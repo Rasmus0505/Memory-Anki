@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { toast } from '@/shared/feedback/toast'
 import type {
   AiModelScenario,
@@ -46,6 +46,7 @@ export interface AiRunConfigRequest {
   entrypointKey: string
   title: string
   description?: string
+  promptSceneKey?: string
   syncScenarioKeys?: string[]
   contextOptions?: AiGenerationContextOption[]
 }
@@ -55,6 +56,7 @@ export interface MultiScenarioEntry {
   entrypointKey: string
   label?: string
   description?: string
+  promptSceneKey?: string
   syncScenarioKeys?: string[]
   contextOptions?: AiGenerationContextOption[]
 }
@@ -96,7 +98,7 @@ export function useAiRunConfigDialog() {
         scenario: scenarios.find((item) => item.key === entry.scenarioKey) ?? null,
         recentConfig: readRecentAiConfig(entry.entrypointKey, entry.scenarioKey),
         promptTemplate: promptTemplates[getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''] ?? null,
-        promptScene: promptScenes[entry.scenarioKey] ?? null,
+        promptScene: promptScenes[entry.promptSceneKey ?? entry.scenarioKey] ?? null,
       })),
     [pendingEntries, promptScenes, promptTemplates, scenarios],
   )
@@ -172,7 +174,7 @@ export function useAiRunConfigDialog() {
           scenario,
           recentConfig,
           promptTemplate,
-          nextPromptScenes[entry.scenarioKey] ?? null,
+          nextPromptScenes[entry.promptSceneKey ?? entry.scenarioKey] ?? null,
         )
         nextSelectedContexts[entry.scenarioKey] = []
       }
@@ -198,6 +200,7 @@ export function useAiRunConfigDialog() {
           {
             scenarioKey: request.scenarioKey,
             entrypointKey: request.entrypointKey,
+            promptSceneKey: request.promptSceneKey,
             syncScenarioKeys: request.syncScenarioKeys,
             contextOptions: request.contextOptions,
           },
@@ -396,7 +399,7 @@ export function useAiRunConfigDialog() {
             const selectedBlockKeys = selection.block_keys ?? []
             const availableBlocks = promptBlocks.filter((block) => (
               block.is_active
-              && (block.applicable_scene_keys.length === 0 || block.applicable_scene_keys.includes(entry.scenarioKey))
+              && (block.applicable_scene_keys.length === 0 || block.applicable_scene_keys.includes(entry.promptSceneKey ?? entry.scenarioKey))
             ))
             const localPreview = compileLocalPromptPreview(
               availableBlocks,
@@ -432,7 +435,7 @@ export function useAiRunConfigDialog() {
                       <>
                         <div>场景默认模型：{scenario.default_model}</div>
                         <div>场景默认思考：{scenario.default_thinking_enabled ? '开启' : '关闭'}</div>
-                        <div>提示词模板：{getScenarioPromptTemplateKey(entry.scenarioKey) ?? '未绑定'}</div>
+                        <div>提示词场景：{entry.promptSceneKey ?? entry.scenarioKey}</div>
                       </>
                     ) : loading ? '正在加载场景配置...' : '未找到场景配置。'}
                   </div>

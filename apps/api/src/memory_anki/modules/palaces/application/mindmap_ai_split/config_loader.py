@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -66,10 +66,9 @@ def resolve_config(
         raise MindMapAiSplitError("AI 分卡缺少 base_url 配置。")
 
     model = first_non_empty(
-        values.get("mindmap_ai_split_model"),
-        runtime.model if ai_options and ai_options.model else "",
-        legacy_values.get("model"),
         runtime.model,
+        values.get("mindmap_ai_split_model"),
+        legacy_values.get("model"),
     )
     if not model:
         raise MindMapAiSplitError("AI 分卡缺少 model 配置。")

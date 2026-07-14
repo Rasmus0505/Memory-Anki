@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any
@@ -43,7 +43,12 @@ def split_palace_editor_doc_with_ai(
     ai_runtime: AiRuntimeProvider,
     prompt_catalog: PromptCatalog,
     ai_options: AiRuntimeOptions | None = None,
+    split_mode: str = "legacy_children",
+    owner_id: str | None = None,
+    operation_id: str | None = None,
 ) -> MindMapAiSplitResult:
+    if split_mode not in {"legacy_children", *split_contracts.AI_SPLIT_REPLACEMENT_MODES}:
+        raise MindMapAiSplitError("不支持的 AI 分卡模式。")
     config = resolve_mindmap_ai_split_config(
         session,
         ai_runtime=ai_runtime,
@@ -60,6 +65,57 @@ def split_palace_editor_doc_with_ai(
     if target_node is None:
         raise MindMapAiSplitError("未找到要分卡的目标节点，请重新选中节点后再试。")
 
+    if split_mode in split_contracts.AI_SPLIT_REPLACEMENT_MODES:
+        expected_owner_id = f"palace:{palace.id}"
+        if owner_id != expected_owner_id:
+            raise MindMapAiSplitError("AI 分卡操作所属宫殿已变化，请重新发起操作。")
+        if not operation_id:
+            raise MindMapAiSplitError("AI 分卡缺少稳定的操作标识，请重新发起操作。")
+        target_node, parent_children, target_index = tree_ops.find_target_location(
+            root,
+            target_node_uid,
+        )
+        if target_node is None:
+            raise MindMapAiSplitError("未找到要分卡的目标节点，请重新选中节点后再试。")
+        if parent_children is None or target_index is None:
+            raise MindMapAiSplitError("根节点不能使用替换式 AI 分卡。")
+        if tree_ops.collect_first_level_children(target_node):
+            raise MindMapAiSplitError("替换式 AI 分卡目前只支持没有子节点的长内容卡片。")
+        inferred_max_children = tree_ops.infer_split_max_children(
+            target_node,
+            [],
+            configured_max_children=config.max_children,
+        )
+        runtime_config = replace(config, max_children=inferred_max_children)
+        ai_payload = _call_mindmap_ai_split_model(
+            config=runtime_config,
+            target_node=target_node,
+            existing_children=[],
+            prompt_catalog=prompt_catalog,
+            split_mode=split_mode,
+            ai_options=ai_options,
+            operation_id=operation_id,
+        )
+        replacements = tree_ops.normalize_replacement_nodes(
+            ai_payload.get("replacement_nodes"),
+            split_mode=split_mode,
+            max_top_level_nodes=inferred_max_children,
+            operation_id=operation_id,
+        )
+        tree_ops.replace_target_at_location(parent_children, target_index, replacements)
+        return MindMapAiSplitResult(
+            editor_doc=normalized_doc,
+            generated_children_count=len(replacements),
+            reassigned_existing_children_count=0,
+            model=config.model,
+            ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
+            resolved_ai=serialize_resolved_ai_runtime(resolved_runtime),
+            review_preview=build_review_preview_payload(editor_doc=normalized_doc),
+            split_mode=split_mode,
+            replacement_node_count=len(replacements),
+            owner_id=owner_id,
+            operation_id=operation_id,
+        )
     existing_children = tree_ops.collect_first_level_children(target_node)
     inferred_max_children = tree_ops.infer_split_max_children(
         target_node,
@@ -122,6 +178,9 @@ def _call_mindmap_ai_split_model(
     target_node: dict[str, Any],
     existing_children: list[dict[str, Any]],
     prompt_catalog: PromptCatalog,
+    split_mode: str = "legacy_children",
+    ai_options: AiRuntimeOptions | None = None,
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     return gateway.call_model(
         config=config,
@@ -129,4 +188,7 @@ def _call_mindmap_ai_split_model(
         existing_children=existing_children,
         prompt_catalog=prompt_catalog,
         build_model_input_fn=tree_ops.build_model_input,
+        split_mode=split_mode,
+        prompt_options=ai_options.prompt_options if ai_options else None,
+        operation_id=operation_id,
     )

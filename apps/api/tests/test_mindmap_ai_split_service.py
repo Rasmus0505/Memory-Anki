@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from unittest.mock import patch
 
@@ -283,7 +283,7 @@ def test_split_granularity_is_inferred_from_existing_children(db_session: Sessio
     assert result.reassigned_existing_children_count == 10
 
 
-def test_config_falls_back_to_environment_values(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+def test_config_falls_back_to_environment_credentials(db_session: Session, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(service, "DASHSCOPE_API_KEY", "env-key")
     monkeypatch.setattr(service, "DASHSCOPE_BASE_URL", "https://example.test/v1")
     monkeypatch.setattr(service, "DASHSCOPE_TEXT_MODEL", "qwen-env")
@@ -295,7 +295,7 @@ def test_config_falls_back_to_environment_values(db_session: Session, monkeypatc
 
     assert config.api_key == "env-key"
     assert config.base_url == "https://example.test/v1"
-    assert config.model == "qwen-env"
+    assert config.model == "qwen3.6-flash"
     assert config.temperature == pytest.approx(0.2)
     assert config.max_children == 5
     assert config.include_note is True
@@ -311,3 +311,193 @@ def test_config_raises_clear_error_when_api_key_is_missing(db_session: Session, 
             db_session,
             ai_runtime=_ai_runtime(db_session),
         )
+
+
+def _build_leaf_replacement_doc() -> dict:
+    return {
+        "root": {
+            "data": {"text": "测试宫殿", "memoryAnkiRootKind": "palace"},
+            "children": [
+                {"data": {"text": "前置节点", "uid": "before"}, "children": []},
+                {
+                    "data": {
+                        "text": "长内容：定义、条件、例子和结论",
+                        "note": "必须保留限定条件",
+                        "uid": "target-leaf",
+                    },
+                    "children": [],
+                },
+                {"data": {"text": "后置节点", "uid": "after"}, "children": []},
+            ],
+        }
+    }
+
+
+def test_parallel_replacement_preserves_sibling_order_and_operation_identity(db_session: Session):
+    palace = _get_palace(db_session)
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={
+            "replacement_nodes": [
+                {"text": "定义与条件", "children": []},
+                {"text": "例子与结论", "children": []},
+            ]
+        },
+    ):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="parallel",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-parallel",
+        )
+
+    children = result.editor_doc["root"]["children"]
+    assert [item["data"]["text"] for item in children] == [
+        "前置节点",
+        "定义与条件",
+        "例子与结论",
+        "后置节点",
+    ]
+    assert result.split_mode == "parallel"
+    assert result.replacement_node_count == 2
+    assert result.operation_id == "operation-parallel"
+    assert result.owner_id == f"palace:{palace.id}"
+    assert children[1]["data"]["uid"] == "ai-split-9f724920860152b5beafb0a351208e6f"
+
+
+def test_hierarchy_replacement_accepts_bounded_tree(db_session: Session):
+    palace = _get_palace(db_session)
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={
+            "replacement_nodes": [
+                {
+                    "text": "核心概念",
+                    "children": [
+                        {"text": "定义", "children": []},
+                        {"text": "限定条件", "children": []},
+                    ],
+                }
+            ]
+        },
+    ):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="hierarchy",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-hierarchy",
+        )
+
+    replacement = result.editor_doc["root"]["children"][1]
+    assert replacement["data"]["text"] == "核心概念"
+    assert [item["data"]["text"] for item in replacement["children"]] == ["定义", "限定条件"]
+
+
+def test_replacement_modes_reject_root_non_leaf_and_stale_owner(db_session: Session):
+    palace = _get_palace(db_session)
+    base_kwargs = {
+        "ai_runtime": _ai_runtime(db_session),
+        "prompt_catalog": _prompt_catalog(db_session),
+        "split_mode": "parallel",
+        "owner_id": f"palace:{palace.id}",
+        "operation_id": "operation-safe",
+    }
+    with pytest.raises(service.MindMapAiSplitError, match="根节点"):
+        service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            None,
+            **base_kwargs,
+        )
+    with pytest.raises(service.MindMapAiSplitError, match="只支持没有子节点"):
+        service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_editor_doc(),
+            "target-1",
+            **base_kwargs,
+        )
+    with pytest.raises(service.MindMapAiSplitError, match="所属宫殿"):
+        service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            **{**base_kwargs, "owner_id": "palace:other"},
+        )
+
+
+def test_parallel_mode_rejects_nested_model_result(db_session: Session):
+    palace = _get_palace(db_session)
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={
+            "replacement_nodes": [
+                {"text": "错误嵌套", "children": [{"text": "子节点", "children": []}]}
+            ]
+        },
+    ), pytest.raises(service.MindMapAiSplitError, match="不能包含子节点"):
+        service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="parallel",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-invalid",
+        )
+
+
+
+def test_ai_split_prompt_scenes_compile_with_required_blocks(db_session: Session):
+    catalog = _prompt_catalog(db_session)
+    parallel = catalog.compose("ai_split_parallel")
+    hierarchy = catalog.compose("ai_split_hierarchy")
+
+    required = {
+        "role.strict_json",
+        "content.split_source_fidelity",
+        "boundary.split_in_place",
+        "output.mindmap_split_json",
+    }
+    assert required.issubset(set(parallel.block_keys))
+    assert required.issubset(set(hierarchy.block_keys))
+    assert "replacement_nodes" in parallel.text
+    assert "children 必须为空数组" in parallel.text
+    assert "最多三层" in hierarchy.text
+
+
+def test_scene_runtime_model_wins_over_stale_legacy_split_model(db_session: Session):
+    db_session.add_all(
+        [
+            Config(key="mindmap_ai_split_model", value="qwen3.6-flash"),
+            Config(key="deepseek_api_key", value="test-deepseek-key"),
+            Config(key="deepseek_base_url", value="https://api.deepseek.test"),
+            Config(key="scene_model_ai_split", value="deepseek-v4-flash"),
+        ]
+    )
+    db_session.commit()
+
+    config = service.resolve_mindmap_ai_split_config(
+        db_session,
+        ai_runtime=_ai_runtime(db_session),
+    )
+
+    assert config.provider == "deepseek"
+    assert config.model == "deepseek-v4-flash"

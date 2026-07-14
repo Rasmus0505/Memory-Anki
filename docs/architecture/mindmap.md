@@ -93,3 +93,10 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可恢复复用；同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
 - 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿视觉、OCR、整理和预览阶段。
 - 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；OCR 重整与视觉重试均创建新的 operation，不覆盖历史任务。
+## AI 分卡替换边界
+
+- 脑图编辑页通过 capability 显式提供“并列分卡”和“层级分卡”；根节点、只读模式和练习模式不开放替换式分卡。
+- 替换式分卡只处理无子节点的长内容卡片。旧请求仍保留原有“新增一级分类并重挂旧子节点”兼容流程，不自动迁移复杂子树。
+- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份与模式完全匹配的响应。
+- 服务端在父级 `children` 的原索引执行一次切片替换，目标前后的兄弟顺序保持不变；新 UID 由 operation 和树路径确定生成。
+- `ai_split_parallel` 与 `ai_split_hierarchy` 使用公共保真、原位边界和 `replacement_nodes` JSON 块；并列模式禁止子节点，层级模式最多三层且节点总量受服务端限制。

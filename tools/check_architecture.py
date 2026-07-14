@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import ast
 import json
@@ -1502,6 +1502,35 @@ def check_mindmap_architecture(errors: list[str]) -> None:
                     f"{path.relative_to(REPO_ROOT).as_posix()}: mind-map import pipeline must retain `{token}`."
                 )
 
+    ai_split_contracts = {
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py": (
+            "AI_SPLIT_REPLACEMENT_MODES",
+            "find_target_location",
+            "operation_id",
+        ),
+        API_SRC / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py": (
+            "content.split_source_fidelity",
+            "boundary.split_in_place",
+            "output.mindmap_split_json",
+            "ai_split_parallel",
+            "ai_split_hierarchy",
+        ),
+        WEB_SRC / "features" / "mindmap-editor" / "capabilities.ts": (
+            "AI 并列分卡",
+            "AI 层级分卡",
+            "split_mode",
+        ),
+    }
+    for path, required_tokens in ai_split_contracts.items():
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8")
+        for token in required_tokens:
+            if token not in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: replacement AI split must retain `{token}`."
+                )
+
 
 def check_prompt_catalog_boundaries(errors: list[str]) -> None:
     forbidden_batch_prompts = (
@@ -1759,4 +1788,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

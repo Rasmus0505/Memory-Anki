@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import uuid
@@ -17,6 +17,7 @@ from memory_anki.infrastructure.db._tables.misc import (
 )
 
 from .ai_prompt_compiler import lint_compiled_prompt, render_prompt_text
+from .ai_prompt_split_seeds import AI_SPLIT_BLOCK_SEEDS, AI_SPLIT_SCENE_SEEDS
 from .ai_prompts import (
     PLACEHOLDER_PATTERN,
     PROMPT_DEFINITIONS,
@@ -156,6 +157,7 @@ BUILTIN_BLOCKS = (
         sort_order=20,
         template="输出前逐项检查：每个事实、题目或结论都必须能回溯到输入资料，不得凭常识补写。",
     ),
+    *(PromptBlockSeed(**seed) for seed in AI_SPLIT_BLOCK_SEEDS),
 )
 
 
@@ -190,6 +192,7 @@ def _mindmap_scene_instruction(task: str) -> str:
 
 
 BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
+    **{seed["scene_key"]: PromptSceneSeed(**seed) for seed in AI_SPLIT_SCENE_SEEDS},
     "vision_image_mindmap": PromptSceneSeed(
         scene_key="vision_image_mindmap",
         prompt_key="ai_prompt_import_image_mindmap",

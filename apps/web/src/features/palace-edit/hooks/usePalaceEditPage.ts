@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
@@ -29,6 +29,10 @@ function readSelectionNodeUid(nodes: MindMapSelection[]) {
   return node?.uid ? String(node.uid) : null
 }
 
+function createAiSplitOperationId() {
+  return globalThis.crypto?.randomUUID?.() ?? `ai-split-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export function usePalaceEditPage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
@@ -47,6 +51,7 @@ export function usePalaceEditPage() {
   const hardUnloadRef = useRef(false)
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
+  const aiSplitOperationRef = useRef<string | null>(null)
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
 
   const timer = useTimedSession({
@@ -323,38 +328,55 @@ export function usePalaceEditPage() {
       if (practice.editorMode !== 'edit' || !palaceId || !documentState.editorState) return
       setAiSplitBusy(true)
       timer.registerActivity('edit_operation', { source: 'mindmap_ai_split' })
-      const requestSummary = `知识点: ${payload.target_node_uid || 'unknown'}`
+      const requestSummary = `知识点: ${payload.target_node_uid || 'unknown'}；模式: ${payload.split_mode}`
       logAiCall({
-        feature: 'AI 整理',
+        feature: 'AI 分卡',
         stage: 'start',
         requestSummary,
         meta: {
           palaceId,
           targetNodeUid: payload.target_node_uid,
+          splitMode: payload.split_mode,
         },
       })
+      let operationId: string | null = null
       try {
         const aiOptions = await promptForAiOptions({
           scenarioKey: 'ai_split',
-          entrypointKey: 'mindmap-ai-split',
-          title: 'AI 整理配置',
+          promptSceneKey: `ai_split_${payload.split_mode}`,
+          entrypointKey: `mindmap-ai-split-${payload.split_mode}`,
+          title: payload.split_mode === 'parallel' ? 'AI 并列分卡配置' : 'AI 层级分卡配置',
+          description: '模型只会处理当前无子节点卡片；生成结果将在原位置替换该卡片。',
         })
-        if (!aiOptions) {
-          return
-        }
+        if (!aiOptions) return
+        operationId = createAiSplitOperationId()
+        const ownerId = `palace:${palaceId}`
+        aiSplitOperationRef.current = operationId
         const result = await splitMindMapNodeApi(palaceId, {
           editor_doc: documentState.editorState.editor_doc,
           target_node_uid: payload.target_node_uid,
+          split_mode: payload.split_mode,
+          owner_id: ownerId,
+          operation_id: operationId,
           ai_options: aiOptions,
         })
         if (!result.ok || !result.editor_doc) {
-          throw new Error(result.error || 'AI 整理失败，请稍后重试。')
+          throw new Error(result.error || 'AI 分卡失败，请稍后重试。')
         }
+        if (
+          aiSplitOperationRef.current !== operationId
+          || result.operation_id !== operationId
+          || result.owner_id !== ownerId
+          || result.split_mode !== payload.split_mode
+        ) {
+          throw new Error('AI 分卡结果已过期，未应用到当前脑图。')
+        }
+        const replacementCount = result.replacement_node_count ?? result.generated_children_count ?? 0
         logAiCall({
-          feature: 'AI 整理',
+          feature: 'AI 分卡',
           stage: 'success',
           requestSummary,
-          responseSummary: `新增 ${result.generated_children_count ?? 0} 个分类，重归类 ${result.reassigned_existing_children_count ?? 0} 个旧知识点`,
+          responseSummary: `原位置生成 ${replacementCount} 个顶层卡片`,
           requestId:
             typeof (result as { request_id?: unknown }).request_id === 'string'
               ? (result as { request_id?: string }).request_id
@@ -362,12 +384,10 @@ export function usePalaceEditPage() {
           meta: {
             palaceId,
             targetNodeUid: payload.target_node_uid,
+            splitMode: payload.split_mode,
+            operationId,
             model: result.model ?? '',
             aiCallLogId: result.ai_call_log_id ?? '',
-            requestId:
-              typeof (result as { request_id?: unknown }).request_id === 'string'
-                ? (result as { request_id?: string }).request_id
-                : '',
           },
         })
         setAiSplitAppliedSyncVersion((value) => value + 1)
@@ -380,16 +400,14 @@ export function usePalaceEditPage() {
           relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
           source: 'mindmap_ai_split_success',
         })
-        const generatedCount = result.generated_children_count ?? 0
-        const movedCount = result.reassigned_existing_children_count ?? 0
         const reviewPreview = result.review_preview
         const reviewSummary = reviewPreview
           ? `预计形成 ${reviewPreview.node_count} 个知识点，约 ${reviewPreview.estimated_review_time || `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`}。`
           : ''
         toast.success(
-          movedCount > 0
-            ? `AI 已整理知识点，新增 ${generatedCount} 个分类并重新归类了 ${movedCount} 个旧知识点。${reviewSummary}`
-            : `AI 已整理知识点，新增 ${generatedCount} 个分类。${reviewSummary}`,
+          payload.split_mode === 'parallel'
+            ? `AI 已在原位置拆成 ${replacementCount} 个并列卡片。${reviewSummary}`
+            : `AI 已在原位置生成层级卡片，共 ${replacementCount} 个顶层节点。${reviewSummary}`,
           result.ai_call_log_id
             ? {
                 action: {
@@ -397,20 +415,20 @@ export function usePalaceEditPage() {
                   onClick: () =>
                     requestOpenAiLogDetail({
                       aiCallLogId: result.ai_call_log_id,
-                      title: 'AI 整理',
+                      title: 'AI 分卡',
                     }),
                 },
               }
             : undefined,
         )
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'AI 整理失败，请稍后重试。'
+        const message = error instanceof Error ? error.message : 'AI 分卡失败，请稍后重试。'
         const requestId =
           error instanceof Error && 'requestId' in error && typeof error.requestId === 'string'
             ? error.requestId
             : ''
         logAiCall({
-          feature: 'AI 整理',
+          feature: 'AI 分卡',
           stage: 'failure',
           requestSummary,
           errorMessage: message,
@@ -418,6 +436,8 @@ export function usePalaceEditPage() {
           meta: {
             palaceId,
             targetNodeUid: payload.target_node_uid,
+            splitMode: payload.split_mode,
+            operationId,
             requestId,
           },
         })
@@ -428,6 +448,9 @@ export function usePalaceEditPage() {
         })
         toast.error(message)
       } finally {
+        if (operationId && aiSplitOperationRef.current === operationId) {
+          aiSplitOperationRef.current = null
+        }
         setAiSplitBusy(false)
       }
     },

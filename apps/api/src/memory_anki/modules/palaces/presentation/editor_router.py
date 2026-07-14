@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -110,6 +110,9 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
                 ai_runtime=ai_runtime,
                 prompt_catalog=SettingsPromptCatalog(s),
                 ai_options=ai_runtime.normalize_options(data.get("ai_options")),
+                split_mode=str(data.get("split_mode") or "legacy_children"),
+                owner_id=str(data.get("owner_id") or "") or None,
+                operation_id=str(data.get("operation_id") or "") or None,
             )
     except MindMapAiSplitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -122,4 +125,8 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
         "ai_call_log_id": getattr(result, "ai_call_log_id", None),
         "resolved_ai": getattr(result, "resolved_ai", None),
         "review_preview": getattr(result, "review_preview", None),
+        "split_mode": getattr(result, "split_mode", "legacy_children"),
+        "replacement_node_count": getattr(result, "replacement_node_count", 0),
+        "owner_id": getattr(result, "owner_id", None),
+        "operation_id": getattr(result, "operation_id", None),
     }

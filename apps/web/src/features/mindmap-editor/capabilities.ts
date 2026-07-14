@@ -1,4 +1,4 @@
-import { Brain, FolderTree, Sparkles } from 'lucide-react'
+﻿import { Brain, FolderTree, Sparkles } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
@@ -100,20 +100,30 @@ function createAiSplitCapability(options: CapabilityFactoryOptions): MindMapCapa
   return {
     key: 'ai-split',
     getNodeActions: ({ nodeId, selection, isRoot, readonly, practiceModeActive }) => {
-      if (readonly || practiceModeActive || !options.onAiSplitRequest) return []
+      if (readonly || practiceModeActive || isRoot || !options.onAiSplitRequest) return []
       const selected = selection[0]
-      return [{
-        label: options.aiSplitBusy ? '正在整理知识点...' : 'AI 拆分知识点',
-        icon: Sparkles,
-        disabled: options.aiSplitBusy,
-        onClick: () => options.onAiSplitRequest?.({
-          target_node_uid: selected?.uid ?? nodeId,
-          target_node_text: selected?.text ?? '',
-          target_node_note: selected?.note ?? '',
-          target_node_type: selected?.memoryAnkiNodeType ?? null,
-          is_root: isRoot,
-        }),
-      }]
+      const buildPayload = (splitMode: 'parallel' | 'hierarchy') => ({
+        target_node_uid: selected?.uid ?? nodeId,
+        target_node_text: selected?.text ?? '',
+        target_node_note: selected?.note ?? '',
+        target_node_type: selected?.memoryAnkiNodeType ?? null,
+        is_root: isRoot,
+        split_mode: splitMode,
+      })
+      return [
+        {
+          label: options.aiSplitBusy ? '正在分卡...' : 'AI 并列分卡',
+          icon: Sparkles,
+          disabled: options.aiSplitBusy,
+          onClick: () => options.onAiSplitRequest?.(buildPayload('parallel')),
+        },
+        {
+          label: options.aiSplitBusy ? '正在分卡...' : 'AI 层级分卡',
+          icon: Sparkles,
+          disabled: options.aiSplitBusy,
+          onClick: () => options.onAiSplitRequest?.(buildPayload('hierarchy')),
+        },
+      ]
     },
   }
 }

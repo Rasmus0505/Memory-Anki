@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import copy
 from typing import Any, TypedDict
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from .contracts import (
+    AI_SPLIT_DEFAULT_MAX_DEPTH,
+    AI_SPLIT_MAX_TOTAL_NODES,
+    MindMapAiSplitError,
+)
 from .primitives import ensure_dict, first_non_empty, plain_identifier, plain_text, stringify
 
 
@@ -313,3 +318,88 @@ def find_target_node(root: dict[str, Any], target_node_uid: str | None) -> dict[
                 if isinstance(child, dict):
                     stack.append(child)
     return None
+
+
+def find_target_location(
+    root: dict[str, Any],
+    target_node_uid: str | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]] | None, int | None]:
+    """返回目标节点、父级 children 列表和原始索引；根节点没有可替换位置。"""
+    if target_node_uid in (None, ""):
+        return root, None, None
+    stack: list[dict[str, Any]] = [root]
+    while stack:
+        parent = stack.pop()
+        children = parent.get("children")
+        if not isinstance(children, list):
+            continue
+        for index, child in enumerate(children):
+            if not isinstance(child, dict):
+                continue
+            data = ensure_dict(child.get("data"))
+            if stringify(data.get("uid")).strip() == target_node_uid:
+                return child, children, index
+            stack.append(child)
+    return None, None, None
+
+
+def normalize_replacement_nodes(
+    raw_value: Any,
+    *,
+    split_mode: str,
+    max_top_level_nodes: int,
+    operation_id: str,
+    max_depth: int = AI_SPLIT_DEFAULT_MAX_DEPTH,
+    max_total_nodes: int = AI_SPLIT_MAX_TOTAL_NODES,
+) -> list[dict[str, Any]]:
+    if not isinstance(raw_value, list):
+        return []
+    if len(raw_value) > max_top_level_nodes:
+        raise MindMapAiSplitError(f"AI 分卡顶层节点超过限制（最多 {max_top_level_nodes} 个）。")
+    total_nodes = 0
+
+    def normalize_node(value: Any, path: tuple[int, ...], depth: int) -> dict[str, Any]:
+        nonlocal total_nodes
+        if not isinstance(value, dict):
+            raise MindMapAiSplitError("AI 分卡返回了无效的节点对象。")
+        if depth > max_depth:
+            raise MindMapAiSplitError(f"AI 分卡层级超过限制（最多 {max_depth} 层）。")
+        text = plain_text(
+            first_non_empty(value.get("text"), value.get("title"), value.get("name")),
+            fallback="",
+        ).strip()
+        if not text:
+            raise MindMapAiSplitError("AI 分卡返回了空标题节点。")
+        raw_children = value.get("children")
+        children_values = raw_children if isinstance(raw_children, list) else []
+        if split_mode == "parallel" and children_values:
+            raise MindMapAiSplitError("并列分卡结果不能包含子节点。")
+        total_nodes += 1
+        if total_nodes > max_total_nodes:
+            raise MindMapAiSplitError(f"AI 分卡节点总数超过限制（最多 {max_total_nodes} 个）。")
+        uid_seed = f"memory-anki:ai-split:{operation_id}:{'.'.join(map(str, path))}"
+        return {
+            "data": {
+                "text": text,
+                "note": plain_text(value.get("note"), fallback="").strip(),
+                "uid": f"ai-split-{uuid5(NAMESPACE_URL, uid_seed).hex}",
+            },
+            "children": [
+                normalize_node(child, (*path, index), depth + 1)
+                for index, child in enumerate(children_values)
+            ],
+        }
+
+    normalized = [normalize_node(item, (index,), 1) for index, item in enumerate(raw_value)]
+    if not normalized:
+        raise MindMapAiSplitError("AI 没有返回可用的替换节点。")
+    return normalized
+
+
+def replace_target_at_location(
+    parent_children: list[dict[str, Any]],
+    target_index: int,
+    replacement_nodes: list[dict[str, Any]],
+) -> None:
+    """一次切片替换保证目标前后的兄弟节点顺序不变。"""
+    parent_children[target_index : target_index + 1] = replacement_nodes

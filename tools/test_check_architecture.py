@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import importlib.util
 import json
@@ -1279,3 +1279,30 @@ def test_prompt_catalog_boundary_rejects_settings_imports_in_application(tmp_pat
     check_architecture.check_prompt_catalog_boundaries(errors)
 
     assert any("platform PromptCatalog" in error for error in errors)
+
+
+def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    split_service = api_src / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py"
+    prompt_composition = api_src / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py"
+    capabilities = web_src / "features" / "mindmap-editor" / "capabilities.ts"
+    split_service.parent.mkdir(parents=True)
+    prompt_composition.parent.mkdir(parents=True)
+    capabilities.parent.mkdir(parents=True)
+    split_service.write_text("AI_SPLIT_REPLACEMENT_MODES\nfind_target_location\n", encoding="utf-8")
+    prompt_composition.write_text(
+        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\nai_split_parallel\n",
+        encoding="utf-8",
+    )
+    capabilities.write_text("AI 并列分卡\nsplit_mode\n", encoding="utf-8")
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_architecture(errors)
+
+    assert any("operation_id" in error for error in errors)
+    assert any("ai_split_hierarchy" in error for error in errors)
+    assert any("AI 层级分卡" in error for error in errors)

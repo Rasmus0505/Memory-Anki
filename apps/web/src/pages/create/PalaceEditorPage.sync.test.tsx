@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as palaceApi from '@/entities/palace/api'
 import {
   fireEvent,
@@ -188,19 +188,13 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI分卡' }))
 
     await waitFor(() => {
-      expect(palaceApi.splitMindMapNodeApi).toHaveBeenCalledWith(101, {
+      expect(palaceApi.splitMindMapNodeApi).toHaveBeenCalledWith(101, expect.objectContaining({
         ai_options: {},
-        editor_doc: {
-          root: {
-            data: { text: '测试宫殿', uid: 'root-1' },
-            children: [{ data: { text: '原节点', uid: 'node-1' }, children: [] }],
-          },
-          theme: { template: 'default', config: {} },
-          layout: 'mindMap',
-          schemaVersion: 1,
-        },
+        owner_id: 'palace:101',
+        split_mode: 'parallel',
+        operation_id: expect.any(String),
         target_node_uid: 'node-1',
-      })
+      }))
     })
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { StrictMode } from 'react'
 import {
   fireEvent as testingLibraryFireEvent,
@@ -135,6 +135,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
       target_node_note: string
       target_node_type: string | null
       is_root: boolean
+      split_mode: 'parallel' | 'hierarchy'
     }) => void
     onNodeActive?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeClick?: (nodes: Array<{ uid: string | null; text: string }>) => void
@@ -247,6 +248,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
                 target_node_note: '原备注',
                 target_node_type: 'peg',
                 is_root: false,
+                split_mode: 'parallel',
               })
             }
           >
@@ -520,7 +522,7 @@ export function setupPalaceEditPageTestDefaults() {
     removed_duplicates: 0,
   } as never)
   vi.spyOn(palaceApi, 'restorePalaceVersionApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(palaceApi, 'splitMindMapNodeApi').mockResolvedValue({
+  vi.spyOn(palaceApi, 'splitMindMapNodeApi').mockImplementation(async (_palaceId, request) => ({
     ok: true,
     editor_doc: {
       root: {
@@ -529,9 +531,13 @@ export function setupPalaceEditPageTestDefaults() {
       },
     },
     generated_children_count: 1,
+    replacement_node_count: 1,
     reassigned_existing_children_count: 0,
+    split_mode: request.split_mode,
+    owner_id: request.owner_id,
+    operation_id: request.operation_id,
     model: 'qwen3.6-flash',
-  } as never)
+  } as never))
   vi.spyOn(appLogs, 'logAiCall').mockImplementation(() => ({
     id: 'log-1',
     kind: 'ai_call',

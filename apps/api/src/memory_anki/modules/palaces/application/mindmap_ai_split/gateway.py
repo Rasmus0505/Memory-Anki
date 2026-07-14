@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from typing import Any
@@ -16,10 +16,32 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     complete_external_ai_call_log,
     fail_external_ai_call_log,
 )
-from memory_anki.platform.application import PromptCatalog
+from memory_anki.platform.application import PromptCatalog, PromptRunSelection
 
 from .contracts import MindMapAiSplitConfig, MindMapAiSplitError
 from .primitives import extract_json_object
+
+
+def _prompt_selection(prompt_options: dict[str, Any] | None) -> PromptRunSelection:
+    options = prompt_options or {}
+    block_keys = options.get("block_keys")
+    return PromptRunSelection(
+        block_keys=(
+            tuple(str(item) for item in block_keys)
+            if isinstance(block_keys, list)
+            else None
+        ),
+        scene_instruction=(
+            str(options.get("scene_instruction"))
+            if options.get("scene_instruction") is not None
+            else None
+        ),
+        run_instruction=(
+            str(options.get("run_instruction"))
+            if options.get("run_instruction") is not None
+            else None
+        ),
+    )
 
 
 def call_model(
@@ -29,9 +51,20 @@ def call_model(
     existing_children: list[dict[str, Any]],
     prompt_catalog: PromptCatalog,
     build_model_input_fn,
+    split_mode: str,
+    prompt_options: dict[str, Any] | None,
+    operation_id: str | None,
 ) -> dict[str, Any]:
     request_url = build_chat_completions_url(config.base_url)
-    system_prompt = prompt_catalog.render("ai_prompt_mindmap_ai_split_system")
+    compiled_prompt = None
+    if split_mode in {"parallel", "hierarchy"}:
+        compiled_prompt = prompt_catalog.compose(
+            f"ai_split_{split_mode}",
+            selection=_prompt_selection(prompt_options),
+        )
+        system_prompt = compiled_prompt.text
+    else:
+        system_prompt = prompt_catalog.render("ai_prompt_mindmap_ai_split_system")
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if config.custom_instruction:
         messages.append(
@@ -49,11 +82,26 @@ def call_model(
         include_note=config.include_note,
         max_children=config.max_children,
     )
+    model_input["split_mode"] = split_mode
+    if operation_id:
+        model_input["operation_id"] = operation_id
     messages.append(
         {
             "role": "user",
             "content": json.dumps(model_input, ensure_ascii=False),
         }
+    )
+    compiled_prompt_payload = (
+        {
+            "scene_key": compiled_prompt.scene_key,
+            "prompt_key": compiled_prompt.prompt_key,
+            "block_keys": list(compiled_prompt.block_keys),
+            "block_versions": compiled_prompt.block_versions,
+            "scene_version_id": compiled_prompt.scene_version_id,
+            "warnings": list(compiled_prompt.warnings),
+        }
+        if compiled_prompt is not None
+        else None
     )
     log_id = begin_external_ai_call_log(
         feature="AI 分卡",
@@ -66,6 +114,9 @@ def call_model(
             "messages": messages,
             "response_format": {"type": "json_object"},
             "model_input": model_input,
+            "split_mode": split_mode,
+            "operation_id": operation_id,
+            "compiled_prompt": compiled_prompt_payload,
         },
     )
     try:
@@ -144,6 +195,9 @@ def call_model(
         response_payload={
             "response_text": content_text,
             "parsed_json": parsed,
+            "split_mode": split_mode,
+            "operation_id": operation_id,
+            "compiled_prompt": compiled_prompt_payload,
         },
     )
     parsed["_ai_call_log_id"] = log_id

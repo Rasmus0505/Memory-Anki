@@ -1,4 +1,4 @@
-export interface ImportApplyContext {
+﻿export interface ImportApplyContext {
   source: 'import'
   jobId: string | null
   applyMode: 'replace' | 'append'
@@ -80,9 +80,13 @@ export interface ImageTextPreviewResponse {
   resolved_ai?: ResolvedAiRuntimeMeta | null
   review_preview?: MindMapReviewPreview | null
 }
+export type MindMapAiSplitMode = 'parallel' | 'hierarchy'
 export interface MindMapAiSplitRequest {
   editor_doc: MindMapDoc | string | null
   target_node_uid: string | null
+  split_mode?: MindMapAiSplitMode
+  owner_id?: string
+  operation_id?: string
   ai_options?: AiRuntimeOptions
 }
 export interface MindMapAiSplitResponse {
@@ -96,6 +100,10 @@ export interface MindMapAiSplitResponse {
   request_id?: string
   resolved_ai?: ResolvedAiRuntimeMeta | null
   review_preview?: MindMapReviewPreview | null
+  split_mode?: MindMapAiSplitMode | 'legacy_children'
+  replacement_node_count?: number
+  owner_id?: string | null
+  operation_id?: string | null
 }
 export type MindMapImportJobStatus = 'draft' | 'running' | 'paused' | 'completed' | 'failed' | 'interrupted'
 export type MindMapImportJobStage = 'prepared' | 'structure' | 'ocr' | 'merge' | 'text' | 'completed'
