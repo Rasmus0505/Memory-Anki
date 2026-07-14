@@ -28,6 +28,10 @@ Schedule rebuild primitives never commit. The explicit Review repair command own
 
 Idempotent review submission and overdue spreading are composed in `review_commands.py`. Domain/application primitives flush with `commit=False`; the command stores the platform mutation response and commits once through `UnitOfWork`. Reviews no longer depends on the transitional Persistence context.
 
+Formal review completion uses one stable mutation identity across retries. The command atomically creates the review log and completed study session, rebuilds stage schedules, clears recoverable progress, and stores a completion receipt. The receipt is readable by review-log id so a refreshed PWA or desktop result page never depends on the deleted pre-rebuild schedule id.
+
+Frontend review completion emits the typed `reviewStateChanged` application event only after the atomic command succeeds. Review queue and Palace catalog caches invalidate immediately; Knowledge may consume the returned projection and refetch its chapter detail without importing private Review implementation modules.
+
 ## Frontend review-flow composition
 
 `widgets/mindmap-review-flow` owns the cross-feature flip-card session surface that combines Review use cases, Palace learning, quiz launching, and mind-map editing. Its public `FlipCardMindMapPanel` is the only host allowed to configure flip-card synchronization, viewport preservation, keyboard/touch progression, fullscreen, and clear-UI behavior. Palace learning and formal Review provide separate progress data and callbacks; formal Review alone adds rating evidence and review completion. `features/review` does not import Palace or Mind-map Editor; reusable state transforms remain under `entities/review`.

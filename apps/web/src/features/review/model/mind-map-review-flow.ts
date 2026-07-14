@@ -9,6 +9,8 @@ export interface CompleteFlowPayload {
   completionMode: "manual_complete" | "auto_complete";
   revealedRemaining: boolean;
   redNodeIds: string[];
+  finalize: () => Promise<void>;
+  cancel: () => void;
 }
 
 export interface MindMapReviewFlowProps {

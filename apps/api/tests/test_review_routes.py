@@ -358,7 +358,7 @@ class ReviewRouteTests(RouterTestCase):
                 {"branch-a": "revealed", "branch-b": "hidden"},
             )
 
-    def test_repair_review_stage_progress_migrates_orphan_review_progress(self):
+    def test_repair_review_stage_progress_preserves_ambiguous_orphan_progress(self):
         with self.SessionLocal() as session:
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
             self.assertIsNotNone(schedule)
@@ -375,39 +375,35 @@ class ReviewRouteTests(RouterTestCase):
             )
             session.commit()
 
-        response = self.client.post("/api/v1/review/repair-stage-progress")
+        preview = self.client.post(
+            "/api/v1/review/repair-stage-progress",
+            json={"dry_run": True},
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.json()["dry_run"])
+        self.assertEqual(preview.json()["after"]["orphan_progress_count"], 1)
+
+        response = self.client.post("/api/v1/review/repair-stage-progress", json={})
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["dry_run"])
 
         with self.SessionLocal() as session:
-            pending_schedule = (
-                session.query(ReviewSchedule)
-                .filter_by(palace_id=1, completed=False)
-                .first()
-            )
-            self.assertIsNotNone(pending_schedule)
             progress = (
                 session.query(SessionProgress)
                 .filter_by(session_kind="review", palace_id=1)
                 .first()
             )
             self.assertIsNotNone(progress)
-            self.assertEqual(progress.review_schedule_id, pending_schedule.id)
+            self.assertEqual(progress.review_schedule_id, 999999)
             self.assertEqual(
                 json.loads(progress.reveal_map),
                 {"branch-a": "revealed", "branch-b": "hidden"},
             )
-            study_session = (
+            self.assertIsNone(
                 session.query(StudySession)
-                .filter_by(
-                    scene="review",
-                    target_type="review_schedule",
-                    target_id=pending_schedule.id,
-                    status="active",
-                )
+                .filter_by(scene="review", target_type="review_schedule", status="active")
                 .first()
             )
-            self.assertIsNotNone(study_session)
-            self.assertEqual(json.loads(study_session.progress_json)["reveal_map"]["branch-a"], "revealed")
 
     def test_review_queue_groups_multiple_due_schedules_by_palace(self):
         with self.SessionLocal() as session:
@@ -654,10 +650,29 @@ class ReviewRouteTests(RouterTestCase):
             json={"duration_seconds": 12, "completion_mode": "manual_complete"},
         )
         self.assertEqual(submit.status_code, 200)
-        self.assertTrue(submit.json()["ok"])
-        self.assertIsNone(submit.json()["next_id"])
+        payload = submit.json()
+        self.assertTrue(payload["ok"])
+        self.assertIsNone(payload["next_id"])
+        self.assertEqual(payload["duration_seconds"], 12)
+        self.assertEqual(payload["completed_stage_count"], 1)
+        self.assertEqual(payload["total_stage_count"], 9)
+        completion = self.client.get(
+            f"/api/v1/review/completions/{payload['review_log_id']}"
+        )
+        self.assertEqual(completion.status_code, 200)
+        self.assertEqual(completion.json()["duration_seconds"], 12)
+        self.assertEqual(completion.json()["completed_stage_count"], 1)
 
         with self.SessionLocal() as session:
+            study_session = session.get(
+                StudySession,
+                f"review-log-{payload['review_log_id']}",
+            )
+            self.assertIsNotNone(study_session)
+            receipt = json.loads(study_session.summary_json)["completion_receipt"]
+            self.assertEqual(receipt["review_log_id"], payload["review_log_id"])
+            self.assertEqual(receipt["duration_seconds"], 12)
+            self.assertEqual(receipt["completed_stage_count"], 1)
             schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.id).all()
             self.assertEqual(len(schedules), 2)
             completed = [schedule for schedule in schedules if schedule.completed]
@@ -1093,7 +1108,8 @@ class ReviewRouteTests(RouterTestCase):
             json={"duration_seconds": 30, "completion_mode": "manual_complete"},
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "review_submit_conflict")
 
     def test_virtual_default_review_payload_exposes_pending_schedule_timing(self):
         with self.SessionLocal() as session:

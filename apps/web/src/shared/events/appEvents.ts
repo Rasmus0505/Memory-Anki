@@ -7,6 +7,7 @@ import type { ThemePreference } from '@/shared/theme/themePreference'
 export const APP_EVENT_NAMES = {
   clientPreferencesUpdated: 'memory-anki-client-preferences-updated',
   palaceCatalogInvalidated: 'palace-catalog:invalidated',
+  reviewStateChanged: 'review-state:changed',
   timerAutomationUpdated: 'memory-anki-timer-automation-change',
   timerFocusUpdated: 'memory-anki-timer-focus-change',
   breakGuardUpdated: 'memory-anki-break-guard-config-change',
@@ -16,6 +17,14 @@ export const APP_EVENT_NAMES = {
 export interface AppEventMap {
   [APP_EVENT_NAMES.clientPreferencesUpdated]: Partial<ClientPreferences>
   [APP_EVENT_NAMES.palaceCatalogInvalidated]: undefined
+  [APP_EVENT_NAMES.reviewStateChanged]: {
+    palaceId: number
+    chapterId: number | null
+    completedStageCount: number
+    totalStageCount: number
+    mastered: boolean
+    nextReviewAt: string | null
+  }
   [APP_EVENT_NAMES.timerAutomationUpdated]: TimerAutomationConfig
   [APP_EVENT_NAMES.timerFocusUpdated]: TimerFocusConfig
   [APP_EVENT_NAMES.breakGuardUpdated]: BreakGuardConfig

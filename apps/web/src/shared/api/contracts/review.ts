@@ -80,9 +80,22 @@ export interface ReviewSessionSubmitResponse {
   score: number
   next_id: number | null
   mastered: boolean
+  review_log_id: number
+  palace_id: number
+  chapter_id: number | null
+  duration_seconds: number
+  completed_stage_count: number
+  total_stage_count: number
+  completed_stage_label: string | null
+  next_stage_label: string | null
+  next_review_at: string | null
+  needs_practice: boolean
 }
 export interface ReviewStageProgressRepairResponse {
   ok: boolean
+  dry_run?: boolean
+  before?: ReviewStageProgressHealthResponse
+  after?: ReviewStageProgressHealthResponse
   palace_count: number
   segment_count: number
   orphan_progress_count?: number
@@ -94,7 +107,9 @@ export interface ReviewStageProgressRepairResponse {
 export interface ReviewStageProgressHealthResponse {
   ok: boolean
   orphan_progress_count: number
+  orphan_progress_ids?: number[]
   orphan_study_session_count: number
+  orphan_study_session_ids?: string[]
   stage_gap_palace_count: number
   total_issues: number
   needs_repair: boolean

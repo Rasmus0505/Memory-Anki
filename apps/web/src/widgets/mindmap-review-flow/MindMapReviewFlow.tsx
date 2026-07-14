@@ -222,7 +222,10 @@ export function MindMapReviewFlow({
                       false
                     }
                     className={review.completeButtonClassName}
-                    onClick={() => review.setCompletionDialogOpen(true)}
+                    onClick={() => {
+                      review.flow.timer.pause({ source: "completion_dialog_open" });
+                      review.setCompletionDialogOpen(true);
+                    }}
                   >
                     <SquareCheckBig className="mr-2 size-4" />
                     {review.flow.feedback.allClearReady ? "完成结算" : "完成"}
@@ -257,7 +260,7 @@ export function MindMapReviewFlow({
                     currentPalaceId={props.palaceId}
                     reviewFxSignal={review.flow.feedback.reviewFxSignal}
                     onEditorStateChange={review.handleEditorStateChange}
-                    onNodeActive={review.setActiveNodes}
+                    onNodeActive={review.handleActiveNodes}
                     onNodeClick={review.flow.handleNodeClick}
                     onNodeContextMenu={review.flow.handleNodeContextMenu}
                     onNodeHover={review.isCheckpointMode ? review.flow.handleNodeHover : undefined}
@@ -290,8 +293,11 @@ export function MindMapReviewFlow({
 
       <CompletionDecisionDialog
         open={review.completionDialogOpen}
-        onOpenChange={review.setCompletionDialogOpen}
-        durationSeconds={Math.max(1, review.flow.timer.effectiveSeconds)}
+        onOpenChange={(open) => {
+          review.setCompletionDialogOpen(open);
+          if (!open) review.flow.timer.resume({ source: "completion_dialog_cancelled" });
+        }}
+        durationSeconds={review.flow.timer.effectiveSeconds}
         onMarkCompleted={() => {
           review.setCompletionDialogOpen(false);
           void review.flow.finishFlow("manual_complete");

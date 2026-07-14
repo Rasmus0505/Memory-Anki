@@ -48,6 +48,7 @@ import type {
   PalaceQuizQuestionType,
 } from '@/shared/api/contracts'
 import { readMindMapEditorState } from '@/entities/mindmap-document'
+import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 
 type ChapterDetail = ChapterDetailResponse
 
@@ -188,6 +189,29 @@ export default function Knowledge() {
       return
     }
     void getChapterApi(selectedChapterId).then(setChapterDetail)
+  }, [selectedChapterId])
+
+  useEffect(() => {
+    if (!selectedChapterId) return
+    return onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (detail) => {
+      if (detail.chapterId != null && detail.chapterId !== selectedChapterId) return
+      setChapterDetail((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          palaces: current.palaces.map((palace) => palace.id === detail.palaceId
+            ? {
+                ...palace,
+                mastered: detail.mastered,
+                review_stage_completed: detail.completedStageCount,
+                review_stage_total: detail.totalStageCount,
+                next_due_date: detail.nextReviewAt?.slice(0, 10) ?? null,
+              }
+            : palace),
+        }
+      })
+      void getChapterApi(selectedChapterId).then(setChapterDetail)
+    })
   }, [selectedChapterId])
 
   const selectedPalaces = useMemo(() => chapterDetail?.palaces ?? [], [chapterDetail])

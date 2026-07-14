@@ -11,6 +11,7 @@ import {
 import type {
   MindMapEditorState,
   ReviewPalaceSummary,
+  ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -30,6 +31,7 @@ import {
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 import { ReviewSessionSkeleton } from '@/features/review/ReviewSessionSkeleton'
 import { ErrorState } from '@/shared/components/state-placeholders'
+import type { CompleteFlowPayload } from '@/features/review/model/mind-map-review-flow'
 
 type ReviewDisplayMode = 'review' | 'edit'
 
@@ -71,7 +73,6 @@ interface ReviewSessionContainerProps {
       completed: boolean
     },
   ) => Promise<unknown>
-  clearProgress: (sessionId: number) => Promise<unknown>
   submitSession: (
     sessionId: number,
     data: {
@@ -84,7 +85,9 @@ interface ReviewSessionContainerProps {
       needs_practice?: boolean
       note?: string
     },
-  ) => Promise<unknown>
+    options?: { mutationId?: string },
+  ) => Promise<ReviewSessionSubmitResponse>
+  onSubmitted?: (result: ReviewSessionSubmitResponse) => void
   backHref: (chapterId: number | null) => string
   warmupKind?: StudyWarmupKind
   refreshReviewStateOnExitEdit?: boolean
@@ -107,6 +110,13 @@ const inflightReviewSessionLoads = new Map<
     }
   }>
 >()
+
+function createCompletionOperationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `review-complete-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
@@ -160,8 +170,8 @@ export function ReviewSessionContainer({
   loadSession,
   loadProgress,
   saveProgress,
-  clearProgress,
   submitSession,
+  onSubmitted,
   backHref,
   warmupKind,
   renderBelowFlow,
@@ -180,12 +190,10 @@ export function ReviewSessionContainer({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
-  const [pendingPayload, setPendingPayload] = useState<{
-    durationSeconds: number
-    completionMode: 'manual_complete' | 'auto_complete'
-    revealedRemaining: boolean
-    redNodeIds: string[]
-  } | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [pendingPayload, setPendingPayload] = useState<(CompleteFlowPayload & {
+    operationId: string
+  }) | null>(null)
   const modeTransitioningRef = useRef(false)
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
@@ -295,41 +303,23 @@ export function ReviewSessionContainer({
     }
   }, [displayMode, flushSave, id, reloadSession])
 
-  const submitCompletion = useCallback(async (payload: {
-    durationSeconds: number
-    completionMode: 'manual_complete' | 'auto_complete'
-    revealedRemaining: boolean
-    redNodeIds: string[]
-  }) => {
-    if (!session) return
-    await flushSave()
-    await clearProgress(session.id)
-    if (payload.completionMode === 'auto_complete') {
-      setSubmitting(true)
-      try {
-        await submitSession(session.id, {
-          chapter_id: chapterId ?? undefined,
-          duration_seconds: payload.durationSeconds,
-          completion_mode: payload.completionMode,
-          revealed_remaining: payload.revealedRemaining,
-          red_marked_count: payload.redNodeIds.length,
-        })
-      } finally {
-        setSubmitting(false)
-      }
+  const submitCompletion = useCallback(async (payload: CompleteFlowPayload) => {
+    if (!session) {
+      payload.cancel()
       return
     }
-    setPendingPayload(payload)
+    setSubmitError(null)
+    setPendingPayload({ ...payload, operationId: createCompletionOperationId() })
     setStageDialogOpen(true)
-  }, [chapterId, clearProgress, flushSave, session, submitSession])
+  }, [session])
 
   const handleStageConfirm = useCallback(async (targetReviewNumber: number, needsPractice: boolean, note: string) => {
-    if (!session || !pendingPayload) return
-    setStageDialogOpen(false)
+    if (!session || !pendingPayload || submitting) return
     setSubmitting(true)
+    setSubmitError(null)
     try {
       await flushSave()
-      await submitSession(session.id, {
+      const result = await submitSession(session.id, {
         chapter_id: chapterId ?? undefined,
         duration_seconds: pendingPayload.durationSeconds,
         completion_mode: pendingPayload.completionMode,
@@ -338,17 +328,24 @@ export function ReviewSessionContainer({
         target_review_number: targetReviewNumber,
         needs_practice: needsPractice,
         ...(note ? { note } : {}),
-      })
+      }, { mutationId: pendingPayload.operationId })
+      await pendingPayload.finalize()
+      setStageDialogOpen(false)
+      setPendingPayload(null)
+      onSubmitted?.(result)
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '复习完成提交失败，请重试。')
     } finally {
       setSubmitting(false)
-      setPendingPayload(null)
     }
-  }, [chapterId, flushSave, pendingPayload, session, submitSession])
+  }, [chapterId, flushSave, onSubmitted, pendingPayload, session, submitSession, submitting])
 
   const handleStageCancel = useCallback(() => {
+    pendingPayload?.cancel()
     setStageDialogOpen(false)
+    setSubmitError(null)
     setPendingPayload(null)
-  }, [])
+  }, [pendingPayload])
 
   const palace = session?.palace ?? editorPalace ?? null
   const displayLoadError = displayMode === 'edit' && !editEditorState ? editorError : null
@@ -445,10 +442,7 @@ export function ReviewSessionContainer({
           initialSnapshot={initialSnapshot}
           onFullscreenChange={setMindMapFullscreen}
           onSnapshotChange={async (snapshot) => {
-            if (snapshot.completed) {
-              await clearProgress(session.id)
-              return
-            }
+            if (snapshot.completed) return
             await saveProgress(session.id, {
               completed: snapshot.completed,
               reveal_map: snapshot.revealMap,
@@ -469,6 +463,8 @@ export function ReviewSessionContainer({
           stages={session.reviewStages}
           currentReviewNumber={session.review_number}
           durationSeconds={pendingPayload?.durationSeconds}
+          submitting={submitting}
+          error={submitError}
           onConfirm={handleStageConfirm}
           onCancel={handleStageCancel}
         />

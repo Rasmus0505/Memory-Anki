@@ -23,13 +23,111 @@ from memory_anki.modules.reviews.application.schedule_rebuild_service import (
 from memory_anki.modules.reviews.application.schedule_service import (
     create_initial_review_schedules,
     get_algorithm_intervals,
+    get_algorithm_stage_labels,
     get_initial_same_day_slot_count,
     is_schedule_due_or_later_today,
+    schedule_display_datetime,
 )
 from memory_anki.modules.sessions.api import (
     ACTIVE_STATUSES,
     create_review_study_session,
 )
+
+
+class ReviewSubmitConflictError(RuntimeError):
+    pass
+
+
+def _review_completion_payload(
+    session: Session,
+    *,
+    log: ReviewLog,
+    palace: Palace,
+    chapter_id: int | None,
+    completed_stage_number: int,
+    completed_stage_count: int,
+    needs_practice: bool,
+) -> dict[str, Any]:
+    stage_labels = get_algorithm_stage_labels(session)
+    total_stage_count = len(stage_labels)
+    next_palace_schedule = (
+        session.query(ReviewSchedule)
+        .filter_by(palace_id=palace.id, completed=False)
+        .order_by(ReviewSchedule.review_number, ReviewSchedule.id)
+        .first()
+    )
+    next_review_datetime = (
+        schedule_display_datetime(next_palace_schedule, palace, session)
+        if next_palace_schedule is not None
+        else None
+    )
+    next_review_at = next_review_datetime.isoformat() if next_review_datetime is not None else None
+    resolved_chapter_id = chapter_id
+    if resolved_chapter_id is None and palace.chapters:
+        resolved_chapter_id = min(chapter.id for chapter in palace.chapters)
+    return {
+        "review_log_id": log.id,
+        "palace_id": palace.id,
+        "chapter_id": resolved_chapter_id,
+        "duration_seconds": max(0, int(log.duration_seconds or 0)),
+        "completed_stage_count": min(completed_stage_count, total_stage_count),
+        "total_stage_count": total_stage_count,
+        "completed_stage_label": (
+            stage_labels[completed_stage_number]
+            if 0 <= completed_stage_number < total_stage_count
+            else None
+        ),
+        "next_stage_label": (
+            stage_labels[completed_stage_count]
+            if 0 <= completed_stage_count < total_stage_count
+            else None
+        ),
+        "next_review_at": next_review_at,
+        "mastered": bool(palace.mastered),
+        "needs_practice": bool(needs_practice),
+    }
+
+
+def get_review_completion(session: Session, review_log_id: int) -> dict[str, Any] | None:
+    log = (
+        session.query(ReviewLog)
+        .join(Palace)
+        .filter(ReviewLog.id == review_log_id, Palace.deleted_at.is_(None))
+        .first()
+    )
+    if log is None or log.palace is None:
+        return None
+    study_session = session.get(StudySession, f"review-log-{review_log_id}")
+    summary = _json_loads(study_session.summary_json if study_session else None, {})
+    stored_receipt = summary.get("completion_receipt")
+    if isinstance(stored_receipt, dict):
+        return {
+            **stored_receipt,
+            "review_log_id": log.id,
+            "palace_id": log.palace_id,
+            "duration_seconds": max(0, int(log.duration_seconds or 0)),
+        }
+    stage_labels = get_algorithm_stage_labels(session)
+    completed_stage_count = sum(
+        1 for schedule in (log.palace.review_schedules or []) if schedule.completed
+    )
+    if log.palace.mastered:
+        completed_stage_count = len(stage_labels)
+    completed_stage_number = summary.get("target_review_number")
+    if not isinstance(completed_stage_number, int):
+        completed_stage_number = summary.get("review_number")
+    if not isinstance(completed_stage_number, int):
+        completed_stage_number = max(0, completed_stage_count - 1)
+    chapter_id = summary.get("chapter_id")
+    return _review_completion_payload(
+        session,
+        log=log,
+        palace=log.palace,
+        chapter_id=chapter_id if isinstance(chapter_id, int) else None,
+        completed_stage_number=completed_stage_number,
+        completed_stage_count=completed_stage_count,
+        needs_practice=bool(summary.get("needs_practice", log.palace.needs_practice)),
+    )
 
 
 def _resolve_completed_count_after_submit(
@@ -57,17 +155,17 @@ def detect_review_stage_progress_issues(session: Session) -> dict:
     """Read-only self-check for progress data handled by stage-progress repair."""
     schedule_ids = {row[0] for row in session.query(ReviewSchedule.id).all()}
 
-    orphan_progress_count = sum(
-        1
+    orphan_progress_ids = [
+        progress.id
         for progress in session.query(SessionProgress)
         .filter(SessionProgress.session_kind == "review", SessionProgress.completed == False)
         .all()
         if progress.review_schedule_id is None
         or progress.review_schedule_id not in schedule_ids
-    )
+    ]
 
-    orphan_study_session_count = sum(
-        1
+    orphan_study_session_ids = [
+        row.id
         for row in session.query(StudySession)
         .filter(
             StudySession.scene == "review",
@@ -77,7 +175,9 @@ def detect_review_stage_progress_issues(session: Session) -> dict:
         )
         .all()
         if row.target_id is None or row.target_id not in schedule_ids
-    )
+    ]
+    orphan_progress_count = len(orphan_progress_ids)
+    orphan_study_session_count = len(orphan_study_session_ids)
 
     schedules_by_palace: dict[int, list[ReviewSchedule]] = {}
     for schedule in session.query(ReviewSchedule).all():
@@ -93,7 +193,9 @@ def detect_review_stage_progress_issues(session: Session) -> dict:
     total_issues = orphan_progress_count + orphan_study_session_count + stage_gap_palace_count
     return {
         "orphan_progress_count": orphan_progress_count,
+        "orphan_progress_ids": orphan_progress_ids,
         "orphan_study_session_count": orphan_study_session_count,
+        "orphan_study_session_ids": orphan_study_session_ids,
         "stage_gap_palace_count": stage_gap_palace_count,
         "total_issues": total_issues,
         "needs_repair": total_issues > 0,
@@ -107,9 +209,10 @@ def submit_review(
     completion_mode: str = "manual_complete",
     target_review_number: int | None = None,
     needs_practice: bool = False,
+    chapter_id: int | None = None,
     *,
     commit: bool = True,
-) -> tuple[ReviewLog | None, dict]:
+) -> tuple[ReviewLog | None, dict[str, Any]]:
     schedule = (
         session.query(ReviewSchedule)
         .join(Palace)
@@ -122,12 +225,14 @@ def submit_review(
     if not schedule:
         return None, {}
 
+    if schedule.completed:
+        raise ReviewSubmitConflictError("该复习阶段已经完成，请刷新复习队列。")
     if not schedule.palace or not is_schedule_due_or_later_today(
         schedule,
         schedule.palace,
         session,
     ):
-        return None, {}
+        raise ReviewSubmitConflictError("该复习阶段当前不可提交，请刷新复习队列。")
 
     completed_at = datetime.now().replace(second=0, microsecond=0)
     today = completed_at.date()
@@ -140,7 +245,7 @@ def submit_review(
         duration_seconds=duration_seconds,
     )
     session.add(log)
-    extra: dict[str, bool] = {}
+    extra: dict[str, Any] = {}
     intervals = get_algorithm_intervals(session)
     next_review_number = (
         target_review_number + 1
@@ -169,6 +274,19 @@ def submit_review(
         extra["mastered"] = True
 
     session.flush()
+    completion_receipt = _review_completion_payload(
+        session,
+        log=log,
+        palace=palace,
+        chapter_id=chapter_id,
+        completed_stage_number=(
+            target_review_number
+            if target_review_number is not None
+            else schedule.review_number
+        ),
+        completed_stage_count=completed_count,
+        needs_practice=needs_practice,
+    )
     create_review_study_session(
         session,
         session_id=f"review-log-{log.id}",
@@ -185,9 +303,12 @@ def submit_review(
             "review_number": schedule.review_number,
             "target_review_number": target_review_number,
             "needs_practice": bool(needs_practice),
+            "chapter_id": chapter_id,
+            "completion_receipt": completion_receipt,
         },
         commit=commit,
     )
+    extra.update(completion_receipt)
     if commit:
         session.commit()
         session.refresh(log)
@@ -283,12 +404,14 @@ def _clean_progress_payload(payload: dict[str, Any], palace: Palace | None) -> d
 def _pending_schedule_for_palace(session: Session, palace_id: int | None) -> ReviewSchedule | None:
     if palace_id is None:
         return None
-    return (
+    candidates = (
         session.query(ReviewSchedule)
         .filter_by(palace_id=palace_id, completed=False)
         .order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc())
-        .first()
+        .limit(2)
+        .all()
     )
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _latest_completed_at(session: Session, palace_id: int | None) -> datetime | None:
@@ -338,10 +461,7 @@ def _migrate_orphan_review_progress(session: Session) -> int:
             .first()
         )
         if current is not None and current.id != progress.id:
-            if (current.updated_at or datetime.min) >= (progress.updated_at or datetime.min):
-                continue
-            session.delete(current)
-            session.flush()
+            continue
         progress.review_schedule_id = target.id
         progress.palace_id = target.palace_id
         progress.palace_segment_id = None
@@ -386,17 +506,19 @@ def _migrate_orphan_review_study_sessions(session: Session) -> int:
             .first()
         )
         if current is not None and current.id != row.id:
-            if (current.updated_at or datetime.min) >= (row.updated_at or datetime.min):
-                row.status = "abandoned"
-                row.ended_at = datetime.now().replace(second=0, microsecond=0)
-                changed += 1
-                continue
-            current.status = "abandoned"
-            current.ended_at = datetime.now().replace(second=0, microsecond=0)
+            continue
+        original_target_id = row.target_id
         row.target_id = target.id
         row.palace_id = target.palace_id
         row.palace_segment_id = None
         row.mini_palace_id = None
+        summary = _json_loads(row.summary_json, {})
+        summary["review_stage_repair"] = {
+            "version": 1,
+            "original_target_id": original_target_id,
+            "repaired_target_id": target.id,
+        }
+        row.summary_json = _json_dumps(summary, "{}")
         changed += 1
     session.flush()
     return changed

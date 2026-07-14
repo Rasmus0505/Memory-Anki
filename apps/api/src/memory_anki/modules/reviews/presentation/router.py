@@ -18,7 +18,9 @@ from memory_anki.modules.reviews.application.review_commands import (
     submit_review_command,
 )
 from memory_anki.modules.reviews.application.review_execution_service import (
+    ReviewSubmitConflictError,
     detect_review_stage_progress_issues,
+    get_review_completion,
 )
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_review_load_forecast,
@@ -27,11 +29,13 @@ from memory_anki.modules.reviews.application.review_metrics_service import (
 )
 from memory_anki.modules.reviews.application.review_queue_service import (
     get_chapter_queue_payload,
+    get_next_due_review,
     get_overdue_count,
     get_review_queue_payload,
     undo_spread_overdue,
 )
 from memory_anki.modules.reviews.application.review_repair_service import (
+    preview_review_stage_progress_repair,
     repair_review_stage_progress,
 )
 from memory_anki.modules.reviews.application.schedule_service import (
@@ -252,10 +256,13 @@ def api_review_stage_progress_health(session: Session = Depends(session_dep)):
 
 
 @router.post("/review/repair-stage-progress")
-def api_repair_review_stage_progress(session: Session = Depends(session_dep)):
-    result = repair_review_stage_progress(
-        session, uow=SqlAlchemyUnitOfWork(session)
-    )
+def api_repair_review_stage_progress(
+    data: dict | None = None,
+    session: Session = Depends(session_dep),
+):
+    if data and bool(data.get("dry_run")):
+        return {"ok": True, **preview_review_stage_progress_repair(session)}
+    result = repair_review_stage_progress(session, uow=SqlAlchemyUnitOfWork(session))
     return {"ok": True, **result}
 
 
@@ -312,16 +319,40 @@ def api_submit_session(
     if existing_response is not None:
         return existing_response
 
-    response = submit_review_command(
-        session,
-        schedule_id,
-        data,
-        uow=SqlAlchemyUnitOfWork(session),
-        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
-    )
+    try:
+        response = submit_review_command(
+            session,
+            schedule_id,
+            data,
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+        )
+    except ReviewSubmitConflictError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "review_submit_conflict", "message": str(error)},
+        ) from error
     if response is None:
         raise_not_found()
     return response
+
+
+@router.get("/review/completions/{review_log_id}", response_model=SubmitReviewResponse)
+def api_review_completion(review_log_id: int, session: Session = Depends(session_dep)):
+    response = get_review_completion(session, review_log_id)
+    if response is None:
+        raise_not_found("复习完成记录不存在。")
+    next_schedule = get_next_due_review(
+        session,
+        chapter_id=response.get("chapter_id"),
+    )
+    return {
+        "ok": True,
+        "completion_mode": "manual_complete",
+        "score": 5,
+        "next_id": next_schedule.id if next_schedule else None,
+        **response,
+    }
 
 
 @router.get("/review", response_model=ReviewQueueResponse)

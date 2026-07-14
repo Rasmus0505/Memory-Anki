@@ -20,10 +20,12 @@ describe("MindMapReviewFlow session", () => {
   it("submits only once when completion is clicked rapidly", async () => {
     let resolveComplete: () => void = () => {};
     const onComplete = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
+      async (payload: { finalize: () => Promise<void> }) => {
+        await new Promise<void>((resolve) => {
           resolveComplete = resolve;
-        }),
+        });
+        await payload.finalize();
+      },
     );
 
     renderInRouter(
@@ -45,14 +47,17 @@ describe("MindMapReviewFlow session", () => {
     fireEvent.click(completedButton);
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    expect(timer.complete).toHaveBeenCalledTimes(1);
+    expect(timer.complete).not.toHaveBeenCalled();
 
     resolveComplete();
-    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(timer.complete).toHaveBeenCalledTimes(1));
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it("maps completion decision shortcuts to unfinished and completed feedback", async () => {
-    const onComplete = vi.fn().mockResolvedValue(undefined);
+    const onComplete = vi.fn(async (payload: { finalize: () => Promise<void> }) => {
+      await payload.finalize();
+    });
 
     const { unmount } = renderInRouter(
       <MindMapReviewFlow
@@ -95,13 +100,15 @@ describe("MindMapReviewFlow session", () => {
     fireEvent.keyDown(window, { key: "5", code: "Digit5" });
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    expect(timer.complete).toHaveBeenCalledWith(
-      "manual_complete",
-      expect.objectContaining({
-        revealed_remaining: true,
-        red_marked_count: 2,
-      }),
-    );
+    await waitFor(() => {
+      expect(timer.complete).toHaveBeenCalledWith(
+        "manual_complete",
+        expect.objectContaining({
+          revealed_remaining: true,
+          red_marked_count: 2,
+        }),
+      );
+    });
   });
 
   it("disables local completion persistence for formal review sessions", async () => {
@@ -152,4 +159,22 @@ describe("MindMapReviewFlow session", () => {
     expect(persistStudySessionRecordMock).toHaveBeenCalledTimes(1);
     expect(timer.reset).toHaveBeenCalledTimes(1);
   });
+  it("starts formal review timing as soon as the active route is ready", async () => {
+    (timer as { status: string }).status = "idle";
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        persistKey="review:1"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(timer.start).toHaveBeenCalledWith({ source: "review_route_ready" });
+    });
+  });
+
 });

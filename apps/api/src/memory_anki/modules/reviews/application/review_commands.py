@@ -52,6 +52,7 @@ def submit_review_command(
         str(payload.get("completion_mode", "manual_complete")),
         target_review_number=payload.get("target_review_number"),
         needs_practice=bool(payload.get("needs_practice", False)),
+        chapter_id=(int(payload["chapter_id"]) if payload.get("chapter_id") is not None else None),
         commit=False,
     )
     if log is None:
@@ -74,6 +75,7 @@ def submit_review_command(
         "score": log.score,
         "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),
+        **extra,
     }
     _commit_response(response, uow=uow, before_commit=before_commit)
     return response

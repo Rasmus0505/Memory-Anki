@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   flushSave: vi.fn(),
   setEditorState: vi.fn(),
   latestFlowProps: null as Record<string, unknown> | null,
+  finalizeCompletion: vi.fn(),
+  cancelCompletion: vi.fn(),
 }))
 
 vi.mock('react-router-dom', () => ({
@@ -51,6 +53,8 @@ vi.mock('@/widgets/mindmap-review-flow/MindMapReviewFlow', () => ({
               completionMode: 'manual_complete',
               revealedRemaining: true,
               redNodeIds: ['node-1'],
+              finalize: mocks.finalizeCompletion,
+              cancel: mocks.cancelCompletion,
             })
           }
         >
@@ -95,6 +99,8 @@ describe('ReviewSession', () => {
     mocks.setEditorState.mockReset()
     mocks.useMindMapDocumentSession.mockReset()
     mocks.latestFlowProps = null
+    mocks.finalizeCompletion.mockReset().mockResolvedValue(undefined)
+    mocks.cancelCompletion.mockReset()
 
     mocks.getReviewSessionApi.mockResolvedValue({
       id: 309,
@@ -123,7 +129,23 @@ describe('ReviewSession', () => {
     })
     mocks.getReviewSessionProgressApi.mockResolvedValue({ progress: null })
     mocks.clearReviewSessionProgressApi.mockResolvedValue({ ok: true })
-    mocks.submitReviewSessionApi.mockResolvedValue({ ok: true, next_id: null, score: 5 })
+    mocks.submitReviewSessionApi.mockResolvedValue({
+      ok: true,
+      completion_mode: 'manual_complete',
+      next_id: null,
+      score: 5,
+      mastered: false,
+      review_log_id: 801,
+      palace_id: 1,
+      chapter_id: null,
+      duration_seconds: 12,
+      completed_stage_count: 4,
+      total_stage_count: 9,
+      completed_stage_label: '2天',
+      next_stage_label: '4天',
+      next_review_at: '2026-05-28T10:00:00',
+      needs_practice: false,
+    })
     mocks.flushSave.mockResolvedValue(undefined)
     mocks.useMindMapDocumentSession.mockReturnValue({
       meta: {
@@ -260,7 +282,7 @@ describe('ReviewSession', () => {
     fireEvent.click(confirmButton)
 
     await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
-    expect(mocks.flushSave).toHaveBeenCalledTimes(3)
+    expect(mocks.flushSave).toHaveBeenCalledTimes(2)
     expect(mocks.submitReviewSessionApi).toHaveBeenCalledWith(309, {
       chapter_id: undefined,
       duration_seconds: 12,
@@ -269,8 +291,9 @@ describe('ReviewSession', () => {
       red_marked_count: 1,
       target_review_number: 3,
       needs_practice: false,
-    })
-    expect(mocks.navigate).not.toHaveBeenCalled()
+    }, expect.objectContaining({ mutationId: expect.any(String) }))
+    expect(mocks.finalizeCompletion).toHaveBeenCalledTimes(1)
+    expect(mocks.navigate).toHaveBeenCalledWith('/review/completed/801', { replace: true })
   })
 
   it('lets number keys select the target stage in the completion feedback dialog', async () => {
@@ -294,7 +317,7 @@ describe('ReviewSession', () => {
       red_marked_count: 1,
       target_review_number: 4,
       needs_practice: false,
-    })
+    }, expect.objectContaining({ mutationId: expect.any(String) }))
   })
 
   it('submits the optional review note from the completion dialog', async () => {
@@ -317,6 +340,43 @@ describe('ReviewSession', () => {
       target_review_number: 3,
       needs_practice: false,
       note: '瓣膜顺序卡壳',
-    })
+    }, expect.objectContaining({ mutationId: expect.any(String) }))
   })
+  it('keeps the completion draft and mutation identity when submission fails and retries', async () => {
+    mocks.submitReviewSessionApi
+      .mockRejectedValueOnce(new Error('网络暂时不可用'))
+      .mockResolvedValueOnce({
+        ok: true,
+        completion_mode: 'manual_complete',
+        next_id: null,
+        score: 5,
+        mastered: false,
+        review_log_id: 802,
+        palace_id: 1,
+        chapter_id: null,
+        duration_seconds: 12,
+        completed_stage_count: 4,
+        total_stage_count: 9,
+        completed_stage_label: '2天',
+        next_stage_label: '4天',
+        next_review_at: '2026-05-28T10:00:00',
+        needs_practice: false,
+      })
+    render(<ReviewSession />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+    fireEvent.click(await screen.findByRole('button', { name: /默认.*标记第 4 次完成/ }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('网络暂时不可用')
+    expect(mocks.finalizeCompletion).not.toHaveBeenCalled()
+    expect(mocks.cancelCompletion).not.toHaveBeenCalled()
+    const firstMutationId = mocks.submitReviewSessionApi.mock.calls[0][2].mutationId
+
+    fireEvent.click(screen.getByRole('button', { name: /默认.*标记第 4 次完成/ }))
+    await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(2))
+    expect(mocks.submitReviewSessionApi.mock.calls[1][2].mutationId).toBe(firstMutationId)
+    expect(mocks.finalizeCompletion).toHaveBeenCalledTimes(1)
+    expect(mocks.navigate).toHaveBeenCalledWith('/review/completed/802', { replace: true })
+  })
+
 })

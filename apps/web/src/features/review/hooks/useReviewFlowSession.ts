@@ -79,7 +79,8 @@ export function useReviewFlowSession({
     totalNodeCount: reveal.totalNodeCount,
     revealMode,
   })
-  const submittingRef = React.useRef(false)
+  const completionPendingRef = React.useRef(false)
+  const autoStartedSessionRef = React.useRef<string | null>(null)
   const previousFullscreenRef = React.useRef(false)
   const timerRef = React.useRef(timer)
   const hardUnloadRef = React.useRef(false)
@@ -88,6 +89,18 @@ export function useReviewFlowSession({
   React.useEffect(() => {
     timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
   }, [isActive, timer])
+
+  React.useEffect(() => {
+    if (sessionKind !== 'review' || !isActive || completionPendingRef.current) return
+    const sessionKey = `${persistKey ?? `${sessionKind}:${palaceId ?? 'none'}`}:${becameActiveAt ?? 'initial'}`
+    if (autoStartedSessionRef.current === sessionKey) return
+    autoStartedSessionRef.current = sessionKey
+    if (timer.status === 'idle') {
+      timer.start({ source: 'review_route_ready' })
+    } else if (timer.status === 'paused') {
+      timer.resume({ source: 'review_route_ready' })
+    }
+  }, [becameActiveAt, isActive, palaceId, persistKey, sessionKind, timer])
 
   React.useEffect(() => {
     if (isActive) return
@@ -153,28 +166,44 @@ export function useReviewFlowSession({
 
   const finishFlow = React.useCallback(
     async (modeName: 'manual_complete' | 'auto_complete') => {
-      if (reveal.completed || submittingRef.current) return
+      if (reveal.completed || completionPendingRef.current) return
 
+      completionPendingRef.current = true
+      timer.pause({ source: 'completion_pending' })
       const finishState = revealRemainingNodes(reveal.root, reveal.revealMap, reveal.redNodeIds)
-      reveal.setRevealMap(finishState.revealMap)
-      reveal.setRedNodeIds(finishState.redNodeIds)
-      reveal.setCompleted(true)
-      await feedback.runCompletionCeremony()
-      timer.registerActivity('practice_interaction', { source: 'complete' })
-      const record = await timer.complete(modeName, {
-        revealed_remaining: finishState.revealedRemaining,
-        red_marked_count: finishState.redNodeIds.size,
-      })
-      submittingRef.current = true
+      let settled = false
+      const cancel = () => {
+        if (settled) return
+        settled = true
+        completionPendingRef.current = false
+        timer.resume({ source: 'completion_cancelled' })
+      }
+      const finalize = async () => {
+        if (settled) return
+        settled = true
+        reveal.setRevealMap(finishState.revealMap)
+        reveal.setRedNodeIds(finishState.redNodeIds)
+        reveal.setCompleted(true)
+        await feedback.runCompletionCeremony()
+        await timer.complete(modeName, {
+          revealed_remaining: finishState.revealedRemaining,
+          red_marked_count: finishState.redNodeIds.size,
+        })
+        completionPendingRef.current = false
+      }
+
       try {
         await onComplete({
-          durationSeconds: record?.effectiveSeconds ?? timer.effectiveSeconds,
+          durationSeconds: timer.getEffectiveSeconds(),
           completionMode: modeName,
           revealedRemaining: finishState.revealedRemaining,
           redNodeIds: [...finishState.redNodeIds],
+          finalize,
+          cancel,
         })
-      } finally {
-        submittingRef.current = false
+      } catch (error) {
+        cancel()
+        throw error
       }
     },
     [feedback, onComplete, reveal, timer],

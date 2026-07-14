@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { submitReviewSessionApi } from './reviewApi'
+import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 
 const { invalidatePalaceCatalogCacheMock, requestMock } = vi.hoisted(() => ({
   invalidatePalaceCatalogCacheMock: vi.fn(),
@@ -20,15 +21,33 @@ describe('reviewApi', () => {
   })
 
   it('invalidates palace catalog state after a successful review submission', async () => {
-    requestMock.mockResolvedValue({ ok: true, next_id: null, score: 5 })
+    requestMock.mockResolvedValue({
+      ok: true,
+      next_id: null,
+      score: 5,
+      review_log_id: 8,
+      palace_id: 9,
+      chapter_id: 10,
+      duration_seconds: 75,
+      completed_stage_count: 4,
+      total_stage_count: 9,
+      completed_stage_label: '2天',
+      next_stage_label: '4天',
+      next_review_at: '2026-07-15T10:00:00',
+      mastered: false,
+      needs_practice: false,
+    })
+    const stateChanged = vi.fn()
+    const unsubscribe = onAppEvent(APP_EVENT_NAMES.reviewStateChanged, stateChanged)
 
     await submitReviewSessionApi(42, {
       completion_mode: 'manual_complete',
       target_review_number: 3,
-    })
+    }, { mutationId: 'stable-review-operation' })
 
     expect(requestMock).toHaveBeenCalledWith('/review/session/42/submit', {
       method: 'POST',
+      headers: { 'X-Memory-Anki-Mutation-ID': 'stable-review-operation' },
       body: JSON.stringify({
         completion_mode: 'manual_complete',
         target_review_number: 3,
@@ -40,5 +59,12 @@ describe('reviewApi', () => {
       },
     })
     expect(invalidatePalaceCatalogCacheMock).toHaveBeenCalledTimes(1)
+    expect(stateChanged).toHaveBeenCalledWith(expect.objectContaining({
+      palaceId: 9,
+      chapterId: 10,
+      completedStageCount: 4,
+      totalStageCount: 9,
+    }), expect.any(CustomEvent))
+    unsubscribe()
   })
 })

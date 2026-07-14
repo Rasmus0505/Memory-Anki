@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 import {
   consumePrefetchedPromise,
@@ -106,6 +107,14 @@ export function getReviewStageProgressHealthApi() {
   return request<ReviewStageProgressHealthResponse>('/review/stage-progress-health')
 }
 
+export function previewReviewStageProgressRepairApi() {
+  return request<ReviewStageProgressRepairResponse>('/review/repair-stage-progress', {
+    method: 'POST',
+    body: JSON.stringify({ dry_run: true }),
+    persistence: false,
+  })
+}
+
 export function repairReviewStageProgressApi() {
   return withReviewStateInvalidation(
     request<ReviewStageProgressRepairResponse>('/review/repair-stage-progress', {
@@ -132,10 +141,12 @@ export function submitReviewSessionApi(
     needs_practice?: boolean
     note?: string
   },
+  options: { mutationId?: string } = {},
 ) {
   return withReviewStateInvalidation(
     request<ReviewSessionSubmitResponse>(`/review/session/${id}/submit`, {
       method: 'POST',
+      headers: options.mutationId ? { 'X-Memory-Anki-Mutation-ID': options.mutationId } : undefined,
       body: JSON.stringify(data),
       persistence: {
         resourceKey: `review-submit:${id}`,
@@ -143,5 +154,19 @@ export function submitReviewSessionApi(
         replayMode: 'auto',
       },
     }),
-  )
+  ).then((result) => {
+    emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, {
+      palaceId: result.palace_id,
+      chapterId: result.chapter_id,
+      completedStageCount: result.completed_stage_count,
+      totalStageCount: result.total_stage_count,
+      mastered: result.mastered,
+      nextReviewAt: result.next_review_at,
+    })
+    return result
+  })
+}
+
+export function getReviewCompletionApi(reviewLogId: number) {
+  return request<ReviewSessionSubmitResponse>(`/review/completions/${reviewLogId}`)
 }

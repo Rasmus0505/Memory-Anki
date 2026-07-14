@@ -67,6 +67,7 @@ function createTimer(
     acknowledgeFocusGoal: overrides.acknowledgeFocusGoal ?? vi.fn(),
     startNextFocusRound: overrides.startNextFocusRound ?? vi.fn(),
     adjustDuration: overrides.adjustDuration ?? vi.fn(),
+    getEffectiveSeconds: overrides.getEffectiveSeconds ?? (() => overrides.effectiveSeconds ?? 0),
     complete: overrides.complete ?? vi.fn(async () => null),
     reset: overrides.reset ?? vi.fn(),
   }

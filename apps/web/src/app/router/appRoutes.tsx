@@ -21,6 +21,7 @@ export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspaceP
 export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
+export const preloadReviewCompletionPage = () => import('@/app/router/review/ReviewCompletion')
 export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
 export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
 
@@ -54,6 +55,7 @@ const ProfileBackupsPage = lazyWithRetry(
   () => import('@/pages/settings/BackupSettingsPage'),
 )
 const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
+const ReviewCompletionPage = lazyWithRetry(preloadReviewCompletionPage)
 const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
 const SegmentPracticePage = lazyWithRetry(preloadSegmentPracticePage)
 const ReviewFeedbackPreviewRoute = lazyWithRetry(
@@ -97,6 +99,7 @@ const REGISTERED_DYNAMIC_PATTERNS = [
   /^\/segments\/\d+\/practice$/,
   /^\/english\/courses\/\d+$/,
   /^\/review\/session\/\d+$/,
+  /^\/review\/completed\/\d+$/,
 ]
 
 // 动态段路由的"前缀提取"：命中已注册动态段的未知后代时，回退到主段。
@@ -177,6 +180,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/review" element={<ReviewOverviewPage />} />
           <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
           <Route path="/review/session/:id" element={<ReviewSessionPage />} />
+          <Route path="/review/completed/:reviewLogId" element={<ReviewCompletionPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/timer" element={<ProfileTimerPage />} />
           <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />

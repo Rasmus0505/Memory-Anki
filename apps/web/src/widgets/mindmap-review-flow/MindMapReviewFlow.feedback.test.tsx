@@ -5,6 +5,7 @@ import {
   getLatestMindMapEditorSurfaceProps,
   renderInRouter,
   setupMindMapReviewFlowTest,
+  timer,
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 import { writeReviewFeedbackSettings } from "@/shared/feedback/reviewFeedbackSettings";
@@ -61,9 +62,11 @@ describe("MindMapReviewFlow feedback", () => {
     expect(screen.getByRole("button", { name: "完成结算" })).toBeTruthy();
   });
 
-  it("shows a short completion ceremony before invoking onComplete", async () => {
+  it("shows the completion ceremony only after the completion callback finalizes", async () => {
     vi.useFakeTimers();
-    const onComplete = vi.fn().mockResolvedValue(undefined);
+    const onComplete = vi.fn(async (payload: { finalize: () => Promise<void> }) => {
+      await payload.finalize();
+    });
 
     renderInRouter(
       <MindMapReviewFlow
@@ -83,14 +86,15 @@ describe("MindMapReviewFlow feedback", () => {
       fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
     });
 
+    expect(onComplete).toHaveBeenCalledTimes(1);
     expect(screen.getByText("通关结算中")).toBeTruthy();
-    expect(onComplete).not.toHaveBeenCalled();
+    expect(timer.complete).not.toHaveBeenCalled();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(850);
     });
 
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(timer.complete).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 

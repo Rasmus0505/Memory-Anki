@@ -61,6 +61,16 @@ class SubmitReviewResponse(BaseModel):
     score: float | None = None
     next_id: int | None = None
     mastered: bool = False
+    review_log_id: int
+    palace_id: int
+    chapter_id: int | None = None
+    duration_seconds: int
+    completed_stage_count: int
+    total_stage_count: int
+    completed_stage_label: str | None = None
+    next_stage_label: str | None = None
+    next_review_at: str | None = None
+    needs_practice: bool = False
 
 class ReviewStageAdjustmentPreviewRequest(BaseModel):
     target_completed_count: int = Field(ge=0)

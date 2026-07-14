@@ -583,6 +583,8 @@ export function useTimedSession({
     setEffectiveSeconds,
     setFocusRound,
   })
+  const getEffectiveSeconds = React.useCallback(() => effectiveSecondsRef.current, [])
+
   const complete = React.useCallback(
     async (
       method: SessionCompletionMethod,
@@ -736,6 +738,7 @@ export function useTimedSession({
     acknowledgeFocusGoal,
     startNextFocusRound,
     adjustDuration,
+    getEffectiveSeconds,
     complete,
     reset,
   }))

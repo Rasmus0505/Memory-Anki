@@ -20,6 +20,7 @@ vi.mock("@/entities/session/model", async () => {
 });
 
 export const timer = {
+  sessionId: 'test-review-session',
   effectiveSeconds: 7,
   idleSeconds: 0,
   pauseCount: 0,
@@ -30,8 +31,10 @@ export const timer = {
   start: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
+  setSceneActive: vi.fn(),
   leaveScene: vi.fn(),
   adjustDuration: vi.fn(),
+  getEffectiveSeconds: vi.fn(() => 7),
   registerActivity: vi.fn(),
   logEvent: vi.fn(),
   complete: vi.fn(async () => ({ effectiveSeconds: 7 })),
@@ -73,6 +76,16 @@ vi.mock("@/features/mindmap-editor", () => ({
         ]);
       }),
       fitView: vi.fn(),
+      enterFullscreen: vi.fn(async () => {
+        (props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(
+          true,
+        );
+      }),
+      exitFullscreen: vi.fn(async () => {
+        (props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(
+          false,
+        );
+      }),
       enterNativeFullscreen: vi.fn(async () => {
         (props.onFullscreenChange as ((active: boolean) => void) | undefined)?.(
           true,
@@ -256,6 +269,7 @@ export function renderInRouter(node: React.ReactNode) {
 }
 
 export function setupMindMapReviewFlowTest() {
+  (timer as { status: string }).status = "running";
   persistStudySessionRecordMock.mockReset();
   persistStudySessionRecordMock.mockResolvedValue(null);
   timer.complete.mockClear();

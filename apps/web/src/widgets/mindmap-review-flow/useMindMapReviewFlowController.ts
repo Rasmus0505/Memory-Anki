@@ -77,6 +77,10 @@ export function useMindMapReviewFlowController({
     onFullscreenChange,
   });
 
+  const handleActiveNodes = React.useCallback((nodes: MindMapSelection[]) => {
+    flow.timer.registerActivity("practice_interaction", { source: "review_node_navigation" });
+    setActiveNodes(nodes);
+  }, [flow.timer]);
   const { startWeakRetryRound } = flow;
   const { firstRatings, round: recallRound, setRound: setRecallRound, weakNodeUids } = recallRatings;
 
@@ -354,7 +358,7 @@ React.useEffect(() => {
     activeNodes,
     selectedNodeUid,
     reviewNodeUids,
-    setActiveNodes,
+    handleActiveNodes,
     inlineEditEnabled,
     resolvedDisplayMode,
     isInlineEditMode,

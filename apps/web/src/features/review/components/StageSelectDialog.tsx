@@ -18,6 +18,8 @@ interface StageSelectDialogProps {
   stages: ReviewStageSummary[]
   currentReviewNumber: number
   durationSeconds?: number
+  submitting?: boolean
+  error?: string | null
   onConfirm: (targetReviewNumber: number, needsPractice: boolean, note: string) => void
   onCancel: () => void
 }
@@ -38,6 +40,8 @@ export function StageSelectDialog({
   stages,
   currentReviewNumber,
   durationSeconds,
+  submitting = false,
+  error = null,
   onConfirm,
   onCancel,
 }: StageSelectDialogProps) {
@@ -94,7 +98,7 @@ export function StageSelectDialog({
   if (total <= 0) return null
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel() }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !submitting) onCancel() }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>选择复习进度</DialogTitle>
@@ -163,6 +167,12 @@ export function StageSelectDialog({
             </div>
           </div>
 
+          {error ? (
+            <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          ) : null}
+
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">
               复盘一句（可选）：这次哪里卡了、下次注意什么
@@ -178,14 +188,16 @@ export function StageSelectDialog({
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t px-6 py-4">
-          <Button variant="outline" size="sm" onClick={onCancel}>
+          <Button variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
             取消
           </Button>
-          <Button variant="outline" size="sm" onClick={() => handleConfirm(true)}>
+          <Button variant="outline" size="sm" disabled={submitting} onClick={() => handleConfirm(true)}>
             完成，但仍需练习
           </Button>
-          <Button size="sm" onClick={() => handleConfirm(false)}>
-            {selectedNumber === defaultTarget
+          <Button size="sm" disabled={submitting} onClick={() => handleConfirm(false)}>
+            {submitting
+              ? '正在提交…'
+              : selectedNumber === defaultTarget
               ? `默认（标记第 ${defaultTarget + 1} 次完成）`
               : `标记第 ${selectedNumber + 1} 次完成（${normalizedStages[selectedNumber]?.label ?? '?'}）`}
           </Button>

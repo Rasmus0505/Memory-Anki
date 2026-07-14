@@ -1,9 +1,10 @@
 import * as React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import KnowledgePage from '@/pages/library/KnowledgeLibraryPage'
 import * as knowledgeApi from '@/entities/knowledge/api'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
 const knowledgeReplaceEditorStateMock = vi.hoisted(() => vi.fn())
@@ -336,4 +337,52 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     expect(knowledgeApi.deleteChapterApi).toHaveBeenNthCalledWith(2, 42, { force: true })
     expect(knowledgeReloadMock).toHaveBeenCalled()
   })
+  it('updates the selected chapter when review completion is broadcast', async () => {
+    const initial = {
+      chapter: { id: 42, name: '第二章', notes: '', children: [], breadcrumbs: [] },
+      palaces: [{
+        id: 9,
+        title: '教育史宫殿',
+        mastered: false,
+        archived: false,
+        review_stage_completed: 2,
+        review_stage_total: 5,
+        next_due_date: '2026-07-10',
+      }],
+    }
+    const refreshed = {
+      ...initial,
+      palaces: [{
+        ...initial.palaces[0],
+        review_stage_completed: 3,
+        next_due_date: '2026-07-15',
+      }],
+    }
+    vi.mocked(knowledgeApi.getChapterApi)
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(refreshed)
+
+    render(
+      <MemoryRouter>
+        <KnowledgePage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '选中测试章节' }))
+    await screen.findByText('复习 2/5')
+
+    act(() => {
+      emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, {
+        palaceId: 9,
+        chapterId: 42,
+        completedStageCount: 3,
+        totalStageCount: 5,
+        mastered: false,
+        nextReviewAt: '2026-07-15T10:00:00',
+      })
+    })
+
+    expect(await screen.findByText('复习 3/5')).toBeTruthy()
+    await waitFor(() => expect(knowledgeApi.getChapterApi).toHaveBeenCalledTimes(2))
+  })
+
 })

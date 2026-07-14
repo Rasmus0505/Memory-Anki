@@ -89,6 +89,7 @@ export interface TimedSessionController {
   acknowledgeFocusGoal: (meta?: TimedSessionMeta) => void
   startNextFocusRound: (meta?: TimedSessionMeta) => void
   adjustDuration: (seconds: number) => void
+  getEffectiveSeconds: () => number
   complete: (method: SessionCompletionMethod, meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
   reset: () => void
 }

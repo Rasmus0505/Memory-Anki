@@ -264,8 +264,11 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }, [activeGuidedUid, guidedCurrentUid])
 
   const selectGuidedNode = useCallback((nodeUid: string | null) => {
-    if (nodeUid) setActiveGuidedUid(nodeUid)
-  }, [])
+    if (!nodeUid) return
+    setActiveGuidedUid(nodeUid)
+    const node = guidedModel.byUid.get(nodeUid)
+    if (node) onNodeActive?.([toGuidedSelection(node)])
+  }, [guidedModel.byUid, onNodeActive])
 
   useEffect(() => {
     if (!onRateNode || activeGuidedUid) return
@@ -281,9 +284,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     selectGuidedNode(next.uid)
   }, [guidedEligibleNodes, ratingAdvancePending, recallRatings, selectGuidedNode])
   const handleGuidedGlobal = useCallback(() => {
-    setActiveGuidedUid(guidedModel.rootUid)
+    selectGuidedNode(guidedModel.rootUid)
     frameRef.current?.fitView?.()
-  }, [guidedModel.rootUid])
+  }, [guidedModel.rootUid, selectGuidedNode])
 
   const handleGuidedReveal = useCallback(() => {
     if (!guidedCurrentNode) return

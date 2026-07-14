@@ -2,7 +2,6 @@ import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ReviewScheduleSummary } from '@/shared/api/contracts'
 import {
-  clearReviewSessionProgressApi,
   getReviewSessionApi,
   getReviewSessionProgressApi,
   saveReviewSessionProgressApi,
@@ -61,8 +60,10 @@ export default function ReviewSession() {
       loadSession={loadReviewSession}
       loadProgress={getReviewSessionProgressApi}
       saveProgress={saveReviewSessionProgressApi}
-      clearProgress={clearReviewSessionProgressApi}
       submitSession={submitReviewSessionApi}
+      onSubmitted={(result) => {
+        navigate(`/review/completed/${result.review_log_id}`, { replace: true })
+      }}
       backHref={buildReviewOverviewPath}
       warmupKind="review-session"
     />
