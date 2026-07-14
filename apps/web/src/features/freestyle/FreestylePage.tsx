@@ -189,12 +189,13 @@ export default function FreestylePage() {
         Math.round(element.scrollTop / Math.max(1, element.clientHeight)),
       ),
     )
+    timer.registerActivity('practice_interaction', { source: 'freestyle_scroll' })
     if (nextIndex === progress.currentIndex) return
     setProgressAndPersist((current) => ({
       ...current,
       currentIndex: nextIndex,
     }))
-  }, [canCompleteRound, mode, progress.currentIndex, queue.length, setProgressAndPersist])
+  }, [canCompleteRound, mode, progress.currentIndex, queue.length, setProgressAndPersist, timer])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {

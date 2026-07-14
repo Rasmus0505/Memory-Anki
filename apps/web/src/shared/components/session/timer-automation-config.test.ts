@@ -23,7 +23,7 @@ describe('timer automation config', () => {
     expect(config.english_reading).toEqual(config.shared)
   })
 
-  it('migrates the legacy shared rule and disables old activity signals', () => {
+  it('migrates the legacy shared rule and keeps learning activity signals enabled', () => {
     const config = sanitizeTimerAutomationConfig({
       schemaVersion: 2,
       mode: 'scene',
@@ -36,9 +36,31 @@ describe('timer automation config', () => {
     expect(config.actions).toEqual({
       autoResumeOnWindowReturn: false,
       countNodeSwitchAsActivity: false,
-      countEditOperationsAsActivity: false,
-      countPracticeInteractionsAsActivity: false,
+      countEditOperationsAsActivity: true,
+      countPracticeInteractionsAsActivity: true,
     })
+  })
+
+  it('repairs schema v3 configs whose activity signals were forced off', () => {
+    const config = sanitizeTimerAutomationConfig({
+      schemaVersion: 3,
+      mode: 'global',
+      actions: {
+        autoResumeOnWindowReturn: false,
+        countNodeSwitchAsActivity: false,
+        countEditOperationsAsActivity: false,
+        countPracticeInteractionsAsActivity: false,
+      },
+      shared: {
+        autoStartOnPageEnter: false,
+        inactiveAutoPauseSeconds: 300,
+      },
+    })
+
+    expect(config.actions.countEditOperationsAsActivity).toBe(true)
+    expect(config.actions.countPracticeInteractionsAsActivity).toBe(true)
+    expect(config.shared.autoStartOnPageEnter).toBe(false)
+    expect(config.shared.inactiveAutoPauseSeconds).toBe(300)
   })
 
   it('uses the same auto-start choice for every scene', () => {

@@ -133,6 +133,7 @@ def api_get_study_session_by_target(
 @router.get("/study-sessions")
 def api_list_study_sessions(
     limit: int | None = Query(default=None, ge=1, le=500),
+    status: Literal["active", "paused", "completed", "abandoned", "recovered"] | None = None,
     offset: int = Query(default=0, ge=0),
     keyword: str | None = Query(default=None, max_length=300),
     kind: Literal["palace_edit", "practice", "quiz", "review"] | None = None,
@@ -146,6 +147,7 @@ def api_list_study_sessions(
                 session,
                 keyword=keyword,
                 kind=kind,
+                status=status,
                 sort_by=sort_by,
                 sort_order=sort_order,
             )
@@ -155,12 +157,18 @@ def api_list_study_sessions(
             session,
             keyword=keyword,
             kind=kind,
+            status=status,
             sort_by=sort_by,
             sort_order=sort_order,
             limit=limit,
             offset=offset,
         ),
-        "total": count_study_sessions(session, keyword=keyword, kind=kind),
+        "total": count_study_sessions(
+            session,
+            keyword=keyword,
+            kind=kind,
+            status=status,
+        ),
         "limit": limit,
         "offset": offset,
     }

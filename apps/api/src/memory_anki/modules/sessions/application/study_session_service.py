@@ -310,12 +310,18 @@ def list_study_sessions(
     include_below_threshold: bool = False,
     keyword: str | None = None,
     kind: str | None = None,
+    status: str | None = None,
     sort_by: str = "started_at",
     sort_order: str = "desc",
     limit: int | None = None,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    query = _filtered_study_sessions_query(session, keyword=keyword, kind=kind)
+    query = _filtered_study_sessions_query(
+        session,
+        keyword=keyword,
+        kind=kind,
+        status=status,
+    )
     sort_column = {
         "started_at": StudySession.started_at,
         "effective_seconds": StudySession.effective_seconds,
@@ -334,8 +340,14 @@ def count_study_sessions(
     *,
     keyword: str | None = None,
     kind: str | None = None,
+    status: str | None = None,
 ) -> int:
-    return _filtered_study_sessions_query(session, keyword=keyword, kind=kind).count()
+    return _filtered_study_sessions_query(
+        session,
+        keyword=keyword,
+        kind=kind,
+        status=status,
+    ).count()
 
 
 def _filtered_study_sessions_query(
@@ -343,8 +355,11 @@ def _filtered_study_sessions_query(
     *,
     keyword: str | None,
     kind: str | None,
+    status: str | None,
 ) -> Query:
     query = session.query(StudySession).filter(StudySession.deleted_at.is_(None))
+    if status:
+        query = query.filter(StudySession.status == status)
     normalized_keyword = str(keyword or "").strip()
     if normalized_keyword:
         query = query.filter(StudySession.title.ilike(f"%{normalized_keyword}%"))

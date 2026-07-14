@@ -1,4 +1,5 @@
 import { API_BASE } from '@/shared/api/http'
+import { getApiToken } from '@/shared/api/apiToken'
 import { enqueueMutation } from '@/shared/persistence/mutationQueue'
 import {
   buildTimeRecordRecoveryMutationId,
@@ -20,10 +21,11 @@ function buildTimeRecordRequestBody(record: TimeSessionRecord) {
   return JSON.stringify(record)
 }
 
-function buildTimeRecordRequestHeaders(mutationId: string) {
+function buildTimeRecordRequestHeaders(mutationId: string, apiToken = getApiToken()) {
   return {
     'Content-Type': JSON_CONTENT_TYPE,
     [MUTATION_ID_HEADER]: mutationId,
+    ...(apiToken ? { 'X-Memory-Anki-Token': apiToken } : {}),
   }
 }
 
@@ -89,8 +91,9 @@ export async function fireAndQueueTimeRecordOnUnload(
   const mutationId = buildTimeRecordRecoveryMutationId(record.id)
   const body = buildTimeRecordRequestBody(record)
   const queuePromise = queueTimeRecordRecovery(record, mutationId, body)
+  const apiToken = getApiToken()
 
-  if (trySendBeacon(body)) {
+  if (!apiToken && trySendBeacon(body)) {
     await queuePromise
     return { mutationId, transport: 'beacon' }
   }

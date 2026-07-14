@@ -179,7 +179,7 @@ describe("DashboardPage overview", () => {
     renderDashboardPage();
 
     expect(await screen.findByText("本周目标")).toBeTruthy();
-    expect(screen.getByText("本周 30 / 目标 60 分钟")).toBeTruthy();
+    expect(await screen.findByText("本周 30 / 目标 60 分钟")).toBeTruthy();
     expect(screen.getByText("本周 2 / 目标 4 次")).toBeTruthy();
     expect(screen.getByText("上周摘要（2026-06-29 ~ 2026-07-05）")).toBeTruthy();
     expect(screen.getByText("2小时 0分")).toBeTruthy();

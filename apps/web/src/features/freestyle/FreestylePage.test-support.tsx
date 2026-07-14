@@ -131,6 +131,8 @@ export function timerMock() {
   }
 }
 
+export const freestyleTimer = timerMock()
+
 export function quizCard(id: number, correctOptionId = 'A'): FreestyleQuizCard {
   return {
     id: `quiz:${id}`,
@@ -301,7 +303,10 @@ export function setupFreestylePageTest() {
   dispatchGlobalFeedbackMock.mockClear()
   emitReviewConfettiMock.mockClear()
   promptForAiOptionsMock.mockResolvedValue({ provider: 'test', model: 'demo' })
-  useTimedSessionMock.mockReturnValue(timerMock())
+  freestyleTimer.registerActivity.mockClear()
+  freestyleTimer.setSceneActive.mockClear()
+  freestyleTimer.start.mockClear()
+  useTimedSessionMock.mockReturnValue(freestyleTimer)
   toastErrorMock.mockClear()
   toastSuccessMock.mockClear()
   memoryLookupDialogMock.mockClear()

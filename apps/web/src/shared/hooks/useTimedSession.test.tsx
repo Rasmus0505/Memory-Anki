@@ -1,9 +1,11 @@
-import { act, render, renderHook, screen } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
+import { setApiToken } from '@/shared/api/apiToken'
 import * as sessionRecordModel from '@/entities/session/model'
 import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
+import { readQueuedMutations, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
   clearPendingTimeRecordRecoveriesForTest,
@@ -18,8 +20,9 @@ import {
 describe('useTimedSession automation config', () => {
   const persistStudySessionRecordSpy = vi.spyOn(sessionRecordModel, 'persistStudySessionRecord')
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers()
+    await resetMutationQueueForTest()
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
     window.sessionStorage.clear()
@@ -36,8 +39,9 @@ describe('useTimedSession automation config', () => {
     persistStudySessionRecordSpy.mockResolvedValue(null)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     delete window.memoryAnkiDesktopTimer
+    await resetMutationQueueForTest()
     resetAutoSaveCoordinatorForTest()
     resetClientPreferenceCacheForTest()
     vi.useRealTimers()
@@ -77,6 +81,45 @@ describe('useTimedSession automation config', () => {
     expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000_000)).toBe(false)
   })
 
+  it('starts from the first practice interaction after repairing a schema v3 config', async () => {
+    window.localStorage.setItem(
+      TIMER_AUTOMATION_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 3,
+        mode: 'global',
+        actions: {
+          autoResumeOnWindowReturn: false,
+          countNodeSwitchAsActivity: false,
+          countEditOperationsAsActivity: false,
+          countPracticeInteractionsAsActivity: false,
+        },
+        shared: {
+          autoStartOnPageEnter: false,
+          inactiveAutoPauseSeconds: 120,
+        },
+      }),
+    )
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    render(<TimedSessionTestHarness kind="review" autoStart={false} />)
+
+    expect(screen.getByTestId('status').textContent).toBe('idle')
+    fireEvent.click(screen.getByRole('button', { name: 'practice-op' }))
+    expect(screen.getByTestId('status').textContent).toBe('running')
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_200)
+      fireEvent.click(screen.getByRole('button', { name: 'complete' }))
+      await Promise.resolve()
+    })
+
+    expect(persistStudySessionRecordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completionMethod: 'manual_complete',
+        effectiveSeconds: 2,
+      }),
+    )
+  })
+
   it('queues a pending recovery record and prefers sendBeacon on pagehide', async () => {
     persistStudySessionRecordSpy.mockImplementation(async (record) => record)
     const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
@@ -103,6 +146,46 @@ describe('useTimedSession automation config', () => {
       completionMethod: 'left_page',
       effectiveSeconds: 4,
     })
+  })
+
+  it('uses authenticated keepalive fetch instead of sendBeacon for remote PWA unload', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    setApiToken('pwa-token')
+    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
+    const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ item: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+
+    render(
+      <TimedSessionTestHarness
+        kind="practice"
+        autoPauseMs={60_000}
+        persistKey="practice:unload-authenticated"
+      />,
+    )
+    await flushMicrotasks()
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_100)
+      window.dispatchEvent(new Event('pagehide'))
+    })
+
+    await flushMicrotasks()
+
+    expect(sendBeaconSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/study-sessions/from-time-record',
+      expect.objectContaining({
+        keepalive: true,
+        method: 'POST',
+        headers: expect.objectContaining({
+          'X-Memory-Anki-Token': 'pwa-token',
+        }),
+      }),
+    )
   })
 
   it('falls back to keepalive fetch when sendBeacon returns false', async () => {
@@ -139,7 +222,6 @@ describe('useTimedSession automation config', () => {
       }),
     )
   })
-
   it('keeps the recovery draft when unload transports are unavailable', async () => {
     persistStudySessionRecordSpy.mockImplementation(async (record) => record)
     vi.spyOn(navigator, 'sendBeacon').mockReturnValue(false)
@@ -164,6 +246,11 @@ describe('useTimedSession automation config', () => {
     await flushMicrotasks()
 
     expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
+    expect(
+      (await readQueuedMutations()).some((item) =>
+        item.resourceKey.startsWith('time-record:'),
+      ),
+    ).toBe(true)
   })
 
   it('flushes the active timer when the desktop shell asks before closing', async () => {

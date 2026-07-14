@@ -102,6 +102,7 @@ export interface StudySessionListOptions {
   offset?: number
   keyword?: string
   kind?: 'palace_edit' | 'practice' | 'quiz' | 'review'
+  status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'recovered'
   sortBy?: 'started_at' | 'effective_seconds' | 'title'
   sortOrder?: 'asc' | 'desc'
 }
@@ -129,6 +130,7 @@ function listPath(options?: StudySessionListOptions) {
   if (options?.offset != null) query.set('offset', String(options.offset))
   if (options?.keyword?.trim()) query.set('keyword', options.keyword.trim())
   if (options?.kind) query.set('kind', options.kind)
+  if (options?.status) query.set('status', options.status)
   if (options?.sortBy) query.set('sort_by', options.sortBy)
   if (options?.sortOrder) query.set('sort_order', options.sortOrder)
   const suffix = query.toString()

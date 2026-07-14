@@ -27,7 +27,7 @@ export async function listStudySessionRecords(options: {
   sortBy: 'started_at' | 'effective_seconds' | 'title'
   sortOrder: 'asc' | 'desc'
 }) {
-  const result = await listStudySessionsApi(options)
+  const result = await listStudySessionsApi({ ...options, status: 'completed' })
   return {
     items: result.items.map(studySessionToTimeRecord),
     total: result.total ?? result.items.length,

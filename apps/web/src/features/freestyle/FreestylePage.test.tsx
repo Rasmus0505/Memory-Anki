@@ -726,6 +726,7 @@ describe('FreestylePage feedback', () => {
     })
   })
 
+
   it('shows the today empty state with create and free-mode actions', async () => {
     renderPageWithFeed([{ cards: [] }, { cards: [] }, { cards: [] }])
 

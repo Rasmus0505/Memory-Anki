@@ -264,9 +264,48 @@ class StudySessionRouteTests(RouterTestCase):
             "limit=1&offset=-1",
             "limit=20&sort_by=unknown",
             "limit=20&sort_order=sideways",
+            "limit=20&status=unknown",
         ):
             response = self.client.get(f"/api/v1/study-sessions?{query}")
             self.assertEqual(response.status_code, 422)
+
+    def test_list_study_sessions_filters_completed_records(self):
+        base = datetime(2026, 7, 2, 8, 0, 0)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="completed-history-record",
+                        status="completed",
+                        scene="review",
+                        target_type="none",
+                        title="Completed",
+                        started_at=base,
+                    ),
+                    StudySession(
+                        id="session-progress-review-42",
+                        status="abandoned",
+                        scene="review",
+                        target_type="review_schedule",
+                        target_id=42,
+                        title="",
+                        started_at=base + timedelta(minutes=1),
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/study-sessions?limit=20&offset=0&status=completed"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(
+            [item["id"] for item in payload["items"]],
+            ["completed-history-record"],
+        )
 
     def test_list_study_sessions_filters_and_sorts_paginated_results(self):
         base = datetime(2026, 7, 2, 8, 0, 0)

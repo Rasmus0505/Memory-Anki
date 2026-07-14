@@ -1,3 +1,4 @@
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildTimeRecordRecoveryMutationId,
@@ -5,6 +6,7 @@ import {
   listPendingTimeRecordRecoveries,
   replayPendingTimeRecordRecoveries,
   upsertPendingTimeRecordRecovery,
+  usePendingTimeRecordRecoveryAutoSync,
 } from '@/entities/session/model/time-record-recovery'
 import type { TimeSessionRecord } from '@/entities/session/model/session-records'
 
@@ -41,6 +43,7 @@ describe('time-record recovery store', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     clearPendingTimeRecordRecoveriesForTest()
   })
 
@@ -74,6 +77,42 @@ describe('time-record recovery store', () => {
     await replayPendingTimeRecordRecoveries()
 
     expect(listPendingTimeRecordRecoveries()).toHaveLength(0)
+  })
+
+  it('automatically retries recovery on mount, online, and foreground return', async () => {
+    vi.useFakeTimers()
+    vi.mocked(createStudySessionRecordApi).mockResolvedValue({ item: null })
+    upsertPendingTimeRecordRecovery(buildRecord(), {
+      mutationId: buildTimeRecordRecoveryMutationId('record-1'),
+    })
+
+    renderHook(() => usePendingTimeRecordRecoveryAutoSync())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(createStudySessionRecordApi).toHaveBeenCalledTimes(1)
+
+    upsertPendingTimeRecordRecovery(buildRecord({ id: 'record-2' }), {
+      mutationId: buildTimeRecordRecoveryMutationId('record-2'),
+    })
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+      await Promise.resolve()
+    })
+    expect(createStudySessionRecordApi).toHaveBeenCalledTimes(2)
+
+    upsertPendingTimeRecordRecovery(buildRecord({ id: 'record-3' }), {
+      mutationId: buildTimeRecordRecoveryMutationId('record-3'),
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+    })
+    expect(createStudySessionRecordApi).toHaveBeenCalledTimes(3)
   })
 
   it('keeps the recovery entry and marks it failed after replay errors', async () => {

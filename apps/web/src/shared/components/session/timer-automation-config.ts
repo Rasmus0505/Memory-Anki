@@ -286,8 +286,8 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     actions: {
       autoResumeOnWindowReturn: false,
       countNodeSwitchAsActivity: false,
-      countEditOperationsAsActivity: false,
-      countPracticeInteractionsAsActivity: false,
+      countEditOperationsAsActivity: true,
+      countPracticeInteractionsAsActivity: true,
     },
     shared,
     palace_edit: { ...shared },
