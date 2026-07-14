@@ -118,6 +118,11 @@ class Palace(Base):
         back_populates="palace",
         cascade="all, delete-orphan",
     )
+    review_stage_adjustments: Mapped[list[ReviewStageAdjustment]] = relationship(
+        "ReviewStageAdjustment",
+        back_populates="palace",
+        cascade="all, delete-orphan",
+    )
     chapters: Mapped[list[Chapter]] = relationship(
         "Chapter",
         secondary=chapter_palace_table,
@@ -336,6 +341,36 @@ class ReviewLog(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
+
+
+class ReviewStageAdjustment(Base):
+    __tablename__ = "review_stage_adjustments"
+    __table_args__ = (
+        Index(
+            "ix_review_stage_adjustments_palace_created",
+            "palace_id",
+            "created_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+    )
+    previous_completed_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_completed_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    needs_practice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+    palace: Mapped[Palace] = relationship(
+        "Palace",
+        back_populates="review_stage_adjustments",
+    )
+
 
 class SessionProgress(Base):
     __tablename__ = "session_progress"
@@ -690,4 +725,3 @@ class PalaceQuizOcrSource(Base):
     )
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="quiz_ocr_sources")
-

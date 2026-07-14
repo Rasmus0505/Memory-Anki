@@ -167,15 +167,24 @@ export function PalaceStageProgress({
                 key={stage.review_number}
                 type="button"
                 title={getStageTooltip(stage)}
+                aria-label={`${stage.label}，${stage.completed ? '已完成' : '未完成'}，点击调整宫殿复习进度`}
                 onClick={() => onStageClick?.(stage)}
                 disabled={!onStageClick}
                 data-testid={`stage-node-${index}`}
                 className={cn(
-	                  'h-3.5 w-3.5 rounded-full border-2 border-background shadow-sm transition-colors',
-	                  onStageClick && 'cursor-pointer hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-	                  active ? 'bg-info' : 'bg-muted-foreground/30',
+                  'group -mx-[9px] flex h-8 w-8 items-center justify-center rounded-full',
+                  onStageClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  active ? '[&>span]:bg-info' : '[&>span]:bg-muted-foreground/30',
                 )}
-              />
+              >
+                <span
+                  className={cn(
+                    'h-3.5 w-3.5 rounded-full border-2 border-background shadow-sm transition-transform',
+                    onStageClick && 'group-hover:scale-110',
+                    active ? 'bg-info' : 'bg-muted-foreground/30',
+                  )}
+                />
+              </button>
             )
           })}
         </div>

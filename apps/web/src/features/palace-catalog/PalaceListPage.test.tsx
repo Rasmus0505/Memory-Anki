@@ -35,14 +35,18 @@ const getPalacesGroupedApi = vi.fn()
 let queryClient: QueryClient
 
 vi.mock('@/entities/palace/api', () => ({
+  buildPalaceCatalogGroupedQueryKey: (params: Record<string, string>) => ['palace-catalog', 'grouped', params],
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  PALACE_CATALOG_GROUPED_QUERY_KEY: ['palace-catalog', 'grouped'],
   PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
 }))
 
 vi.mock('@/entities/palace/api', () => ({
+  buildPalaceCatalogGroupedQueryKey: (params: Record<string, string>) => ['palace-catalog', 'grouped', params],
   deletePalaceApi: vi.fn(),
   getPalaceReviewPlanApi: vi.fn(),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  PALACE_CATALOG_GROUPED_QUERY_KEY: ['palace-catalog', 'grouped'],
   PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
 }))
 

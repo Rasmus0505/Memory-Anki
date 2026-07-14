@@ -8,6 +8,7 @@ import { formatDuration } from '@/entities/session/model'
 import type {
   PalaceGroupedItem,
   PalaceSegmentSummary,
+  ReviewStageSummary,
 } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -36,6 +37,7 @@ interface PalaceListCardProps {
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
+  onStageClick?: (palace: PalaceGroupedItem, stage: ReviewStageSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -151,6 +153,7 @@ export function PalaceListCard({
   onWarmPalacePractice = () => {},
   onSegmentPractice,
   onWarmSegmentPractice = () => {},
+  onStageClick,
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -288,6 +291,7 @@ export function PalaceListCard({
               completed={palace.review_stage_completed}
               stages={palace.review_stages}
               nextReviewAt={palace.next_review_at}
+              onStageClick={onStageClick ? (stage) => onStageClick(palace, stage) : undefined}
             />
           ) : null}
 

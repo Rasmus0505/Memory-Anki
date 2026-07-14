@@ -1,4 +1,4 @@
-﻿import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
 import type { ReviewStageSummary } from '@/shared/api/contracts'
@@ -31,6 +31,25 @@ function getWidthPercent() {
 }
 
 describe('PalaceStageProgress', () => {
+  it('invokes the stage callback from the enlarged accessible node target', () => {
+    const onStageClick = vi.fn()
+    const targetStage = buildStage(1, { label: '1天' })
+
+    render(
+      <PalaceStageProgress
+        stageLabels={['1小时', '1天']}
+        completed={1}
+        stages={[buildStage(0, { completed: true }), targetStage]}
+        onStageClick={onStageClick}
+      />,
+    )
+
+    const node = screen.getByRole('button', { name: '1天，未完成，点击调整宫殿复习进度' })
+    expect(node.className).toContain('h-8')
+    fireEvent.click(node)
+    expect(onStageClick).toHaveBeenCalledWith(targetStage)
+  })
+
   afterEach(() => {
     vi.useRealTimers()
   })

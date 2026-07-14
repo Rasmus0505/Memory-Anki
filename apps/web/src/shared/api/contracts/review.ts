@@ -112,3 +112,32 @@ export interface ReviewLoadForecastResponse {
   total_upcoming: number
   items: ReviewLoadForecastItem[]
 }
+export interface ReviewStageAdjustmentPreviewPayload {
+  target_completed_count: number
+  completed_at: string | null
+  needs_practice: boolean
+}
+
+export interface ReviewStageAdjustmentPayload extends ReviewStageAdjustmentPreviewPayload {
+  expected_completed_count: number
+  note?: string
+}
+
+export interface ReviewStageAdjustmentResponse {
+  ok: boolean
+  palace_id: number
+  palace_title: string
+  previous_completed_count: number
+  target_completed_count: number
+  total_stage_count: number
+  direction: 'forward' | 'backward' | 'reset' | 'unchanged'
+  current_stage_label: string | null
+  target_stage_label: string | null
+  preserved_stage_labels: string[]
+  added_stage_labels: string[]
+  removed_stage_labels: string[]
+  next_stage_label: string | null
+  next_review_at: string | null
+  mastered: boolean
+  needs_practice: boolean
+}

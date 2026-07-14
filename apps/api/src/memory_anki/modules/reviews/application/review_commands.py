@@ -12,6 +12,9 @@ from memory_anki.modules.reviews.application.review_queue_service import (
     get_next_due_review,
     spread_overdue,
 )
+from memory_anki.modules.reviews.application.stage_adjustment_service import (
+    apply_review_stage_adjustment,
+)
 from memory_anki.modules.sessions.api import (
     clear_review_progress,
 )
@@ -72,6 +75,27 @@ def submit_review_command(
         "next_id": next_schedule.id if next_schedule else None,
         "mastered": extra.get("mastered", False),
     }
+    _commit_response(response, uow=uow, before_commit=before_commit)
+    return response
+
+
+def adjust_review_stage_command(
+    session: Session,
+    palace_id: int,
+    payload: dict[str, Any],
+    *,
+    uow: UnitOfWork,
+    before_commit: ResponseCallback | None = None,
+) -> dict[str, Any]:
+    response = apply_review_stage_adjustment(
+        session,
+        palace_id,
+        target_completed_count=int(payload["target_completed_count"]),
+        completed_at=payload.get("completed_at"),
+        needs_practice=bool(payload.get("needs_practice", False)),
+        expected_completed_count=int(payload["expected_completed_count"]),
+        note=str(payload.get("note") or ""),
+    )
     _commit_response(response, uow=uow, before_commit=before_commit)
     return response
 

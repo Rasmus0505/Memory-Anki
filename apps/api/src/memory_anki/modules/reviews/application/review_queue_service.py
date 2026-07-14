@@ -364,7 +364,6 @@ def maybe_auto_smooth_overdue(session: Session) -> int:
 
 
 def get_review_queue_payload(session: Session, chapter_id: int | None = None) -> dict:
-    smoothed_count = maybe_auto_smooth_overdue(session)
     reviews = get_today_review_groups(
         session,
         chapter_id=chapter_id,
@@ -375,7 +374,7 @@ def get_review_queue_payload(session: Session, chapter_id: int | None = None) ->
         "due_count": len(reviews),
         "later_today_count": len(later_today_reviews),
         "overdue_count": get_overdue_count(session),
-        "smoothed_count": smoothed_count,
+        "smoothed_count": 0,
         "stats": get_weekly_stats(session),
         "reviews": reviews,
         "later_today_reviews": later_today_reviews,

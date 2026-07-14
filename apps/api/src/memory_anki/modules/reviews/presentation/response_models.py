@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OverdueCountResponse(BaseModel):
@@ -60,3 +61,32 @@ class SubmitReviewResponse(BaseModel):
     score: float | None = None
     next_id: int | None = None
     mastered: bool = False
+
+class ReviewStageAdjustmentPreviewRequest(BaseModel):
+    target_completed_count: int = Field(ge=0)
+    completed_at: datetime | None = None
+    needs_practice: bool = False
+
+
+class ReviewStageAdjustmentRequest(ReviewStageAdjustmentPreviewRequest):
+    expected_completed_count: int = Field(ge=0)
+    note: str = Field(default="", max_length=2000)
+
+
+class ReviewStageAdjustmentResponse(BaseModel):
+    ok: bool
+    palace_id: int
+    palace_title: str
+    previous_completed_count: int
+    target_completed_count: int
+    total_stage_count: int
+    direction: Literal["forward", "backward", "reset", "unchanged"]
+    current_stage_label: str | None = None
+    target_stage_label: str | None = None
+    preserved_stage_labels: list[str]
+    added_stage_labels: list[str]
+    removed_stage_labels: list[str]
+    next_stage_label: str | None = None
+    next_review_at: str | None = None
+    mastered: bool
+    needs_practice: bool

@@ -27,6 +27,7 @@ interface UseReviewFlowSessionOptions {
 }
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
+const IMMERSIVE_REVIEW_AUTO_PAUSE_MS = 24 * 60 * 60 * 1000
 
 export function useReviewFlowSession({
   title,
@@ -44,14 +45,17 @@ export function useReviewFlowSession({
   onFullscreenChange,
 }: UseReviewFlowSessionOptions) {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  const [fullscreen, setFullscreen] = React.useState(false)
   const timer = useTimedSession({
     kind: sessionKind,
     title,
     palaceId,
     sourceKind: palaceId != null ? 'palace' : null,
+    autoPauseMs: fullscreen ? IMMERSIVE_REVIEW_AUTO_PAUSE_MS : undefined,
     persistKey,
     persistCompletionRecord: sessionKind !== 'review',
   })
+  const registerTimerActivity = timer.registerActivity
   useGlobalTimerRegistration({
     scene: persistProgress ? 'practice' : 'review',
     title,
@@ -75,8 +79,8 @@ export function useReviewFlowSession({
     totalNodeCount: reveal.totalNodeCount,
     revealMode,
   })
-  const [fullscreen, setFullscreen] = React.useState(false)
   const submittingRef = React.useRef(false)
+  const previousFullscreenRef = React.useRef(false)
   const timerRef = React.useRef(timer)
   const hardUnloadRef = React.useRef(false)
   const lastSnapshotPayloadRef = React.useRef('')
@@ -91,13 +95,19 @@ export function useReviewFlowSession({
   }, [isActive])
 
   React.useEffect(() => {
+    if (fullscreen !== previousFullscreenRef.current) {
+      previousFullscreenRef.current = fullscreen
+      registerTimerActivity('practice_interaction', {
+        source: fullscreen ? 'review_fullscreen_enter' : 'review_fullscreen_exit',
+      })
+    }
     if (!fullscreen) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = previousOverflow
     }
-  }, [fullscreen])
+  }, [fullscreen, registerTimerActivity])
 
   React.useEffect(() => {
     onFullscreenChange?.(fullscreen)

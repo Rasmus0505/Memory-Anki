@@ -20,16 +20,22 @@ from .application.schedule_service import (
     is_schedule_due,
     schedule_display_datetime,
 )
+from .application.stage_adjustment_service import (
+    apply_review_stage_adjustment,
+    preview_review_stage_adjustment,
+)
 
 __all__ = [
+    "apply_review_stage_adjustment",
     "build_review_schedule_draft",
     "get_algorithm_intervals",
     "get_algorithm_stage_labels",
     "get_config_value",
-    "infer_completed_stage_count",
     "get_weekly_stats",
+    "infer_completed_stage_count",
     "is_schedule_due",
     "load_review_schedule_policy",
+    "preview_review_stage_adjustment",
     "rebuild_all_pending_review_schedules",
     "rebuild_palace_review_schedules",
     "repair_review_stage_progress",

@@ -13,6 +13,7 @@ from memory_anki.modules.palaces.api import (
     palace_review_stages_json,
 )
 from memory_anki.modules.reviews.application.review_commands import (
+    adjust_review_stage_command,
     spread_overdue_command,
     submit_review_command,
 )
@@ -37,10 +38,18 @@ from memory_anki.modules.reviews.application.schedule_service import (
     get_algorithm_stage_labels,
     schedule_display_datetime,
 )
+from memory_anki.modules.reviews.application.stage_adjustment_service import (
+    ReviewStageAdjustmentConflictError,
+    ReviewStageAdjustmentNotFoundError,
+    preview_review_stage_adjustment,
+)
 from memory_anki.modules.reviews.presentation.response_models import (
     OverdueCountResponse,
     ReviewQueueResponse,
     ReviewScheduleItem,
+    ReviewStageAdjustmentPreviewRequest,
+    ReviewStageAdjustmentRequest,
+    ReviewStageAdjustmentResponse,
     SubmitReviewResponse,
 )
 from memory_anki.modules.sessions.api import (
@@ -72,6 +81,64 @@ def active_schedule_by_id(session: Session, schedule_id: int) -> ReviewSchedule 
         .first()
     )
 
+@router.post(
+    "/review/palaces/{palace_id}/stage-adjustment/preview",
+    response_model=ReviewStageAdjustmentResponse,
+)
+def api_preview_review_stage_adjustment(
+    palace_id: int,
+    data: ReviewStageAdjustmentPreviewRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return preview_review_stage_adjustment(
+            session,
+            palace_id,
+            target_completed_count=data.target_completed_count,
+            completed_at=data.completed_at,
+            needs_practice=data.needs_practice,
+        )
+    except ReviewStageAdjustmentNotFoundError:
+        raise_not_found("宫殿不存在。")
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/review/palaces/{palace_id}/stage-adjustment",
+    response_model=ReviewStageAdjustmentResponse,
+)
+def api_apply_review_stage_adjustment(
+    palace_id: int,
+    data: ReviewStageAdjustmentRequest,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    existing_response = mutation_store.get(mutation_identity)
+    if existing_response is not None:
+        return existing_response
+    try:
+        return adjust_review_stage_command(
+            session,
+            palace_id,
+            data.model_dump(),
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda payload: mutation_store.save(
+                mutation_identity,
+                payload,
+            ),
+        )
+    except ReviewStageAdjustmentNotFoundError:
+        raise_not_found("宫殿不存在。")
+    except ReviewStageAdjustmentConflictError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="复习进度已发生变化，请重新打开弹窗后再调整。",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 def chapter_json(chapter: Chapter | None) -> dict | None:
     if chapter is None:

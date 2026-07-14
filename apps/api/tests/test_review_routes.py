@@ -542,7 +542,7 @@ class ReviewRouteTests(RouterTestCase):
             self.assertIsNotNone(updated)
             self.assertEqual(updated.scheduled_date, original_date)
 
-    def test_review_queue_auto_smoothing_still_spreads_started_overdue_palace(self):
+    def test_review_queue_never_auto_smooths_started_overdue_palace(self):
         with self.SessionLocal() as session:
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
             self.assertIsNotNone(schedule)
@@ -572,7 +572,7 @@ class ReviewRouteTests(RouterTestCase):
         response = self.client.get("/api/v1/review/queue")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["smoothed_count"], 1)
+        self.assertEqual(payload["smoothed_count"], 0)
 
         with self.SessionLocal() as session:
             pending = (
@@ -581,7 +581,45 @@ class ReviewRouteTests(RouterTestCase):
                 .first()
             )
             self.assertIsNotNone(pending)
-            self.assertEqual(pending.scheduled_date, date.today())
+            self.assertEqual(pending.scheduled_date, date.today() - timedelta(days=1))
+
+    def test_review_queue_get_does_not_commit_or_mutate_database(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            schedule.completed = True
+            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            pending = ReviewSchedule(
+                palace_id=1,
+                scheduled_date=date.today() - timedelta(days=1),
+                scheduled_at=datetime.now().replace(second=0, microsecond=0) - timedelta(days=1),
+                interval_days=2,
+                algorithm_used="ebbinghaus",
+                completed=False,
+                review_number=1,
+                review_type="standard",
+            )
+            session.add(pending)
+            session.add_all(
+                [
+                    Config(key="auto_smooth_overdue", value="true"),
+                    Config(key="overdue_smoothing_threshold", value="1"),
+                    Config(key="overdue_smoothing_days", value="7"),
+                ]
+            )
+            session.commit()
+            pending_id = pending.id
+            original_date = pending.scheduled_date
+
+        for path in ("/api/v1/review/queue", "/api/v1/review"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            unchanged = session.query(ReviewSchedule).filter_by(id=pending_id).one()
+            self.assertEqual(unchanged.scheduled_date, original_date)
+            undo_snapshot = session.query(Config).filter_by(key="review_spread_undo").first()
+            self.assertTrue(undo_snapshot is None or not undo_snapshot.value)
 
     def test_submit_review_only_advances_current_due_schedule(self):
         with self.SessionLocal() as session:
@@ -980,6 +1018,7 @@ class ReviewRouteTests(RouterTestCase):
             palace = session.query(Palace).filter_by(id=1).first()
             self.assertIsNotNone(schedule)
             self.assertIsNotNone(palace)
+            session.add(Config(key='ebbinghaus_intervals', value='1,2,4'))
             schedule.scheduled_date = date.today()
             schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
             palace.needs_practice = False
@@ -1000,6 +1039,46 @@ class ReviewRouteTests(RouterTestCase):
             palace = session.query(Palace).filter_by(id=1).first()
             self.assertIsNotNone(palace)
             self.assertTrue(palace.needs_practice)
+            schedules = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=palace.id)
+                .order_by(ReviewSchedule.review_number, ReviewSchedule.id)
+                .all()
+            )
+            self.assertEqual([schedule.review_number for schedule in schedules if schedule.completed], [0])
+            pending = [schedule for schedule in schedules if not schedule.completed]
+            self.assertEqual([schedule.review_number for schedule in pending], [1])
+            self.assertGreater(pending[0].scheduled_at, datetime.now())
+
+        catalog = self.client.get('/api/v1/palaces/subjects')
+        self.assertEqual(catalog.status_code, 200)
+        catalog_item = catalog.json()['items'][0]
+        self.assertEqual(catalog_item['review_status'], 'idle')
+        self.assertFalse(catalog_item['has_due_review'])
+        self.assertFalse(catalog_item['has_due_later_today'])
+
+    def test_formal_review_submission_clears_catalog_due_status(self):
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            session.add(Config(key='ebbinghaus_intervals', value='1,2,4'))
+            schedule.scheduled_date = date.today()
+            schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) - timedelta(minutes=1)
+            session.commit()
+
+        response = self.client.post(
+            '/api/v1/review/session/1/submit',
+            json={'duration_seconds': 30, 'completion_mode': 'manual_complete'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        catalog = self.client.get('/api/v1/palaces/subjects')
+        self.assertEqual(catalog.status_code, 200)
+        catalog_item = catalog.json()['items'][0]
+        self.assertEqual(catalog_item['review_status'], 'idle')
+        self.assertFalse(catalog_item['has_due_review'])
+        self.assertFalse(catalog_item['has_due_later_today'])
 
     def test_review_session_rejects_future_day_submission(self):
         with self.SessionLocal() as session:

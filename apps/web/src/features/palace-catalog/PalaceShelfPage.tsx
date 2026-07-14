@@ -219,6 +219,7 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
         onSegmentPractice={cardActions.onSegmentPractice}
         onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
+        onStageClick={cardActions.onStageClick}
         onDelete={cardActions.onDelete}
       />
     ),

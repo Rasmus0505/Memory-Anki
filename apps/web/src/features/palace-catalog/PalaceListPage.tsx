@@ -127,6 +127,7 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         onWarmPalacePractice={cardActions.onWarmPalacePractice}
         onSegmentPractice={cardActions.onSegmentPractice}
         onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
+        onStageClick={cardActions.onStageClick}
         onDelete={cardActions.onDelete}
       />
     ),

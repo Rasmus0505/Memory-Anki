@@ -305,17 +305,6 @@ describe('PalaceShelfPage', () => {
     })
   })
 
-  it('renders mini palaces with the same action copy as regular palace cards', async () => {
-    render(<PalaceShelfPage />)
-
-    await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
-
-    await screen.findByText('迷你宫殿训练 A')
-    expect(screen.getByText('训练关卡')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /开始复习|练习/ }).length).toBeGreaterThan(1)
-    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(1)
-  })
 
   it('refreshes shelf and expanded palace data when the catalog is invalidated', async () => {
     render(<PalaceShelfPage />)

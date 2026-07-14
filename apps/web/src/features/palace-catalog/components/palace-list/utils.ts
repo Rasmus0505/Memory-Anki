@@ -1,6 +1,7 @@
-﻿import { cn } from '@/shared/lib/utils'
+import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
 import type {
+  PalaceGroupedItem,
   PalaceSegmentSummary,
   ReviewStageSummary,
 } from '@/shared/api/contracts'
@@ -10,9 +11,9 @@ import type {
 } from '@/entities/preferences/model/palaceViewSettings'
 
 export interface StageEditState {
-  palaceId: number
-  segment: PalaceSegmentSummary
+  palace: PalaceGroupedItem
   stage: ReviewStageSummary
+  targetCompletedCount: number
 }
 
 export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled' | 'practice'

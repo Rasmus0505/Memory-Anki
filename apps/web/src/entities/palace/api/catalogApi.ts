@@ -14,9 +14,10 @@ import {
   consumePrefetchedPromise,
   prefetchPromise,
 } from '@/shared/api/promiseWarmupCache'
-import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
+import { emitAppEvent } from '@/shared/events/appEvents'
+import { PALACE_CATALOG_INVALIDATED_EVENT } from './catalogQuery'
 
-export const PALACE_CATALOG_INVALIDATED_EVENT = APP_EVENT_NAMES.palaceCatalogInvalidated
+export { PALACE_CATALOG_INVALIDATED_EVENT } from './catalogQuery'
 
 export type PalaceMutationPayload = Partial<
   Pick<PalaceEditorMeta, 'title' | 'description' | 'created_at' | 'primary_chapter_id'>

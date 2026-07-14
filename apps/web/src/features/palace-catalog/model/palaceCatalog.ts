@@ -2,8 +2,10 @@ import type {
   PalaceGroupedItem,
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
-
-export const PALACE_CATALOG_GROUPED_QUERY_KEY = ['palace-catalog', 'grouped'] as const
+export {
+  buildPalaceCatalogGroupedQueryKey,
+  PALACE_CATALOG_GROUPED_QUERY_KEY,
+} from '@/entities/palace/api'
 
 type PalaceSearchableItem = PalaceGroupedItem & {
   tags?: unknown
@@ -30,10 +32,6 @@ export function buildPalaceCatalogQuery(
   if (scope.search) params.search = scope.search
   if (scope.selectedSubjectId) params.subject_id = scope.selectedSubjectId
   return params
-}
-
-export function buildPalaceCatalogGroupedQueryKey(params: Record<string, string>) {
-  return [...PALACE_CATALOG_GROUPED_QUERY_KEY, params] as const
 }
 
 export function filterGroupedPalacesByScope(

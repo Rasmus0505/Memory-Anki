@@ -8,15 +8,18 @@ import { createAppQueryClient } from '@/shared/api/queryClient'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
+import { usePendingTimeRecordRecoveryAutoSync } from '@/entities/session/model'
 import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 import { PageHistoryCoordinator } from '@/shared/page-history/PageHistoryCoordinator'
+import { PalaceCatalogQueryInvalidationBridge } from '@/entities/palace/api'
 
 const queryClient = createAppQueryClient()
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
+  usePendingTimeRecordRecoveryAutoSync()
 
   useEffect(() => {
     cleanupExpiredAppLogs()
@@ -53,6 +56,7 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PalaceCatalogQueryInvalidationBridge />
       <BrowserRouter>
         <PageHistoryCoordinator>
           <RouteProgressBar />
