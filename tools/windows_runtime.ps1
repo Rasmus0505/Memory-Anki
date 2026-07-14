@@ -134,11 +134,29 @@ function Invoke-MemoryAnkiPython {
     [string[]]$Arguments
   )
   $invokeArgs = @($Python.Args) + @($Arguments)
-  & $Python.File @invokeArgs
-  if ($LASTEXITCODE -ne $null) {
-    return $LASTEXITCODE
+
+  $quotedArgs = @($invokeArgs | ForEach-Object {
+    $argument = [string]$_
+    if ($argument.Length -eq 0) {
+      return '""'
+    }
+    if ($argument -notmatch '[\s"]') {
+      return $argument
+    }
+    $escaped = [regex]::Replace($argument, '(\\*)"', '$1$1\"')
+    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    return '"' + $escaped + '"'
+  })
+  $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $startInfo.FileName = $Python.File
+  $startInfo.Arguments = $quotedArgs -join ' '
+  $startInfo.UseShellExecute = $false
+  $process = [System.Diagnostics.Process]::Start($startInfo)
+  if (-not $process) {
+    throw "Failed to start Python runtime: $($Python.File)"
   }
-  return 0
+  $process.WaitForExit()
+  return $process.ExitCode
 }
 
 function Ensure-MemoryAnkiNodeRuntime {

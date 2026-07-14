@@ -1,8 +1,10 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
+const fs = require('node:fs')
 const path = require('node:path')
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
 const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
+const READY_FILE = process.env.MEMORY_ANKI_DESKTOP_READY_FILE || ''
 
 let mainWindow = null
 let timerWindow = null
@@ -10,9 +12,19 @@ let lastTimerSnapshot = null
 let mainBlurPromptTimer = null
 let pendingFlush = null
 let allowMainWindowClose = false
+let desktopReadyWritten = false
+let mainWindowLoaded = false
+let timerWindowLoaded = false
 
 const FLUSH_TIMEOUT_MS = 1800
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+function writeDesktopReady() {
+  if (desktopReadyWritten || !READY_FILE || !mainWindowLoaded || !timerWindowLoaded) return
+  fs.mkdirSync(path.dirname(READY_FILE), { recursive: true })
+  fs.writeFileSync(READY_FILE, JSON.stringify({ readyAt: new Date().toISOString(), pid: process.pid }))
+  desktopReadyWritten = true
+}
 
 if (!hasSingleInstanceLock) {
   app.quit()
@@ -105,6 +117,10 @@ function createMainWindow() {
   })
 
   mainWindow.loadURL(APP_URL)
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindowLoaded = true
+    writeDesktopReady()
+  })
   mainWindow.on('close', (event) => {
     if (allowMainWindowClose) return
     event.preventDefault()
@@ -154,6 +170,8 @@ function createTimerWindow() {
   timerWindow.setAlwaysOnTop(true, 'screen-saver')
   timerWindow.loadURL(OVERLAY_URL)
   timerWindow.webContents.on('did-finish-load', () => {
+    timerWindowLoaded = true
+    writeDesktopReady()
     if (lastTimerSnapshot) {
       timerWindow?.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
     }

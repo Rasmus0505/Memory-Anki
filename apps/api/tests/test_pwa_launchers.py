@@ -322,7 +322,7 @@ def test_tray_and_autostart_launch_shared_service_through_diagnostic_runner():
     assert 'ScriptPath `"$launcherPath`" Start -ConfigureServe' in launcher
 
 
-def test_manual_batch_start_shows_backend_console():
+def test_manual_batch_start_keeps_launcher_console_visible():
     desktop_batch = (ROOT / "start-desktop.bat").read_text(encoding="utf-8")
     pwa_batch = (ROOT / "start-pwa.bat").read_text(encoding="utf-8")
     launcher = (TOOLS_DIR / "pwa_launcher.ps1").read_text(encoding="utf-8")
@@ -333,6 +333,37 @@ def test_manual_batch_start_shows_backend_console():
     assert "-WindowStyle Hidden" not in pwa_batch
     assert 'MEMORY_ANKI_VISIBLE_BACKEND = "1"' in launcher
     assert "-WindowStyle Hidden" not in launcher
+
+
+def test_desktop_launcher_detaches_after_electron_ready_signal():
+    desktop_timer = (TOOLS_DIR / "desktop_timer.py").read_text(encoding="utf-8")
+    electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")
+
+    assert 'env["MEMORY_ANKI_DESKTOP_READY_FILE"]' in desktop_timer
+    assert "process = subprocess.Popen(" in desktop_timer
+    assert "ready_path.is_file()" in desktop_timer
+    assert 'log_file = log_path.open("a", encoding="utf-8")' in desktop_timer
+    assert "log_file.close()" in desktop_timer
+    assert "subprocess.run(" not in desktop_timer
+    assert "MEMORY_ANKI_DESKTOP_READY_FILE" in electron_main
+    assert "writeDesktopReady()" in electron_main
+
+
+def test_shared_backend_never_inherits_launcher_diagnostic_pipe():
+    pwa_source = (TOOLS_DIR / "pwa_server.py").read_text(encoding="utf-8")
+
+    assert 'log_file = log_path.open("ab")' in pwa_source
+    assert "stdout=log_file" in pwa_source
+    assert "stderr=subprocess.STDOUT" in pwa_source
+    assert "stdin=subprocess.DEVNULL" in pwa_source
+
+
+def test_windows_python_launcher_waits_for_direct_process_only():
+    runtime = (TOOLS_DIR / "windows_runtime.ps1").read_text(encoding="utf-8")
+
+    assert "[System.Diagnostics.ProcessStartInfo]::new()" in runtime
+    assert "$process.WaitForExit()" in runtime
+    assert "return $process.ExitCode" in runtime
 
 
 def test_retired_0022_revision_remains_available_for_existing_databases():

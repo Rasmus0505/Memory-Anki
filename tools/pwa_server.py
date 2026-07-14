@@ -420,19 +420,22 @@ def _start_backend() -> subprocess.Popen:
         str(dev_server.BACKEND_PORT),
     ]
     visible = _backend_console_is_visible()
-    log_file = None if visible else log_path.open("ab")
+    log_file = log_path.open("ab")
     if visible:
-        print("[i] Backend output is attached to this window; errors will remain visible.")
-    process = subprocess.Popen(
-        cmd,
-        cwd=str(API_DIR),
-        env=_backend_env(),
-        stdout=log_file,
-        stderr=None if visible else subprocess.STDOUT,
-        stdin=None if visible else subprocess.DEVNULL,
-        close_fds=True,
-        **({} if visible else dev_server.hidden_process_kwargs()),
-    )
+        print(f"[i] Backend output is written to {log_path}; startup errors remain in diagnostics.")
+    try:
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(API_DIR),
+            env=_backend_env(),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            **dev_server.hidden_process_kwargs(),
+        )
+    finally:
+        log_file.close()
     PWA_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PWA_PID_FILE.write_text(str(process.pid), encoding="utf-8")
     return process
