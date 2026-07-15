@@ -3,7 +3,7 @@
   "architecture": {
     "backend": "modular-monolith",
     "frontend": "app-pages-widgets-features-entities-shared",
-    "databaseSchemaChanges": false
+    "databaseSchemaChanges": true
   },
   "backend": {
     "targetLayers": [
@@ -135,6 +135,7 @@
       "pdf_library": [],
       "reviews": [
         "mindmap_document",
+        "mindmap_learning",
         "palaces",
         "sessions"
       ],

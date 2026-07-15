@@ -38,3 +38,11 @@ Frontend review completion emits the typed `reviewStateChanged` application even
 ## Manual stage correction
 
 Manual palace stage adjustment is a Review-owned scheduling correction, even when the action starts from the Palace catalog UI. Preview requests may simulate schedule rebuilding but must roll back all database changes. Apply requests rebuild palace-level schedules through the Review use case, use mutation identity and one `UnitOfWork`, reject stale `expected_completed_count` values, and store a separate adjustment audit record. They must not create `ReviewLog` or `StudySession` rows and must not alter learning-group progress.
+
+## Node-level FSRS scheduling (2026 migration)
+
+Reviews now owns an independent FSRS card for every non-root palace node, keyed by `palace_id + node_uid`. The root node is a batch-rating entry point and is excluded from progress and scheduling. The public Reviews facade exposes projection, four-level rating, subtree rating, undo, due-node listing, and completion-summary capabilities.
+
+Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Legacy stage schedules remain audit data only during migration.
+
+Formal review, palace practice, and learning-group practice must use the same node-state key. A review session freezes its due-node scope on entry; ratings that create new due nodes are deferred to the next session.

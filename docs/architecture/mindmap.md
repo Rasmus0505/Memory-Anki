@@ -115,3 +115,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 宫殿编辑页通过单工作区标签在宫殿文档和显式归属的学科文档之间切换，同一时刻只挂载一个可编辑画布。切换文档前必须提交当前文档待保存状态。
 - 学科文档在宫殿宿主中仍由 Knowledge API 读写；Palace 只注入章节关联 capability，并拥有宫殿—学科、宫殿—章节的一致性命令。
 - `PalaceKnowledgeOutlinePanel`、`PalaceChapterPanel` 和页面自行推导“第一个学科”的实现已经退役，不得重建。
+
+## Node identity and memory state
+
+A palace document has one stable node UID per node. Reviews indexes memory state by `palace_id + node_uid`; all non-root nodes are independent FSRS cards. Text or note changes invalidate the content fingerprint and reset only that node, while movement, style, and layout changes preserve the card. New nodes immediately join the progress denominator; deleted nodes stop scheduling while historical evidence remains.
