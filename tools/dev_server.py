@@ -390,6 +390,27 @@ def stop_all() -> int:
     return 0
 
 
+def peek_sync_before_start():
+    """Peek Baidu-disk data sync need without restoring snapshots.
+
+    Returns a SyncResult-like object from file_sync.peek_pull_on_start.
+    This is NOT a GitHub git pull.
+    """
+    config = _apply_local_runtime_env()
+    if not config.sync_enabled:
+        from memory_anki.core.file_sync import SyncResult
+
+        print(f"[i] 本机同步未启用（配置文件: {config.config_path}）。")
+        return SyncResult(True, "disabled", "同步未启用。")
+    from memory_anki.core.file_sync import peek_pull_on_start
+
+    print(f"[i] 启动前同步快检（百度网盘 revision）→ {config.sync_root}")
+    result = peek_pull_on_start(config)
+    prefix = "[ok]" if result.ok else "[!]"
+    print(f"{prefix} {result.message}")
+    return result
+
+
 def sync_before_start() -> bool:
     config = _apply_local_runtime_env()
     if not config.sync_enabled:

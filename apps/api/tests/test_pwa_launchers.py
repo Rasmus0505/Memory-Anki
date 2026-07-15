@@ -113,6 +113,7 @@ def test_desktop_restart_syncs_and_leaves_shared_service_running():
     process = SimpleNamespace(pid=1234)
     with (
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=False),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
         patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
@@ -128,6 +129,77 @@ def test_desktop_restart_syncs_and_leaves_shared_service_running():
     prepare_runtime.assert_called_once_with()
     start_backend.assert_called_once_with()
     kill_process.assert_not_called()
+
+
+def test_desktop_reuses_healthy_service_when_baidu_sync_up_to_date():
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
+        patch.object(
+            pwa_server.dev_server,
+            "peek_sync_before_start",
+            return_value=SimpleNamespace(ok=True, status="up-to-date", message="ok"),
+        ) as peek,
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
+        patch.object(pwa_server.dev_server, "sync_before_start") as sync,
+        patch.object(pwa_server, "_start_backend") as start_backend,
+    ):
+        assert pwa_server.restart_for_desktop() == 0
+
+    peek.assert_called_once_with()
+    stop_service.assert_not_called()
+    sync.assert_not_called()
+    start_backend.assert_not_called()
+
+
+def test_desktop_restarts_when_baidu_sync_needs_pull():
+    process = SimpleNamespace(pid=1234)
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
+        patch.object(
+            pwa_server.dev_server,
+            "peek_sync_before_start",
+            return_value=SimpleNamespace(ok=True, status="needs-pull", message="remote newer"),
+        ),
+        patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
+        patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_prepare_runtime", return_value=True),
+        patch.object(pwa_server, "_start_backend", return_value=process) as start_backend,
+        patch.object(pwa_server, "_wait_for_pwa", return_value=True),
+    ):
+        assert pwa_server.restart_for_desktop() == 0
+
+    stop_service.assert_called_once_with()
+    sync.assert_called_once_with()
+    start_backend.assert_called_once_with()
+
+
+def test_fingerprint_uses_metadata_not_file_contents(tmp_path):
+    source = tmp_path / "a.txt"
+    source.write_text("hello", encoding="utf-8")
+    first = pwa_server._fingerprint([source])
+    source.write_text("hello-changed", encoding="utf-8")
+    # Force mtime change even if filesystem timestamp granularity is coarse.
+    os_utime = __import__("os").utime
+    os_utime(source, (source.stat().st_mtime + 2, source.stat().st_mtime + 2))
+    second = pwa_server._fingerprint([source])
+    assert first != second
+    assert len(first) == 64
+
+
+def test_supervise_exits_zero_when_service_taken_over(tmp_path):
+    process = SimpleNamespace(returncode=1, poll=lambda: 1)
+    reason_file = tmp_path / "pwa-stop-reason.txt"
+    reason_file.write_text("requested", encoding="utf-8")
+    with (
+        patch.object(pwa_server, "PWA_STOP_REASON_FILE", reason_file),
+        patch.object(pwa_server.signal, "signal"),
+    ):
+        assert pwa_server._supervise(process) == 0
+    assert not reason_file.exists()
 
 
 def test_desktop_stop_holds_service_lock_through_sync_push():
@@ -362,6 +434,7 @@ def test_diagnostic_runner_writes_fixed_ai_debug_artifacts():
     assert 'State "running"' in runner
     assert "exit_code" in runner
     assert "git_commit" in runner
+    assert "git status --porcelain" not in runner
 
 
 def test_diagnostic_runner_does_not_promote_child_stderr_to_wrapper_failure():

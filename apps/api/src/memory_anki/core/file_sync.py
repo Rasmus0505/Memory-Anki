@@ -479,6 +479,52 @@ def _write_conflict_snapshot(
     return conflict_path
 
 
+def peek_pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
+    """Revision-only startup sync check (百度网盘数据，不是 GitHub).
+
+    Does not restore snapshots or stop services. Status meanings for launchers:
+    - disabled / no-remote / up-to-date: safe to keep a healthy shared service running
+    - needs-pull: remote has a newer revision; caller must stop the service before pull_on_start
+    - other ok=False: surface the error and do not start
+    """
+    if not config.sync_enabled or not config.sync_on_start:
+        return SyncResult(True, "disabled", "同步未启用或启动同步已关闭。")
+    if config.sync_root is None:
+        return SyncResult(False, "misconfigured", "同步已启用，但 sync_root 未配置。")
+
+    paths = _sync_paths(config)
+    app_home = config.local_app_home
+    try:
+        with SyncLock(paths["locks"] / "sync.lock", config):
+            remote_state = _read_json(paths["state"])
+            if not remote_state:
+                return SyncResult(True, "no-remote", "远端同步目录尚未初始化，本次启动跳过拉取。")
+            _assert_remote_generation_compatible(remote_state)
+            local_state = _read_json(_local_state_path(app_home))
+            remote_revision = int(remote_state.get("revision") or 0)
+            local_revision = int(local_state.get("remote_revision") or 0)
+            logger.info(
+                "sync peek revision check: local revision %s, remote revision %s",
+                local_revision,
+                remote_revision,
+            )
+            if remote_revision < local_revision:
+                return SyncResult(
+                    False,
+                    "remote-stale",
+                    "云盘中的同步版本比本机记录更旧，请等待云盘同步完成后再启动。",
+                )
+            if remote_revision == local_revision:
+                return SyncResult(True, "up-to-date", "本机数据已是最新，无需拉取。")
+            return SyncResult(
+                True,
+                "needs-pull",
+                f"远端 revision {remote_revision} 新于本机 {local_revision}，需要停服务后拉取。",
+            )
+    except SyncError as exc:
+        return SyncResult(False, "error", str(exc))
+
+
 def pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
     if not config.sync_enabled or not config.sync_on_start:
         return SyncResult(True, "disabled", "同步未启用或启动同步已关闭。")
@@ -662,6 +708,7 @@ __all__ = [
     "compute_snapshot_hash",
     "create_snapshot_zip",
     "has_local_payload",
+    "peek_pull_on_start",
     "pull_on_start",
     "push_on_stop",
     "restore_snapshot_zip",

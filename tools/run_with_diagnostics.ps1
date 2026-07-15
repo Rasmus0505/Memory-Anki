@@ -95,8 +95,9 @@ try {
   }
 
   try {
+    # Only short commit for diagnostics; skip `git status` (slow on large/synced trees).
     $gitCommit = (& git rev-parse --short HEAD 2>$null | Select-Object -First 1)
-    $gitDirty = [bool](& git status --porcelain 2>$null | Select-Object -First 1)
+    $gitDirty = $null
   } catch {
     $gitCommit = $null
     $gitDirty = $null
