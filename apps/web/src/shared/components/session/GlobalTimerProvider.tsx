@@ -84,14 +84,18 @@ export function GlobalTimerProvider({
   React.useEffect(() => {
     const handleMainAppClick = (event: MouseEvent) => {
       const target = event.target
-      if (target instanceof Element && target.closest('[data-timer-overlay-root="true"]')) return
+      if (
+        target instanceof Element &&
+        target.closest('[data-timer-overlay-root="true"], [data-timer-activity="ignore"]')
+      ) return
       const entry = activeEntryRef.current
-      if (!entry || entry.timer.status !== 'running') return
+      if (!entry?.isRouteActive) return
+      if (!notifyStudyActivity(entry.sessionId)) return
       entry.timer.registerActivity('practice_interaction', { source: 'main_app_click' })
     }
     document.addEventListener('click', handleMainAppClick, true)
     return () => document.removeEventListener('click', handleMainAppClick, true)
-  }, [activeEntryRef])
+  }, [activeEntryRef, notifyStudyActivity])
   React.useEffect(() => {
     const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
       const nextConfig = detail || readTimerAutomationConfig()

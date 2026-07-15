@@ -17,6 +17,9 @@ import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSess
 import { cn } from '@/shared/lib/utils'
 import { readMindMapEditorState } from '@/entities/mindmap-document'
 import { detectClientSource } from '@/shared/lib/clientSource'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
+import { useTimedSession } from '@/shared/hooks/useTimedSession'
+import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 
 interface PalaceMeta {
   id: number
@@ -28,6 +31,7 @@ interface PalaceMeta {
 }
 
 export default function PalaceView() {
+  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const { openQuizLauncher } = useQuizLauncher()
   const palaceId = id ? Number(id) : null
@@ -50,6 +54,27 @@ export default function PalaceView() {
   })
 
   const palace = meta as PalaceMeta | null
+  const timerTitle = palace?.title ? `${palace.title} · 宫殿学习` : '宫殿学习'
+  const timer = useTimedSession({
+    kind: 'practice',
+    title: timerTitle,
+    palaceId,
+    automationScene: 'practice',
+    sourceKind: palaceId != null ? 'palace' : null,
+    persistKey: palaceId ? `palace_view:${palaceId}` : null,
+  })
+  useGlobalTimerRegistration({
+    scene: 'practice',
+    title: timerTitle,
+    timer,
+    isRouteActive: isActive,
+    becameActiveAt,
+    routePath: fullPath,
+  })
+
+  useEffect(() => {
+    timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
+  }, [isActive, timer])
 
   useEffect(() => {
     if (!palace || !editorState) {

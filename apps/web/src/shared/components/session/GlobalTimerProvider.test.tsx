@@ -149,6 +149,75 @@ describe('GlobalTimerProvider', () => {
     resetClientPreferenceCacheForTest()
   })
 
+  it.each(['idle', 'paused', 'running'] as const)(
+    'registers a learning-page content click while the active timer is %s',
+    (status) => {
+      const registerActivity = vi.fn()
+      const timer = createTimer({
+        sessionId: `active-${status}`,
+        status,
+        startedAt: status === 'idle' ? null : '2026-06-17T10:00:00',
+        registerActivity,
+      })
+      renderOverlay(
+        <>
+          <RegistrationProbe
+            timer={timer}
+            scene="review"
+            title="主动复习"
+            isRouteActive
+            becameActiveAt={100}
+          />
+          <button type="button">学习内容</button>
+        </>,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: '学习内容' }))
+
+      expect(registerActivity).toHaveBeenCalledWith('practice_interaction', { source: 'main_app_click' })
+    },
+  )
+
+  it('does not treat completion controls as timer activity', () => {
+    const registerActivity = vi.fn()
+    renderOverlay(
+      <>
+        <RegistrationProbe
+          timer={createTimer({ sessionId: 'completion-paused', status: 'paused', registerActivity })}
+          scene="review"
+          title="结算中的复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+        <div data-timer-activity="ignore"><button type="button">确认结算</button></div>
+      </>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '确认结算' }))
+
+    expect(registerActivity).not.toHaveBeenCalled()
+  })
+
+  it('does not resume a background timer from an ordinary page click', () => {
+    const registerActivity = vi.fn()
+    renderOverlay(
+      <>
+        <RegistrationProbe
+          timer={createTimer({ sessionId: 'background-paused', status: 'paused', registerActivity })}
+          scene="review"
+          title="后台复习"
+          isRouteActive={false}
+          becameActiveAt={100}
+        />
+        <button type="button">普通页面</button>
+      </>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '普通页面' }))
+
+    expect(registerActivity).not.toHaveBeenCalled()
+  })
+
   it('prefers the active route running session over background sessions', () => {
     renderOverlay(
       <>

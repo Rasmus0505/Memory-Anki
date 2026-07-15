@@ -82,10 +82,6 @@ describe("MindMapReviewFlow feedback", () => {
       fireEvent.click(screen.getByRole("button", { name: /完成/ }));
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
-    });
-
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(screen.getByText("通关结算中")).toBeTruthy();
     expect(timer.complete).not.toHaveBeenCalled();

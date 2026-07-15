@@ -1,5 +1,4 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
-import { CompletionDecisionDialog } from "@/features/review/components/CompletionDecisionDialog";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
@@ -200,7 +199,7 @@ export function MindMapReviewFlow({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={review.flow.handleRestart}
+                    onClick={() => { void review.flow.handleRestart() }}
                   >
                     <RotateCcw className="mr-2 size-4" />
                     重新开始
@@ -223,8 +222,7 @@ export function MindMapReviewFlow({
                     }
                     className={review.completeButtonClassName}
                     onClick={() => {
-                      review.flow.timer.pause({ source: "completion_dialog_open" });
-                      review.setCompletionDialogOpen(true);
+                      void review.flow.finishFlow("manual_complete");
                     }}
                   >
                     <SquareCheckBig className="mr-2 size-4" />
@@ -291,22 +289,6 @@ export function MindMapReviewFlow({
           </Card>
       </div>
 
-      <CompletionDecisionDialog
-        open={review.completionDialogOpen}
-        onOpenChange={(open) => {
-          review.setCompletionDialogOpen(open);
-          if (!open) review.flow.timer.resume({ source: "completion_dialog_cancelled" });
-        }}
-        durationSeconds={review.flow.timer.effectiveSeconds}
-        onMarkCompleted={() => {
-          review.setCompletionDialogOpen(false);
-          void review.flow.finishFlow("manual_complete");
-        }}
-        onMarkUncompleted={() => {
-          void review.handleMarkUncompleted();
-        }}
-        submitting={submitting || review.savingIncomplete}
-      />
 
       <MindMapRatingHistoryDrawer open={review.recallRatings.historyOpen} onOpenChange={review.recallRatings.setHistoryOpen} events={review.recallRatings.currentEvents} onCorrect={(nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) }} />
 

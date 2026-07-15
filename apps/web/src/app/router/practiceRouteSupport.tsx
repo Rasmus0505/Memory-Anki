@@ -13,6 +13,7 @@ import {
   type ReviewFlowSnapshot,
 } from '@/widgets/mindmap-review-flow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
 import { consumePrefetchedStudySession, type StudyWarmupKind } from '@/shared/api/studySessionWarmup'
 
 export type { CompleteFlowPayload } from '@/widgets/mindmap-review-flow'
@@ -25,13 +26,6 @@ export interface PracticeProgressSnapshot {
 
 interface PracticeProgressResponse {
   progress: PracticeProgressSnapshot | null
-}
-
-interface PendingStageSubmission<TData> {
-  data: TData
-  payload: CompleteFlowPayload
-  target: PracticeStageTarget
-  operationId: string
 }
 
 interface PracticeCompletionResult {
@@ -53,6 +47,13 @@ interface PracticeRouteSession<TData> {
   palaceId: number | null
   reviewEditorState: MindMapEditorState
   editEditorState?: MindMapEditorState | null
+}
+
+interface PreparedPracticeCompletion<TData> {
+  session: PracticeRouteSession<TData>
+  data: TData
+  target: PracticeStageTarget
+  mode: 'stage-backed' | 'plain-practice'
 }
 
 interface PracticeRouteConfig<TData, TSession> {
@@ -82,6 +83,7 @@ interface PracticeRouteConfig<TData, TSession> {
     payload: CompleteFlowPayload,
     targetReviewNumber: number,
     needsPractice: boolean,
+    note: string,
     options: { mutationId: string },
   ) => Promise<PracticeCompletionResult | void>
   flowProps?: (data: TData) => Partial<MindMapReviewFlowProps>
@@ -102,27 +104,39 @@ function toInitialSnapshot(progress: PracticeProgressSnapshot | null): ReviewFlo
   }
 }
 
-function hasStageChoices(target: PracticeStageTarget) {
-  return Boolean(target.stage_labels?.length && target.review_stages?.length)
-}
-
-function hasSubmittableStageChoices(target: PracticeStageTarget) {
-  return hasStageChoices(target) && Boolean(target.current_review_schedule_id)
-}
-
-function createCompletionOperationId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `practice-complete-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function completionErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '完成提交失败，请重试。'
-}
-
 function resolvePersistTimeRecord(result: PracticeCompletionResult | void) {
   return typeof result === 'object' && result !== null ? result.persistTimeRecord : undefined
+}
+
+function resolvePracticeCompletionMode(target: PracticeStageTarget): 'stage-backed' | 'plain-practice' {
+  const labels = target.stage_labels ?? []
+  const stages = target.review_stages ?? []
+  const total = target.review_stage_total
+  const completed = target.review_stage_completed
+  const hasScheduleSignals =
+    target.current_review_schedule_id != null ||
+    labels.length > 0 ||
+    stages.length > 0 ||
+    (total ?? 0) > 0 ||
+    (completed ?? 0) > 0
+
+  if (!hasScheduleSignals) return 'plain-practice'
+
+  if (
+    !target.current_review_schedule_id ||
+    !Number.isInteger(total) ||
+    (total ?? 0) <= 0 ||
+    !Number.isInteger(completed) ||
+    (completed ?? -1) < 0 ||
+    (completed ?? 0) >= (total ?? 0) ||
+    labels.length !== total ||
+    stages.length !== total ||
+    stages.some((stage, index) => stage.review_number !== index || stage.label !== labels[index])
+  ) {
+    throw new Error('当前复习节点信息不完整或不一致，请返回书架刷新或重新加载结算信息。')
+  }
+
+  return 'stage-backed'
 }
 
 export function PracticeSessionRoute<TData, TSession>({
@@ -140,11 +154,6 @@ export function PracticeSessionRoute<TData, TSession>({
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
   const [resetVersion, setResetVersion] = useState(0)
   const [hasResumeProgress, setHasResumeProgress] = useState(false)
-  const [stageDialogOpen, setStageDialogOpen] = useState(false)
-  const [pendingStageSubmission, setPendingStageSubmission] =
-    useState<PendingStageSubmission<TData> | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!routeId) return
@@ -172,6 +181,42 @@ export function PracticeSessionRoute<TData, TSession>({
     }
     void load()
   }, [config, routeId])
+
+  const completion = useReviewCompletionCoordinator<
+    PreparedPracticeCompletion<TData>,
+    { targetReviewNumber: number; needsPractice: boolean; note: string },
+    void
+  >({
+    prepare: async () => {
+      if (!session) throw new Error('练习会话尚未加载完成。')
+      let activeSession = session
+      if (config.refreshStageTarget) {
+        const refreshed = await config.refreshStageTarget(session.data)
+        if (refreshed) {
+          activeSession = refreshed
+          setSession(refreshed)
+          setEditEditorState(refreshed.editEditorState ?? null)
+        }
+      }
+      const target = config.getStageTarget(activeSession.data)
+      const mode = resolvePracticeCompletionMode(target)
+      return { session: activeSession, data: activeSession.data, target, mode }
+    },
+    submit: async ({ target: prepared, input, payload, operationId }) => {
+      const result = prepared.mode === 'stage-backed'
+        ? await config.submitStage(
+            prepared.data,
+            payload,
+            input.targetReviewNumber,
+            input.needsPractice,
+            input.note,
+            { mutationId: operationId },
+          )
+        : await config.completeWithoutStage(prepared.data, payload, { mutationId: operationId })
+      return { result: undefined, persistTimeRecord: resolvePersistTimeRecord(result) }
+    },
+    onCompleted: () => setHasResumeProgress(false),
+  })
 
   const effectiveInitialSnapshot = useMemo(() => {
     if (!session) return initialSnapshot
@@ -247,109 +292,53 @@ export function PracticeSessionRoute<TData, TSession>({
               tone: 'danger',
             },
           )
-          if (!confirmed) return
+          if (!confirmed) return false
           await config.clearProgress(data)
           setHasResumeProgress(false)
           setInitialSnapshot(null)
           if (config.resetFlowOnRestart) {
             setResetVersion((current) => current + 1)
           }
+          return true
         }}
-        submitting={submitting}
-        onComplete={async (payload) => {
-          setSubmissionError(null)
-          let activeData = data
-          let activeStageTarget = stageTarget
-          const needsStageRefresh =
-            (activeStageTarget.review_stage_total ?? 0) > 0 &&
-            (!hasStageChoices(activeStageTarget) || !activeStageTarget.current_review_schedule_id)
-          try {
-            if (needsStageRefresh) {
-              const refreshed = await config.refreshStageTarget?.(activeData)
-              if (refreshed) {
-                activeData = refreshed.data
-                activeStageTarget = config.getStageTarget(activeData)
-                setSession(refreshed)
-                setEditEditorState(refreshed.editEditorState ?? editEditorState)
-              }
-            }
-            const operationId = createCompletionOperationId()
-            if (hasSubmittableStageChoices(activeStageTarget)) {
-              setPendingStageSubmission({
-                data: activeData,
-                payload,
-                target: activeStageTarget,
-                operationId,
-              })
-              setStageDialogOpen(true)
-              return
-            }
-            setSubmitting(true)
-            const result = await config.completeWithoutStage(activeData, payload, { mutationId: operationId })
-            await payload.finalize({ persistTimeRecord: resolvePersistTimeRecord(result) })
-            setHasResumeProgress(false)
-          } catch (nextError) {
-            setSubmissionError(completionErrorMessage(nextError))
-            payload.cancel()
-          } finally {
-            setSubmitting(false)
-          }
-        }}
+        submitting={completion.submitting}
+        onComplete={completion.requestCompletion}
         {...config.flowProps?.(data)}
       />
 
       {config.renderAfterFlow?.(data)}
 
-      {submissionError && !stageDialogOpen ? (
-        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {submissionError}
-        </div>
-      ) : null}
 
-      {pendingStageSubmission ? (
-        <StageSelectDialog
-          open={stageDialogOpen}
-          stageLabels={pendingStageSubmission.target.stage_labels ?? []}
-          stages={pendingStageSubmission.target.review_stages ?? []}
-          currentReviewNumber={Math.max(
-            0,
-            pendingStageSubmission.target.review_stage_completed ?? 0,
-          )}
-          durationSeconds={pendingStageSubmission.payload.durationSeconds}
-          submitting={submitting}
-          error={submissionError}
-          onConfirm={async (targetReviewNumber, needsPractice) => {
-            if (submitting) return
-            setSubmitting(true)
-            setSubmissionError(null)
-            try {
-              const result = await config.submitStage(
-                pendingStageSubmission.data,
-                pendingStageSubmission.payload,
-                targetReviewNumber,
-                needsPractice,
-                { mutationId: pendingStageSubmission.operationId },
-              )
-              await pendingStageSubmission.payload.finalize({
-                persistTimeRecord: resolvePersistTimeRecord(result),
-              })
-              setHasResumeProgress(false)
-              setStageDialogOpen(false)
-              setPendingStageSubmission(null)
-            } catch (nextError) {
-              setSubmissionError(completionErrorMessage(nextError))
-            } finally {
-              setSubmitting(false)
-            }
-          }}
-          onCancel={() => {
-            pendingStageSubmission.payload.cancel()
-            setStageDialogOpen(false)
-            setSubmissionError(null)
-            setPendingStageSubmission(null)
-          }}
-        />
-      ) : null}
+      <StageSelectDialog
+        open={completion.open}
+        stageLabels={completion.target?.target.stage_labels ?? []}
+        stages={completion.target?.target.review_stages ?? []}
+        currentReviewNumber={Math.max(
+          0,
+          completion.target?.target.review_stage_completed ?? stageTarget.review_stage_completed ?? 0,
+        )}
+        durationSeconds={completion.durationSeconds}
+        submitting={completion.submitting}
+        preparing={completion.preparing}
+        preparationFailed={completion.preparationFailed}
+        submissionFailed={completion.submissionFailed}
+        requiresStages={
+          completion.target?.mode === 'stage-backed' ||
+          (completion.target == null && (
+            stageTarget.current_review_schedule_id != null ||
+            (stageTarget.review_stage_total ?? 0) > 0 ||
+            (stageTarget.stage_labels?.length ?? 0) > 0 ||
+            (stageTarget.review_stages?.length ?? 0) > 0
+          ))
+        }
+        error={completion.error}
+        onRetry={() => void completion.retryPreparation()}
+        onRetrySubmission={() => void completion.retrySubmission()}
+        onConfirm={(targetReviewNumber, needsPractice, note) => {
+          void completion.confirmCompletion({ targetReviewNumber, needsPractice, note })
+        }}
+        onCancel={completion.cancelCompletion}
+      />
     </div>
   )
 }

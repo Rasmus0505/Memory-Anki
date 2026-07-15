@@ -67,7 +67,7 @@ export default function SegmentPracticePage() {
           await updatePalaceSegmentApi(segment.id, { needs_practice: false })
           invalidatePalaceCatalogCache()
         },
-        submitStage: async ({ segment }, payload, targetReviewNumber, needsPractice, options) => {
+        submitStage: async ({ segment }, payload, targetReviewNumber, needsPractice, note, options) => {
           const scheduleId = segment.current_review_schedule_id
           if (!scheduleId) {
             throw new Error('当前学习组没有可提交的复习节点，请返回书架刷新后重试。')
@@ -81,6 +81,7 @@ export default function SegmentPracticePage() {
               red_marked_count: payload.redNodeIds.length,
               target_review_number: targetReviewNumber,
               needs_practice: needsPractice,
+              ...(note ? { note } : {}),
             },
             { mutationId: options.mutationId },
           )

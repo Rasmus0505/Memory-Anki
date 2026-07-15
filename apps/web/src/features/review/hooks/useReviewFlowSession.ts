@@ -19,7 +19,7 @@ interface UseReviewFlowSessionOptions {
   persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
-  onRestart?: () => void
+  onRestart?: () => boolean | void | Promise<boolean | void>
   persistProgress?: boolean
   initialSnapshot?: ReviewFlowSnapshot | null
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void
@@ -184,17 +184,24 @@ export function useReviewFlowSession({
         reveal.setRevealMap(finishState.revealMap)
         reveal.setRedNodeIds(finishState.redNodeIds)
         reveal.setCompleted(true)
-        await feedback.runCompletionCeremony()
         const completionMeta = {
           revealed_remaining: finishState.revealedRemaining,
           red_marked_count: finishState.redNodeIds.size,
         }
-        if (options?.persistTimeRecord === false) {
-          await timer.complete(modeName, completionMeta, { persistRecord: false })
-        } else {
-          await timer.complete(modeName, completionMeta)
+        try {
+          try {
+            await feedback.runCompletionCeremony()
+          } catch (error) {
+            console.error('Review completion ceremony failed.', error)
+          }
+          if (options?.persistTimeRecord === false) {
+            await timer.complete(modeName, completionMeta, { persistRecord: false })
+          } else {
+            await timer.complete(modeName, completionMeta)
+          }
+        } finally {
+          completionPendingRef.current = false
         }
-        completionPendingRef.current = false
       }
 
       try {
@@ -250,11 +257,13 @@ export function useReviewFlowSession({
     const weakSet = new Set(nodeUids)
     reveal.setRevealMap((current) => Object.fromEntries(Object.entries(current).map(([uid, state]) => [uid, weakSet.has(uid) ? 'placeholder' : state])))
   }, [reveal])
-  const handleRestart = React.useCallback(() => {
+  const handleRestart = React.useCallback(async () => {
+    const shouldRestart = await onRestart?.()
+    if (shouldRestart === false) return
     reveal.reset()
     feedback.emitManualEvent('session_reset')
+    timer.reset()
     timer.registerActivity('practice_interaction', { source: 'restart' })
-    onRestart?.()
   }, [feedback, onRestart, reveal, timer])
 
   const screenGlowClass =
