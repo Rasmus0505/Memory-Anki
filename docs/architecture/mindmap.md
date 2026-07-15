@@ -107,3 +107,11 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份与模式完全匹配的响应。
 - 服务端在父级 `children` 的原索引执行一次切片替换，目标前后的兄弟顺序保持不变；新 UID 由 operation 和树路径确定生成。
 - `ai_split_parallel` 与 `ai_split_hierarchy` 使用公共保真、原位边界和 `replacement_nodes` JSON 块；并列模式禁止子节点，层级模式最多三层且节点总量受服务端限制。
+
+
+## 统一文档工作区与宫殿学科标签
+
+- 全站思维导图继续使用同一套 `MindMapEditorSurface`、`MindMapPageToolbar` 和 `useMindMapDocumentSession`。宫殿文档与学科文档是独立持久化文档，不得合并数据库内容。
+- 宫殿编辑页通过单工作区标签在宫殿文档和显式归属的学科文档之间切换，同一时刻只挂载一个可编辑画布。切换文档前必须提交当前文档待保存状态。
+- 学科文档在宫殿宿主中仍由 Knowledge API 读写；Palace 只注入章节关联 capability，并拥有宫殿—学科、宫殿—章节的一致性命令。
+- `PalaceKnowledgeOutlinePanel`、`PalaceChapterPanel` 和页面自行推导“第一个学科”的实现已经退役，不得重建。

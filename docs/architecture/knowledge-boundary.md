@@ -21,3 +21,8 @@ All Knowledge subject and chapter write commands receive `platform.application.U
 ## Mutation responses
 
 Knowledge subject/chapter creation extracts a platform `MutationIdentity` at presentation and persists the response through `SqlAlchemyMutationResponseStore` inside the existing application `UnitOfWork`. Knowledge no longer depends on the transitional Persistence context, and route error handling rolls back through the same UoW adapter used by the command.
+
+
+## Palace subject ownership
+
+Knowledge owns Subject, Chapter, and subject mind-map documents. Palace owns explicit `palace_subjects`, chapter binding revisions, primary-chapter repair, and the invariant that explicit linked chapters belong to an explicitly owned subject. Subject deletion is blocked while chapters or palace ownership references remain. The Palace editor may create a Subject through Knowledge's public HTTP contract, but all palace ownership mutations use the Palace knowledge-binding command.

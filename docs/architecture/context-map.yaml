@@ -154,6 +154,7 @@
       "modules/palaces/application/attachment_service.py",
       "modules/palaces/application/editor_state_service.py",
       "modules/palaces/application/import_export_service.py",
+      "modules/palaces/application/knowledge_binding_service.py",
       "modules/palaces/application/palace_service.py",
       "modules/palaces/application/palace_template_service.py",
       "modules/palaces/application/segment_management_service.py",

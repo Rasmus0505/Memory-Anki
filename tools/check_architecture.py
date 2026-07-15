@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import ast
 import json
@@ -86,6 +86,9 @@ FORBIDDEN_REMOVED_FEATURE_FILES = {
     "features/palace-edit/PalaceEditPage.tsx": "route-level Palace editor composition belongs in pages/create/PalaceEditorPage.tsx.",
     "features/palace-edit/PalaceEditSkeleton.tsx": "Palace editor page loading UI belongs beside the page in pages/create.",
     "features/palace-edit/components/PalaceKnowledgeOutlinePanel.tsx": "route-level Knowledge outline and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
+    "features/palace-edit/components/PalaceChapterPanel.tsx": "palace chapter selection is owned by the unified Palace knowledge workspace.",
+    "features/palace-edit/components/PalaceBindingPanel.tsx": "palace knowledge binding is owned by the unified Palace knowledge workspace.",
+    "pages/create/PalaceKnowledgeOutlinePanel.tsx": "the separate Palace knowledge outline is retired; use the single tabbed mind-map workspace.",
     "features/palace-edit/components/PalaceVersionDialog.tsx": "route-level Palace version preview and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
     "features/knowledge/KnowledgePage.tsx": "route-level Knowledge composition belongs in pages/library/KnowledgeLibraryPage.tsx.",
     "features/knowledge/components/KnowledgeMindMapImportDrawer.tsx": "Knowledge import and editor composition belongs beside the Knowledge library page.",
@@ -1731,8 +1734,21 @@ def check_ai_run_workspace(errors: list[str]) -> None:
                 "do not call autoGenerateAndSavePalaceQuiz from UI code."
             )
 
+
+def check_retired_palace_knowledge_binding(errors: list[str]) -> None:
+    retired_route = '/palaces/{palace_id}/chapters'
+    for relative in (
+        'apps/api/src/memory_anki/modules/knowledge/presentation/router.py',
+        'apps/web/src/entities/palace/api/practiceApi.ts',
+    ):
+        path = REPO_ROOT / relative
+        if path.exists() and retired_route in path.read_text(encoding='utf-8'):
+            errors.append(f'{relative}: retired palace chapter write route must not return; use /knowledge-binding.')
+
+
 def main() -> int:
     errors: list[str] = []
+    check_retired_palace_knowledge_binding(errors)
     check_context_dependency_map(errors)
     check_forbidden_imports(errors)
     check_mindmap_architecture(errors)
