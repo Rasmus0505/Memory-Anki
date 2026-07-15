@@ -2,6 +2,7 @@ import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewSession from '@/app/router/review/ReviewSession'
+import { normalizeReviewSessionContainerSession } from '@/widgets/mindmap-review-flow/ReviewSessionContainer'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   latestFlowProps: null as Record<string, unknown> | null,
   finalizeCompletion: vi.fn(),
   cancelCompletion: vi.fn(),
+  consumePrefetchedStudySession: vi.fn(),
+  reviewSessionResponse: null as Record<string, any> | null,
 }))
 
 vi.mock('react-router-dom', () => ({
@@ -74,8 +77,8 @@ vi.mock('@/features/review/api', () => ({
 }))
 
 vi.mock('@/shared/api/studySessionWarmup', () => ({
-  consumePrefetchedStudySession: (_kind: string, _id: number, loader: () => Promise<unknown>) =>
-    loader(),
+  consumePrefetchedStudySession: (...args: unknown[]) =>
+    mocks.consumePrefetchedStudySession(...args),
 }))
 
 vi.mock('@/entities/palace/api', () => ({
@@ -90,6 +93,27 @@ vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({
 }))
 
 describe('ReviewSession', () => {
+  it('normalizes nested stage fields from a raw warmup session', () => {
+    const rawSession = {
+      id: 309,
+      palace_id: 1,
+      algorithm_used: 'ebbinghaus',
+      review_type: 'normal',
+      review_number: 0,
+      palace: {
+        stage_labels: ['1小时'],
+        review_stages: [
+          { review_number: 0, label: '1小时', completed: false, completed_at: null, scheduled_at: null },
+        ],
+      },
+    } as Parameters<typeof normalizeReviewSessionContainerSession>[0]
+
+    const normalized = normalizeReviewSessionContainerSession(rawSession)
+
+    expect(normalized.stageLabels).toEqual(['1小时'])
+    expect(normalized.reviewStages).toEqual(rawSession.palace?.review_stages)
+  })
+
   beforeEach(() => {
     mocks.navigate.mockReset()
     mocks.toastSuccess.mockReset()
@@ -101,8 +125,11 @@ describe('ReviewSession', () => {
     mocks.latestFlowProps = null
     mocks.finalizeCompletion.mockReset().mockResolvedValue(undefined)
     mocks.cancelCompletion.mockReset()
+    mocks.consumePrefetchedStudySession.mockReset().mockImplementation(
+      (_kind: string, _id: number, loader: () => Promise<unknown>) => loader(),
+    )
 
-    mocks.getReviewSessionApi.mockResolvedValue({
+    mocks.reviewSessionResponse = {
       id: 309,
       palace_id: 1,
       algorithm_used: 'ebbinghaus',
@@ -126,8 +153,9 @@ describe('ReviewSession', () => {
           { review_number: 8, label: '60天', completed: false, completed_at: null, scheduled_at: null },
         ],
       },
-    })
-    mocks.getReviewSessionProgressApi.mockResolvedValue({ progress: null })
+    }
+    mocks.getReviewSessionApi.mockReset().mockResolvedValue(mocks.reviewSessionResponse)
+    mocks.getReviewSessionProgressApi.mockReset().mockResolvedValue({ progress: null })
     mocks.clearReviewSessionProgressApi.mockResolvedValue({ ok: true })
     mocks.submitReviewSessionApi.mockResolvedValue({
       ok: true,
@@ -165,6 +193,46 @@ describe('ReviewSession', () => {
       reload: vi.fn(),
       flushSave: mocks.flushSave,
     })
+  })
+
+  it('normalizes a raw prefetched review session and reloads authoritative stages before completion', async () => {
+    mocks.consumePrefetchedStudySession.mockResolvedValueOnce({
+      session: mocks.reviewSessionResponse,
+      progress: { progress: null },
+    })
+
+    render(<ReviewSession />)
+    await screen.findByTestId('flow-mode')
+    expect(mocks.getReviewSessionApi).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
+
+    expect(await screen.findByRole('heading', { name: '选择复习进度' })).toBeTruthy()
+    expect(mocks.getReviewSessionApi).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/复习阶段信息不完整或不一致/)).toBeNull()
+  })
+
+  it('reloads the review session when retrying incomplete settlement information', async () => {
+    const incompleteSession = structuredClone(mocks.reviewSessionResponse)
+    incompleteSession.palace.review_stages = []
+    mocks.consumePrefetchedStudySession.mockResolvedValueOnce({
+      session: mocks.reviewSessionResponse,
+      progress: { progress: null },
+    })
+    mocks.getReviewSessionApi
+      .mockReset()
+      .mockResolvedValueOnce(incompleteSession)
+      .mockResolvedValueOnce(mocks.reviewSessionResponse)
+
+    render(<ReviewSession />)
+    await screen.findByTestId('flow-mode')
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('复习阶段信息不完整或不一致')
+    fireEvent.click(screen.getByRole('button', { name: '重新加载结算信息' }))
+
+    expect(await screen.findByRole('heading', { name: '选择复习进度' })).toBeTruthy()
+    expect(mocks.getReviewSessionApi).toHaveBeenCalledTimes(2)
   })
 
   it('passes inline review editing props into MindMapReviewFlow', async () => {
