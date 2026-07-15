@@ -164,6 +164,7 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
         patch.object(pwa_server, "_current_update_fingerprints", return_value=fingerprints),
         patch.object(pwa_server, "_read_update_state", return_value=fingerprints),
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_desktop_runtime_ready", return_value=True),
         patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
         patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
         patch.object(pwa_server, "_run_frontend_build") as build,
@@ -175,6 +176,54 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
     build.assert_not_called()
     sync.assert_not_called()
 
+
+
+def test_desktop_runtime_installs_lockfile_dependencies_when_electron_package_is_missing(tmp_path):
+    web_dir = tmp_path / "web"
+    logs_dir = tmp_path / "logs"
+    web_dir.mkdir()
+    completed = SimpleNamespace(returncode=0)
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server, "LOGS_DIR", logs_dir),
+        patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
+        patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
+        patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert pwa_server._ensure_desktop_runtime() is True
+
+    assert run.call_args.args[0] == [
+        "npm.cmd",
+        "ci",
+        "--include=dev",
+        "--foreground-scripts",
+    ]
+
+
+def test_desktop_runtime_rebuilds_installed_electron_package(tmp_path):
+    web_dir = tmp_path / "web"
+    logs_dir = tmp_path / "logs"
+    electron_dir = web_dir / "node_modules" / "electron"
+    electron_dir.mkdir(parents=True)
+    (electron_dir / "package.json").write_text("{}", encoding="utf-8")
+    completed = SimpleNamespace(returncode=0)
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server, "LOGS_DIR", logs_dir),
+        patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
+        patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
+        patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert pwa_server._ensure_desktop_runtime() is True
+
+    assert run.call_args.args[0] == [
+        "npm.cmd",
+        "rebuild",
+        "electron",
+        "--foreground-scripts",
+    ]
 
 
 def test_prepare_repairs_missing_desktop_runtime():
@@ -261,6 +310,22 @@ def test_pwa_launcher_uses_lightweight_python_probe():
 
     assert 'ProbeCode "import sys"' in launcher
     assert "pydantic_settings" not in launcher
+
+
+def test_pwa_launcher_preserves_native_python_exit_code():
+    launcher = (TOOLS_DIR / "pwa_launcher.ps1").read_text(encoding="utf-8")
+
+    assert "$script:PwaServerExitCode = $exitCode" in launcher
+    assert "exit $script:PwaServerExitCode" in launcher
+    assert "return $exitCode" not in launcher
+    assert "exit (Invoke-PwaServer" not in launcher
+
+
+def test_desktop_launch_rechecks_and_repairs_electron_runtime():
+    desktop_timer = (TOOLS_DIR / "desktop_timer.py").read_text(encoding="utf-8")
+
+    assert "pwa_server._ensure_desktop_runtime()" in desktop_timer
+    assert "Electron runtime repair failed" in desktop_timer
 
 
 def test_all_batch_entrypoints_use_diagnostic_runner():

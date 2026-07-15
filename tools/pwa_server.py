@@ -314,11 +314,21 @@ def _ensure_desktop_runtime() -> bool:
         return False
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "electron-install.log"
+    electron_package = WEB_DIR / "node_modules" / "electron" / "package.json"
+    if electron_package.is_file():
+        command = [npm, "rebuild", "electron", "--foreground-scripts"]
+        action = "rebuilding Electron"
+    else:
+        # `npm rebuild electron` exits successfully when the package is absent.
+        # Restore the exact lockfile dependency tree so a missing/empty
+        # node_modules directory is repaired rather than silently accepted.
+        command = [npm, "ci", "--include=dev", "--foreground-scripts"]
+        action = "restoring frontend dependencies"
     _append_log_separator(log_path, "Electron runtime repair")
-    print(f"[i] Electron runtime is incomplete; repairing it, log: {log_path}")
+    print(f"[i] Electron runtime is incomplete; {action}, log: {log_path}")
     with log_path.open("ab") as log_file:
         result = subprocess.run(
-            [npm, "rebuild", "electron", "--foreground-scripts"],
+            command,
             cwd=str(WEB_DIR),
             stdout=log_file,
             stderr=subprocess.STDOUT,
