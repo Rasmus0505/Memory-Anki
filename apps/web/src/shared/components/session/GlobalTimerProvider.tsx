@@ -21,6 +21,7 @@ import {
   hasDesktopTimerBridge,
   type UnifiedTimerCommand,
 } from '@/shared/components/session/desktopTimerBridge'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   resetBreakGuardConfig,
   saveBreakGuardConfig,
@@ -48,7 +49,9 @@ export function GlobalTimerProvider({
   children,
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
-  const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
+  const [showInPageTimerOverlay] = React.useState(
+    () => !hasDesktopTimerBridge() && detectClientSource() !== 'pwa',
+  )
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>

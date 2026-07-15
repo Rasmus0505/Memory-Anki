@@ -142,6 +142,20 @@ describe('GlobalTimerProvider', () => {
       writable: true,
       value: 900,
     })
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    })
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia
   })
 
   afterEach(() => {
@@ -329,6 +343,42 @@ describe('GlobalTimerProvider', () => {
         title: '当前复习',
       }),
     )
+  })
+
+  it('does not render the floating timer overlay on PWA clients', () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    })
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: query === '(display-mode: standalone)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia
+
+    renderOverlay(
+      <RegistrationProbe
+        timer={createTimer({
+          sessionId: 'pwa-review-running',
+          effectiveSeconds: 10,
+          status: 'running',
+          startedAt: '2026-06-17T10:00:00',
+        })}
+        scene="review"
+        title="当前复习"
+        isRouteActive
+        becameActiveAt={100}
+      />,
+    )
+
+    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
+    expect(document.querySelector('.memory-anki-global-timer-capsule')).toBeNull()
+    expect(screen.queryByText('当前复习')).toBeNull()
   })
 
   it('cancels a pending break prompt when the desktop main window returns to an active study route', () => {
