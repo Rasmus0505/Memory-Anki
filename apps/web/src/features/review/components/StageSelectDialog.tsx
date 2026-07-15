@@ -91,7 +91,7 @@ export function StageSelectDialog({
   const numberShortcutLimit = Math.min(5, total)
 
   React.useEffect(() => {
-    if (!open) return undefined
+    if (!open || submissionFailed || submitting) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
       if (isEditableKeyboardTarget(event.target)) return
@@ -105,7 +105,7 @@ export function StageSelectDialog({
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [numberShortcutLimit, open])
+  }, [numberShortcutLimit, open, submissionFailed, submitting])
 
   if (preparing || total <= 0) {
     const missingRequiredStages = preparationFailed || (requiresStages && !preparing)
