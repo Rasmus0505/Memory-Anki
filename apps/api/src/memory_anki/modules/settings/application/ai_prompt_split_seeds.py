@@ -1,6 +1,25 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-AI_SPLIT_BLOCK_SEEDS = (
+from typing import TypedDict
+
+
+class PromptBlockSeedData(TypedDict):
+    key: str
+    label: str
+    description: str
+    layer: str
+    sort_order: int
+    template: str
+
+
+class PromptSceneSeedData(TypedDict):
+    scene_key: str
+    prompt_key: str
+    block_keys: tuple[str, ...]
+    scene_instruction: str
+    recommended_block_keys: tuple[str, ...]
+
+AI_SPLIT_BLOCK_SEEDS: tuple[PromptBlockSeedData, ...] = (
     {
         "key": "content.split_source_fidelity",
         "label": "分卡内容完整保留",
@@ -36,7 +55,7 @@ AI_SPLIT_BLOCK_SEEDS = (
     },
 )
 
-AI_SPLIT_SCENE_SEEDS = (
+AI_SPLIT_SCENE_SEEDS: tuple[PromptSceneSeedData, ...] = (
     {
         "scene_key": "ai_split_parallel",
         "prompt_key": "ai_prompt_mindmap_ai_split_system",
