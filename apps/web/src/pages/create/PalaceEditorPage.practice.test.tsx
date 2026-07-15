@@ -55,7 +55,7 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledWith(101)
     })
 
-    expect(screen.getByText('outline')).toBeTruthy()
+    expect(screen.getByText('学科与思维导图')).toBeTruthy()
     expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
     expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
     expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
@@ -63,7 +63,7 @@ describe('usePalaceEditPage inline practice mode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '学习' }))
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(
         screen.getByText((content) =>
@@ -77,7 +77,7 @@ describe('usePalaceEditPage inline practice mode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
       expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()

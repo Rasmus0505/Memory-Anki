@@ -13,7 +13,6 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
-import { PalaceChapterPanel } from '@/features/palace-edit/components/PalaceChapterPanel'
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
 import { PalaceTemplateDialog } from '@/features/palace-edit/components/PalaceTemplateDialog'
@@ -21,7 +20,8 @@ import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/features/palace-edit/hooks/usePalaceMindMapFileTransfer'
 import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
 import { usePalaceEditPage } from '@/features/palace-edit/hooks/usePalaceEditPage'
-import { PalaceKnowledgeOutlinePanel } from './PalaceKnowledgeOutlinePanel'
+import { PalaceCreateSetup } from './PalaceCreateSetup'
+import { PalaceMindMapWorkspace } from './PalaceMindMapWorkspace'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useMindMapExperience } from '@/features/mindmap-experience'
@@ -83,6 +83,7 @@ export default function PalaceEdit() {
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
   const [templateSaving, setTemplateSaving] = useState(false)
 
   const selectedNodeUid =
@@ -310,16 +311,12 @@ export default function PalaceEdit() {
             </Button>
           }
         />
+        <PalaceCreateSetup
+          busy={page.isCreatingDraft}
+          onCreate={page.handleCreateBlankPalace}
+        />
         <Card>
           <CardContent className="flex flex-wrap gap-3 p-6">
-            <Button disabled={page.isCreatingDraft} onClick={() => void page.handleCreateBlankPalace()}>
-              {page.isCreatingDraft ? (
-                <LoaderCircle className="mr-2 size-4 animate-spin" />
-              ) : (
-                <FileStack className="mr-2 size-4" />
-              )}
-              创建空白宫殿
-            </Button>
             <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
               <LayoutTemplate className="mr-2 size-4" />
               从模板创建
@@ -414,6 +411,16 @@ export default function PalaceEdit() {
         </div>
       ) : null}
 
+      {!page.mindMapFullscreen && page.palace ? (
+        <PalaceMindMapWorkspace
+          palace={page.palace}
+          activeKey={activeMindMapKey}
+          onActiveKeyChange={setActiveMindMapKey}
+          onReload={page.reload}
+        />
+      ) : null}
+
+      {activeMindMapKey === 'palace' ? (
       <div
         className={cn(
           'grid gap-3 xl:grid-cols-[340px_minmax(0,1fr)]',
@@ -429,15 +436,6 @@ export default function PalaceEdit() {
             onCreatedAtChange={page.setCreatedAt}
             onSave={page.handleSaveMeta}
             onEstablishCreatedAt={page.handleEstablishCreatedAt}
-          />
-
-          <PalaceChapterPanel
-            chapterOptions={page.chapterOptions}
-            explicitChapterIds={page.explicitChapterIds}
-            inheritedChapterIds={page.inheritedChapterIds}
-            primaryChapterId={page.primaryChapterId}
-            selectionPending={page.chapterSelectionPending}
-            onToggleChapter={page.handleChapterToggle}
           />
 
           <PalaceSegmentsPanel
@@ -623,15 +621,9 @@ export default function PalaceEdit() {
             </CardContent>
           </Card>
 
-          {!page.mindMapFullscreen ? (
-            <PalaceKnowledgeOutlinePanel
-              palace={page.palace}
-              explicitChapterIds={page.explicitChapterIds}
-              chapterOptions={page.chapterOptions}
-            />
-          ) : null}
         </div>
       </div>
+      ) : null}
 
       <MindMapImportDrawer
         open={mindMapImport.importOpen}

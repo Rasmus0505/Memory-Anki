@@ -98,6 +98,10 @@ export interface PalaceEditorMeta {
   updated_at?: string | null
   primary_chapter_id?: number | null
   primary_chapter?: ChapterSummary | null
+  subjects?: SubjectSummary[]
+  explicit_chapter_ids?: number[]
+  inherited_chapter_ids?: number[]
+  binding_revision?: number
   chapters?: Array<ChapterSummary & {
     subject?: { id: number; name: string } | null
   }>

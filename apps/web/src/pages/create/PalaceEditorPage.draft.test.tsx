@@ -21,17 +21,19 @@ describe('usePalaceEditPage draft creation', () => {
 
     renderPalaceEditPageStrict()
 
-    expect(await screen.findByText('创建空白宫殿')).toBeTruthy()
+    expect(await screen.findByText('创建宫殿')).toBeTruthy()
     expect(createPalaceApi).not.toHaveBeenCalled()
   })
 
-  it('creates a palace only after the explicit blank-palace action', async () => {
+  it('creates a palace only after title and subject are selected', async () => {
     const createPalaceApi = vi.spyOn(palaceApi, 'createPalaceApi').mockResolvedValue({ id: 101 } as never)
 
     renderPalaceEditPage('/palaces/new')
-    fireEvent.click(screen.getByRole('button', { name: '创建空白宫殿' }))
+    fireEvent.change(screen.getByLabelText('宫殿名'), { target: { value: '教育史宫殿' } })
+    fireEvent.click(await screen.findByRole('button', { name: /测试学科/ }))
+    fireEvent.click(screen.getByRole('button', { name: '创建并进入编辑器' }))
 
-    await waitFor(() => expect(createPalaceApi).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(createPalaceApi).toHaveBeenCalledWith(expect.objectContaining({ title: '教育史宫殿', subject_ids: [1] })))
   })
   it('does not auto start on page enter by default', async () => {
     vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({

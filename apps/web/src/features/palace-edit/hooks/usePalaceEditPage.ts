@@ -22,7 +22,7 @@ import { splitMindMapNodeApi } from '@/entities/palace/api'
 import { getEnglishContinueCourseApi } from '@/entities/english/api'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
-export type { ChapterOption, PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
+export type { PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
   const node = nodes[0] ?? null
@@ -220,11 +220,11 @@ export function usePalaceEditPage() {
     Boolean(documentState.editorState),
   )
 
-  const handleCreateBlankPalace = useCallback(async () => {
+  const handleCreateBlankPalace = useCallback(async (options: { title: string; subjectIds: number[] }) => {
     if (palaceId || id !== undefined || documentState.isCreatingDraft) return
     documentState.setIsCreatingDraft(true)
     try {
-      const createdId = await documentState.createDraftPalace()
+      const createdId = await documentState.createDraftPalace(options)
       navigate(`/palaces/${createdId}/edit`, { replace: true })
     } catch (error) {
       documentState.setIsCreatingDraft(false)
@@ -463,6 +463,7 @@ export function usePalaceEditPage() {
     aiRunConfigDialog,
     palaceId,
     palace,
+    reload: documentState.reload,
     timer,
     title: meta.title,
     setTitle: meta.setTitle,
@@ -470,11 +471,6 @@ export function usePalaceEditPage() {
     setCreatedAt: meta.setCreatedAt,
     editorMode: practice.editorMode,
     enterPreview: practice.enterPreview,
-    chapterOptions: meta.chapterOptions,
-    explicitChapterIds: meta.explicitChapterIds,
-    inheritedChapterIds: meta.inheritedChapterIds,
-    primaryChapterId: meta.primaryChapterId,
-    chapterSelectionPending: meta.chapterSelectionPending,
     versionOpen: versions.versionOpen,
     setVersionOpen: versions.setVersionOpen,
     mindMapFullscreen,
@@ -540,7 +536,6 @@ export function usePalaceEditPage() {
     handleEstablishCreatedAt: meta.handleEstablishCreatedAt,
     handleAttachmentUpload: meta.handleAttachmentUpload,
     handleAttachmentDelete: meta.handleAttachmentDelete,
-    handleChapterToggle: meta.handleChapterToggle,
     enterInlinePractice,
     exitInlinePractice,
     toggleInlinePractice,

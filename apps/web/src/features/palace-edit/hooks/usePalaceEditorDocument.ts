@@ -362,7 +362,7 @@ export function usePalaceEditorDocument({
   }
 }
 
-async function createDraftPalace() {
-  const created = await createPalaceApi({ title: '未命名宫殿', description: '', pegs: [] })
+async function createDraftPalace(options: { title: string; subjectIds: number[] }) {
+  const created = await createPalaceApi({ title: options.title, subject_ids: options.subjectIds, description: '', pegs: [] })
   return created.id as number
 }

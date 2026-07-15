@@ -235,10 +235,6 @@ vi.mock('./PalaceVersionDialog', () => ({
   PalaceVersionDialog: () => null,
 }))
 
-vi.mock('./PalaceKnowledgeOutlinePanel', () => ({
-  PalaceKnowledgeOutlinePanel: () => <div>outline</div>,
-}))
-
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void

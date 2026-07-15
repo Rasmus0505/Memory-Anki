@@ -444,10 +444,6 @@ vi.mock('@/shared/components/session/SessionTimerBar', () => ({
   SessionTimerBar: () => <div>timer</div>,
 }))
 
-vi.mock('./PalaceKnowledgeOutlinePanel', () => ({
-  PalaceKnowledgeOutlinePanel: () => <div>outline</div>,
-}))
-
 export function getMindMapTexts() {
   return {
     root: testingLibraryScreen.getByText(/^root-/).textContent,
@@ -500,7 +496,7 @@ export function setupPalaceEditPageTestDefaults() {
   promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
-  vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([])
+  vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)

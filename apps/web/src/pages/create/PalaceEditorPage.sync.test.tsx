@@ -225,19 +225,19 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '切换半屏' }))
 
     await waitFor(() => {
-      expect(screen.queryByText('outline')).toBeNull()
+      expect(screen.queryByText('学科与思维导图')).toBeNull()
     })
 
     fireEvent.keyDown(window, { key: 'Escape' })
 
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
     })
   })
 })

@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createMindMapCapabilities } from './capabilities'
 
 function buildAiCapability(onAiSplitRequest = vi.fn()) {
@@ -8,6 +8,7 @@ function buildAiCapability(onAiSplitRequest = vi.fn()) {
     segmentColorMode: 'all',
     segmentRangeDraft: {
       active: false,
+      targetSegmentId: null,
       selectedNodeUids: [],
       overriddenConflictNodeUids: [],
     },
@@ -28,7 +29,7 @@ describe('AI split capability', () => {
     const { capability, onAiSplitRequest } = buildAiCapability()
     const actions = capability?.getNodeActions?.({
       nodeId: 'target-node',
-      selection: [{ uid: 'target-node', text: '长内容', note: '', memoryAnkiNodeType: 'peg' }],
+      selection: [{ uid: 'target-node', text: '长内容', note: '', memoryAnkiId: null, memoryAnkiNodeType: 'peg', rawData: {} }],
       isRoot: false,
       readonly: false,
       practiceModeActive: false,
