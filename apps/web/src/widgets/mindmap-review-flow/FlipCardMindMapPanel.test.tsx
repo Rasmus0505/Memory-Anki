@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import {
   editorState,
   getLatestMindMapEditorSurfaceProps,
@@ -43,6 +43,52 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: '忘记 1' })).toBeNull()
     expect(screen.queryByRole('button', { name: '本轮评分记录' })).toBeNull()
   })
+  it('enters rating mode through node clicks and chooses single scope for leaves', async () => {
+    const onRateNode = vi.fn()
+    const onToggleRatingMode = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        onToggleRatingMode={onToggleRatingMode}
+        onRateNode={onRateNode}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '评分' })).toBeTruthy()
+    expect(getLatestMindMapEditorSurfaceProps()?.toolbarContent).toBeTruthy()
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'grandchild', text: 'Grandchild' }])
+    })
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /记得/ }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: /记得/ }).at(-1)!)
+    expect(onRateNode).toHaveBeenCalledWith('grandchild', 3, 'first', 'single', expect.any(Object))
+  })
+
+  it('embeds rating mode action into the canvas toolbar content', () => {
+    const onToggleRatingMode = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={false}
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        onToggleRatingMode={onToggleRatingMode}
+        onRateNode={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '评分' }))
+    expect(onToggleRatingMode).toHaveBeenCalledTimes(1)
+    expect(getLatestMindMapEditorSurfaceProps()?.toolbarContent).toBeTruthy()
+  })
+
   it('reports mobile next navigation as an active learning interaction', async () => {
     const onNodeActive = vi.fn()
     renderInRouter(
@@ -61,7 +107,7 @@ describe('FlipCardMindMapPanel', () => {
     onNodeActive.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '下一个' }))
     expect(onNodeActive).toHaveBeenCalledWith([
-      expect.objectContaining({ uid: 'child' }),
+      expect.objectContaining({ uid: 'grandchild' }),
     ])
   })
 

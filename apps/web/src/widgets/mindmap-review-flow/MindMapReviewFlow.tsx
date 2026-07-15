@@ -269,6 +269,8 @@ export function MindMapReviewFlow({
                     onRateNode={props.studySessionId ? (nodeUid, rating, round, evidence) => { void review.recallRatings.rateNode(nodeUid, rating, round, evidence) } : undefined}
                     onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
                     onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
+                    ratingMode={review.ratingMode}
+                    onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
                   />
                 </div>
                 <AiLearningWorkbench

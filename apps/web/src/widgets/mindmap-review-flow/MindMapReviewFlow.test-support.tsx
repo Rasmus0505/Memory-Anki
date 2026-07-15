@@ -121,6 +121,7 @@ vi.mock("@/features/mindmap-editor", () => ({
     return (
       <div data-testid="mind-map-frame">
         <div>{`frame-${props.readonly ? "readonly" : "editable"}-${fullscreen ? "immersive" : "plain"}`}</div>
+        {props.toolbarContent as React.ReactNode}
         <button
           type="button"
           onClick={() =>
@@ -164,6 +165,7 @@ vi.mock("@/features/mindmap-editor", () => ({
     );
   }),
   MindMapPageToolbar: ({
+    ratingAction,
     modeToggle,
     quizAction,
     miniPalaceAction,
@@ -172,6 +174,11 @@ vi.mock("@/features/mindmap-editor", () => ({
     clearUiAction,
   }: Record<string, any>) => (
     <div data-testid="mind-map-toolbar">
+      {ratingAction ? (
+        <button type="button" onClick={ratingAction.onClick}>
+          {ratingAction.label}
+        </button>
+      ) : null}
       {modeToggle ? (
         <button type="button" onClick={modeToggle.onClick}>
           {modeToggle.label}

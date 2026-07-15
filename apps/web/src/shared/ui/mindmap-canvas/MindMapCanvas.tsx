@@ -263,7 +263,6 @@ function MindMapCanvasInner({
           canRedo={state.canRedo}
           showHistoryControls={state.canShowHistoryControls}
           leadingContent={props.toolbarContent}
-          onReflow={state.resetLayout}
           onRefreshHost={onHostRefresh}
           onToggleFocusMode={handleToggleFocusMode}
           onUndo={props.onUndo}

@@ -3,7 +3,6 @@ import {
   Minimize2,
   Redo2,
   RefreshCw,
-  RotateCcw,
   Undo2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -15,7 +14,6 @@ interface MindMapCanvasToolbarProps {
   canRedo: boolean
   showHistoryControls: boolean
   leadingContent?: ReactNode
-  onReflow: () => void
   onRefreshHost: () => void
   onToggleFocusMode?: () => void
   onUndo?: () => void
@@ -29,7 +27,6 @@ export function MindMapCanvasToolbar({
   canRedo,
   showHistoryControls,
   leadingContent,
-  onReflow,
   onRefreshHost,
   onToggleFocusMode,
   onUndo,
@@ -40,14 +37,6 @@ export function MindMapCanvasToolbar({
       {leadingContent}
       {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
       <button
-        type="button"
-        onClick={onReflow}
-        className="flex h-9 items-center justify-center gap-2 rounded-xl border border-transparent px-3 text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
-        title="手动整理画布"
-      >
-        <RotateCcw className="size-4" />
-        <span className="text-xs font-medium">整理画布</span>
-      </button>      <button
         type="button"
         onClick={onRefreshHost}
         className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"

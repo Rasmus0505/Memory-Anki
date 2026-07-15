@@ -8,6 +8,7 @@ import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
+import { toast } from "@/shared/feedback/toast";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
 import { useMindMapRecallRatings } from '@/features/review/hooks/useMindMapRecallRatings';
 
@@ -35,6 +36,7 @@ export function useMindMapReviewFlowController({
 }: MindMapReviewFlowProps) {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([]);
+  const [ratingMode, setRatingMode] = React.useState(false);
   const [comboBurst, setComboBurst] = React.useState<{
     milestoneStep: number;
     comboCount: number;
@@ -43,7 +45,7 @@ export function useMindMapReviewFlowController({
   } | null>(null);
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
-  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: sessionKind === 'review' && Boolean(studySessionId) });
+  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: Boolean(studySessionId), sourceScene: sessionKind === 'review' ? 'formal_review' : 'practice' });
   const reviewNodeUids = React.useMemo(() => {
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
     const result: string[] = [];
@@ -195,37 +197,63 @@ React.useEffect(() => {
     isInlineEditMode,
   ]);
 
-  const handleSpacePourRef = React.useRef(flow.handleSpacePour);
-  handleSpacePourRef.current = flow.handleSpacePour;
+  const handleSpacePourRef = React.useRef(flow.handleSpacePour)
+  handleSpacePourRef.current = flow.handleSpacePour
+
+  const canUseRatingMode = Boolean(palaceId && studySessionId && !isInlineEditMode && !flow.completed)
+  React.useEffect(() => {
+    if (canUseRatingMode || isInlineEditMode || !isCheckpointMode) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key !== ' ' && event.code !== 'Space')) return
+      if (isEditableKeyboardTarget(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleSpacePourRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, isCheckpointMode, isInlineEditMode])
 
   React.useEffect(() => {
-    if (!isCheckpointMode) return;
+    if (canUseRatingMode || isInlineEditMode || isCheckpointMode) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.key === " " || event.code === "Space") {
-        if (isEditableKeyboardTarget(event.target)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        handleSpacePourRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [flow.handleSpacePour, isCheckpointMode]);
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== ' ' && event.code !== 'Space') return
+      if (isEditableKeyboardTarget(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleShortcutAdvanceReview()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode])
 
   React.useEffect(() => {
-    if (isInlineEditMode || isCheckpointMode) return;
+    if (!canUseRatingMode && ratingMode) setRatingMode(false)
+  }, [canUseRatingMode, ratingMode])
+
+  const handleToggleRatingMode = React.useCallback(() => {
+    if (!canUseRatingMode) return
+    setRatingMode((current) => {
+      const next = !current
+      toast.success(next ? '已进入评分模式，点击节点即可评分' : '已退出评分模式')
+      return next
+    })
+  }, [canUseRatingMode])
+
+  React.useEffect(() => {
+    if (!canUseRatingMode) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key !== " " && event.code !== "Space") return;
-      if (isEditableKeyboardTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      handleShortcutAdvanceReview();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode]);
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== ' ' && event.code !== 'Space') return
+      if (isEditableKeyboardTarget(event.target) || document.querySelector('[role="dialog"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleToggleRatingMode()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, handleToggleRatingMode])
 
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
@@ -349,6 +377,9 @@ React.useEffect(() => {
     handleCycleFeedbackGlobalIntensity,
     handleShortcutAdvanceReview,
     recallRatings,
+    ratingMode,
+    canUseRatingMode,
+    handleToggleRatingMode,
   };
 }
 

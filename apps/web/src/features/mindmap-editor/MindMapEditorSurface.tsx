@@ -58,7 +58,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
-  immersiveModeActive: _immersiveModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
   syncReason = null,
@@ -94,7 +93,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
-  onFullscreenToggle: _onFullscreenToggle,
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
@@ -729,4 +727,3 @@ function collectRevealMap(editorState: MindMapEditorState) {
   if (doc.root) walk(doc.root)
   return result
 }
-

@@ -37,4 +37,6 @@ export interface MindMapReviewFlowProps {
   initialSnapshot?: ReviewFlowSnapshot | null;
   onSnapshotChange?: (snapshot: ReviewFlowSnapshot) => void;
   onFullscreenChange?: (active: boolean) => void;
+  ratingMode?: boolean;
+  onToggleRatingMode?: () => void;
 }

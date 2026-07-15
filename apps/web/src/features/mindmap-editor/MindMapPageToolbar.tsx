@@ -41,6 +41,7 @@ export interface MindMapPageToolbarProps {
   searchControl?: { value: string; onChange: (value: string) => void; placeholder?: string; resultCount?: number } | null
   focusAction?: MindMapToolbarAction | null
   fitAction?: MindMapToolbarAction | null
+  ratingAction?: MindMapToolbarToggleAction | null
   moreActions?: Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
   segmentControl?: MindMapToolbarSegmentControl | null
   modeControl?: MindMapToolbarModeControl | null
@@ -62,19 +63,20 @@ function resolveSegmentTargetLabel(control: MindMapToolbarSegmentControl) {
 
 export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   const {
-    compact = false, embedded = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null,
+    compact = false, embedded = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null, ratingAction = null,
     moreActions = [], segmentControl = null, modeControl = null, modeToggle = null, importMindMapAction = null,
     importTextAction = null, englishAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
   const legacyActions = [importMindMapAction, importTextAction, englishAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
-  const modern = Boolean(taskControl || searchControl || focusAction || fitAction || moreActions.length)
+  const modern = Boolean(taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length)
   const overflowMenu = useDropdownMenuActionCoordinator()
 
   return (
     <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
       <div className="flex flex-nowrap items-center gap-2">
+        {ratingAction ? <Button type="button" variant={ratingAction.active ? 'default' : 'outline'} onClick={ratingAction.onClick} disabled={ratingAction.disabled}><Brain className="size-4" />{ratingAction.label}</Button> : null}
         {taskControl ? (
           <div className="inline-flex rounded-lg border border-border/70 bg-background p-1">
             {([{ value: 'build', label: '构建', icon: PenLine }, { value: 'learn', label: '学习', icon: Brain }] as const).map(({ value, label, icon: Icon }) => (
@@ -127,3 +129,4 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     </div>
   )
 }
+
