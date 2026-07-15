@@ -68,6 +68,8 @@ describe('StageSelectDialog completion modes', () => {
     expect(screen.getByRole('alert').textContent).toContain('网络暂时不可用')
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: '完成，但仍需练习' })).toBeNull()
+    fireEvent.keyDown(window, { code: 'Digit1', key: '1' })
+    expect(screen.getByTitle(/first/).className).not.toContain('scale-125')
     fireEvent.click(screen.getByRole('button', { name: '重新提交相同结算' }))
     expect(onRetrySubmission).toHaveBeenCalledTimes(1)
   })
