@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+﻿import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as pwaReset from '@/pwa/resetPwa'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 
 let shouldThrow = false
@@ -52,7 +53,26 @@ describe('RouteErrorBoundary', () => {
     )
 
     expect(screen.getByText('页面资源加载失败')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '刷新页面' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '修复并刷新' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '直接刷新' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  })
+
+  it('repairs PWA runtime caches before reloading for chunk failures', async () => {
+    const reset = vi.spyOn(pwaReset, 'resetPwaRuntime').mockResolvedValue({
+      unregisteredServiceWorkers: 1,
+      deletedCaches: 1,
+    })
+
+    render(
+      <RouteErrorBoundary resetKey="/knowledge">
+        <BrokenChunkRoute />
+      </RouteErrorBoundary>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '修复并刷新' }))
+
+    await vi.waitFor(() => expect(reset).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: '正在修复…' })).toHaveProperty('disabled', true)
   })
 })
