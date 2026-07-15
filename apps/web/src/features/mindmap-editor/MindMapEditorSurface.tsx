@@ -58,7 +58,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
-  immersiveModeActive = false,
+  immersiveModeActive: _immersiveModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
   syncReason = null,
@@ -94,7 +94,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
-  onFullscreenToggle,
+  onFullscreenToggle: _onFullscreenToggle,
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
@@ -622,11 +622,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const handleFocusToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
     if (handled) return
-    if (onFullscreenToggle && presentationStrategy === 'native-preferred') onFullscreenToggle()
-    else toggleCanvasFullscreen()
-  }, [capabilities, onFullscreenToggle, presentationStrategy, toggleCanvasFullscreen])
-
-  const usesSurfaceFullscreen = presentationStrategy === 'viewport-only' || !onFullscreenToggle
+    // Always drive surface presentation (native Fullscreen API on desktop,
+    // viewport CSS lock on PWA). Host immersive layout stays on separate toolbar actions.
+    toggleCanvasFullscreen()
+  }, [capabilities, toggleCanvasFullscreen])
 
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
@@ -638,8 +637,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
-        focusMode={usesSurfaceFullscreen ? nativeFullscreenActive : immersiveModeActive}
-        focusModeLabel={presentationStrategy === 'viewport-only' ? '全屏' : onFullscreenToggle ? '网页内全屏' : '系统全屏'}
+        focusMode={nativeFullscreenActive}
+        focusModeLabel={presentationStrategy === 'viewport-only' ? '全屏' : '系统全屏'}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
         mobileViewPolicy={mobileViewPolicy}
