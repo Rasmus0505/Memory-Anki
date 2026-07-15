@@ -26,6 +26,8 @@ class MindMapRecallEvent(Base):
     source_scene: Mapped[str] = mapped_column(String(40), nullable=False, default="formal_review")
     recall_round: Mapped[str] = mapped_column(String(20), nullable=False, default="first")
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating_scope: Mapped[str] = mapped_column(String(16), nullable=False, default="single")
+    evidence_origin: Mapped[str] = mapped_column(String(24), nullable=False, default="direct")
     rating_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     inference_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     response_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

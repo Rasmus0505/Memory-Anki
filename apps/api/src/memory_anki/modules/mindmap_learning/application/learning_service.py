@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from collections import defaultdict
@@ -13,14 +13,14 @@ from memory_anki.infrastructure.db._tables.mindmap import (
 )
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
-VALID_RATINGS = {1, 2, 3, 5}
+VALID_RATINGS = {1, 2, 3, 4, 5}
 VALID_ROUNDS = {"first", "weak_retry"}
 VALID_LABELS = {"weak", "mastered"}
 VALID_RATING_SOURCES = {"manual", "inferred"}
 
 
 def _normalized_rating(rating: int) -> int:
-    return 3 if rating == 5 else rating
+    return 3 if rating in {4, 5} else rating
 
 
 def _event_json(row: MindMapRecallEvent) -> dict[str, Any]:
@@ -32,6 +32,8 @@ def _event_json(row: MindMapRecallEvent) -> dict[str, Any]:
         "source_scene": row.source_scene,
         "recall_round": row.recall_round,
         "rating": row.rating,
+        "rating_scope": row.rating_scope,
+        "evidence_origin": row.evidence_origin,
         "rating_source": row.rating_source,
         "inference_confidence": row.inference_confidence,
         "response_ms": row.response_ms,
@@ -51,7 +53,9 @@ def create_recall_event(session: Session, payload: dict[str, Any]) -> dict[str, 
     rating = int(payload.get("rating") or 0)
     recall_round = str(payload.get("recall_round") or "first")
     rating_source = str(payload.get("rating_source") or "manual")
-    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS or rating_source not in VALID_RATING_SOURCES:
+    rating_scope = str(payload.get("rating_scope") or "single")
+    evidence_origin = str(payload.get("evidence_origin") or "direct")
+    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS or rating_source not in VALID_RATING_SOURCES or rating_scope not in {"single", "subtree"} or evidence_origin not in {"direct", "batch_inherited"}:
         raise ValueError("invalid recall rating or round")
     inference_confidence = payload.get("inference_confidence")
     if rating_source == "inferred" and inference_confidence is None:
@@ -68,6 +72,8 @@ def create_recall_event(session: Session, payload: dict[str, Any]) -> dict[str, 
         recall_round=recall_round,
         rating=rating,
         rating_source=rating_source,
+        rating_scope=rating_scope,
+        evidence_origin=evidence_origin,
         inference_confidence=inference_confidence,
         response_ms=payload.get("response_ms"),
         hint_count=int(payload.get("hint_count") or 0),

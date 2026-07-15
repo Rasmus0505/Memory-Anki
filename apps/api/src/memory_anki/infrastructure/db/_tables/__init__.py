@@ -15,6 +15,7 @@ from . import (  # noqa: F401
     misc,
     palaces,
     quiz_generation,
+    reviews,
 )
 from ._base import Base, engine, get_session, init_db
 

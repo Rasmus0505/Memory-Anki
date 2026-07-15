@@ -12,6 +12,12 @@ from memory_anki.modules.palaces.api import (
 from memory_anki.modules.palaces.api import (
     palace_review_stages_json,
 )
+from memory_anki.modules.reviews.application.node_memory_service import (
+    get_completion_summary,
+    get_palace_memory_projection,
+    rate_nodes,
+    undo_rating_operation,
+)
 from memory_anki.modules.reviews.application.review_commands import (
     adjust_review_stage_command,
     spread_overdue_command,
@@ -264,6 +270,64 @@ def api_repair_review_stage_progress(
         return {"ok": True, **preview_review_stage_progress_repair(session)}
     result = repair_review_stage_progress(session, uow=SqlAlchemyUnitOfWork(session))
     return {"ok": True, **result}
+
+
+@router.get("/review/palaces/{palace_id}/memory")
+def api_palace_memory(palace_id: int, session: Session = Depends(session_dep)):
+    try:
+        return {"item": get_palace_memory_projection(session, palace_id)}
+    except ValueError as exc:
+        raise_not_found(str(exc))
+
+
+@router.get("/review/palaces/{palace_id}/completion-summary")
+def api_palace_completion_summary(
+    palace_id: int,
+    node_uids: str | None = None,
+    session: Session = Depends(session_dep),
+):
+    try:
+        selected = [item for item in (node_uids or "").split(",") if item]
+        return {"item": get_completion_summary(session, palace_id, node_uids=selected or None)}
+    except ValueError as exc:
+        raise_not_found(str(exc))
+
+
+@router.post("/review/palaces/{palace_id}/ratings")
+def api_rate_palace_nodes(
+    palace_id: int,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    operation_id = str(data.get("operation_id") or "").strip()
+    study_session_id = str(data.get("study_session_id") or f"rating-{operation_id}").strip()
+    try:
+        return {"item": rate_nodes(
+            session, palace_id=palace_id, node_uid=str(data.get("node_uid") or ""),
+            rating=int(str(data.get("rating") or "")), study_session_id=study_session_id,
+            operation_id=operation_id, rating_scope=str(data.get("rating_scope") or "subtree"),
+            source_scene=str(data.get("source_scene") or "formal_review"),
+        )}
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/palaces/{palace_id}/ratings/{operation_id}/undo")
+def api_undo_palace_rating(
+    palace_id: int,
+    operation_id: str,
+    data: dict | None = None,
+    session: Session = Depends(session_dep),
+):
+    try:
+        result = undo_rating_operation(
+            session, operation_id=operation_id,
+            study_session_id=str((data or {}).get("study_session_id") or ""),
+        )
+        return {"item": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/review/queue", response_model=ReviewQueueResponse)

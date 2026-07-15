@@ -27,6 +27,7 @@ from memory_anki.modules.palaces.application.title_sync_service import (
 )
 from memory_anki.modules.reviews.api import (
     get_algorithm_stage_labels,
+    get_palace_memory_projection,
     is_schedule_due,
     is_schedule_due_or_later_today,
 )
@@ -98,6 +99,16 @@ def palace_json(
         if session is not None
         else (0, 0, 0.0)
     )
+    memory_projection = (
+        get_palace_memory_projection(session, p.id)
+        if session is not None
+        else {
+            "node_count": 0, "mastery_progress": 0.0, "mastery_percent": 0,
+            "memory_health": 0.0, "memory_health_percent": 0, "mastered_node_count": 0,
+            "mastery_horizon_days": 60, "due_node_count": 0, "overdue_node_count": 0,
+            "next_review_at": None, "mastered": False, "severe_weak_node_count": 0,
+        }
+    )
     stage_labels: list[str] = []
     if session:
         stage_labels = (
@@ -131,6 +142,18 @@ def palace_json(
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
         "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
+        "memory_node_count": memory_projection["node_count"],
+        "mastery_progress": memory_projection["mastery_progress"],
+        "mastery_percent": memory_projection["mastery_percent"],
+        "memory_health": memory_projection["memory_health"],
+        "memory_health_percent": memory_projection["memory_health_percent"],
+        "mastered_node_count": memory_projection["mastered_node_count"],
+        "mastery_horizon_days": memory_projection["mastery_horizon_days"],
+        "due_node_count": memory_projection["due_node_count"],
+        "overdue_node_count": memory_projection["overdue_node_count"],
+        "memory_next_review_at": memory_projection["next_review_at"],
+        "memory_mastered": memory_projection["mastered"],
+        "severe_weak_node_count": memory_projection["severe_weak_node_count"],
         "pegs": [peg_json(peg) for peg in p.pegs],
         "attachments": [{"id": a.id, "filename": a.filename,
                          "original_name": a.original_name, "file_size": a.file_size}
@@ -211,6 +234,16 @@ def palace_summary_json(
         if session is not None
         else (0, 0, 0.0)
     )
+    memory_projection = (
+        get_palace_memory_projection(session, p.id)
+        if session is not None
+        else {
+            "node_count": 0, "mastery_progress": 0.0, "mastery_percent": 0,
+            "memory_health": 0.0, "memory_health_percent": 0, "mastered_node_count": 0,
+            "mastery_horizon_days": 60, "due_node_count": 0, "overdue_node_count": 0,
+            "next_review_at": None, "mastered": False, "severe_weak_node_count": 0,
+        }
+    )
     stage_labels: list[str] = []
     if session:
         stage_labels = (
@@ -242,6 +275,18 @@ def palace_summary_json(
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
         "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
+        "memory_node_count": memory_projection["node_count"],
+        "mastery_progress": memory_projection["mastery_progress"],
+        "mastery_percent": memory_projection["mastery_percent"],
+        "memory_health": memory_projection["memory_health"],
+        "memory_health_percent": memory_projection["memory_health_percent"],
+        "mastered_node_count": memory_projection["mastered_node_count"],
+        "mastery_horizon_days": memory_projection["mastery_horizon_days"],
+        "due_node_count": memory_projection["due_node_count"],
+        "overdue_node_count": memory_projection["overdue_node_count"],
+        "memory_next_review_at": memory_projection["next_review_at"],
+        "memory_mastered": memory_projection["mastered"],
+        "severe_weak_node_count": memory_projection["severe_weak_node_count"],
         "subjects": [
             {"id": subject.id, "name": subject.name, "color": subject.color, "sort_order": subject.sort_order}
             for subject in (getattr(p, "subjects", []) or [])

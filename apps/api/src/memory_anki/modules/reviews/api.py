@@ -1,5 +1,12 @@
-"""Public review context facade for cross-context composition."""
+﻿"""Public review context facade for cross-context composition."""
 
+from .application.node_memory_service import (
+    get_completion_summary,
+    get_palace_memory_projection,
+    list_due_nodes,
+    rate_nodes,
+    undo_rating_operation,
+)
 from .application.review_execution_service import trigger_review_for_palace
 from .application.review_metrics_service import get_weekly_stats
 from .application.review_repair_service import repair_review_stage_progress
@@ -37,6 +44,11 @@ __all__ = [
     "is_schedule_due",
     "is_schedule_due_or_later_today",
     "load_review_schedule_policy",
+    "get_completion_summary",
+    "get_palace_memory_projection",
+    "list_due_nodes",
+    "rate_nodes",
+    "undo_rating_operation",
     "preview_review_stage_adjustment",
     "rebuild_all_pending_review_schedules",
     "rebuild_palace_review_schedules",

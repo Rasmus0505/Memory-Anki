@@ -5,9 +5,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-RecallRating = Literal[1, 2, 3, 5]
+RecallRating = Literal[1, 2, 3, 4, 5]
 RecallRound = Literal["first", "weak_retry"]
 RecallRatingSource = Literal["manual", "inferred"]
+RecallRatingScope = Literal["single", "subtree"]
+RecallEvidenceOrigin = Literal["direct", "batch_inherited"]
 
 
 class RecallEventCreate(BaseModel):
@@ -19,6 +21,8 @@ class RecallEventCreate(BaseModel):
     recall_round: RecallRound = "first"
     rating: RecallRating
     rating_source: RecallRatingSource = "manual"
+    rating_scope: RecallRatingScope = "single"
+    evidence_origin: RecallEvidenceOrigin = "direct"
     inference_confidence: float | None = Field(default=None, ge=0, le=1)
     response_ms: int | None = Field(default=None, ge=0)
     hint_count: int = Field(default=0, ge=0)

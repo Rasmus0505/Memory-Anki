@@ -71,6 +71,11 @@ SCHEDULE_IMPACTING_KEYS = {
     "ebbinghaus_intervals",
     "sleep_review_time",
     "early_review_anchor",
+    "desired_retention",
+    "mastery_horizon_days",
+    "maximum_interval",
+    "learning_steps",
+    "relearning_steps",
 }
 
 CLIENT_PREFERENCE_GROUPS = {
