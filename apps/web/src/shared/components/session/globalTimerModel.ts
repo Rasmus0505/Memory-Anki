@@ -158,7 +158,7 @@ export function clampTimerOverlayLayoutToViewport(layout: TimerOverlayLayout) {
   }
 }
 
-function migrateLegacyDefaultTimerOverlayLayout(layout: TimerOverlayLayout) {
+function migrateObstructiveDesktopTimerOverlayLayout(layout: TimerOverlayLayout) {
   if (typeof window === 'undefined' || window.innerWidth < 1024) return layout
   const isLegacyDefault =
     layout.x === 24 &&
@@ -166,18 +166,24 @@ function migrateLegacyDefaultTimerOverlayLayout(layout: TimerOverlayLayout) {
     layout.width === 320 &&
     layout.height === 208 &&
     !layout.collapsed
-  if (!isLegacyDefault) return layout
+  const isPreviousTopRightDefault =
+    layout.x === window.innerWidth - layout.width - 24 &&
+    layout.y === 24 &&
+    layout.width === 320 &&
+    layout.height === 208 &&
+    !layout.collapsed
+  if (!isLegacyDefault && !isPreviousTopRightDefault) return layout
   return {
     ...layout,
     x: window.innerWidth - layout.width - 24,
-    y: 24,
+    y: window.innerHeight - layout.height - 24,
   }
 }
 
 export function resolveFloatingTimerLayout(layout: TimerOverlayLayout) {
   const sanitized = sanitizeTimerOverlayLayout(layout)
   return clampTimerOverlayLayoutToViewport(
-    migrateLegacyDefaultTimerOverlayLayout(sanitized),
+    migrateObstructiveDesktopTimerOverlayLayout(sanitized),
   )
 }
 

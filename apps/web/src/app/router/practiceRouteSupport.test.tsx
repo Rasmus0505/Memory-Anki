@@ -12,6 +12,9 @@ import type { MindMapEditorState } from '@/shared/api/contracts'
 const mocks = vi.hoisted(() => ({
   latestFlowProps: null as Record<string, any> | null,
   latestStageProps: null as Record<string, any> | null,
+  latestCompletionPayload: null as Record<string, any> | null,
+  completionFinalize: vi.fn<(options?: { persistTimeRecord?: boolean }) => Promise<void>>(),
+  completionCancel: vi.fn<() => void>(),
   consumePrefetchedStudySession: vi.fn(),
   routeId: '42',
 }))
@@ -62,14 +65,18 @@ vi.mock('@/widgets/mindmap-review-flow', () => ({
         </button>
         <button
           type="button"
-          onClick={() =>
-            props.onComplete({
+          onClick={() => {
+            const payload = {
               durationSeconds: 9,
               completionMode: 'manual_complete',
               revealedRemaining: true,
               redNodeIds: ['a', 'b'],
-            })
-          }
+              finalize: mocks.completionFinalize,
+              cancel: mocks.completionCancel,
+            }
+            mocks.latestCompletionPayload = payload
+            return props.onComplete(payload)
+          }}
         >
           complete flow
         </button>
@@ -82,9 +89,15 @@ vi.mock('@/features/review/components/StageSelectDialog', () => ({
   StageSelectDialog: (props: Record<string, any>) => {
     mocks.latestStageProps = props
     return props.open ? (
-      <button type="button" onClick={() => props.onConfirm(2, false)}>
-        confirm stage
-      </button>
+      <div>
+        {props.error ? <div role="alert">{props.error}</div> : null}
+        <button type="button" onClick={() => props.onConfirm(2, false, '')}>
+          confirm stage
+        </button>
+        <button type="button" onClick={() => props.onCancel()}>
+          cancel stage
+        </button>
+      </div>
     ) : null
   },
 }))
@@ -112,13 +125,16 @@ function createConfig(overrides: Partial<Parameters<typeof PracticeSessionRoute<
   const loadProgress = vi.fn<(id: number) => Promise<{ progress: PracticeProgressSnapshot | null }>>()
   const clearProgress = vi.fn<(data: TestData) => Promise<unknown>>()
   const saveProgress = vi.fn<(data: TestData, snapshot: PracticeProgressSnapshot) => Promise<unknown>>()
-  const completeWithoutStage = vi.fn<(data: TestData) => Promise<void>>()
+  const completeWithoutStage = vi.fn<
+    (data: TestData, payload: CompleteFlowPayload, options: { mutationId: string }) => Promise<void>
+  >()
   const submitStage = vi.fn<
     (
       data: TestData,
       payload: CompleteFlowPayload,
       targetReviewNumber: number,
       needsPractice: boolean,
+      options: { mutationId: string },
     ) => Promise<void>
   >()
   const refreshStageTarget = vi.fn<(data: TestData) => Promise<{
@@ -173,13 +189,15 @@ function createConfig(overrides: Partial<Parameters<typeof PracticeSessionRoute<
     getPersistKey: (nextData: TestData) => `practice:${nextData.id}`,
     getStageTarget: (nextData: TestData) => nextData,
     refreshStageTarget,
-    completeWithoutStage: (nextData: TestData) => completeWithoutStage(nextData),
+    completeWithoutStage: (nextData: TestData, payload: CompleteFlowPayload, options: { mutationId: string }) =>
+      completeWithoutStage(nextData, payload, options),
     submitStage: (
       nextData: TestData,
       payload: CompleteFlowPayload,
       targetReviewNumber: number,
       needsPractice: boolean,
-    ) => submitStage(nextData, payload, targetReviewNumber, needsPractice),
+      options: { mutationId: string },
+    ) => submitStage(nextData, payload, targetReviewNumber, needsPractice, options),
     ...overrides,
   }
 
@@ -200,6 +218,10 @@ describe('PracticeSessionRoute', () => {
   beforeEach(() => {
     mocks.latestFlowProps = null
     mocks.latestStageProps = null
+    mocks.latestCompletionPayload = null
+    mocks.completionFinalize.mockReset()
+    mocks.completionFinalize.mockResolvedValue(undefined)
+    mocks.completionCancel.mockReset()
     mocks.routeId = '42'
     mocks.consumePrefetchedStudySession.mockReset()
     mocks.consumePrefetchedStudySession.mockImplementation(
@@ -239,7 +261,7 @@ describe('PracticeSessionRoute', () => {
     expect(screen.getByText('resume')).toBeTruthy()
   })
 
-  it('saves, clears, restarts, and completes non-stage practice sessions through the configured operations', async () => {
+  it('saves, clears, and restarts non-stage practice sessions through the configured operations', async () => {
     const setup = createConfig()
 
     render(<PracticeSessionRoute config={setup.config} />)
@@ -264,12 +286,58 @@ describe('PracticeSessionRoute', () => {
       '确定重新开始本次练习吗？此操作不可撤销，会清空当前练习进度并从头开始。',
     )
     await waitFor(() => expect(setup.clearProgress).toHaveBeenCalledTimes(2))
-
-    fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))
-    await waitFor(() => expect(setup.completeWithoutStage).toHaveBeenCalledWith(setup.data))
   })
 
-  it('opens stage selection after refreshing stale stage metadata and submits the selected stage', async () => {
+  it('passes the real completion payload to non-stage submission and finalizes exactly once after success', async () => {
+    const setup = createConfig()
+
+    render(<PracticeSessionRoute config={setup.config} />)
+    await screen.findByTestId('flow-title')
+
+    fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))
+
+    await waitFor(() => expect(setup.completeWithoutStage).toHaveBeenCalledTimes(1))
+    expect(mocks.latestCompletionPayload).toEqual(
+      expect.objectContaining({
+        finalize: mocks.completionFinalize,
+        cancel: mocks.completionCancel,
+      }),
+    )
+    expect(setup.completeWithoutStage).toHaveBeenCalledWith(
+      setup.data,
+      mocks.latestCompletionPayload,
+      expect.objectContaining({ mutationId: expect.any(String) }),
+    )
+    await waitFor(() => expect(mocks.completionFinalize).toHaveBeenCalledTimes(1))
+    expect(mocks.completionCancel).not.toHaveBeenCalled()
+  })
+
+  it('completes as practice-only when stages exist but no review schedule is currently submittable', async () => {
+    const setup = createConfig()
+    setup.data.review_stage_total = 3
+    setup.data.stage_labels = ['first', 'second', 'third']
+    setup.data.review_stages = [
+      { review_number: 0, label: 'first', completed: true, completed_at: null, scheduled_at: null },
+      { review_number: 1, label: 'second', completed: false, completed_at: null, scheduled_at: null },
+    ]
+    setup.refreshStageTarget.mockResolvedValue({
+      data: setup.data,
+      title: setup.data.title,
+      palaceId: setup.data.id,
+      reviewEditorState: buildEditorState({ root: { data: { text: 'Refreshed' }, children: [] } }),
+    })
+
+    render(<PracticeSessionRoute config={setup.config} />)
+    await screen.findByTestId('flow-title')
+    fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))
+
+    await waitFor(() => expect(setup.completeWithoutStage).toHaveBeenCalledTimes(1))
+    expect(setup.submitStage).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'confirm stage' })).toBeNull()
+    expect(mocks.completionFinalize).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens stage selection after refreshing stale stage metadata, submits, and finalizes exactly once', async () => {
     const setup = createConfig()
     const refreshedData: TestData = {
       ...setup.data,
@@ -280,6 +348,7 @@ describe('PracticeSessionRoute', () => {
       ],
       review_stage_total: 3,
       review_stage_completed: 1,
+      current_review_schedule_id: 2080,
     }
     setup.data.review_stage_total = 3
     setup.refreshStageTarget.mockResolvedValue({
@@ -298,7 +367,6 @@ describe('PracticeSessionRoute', () => {
     expect(mocks.latestStageProps).toEqual(
       expect.objectContaining({
         stageLabels: ['first', 'second', 'third'],
-        currentReviewNumber: 0,
       }),
     )
 
@@ -306,14 +374,110 @@ describe('PracticeSessionRoute', () => {
     await waitFor(() => expect(setup.submitStage).toHaveBeenCalledTimes(1))
     expect(setup.submitStage).toHaveBeenCalledWith(
       refreshedData,
-      {
-        durationSeconds: 9,
-        completionMode: 'manual_complete',
-        revealedRemaining: true,
-        redNodeIds: ['a', 'b'],
-      },
+      mocks.latestCompletionPayload,
       2,
       false,
+      expect.objectContaining({ mutationId: expect.any(String) }),
     )
+    await waitFor(() => expect(mocks.completionFinalize).toHaveBeenCalledTimes(1))
+    expect(mocks.completionCancel).not.toHaveBeenCalled()
+  })
+
+  it('keeps the stage dialog and payload after submit failure, shows the error, and retries successfully', async () => {
+    const setup = createConfig()
+    setup.data.stage_labels = ['first', 'second', 'third']
+    setup.data.current_review_schedule_id = 2080
+    setup.data.review_stages = [
+      {
+        review_number: 0,
+        label: 'first',
+        completed: true,
+        completed_at: null,
+        scheduled_at: null,
+      },
+      {
+        review_number: 1,
+        label: 'second',
+        completed: false,
+        completed_at: null,
+        scheduled_at: null,
+      },
+      {
+        review_number: 2,
+        label: 'third',
+        completed: false,
+        completed_at: null,
+        scheduled_at: null,
+      },
+    ]
+    setup.data.review_stage_total = 3
+    setup.data.review_stage_completed = 1
+    setup.data.current_review_schedule_id = 2080
+    setup.submitStage
+      .mockRejectedValueOnce(new Error('stage submit failed'))
+      .mockResolvedValueOnce(undefined)
+
+    render(<PracticeSessionRoute config={setup.config} />)
+    await screen.findByTestId('flow-title')
+
+    fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'confirm stage' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('stage submit failed')
+    expect(screen.getByRole('button', { name: 'confirm stage' })).toBeTruthy()
+    expect(setup.submitStage).toHaveBeenNthCalledWith(
+      1,
+      setup.data,
+      mocks.latestCompletionPayload,
+      2,
+      false,
+      expect.objectContaining({ mutationId: expect.any(String) }),
+    )
+    expect(mocks.completionFinalize).not.toHaveBeenCalled()
+    expect(mocks.completionCancel).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'confirm stage' }))
+
+    await waitFor(() => expect(setup.submitStage).toHaveBeenCalledTimes(2))
+    expect(setup.submitStage).toHaveBeenNthCalledWith(
+      2,
+      setup.data,
+      mocks.latestCompletionPayload,
+      2,
+      false,
+      expect.objectContaining({ mutationId: expect.any(String) }),
+    )
+    expect(setup.submitStage.mock.calls[1]?.[4]).toEqual(setup.submitStage.mock.calls[0]?.[4])
+    await waitFor(() => expect(mocks.completionFinalize).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'confirm stage' })).toBeNull()
+    })
+  })
+
+  it('cancels the real completion payload when stage selection is cancelled', async () => {
+    const setup = createConfig()
+    setup.data.stage_labels = ['first']
+    setup.data.current_review_schedule_id = 2080
+    setup.data.review_stages = [
+      {
+        review_number: 0,
+        label: 'first',
+        completed: false,
+        completed_at: null,
+        scheduled_at: null,
+      },
+    ]
+    setup.data.review_stage_total = 1
+
+    render(<PracticeSessionRoute config={setup.config} />)
+    await screen.findByTestId('flow-title')
+
+    fireEvent.click(screen.getByRole('button', { name: 'complete flow' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'cancel stage' }))
+
+    expect(mocks.completionCancel).toHaveBeenCalledTimes(1)
+    expect(mocks.completionFinalize).not.toHaveBeenCalled()
+    expect(setup.submitStage).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'confirm stage' })).toBeNull()
   })
 })

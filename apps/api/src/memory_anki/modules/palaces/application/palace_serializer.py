@@ -28,6 +28,7 @@ from memory_anki.modules.palaces.application.title_sync_service import (
 from memory_anki.modules.reviews.api import (
     get_algorithm_stage_labels,
     is_schedule_due,
+    is_schedule_due_or_later_today,
 )
 from memory_anki.modules.reviews.api import (
     schedule_display_datetime as review_schedule_display_datetime,
@@ -87,6 +88,11 @@ def palace_json(
         else None
     )
     has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
+    has_submittable_review = bool(
+        next_schedule
+        and session
+        and is_schedule_due_or_later_today(next_schedule, p, session)
+    )
     review_stage_total, review_stage_completed, review_stage_progress = (
         palace_stage_progress(session, p)
         if session is not None
@@ -119,7 +125,7 @@ def palace_json(
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
         "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
         "has_due_review": has_due_review,
-        "current_review_schedule_id": next_schedule.id if has_due_review and next_schedule else None,
+        "current_review_schedule_id": next_schedule.id if has_submittable_review and next_schedule else None,
         "review_stage_total": review_stage_total,
         "review_stage_completed": review_stage_completed,
         "review_stage_progress": review_stage_progress,
@@ -188,6 +194,11 @@ def palace_summary_json(
         else None
     )
     has_due_review = bool(next_schedule and session and is_schedule_due(next_schedule, p, session))
+    has_submittable_review = bool(
+        next_schedule
+        and session
+        and is_schedule_due_or_later_today(next_schedule, p, session)
+    )
     review_stage_total, review_stage_completed, review_stage_progress = (
         palace_stage_progress(session, p)
         if session is not None
@@ -218,11 +229,12 @@ def palace_summary_json(
         "next_scheduled_date": next_schedule.scheduled_date.isoformat() if next_schedule and next_schedule.scheduled_date else None,
         "next_review_at": next_review_at.isoformat(timespec="minutes") if next_review_at else None,
         "has_due_review": has_due_review,
-        "current_review_schedule_id": next_schedule.id if has_due_review and next_schedule else None,
+        "current_review_schedule_id": next_schedule.id if has_submittable_review and next_schedule else None,
         "review_stage_total": review_stage_total,
         "review_stage_completed": review_stage_completed,
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
+        "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
         "manual_title": getattr(p, "manual_title", "") or "",
         "resolved_title": resolve_palace_title(p),
@@ -276,10 +288,6 @@ def palace_card_json(
             if precomputed_explicit_chapter_ids is not None
             else get_palace_explicit_chapter_ids(session, p)
         )
-    raw_stage_labels = payload.get("stage_labels")
-    stage_labels: list[str] = (
-        [str(item) for item in raw_stage_labels] if isinstance(raw_stage_labels, list) else []
-    )
     default_segment = (
         build_palace_default_segment_summary(session, p)
         if session is not None
@@ -287,7 +295,6 @@ def palace_card_json(
     )
     payload.update(
         {
-            "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
             "chapters": [
                 {
                     "id": c.id,

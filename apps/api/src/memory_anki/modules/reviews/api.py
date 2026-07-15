@@ -18,6 +18,7 @@ from .application.schedule_service import (
     get_algorithm_stage_labels,
     get_config_value,
     is_schedule_due,
+    is_schedule_due_or_later_today,
     schedule_display_datetime,
 )
 from .application.stage_adjustment_service import (
@@ -34,6 +35,7 @@ __all__ = [
     "get_weekly_stats",
     "infer_completed_stage_count",
     "is_schedule_due",
+    "is_schedule_due_or_later_today",
     "load_review_schedule_policy",
     "preview_review_stage_adjustment",
     "rebuild_all_pending_review_schedules",

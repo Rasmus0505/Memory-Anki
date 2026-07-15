@@ -90,7 +90,11 @@ export interface TimedSessionController {
   startNextFocusRound: (meta?: TimedSessionMeta) => void
   adjustDuration: (seconds: number) => void
   getEffectiveSeconds: () => number
-  complete: (method: SessionCompletionMethod, meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
+  complete: (
+    method: SessionCompletionMethod,
+    meta?: TimedSessionMeta,
+    options?: { persistRecord?: boolean },
+  ) => Promise<TimeSessionRecord | null>
   reset: () => void
 }
 

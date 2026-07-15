@@ -9,7 +9,7 @@ export interface CompleteFlowPayload {
   completionMode: "manual_complete" | "auto_complete";
   revealedRemaining: boolean;
   redNodeIds: string[];
-  finalize: () => Promise<void>;
+  finalize: (options?: { persistTimeRecord?: boolean }) => Promise<void>;
   cancel: () => void;
 }
 

@@ -589,6 +589,7 @@ export function useTimedSession({
     async (
       method: SessionCompletionMethod,
       meta?: TimedSessionMeta,
+      completionOptions?: { persistRecord?: boolean },
     ) => {
       if (!startedAtRef.current) return null
       if (statusRef.current === 'completed') return null
@@ -614,7 +615,7 @@ export function useTimedSession({
       if (record) {
         removePendingTimeRecordRecovery(record.id)
       }
-      if (!persistCompletionRecord) {
+      if (!persistCompletionRecord || completionOptions?.persistRecord === false) {
         return record
       }
       return persistRecord(record)

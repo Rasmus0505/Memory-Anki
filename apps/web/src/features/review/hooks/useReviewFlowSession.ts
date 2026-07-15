@@ -91,7 +91,7 @@ export function useReviewFlowSession({
   }, [isActive, timer])
 
   React.useEffect(() => {
-    if (sessionKind !== 'review' || !isActive || completionPendingRef.current) return
+    if (!isActive || completionPendingRef.current) return
     const sessionKey = `${persistKey ?? `${sessionKind}:${palaceId ?? 'none'}`}:${becameActiveAt ?? 'initial'}`
     if (autoStartedSessionRef.current === sessionKey) return
     autoStartedSessionRef.current = sessionKey
@@ -178,17 +178,22 @@ export function useReviewFlowSession({
         completionPendingRef.current = false
         timer.resume({ source: 'completion_cancelled' })
       }
-      const finalize = async () => {
+      const finalize = async (options?: { persistTimeRecord?: boolean }) => {
         if (settled) return
         settled = true
         reveal.setRevealMap(finishState.revealMap)
         reveal.setRedNodeIds(finishState.redNodeIds)
         reveal.setCompleted(true)
         await feedback.runCompletionCeremony()
-        await timer.complete(modeName, {
+        const completionMeta = {
           revealed_remaining: finishState.revealedRemaining,
           red_marked_count: finishState.redNodeIds.size,
-        })
+        }
+        if (options?.persistTimeRecord === false) {
+          await timer.complete(modeName, completionMeta, { persistRecord: false })
+        } else {
+          await timer.complete(modeName, completionMeta)
+        }
         completionPendingRef.current = false
       }
 

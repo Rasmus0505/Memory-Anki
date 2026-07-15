@@ -177,4 +177,49 @@ describe("MindMapReviewFlow session", () => {
     });
   });
 
+  it("skips duplicate local time persistence when completion was stored by the submit API", async () => {
+    const onComplete = vi.fn(async (payload: { finalize: (options?: { persistTimeRecord?: boolean }) => Promise<void> }) => {
+      await payload.finalize({ persistTimeRecord: false });
+    });
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={onComplete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
+    fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
+
+    await waitFor(() => {
+      expect(timer.complete).toHaveBeenCalledWith(
+        "manual_complete",
+        expect.objectContaining({ revealed_remaining: true }),
+        { persistRecord: false },
+      );
+    });
+  });
+
+  it("starts practice timing as soon as the active route is ready", async () => {
+    (timer as { status: string }).status = "idle";
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        persistKey="practice:palace:1"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(timer.start).toHaveBeenCalledWith({ source: "review_route_ready" });
+    });
+  });
+
 });
