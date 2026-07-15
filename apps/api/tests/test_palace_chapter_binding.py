@@ -154,7 +154,8 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertNotIn("editor_doc", palace_payload)
         self.assertNotIn("segments", palace_payload)
         self.assertNotIn("mini_palaces", palace_payload)
-        self.assertNotIn("review_stages", palace_payload)
+        self.assertIn("review_stages", palace_payload)
+        self.assertEqual(len(palace_payload["review_stages"]), palace_payload["review_stage_total"])
 
     def test_chapter_detail_includes_palace_review_status(self):
         self.client.put(

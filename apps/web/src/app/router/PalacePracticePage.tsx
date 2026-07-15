@@ -4,6 +4,7 @@ import {
   clearPracticeSessionProgressApi,
   getPalaceEditorApi,
   getPracticeSessionProgressApi,
+  invalidatePalaceCatalogCache,
   savePracticeSessionProgressApi,
   updatePalacePracticeFlagApi,
 } from '@/entities/palace/api'
@@ -66,25 +67,27 @@ export default function PalacePracticePage() {
           }
         },
         completeWithoutStage: async (palace) => {
-          await clearPracticeSessionProgressApi(palace.id)
           await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+          invalidatePalaceCatalogCache()
         },
-        submitStage: async (palace, payload, targetReviewNumber, needsPractice) => {
+        submitStage: async (palace, payload, targetReviewNumber, needsPractice, options) => {
           const scheduleId = palace.current_review_schedule_id
-          if (scheduleId) {
-            await submitReviewSessionApi(scheduleId, {
+          if (!scheduleId) {
+            throw new Error('当前复习节点已变化，请返回书架刷新后重试。')
+          }
+          await submitReviewSessionApi(
+            scheduleId,
+            {
               duration_seconds: payload.durationSeconds,
               completion_mode: payload.completionMode,
               revealed_remaining: payload.revealedRemaining,
               red_marked_count: payload.redNodeIds.length,
               target_review_number: targetReviewNumber,
               needs_practice: needsPractice,
-            })
-          }
-          await clearPracticeSessionProgressApi(palace.id)
-          if (!needsPractice) {
-            await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
-          }
+            },
+            { mutationId: options.mutationId },
+          )
+          return { persistTimeRecord: false }
         },
       }}
     />

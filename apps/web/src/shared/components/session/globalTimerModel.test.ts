@@ -10,7 +10,7 @@ afterEach(() => {
 })
 
 describe('resolveFloatingTimerLayout', () => {
-  it('moves the legacy desktop default away from the application sidebar', () => {
+  it('moves the legacy desktop default away from the sidebar and top action bar', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
 
@@ -22,7 +22,26 @@ describe('resolveFloatingTimerLayout', () => {
       collapsed: false,
     })).toEqual({
       x: 1096,
+      y: 668,
+      width: 320,
+      height: 208,
+      collapsed: false,
+    })
+  })
+
+  it('moves the previous top-right default away from review completion controls', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+
+    expect(resolveFloatingTimerLayout({
+      x: 1096,
       y: 24,
+      width: 320,
+      height: 208,
+      collapsed: false,
+    })).toEqual({
+      x: 1096,
+      y: 668,
       width: 320,
       height: 208,
       collapsed: false,

@@ -1027,6 +1027,61 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(item["needs_practice_count"], 2)
         self.assertEqual(item["review_status"], "due_now")
 
+    def test_editor_and_grouped_summary_share_submittable_schedule_stage_projection(self):
+        overdue_editor = self.client.get("/api/v1/palaces/1/editor")
+        self.assertEqual(overdue_editor.status_code, 200)
+        overdue_palace = overdue_editor.json()["palace"]
+        self.assertTrue(overdue_palace["has_due_review"])
+        self.assertEqual(overdue_palace["current_review_schedule_id"], 1)
+        self.assertEqual(len(overdue_palace["review_stages"]), overdue_palace["review_stage_total"])
+
+        fixed_day = date(2026, 7, 15)
+        current = datetime.combine(fixed_day, time(hour=12))
+        later_due_at = datetime.combine(fixed_day, time(hour=14))
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                if tz is not None:
+                    return current.replace(tzinfo=tz)
+                return current
+
+        with self.SessionLocal() as session:
+            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
+            self.assertIsNotNone(schedule)
+            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
+            schedule.scheduled_date = fixed_day
+            schedule.scheduled_at = later_due_at
+            session.commit()
+
+        with (
+            patch(
+                "memory_anki.modules.reviews.application.schedule_service.datetime",
+                FixedDateTime,
+            ),
+        ):
+            editor_response = self.client.get("/api/v1/palaces/1/editor")
+            summary_response = self.client.get("/api/v1/palaces/grouped-summary")
+
+        self.assertEqual(editor_response.status_code, 200)
+        self.assertEqual(summary_response.status_code, 200)
+        editor_palace = editor_response.json()["palace"]
+        summary_palace = summary_response.json()["ungrouped"][0]
+
+        self.assertFalse(editor_palace["has_due_review"])
+        self.assertEqual(editor_palace["current_review_schedule_id"], 1)
+        self.assertEqual(editor_palace["stage_labels"], ["1天", "2天", "4天"])
+        self.assertEqual(editor_palace["review_stages"][0]["scheduled_at"], "2026-07-15T14:00")
+        self.assertEqual(
+            summary_palace["current_review_schedule_id"],
+            editor_palace["current_review_schedule_id"],
+        )
+        self.assertEqual(summary_palace["review_stages"], editor_palace["review_stages"])
+        self.assertEqual(
+            summary_palace["review_stage_completed"],
+            editor_palace["review_stage_completed"],
+        )
+
     def test_review_session_allows_later_today_submission_and_sets_needs_practice(self):
         with self.SessionLocal() as session:
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
