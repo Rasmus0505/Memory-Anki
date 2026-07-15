@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
+import { PalaceMemoryProgress } from '@/features/palace-catalog/components/palace-list/PalaceMemoryProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
 import { formatDuration } from '@/entities/session/model'
 import type {
@@ -176,6 +177,7 @@ export function PalaceListCard({
   const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
   const shouldShowStageProgress = Array.isArray(palace.stage_labels) && palace.stage_labels.length > 0
+  const shouldShowMemoryProgress = typeof palace.mastery_percent === 'number'
   const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
@@ -285,7 +287,9 @@ export function PalaceListCard({
             ) : null}
           </div>
 
-          {shouldShowStageProgress ? (
+          {shouldShowMemoryProgress ? (
+            <PalaceMemoryProgress palace={palace} />
+          ) : shouldShowStageProgress ? (
             <PalaceStageProgress
               stageLabels={palace.stage_labels}
               completed={palace.review_stage_completed}

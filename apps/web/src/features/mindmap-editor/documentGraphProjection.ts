@@ -159,7 +159,13 @@ function buildNodeVisual(options: {
 }) {
   const masteryStatus = options.mastery?.status ?? ''
   const manualLabel = options.mastery?.manualLabel ?? ''
-  const badge = manualLabel === 'weak' || masteryStatus === 'weak'
+  const ratingBadge = {
+    'rating-forgot': { tone: 'danger' as const, title: '忘记' },
+    'rating-hard': { tone: 'warning' as const, title: '困难' },
+    'rating-good': { tone: 'info' as const, title: '记得' },
+    'rating-easy': { tone: 'success' as const, title: '轻松' },
+  }[masteryStatus as 'rating-forgot' | 'rating-hard' | 'rating-good' | 'rating-easy']
+  const badge = ratingBadge ?? (manualLabel === 'weak' || masteryStatus === 'weak'
     ? { tone: 'danger' as const, title: manualLabel === 'weak' ? '手动标记薄弱' : masteryStatus }
     : manualLabel === 'mastered' || masteryStatus === 'stable'
       ? { tone: 'success' as const, title: manualLabel === 'mastered' ? '手动标记已掌握' : masteryStatus }
@@ -167,7 +173,7 @@ function buildNodeVisual(options: {
         ? { tone: 'warning' as const, title: masteryStatus }
         : masteryStatus
           ? { tone: 'neutral' as const, title: masteryStatus }
-          : null
+          : null)
   return {
     concealText: options.revealState === 'hidden',
     placeholder: options.revealState === 'placeholder',

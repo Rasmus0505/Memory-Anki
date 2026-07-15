@@ -262,6 +262,7 @@ export function PracticeSessionRoute<TData, TSession>({
         title={session.title}
         palaceId={session.palaceId}
         sessionKind="practice"
+        studySessionId={`practice:${session.palaceId}:${resetVersion}`}
         displayMode={displayMode}
         persistKey={config.getPersistKey(data)}
         reviewEditorState={session.reviewEditorState}

@@ -193,19 +193,33 @@ export default function ProfileSettingsPage({
           <form onSubmit={handleSaveConfig} className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">高级排程策略</CardTitle>
+                <CardTitle className="text-base">记忆调度</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="ebbinghaus-intervals">
-                    增强艾宾浩斯顺序：1小时，睡前，1天，x天
-                  </Label>
-                  <Input
-                    id="ebbinghaus-intervals"
-                    name="ebbinghaus_intervals"
-                    defaultValue={config.ebbinghaus_intervals}
-                    placeholder="1h,sleep,1,2,4,7,15,30,60"
-                  />
+                <p className="text-xs text-muted-foreground">FSRS 会根据每个节点的实际评分计算下一次复习时间；旧艾宾浩斯记录保留在数据库中用于迁移审计。</p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="desired-retention">目标记忆率</Label>
+                    <Input id="desired-retention" name="desired_retention" type="number" min="0.7" max="0.99" step="0.01" defaultValue={config.desired_retention || '0.90'} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mastery-horizon-days">掌握跨度（天）</Label>
+                    <Input id="mastery-horizon-days" name="mastery_horizon_days" type="number" min="7" max="365" defaultValue={config.mastery_horizon_days || '60'} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maximum-interval">最长间隔（天）</Label>
+                    <Input id="maximum-interval" name="maximum_interval" type="number" min="1" max="365" defaultValue={config.maximum_interval || '180'} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="learning-steps">首次学习短期步骤</Label>
+                    <Input id="learning-steps" name="learning_steps" defaultValue={config.learning_steps || '10m,1h'} placeholder="10m,1h" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="relearning-steps">遗忘后短期步骤</Label>
+                    <Input id="relearning-steps" name="relearning_steps" defaultValue={config.relearning_steps || '10m,1h'} placeholder="10m,1h" />
+                  </div>
                 </div>
               </CardContent>
             </Card>

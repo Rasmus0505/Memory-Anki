@@ -58,6 +58,18 @@ export interface PalaceListItem {
   stage_labels: string[]
   review_stages?: ReviewStageSummary[]
   active_review_progress?: number | null
+  memory_node_count?: number
+  mastery_progress?: number
+  mastery_percent?: number
+  memory_health?: number
+  memory_health_percent?: number
+  mastered_node_count?: number
+  mastery_horizon_days?: number
+  due_node_count?: number
+  overdue_node_count?: number
+  memory_next_review_at?: string | null
+  memory_mastered?: boolean
+  severe_weak_node_count?: number
   segments: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }
@@ -113,6 +125,18 @@ export interface PalaceEditorMeta {
   review_stage_total?: number
   review_stage_completed?: number
   review_stage_progress?: number
+  memory_node_count?: number
+  mastery_progress?: number
+  mastery_percent?: number
+  memory_health?: number
+  memory_health_percent?: number
+  mastered_node_count?: number
+  mastery_horizon_days?: number
+  due_node_count?: number
+  overdue_node_count?: number
+  memory_next_review_at?: string | null
+  memory_mastered?: boolean
+  severe_weak_node_count?: number
   segments?: PalaceSegmentSummary[]
   editor_doc?: MindMapDoc | string | null
 }

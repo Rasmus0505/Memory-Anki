@@ -1,4 +1,4 @@
-export interface BackupSummary {
+﻿export interface BackupSummary {
   kind: "full" | "rescue"
   /** full = 完整备份(含附件等大目录)，rolling = 轻量备份(仅数据库+迁移状态) */
   scope?: "full" | "rolling"
@@ -20,6 +20,11 @@ export interface ReviewSettings {
   sleep_review_time: string
   early_review_anchor: string
   ebbinghaus_intervals: string
+  desired_retention?: string
+  mastery_horizon_days?: string
+  maximum_interval?: string
+  learning_steps?: string
+  relearning_steps?: string
   daily_max_reviews: string
   mastered_interval: string
   auto_smooth_overdue: string
