@@ -19,7 +19,13 @@ interface StageSelectDialogProps {
   currentReviewNumber: number
   durationSeconds?: number
   submitting?: boolean
+  preparing?: boolean
+  preparationFailed?: boolean
+  submissionFailed?: boolean
+  requiresStages?: boolean
   error?: string | null
+  onRetry?: () => void
+  onRetrySubmission?: () => void
   onConfirm: (targetReviewNumber: number, needsPractice: boolean, note: string) => void
   onCancel: () => void
 }
@@ -41,7 +47,13 @@ export function StageSelectDialog({
   currentReviewNumber,
   durationSeconds,
   submitting = false,
+  preparing = false,
+  preparationFailed = false,
+  submissionFailed = false,
+  requiresStages = true,
   error = null,
+  onRetry,
+  onRetrySubmission,
   onConfirm,
   onCancel,
 }: StageSelectDialogProps) {
@@ -95,11 +107,61 @@ export function StageSelectDialog({
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [numberShortcutLimit, open])
 
-  if (total <= 0) return null
+  if (preparing || total <= 0) {
+    const missingRequiredStages = preparationFailed || (requiresStages && !preparing)
+    return (
+      <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting) onCancel() }}>
+        <DialogContent className="max-w-md" data-timer-activity="ignore">
+          <DialogHeader>
+            <DialogTitle>{requiresStages ? '准备复习结算' : '完成本次练习'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 px-6 py-5">
+            {typeof durationSeconds === 'number' ? (
+              <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                本次耗时：<span className="font-medium text-foreground">{formatDuration(durationSeconds)}</span>
+              </div>
+            ) : null}
+            {preparing ? (
+              <p className="text-sm text-muted-foreground">正在读取最新复习节点，请稍候…</p>
+            ) : missingRequiredStages ? (
+              <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error || '当前复习节点信息不完整，请重新加载结算信息。'}
+              </div>
+            ) : submissionFailed ? (
+              <div className="space-y-2">
+                <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error || '完成提交失败，请使用相同结算内容重试。'}
+                </div>
+                <p className="text-xs text-muted-foreground">将保留本次时长、选择和提交标识，不会创建第二条完成记录。</p>
+              </div>
+            ) : error ? (
+              <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">确认完成本次练习并保存学习时间。</p>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t px-6 py-4">
+            <Button variant="outline" size="sm" disabled={submitting} onClick={onCancel}>取消</Button>
+            {missingRequiredStages ? (
+              <Button size="sm" disabled={submitting || !onRetry} onClick={onRetry}>重新加载结算信息</Button>
+            ) : submissionFailed ? (
+              <Button size="sm" disabled={submitting || !onRetrySubmission} onClick={onRetrySubmission}>重新提交</Button>
+            ) : !preparing ? (
+              <Button size="sm" disabled={submitting} onClick={() => onConfirm(0, false, '')}>
+                {submitting ? '正在提交…' : '确认完成'}
+              </Button>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !submitting) onCancel() }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" data-timer-activity="ignore">
         <DialogHeader>
           <DialogTitle>选择复习进度</DialogTitle>
         </DialogHeader>
@@ -142,6 +204,7 @@ export function StageSelectDialog({
                     key={stage.review_number}
                     type="button"
                     title={`${getStageTooltip(stage)}${index < 5 ? ` · 快捷键 ${index + 1}` : ''}`}
+                    disabled={submissionFailed || submitting}
                     onClick={() => setSelectedNumber(index)}
                     className={cn(
                       'relative size-5 rounded-full border-2 transition-all',
@@ -179,6 +242,7 @@ export function StageSelectDialog({
             </div>
             <Textarea
               value={note}
+              disabled={submissionFailed || submitting}
               onChange={(event) => setNote(event.target.value)}
               placeholder="例如：心脏瓣膜顺序又忘了，下次先背口诀"
               rows={2}
@@ -191,16 +255,24 @@ export function StageSelectDialog({
           <Button variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
             取消
           </Button>
-          <Button variant="outline" size="sm" disabled={submitting} onClick={() => handleConfirm(true)}>
-            完成，但仍需练习
-          </Button>
-          <Button size="sm" disabled={submitting} onClick={() => handleConfirm(false)}>
-            {submitting
-              ? '正在提交…'
-              : selectedNumber === defaultTarget
-              ? `默认（标记第 ${defaultTarget + 1} 次完成）`
-              : `标记第 ${selectedNumber + 1} 次完成（${normalizedStages[selectedNumber]?.label ?? '?'}）`}
-          </Button>
+          {submissionFailed ? (
+            <Button size="sm" disabled={submitting || !onRetrySubmission} onClick={onRetrySubmission}>
+              重新提交相同结算
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" disabled={submitting} onClick={() => handleConfirm(true)}>
+                完成，但仍需练习
+              </Button>
+              <Button size="sm" disabled={submitting} onClick={() => handleConfirm(false)}>
+                {submitting
+                  ? '正在提交…'
+                  : selectedNumber === defaultTarget
+                  ? `默认（标记第 ${defaultTarget + 1} 次完成）`
+                  : `标记第 ${selectedNumber + 1} 次完成（${normalizedStages[selectedNumber]?.label ?? '?'}）`}
+              </Button>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

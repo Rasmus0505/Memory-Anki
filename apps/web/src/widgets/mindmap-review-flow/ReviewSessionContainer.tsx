@@ -24,6 +24,7 @@ import {
   type ReviewFlowSnapshot,
 } from './MindMapReviewFlow'
 import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
 import {
   consumePrefetchedStudySession,
   type StudyWarmupKind,
@@ -31,7 +32,6 @@ import {
 import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
 import { ReviewSessionSkeleton } from '@/features/review/ReviewSessionSkeleton'
 import { ErrorState } from '@/shared/components/state-placeholders'
-import type { CompleteFlowPayload } from '@/features/review/model/mind-map-review-flow'
 
 type ReviewDisplayMode = 'review' | 'edit'
 
@@ -111,13 +111,6 @@ const inflightReviewSessionLoads = new Map<
   }>
 >()
 
-function createCompletionOperationId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `review-complete-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
 function formatReviewStage(reviewType: string, reviewNumber: number) {
   if (reviewType === '1h') return '首日 1 小时'
   if (reviewType === 'sleep') return '首日睡前'
@@ -183,17 +176,11 @@ export function ReviewSessionContainer({
   const [session, setSession] = useState<ReviewSessionContainerSession | null>(null)
   const [reviewEditorState, setReviewEditorState] = useState<MindMapEditorState | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<ReviewFlowSnapshot | null>(null)
-  const [submitting, setSubmitting] = useState(false)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [displayMode, setDisplayMode] = useState<ReviewDisplayMode>('review')
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
-  const [stageDialogOpen, setStageDialogOpen] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [pendingPayload, setPendingPayload] = useState<(CompleteFlowPayload & {
-    operationId: string
-  }) | null>(null)
   const modeTransitioningRef = useRef(false)
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
@@ -242,6 +229,44 @@ export function ReviewSessionContainer({
   useEffect(() => {
     editorReloadRef.current = reloadEditor
   }, [reloadEditor])
+
+  const completion = useReviewCompletionCoordinator<
+    ReviewSessionContainerSession,
+    { targetReviewNumber: number; needsPractice: boolean; note: string },
+    ReviewSessionSubmitResponse
+  >({
+    prepare: async () => {
+      if (!session) throw new Error('复习会话尚未加载完成。')
+      const labels = session.stageLabels ?? []
+      const stages = session.reviewStages ?? []
+      if (
+        labels.length === 0 ||
+        stages.length !== labels.length ||
+        stages.some((stage, index) => stage.review_number !== index || stage.label !== labels[index])
+      ) {
+        throw new Error('复习阶段信息不完整或不一致，请重新加载结算信息。')
+      }
+      if (!Number.isInteger(session.id) || session.id <= 0 || session.review_number < 0 || session.review_number >= stages.length) {
+        throw new Error('当前复习节点与阶段信息不一致，请返回复习队列刷新后重试。')
+      }
+      return session
+    },
+    submit: async ({ target, input, payload, operationId }) => {
+      await flushSave()
+      const result = await submitSession(target.id, {
+        chapter_id: chapterId ?? undefined,
+        duration_seconds: payload.durationSeconds,
+        completion_mode: payload.completionMode,
+        revealed_remaining: payload.revealedRemaining,
+        red_marked_count: payload.redNodeIds.length,
+        target_review_number: input.targetReviewNumber,
+        needs_practice: input.needsPractice,
+        ...(input.note ? { note: input.note } : {}),
+      }, { mutationId: operationId })
+      return { result, persistTimeRecord: false }
+    },
+    onCompleted: onSubmitted,
+  })
 
   useEffect(() => {
     if (!id) return
@@ -303,49 +328,6 @@ export function ReviewSessionContainer({
     }
   }, [displayMode, flushSave, id, reloadSession])
 
-  const submitCompletion = useCallback(async (payload: CompleteFlowPayload) => {
-    if (!session) {
-      payload.cancel()
-      return
-    }
-    setSubmitError(null)
-    setPendingPayload({ ...payload, operationId: createCompletionOperationId() })
-    setStageDialogOpen(true)
-  }, [session])
-
-  const handleStageConfirm = useCallback(async (targetReviewNumber: number, needsPractice: boolean, note: string) => {
-    if (!session || !pendingPayload || submitting) return
-    setSubmitting(true)
-    setSubmitError(null)
-    try {
-      await flushSave()
-      const result = await submitSession(session.id, {
-        chapter_id: chapterId ?? undefined,
-        duration_seconds: pendingPayload.durationSeconds,
-        completion_mode: pendingPayload.completionMode,
-        revealed_remaining: pendingPayload.revealedRemaining,
-        red_marked_count: pendingPayload.redNodeIds.length,
-        target_review_number: targetReviewNumber,
-        needs_practice: needsPractice,
-        ...(note ? { note } : {}),
-      }, { mutationId: pendingPayload.operationId })
-      await pendingPayload.finalize()
-      setStageDialogOpen(false)
-      setPendingPayload(null)
-      onSubmitted?.(result)
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '复习完成提交失败，请重试。')
-    } finally {
-      setSubmitting(false)
-    }
-  }, [chapterId, flushSave, onSubmitted, pendingPayload, session, submitSession, submitting])
-
-  const handleStageCancel = useCallback(() => {
-    pendingPayload?.cancel()
-    setStageDialogOpen(false)
-    setSubmitError(null)
-    setPendingPayload(null)
-  }, [pendingPayload])
 
   const palace = session?.palace ?? editorPalace ?? null
   const displayLoadError = displayMode === 'edit' && !editEditorState ? editorError : null
@@ -435,7 +417,7 @@ export function ReviewSessionContainer({
           editEditorState={resolvedEditEditorState}
           onModeToggle={handleModeToggle}
           onEditEditorStateChange={setEditEditorState}
-          submitting={submitting}
+          submitting={completion.submitting}
           editSaving={editorSaving}
           editError={editorError}
           persistProgress
@@ -449,26 +431,32 @@ export function ReviewSessionContainer({
               red_node_ids: snapshot.redNodeIds,
             })
           }}
-          onComplete={submitCompletion}
+          onComplete={completion.requestCompletion}
         />
 
         {!mindMapFullscreen ? renderAttachments(session) : null}
         {renderBelowFlow?.({ session, mindMapFullscreen })}
       </div>
 
-      {session.stageLabels && session.reviewStages ? (
-        <StageSelectDialog
-          open={stageDialogOpen}
-          stageLabels={session.stageLabels}
-          stages={session.reviewStages}
-          currentReviewNumber={session.review_number}
-          durationSeconds={pendingPayload?.durationSeconds}
-          submitting={submitting}
-          error={submitError}
-          onConfirm={handleStageConfirm}
-          onCancel={handleStageCancel}
-        />
-      ) : null}
+      <StageSelectDialog
+        open={completion.open}
+        stageLabels={completion.target?.stageLabels ?? []}
+        stages={completion.target?.reviewStages ?? []}
+        currentReviewNumber={completion.target?.review_number ?? session.review_number}
+        durationSeconds={completion.durationSeconds}
+        submitting={completion.submitting}
+        preparing={completion.preparing}
+        preparationFailed={completion.preparationFailed}
+        submissionFailed={completion.submissionFailed}
+        requiresStages
+        error={completion.error}
+        onRetry={() => void completion.retryPreparation()}
+        onRetrySubmission={() => void completion.retrySubmission()}
+        onConfirm={(targetReviewNumber, needsPractice, note) => {
+          void completion.confirmCompletion({ targetReviewNumber, needsPractice, note })
+        }}
+        onCancel={completion.cancelCompletion}
+      />
     </div>
   )
 }

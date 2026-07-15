@@ -1,10 +1,8 @@
 import * as React from "react";
-import { toast } from "@/shared/feedback/toast";
 import { useQuizLauncher } from "@/widgets/quiz-launcher";
 import { getReviewSurpriseCopy } from "@/entities/review/model/review-feedback";
 import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
 import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiShortcuts";
-import { persistStudySessionRecord } from "@/entities/session/model";
 import type { MindMapSelection } from "@/features/mindmap-editor";
 import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
@@ -36,8 +34,6 @@ export function useMindMapReviewFlowController({
   onFullscreenChange,
 }: MindMapReviewFlowProps) {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
-  const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
-  const [savingIncomplete, setSavingIncomplete] = React.useState(false);
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([]);
   const [comboBurst, setComboBurst] = React.useState<{
     milestoneStep: number;
@@ -242,29 +238,6 @@ React.useEffect(() => {
     [flow],
   );
 
-  const handleMarkUncompleted = React.useCallback(async () => {
-    if (savingIncomplete) return;
-    setCompletionDialogOpen(false);
-    setSavingIncomplete(true);
-    try {
-      flow.timer.registerActivity("practice_interaction", {
-        source: "complete_unfinished",
-      });
-      const record = await flow.timer.complete("saved", {
-        revealed_remaining: false,
-        red_marked_count: flow.redNodeCount,
-      });
-      if (record && sessionKind === "review") {
-        await persistStudySessionRecord(record);
-      }
-      toast.success("已保存进度和本段时长，下次可继续");
-    } catch {
-      toast.error("进度已保留，但本段时长保存失败，请稍后重试");
-    } finally {
-      flow.timer.reset();
-      setSavingIncomplete(false);
-    }
-  }, [flow.redNodeCount, flow.timer, savingIncomplete, sessionKind]);
 
   const handleQuizBreakOpen = React.useCallback(() => {
     flow.timer.registerActivity("practice_interaction", {
@@ -350,9 +323,6 @@ React.useEffect(() => {
     flow,
     feedbackDialogOpen,
     setFeedbackDialogOpen,
-    completionDialogOpen,
-    setCompletionDialogOpen,
-    savingIncomplete,
     comboBurst,
     setComboBurst,
     activeNodes,
@@ -371,7 +341,6 @@ React.useEffect(() => {
     cardFlashClassName,
     handleEditorStateChange,
     handleFullscreenToggle,
-    handleMarkUncompleted,
     handleQuizBreakOpen,
     handleToggleFeedbackSound,
     handleFeedbackVolumeChange,

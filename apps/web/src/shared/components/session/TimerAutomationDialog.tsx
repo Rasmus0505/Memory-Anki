@@ -79,7 +79,10 @@ export function TimerAutomationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-lg border-border/70 bg-background/98 p-0">
+      <DialogContent
+        data-timer-activity="ignore"
+        className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-lg border-border/70 bg-background/98 p-0"
+      >
         <DialogHeader>
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-foreground">

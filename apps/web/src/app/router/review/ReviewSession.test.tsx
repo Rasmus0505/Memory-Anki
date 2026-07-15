@@ -292,7 +292,7 @@ describe('ReviewSession', () => {
       target_review_number: 3,
       needs_practice: false,
     }, expect.objectContaining({ mutationId: expect.any(String) }))
-    expect(mocks.finalizeCompletion).toHaveBeenCalledTimes(1)
+    expect(mocks.finalizeCompletion).toHaveBeenCalledWith({ persistTimeRecord: false })
     expect(mocks.navigate).toHaveBeenCalledWith('/review/completed/801', { replace: true })
   })
 
@@ -372,8 +372,9 @@ describe('ReviewSession', () => {
     expect(mocks.cancelCompletion).not.toHaveBeenCalled()
     const firstMutationId = mocks.submitReviewSessionApi.mock.calls[0][2].mutationId
 
-    fireEvent.click(screen.getByRole('button', { name: /默认.*标记第 4 次完成/ }))
+    fireEvent.click(screen.getByRole('button', { name: '重新提交相同结算' }))
     await waitFor(() => expect(mocks.submitReviewSessionApi).toHaveBeenCalledTimes(2))
+    expect(mocks.submitReviewSessionApi.mock.calls[1][1]).toEqual(mocks.submitReviewSessionApi.mock.calls[0][1])
     expect(mocks.submitReviewSessionApi.mock.calls[1][2].mutationId).toBe(firstMutationId)
     expect(mocks.finalizeCompletion).toHaveBeenCalledTimes(1)
     expect(mocks.navigate).toHaveBeenCalledWith('/review/completed/802', { replace: true })

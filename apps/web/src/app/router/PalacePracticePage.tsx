@@ -70,7 +70,7 @@ export default function PalacePracticePage() {
           await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
           invalidatePalaceCatalogCache()
         },
-        submitStage: async (palace, payload, targetReviewNumber, needsPractice, options) => {
+        submitStage: async (palace, payload, targetReviewNumber, needsPractice, note, options) => {
           const scheduleId = palace.current_review_schedule_id
           if (!scheduleId) {
             throw new Error('当前复习节点已变化，请返回书架刷新后重试。')
@@ -84,6 +84,7 @@ export default function PalacePracticePage() {
               red_marked_count: payload.redNodeIds.length,
               target_review_number: targetReviewNumber,
               needs_practice: needsPractice,
+              ...(note ? { note } : {}),
             },
             { mutationId: options.mutationId },
           )

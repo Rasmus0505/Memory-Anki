@@ -29,7 +29,7 @@ export interface MindMapReviewFlowProps {
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>;
   onModeToggle?: () => void | Promise<void>;
   onEditEditorStateChange?: (nextState: MindMapEditorState) => void;
-  onRestart?: () => void;
+  onRestart?: () => boolean | void | Promise<boolean | void>;
   submitting?: boolean;
   editSaving?: boolean;
   editError?: string | null;

@@ -3,7 +3,6 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   editorState,
-  persistStudySessionRecordMock,
   renderInRouter,
   setupMindMapReviewFlowTest,
   timer,
@@ -42,10 +41,6 @@ describe("MindMapReviewFlow session", () => {
     fireEvent.click(completeButton);
     fireEvent.click(completeButton);
 
-    const completedButton = screen.getByRole("button", { name: /已完成/ });
-    fireEvent.click(completedButton);
-    fireEvent.click(completedButton);
-
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     expect(timer.complete).not.toHaveBeenCalled();
 
@@ -54,37 +49,8 @@ describe("MindMapReviewFlow session", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it("maps completion decision shortcuts to unfinished and completed feedback", async () => {
-    const onComplete = vi.fn(async (payload: { finalize: () => Promise<void> }) => {
-      await payload.finalize();
-    });
-
-    const { unmount } = renderInRouter(
-      <MindMapReviewFlow
-        title="Root"
-        palaceId={1}
-        sessionKind="review"
-        reviewEditorState={editorState}
-        onComplete={onComplete}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
-    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
-
-    await waitFor(() => {
-      expect(timer.complete).toHaveBeenCalledWith(
-        "saved",
-        expect.objectContaining({
-          revealed_remaining: false,
-          red_marked_count: 0,
-        }),
-      );
-    });
-    expect(onComplete).not.toHaveBeenCalled();
-
-    unmount();
-    setupMindMapReviewFlowTest();
+  it("requests final completion directly without an intermediate decision dialog", async () => {
+    const onComplete = vi.fn();
 
     renderInRouter(
       <MindMapReviewFlow
@@ -97,18 +63,11 @@ describe("MindMapReviewFlow session", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /完成/ }));
-    fireEvent.keyDown(window, { key: "5", code: "Digit5" });
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    await waitFor(() => {
-      expect(timer.complete).toHaveBeenCalledWith(
-        "manual_complete",
-        expect.objectContaining({
-          revealed_remaining: true,
-          red_marked_count: 2,
-        }),
-      );
-    });
+    expect(screen.queryByRole("button", { name: /已完成/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /未完成/ })).toBeNull();
+    expect(timer.pause).toHaveBeenCalledWith({ source: "completion_pending" });
   });
 
   it("disables local completion persistence for formal review sessions", async () => {
@@ -133,32 +92,6 @@ describe("MindMapReviewFlow session", () => {
     );
   });
 
-  it("records time when a formal review session is marked unfinished", async () => {
-    renderInRouter(
-      <MindMapReviewFlow
-        title="Root"
-        palaceId={1}
-        sessionKind="review"
-        reviewEditorState={editorState}
-        onComplete={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
-    fireEvent.click(screen.getByRole("button", { name: /未完成/ }));
-
-    await waitFor(() => {
-      expect(timer.complete).toHaveBeenCalledWith(
-        "saved",
-        expect.objectContaining({
-          revealed_remaining: false,
-          red_marked_count: 0,
-        }),
-      );
-    });
-    expect(persistStudySessionRecordMock).toHaveBeenCalledTimes(1);
-    expect(timer.reset).toHaveBeenCalledTimes(1);
-  });
   it("starts formal review timing as soon as the active route is ready", async () => {
     (timer as { status: string }).status = "idle";
     renderInRouter(
@@ -193,7 +126,6 @@ describe("MindMapReviewFlow session", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /完成/ }));
-    fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
 
     await waitFor(() => {
       expect(timer.complete).toHaveBeenCalledWith(
@@ -220,6 +152,26 @@ describe("MindMapReviewFlow session", () => {
     await waitFor(() => {
       expect(timer.start).toHaveBeenCalledWith({ source: "review_route_ready" });
     });
+  });
+
+  it("resets completed timing only after restart is confirmed", async () => {
+    const onRestart = vi.fn(async () => true);
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onRestart={onRestart}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新开始" }));
+
+    await waitFor(() => expect(onRestart).toHaveBeenCalledTimes(1));
+    expect(timer.reset).toHaveBeenCalledTimes(1);
+    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", { source: "restart" });
   });
 
 });
