@@ -65,10 +65,11 @@ def _subject_sort_key(subject: Any | None) -> tuple[int, int, str]:
 
 
 def _palace_outline_sort_key(palace_data: dict[str, Any]) -> tuple[Any, ...]:
+    palace_id = int(palace_data.get("id", 0) or 0)
     primary = palace_data.get("_primary_chapter")
     if primary is not None:
-        return (_chapter_outline_path(primary), palace_data.get("id", 0))
-    return ((999999, palace_data.get("id", 0)), palace_data.get("id", 0))
+        return (0, _chapter_outline_path(primary), palace_id)
+    return (1, (), palace_id)
 
 
 def chapter_summary(chapter: Chapter | None) -> dict[str, Any] | None:
