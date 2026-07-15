@@ -95,8 +95,13 @@ class TestSubmitRouteIdempotency:
             json=body,
             headers={MUTATION_ID_HEADER: "id-b"},
         )
-        assert second.status_code == 404
-        assert second.json() == {"detail": "not found"}
+        assert second.status_code == 409
+        assert second.json() == {
+            "detail": {
+                "code": "review_submit_conflict",
+                "message": "该复习阶段已经完成，请刷新复习队列。",
+            }
+        }
 
     def test_no_header_executes_normally(self, client, session_factory):
         schedule_id = _seed_schedule(session_factory)

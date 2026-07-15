@@ -14,7 +14,6 @@ from memory_anki.modules.knowledge.application.editor_state_service import (
 from memory_anki.modules.knowledge.domain.schemas import (
     ChapterCreate,
     ChapterUpdate,
-    PalaceChapterLinks,
     SubjectCreate,
     SubjectUpdate,
 )
@@ -87,6 +86,18 @@ def update_subject(subject_id: int, data: SubjectUpdate, s: Session = Depends(se
 
 @router.delete("/subjects/{subject_id}")
 def delete_subject(subject_id: int, s: Session = Depends(session_dep)):
+    impact = subject_service.get_subject_delete_impact(s, subject_id)
+    if impact is None:
+        raise HTTPException(status_code=404, detail="not found")
+    if impact["blocked"]:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "requires_reassignment": True,
+                **impact,
+            },
+        )
     deleted = subject_service.delete_subject(
         s,
         subject_id,
@@ -214,29 +225,3 @@ def delete_chapter(chapter_id: int, force: bool = False, s: Session = Depends(se
         s.rollback()
         logger.exception("delete_chapter failed: chapter_id=%s", chapter_id)
         return _internal_error_response("删除章节失败，请查看服务端日志。")
-
-
-# === 宫殿章节关联 ===
-
-
-@router.get("/palaces/{palace_id}/chapters")
-def palace_chapters(palace_id: int, s: Session = Depends(session_dep)):
-    """获取宫殿关联的章节"""
-    chapters = chapter_service.get_palace_chapters(s, palace_id)
-    if chapters is None:
-        raise HTTPException(status_code=404, detail="not found")
-    return chapters
-
-
-@router.put("/palaces/{palace_id}/chapters")
-def link_chapters(palace_id: int, data: PalaceChapterLinks, s: Session = Depends(session_dep)):
-    """设置宫殿关联的章节 (data: {chapter_ids: [1,2,3], primary_chapter_id?: 3})"""
-    result = chapter_service.link_palace_chapters(
-        s,
-        palace_id,
-        data.model_dump(exclude_unset=True, exclude_none=False),
-        uow=SqlAlchemyUnitOfWork(s),
-    )
-    if result is None:
-        raise HTTPException(status_code=404, detail="not found")
-    return result

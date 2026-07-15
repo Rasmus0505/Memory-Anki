@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class SubjectCreate(BaseModel):
@@ -35,10 +35,3 @@ class ChapterUpdate(BaseModel):
     notes: str | None = None
     sort_order: int | None = None
     parent_id: int | None = None
-
-
-class PalaceChapterLinks(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    chapter_ids: list[int] = Field(default_factory=list)
-    primary_chapter_id: int | None = None

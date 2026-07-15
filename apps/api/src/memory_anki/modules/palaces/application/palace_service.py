@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
+from memory_anki.modules.palaces.application.knowledge_binding_service import assign_palace_subjects
 from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate, PegIn
 from memory_anki.modules.palaces.infrastructure.repositories import PalaceRepository
 from memory_anki.platform.application import UnitOfWork
@@ -48,24 +49,22 @@ def list_palaces_by_subject(session: Session, subject_id: int | None, search: st
     if subject_id is None:
         return palaces
 
-    filtered: list[Palace] = []
-    for palace in palaces:
-        chapters = list(getattr(palace, "chapters", []) or [])
-        if any(getattr(chapter, "subject_id", None) == subject_id for chapter in chapters):
-            filtered.append(palace)
-    return filtered
+    return [
+        palace
+        for palace in palaces
+        if any(subject.id == subject_id for subject in (getattr(palace, "subjects", []) or []))
+    ]
 
 
 def list_catalog_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
     palaces = list_catalog_palaces(session, search)
     if subject_id is None:
         return palaces
-    filtered: list[Palace] = []
-    for palace in palaces:
-        chapters = list(getattr(palace, "chapters", []) or [])
-        if any(chapter.subject_id == subject_id for chapter in chapters):
-            filtered.append(palace)
-    return filtered
+    return [
+        palace
+        for palace in palaces
+        if any(subject.id == subject_id for subject in (getattr(palace, "subjects", []) or []))
+    ]
 
 
 def get_palace(session: Session, palace_id: int) -> Palace | None:
@@ -89,6 +88,9 @@ def create_palace(
     )
     repo.add(palace)
     repo.flush()
+    assign_palace_subjects(session, palace, data.subject_ids)
+    palace.manual_title = data.title
+    palace.title_mode = "sync"
     _sync_pegs(session, palace, data.pegs)
     if before_commit is not None:
         before_commit(palace)
@@ -106,6 +108,8 @@ def update_palace(
 ) -> Palace:
     if data.title is not None:
         palace.title = data.title
+        palace.manual_title = data.title
+        palace.title_mode = "manual"
     if data.description is not None:
         palace.description = data.description
     if data.created_at is not None:

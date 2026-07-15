@@ -35,7 +35,7 @@ class PalaceChapterBindingTests(RouterTestCase):
         session.add_all([chapter9_section1, chapter10_section1])
         session.flush()
 
-        palace = Palace(title="未命名宫殿", description="")
+        palace = Palace(title="未命名宫殿", description="", subjects=[subject])
         session.add(palace)
         session.commit()
 
@@ -45,12 +45,24 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.chapter9_section1_id = chapter9_section1.id
         self.chapter10_section1_id = chapter10_section1.id
         self.palace_id = palace.id
+        self.binding_revision = 0
+
+    def bind(self, data):
+        response = self.client.put(
+            f"/api/v1/palaces/{self.palace_id}/knowledge-binding",
+            json={
+                "subject_ids": [self.subject_id],
+                "base_revision": self.binding_revision,
+                "operation_id": f"binding-{self.binding_revision + 1}",
+                **data,
+            },
+        )
+        if response.status_code == 200:
+            self.binding_revision = response.json()["binding_revision"]
+        return response
 
     def test_linking_single_subchapter_keeps_primary_on_subchapter(self):
-        response = self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
-        )
+        response = self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
         self.assertEqual(response.status_code, 200)
 
         palace = self.client.get(f"/api/v1/palaces/{self.palace_id}").json()
@@ -63,19 +75,13 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(chapter_flags[self.chapter10_id], False)
 
     def test_latest_selected_subchapter_becomes_primary(self):
-        first = self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter9_section1_id], "primary_chapter_id": self.chapter9_section1_id},
-        )
+        first = self.bind({"chapter_ids": [self.chapter9_section1_id], "primary_chapter_id": self.chapter9_section1_id})
         self.assertEqual(first.status_code, 200)
 
-        second = self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={
+        second = self.bind({
                 "chapter_ids": [self.chapter9_section1_id, self.chapter10_section1_id],
                 "primary_chapter_id": self.chapter10_section1_id,
-            },
-        )
+            })
         self.assertEqual(second.status_code, 200)
 
         palace = self.client.get(f"/api/v1/palaces/{self.palace_id}").json()
@@ -84,17 +90,11 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(palace["resolved_parent_chapter"]["id"], self.chapter10_id)
 
     def test_unselecting_current_primary_falls_back_to_remaining_deepest_explicit_chapter(self):
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={
+        self.bind({
                 "chapter_ids": [self.chapter9_section1_id, self.chapter10_section1_id],
                 "primary_chapter_id": self.chapter10_section1_id,
-            },
-        )
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter9_section1_id], "primary_chapter_id": None},
-        )
+            })
+        self.bind({"chapter_ids": [self.chapter9_section1_id], "primary_chapter_id": None})
 
         palace = self.client.get(f"/api/v1/palaces/{self.palace_id}").json()
         self.assertEqual(palace["primary_chapter_id"], self.chapter9_section1_id)
@@ -102,13 +102,10 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(palace["resolved_parent_chapter"]["id"], self.chapter9_id)
 
     def test_read_preserves_stale_binding_until_explicit_update(self):
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={
+        self.bind({
                 "chapter_ids": [self.chapter10_section1_id],
                 "primary_chapter_id": self.chapter10_section1_id,
-            },
-        )
+            })
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=self.palace_id).first()
             self.assertIsNotNone(palace)
@@ -122,20 +119,14 @@ class PalaceChapterBindingTests(RouterTestCase):
             persisted = session.query(Palace).filter_by(id=self.palace_id).one()
             self.assertEqual(persisted.primary_chapter_id, self.chapter10_id)
 
-        updated = self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={
+        updated = self.bind({
                 "chapter_ids": [self.chapter10_section1_id],
                 "primary_chapter_id": self.chapter10_section1_id,
-            },
-        ).json()
+            }).json()
         self.assertEqual(updated["primary_chapter_id"], self.chapter10_section1_id)
 
     def test_grouped_summary_omits_heavy_fields_and_includes_counts(self):
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
-        )
+        self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
 
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=self.palace_id).first()
@@ -158,10 +149,7 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(len(palace_payload["review_stages"]), palace_payload["review_stage_total"])
 
     def test_chapter_detail_includes_palace_review_status(self):
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
-        )
+        self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
 
         response = self.client.get(f"/api/v1/chapters/{self.chapter10_section1_id}")
         self.assertEqual(response.status_code, 200)
@@ -176,10 +164,7 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertIsNone(palace_payload["next_due_date"])
 
     def test_delete_bound_chapter_requires_force_and_reports_impact(self):
-        self.client.put(
-            f"/api/v1/palaces/{self.palace_id}/chapters",
-            json={"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id},
-        )
+        self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
         with self.SessionLocal() as session:
             question = PalaceQuizQuestion(
                 source_chapter_id=self.chapter10_section1_id,

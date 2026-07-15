@@ -35,7 +35,15 @@ from ._base import Base
 if TYPE_CHECKING:
     # Chapter is defined in the knowledge tables module; imported only for
     # type-checking to satisfy static analyzers on the relationship annotations.
-    from .knowledge import Chapter
+    from .knowledge import Chapter, Subject
+
+palace_subject_table = Table(
+    "palace_subjects",
+    Base.metadata,
+    Column("palace_id", Integer, ForeignKey("palaces.id", ondelete="CASCADE"), primary_key=True),
+    Column("subject_id", Integer, ForeignKey("subjects.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_palace_subjects_subject_palace", "subject_id", "palace_id"),
+)
 
 chapter_palace_table = Table(
     "chapter_palaces",
@@ -123,6 +131,12 @@ class Palace(Base):
         back_populates="palace",
         cascade="all, delete-orphan",
     )
+    subjects: Mapped[list[Subject]] = relationship(
+        "Subject",
+        secondary=palace_subject_table,
+        back_populates="palaces",
+        order_by="Subject.sort_order, Subject.name, Subject.id",
+    )
     chapters: Mapped[list[Chapter]] = relationship(
         "Chapter",
         secondary=chapter_palace_table,
@@ -164,6 +178,7 @@ class Palace(Base):
     group_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     group_sort_order: Mapped[int] = mapped_column(Integer, default=0)
     title_mode: Mapped[str] = mapped_column(String(20), default="sync")
+    binding_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     manual_title: Mapped[str] = mapped_column(String(200), default="")
     grouping_mode: Mapped[str] = mapped_column(String(20), default="auto")
     manual_group_chapter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

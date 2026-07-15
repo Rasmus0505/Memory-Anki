@@ -15,10 +15,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.knowledge.domain.schemas import ChapterCreate
-from memory_anki.modules.palaces.api import (
-    get_palace_explicit_chapter_ids,
-    update_palace_chapter_binding,
-)
 from memory_anki.platform.application import UnitOfWork
 
 
@@ -214,48 +210,3 @@ def delete_chapter(
     uow.commit()
     maybe_create_rolling_backup("rolling-delete-chapter")
     return {"ok": True}
-
-
-def get_palace_chapters(session: Session, palace_id: int) -> list[dict] | None:
-    p = session.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return None
-    explicit_ids = get_palace_explicit_chapter_ids(session, p)
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "subject_id": c.subject_id,
-            "parent_id": c.parent_id,
-            "is_explicit": c.id in explicit_ids,
-            "subject": {"id": c.subject.id, "name": c.subject.name}
-            if c.subject
-            else None,
-        }
-        for c in p.chapters
-    ]
-
-
-def link_palace_chapters(
-    session: Session,
-    palace_id: int,
-    data: dict,
-    *,
-    uow: UnitOfWork,
-) -> dict | None:
-    p = session.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return None
-    ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
-    primary_chapter_id = data.get("primary_chapter_id")
-    next_primary = int(primary_chapter_id) if primary_chapter_id is not None else None
-    expanded_ids = update_palace_chapter_binding(
-        session,
-        p,
-        chapter_ids=ids,
-        preferred_primary_chapter_id=next_primary,
-    )
-    uow.commit()
-    uow.refresh(p)
-    maybe_create_rolling_backup("rolling-link-chapters")
-    return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}

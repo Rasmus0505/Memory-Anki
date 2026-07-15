@@ -141,6 +141,13 @@ def palace_json(
                       "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None}
                       for c in p.chapters],
         "segments": list_palace_segments(session, p, default_segment_payload=default_segment) if session else [],
+        "subjects": [
+            {"id": subject.id, "name": subject.name, "color": subject.color, "sort_order": subject.sort_order}
+            for subject in (getattr(p, "subjects", []) or [])
+        ],
+        "explicit_chapter_ids": sorted(explicit_chapter_ids),
+        "inherited_chapter_ids": sorted(c.id for c in (getattr(p, "chapters", []) or []) if c.id not in explicit_chapter_ids),
+        "binding_revision": int(getattr(p, "binding_revision", 0) or 0),
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
         "manual_title": getattr(p, "manual_title", "") or "",
         "resolved_title": resolve_palace_title(p),
@@ -235,6 +242,13 @@ def palace_summary_json(
         "review_stage_progress": review_stage_progress,
         "stage_labels": stage_labels,
         "review_stages": palace_review_stages_json(session, p, stage_labels) if session else [],
+        "subjects": [
+            {"id": subject.id, "name": subject.name, "color": subject.color, "sort_order": subject.sort_order}
+            for subject in (getattr(p, "subjects", []) or [])
+        ],
+        "explicit_chapter_ids": sorted(explicit_chapter_ids),
+        "inherited_chapter_ids": sorted(c.id for c in (getattr(p, "chapters", []) or []) if c.id not in explicit_chapter_ids),
+        "binding_revision": int(getattr(p, "binding_revision", 0) or 0),
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
         "manual_title": getattr(p, "manual_title", "") or "",
         "resolved_title": resolve_palace_title(p),
