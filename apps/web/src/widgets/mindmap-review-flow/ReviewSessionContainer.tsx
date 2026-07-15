@@ -117,6 +117,20 @@ function formatReviewStage(reviewType: string, reviewNumber: number) {
   return `第 ${reviewNumber + 1} 次`
 }
 
+type ReviewSessionContainerInput =
+  Omit<ReviewSessionContainerSession, 'stageLabels' | 'reviewStages'> &
+  Partial<Pick<ReviewSessionContainerSession, 'stageLabels' | 'reviewStages'>>
+
+export function normalizeReviewSessionContainerSession(
+  session: ReviewSessionContainerInput,
+): ReviewSessionContainerSession {
+  return {
+    ...session,
+    stageLabels: session.stageLabels ?? session.palace?.stage_labels ?? null,
+    reviewStages: session.reviewStages ?? session.palace?.review_stages ?? null,
+  }
+}
+
 function toSnapshot(progress: {
   reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   red_node_ids: string[]
@@ -185,12 +199,16 @@ export function ReviewSessionContainer({
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
 
+  const fetchAuthoritativeSession = useCallback(async (sessionId: number) => (
+    normalizeReviewSessionContainerSession(await loadSession(sessionId))
+  ), [loadSession])
+
   const reloadSession = useCallback(async (sessionId: number) => {
-    const nextSession = await loadSession(sessionId)
+    const nextSession = await fetchAuthoritativeSession(sessionId)
     setSession(nextSession)
     setReviewEditorState(buildReviewEditorState(nextSession))
     return nextSession
-  }, [buildReviewEditorState, loadSession])
+  }, [buildReviewEditorState, fetchAuthoritativeSession])
 
   const {
     meta: editorPalace,
@@ -236,9 +254,16 @@ export function ReviewSessionContainer({
     ReviewSessionSubmitResponse
   >({
     prepare: async () => {
-      if (!session) throw new Error('复习会话尚未加载完成。')
-      const labels = session.stageLabels ?? []
-      const stages = session.reviewStages ?? []
+      const sessionId = id ? Number(id) : null
+      if (!sessionId || !Number.isInteger(sessionId)) {
+        throw new Error('复习会话编号无效，请返回复习队列后重试。')
+      }
+      const latestSession = await fetchAuthoritativeSession(sessionId)
+      if (latestSession.id !== sessionId) {
+        throw new Error('返回的复习会话与当前复习节点不一致，请返回复习队列后重试。')
+      }
+      const labels = latestSession.stageLabels ?? []
+      const stages = latestSession.reviewStages ?? []
       if (
         labels.length === 0 ||
         stages.length !== labels.length ||
@@ -246,10 +271,10 @@ export function ReviewSessionContainer({
       ) {
         throw new Error('复习阶段信息不完整或不一致，请重新加载结算信息。')
       }
-      if (!Number.isInteger(session.id) || session.id <= 0 || session.review_number < 0 || session.review_number >= stages.length) {
+      if (latestSession.id <= 0 || latestSession.review_number < 0 || latestSession.review_number >= stages.length) {
         throw new Error('当前复习节点与阶段信息不一致，请返回复习队列刷新后重试。')
       }
-      return session
+      return latestSession
     },
     submit: async ({ target, input, payload, operationId }) => {
       await flushSave()
@@ -295,8 +320,9 @@ export function ReviewSessionContainer({
       const pending = warmupKind
         ? consumePrefetchedStudySession(warmupKind, sessionId, loadSessionAndProgress)
         : loadSessionAndProgress()
-      const { session: nextSession, progress: progressResponse } = await pending
+      const { session: prefetchedSession, progress: progressResponse } = await pending
       if (!active) return
+      const nextSession = normalizeReviewSessionContainerSession(prefetchedSession)
       setSession(nextSession)
       setReviewEditorState(buildReviewEditorState(nextSession))
       setInitialSnapshot(toSnapshot(progressResponse.progress))
