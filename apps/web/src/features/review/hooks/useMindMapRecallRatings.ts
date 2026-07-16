@@ -1,6 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listMindMapSessionEventsApi } from '@/entities/mindmap-learning'
-import { ratePalaceNodesApi, undoPalaceRatingApi } from '@/features/review/api'
+import { ratePalaceNodesApi, undoPalaceRatingApi, type RatingConflictPolicy } from '@/features/review/api'
 import type { MindMapRecallEvent, MindMapRecallRating, MindMapRecallRatingSource, MindMapRecallRound } from '@/shared/api/contracts'
 
 function effectiveEvents(events: MindMapRecallEvent[]) {
@@ -18,6 +18,12 @@ function makeOperationId() {
     : `rating_${Date.now()}_${Math.random().toString(36).slice(2)}`
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  return fallback
+}
+
 export interface RateNodeEvidence {
   source?: MindMapRecallRatingSource
   confidence?: number | null
@@ -26,60 +32,173 @@ export interface RateNodeEvidence {
   retryCount?: number
 }
 
-export function useMindMapRecallRatings({ palaceId, studySessionId, enabled, sourceScene = 'formal_review' }: { palaceId: number | null; studySessionId: string | null; enabled: boolean; sourceScene?: string }) {
+export interface RateNodeOptions {
+  scope?: 'single' | 'subtree'
+  conflictPolicy?: RatingConflictPolicy
+  evidence?: RateNodeEvidence
+}
+
+export function useMindMapRecallRatings({
+  palaceId,
+  studySessionId,
+  enabled,
+  sourceScene = 'formal_review',
+}: {
+  palaceId: number | null
+  studySessionId: string | null
+  enabled: boolean
+  sourceScene?: string
+}) {
   const [events, setEvents] = useState<MindMapRecallEvent[]>([])
   const [round, setRound] = useState<MindMapRecallRound>('first')
   const [historyOpen, setHistoryOpen] = useState(false)
 
   useEffect(() => {
-    if (!enabled || !studySessionId) { setEvents([]); return }
+    if (!enabled || !studySessionId) {
+      setEvents([])
+      return
+    }
     let active = true
-    void listMindMapSessionEventsApi(studySessionId).then((response) => { if (active) setEvents(response.items) }).catch(() => {})
-    return () => { active = false }
+    void listMindMapSessionEventsApi(studySessionId)
+      .then((response) => {
+        if (active) setEvents(response.items)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
   }, [enabled, studySessionId])
 
   const currentEvents = useMemo(() => effectiveEvents(events), [events])
-  const byKey = useMemo(() => new Map(currentEvents.map((event) => [`${event.node_uid}:${event.recall_round}`, event])), [currentEvents])
-  const firstRatings = useMemo(() => new Map(currentEvents.filter((event) => event.recall_round === 'first').map((event) => [event.node_uid, normalizeRating(event.rating)])), [currentEvents])
-  const retryRatings = useMemo(() => new Map(currentEvents.filter((event) => event.recall_round === 'weak_retry').map((event) => [event.node_uid, normalizeRating(event.rating)])), [currentEvents])
-  const weakNodeUids = useMemo(() => [...firstRatings].filter(([, rating]) => rating === 1 || rating === 2).map(([uid]) => uid), [firstRatings])
+  const byKey = useMemo(
+    () => new Map(currentEvents.map((event) => [`${event.node_uid}:${event.recall_round}`, event])),
+    [currentEvents],
+  )
+  const firstRatings = useMemo(
+    () =>
+      new Map(
+        currentEvents
+          .filter((event) => event.recall_round === 'first')
+          .map((event) => [event.node_uid, normalizeRating(event.rating)]),
+      ),
+    [currentEvents],
+  )
+  const retryRatings = useMemo(
+    () =>
+      new Map(
+        currentEvents
+          .filter((event) => event.recall_round === 'weak_retry')
+          .map((event) => [event.node_uid, normalizeRating(event.rating)]),
+      ),
+    [currentEvents],
+  )
+  const weakNodeUids = useMemo(
+    () => [...firstRatings].filter(([, rating]) => rating === 1 || rating === 2).map(([uid]) => uid),
+    [firstRatings],
+  )
 
-  const rateNode = useCallback(async (nodeUid: string, rating: MindMapRecallRating, targetRound: MindMapRecallRound = round, scope: 'single' | 'subtree' = 'subtree', evidence: RateNodeEvidence = {}) => {
-    if (!enabled || !palaceId || !studySessionId) return
-    const previous = byKey.get(`${nodeUid}:${targetRound}`) ?? null
-    const operationId = makeOperationId()
-    const optimistic: MindMapRecallEvent = {
-      id: `${operationId}:${nodeUid}`.slice(0, 64), study_session_id: studySessionId, palace_id: palaceId, node_uid: nodeUid,
-      source_scene: sourceScene, recall_round: targetRound, rating, rating_source: evidence.source ?? 'manual',
-      rating_scope: scope, evidence_origin: 'direct',
-      inference_confidence: evidence.source === 'inferred' ? evidence.confidence ?? 0.35 : null,
-      response_ms: evidence.responseMs ?? null, hint_count: evidence.hintCount ?? 0, retry_count: evidence.retryCount ?? 0,
-      operation_id: operationId, occurred_at: new Date().toISOString(), supersedes_event_id: previous?.id ?? null,
+  /** Nodes whose latest effective event in the active round is a direct rating. */
+  const directRatedUids = useMemo(() => {
+    const latest = new Map<string, MindMapRecallEvent>()
+    for (const event of currentEvents) {
+      if (event.recall_round !== round) continue
+      if (!latest.has(event.node_uid)) latest.set(event.node_uid, event)
     }
-    setEvents((current) => [...current, optimistic])
-    try {
-      const response = await ratePalaceNodesApi(palaceId, { node_uid: nodeUid, rating, study_session_id: studySessionId, operation_id: operationId, rating_scope: scope, source_scene: sourceScene })
-      const affected = response.item.affected_node_uids ?? [nodeUid]
-      setEvents((current) => {
-        const existingIds = new Set(current.filter((event) => event.operation_id === operationId).map((event) => event.node_uid))
-        const inherited = affected.filter((uid) => !existingIds.has(uid)).map((uid) => ({
-          ...optimistic,
-          id: `${operationId}:${uid}`.slice(0, 64),
-          node_uid: uid,
+    const direct = new Set<string>()
+    latest.forEach((event, uid) => {
+      if (event.evidence_origin === 'direct') direct.add(uid)
+    })
+    return direct
+  }, [currentEvents, round])
+
+  const rateNode = useCallback(
+    async (
+      nodeUid: string,
+      rating: MindMapRecallRating,
+      targetRound: MindMapRecallRound = round,
+      scope: 'single' | 'subtree' = 'subtree',
+      evidence: RateNodeEvidence = {},
+      conflictPolicy: RatingConflictPolicy = 'overwrite',
+    ) => {
+      if (!enabled || !palaceId || !studySessionId) return
+      const previous = byKey.get(`${nodeUid}:${targetRound}`) ?? null
+      const operationId = makeOperationId()
+      const optimistic: MindMapRecallEvent = {
+        id: `${operationId}:${nodeUid}`.slice(0, 64),
+        study_session_id: studySessionId,
+        palace_id: palaceId,
+        node_uid: nodeUid,
+        source_scene: sourceScene,
+        recall_round: targetRound,
+        rating,
+        rating_source: evidence.source ?? 'manual',
+        rating_scope: scope,
+        evidence_origin: 'direct',
+        inference_confidence: evidence.source === 'inferred' ? evidence.confidence ?? 0.35 : null,
+        response_ms: evidence.responseMs ?? null,
+        hint_count: evidence.hintCount ?? 0,
+        retry_count: evidence.retryCount ?? 0,
+        operation_id: operationId,
+        occurred_at: new Date().toISOString(),
+        supersedes_event_id: previous?.id ?? null,
+      }
+      setEvents((current) => [...current, optimistic])
+      try {
+        const response = await ratePalaceNodesApi(palaceId, {
+          node_uid: nodeUid,
+          rating,
+          study_session_id: studySessionId,
+          operation_id: operationId,
           rating_scope: scope,
-          evidence_origin: (uid === nodeUid ? 'direct' : 'batch_inherited') as 'direct' | 'batch_inherited',
-        }))
-        return [...current, ...inherited]
-      })
-    } catch {
-      setEvents((current) => current.filter((event) => event.id !== optimistic.id))
-      throw new Error('节点评分保存失败')
-    }
-    return operationId
-  }, [byKey, enabled, palaceId, round, sourceScene, studySessionId])
+          conflict_policy: conflictPolicy,
+          source_scene: sourceScene,
+          recall_round: targetRound,
+          rating_source: evidence.source ?? 'manual',
+          inference_confidence: evidence.confidence ?? null,
+          response_ms: evidence.responseMs ?? null,
+          hint_count: evidence.hintCount ?? 0,
+          retry_count: evidence.retryCount ?? 0,
+        })
+        const affected = response.item.affected_node_uids ?? [nodeUid]
+        setEvents((current) => {
+          const existingIds = new Set(
+            current.filter((event) => event.operation_id === operationId).map((event) => event.node_uid),
+          )
+          const inherited = affected
+            .filter((uid) => !existingIds.has(uid))
+            .map((uid) => ({
+              ...optimistic,
+              id: `${operationId}:${uid}`.slice(0, 64),
+              node_uid: uid,
+              rating_scope: scope,
+              evidence_origin: (uid === nodeUid ? 'direct' : 'batch_inherited') as
+                | 'direct'
+                | 'batch_inherited',
+              supersedes_event_id: null,
+            }))
+          // When skip_direct, parent may be the only optimistic row; drop optimistic if not in affected.
+          if (!affected.includes(nodeUid)) {
+            return [
+              ...current.filter((event) => event.id !== optimistic.id),
+              ...inherited,
+            ]
+          }
+          return [...current, ...inherited]
+        })
+      } catch (error) {
+        setEvents((current) => current.filter((event) => event.id !== optimistic.id))
+        throw new Error(errorMessage(error, '节点评分保存失败'), { cause: error })
+      }
+      return operationId
+    },
+    [byKey, enabled, palaceId, round, sourceScene, studySessionId],
+  )
 
   const undoLastRating = useCallback(() => {
-    const latest = [...currentEvents].reverse().find((event) => event.evidence_origin !== 'batch_inherited') ?? currentEvents.at(-1) ?? null
+    const latest =
+      [...currentEvents].reverse().find((event) => event.evidence_origin !== 'batch_inherited') ??
+      currentEvents.at(-1) ??
+      null
     if (latest && palaceId && studySessionId && latest.operation_id) {
       void undoPalaceRatingApi(palaceId, latest.operation_id, studySessionId).catch(() => {})
       setEvents((current) => current.filter((event) => event.operation_id !== latest.operation_id))
@@ -87,5 +206,18 @@ export function useMindMapRecallRatings({ palaceId, studySessionId, enabled, sou
     return latest
   }, [currentEvents, palaceId, studySessionId])
 
-  return { events, currentEvents, firstRatings, retryRatings, weakNodeUids, round, setRound, rateNode, undoLastRating, historyOpen, setHistoryOpen }
+  return {
+    events,
+    currentEvents,
+    firstRatings,
+    retryRatings,
+    weakNodeUids,
+    directRatedUids,
+    round,
+    setRound,
+    rateNode,
+    undoLastRating,
+    historyOpen,
+    setHistoryOpen,
+  }
 }

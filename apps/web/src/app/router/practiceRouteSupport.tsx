@@ -5,14 +5,14 @@ import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
-import type { MindMapEditorState, ReviewStageSummary } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
   MindMapReviewFlow,
   type CompleteFlowPayload,
   type MindMapReviewFlowProps,
   type ReviewFlowSnapshot,
 } from '@/widgets/mindmap-review-flow'
-import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { PracticeCompletionDialog } from '@/features/review/components/PracticeCompletionDialog'
 import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
 import { consumePrefetchedStudySession, type StudyWarmupKind } from '@/shared/api/studySessionWarmup'
 
@@ -34,26 +34,16 @@ interface PracticeCompletionResult {
 
 export interface PracticeStageTarget {
   id: number
-  stage_labels?: string[]
-  review_stages?: ReviewStageSummary[]
   review_stage_total?: number | null
   review_stage_completed?: number | null
   current_review_schedule_id?: number | null
 }
-
 interface PracticeRouteSession<TData> {
   data: TData
   title: string
   palaceId: number | null
   reviewEditorState: MindMapEditorState
   editEditorState?: MindMapEditorState | null
-}
-
-interface PreparedPracticeCompletion<TData> {
-  session: PracticeRouteSession<TData>
-  data: TData
-  target: PracticeStageTarget
-  mode: 'stage-backed' | 'plain-practice'
 }
 
 interface PracticeRouteConfig<TData, TSession> {
@@ -71,21 +61,16 @@ interface PracticeRouteConfig<TData, TSession> {
   renderBadge: (data: TData, hasResumeProgress: boolean) => ReactNode
   getFlowKey: (data: TData, resetVersion: number) => string
   getPersistKey: (data: TData) => string
-  getStageTarget: (data: TData) => PracticeStageTarget
-  refreshStageTarget?: (data: TData) => Promise<PracticeRouteSession<TData>>
-  completeWithoutStage: (
+  completePractice?: (
     data: TData,
     payload: CompleteFlowPayload,
-    options: { mutationId: string },
-  ) => Promise<PracticeCompletionResult | void>
-  submitStage: (
-    data: TData,
-    payload: CompleteFlowPayload,
-    targetReviewNumber: number,
-    needsPractice: boolean,
     note: string,
     options: { mutationId: string },
   ) => Promise<PracticeCompletionResult | void>
+  getStageTarget?: (data: TData) => PracticeStageTarget
+  refreshStageTarget?: (data: TData) => Promise<PracticeRouteSession<TData>>
+  completeWithoutStage?: (data: TData, payload: CompleteFlowPayload, options: { mutationId: string }) => Promise<PracticeCompletionResult | void>
+  submitStage?: (data: TData, payload: CompleteFlowPayload, targetReviewNumber: number, needsPractice: boolean, note: string, options: { mutationId: string }) => Promise<PracticeCompletionResult | void>
   flowProps?: (data: TData) => Partial<MindMapReviewFlowProps>
   computeInitialSnapshot?: (
     session: PracticeRouteSession<TData>,
@@ -106,37 +91,6 @@ function toInitialSnapshot(progress: PracticeProgressSnapshot | null): ReviewFlo
 
 function resolvePersistTimeRecord(result: PracticeCompletionResult | void) {
   return typeof result === 'object' && result !== null ? result.persistTimeRecord : undefined
-}
-
-function resolvePracticeCompletionMode(target: PracticeStageTarget): 'stage-backed' | 'plain-practice' {
-  const labels = target.stage_labels ?? []
-  const stages = target.review_stages ?? []
-  const total = target.review_stage_total
-  const completed = target.review_stage_completed
-  const hasScheduleSignals =
-    target.current_review_schedule_id != null ||
-    labels.length > 0 ||
-    stages.length > 0 ||
-    (total ?? 0) > 0 ||
-    (completed ?? 0) > 0
-
-  if (!hasScheduleSignals) return 'plain-practice'
-
-  if (
-    !target.current_review_schedule_id ||
-    !Number.isInteger(total) ||
-    (total ?? 0) <= 0 ||
-    !Number.isInteger(completed) ||
-    (completed ?? -1) < 0 ||
-    (completed ?? 0) >= (total ?? 0) ||
-    labels.length !== total ||
-    stages.length !== total ||
-    stages.some((stage, index) => stage.review_number !== index || stage.label !== labels[index])
-  ) {
-    throw new Error('当前复习节点信息不完整或不一致，请返回书架刷新或重新加载结算信息。')
-  }
-
-  return 'stage-backed'
 }
 
 export function PracticeSessionRoute<TData, TSession>({
@@ -183,41 +137,22 @@ export function PracticeSessionRoute<TData, TSession>({
   }, [config, routeId])
 
   const completion = useReviewCompletionCoordinator<
-    PreparedPracticeCompletion<TData>,
-    { targetReviewNumber: number; needsPractice: boolean; note: string },
+    PracticeRouteSession<TData>,
+    { note: string },
     void
   >({
     prepare: async () => {
       if (!session) throw new Error('练习会话尚未加载完成。')
-      let activeSession = session
-      if (config.refreshStageTarget) {
-        const refreshed = await config.refreshStageTarget(session.data)
-        if (refreshed) {
-          activeSession = refreshed
-          setSession(refreshed)
-          setEditEditorState(refreshed.editEditorState ?? null)
-        }
-      }
-      const target = config.getStageTarget(activeSession.data)
-      const mode = resolvePracticeCompletionMode(target)
-      return { session: activeSession, data: activeSession.data, target, mode }
+      return session
     },
-    submit: async ({ target: prepared, input, payload, operationId }) => {
-      const result = prepared.mode === 'stage-backed'
-        ? await config.submitStage(
-            prepared.data,
-            payload,
-            input.targetReviewNumber,
-            input.needsPractice,
-            input.note,
-            { mutationId: operationId },
-          )
-        : await config.completeWithoutStage(prepared.data, payload, { mutationId: operationId })
+    submit: async ({ target, input, payload, operationId }) => {
+      const result = config.completePractice
+        ? await config.completePractice(target.data, payload, input.note, { mutationId: operationId })
+        : await config.completeWithoutStage?.(target.data, payload, { mutationId: operationId })
       return { result: undefined, persistTimeRecord: resolvePersistTimeRecord(result) }
     },
     onCompleted: () => setHasResumeProgress(false),
   })
-
   const effectiveInitialSnapshot = useMemo(() => {
     if (!session) return initialSnapshot
     return config.computeInitialSnapshot?.(session, initialSnapshot) ?? initialSnapshot
@@ -236,7 +171,6 @@ export function PracticeSessionRoute<TData, TSession>({
   }
 
   const data = session.data
-  const stageTarget = config.getStageTarget(data)
 
   return (
     <div className="space-y-5">
@@ -310,34 +244,13 @@ export function PracticeSessionRoute<TData, TSession>({
       {config.renderAfterFlow?.(data)}
 
 
-      <StageSelectDialog
+      <PracticeCompletionDialog
         open={completion.open}
-        stageLabels={completion.target?.target.stage_labels ?? []}
-        stages={completion.target?.target.review_stages ?? []}
-        currentReviewNumber={Math.max(
-          0,
-          completion.target?.target.review_stage_completed ?? stageTarget.review_stage_completed ?? 0,
-        )}
         durationSeconds={completion.durationSeconds}
         submitting={completion.submitting}
-        preparing={completion.preparing}
-        preparationFailed={completion.preparationFailed}
-        submissionFailed={completion.submissionFailed}
-        requiresStages={
-          completion.target?.mode === 'stage-backed' ||
-          (completion.target == null && (
-            stageTarget.current_review_schedule_id != null ||
-            (stageTarget.review_stage_total ?? 0) > 0 ||
-            (stageTarget.stage_labels?.length ?? 0) > 0 ||
-            (stageTarget.review_stages?.length ?? 0) > 0
-          ))
-        }
         error={completion.error}
-        onRetry={() => void completion.retryPreparation()}
-        onRetrySubmission={() => void completion.retrySubmission()}
-        onConfirm={(targetReviewNumber, needsPractice, note) => {
-          void completion.confirmCompletion({ targetReviewNumber, needsPractice, note })
-        }}
+        onRetry={() => void completion.retrySubmission()}
+        onConfirm={(note) => { void completion.confirmCompletion({ note }) }}
         onCancel={completion.cancelCompletion}
       />
     </div>

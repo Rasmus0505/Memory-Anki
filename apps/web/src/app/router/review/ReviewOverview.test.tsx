@@ -1,219 +1,23 @@
-import * as React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewOverview from '@/app/router/review/ReviewOverview'
-import type { ReviewQueueResponse, ReviewStageProgressHealthResponse } from '@/shared/api/contracts'
 
-const mocks = vi.hoisted(() => ({
-  getReviewQueueApi: vi.fn(),
-  getChapterReviewQueueApi: vi.fn(),
-  getReviewStageProgressHealthApi: vi.fn(),
-  invalidateReviewQueueCache: vi.fn(),
-  repairReviewStageProgressApi: vi.fn(),
-  previewSpreadOverdueApi: vi.fn(),
-  spreadOverdueApi: vi.fn(),
-  undoSpreadOverdueApi: vi.fn(),
-  toastSuccess: vi.fn(),
-  toastError: vi.fn(),
-}))
-
-vi.mock('sonner', () => ({
-  toast: {
-    success: mocks.toastSuccess,
-    error: mocks.toastError,
-  },
-}))
-
+const queue = vi.fn()
 vi.mock('@/features/review/api', () => ({
-  getReviewQueueApi: (...args: unknown[]) => mocks.getReviewQueueApi(...args),
-  getChapterReviewQueueApi: (...args: unknown[]) => mocks.getChapterReviewQueueApi(...args),
-  getReviewStageProgressHealthApi: (...args: unknown[]) => mocks.getReviewStageProgressHealthApi(...args),
-  invalidateReviewQueueCache: (...args: unknown[]) => mocks.invalidateReviewQueueCache(...args),
-  repairReviewStageProgressApi: (...args: unknown[]) => mocks.repairReviewStageProgressApi(...args),
-  previewSpreadOverdueApi: (...args: unknown[]) => mocks.previewSpreadOverdueApi(...args),
-  spreadOverdueApi: (...args: unknown[]) => mocks.spreadOverdueApi(...args),
-  undoSpreadOverdueApi: (...args: unknown[]) => mocks.undoSpreadOverdueApi(...args),
+  getReviewQueueApi: () => queue(), getChapterReviewQueueApi: () => queue(),
+  getReviewSessionApi: vi.fn(), getReviewSessionProgressApi: vi.fn(),
 }))
+vi.mock('@/shared/api/studySessionWarmup', () => ({ prefetchStudySession: vi.fn() }))
+vi.mock('@/features/review/components/ReviewLoadForecastCard', () => ({ ReviewLoadForecastCard: () => <div>负荷预测</div> }))
 
-vi.mock('@/features/review/components/ReviewLoadForecastCard', () => ({
-  ReviewLoadForecastCard: () => <div data-testid="review-load-forecast" />,
-}))
-
-vi.mock('@/shared/api/studySessionWarmup', () => ({
-  prefetchStudySession: vi.fn(),
-}))
-
-const queue = {
-  due_count: 0,
-  later_today_count: 0,
-  overdue_count: 0,
-  smoothed_count: 0,
-  stats: {
-    total: 0,
-    review_count: 0,
-    review_duration_seconds: 0,
-  },
-  chapter: null,
-  reviews: [],
-  later_today_reviews: [],
-} satisfies ReviewQueueResponse
-
-const unhealthy = {
-  ok: true,
-  orphan_progress_count: 1,
-  orphan_study_session_count: 1,
-  stage_gap_palace_count: 1,
-  total_issues: 3,
-  needs_repair: true,
-} satisfies ReviewStageProgressHealthResponse
-
-const healthy = {
-  ok: true,
-  orphan_progress_count: 0,
-  orphan_study_session_count: 0,
-  stage_gap_palace_count: 0,
-  total_issues: 0,
-  needs_repair: false,
-} satisfies ReviewStageProgressHealthResponse
-
-describe('ReviewOverview', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  beforeEach(() => {
-    Object.values(mocks).forEach((mock) => mock.mockReset())
-    mocks.getReviewQueueApi.mockResolvedValue(queue)
-    mocks.getChapterReviewQueueApi.mockResolvedValue({
-      ...queue,
-      chapter: { id: 12, name: 'Chapter', subject_id: 1, subject: { id: 1, name: 'Subject' } },
-    })
-    mocks.getReviewStageProgressHealthApi.mockResolvedValue(healthy)
-    mocks.repairReviewStageProgressApi.mockResolvedValue({
-      ok: true,
-      palace_count: 2,
-      segment_count: 0,
-    })
-  })
-
-  it('shows stage-progress health issues and repairs through the existing repair API', async () => {
-    mocks.getReviewStageProgressHealthApi
-      .mockResolvedValueOnce(unhealthy)
-      .mockResolvedValueOnce(healthy)
-
-    render(
-      <MemoryRouter initialEntries={['/review']}>
-        <ReviewOverview />
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByText(/检测到 3 处复习进度异常/)).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '一键修复' }))
-
-    await waitFor(() => expect(mocks.repairReviewStageProgressApi).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(mocks.getReviewStageProgressHealthApi).toHaveBeenCalledTimes(2))
-    expect(mocks.getReviewQueueApi).toHaveBeenCalledTimes(2)
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('修复完成：重建 2 个宫殿', undefined)
-  })
-
-  it('does not request stage-progress health in chapter review mode', async () => {
-    render(
-      <MemoryRouter initialEntries={['/review?chapterId=12']}>
-        <ReviewOverview />
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByText('章节复习：Subject / Chapter')).toBeTruthy()
-    expect(mocks.getChapterReviewQueueApi).toHaveBeenCalledWith(12)
-    expect(mocks.getReviewStageProgressHealthApi).not.toHaveBeenCalled()
-  })
-
-  it('shows later-today reviews with an early-review link', async () => {
-    mocks.getReviewQueueApi.mockResolvedValue({
-      ...queue,
-      later_today_count: 1,
-      later_today_reviews: [
-        {
-          id: 42,
-          palace_id: 7,
-          scheduled_date: '2026-07-13',
-          due_at: '2026-07-13T15:30',
-          interval_days: 1,
-          algorithm_used: 'ebbinghaus',
-          completed: false,
-          review_number: 0,
-          review_type: '1h',
-          schedule_count: 1,
-          overdue_schedule_count: 0,
-          next_due_date: '2026-07-13',
-          palace: {
-            id: 7,
-            title: '稍后复习宫殿',
-            description: '',
-            archived: false,
-            mastered: false,
-            editor_doc: null,
-            pegs: [],
-            attachments: [],
-            chapters: [],
-          },
-        },
-      ],
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/review']}>
-        <ReviewOverview />
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByText('今日稍后到期（1）')).toBeTruthy()
-    expect(screen.getByText('稍后复习宫殿')).toBeTruthy()
-    expect(screen.getByText(/今日 15:30 到期/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: /提前复习/ }).getAttribute('href')).toBe('/review/session/42')
-  })
-
-  it('refreshes the queue when the earliest later-today review becomes due', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-07-13T12:00:00'))
-    mocks.getReviewQueueApi
-      .mockResolvedValueOnce({
-        ...queue,
-        later_today_count: 1,
-        later_today_reviews: [
-          {
-            id: 42,
-            palace_id: 7,
-            scheduled_date: '2026-07-13',
-            due_at: '2026-07-13T12:00:01',
-            interval_days: 1,
-            algorithm_used: 'ebbinghaus',
-            completed: false,
-            review_number: 0,
-            review_type: '1h',
-            schedule_count: 1,
-            overdue_schedule_count: 0,
-            next_due_date: '2026-07-13',
-            palace: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce(queue)
-
-    render(
-      <MemoryRouter initialEntries={['/review']}>
-        <ReviewOverview />
-      </MemoryRouter>,
-    )
-
-    await act(async () => Promise.resolve())
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1250)
-    })
-
-    expect(mocks.invalidateReviewQueueCache).toHaveBeenCalledTimes(1)
-    expect(mocks.getReviewQueueApi).toHaveBeenCalledTimes(2)
+describe('ReviewOverview FSRS queue', () => {
+  beforeEach(() => queue.mockResolvedValue({ due_count: 3, later_today_count: 0, overdue_count: 1, smoothed_count: 0, stats: { total: 0, review_count: 0, review_duration_seconds: 0 }, chapter: null, later_today_reviews: [], reviews: [{ id: 7, palace_id: 7, algorithm_used: 'FSRS', completed: false, review_type: 'fsrs', due_at: '2026-07-15T10:00:00Z', next_due_at: '2026-07-15T10:00:00Z', due_node_count: 3, overdue_node_count: 1, schedule_count: 3, overdue_schedule_count: 1, next_due_date: '2026-07-15', palace: { id: 7, title: '测试宫殿', description: '', archived: false, mastered: false, editor_doc: null, pegs: [], attachments: [], chapters: [] } }] }))
+  it('shows node counts instead of stages and intervals', async () => {
+    render(<MemoryRouter><ReviewOverview /></MemoryRouter>)
+    expect(await screen.findByText('测试宫殿')).toBeTruthy()
+    expect(screen.getByText(/到期 3 · 逾期 1/)).toBeTruthy()
+    expect(screen.queryByText(/第 1 次/)).toBeNull()
+    expect(screen.queryByText(/间隔/)).toBeNull()
   })
 })

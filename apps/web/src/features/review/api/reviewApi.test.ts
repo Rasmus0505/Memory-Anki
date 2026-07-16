@@ -29,20 +29,20 @@ describe('reviewApi', () => {
       palace_id: 9,
       chapter_id: 10,
       duration_seconds: 75,
-      completed_stage_count: 4,
-      total_stage_count: 9,
-      completed_stage_label: '2天',
-      next_stage_label: '4天',
+      rated_node_count: 4,
+      scope_node_count: 9,
+      mastery_percent: 60,
+      rating_counts: { 忘记: 0, 困难: 1, 记得: 3, 轻松: 0 },
       next_review_at: '2026-07-15T10:00:00',
       mastered: false,
-      needs_practice: false,
+
     })
     const stateChanged = vi.fn()
     const unsubscribe = onAppEvent(APP_EVENT_NAMES.reviewStateChanged, stateChanged)
 
     await submitReviewSessionApi(42, {
       completion_mode: 'manual_complete',
-      target_review_number: 3,
+
     }, { mutationId: 'stable-review-operation' })
 
     expect(requestMock).toHaveBeenCalledWith('/review/session/42/submit', {
@@ -50,7 +50,7 @@ describe('reviewApi', () => {
       headers: { 'X-Memory-Anki-Mutation-ID': 'stable-review-operation' },
       body: JSON.stringify({
         completion_mode: 'manual_complete',
-        target_review_number: 3,
+
       }),
       persistence: {
         resourceKey: 'review-submit:42',
