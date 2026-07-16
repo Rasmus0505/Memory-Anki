@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileSettingsPage from '@/features/profile/ProfileSettingsPage'
@@ -61,29 +61,18 @@ describe('ProfileSettingsPage', () => {
     vi.restoreAllMocks()
   })
 
-  it('repairs historical review stage progress from the settings page', async () => {
+  it('describes FSRS scheduling without exposing legacy stage repair controls', async () => {
     mockSettings()
-    const repairSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      palace_count: 3,
-      segment_count: 0,
-    })
 
     render(
       <MemoryRouter initialEntries={['/profile']}>
-        <ProfileSettingsPage repairReviewStageProgress={repairSpy} shortcutsSettings={<div>快捷键设置</div>} />
+        <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
       </MemoryRouter>,
     )
 
-    const repairButton = await screen.findByRole('button', {
-      name: '一键修复历史宫殿复习进度',
-    })
-    fireEvent.click(repairButton)
-
-    await waitFor(() => {
-      expect(repairSpy).toHaveBeenCalledTimes(1)
-      expect(screen.getByText('修复完成：重建 3 个宫殿。')).toBeTruthy()
-    })
+    expect(await screen.findByText(/FSRS 会根据每个节点的实际评分计算下一次复习时间/)).toBeTruthy()
+    expect(screen.getByText(/旧艾宾浩斯记录保留在数据库中用于迁移审计/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '一键修复历史宫殿复习进度' })).toBeNull()
   })
 
   it('renders the local theme setting and applies dark mode immediately', async () => {
@@ -91,7 +80,7 @@ describe('ProfileSettingsPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/profile']}>
-        <ProfileSettingsPage repairReviewStageProgress={vi.fn()} shortcutsSettings={<div>快捷键设置</div>} />
+        <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
       </MemoryRouter>,
     )
 
