@@ -20,24 +20,24 @@ palaces application/presentation -> reviews.api
 
 The remaining `palaces -> reviews` dependency is explicit and restricted to the public `reviews.api` facade. Future slices may replace read-heavy calls with precomputed projections, but private review application modules are not cross-context APIs.
 
-## Review repair transaction ownership
+## Legacy review audit ownership
 
-Schedule rebuild primitives never commit. The explicit Review repair command owns one `UnitOfWork` covering schedule replacement, orphan progress migration, practice recovery, and study-session synchronization. Settings uses the public `reviews.api` facade and commits schedule-impacting setting changes together with the rebuilt pending schedules. The unused Palace `segment_progress_service` compatibility transaction entry was removed.
+Legacy `ReviewSchedule`, stage-adjustment audit rows, and Ebbinghaus configuration remain persisted only for migration inspection. They are not repaired during startup, exposed through normal runtime APIs, or rebuilt by formal completion. Any future migration tooling must be an explicit offline/maintenance command and must not be reachable from the review UI.
 
 ## Review mutation commands
 
-Idempotent review submission and overdue spreading are composed in `review_commands.py`. Domain/application primitives flush with `commit=False`; the command stores the platform mutation response and commits once through `UnitOfWork`. Reviews no longer depends on the transitional Persistence context.
+Formal node ratings and completion use stable operation or mutation identities. A rating operation validates its `StudySession`, palace, frozen node scope, rating, and operation ownership before returning an idempotent result. Cross-session or cross-palace reuse is rejected.
 
-Formal review completion uses one stable mutation identity across retries. The command atomically creates the review log and completed study session, rebuilds stage schedules, clears recoverable progress, and stores a completion receipt. The receipt is readable by review-log id so a refreshed PWA or desktop result page never depends on the deleted pre-rebuild schedule id.
+Formal completion uses one database transaction to create `ReviewLog`, finalize the UUID `StudySession`, clear reveal progress, save the completion receipt, and persist the mutation response. It never creates or updates a legacy stage schedule. The receipt remains readable by review-log id after refresh.
 
-Frontend review completion emits the typed `reviewStateChanged` application event only after the atomic command succeeds. Review queue and Palace catalog caches invalidate immediately; Knowledge may consume the returned projection and refetch its chapter detail without importing private Review implementation modules.
+Frontend review completion emits the typed `reviewStateChanged` application event only after the atomic command succeeds. Review queue and Palace catalog caches invalidate immediately; Knowledge may consume the returned FSRS projection and refetch its chapter detail without importing private Review implementation modules.
 
 ## Frontend review-flow composition
 
 `widgets/mindmap-review-flow` owns the cross-feature flip-card session surface that combines Review use cases, Palace learning, quiz launching, and mind-map editing. Its public `FlipCardMindMapPanel` is the only host allowed to configure flip-card synchronization, viewport preservation, keyboard/touch progression, fullscreen, and clear-UI behavior. Palace learning and formal Review provide separate progress data and callbacks; formal Review alone adds rating evidence and review completion. `features/review` does not import Palace or Mind-map Editor; reusable state transforms remain under `entities/review`.
-## Manual stage correction
+## Retired stage correction
 
-Manual palace stage adjustment is a Review-owned scheduling correction, even when the action starts from the Palace catalog UI. Preview requests may simulate schedule rebuilding but must roll back all database changes. Apply requests rebuild palace-level schedules through the Review use case, use mutation identity and one `UnitOfWork`, reject stale `expected_completed_count` values, and store a separate adjustment audit record. They must not create `ReviewLog` or `StudySession` rows and must not alter learning-group progress.
+Manual stage adjustment, stage reset, stage-health repair, and overdue spreading are retired runtime capabilities. Historical records are retained for migration audit only; no frontend component or public runtime route may invoke them.
 
 ## Node-level FSRS scheduling (2026 migration)
 
@@ -46,3 +46,13 @@ Reviews now owns an independent FSRS card for every non-root palace node, keyed 
 Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Legacy stage schedules remain audit data only during migration.
 
 Formal review, palace practice, and learning-group practice must use the same node-state key. A review session freezes its due-node scope on entry; ratings that create new due nodes are deferred to the next session.
+
+## FSRS formal review runtime
+
+Formal review runtime scheduling is exclusively derived from `ReviewNodeState.due_at`. Queue, overdue count, later-today grouping, and load forecasting must not read `ReviewSchedule`; that table and stage-adjustment history are migration audit data only.
+
+Entering a formal review creates or resumes an active UUID `StudySession` and freezes the due-node UID scope. Formal subtree ratings intersect that scope. Nodes added later are deferred, deleted nodes drop out of completion counts, and unrated nodes remain unchanged and due.
+
+Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time. Completion must never rebuild legacy stage schedules or write `target_review_number` / `needs_practice` progress controls.
+
+The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. User-facing stage selectors, stage progress bars, manual stage adjustment, and overdue date spreading are retired.

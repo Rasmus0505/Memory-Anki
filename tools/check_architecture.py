@@ -1746,6 +1746,56 @@ def check_retired_palace_knowledge_binding(errors: list[str]) -> None:
             errors.append(f'{relative}: retired palace chapter write route must not return; use /knowledge-binding.')
 
 
+
+def check_fsrs_review_frontend(errors: list[str]) -> None:
+    guarded = {
+        "widgets/mindmap-review-flow/ReviewSessionContainer.tsx": ("StageSelectDialog", "target_review_number", "needs_practice"),
+        "app/router/review/ReviewOverview.tsx": ("spreadOverdue", "formatReviewStage", "interval_days"),
+        "app/router/review/ReviewCompletion.tsx": ("completed_stage", "next_stage", "needs_practice"),
+        "features/palace-catalog/components/palace-list/PalaceListCard.tsx": ("PalaceStageProgress", "review_stages", "stage_labels"),
+        "features/profile/ProfileSettingsPage.tsx": ("repairReviewStageProgress", "复习阶段"),
+        "features/review/api/reviewApi.ts": ("spread-overdue", "repair-stage-progress", "stage-progress-health"),
+    }
+    for relative, forbidden in guarded.items():
+        path = WEB_SRC / relative
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        for marker in forbidden:
+            if marker in source:
+                errors.append(f"FSRS review runtime must not contain {marker!r}: {path.relative_to(REPO_ROOT)}")
+
+    retired_components = (
+        "features/review/components/StageSelectDialog.tsx",
+        "features/palace-catalog/components/palace-list/PalaceStageEditDialog.tsx",
+        "features/palace-catalog/components/palace-list/PalaceStageProgress.tsx",
+        "entities/review/api/stageAdjustmentApi.ts",
+    )
+    for relative in retired_components:
+        path = WEB_SRC / relative
+        if path.exists():
+            errors.append(f"retired stage UI/API module must not return: {path.relative_to(REPO_ROOT)}")
+
+    router_path = API_SRC / "modules/reviews/presentation/router.py"
+    router_source = router_path.read_text(encoding="utf-8")
+    for marker in ("/review/spread-overdue", "/review/stage-progress-health", "/review/repair-stage-progress", "stage-adjustment"):
+        if marker in router_source:
+            errors.append(f"retired review runtime route must not return: {marker}")
+
+    service_path = API_SRC / "modules/reviews/application/formal_review_service.py"
+    service_source = service_path.read_text(encoding="utf-8")
+    for function_name in ("get_fsrs_queue_payload", "get_fsrs_load_forecast", "complete_formal_review"):
+        function_start = service_source.index(f"def {function_name}")
+        next_function = service_source.find("\ndef ", function_start + 1)
+        function_source = service_source[function_start: next_function if next_function >= 0 else None]
+        if "ReviewSchedule" in function_source:
+            errors.append(f"{function_name} must not read or write legacy ReviewSchedule")
+
+    warmup_path = API_SRC / "app/startup_warmup.py"
+    if warmup_path.exists() and "review_schedules" in warmup_path.read_text(encoding="utf-8"):
+        errors.append("startup warmup must use review_node_states, not legacy review_schedules")
+
+
 def main() -> int:
     errors: list[str] = []
     check_retired_palace_knowledge_binding(errors)
@@ -1775,6 +1825,7 @@ def main() -> int:
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
+    check_fsrs_review_frontend(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)
     check_dashboard_public_facades(errors)
