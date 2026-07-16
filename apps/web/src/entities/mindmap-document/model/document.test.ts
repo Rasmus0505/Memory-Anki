@@ -5,8 +5,14 @@ import {
   auditMindMapDocument,
   countMindMapSubtree,
   deleteMindMapNodeOnly,
+  deleteMindMapNodes,
+  extractMindMapSelectionWithResult,
+  getMindMapNodeText,
   normalizeMindMapDocument,
+  relocateMindMapNode,
+  relocateMindMapNodes,
   searchMindMapDocument,
+  selectMindMapNode,
 } from './document'
 
 const document = {
@@ -39,5 +45,86 @@ describe('mind-map document entity', () => {
     expect(sibling.nodeUid).toBeTruthy()
     expect(countMindMapSubtree(deleted, 'cell')).toBe(0)
     expect(document.root.children).toHaveLength(4)
+  })
+
+  it('cuts a live text selection into a new child card', () => {
+    const liveText = '细胞膜与细胞质'
+    const result = extractMindMapSelectionWithResult(
+      document,
+      'cell',
+      liveText,
+      0,
+      3,
+      { mode: 'inside', targetUid: 'cell' },
+    )
+    expect(result.extractedText).toBe('细胞膜')
+    expect(result.nodeUid).toBeTruthy()
+    expect(selectMindMapNode(result.document, 'cell')[0]?.text).toBe('与细胞质')
+    expect(getMindMapNodeText(
+      result.document.root.children!.find((node) => node.data?.uid === 'cell')!.children!.at(-1)!,
+    )).toBe('细胞膜')
+    expect(document.root.children![0].data?.text).toBe('细胞')
+  })
+
+  it('inserts extracted text as a sibling before the target', () => {
+    const result = extractMindMapSelectionWithResult(
+      document,
+      'cell',
+      '前缀_目标内容_后缀',
+      3,
+      7,
+      { mode: 'before', targetUid: 'mito' },
+    )
+    expect(result.extractedText).toBe('目标内容')
+    const cellChildren = result.document.root.children!.find((node) => node.data?.uid === 'cell')!.children!
+    expect(cellChildren.map((node) => node.data?.text)).toEqual(['目标内容', '线粒体'])
+  })
+
+  it('cancels when the selection is empty or whitespace', () => {
+    const result = extractMindMapSelectionWithResult(
+      document,
+      'cell',
+      '细胞  结构',
+      2,
+      4,
+      { mode: 'inside', targetUid: 'root' },
+    )
+    expect(result.nodeUid).toBeNull()
+    expect(result.extractedText).toBeNull()
+  })
+
+  it('reparents a node as the last child when relocating inside', () => {
+    const next = relocateMindMapNode(document, 'empty', 'cell', 'inside')
+    const cell = next.root.children!.find((node) => node.data?.uid === 'cell')!
+    expect(cell.children!.map((node) => node.data?.uid)).toEqual(['mito', 'empty'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['cell', 'dup1', 'dup2'])
+  })
+
+  it('moves a node across parents as a sibling when relocating before/after', () => {
+    const next = relocateMindMapNode(document, 'empty', 'mito', 'before')
+    const cell = next.root.children!.find((node) => node.data?.uid === 'cell')!
+    expect(cell.children!.map((node) => node.data?.uid)).toEqual(['empty', 'mito'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['cell', 'dup1', 'dup2'])
+  })
+
+  it('rejects relocating a node into its own descendant', () => {
+    const next = relocateMindMapNode(document, 'cell', 'mito', 'inside')
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['cell', 'empty', 'dup1', 'dup2'])
+    const cell = next.root.children!.find((node) => node.data?.uid === 'cell')!
+    expect(cell.children!.map((node) => node.data?.uid)).toEqual(['mito'])
+  })
+
+  it('moves only top-level selected nodes when batch relocating', () => {
+    const next = relocateMindMapNodes(document, ['cell', 'mito', 'dup1'], 'empty', 'inside')
+    const empty = next.root.children!.find((node) => node.data?.uid === 'empty')!
+    // cell already contains mito; only cell and dup1 move as top-level sources.
+    expect(empty.children!.map((node) => node.data?.uid)).toEqual(['cell', 'dup1'])
+    expect(empty.children![0].children!.map((node) => node.data?.uid)).toEqual(['mito'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['empty', 'dup2'])
+  })
+
+  it('deletes multiple non-root nodes deepest-first', () => {
+    const next = deleteMindMapNodes(document, ['mito', 'cell', 'dup2'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['empty', 'dup1'])
   })
 })

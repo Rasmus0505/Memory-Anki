@@ -185,33 +185,178 @@ export function countMindMapSubtree(document: MindMapDocumentInput, nodeUid: str
   return found ? count(found.node) : 0
 }
 
+export type MindMapRelocateMode = 'inside' | 'before' | 'after'
+
 export function reparentMindMapNode(document: MindMapDocumentInput, sourceUid: string, targetUid: string) {
+  return relocateMindMapNode(document, sourceUid, targetUid, 'inside')
+}
+
+/**
+ * Move a node relative to a target:
+ * - inside: become last child of target
+ * - before/after: become sibling of target (same parent); works across parents
+ */
+export function relocateMindMapNode(
+  document: MindMapDocumentInput,
+  sourceUid: string,
+  targetUid: string,
+  mode: MindMapRelocateMode,
+) {
+  return relocateMindMapNodes(document, [sourceUid], targetUid, mode)
+}
+
+/**
+ * Move one or more nodes. Only top-level sources (not descendants of other sources) move.
+ * Order follows document preorder so relative sibling order is preserved.
+ */
+export function relocateMindMapNodes(
+  document: MindMapDocumentInput,
+  sourceUids: readonly string[],
+  targetUid: string,
+  mode: MindMapRelocateMode,
+) {
   return updateDocument(document, (draft) => {
-    if (sourceUid === targetUid || isDescendantUid(draft.root, sourceUid, targetUid)) return
-    const source = findNode(draft.root, sourceUid)
+    const uniqueSources = uniqueUids(sourceUids)
+    if (uniqueSources.length === 0) return
+
+    const topLevelSources = selectTopLevelSourceUids(draft.root, uniqueSources).filter(
+      (sourceUid) => sourceUid !== targetUid,
+    )
+    if (topLevelSources.length === 0) return
+
+    for (const sourceUid of topLevelSources) {
+      // Target under source would create a cycle (inside) or detach the target (before/after).
+      if (isDescendantUid(draft.root, sourceUid, targetUid)) return
+    }
+
     const target = findNode(draft.root, targetUid)
-    if (!source?.parent || !target) return
-    const siblings = source.parent.children ?? []
-    const [moved] = siblings.splice(source.index, 1)
-    if (!moved) return
-    source.parent.children = siblings
-    target.node.children = [...(target.node.children ?? []), moved]
+    if (!target) return
+    if ((mode === 'before' || mode === 'after') && !target.parent) return
+
+    // Detach first so indices stay consistent, preserving document order.
+    const detached: MindMapNode[] = []
+    for (const sourceUid of topLevelSources) {
+      const source = findNode(draft.root, sourceUid)
+      if (!source?.parent) continue
+      const siblings = source.parent.children ?? []
+      const [moved] = siblings.splice(source.index, 1)
+      if (!moved) continue
+      source.parent.children = siblings
+      detached.push(moved)
+    }
+    if (detached.length === 0) return
+
+    if (mode === 'inside') {
+      const nextTarget = findNode(draft.root, targetUid)
+      if (!nextTarget) return
+      nextTarget.node.children = [...(nextTarget.node.children ?? []), ...detached]
+      return
+    }
+
+    const nextTarget = findNode(draft.root, targetUid)
+    if (!nextTarget?.parent) return
+    const siblings = nextTarget.parent.children ?? []
+    const targetIndex = siblings.findIndex((node) => getMindMapNodeUid(node, '') === targetUid)
+    if (targetIndex < 0) return
+    const insertAt = mode === 'before' ? targetIndex : targetIndex + 1
+    siblings.splice(insertAt, 0, ...detached)
+    nextTarget.parent.children = siblings
   })
 }
 
-export function reorderMindMapNode(document: MindMapDocumentInput, sourceUid: string, targetUid: string, position: 'before' | 'after') {
+/** Delete many non-root nodes. Deletes deepest nodes first so parents are not removed before children ops. */
+export function deleteMindMapNodes(document: MindMapDocumentInput, nodeUids: readonly string[]) {
   return updateDocument(document, (draft) => {
-    const source = findNode(draft.root, sourceUid)
-    const target = findNode(draft.root, targetUid)
-    if (!source?.parent || !target?.parent || source.parent !== target.parent) return
-    const siblings = source.parent.children ?? []
-    const [moved] = siblings.splice(source.index, 1)
-    if (!moved) return
-    const targetIndex = siblings.findIndex((node) => getMindMapNodeUid(node, '') === targetUid)
-    if (targetIndex < 0) return
-    siblings.splice(position === 'before' ? targetIndex : targetIndex + 1, 0, moved)
-    source.parent.children = siblings
+    const unique = uniqueUids(nodeUids)
+    if (unique.length === 0) return
+    const ordered = orderUidsDeepestFirst(draft.root, unique)
+    for (const uid of ordered) {
+      const found = findNode(draft.root, uid)
+      if (!found?.parent) continue
+      found.parent.children = (found.parent.children ?? []).filter((_, index) => index !== found.index)
+    }
   })
+}
+
+export type MindMapExtractPlacement =
+  | { mode: 'inside'; targetUid: string }
+  | { mode: 'before' | 'after'; targetUid: string }
+
+export interface MindMapExtractSelectionResult extends MindMapDocumentCreateResult {
+  extractedText: string | null
+}
+
+/**
+ * Cut a text range out of a node and insert it as a new card at the placement.
+ * Uses the live editor text (not re-trimmed document text) so selection indices match the textarea.
+ */
+export function extractMindMapSelectionWithResult(
+  document: MindMapDocumentInput,
+  sourceUid: string,
+  liveText: string,
+  start: number,
+  end: number,
+  placement: MindMapExtractPlacement,
+): MindMapExtractSelectionResult {
+  const from = Math.max(0, Math.min(start, end))
+  const to = Math.min(liveText.length, Math.max(start, end))
+  const extractedRaw = liveText.slice(from, to)
+  const extractedText = extractedRaw.replace(/\s+/g, ' ').trim()
+  if (!extractedText) {
+    return { document: normalizeMindMapDocument(document), nodeUid: null, extractedText: null }
+  }
+  const remaining = `${liveText.slice(0, from)}${liveText.slice(to)}`
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  let nodeUid: string | null = null
+  const nextDocument = updateDocument(document, (draft) => {
+    const source = findNode(draft.root, sourceUid)
+    if (!source) return
+    source.node.data = { ...(source.node.data ?? {}), text: remaining }
+
+    const created = makeNode(extractedText)
+    nodeUid = getMindMapNodeUid(created, '')
+
+    if (placement.mode === 'inside') {
+      const target = findNode(draft.root, placement.targetUid)
+      if (!target) {
+        nodeUid = null
+        return
+      }
+      target.node.children = [...(target.node.children ?? []), created]
+      return
+    }
+
+    const target = findNode(draft.root, placement.targetUid)
+    if (!target?.parent) {
+      // Root has no parent — fall back to child of target.
+      if (target) {
+        target.node.children = [...(target.node.children ?? []), created]
+        return
+      }
+      nodeUid = null
+      return
+    }
+    const siblings = target.parent.children ?? []
+    const insertAt = placement.mode === 'before' ? target.index : target.index + 1
+    siblings.splice(insertAt, 0, created)
+    target.parent.children = siblings
+  })
+
+  return { document: nextDocument, nodeUid, extractedText }
+}
+
+export function reorderMindMapNode(
+  document: MindMapDocumentInput,
+  sourceUid: string,
+  targetUid: string,
+  position: 'before' | 'after',
+) {
+  // Cross-parent before/after now relocates as sibling; same-parent keeps reorder semantics.
+  return relocateMindMapNode(document, sourceUid, targetUid, position)
 }
 
 export function moveMindMapNode(document: MindMapDocumentInput, nodeUid: string, direction: 'up' | 'down') {
@@ -331,6 +476,46 @@ function findNode(root: MindMapNode | undefined, uid: string, parent: MindMapNod
 function isDescendantUid(root: MindMapNode | undefined, sourceUid: string, targetUid: string) {
   const source = findNode(root, sourceUid)
   return source ? Boolean(findNode(source.node, targetUid)) : false
+}
+
+function uniqueUids(uids: readonly string[]) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const uid of uids) {
+    if (!uid || seen.has(uid)) continue
+    seen.add(uid)
+    result.push(uid)
+  }
+  return result
+}
+
+/** Keep sources that are not descendants of another source (document preorder). */
+function selectTopLevelSourceUids(root: MindMapNode, sourceUids: readonly string[]) {
+  const sourceSet = new Set(sourceUids)
+  const topLevel: string[] = []
+  const walk = (node: MindMapNode, underSelectedAncestor: boolean, fallback: string) => {
+    const uid = getMindMapNodeUid(node, fallback)
+    const isSelected = sourceSet.has(uid)
+    if (isSelected && !underSelectedAncestor) topLevel.push(uid)
+    const nextUnder = underSelectedAncestor || isSelected
+    ;(node.children ?? []).forEach((child, index) => walk(child, nextUnder, `${uid}-${index}`))
+  }
+  walk(root, false, 'root')
+  return topLevel
+}
+
+function orderUidsDeepestFirst(root: MindMapNode, uids: readonly string[]) {
+  const uidSet = new Set(uids)
+  const ranked: Array<{ uid: string; depth: number; order: number }> = []
+  let order = 0
+  const walk = (node: MindMapNode, depth: number, fallback: string) => {
+    const uid = getMindMapNodeUid(node, fallback)
+    if (uidSet.has(uid)) ranked.push({ uid, depth, order: order++ })
+    ;(node.children ?? []).forEach((child, index) => walk(child, depth + 1, `${uid}-${index}`))
+  }
+  walk(root, 0, 'root')
+  ranked.sort((a, b) => b.depth - a.depth || b.order - a.order)
+  return ranked.map((item) => item.uid)
 }
 
 function createUid() {
