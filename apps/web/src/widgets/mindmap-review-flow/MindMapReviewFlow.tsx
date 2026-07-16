@@ -15,8 +15,11 @@ import {
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
 import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
+import { toast } from "@/shared/feedback/toast";
 import { cn } from "@/shared/lib/utils";
 import * as React from "react";
+import type { MindMapRecallRating, MindMapRecallRound } from "@/shared/api/contracts";
+import type { RatingConflictPolicy } from "@/features/review/api";
 
 export type { ReviewFlowSnapshot } from "@/entities/review/model/review-flow-tree";
 export type {
@@ -242,6 +245,7 @@ export function MindMapReviewFlow({
                   <FlipCardMindMapPanel
                     fullscreen={review.flow.fullscreen}
                     displayMode={review.mapDisplayMode}
+                    sessionKind={props.sessionKind === 'review' ? 'review' : 'practice'}
                     modeSyncVersion={modeSyncVersion}
                     viewMemoryScope={viewMemoryScope}
                     onToggleFullscreen={review.handleFullscreenToggle}
@@ -266,7 +270,33 @@ export function MindMapReviewFlow({
                     recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
-                    onRateNode={props.studySessionId ? (nodeUid, rating, round, evidence) => { void review.recallRatings.rateNode(nodeUid, rating, round, evidence) } : undefined}
+                    directRatedUids={review.recallRatings.directRatedUids}
+                    onRateNode={
+                      props.studySessionId
+                        ? (
+                            nodeUid: string,
+                            rating: MindMapRecallRating,
+                            round: MindMapRecallRound,
+                            scope?: 'single' | 'subtree',
+                            evidence?: {
+                              source?: 'manual' | 'inferred'
+                              confidence?: number | null
+                              responseMs?: number | null
+                            },
+                            conflictPolicy?: RatingConflictPolicy,
+                          ) => {
+                            void review.recallRatings
+                              .rateNode(nodeUid, rating, round, scope, evidence, conflictPolicy)
+                              .catch((error: unknown) => {
+                                toast.error(
+                                  error instanceof Error && error.message
+                                    ? error.message
+                                    : '节点评分保存失败',
+                                )
+                              })
+                          }
+                        : undefined
+                    }
                     onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
                     onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
                     ratingMode={review.ratingMode}
@@ -292,7 +322,16 @@ export function MindMapReviewFlow({
       </div>
 
 
-      <MindMapRatingHistoryDrawer open={review.recallRatings.historyOpen} onOpenChange={review.recallRatings.setHistoryOpen} events={review.recallRatings.currentEvents} onCorrect={(nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) }} />
+      <MindMapRatingHistoryDrawer
+        open={review.recallRatings.historyOpen}
+        onOpenChange={review.recallRatings.setHistoryOpen}
+        events={review.recallRatings.currentEvents}
+        onCorrect={(nodeUid, rating, round) => {
+          void review.recallRatings.rateNode(nodeUid, rating, round).catch((error: unknown) => {
+            toast.error(error instanceof Error && error.message ? error.message : '节点评分保存失败')
+          })
+        }}
+      />
 
     </div>
   );

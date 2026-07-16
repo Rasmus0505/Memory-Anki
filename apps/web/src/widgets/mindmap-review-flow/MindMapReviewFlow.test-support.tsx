@@ -119,9 +119,10 @@ vi.mock("@/features/mindmap-editor", () => ({
       },
     };
     return (
-      <div data-testid="mind-map-frame">
+      <div data-testid="mind-map-frame" className="relative">
         <div>{`frame-${props.readonly ? "readonly" : "editable"}-${fullscreen ? "immersive" : "plain"}`}</div>
         {props.toolbarContent as React.ReactNode}
+        {props.frameOverlay as React.ReactNode}
         <button
           type="button"
           onClick={() =>

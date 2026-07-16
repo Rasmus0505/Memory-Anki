@@ -10,6 +10,8 @@ import {
 } from '@/entities/palace/api'
 import type {
   MindMapEditorState,
+  ReviewCompletionSummary,
+  ReviewMemorySummary,
   ReviewPalaceSummary,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
@@ -23,7 +25,7 @@ import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from './MindMapReviewFlow'
-import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { FsrsCompletionDialog } from '@/features/review/components/FsrsCompletionDialog'
 import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
 import {
   consumePrefetchedStudySession,
@@ -36,67 +38,35 @@ import { ErrorState } from '@/shared/components/state-placeholders'
 type ReviewDisplayMode = 'review' | 'edit'
 
 export interface ReviewSessionContainerSession {
-  id: number
+  id: string | number
   palace_id: number | null
   algorithm_used: string
   review_type: string
   review_number: number
   palace: ReviewPalaceSummary | null
-  stageLabels: string[] | null
+  frozen_due_node_uids?: string[]
+  due_node_count?: number
+  memory_summary?: ReviewMemorySummary
   revealMode?: RevealFlowMode
   checkpointNodeUids?: string[]
   editor_doc?: Record<string, unknown> | string | null
-  reviewStages: Array<{
-    review_number: number
-    label: string
-    completed: boolean
-    completed_at: string | null
-    scheduled_at: string | null
-  }> | null
 }
 
 interface ReviewSessionContainerProps {
   eyebrow: string
   buildTitle: (session: ReviewSessionContainerSession) => string
   buildReviewEditorState: (session: ReviewSessionContainerSession) => MindMapEditorState
-  loadSession: (sessionId: number) => Promise<ReviewSessionContainerSession>
-  loadProgress: (sessionId: number) => Promise<{ progress: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  } | null }>
-  saveProgress: (
-    sessionId: number,
-    data: {
-      reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-      red_node_ids: string[]
-      completed: boolean
-    },
-  ) => Promise<unknown>
-  submitSession: (
-    sessionId: number,
-    data: {
-      chapter_id?: number
-      duration_seconds?: number
-      completion_mode?: 'manual_complete' | 'auto_complete'
-      revealed_remaining?: boolean
-      red_marked_count?: number
-      target_review_number?: number
-      needs_practice?: boolean
-      note?: string
-    },
-    options?: { mutationId?: string },
-  ) => Promise<ReviewSessionSubmitResponse>
+  loadSession: (sessionId: string | number) => Promise<ReviewSessionContainerSession>
+  loadProgress: (sessionId: string | number) => Promise<{ progress: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean } | null }>
+  saveProgress: (sessionId: string | number, data: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean }) => Promise<unknown>
+  loadCompletionSummary: (sessionId: string | number) => Promise<{ item: ReviewCompletionSummary }>
+  submitSession: (sessionId: string | number, data: { chapter_id?: number; duration_seconds?: number; completion_mode?: 'manual_complete' | 'auto_complete'; revealed_remaining?: boolean; red_marked_count?: number; note?: string }, options?: { mutationId?: string }) => Promise<ReviewSessionSubmitResponse>
   onSubmitted?: (result: ReviewSessionSubmitResponse) => void
   backHref: (chapterId: number | null) => string
   warmupKind?: StudyWarmupKind
   refreshReviewStateOnExitEdit?: boolean
-  renderBelowFlow?: (args: {
-    session: ReviewSessionContainerSession
-    mindMapFullscreen: boolean
-  }) => React.ReactNode
+  renderBelowFlow?: (args: { session: ReviewSessionContainerSession; mindMapFullscreen: boolean }) => React.ReactNode
 }
-
 const inflightReviewSessionLoads = new Map<
   string,
   Promise<{
@@ -111,26 +81,12 @@ const inflightReviewSessionLoads = new Map<
   }>
 >()
 
-function formatReviewStage(reviewType: string, reviewNumber: number) {
-  if (reviewType === '1h') return '首日 1 小时'
-  if (reviewType === 'sleep') return '首日睡前'
-  return `第 ${reviewNumber + 1} 次`
-}
-
-type ReviewSessionContainerInput =
-  Omit<ReviewSessionContainerSession, 'stageLabels' | 'reviewStages'> &
-  Partial<Pick<ReviewSessionContainerSession, 'stageLabels' | 'reviewStages'>>
 
 export function normalizeReviewSessionContainerSession(
-  session: ReviewSessionContainerInput,
+  session: ReviewSessionContainerSession,
 ): ReviewSessionContainerSession {
-  return {
-    ...session,
-    stageLabels: session.stageLabels ?? session.palace?.stage_labels ?? null,
-    reviewStages: session.reviewStages ?? session.palace?.review_stages ?? null,
-  }
+  return session
 }
-
 function toSnapshot(progress: {
   reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   red_node_ids: string[]
@@ -177,6 +133,7 @@ export function ReviewSessionContainer({
   loadSession,
   loadProgress,
   saveProgress,
+  loadCompletionSummary,
   submitSession,
   onSubmitted,
   backHref,
@@ -199,11 +156,11 @@ export function ReviewSessionContainer({
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
 
-  const fetchAuthoritativeSession = useCallback(async (sessionId: number) => (
+  const fetchAuthoritativeSession = useCallback(async (sessionId: string | number) => (
     normalizeReviewSessionContainerSession(await loadSession(sessionId))
   ), [loadSession])
 
-  const reloadSession = useCallback(async (sessionId: number) => {
+  const reloadSession = useCallback(async (sessionId: string | number) => {
     const nextSession = await fetchAuthoritativeSession(sessionId)
     setSession(nextSession)
     setReviewEditorState(buildReviewEditorState(nextSession))
@@ -249,54 +206,34 @@ export function ReviewSessionContainer({
   }, [reloadEditor])
 
   const completion = useReviewCompletionCoordinator<
-    ReviewSessionContainerSession,
-    { targetReviewNumber: number; needsPractice: boolean; note: string },
+    { session: ReviewSessionContainerSession; summary: ReviewCompletionSummary },
+    { note: string },
     ReviewSessionSubmitResponse
   >({
     prepare: async () => {
-      const sessionId = id ? Number(id) : null
-      if (!sessionId || !Number.isInteger(sessionId)) {
-        throw new Error('复习会话编号无效，请返回复习队列后重试。')
-      }
-      const latestSession = await fetchAuthoritativeSession(sessionId)
-      if (latestSession.id !== sessionId) {
-        throw new Error('返回的复习会话与当前复习节点不一致，请返回复习队列后重试。')
-      }
-      const labels = latestSession.stageLabels ?? []
-      const stages = latestSession.reviewStages ?? []
-      if (
-        labels.length === 0 ||
-        stages.length !== labels.length ||
-        stages.some((stage, index) => stage.review_number !== index || stage.label !== labels[index])
-      ) {
-        throw new Error('复习阶段信息不完整或不一致，请重新加载结算信息。')
-      }
-      if (latestSession.id <= 0 || latestSession.review_number < 0 || latestSession.review_number >= stages.length) {
-        throw new Error('当前复习节点与阶段信息不一致，请返回复习队列刷新后重试。')
-      }
-      return latestSession
+      if (!id) throw new Error('复习会话编号无效，请返回复习队列后重试。')
+      const latestSession = await fetchAuthoritativeSession(id)
+      const summary = await loadCompletionSummary(latestSession.id)
+      return { session: latestSession, summary: summary.item }
     },
     submit: async ({ target, input, payload, operationId }) => {
       await flushSave()
-      const result = await submitSession(target.id, {
+      const result = await submitSession(target.session.id, {
         chapter_id: chapterId ?? undefined,
         duration_seconds: payload.durationSeconds,
         completion_mode: payload.completionMode,
         revealed_remaining: payload.revealedRemaining,
         red_marked_count: payload.redNodeIds.length,
-        target_review_number: input.targetReviewNumber,
-        needs_practice: input.needsPractice,
         ...(input.note ? { note: input.note } : {}),
       }, { mutationId: operationId })
       return { result, persistTimeRecord: false }
     },
     onCompleted: onSubmitted,
   })
-
   useEffect(() => {
     if (!id) return
     let active = true
-    const sessionId = Number(id)
+    const sessionId = id
     const load = async () => {
       setLoadError(null)
       const inflightKey = `${eyebrow}:${sessionId}`
@@ -317,7 +254,7 @@ export function ReviewSessionContainer({
         }
         return pending
       }
-      const pending = warmupKind
+      const pending = warmupKind && typeof sessionId === 'number'
         ? consumePrefetchedStudySession(warmupKind, sessionId, loadSessionAndProgress)
         : loadSessionAndProgress()
       const { session: prefetchedSession, progress: progressResponse } = await pending
@@ -341,7 +278,7 @@ export function ReviewSessionContainer({
   const handleModeToggle = useCallback(async () => {
     if (!id || modeTransitioningRef.current) return
     modeTransitioningRef.current = true
-    const sessionId = Number(id)
+    const sessionId = id
     try {
       if (displayMode === 'edit') {
         await flushSave()
@@ -420,8 +357,8 @@ export function ReviewSessionContainer({
               <Badge variant={displayMode === 'edit' ? 'secondary' : 'outline'}>
                 {displayMode === 'edit' ? '内联编辑中' : '翻卡复习中'}
               </Badge>
-              <Badge variant="secondary">{session.algorithm_used}</Badge>
-              <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
+              <Badge variant="secondary">FSRS</Badge>
+              <Badge variant="outline">本次 {session.due_node_count ?? session.frozen_due_node_uids?.length ?? 0} 个到期节点</Badge>
             </>
           }
         />
@@ -464,23 +401,17 @@ export function ReviewSessionContainer({
         {renderBelowFlow?.({ session, mindMapFullscreen })}
       </div>
 
-      <StageSelectDialog
+      <FsrsCompletionDialog
         open={completion.open}
-        stageLabels={completion.target?.stageLabels ?? []}
-        stages={completion.target?.reviewStages ?? []}
-        currentReviewNumber={completion.target?.review_number ?? session.review_number}
+        summary={completion.target?.summary ?? null}
         durationSeconds={completion.durationSeconds}
         submitting={completion.submitting}
         preparing={completion.preparing}
-        preparationFailed={completion.preparationFailed}
         submissionFailed={completion.submissionFailed}
-        requiresStages
         error={completion.error}
         onRetry={() => void completion.retryPreparation()}
         onRetrySubmission={() => void completion.retrySubmission()}
-        onConfirm={(targetReviewNumber, needsPractice, note) => {
-          void completion.confirmCompletion({ targetReviewNumber, needsPractice, note })
-        }}
+        onConfirm={(note) => { void completion.confirmCompletion({ note }) }}
         onCancel={completion.cancelCompletion}
       />
     </div>
