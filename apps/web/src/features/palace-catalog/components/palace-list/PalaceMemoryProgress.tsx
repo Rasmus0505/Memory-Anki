@@ -153,7 +153,14 @@ export function PalaceMemoryProgress({ palace }: {
           onFocus={() => handleOpenChange(true)}
         >
           <span className="shrink-0 font-medium text-foreground">掌握 {mastery}%</span>
-          <span className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-border/80">
+          <span
+            className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-border/80"
+            role="progressbar"
+            aria-label={`掌握度 ${mastery}%`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={mastery}
+          >
             <span
               className="block h-full rounded-full bg-primary transition-[width]"
               style={{ width: `${mastery}%` }}

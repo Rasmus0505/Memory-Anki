@@ -193,7 +193,8 @@ describe('PalaceListCard', () => {
     )
 
     expect(screen.getByRole('progressbar', { name: '掌握度 42%' })).toBeTruthy()
-    expect(screen.getByText('到期 3')).toBeTruthy()
+    expect(screen.getByText('掌握 42%')).toBeTruthy()
+    expect(screen.queryByText('到期 3')).toBeNull()
     expect(screen.getByText('22 个知识点')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '展开详情' })).toBeNull()
     expect(screen.queryByText('第 1 部分')).toBeNull()

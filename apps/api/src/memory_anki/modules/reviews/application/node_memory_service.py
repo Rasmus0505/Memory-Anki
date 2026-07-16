@@ -405,11 +405,16 @@ def get_palace_mastery_trend(session: Session, palace_id: int) -> dict[str, Any]
             continue
         mastery_progress = receipt.get("mastery_progress")
         mastery_percent = receipt.get("mastery_percent")
-        if not isinstance(mastery_progress, int | float) or not isinstance(mastery_percent, int | float):
+        ended_at = row.ended_at
+        if (
+            ended_at is None
+            or not isinstance(mastery_progress, int | float)
+            or not isinstance(mastery_percent, int | float)
+        ):
             continue
         points.append(
             {
-                "at": row.ended_at.isoformat(),
+                "at": ended_at.isoformat(),
                 "mastery_progress": round(float(mastery_progress), 4),
                 "mastery_percent": round(float(mastery_percent)),
             }
