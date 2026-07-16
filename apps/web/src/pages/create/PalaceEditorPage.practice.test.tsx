@@ -57,7 +57,7 @@ describe('usePalaceEditPage inline practice mode', () => {
 
     expect(screen.getByText('学科与思维导图')).toBeTruthy()
     expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-    expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
     expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
 
@@ -79,7 +79,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     await waitFor(() => {
       expect(screen.getByText('学科与思维导图')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-      expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
+      expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
     })

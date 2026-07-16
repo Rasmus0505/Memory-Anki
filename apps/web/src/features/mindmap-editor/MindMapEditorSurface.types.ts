@@ -66,6 +66,11 @@ export interface MindMapEditorSurfaceProps {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
+  countBadgeByNodeUid?: Record<
+    string,
+    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
+  >
+  onCountBadgeClick?: (nodeUid: string) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null

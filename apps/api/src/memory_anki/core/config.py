@@ -169,6 +169,8 @@ DEFAULTS = {
     "scene_model_quiz_short_answer_thinking_enabled": "false",
     "scene_model_quiz_mini_palace": "qwen-turbo",
     "scene_model_quiz_mini_palace_thinking_enabled": "false",
+    "scene_model_quiz_node_binding": DASHSCOPE_TEXT_MODEL,
+    "scene_model_quiz_node_binding_thinking_enabled": "false",
     "scene_model_quiz_text_generation": DASHSCOPE_TEXT_MODEL,
     "scene_model_quiz_text_generation_thinking_enabled": "false",
     "scene_model_vision_image_mindmap": DASHSCOPE_OCR_MODEL,

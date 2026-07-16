@@ -30,6 +30,7 @@ import {
   selectionToolbarButtonClass,
   statusChipClassName,
 } from './NodeCardToolbar'
+import { NodeCountBadge } from './NodeCountBadge'
 import { ExtractDropPlaceholders, ExtractGhostPortal } from './MindMapExtractUi'
 import { useMindMapExtractDrag } from './useMindMapExtractDrag'
 
@@ -53,6 +54,7 @@ type NodeCardData = MindMapNode & {
   onAddSibling?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
   onMeasure?: (nodeId: string, size: NodeSize) => void
+  onCountBadgeClick?: (nodeId: string) => void
   onReadonlyDoubleClick?: (nodeId: string) => void
   onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
   onExtractSelection?: (payload: {
@@ -699,6 +701,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
                       : 'bg-muted-foreground/40'
               }`}
               title={visual.badge.title}
+            />
+          ) : null}
+          {visual.countBadge && !isRoot ? (
+            <NodeCountBadge
+              countBadge={visual.countBadge}
+              onClick={() => nodeData.onCountBadgeClick?.(id)}
             />
           ) : null}
           <button

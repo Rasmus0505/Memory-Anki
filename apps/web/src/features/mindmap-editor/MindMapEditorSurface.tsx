@@ -73,6 +73,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   highlightedNodeUids = [],
   masteryByNodeUid = {},
   statusChipsByNodeUid,
+  countBadgeByNodeUid,
+  onCountBadgeClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
   reviewFxSignal = null,
@@ -137,6 +139,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       highlightedNodeUids,
       masteryByNodeUid,
       statusChipsByNodeUid,
+      countBadgeByNodeUid,
       practiceModeActive,
       revealMap: practiceModeActive ? revealMap : undefined,
       aiSplitBusy,
@@ -147,7 +150,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       onNodeContextMenu,
         }),
     [
-      activeSegmentId, aiSplitBusy,  highlightedNodeUids, masteryByNodeUid,
+      activeSegmentId, aiSplitBusy, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
       onAiSplitRequest, onCreateSegmentFromSelection,
       onNodeClick, onNodeContextMenu, onSegmentRangeDraftChange, practiceModeActive,
       providedCapabilities, revealMap, segmentColorMode, segmentRangeDraft, segments,
@@ -601,6 +604,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onNodeActivate={activateNode}
         onNodeContextAction={contextNode}
         onNodeHover={hoverNode}
+        onCountBadgeClick={onCountBadgeClick}
         buildNodeActions={buildNodeActions}
         buildSelectionToolbarActions={buildSelectionToolbarActions}
         selectionToolbarPreferPosition={selectionToolbarPreferPosition}

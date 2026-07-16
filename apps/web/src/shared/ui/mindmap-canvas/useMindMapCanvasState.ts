@@ -308,6 +308,7 @@ export function useMindMapCanvasState(
       onDelete,
       onFinishEdit: handleFinishEditAndClose,
       onMeasure: viewport.handleNodeMeasure,
+      onCountBadgeClick: props.onCountBadgeClick,
       onExtractSelection: onExtractSelection ? handleExtractSelection : undefined,
       onExtractDropPreview: onExtractSelection ? handleExtractDropPreview : undefined,
       readonly,
@@ -320,7 +321,9 @@ export function useMindMapCanvasState(
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
+  // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)

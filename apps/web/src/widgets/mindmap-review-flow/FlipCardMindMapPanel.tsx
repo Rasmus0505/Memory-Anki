@@ -51,6 +51,8 @@ type FlipCardSurfaceExtensions = Pick<
   | 'segmentRangeDraft'
   | 'highlightedNodeUids'
   | 'masteryByNodeUid'
+  | 'countBadgeByNodeUid'
+  | 'onCountBadgeClick'
   | 'focusRequestNodeUid'
   | 'focusRequestNonce'
   | 'feedbackFxSignal'
@@ -71,6 +73,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   className?: string
   surfaceClassName?: string
   toolbarExtensions?: FlipCardToolbarExtensions
+  /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
+  hidePresentationOverflowActions?: boolean
   onToggleFullscreen: (active?: boolean) => void
   onToggleMode?: () => void
   visibleEditorState: MindMapEditorState
@@ -107,6 +111,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   className,
   surfaceClassName,
   toolbarExtensions,
+  hidePresentationOverflowActions = false,
   onToggleFullscreen,
   onToggleMode,
   visibleEditorState,
@@ -124,6 +129,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onNativeFullscreenChange,
   onUiClearedChange,
   masteryByNodeUid,
+  countBadgeByNodeUid,
+  onCountBadgeClick,
   focusRequestNodeUid,
   focusRequestNonce,
   feedbackFxSignal,
@@ -436,27 +443,39 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
             ]}
             modeToggle={onToggleMode ? { label: isEditMode ? '复习' : '编辑', onClick: onToggleMode } : null}
             quizAction={currentPalaceId ? { label: '做题', onClick: handleOpenQuizPage } : null}
-            immersiveAction={resolvedPresentationStrategy === 'viewport-only' ? null : {
-              label: fullscreen ? '退出网页内全屏' : '网页内全屏',
-              active: fullscreen,
-              onClick: () => { void onToggleFullscreen() },
-            }}
-            nativeFullscreenAction={{
-              label: resolvedPresentationStrategy === 'viewport-only'
-                ? nativeFullscreenActive ? '退出全屏' : '全屏'
-                : nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
-              active: nativeFullscreenActive,
-              onClick: () => {
-                void (nativeFullscreenActive
-                  ? frameRef.current?.exitFullscreen()
-                  : frameRef.current?.enterFullscreen())
-              },
-            }}
-            clearUiAction={{
-              label: '清屏',
-              active: uiCleared,
-              onClick: () => frameRef.current?.toggleUiCleared(),
-            }}
+            immersiveAction={
+              hidePresentationOverflowActions || resolvedPresentationStrategy === 'viewport-only'
+                ? null
+                : {
+                    label: fullscreen ? '退出网页内全屏' : '网页内全屏',
+                    active: fullscreen,
+                    onClick: () => { void onToggleFullscreen() },
+                  }
+            }
+            nativeFullscreenAction={
+              hidePresentationOverflowActions
+                ? null
+                : {
+                    label: resolvedPresentationStrategy === 'viewport-only'
+                      ? nativeFullscreenActive ? '退出全屏' : '全屏'
+                      : nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
+                    active: nativeFullscreenActive,
+                    onClick: () => {
+                      void (nativeFullscreenActive
+                        ? frameRef.current?.exitFullscreen()
+                        : frameRef.current?.enterFullscreen())
+                    },
+                  }
+            }
+            clearUiAction={
+              hidePresentationOverflowActions
+                ? null
+                : {
+                    label: '清屏',
+                    active: uiCleared,
+                    onClick: () => frameRef.current?.toggleUiCleared(),
+                  }
+            }
           />
         }
         syncOnPropChange
@@ -478,6 +497,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         highlightedNodeUids={highlightedNodeUids}
         masteryByNodeUid={ratingMasteryByNodeUid}
         statusChipsByNodeUid={statusChipsByNodeUid}
+        countBadgeByNodeUid={countBadgeByNodeUid}
+        onCountBadgeClick={onCountBadgeClick}
         buildSelectionToolbarActions={ratingMode && onRateNode ? ratingControls.buildSelectionToolbarActions : undefined}
         selectionToolbarPreferPosition="bottom"
         frameOverlay={ratingConflictOverlay}

@@ -1,5 +1,6 @@
 import { request, uploadWithFormData } from '@/shared/api/http'
 import type {
+  AiRuntimeOptions,
   MindMapEditorState,
   PalaceQuizSegmentClassificationResult,
   PalaceQuizOcrSource,
@@ -10,6 +11,9 @@ import type {
   PalaceQuizQuestionType,
   PalaceQuestionExplainResult,
   PalaceShortAnswerFeedback,
+  QuizNodeBindingEdge,
+  QuizNodeBindingMergeMode,
+  QuizNodeBindingPreview,
 } from '@/shared/api/contracts'
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
@@ -383,4 +387,77 @@ export function recordQuizAttemptEventApi(data: {
   ai_score?: number | null
 }) {
   return request('/palace-quiz-attempt-events', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function listPalaceQuizNodeBindingsApi(palaceId: number) {
+  return request<{ items: QuizNodeBindingEdge[]; item_count: number }>(
+    `/palaces/${palaceId}/quiz-node-bindings`,
+  )
+}
+
+export function previewPalaceQuizNodeBindingsApi(
+  palaceId: number,
+  data: {
+    merge_mode?: QuizNodeBindingMergeMode
+    batch_size?: number
+    operation_id?: string
+    ai_options?: AiRuntimeOptions | null
+  },
+) {
+  return request<QuizNodeBindingPreview>(`/palaces/${palaceId}/quiz-node-bindings/preview`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function applyPalaceQuizNodeBindingsApi(
+  palaceId: number,
+  data: {
+    merge_mode: QuizNodeBindingMergeMode
+    operation_id?: string
+    bindings: QuizNodeBindingEdge[]
+    accepted_edges?: QuizNodeBindingEdge[] | null
+  },
+) {
+  return request<{
+    palace_id: number
+    operation_id: string
+    merge_mode: QuizNodeBindingMergeMode
+    created_count: number
+    items: QuizNodeBindingEdge[]
+    item_count: number
+  }>(`/palaces/${palaceId}/quiz-node-bindings/apply`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:quiz-node-bindings:apply`,
+      description: '保存题库知识点绑定',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function mutatePalaceQuizNodeBindingsApi(
+  palaceId: number,
+  data: {
+    add?: Array<{ question_id: number; node_uid: string; reason?: string }>
+    remove?: Array<{ question_id: number; node_uid: string }>
+  },
+) {
+  return request<{
+    palace_id: number
+    created_count: number
+    updated_count: number
+    removed_count: number
+    items: QuizNodeBindingEdge[]
+    item_count: number
+  }>(`/palaces/${palaceId}/quiz-node-bindings/mutate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:quiz-node-bindings:mutate`,
+      description: '手改题库知识点绑定',
+      replayMode: 'manual',
+    },
+  })
 }

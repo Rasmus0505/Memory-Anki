@@ -17,6 +17,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -589,6 +590,40 @@ class PalaceQuizQuestion(Base):
     classified_chapter: Mapped[Chapter | None] = relationship(
         "Chapter",
         foreign_keys=[classified_chapter_id],
+    )
+
+
+class PalaceQuizQuestionNodeBinding(Base):
+    """Maps a palace quiz question to one or more mind-map knowledge nodes."""
+
+    __tablename__ = "palace_quiz_question_node_bindings"
+    __table_args__ = (
+        UniqueConstraint("question_id", "node_uid", name="uq_quiz_question_node_binding"),
+        Index("ix_quiz_question_node_bindings_palace_node", "palace_id", "node_uid"),
+        Index("ix_quiz_question_node_bindings_question", "question_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("palace_quiz_questions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    node_uid: Mapped[str] = mapped_column(String(160), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="ai")
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
     )
 
 

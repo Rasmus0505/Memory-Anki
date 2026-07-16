@@ -25,6 +25,7 @@ interface BuildDisplayNodesInput {
   onDelete: (nodeId: string) => void
   onFinishEdit: (nodeId: string, text: string) => void
   onMeasure: (nodeId: string, size: NodeSize) => void
+  onCountBadgeClick?: (nodeId: string) => void
   onExtractSelection?: (payload: {
     sourceId: string
     liveText: string
@@ -66,6 +67,7 @@ export function buildDisplayNodes({
   onDelete,
   onFinishEdit,
   onMeasure,
+  onCountBadgeClick,
   onExtractSelection,
   onExtractDropPreview,
   readonly,
@@ -142,6 +144,7 @@ export function buildDisplayNodes({
       onEditTextChange,
       onFinishEdit,
       onMeasure,
+      onCountBadgeClick,
       onExtractSelection,
       onExtractDropPreview,
       readonly,

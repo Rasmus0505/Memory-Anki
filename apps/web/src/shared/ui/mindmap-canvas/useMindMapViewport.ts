@@ -383,7 +383,7 @@ export function useMindMapViewport({
         }
       }
 
-      let nextPreview: PreviewState | null = closest
+      const nextPreview: PreviewState | null = closest
         ? {
             sourceId: dragId,
             sourceIds,

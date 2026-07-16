@@ -12,6 +12,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
+import { AiSplitWorkbench } from '@/features/palace-edit/components/AiSplitWorkbench'
 import { PalaceAttachmentPanel } from '@/features/palace-edit/components/PalaceAttachmentPanel'
 import { PalaceMetaPanel } from '@/features/palace-edit/components/PalaceMetaPanel'
 import { PalaceSegmentsPanel } from '@/features/palace-edit/components/PalaceSegmentsPanel'
@@ -30,7 +31,7 @@ import { appPrompt } from '@/shared/components/ui/native-dialog'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
-import { detectClientSource } from '@/shared/lib/clientSource'
+import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
 
 function SaveStatusBadge({
   status,
@@ -80,7 +81,7 @@ export default function PalaceEdit() {
   const page = usePalaceEditPage()
   const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
-  const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
+  const [, setMindMapUiCleared] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
@@ -109,6 +110,10 @@ export default function PalaceEdit() {
     entityId: page.palaceId,
     editorState: page.editorState,
     defaultTask: 'build',
+  })
+  const quizBindingsHost = usePalaceEditorQuizBindings({
+    palaceId: page.palaceId,
+    editorDoc: page.editorState?.editor_doc,
   })
   const setMindMapTask = mindMapExperience.setTask
   const editorMode = page.editorMode
@@ -196,8 +201,6 @@ export default function PalaceEdit() {
     | 'segmentControl'
     | 'moreActions'
     | 'importMindMapAction'
-    | 'englishAction'
-    | 'nativeFullscreenAction'
   > = {
     embedded: true,
     taskControl: {
@@ -252,6 +255,7 @@ export default function PalaceEdit() {
         },
       },
       ...mindMapFileTransfer.toolbarActions,
+      quizBindingsHost.moreAction,
       ...(selectedNodeUid
         ? [
             {
@@ -274,18 +278,6 @@ export default function PalaceEdit() {
       label: '转脑图',
       onClick: () => mindMapImport.setImportOpen(true),
       opensOverlay: true,
-    },
-    englishAction: {
-      label: '英语区',
-      onClick: () => { void page.handleOpenEnglishArea() },
-    },
-    nativeFullscreenAction: {
-      label: detectClientSource() === 'pwa' ? mindMapNativeFullscreen ? '退出全屏' : '全屏' : mindMapNativeFullscreen ? '退出系统全屏' : '系统全屏',
-      active: mindMapNativeFullscreen,
-      onClick: () => {
-        if (mindMapNativeFullscreen) void mindMapFrameRef.current?.exitFullscreen()
-        else void mindMapFrameRef.current?.enterFullscreen()
-      },
     },
   }
 
@@ -514,6 +506,7 @@ export default function PalaceEdit() {
                       modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
                       viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
                       toolbarExtensions={mindMapToolbarExtensions}
+                      hidePresentationOverflowActions
                       visibleEditorState={activeFrameEditorState}
                       visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
                       currentPalaceId={page.palaceId}
@@ -521,6 +514,8 @@ export default function PalaceEdit() {
                       feedbackFxSignal={page.feedbackFxSignal}
                       highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                       masteryByNodeUid={mindMapExperience.masteryByNodeUid}
+                      countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
+                      onCountBadgeClick={quizBindingsHost.openNodeQuiz}
                       segments={mindMapSegments}
                       activeSegmentId={page.activeSegmentId}
                       segmentColorMode="all-with-active-emphasis"
@@ -561,14 +556,12 @@ export default function PalaceEdit() {
                         <MindMapPageToolbar
                           {...mindMapToolbarExtensions}
                           quizAction={{ label: '做题', onClick: handleOpenQuizPage }}
-                          clearUiAction={{
-                            label: mindMapUiCleared ? '恢复界面' : '清屏',
-                            onClick: () => mindMapFrameRef.current?.toggleUiCleared(),
-                          }}
                         />
                       }
                       highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                       masteryByNodeUid={mindMapExperience.masteryByNodeUid}
+                      countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
+                      onCountBadgeClick={quizBindingsHost.openNodeQuiz}
                       viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
                       immersiveModeActive={page.mindMapFullscreen}
                       aiSplitBusy={page.aiSplitBusy}
@@ -579,7 +572,7 @@ export default function PalaceEdit() {
                       }
                       initialViewPolicy="reset"
                       externalSyncKey={mindMapImport.importExternalSyncKey}
-                      forceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                      forceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}:${page.aiSplitAppliedSyncVersion}`}
                       forceSyncIntent="replace"
                       segments={mindMapSegments}
                       activeSegmentId={page.activeSegmentId}
@@ -710,7 +703,11 @@ export default function PalaceEdit() {
         overlayClassName={page.mindMapFullscreen ? 'z-[120]' : 'z-[110]'}
       />
       {mindMapImport.aiRunConfigDialog}
-      {page.aiRunConfigDialog}
+      <AiSplitWorkbench
+        workbench={page.aiSplitWorkbench}
+        currentSelectedLabel={selectedNodeLabel}
+        hasCurrentSelection={Boolean(page.selectedNode?.uid)}
+      />
 
       <PalaceVersionDialog
         open={page.versionOpen}
@@ -736,6 +733,8 @@ export default function PalaceEdit() {
         onOpenChange={setTemplateDialogOpen}
         onCreated={(palaceId) => navigate(`/palaces/${palaceId}/edit`, { replace: true })}
       />
+
+      {quizBindingsHost.dialogs}
 
     </div>
   )

@@ -210,7 +210,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
     AiSceneDefinition(
         key="ai_split",
         label="AI 分卡",
-        description="脑图编辑页右键 AI 分卡。把当前节点拆成新的并列分类，并把旧子节点整体重挂到新分类下。",
+        description="脑图编辑页右键 AI 分卡。把无子节点的长内容卡片原位拆成并列或层级小卡片，尽量保留原句。",
         category_key="llm",
         config_key="scene_model_ai_split",
         thinking_config_key="scene_model_ai_split_thinking_enabled",
@@ -321,6 +321,18 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         legacy_config_keys=("ai_model_quiz_mini_palace",),
         legacy_thinking_config_keys=("ai_model_quiz_mini_palace_thinking_enabled",),
         source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+    ),
+    AiSceneDefinition(
+        key="quiz_node_binding",
+        label="题库结合",
+        description="分析宫殿题库与思维导图，把题目绑定到知识点卡片。",
+        category_key="llm",
+        config_key="scene_model_quiz_node_binding",
+        thinking_config_key="scene_model_quiz_node_binding_thinking_enabled",
+        default_model="qwen-plus",
+        legacy_config_keys=("ai_model_quiz_text",),
+        legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
+        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/node_binding.py",
     ),
     AiSceneDefinition(
         key="quiz_text_generation",

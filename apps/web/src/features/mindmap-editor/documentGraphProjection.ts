@@ -48,6 +48,10 @@ export interface EditorDocGraphOptions {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
+  countBadgeByNodeUid?: Record<
+    string,
+    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
+  >
 }
 
 export interface EditorDocCreateResult {
@@ -103,6 +107,7 @@ export function editorDocToGraph(
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
           statusChips: options.statusChipsByNodeUid?.[uid] ?? null,
+          countBadge: options.countBadgeByNodeUid?.[uid] ?? null,
         }),
       },
     })
@@ -192,6 +197,11 @@ function buildNodeVisual(options: {
     tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'
     style: 'filled' | 'outline'
   }> | null
+  countBadge?: {
+    text: string
+    tone: 'success' | 'danger' | 'warning' | 'neutral'
+    title?: string
+  } | null
 }) {
   const masteryStatus = options.mastery?.status ?? ''
   const manualLabel = options.mastery?.manualLabel ?? ''
@@ -223,5 +233,6 @@ function buildNodeVisual(options: {
     muted: options.muted,
     badge,
     statusChips: options.statusChips?.length ? options.statusChips : null,
+    countBadge: options.countBadge ?? null,
   }
 }

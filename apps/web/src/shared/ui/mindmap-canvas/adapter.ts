@@ -22,6 +22,12 @@ export interface MindMapNodeVisual {
   } | null
   /** Compact labels above the card; host-owned content, generic rendering only. */
   statusChips?: MindMapNodeStatusChip[] | null
+  /** Numeric corner badge (e.g. bottom-right count). Host-owned; canvas only renders. */
+  countBadge?: {
+    text: string
+    tone: 'success' | 'danger' | 'warning' | 'neutral'
+    title?: string
+  } | null
 }
 
 export interface MindMapNode {

@@ -17,6 +17,7 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS = {
   quiz_text_generation: 'ai_prompt_palace_quiz_generate',
   quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
   quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
+  quiz_node_binding: 'ai_prompt_palace_quiz_node_binding',
 } as const satisfies Record<string, AiPromptTemplate['key']>
 
 type ScenarioPromptTemplateKey = keyof typeof SCENARIO_PROMPT_TEMPLATE_KEYS

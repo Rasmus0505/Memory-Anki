@@ -4,6 +4,8 @@ import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
+import { usePalaceQuizNodeBindings } from "@/features/palace-quiz/hooks/usePalaceQuizNodeBindings";
+import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -45,6 +47,30 @@ export function MindMapReviewFlow({
   });
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
+  const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
+  const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
+  const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
+  const editorDocForBindings =
+    (review.mapEditorState ?? review.flow.visibleEditorState ?? props.reviewEditorState)?.editor_doc;
+  const quizNodeBindings = usePalaceQuizNodeBindings({
+    palaceId: props.palaceId,
+    editorDoc: editorDocForBindings,
+    enabled: Boolean(props.palaceId),
+  });
+  const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds;
+  const handleOpenNodeQuiz = React.useCallback(
+    (nodeUid: string) => {
+      const ids = getOpenQuestionIds(nodeUid);
+      if (!ids.length) {
+        toast.message("该卡片没有未完成的关联题目。");
+        return;
+      }
+      setNodeQuizNodeUid(nodeUid);
+      setNodeQuizQuestionIds(ids);
+      setNodeQuizOpen(true);
+    },
+    [getOpenQuestionIds],
+  );
 
   return (
     <div className={cn("space-y-5", review.flow.screenGlowClass)}>
@@ -267,6 +293,8 @@ export function MindMapReviewFlow({
                     onNodeContextMenu={review.flow.handleNodeContextMenu}
                     onNodeHover={review.isCheckpointMode ? review.flow.handleNodeHover : undefined}
                     onQuizBreakOpen={review.handleQuizBreakOpen}
+                    countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
+                    onCountBadgeClick={handleOpenNodeQuiz}
                     recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
@@ -317,10 +345,10 @@ export function MindMapReviewFlow({
                   ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
                   fullscreen={review.flow.fullscreen}
                 />
-              </div>            </CardContent>
+              </div>
+            </CardContent>
           </Card>
       </div>
-
 
       <MindMapRatingHistoryDrawer
         open={review.recallRatings.historyOpen}
@@ -331,6 +359,15 @@ export function MindMapReviewFlow({
             toast.error(error instanceof Error && error.message ? error.message : '节点评分保存失败')
           })
         }}
+      />
+
+      <NodeBoundQuizDialog
+        open={nodeQuizOpen}
+        onOpenChange={setNodeQuizOpen}
+        palaceId={props.palaceId}
+        nodeUid={nodeQuizNodeUid}
+        questionIds={nodeQuizQuestionIds}
+        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
       />
 
     </div>
