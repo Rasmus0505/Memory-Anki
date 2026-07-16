@@ -2,16 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
 import { PalaceMemoryProgress } from '@/features/palace-catalog/components/palace-list/PalaceMemoryProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
 import { formatDuration } from '@/entities/session/model'
-import type {
-  PalaceGroupedItem,
-  PalaceSegmentSummary,
-  ReviewStageSummary,
-} from '@/shared/api/contracts'
-import { Badge } from '@/shared/components/ui/badge'
+import type { PalaceGroupedItem, PalaceSegmentSummary } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
@@ -26,7 +20,6 @@ import {
   getSegmentCardClass,
   getSegmentDisplayName,
   getSegmentListClass,
-  isSleepReviewSegment,
 } from '@/features/palace-catalog/components/palace-list/utils'
 
 interface PalaceListCardProps {
@@ -38,7 +31,6 @@ interface PalaceListCardProps {
   onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
   onSegmentPractice: (segment: PalaceSegmentSummary) => void
   onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
-  onStageClick?: (palace: PalaceGroupedItem, stage: ReviewStageSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -154,7 +146,6 @@ export function PalaceListCard({
   onWarmPalacePractice = () => {},
   onSegmentPractice,
   onWarmSegmentPractice = () => {},
-  onStageClick,
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -164,21 +155,22 @@ export function PalaceListCard({
   const isMultiSegment = segmentCount > 1
   const hasSingleSegment = segmentCount === 1
   const singleSegment = hasSingleSegment ? palace.segments[0] : null
-  const singleSegmentReviewState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
+  const hasFsrsProjection = typeof palace.memory_node_count === 'number' || 'memory_next_review_at' in palace
+  const memoryNextReviewAt = hasFsrsProjection ? palace.memory_next_review_at ?? null : singleSegment?.next_review_at ?? null
+  const singleSegmentReviewState = getReviewButtonState(memoryNextReviewAt)
   const showSingleSegmentReviewButton = Boolean(
     singleSegment &&
-      !palace.needs_practice &&
       !singleSegment.is_empty &&
-      (singleSegment.has_due_review ||
-        (singleSegmentReviewState !== 'due_now' &&
-          singleSegment.current_review_schedule_id &&
-          singleSegment.next_review_at)),
+      (hasFsrsProjection
+        ? (palace.memory_node_count ?? singleSegment.node_count) > 0 && Boolean(memoryNextReviewAt)
+        : (singleSegment.has_due_review ||
+            (singleSegmentReviewState !== 'due_now' &&
+              singleSegment.current_review_schedule_id &&
+              singleSegment.next_review_at))),
   )
   const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
-  const shouldShowStageProgress = Array.isArray(palace.stage_labels) && palace.stage_labels.length > 0
-  const shouldShowMemoryProgress = typeof palace.mastery_percent === 'number'
-  const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
+  const showPalacePracticeButton = !showSingleSegmentReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
   const singleSegmentActiveProgress = normalizeReviewProgress(singleSegment?.active_review_progress)
@@ -237,15 +229,13 @@ export function PalaceListCard({
                 ) : null}
                 {singleSegment && showSingleSegmentReviewButton ? (
                   <ReviewActionButton
-                    label={getReviewActionLabel(singleSegment.next_review_at, {
+                    label={getReviewActionLabel(memoryNextReviewAt, {
                       state: singleSegmentReviewState,
-                      isSleepReview: isSleepReviewSegment(singleSegment),
                     })}
                     className={cn(
-                      'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
+                      'h-8 min-w-[84px] max-w-[156px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
                       getReviewActionButtonClass({
                         state: singleSegmentReviewState,
-                        isSleepReview: isSleepReviewSegment(singleSegment),
                       }),
                     )}
                     disabled={singleSegmentReviewState === 'unscheduled'}
@@ -287,17 +277,7 @@ export function PalaceListCard({
             ) : null}
           </div>
 
-          {shouldShowMemoryProgress ? (
-            <PalaceMemoryProgress palace={palace} />
-          ) : shouldShowStageProgress ? (
-            <PalaceStageProgress
-              stageLabels={palace.stage_labels}
-              completed={palace.review_stage_completed}
-              stages={palace.review_stages}
-              nextReviewAt={palace.next_review_at}
-              onStageClick={onStageClick ? (stage) => onStageClick(palace, stage) : undefined}
-            />
-          ) : null}
+          <PalaceMemoryProgress palace={palace} />
 
           {expanded && shouldShowSegmentListWhenExpanded ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
@@ -357,11 +337,6 @@ export function PalaceListCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          {palace.mastered ? (
-            <Badge variant="secondary" className="text-[10px]">
-              已掌握
-            </Badge>
-          ) : null}
           <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
               variant="ghost"

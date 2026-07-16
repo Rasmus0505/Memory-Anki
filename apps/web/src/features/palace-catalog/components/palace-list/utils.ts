@@ -1,20 +1,11 @@
 import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
-import type {
-  PalaceGroupedItem,
-  PalaceSegmentSummary,
-  ReviewStageSummary,
-} from '@/shared/api/contracts'
+import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import type {
   PalaceListDensityMode,
   PalaceListLayoutMode,
 } from '@/entities/preferences/model/palaceViewSettings'
 
-export interface StageEditState {
-  palace: PalaceGroupedItem
-  stage: ReviewStageSummary
-  targetCompletedCount: number
-}
 
 export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled' | 'practice'
 
@@ -121,6 +112,8 @@ export function getReviewActionButtonClass(options: {
       'border-success bg-success text-white hover:bg-success/80',
     state === 'due_later_today' &&
       'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
+    state === 'future' &&
+      'border-info/40 bg-info/10 text-info hover:bg-info/20',
     isSleepReview && 'border-info bg-info text-white hover:bg-info/80',
     disabled && 'border-border bg-muted/30 text-muted-foreground',
     className,
@@ -140,24 +133,24 @@ export function formatRelativeReviewTime(value: string | null): string {
   const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (totalMinutes < 60) {
-    return `${Math.max(1, totalMinutes)}分钟`
+    return `${Math.max(1, totalMinutes)}分钟后`
   }
 
   if (totalHours < 24) {
     const hours = totalHours
     const minutes = totalMinutes % 60
-    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+    return minutes > 0 ? `${hours}小时${minutes}分钟后` : `${hours}小时后`
   }
 
   if (totalDays < 30) {
     const days = totalDays
     const hours = totalHours % 24
-    return hours > 0 ? `${days}天${hours}小时` : `${days}天`
+    return hours > 0 ? `${days}天${hours}小时后` : `${days}天后`
   }
 
   const months = Math.floor(totalDays / 30)
   const days = totalDays % 30
-  return days > 0 ? `${months}月${days}天` : `${months}天`
+  return days > 0 ? `${months}月${days}天后` : `${months}天后`
 }
 
 export function getReviewButtonState(value: string | null): ReviewButtonState {
@@ -200,15 +193,11 @@ export function getReviewActionLabel(
       return '今日稍后'
     }
   }
-  return formatRelativeReviewTime(value)
+  return state === 'due_later_today' || state === 'future'
+    ? `提前复习 · ${formatRelativeReviewTime(value)}`
+    : formatRelativeReviewTime(value)
 }
 
-export function isSleepReviewSegment(
-  segment: Pick<PalaceSegmentSummary, 'current_review_type' | 'review_stage_completed' | 'stage_labels'>,
-): boolean {
-  if (segment.current_review_type === 'sleep') return true
-  return segment.stage_labels?.[segment.review_stage_completed] === '睡前'
-}
 
 export function formatCreatedAt(value: string | null): string {
   if (!value) return '未知'

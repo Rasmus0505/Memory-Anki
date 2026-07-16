@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,11 +25,6 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/features/palace-catalog/components/palace-list/PalaceStageProgress', () => ({
-  PalaceStageProgress: () => <div data-testid="stage-progress" />,
-  formatStageDateTime: () => '',
-  toDateTimeLocalValue: () => '',
-}))
 
 const getPalacesGroupedApi = vi.fn()
 let queryClient: QueryClient
