@@ -32,6 +32,10 @@ interface CapabilityFactoryOptions {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
+  countBadgeByNodeUid?: Record<
+    string,
+    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
+  >
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   aiSplitBusy: boolean
@@ -55,6 +59,13 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
     capabilities.push({
       key: 'status-chips',
       graphOptions: { statusChipsByNodeUid: options.statusChipsByNodeUid },
+    })
+  }
+
+  if (options.countBadgeByNodeUid && Object.keys(options.countBadgeByNodeUid).length > 0) {
+    capabilities.push({
+      key: 'count-badges',
+      graphOptions: { countBadgeByNodeUid: options.countBadgeByNodeUid },
     })
   }
 
@@ -113,26 +124,20 @@ function createAiSplitCapability(options: CapabilityFactoryOptions): MindMapCapa
     getNodeActions: ({ nodeId, selection, isRoot, readonly, practiceModeActive }) => {
       if (readonly || practiceModeActive || isRoot || !options.onAiSplitRequest) return []
       const selected = selection[0]
-      const buildPayload = (splitMode: 'parallel' | 'hierarchy') => ({
-        target_node_uid: selected?.uid ?? nodeId,
-        target_node_text: selected?.text ?? '',
-        target_node_note: selected?.note ?? '',
-        target_node_type: selected?.memoryAnkiNodeType ?? null,
-        is_root: isRoot,
-        split_mode: splitMode,
-      })
       return [
         {
-          label: options.aiSplitBusy ? '正在分卡...' : 'AI 并列分卡',
+          label: options.aiSplitBusy ? '正在分卡...' : 'AI 分卡',
           icon: Sparkles,
           disabled: options.aiSplitBusy,
-          onClick: () => options.onAiSplitRequest?.(buildPayload('parallel')),
-        },
-        {
-          label: options.aiSplitBusy ? '正在分卡...' : 'AI 层级分卡',
-          icon: Sparkles,
-          disabled: options.aiSplitBusy,
-          onClick: () => options.onAiSplitRequest?.(buildPayload('hierarchy')),
+          onClick: () =>
+            options.onAiSplitRequest?.({
+              target_node_uid: selected?.uid ?? nodeId,
+              target_node_text: selected?.text ?? '',
+              target_node_note: selected?.note ?? '',
+              target_node_type: selected?.memoryAnkiNodeType ?? null,
+              is_root: isRoot,
+              split_mode: 'auto',
+            }),
         },
       ]
     },

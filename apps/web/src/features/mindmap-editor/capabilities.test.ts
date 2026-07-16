@@ -25,7 +25,7 @@ function buildAiCapability(onAiSplitRequest = vi.fn()) {
 }
 
 describe('AI split capability', () => {
-  it('offers explicit parallel and hierarchy modes for non-root leaf cards', () => {
+  it('offers a single auto AI split action for non-root leaf cards', () => {
     const { capability, onAiSplitRequest } = buildAiCapability()
     const actions = capability?.getNodeActions?.({
       nodeId: 'target-node',
@@ -35,11 +35,9 @@ describe('AI split capability', () => {
       practiceModeActive: false,
     }) ?? []
 
-    expect(actions.map((action) => action.label)).toEqual(['AI 并列分卡', 'AI 层级分卡'])
+    expect(actions.map((action) => action.label)).toEqual(['AI 分卡'])
     actions[0]?.onClick()
-    actions[1]?.onClick()
-    expect(onAiSplitRequest).toHaveBeenNthCalledWith(1, expect.objectContaining({ split_mode: 'parallel' }))
-    expect(onAiSplitRequest).toHaveBeenNthCalledWith(2, expect.objectContaining({ split_mode: 'hierarchy' }))
+    expect(onAiSplitRequest).toHaveBeenCalledWith(expect.objectContaining({ split_mode: 'auto' }))
   })
 
   it('does not expose replacement split actions for the root', () => {

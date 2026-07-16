@@ -1515,13 +1515,14 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             "content.split_source_fidelity",
             "boundary.split_in_place",
             "output.mindmap_split_json",
-            "ai_split_parallel",
-            "ai_split_hierarchy",
+            "task.split_structure_judgment",
+            "task.split_examples",
+            "ai_split",
         ),
         WEB_SRC / "features" / "mindmap-editor" / "capabilities.ts": (
-            "AI 并列分卡",
-            "AI 层级分卡",
+            "AI 分卡",
             "split_mode",
+            "auto",
         ),
     }
     for path, required_tokens in ai_split_contracts.items():

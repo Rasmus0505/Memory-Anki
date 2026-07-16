@@ -1,7 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
-import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import type { MindMapSelection } from '@/entities/mindmap-document'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
@@ -10,7 +9,6 @@ import { readTimerAutomationConfig } from '@/shared/components/session/timer-aut
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
-import { logAiCall, requestOpenAiLogDetail } from '@/shared/logs/model/appLogs'
 import { parseMindMapDoc } from '@/features/palace-edit/model/mindmap-editor'
 import { usePalaceEditorDocument } from '@/features/palace-edit/hooks/usePalaceEditorDocument'
 import { usePalaceMetaController } from '@/features/palace-edit/hooks/usePalaceMetaController'
@@ -18,19 +16,15 @@ import { usePalacePracticeMode } from '@/features/palace-edit/hooks/usePalacePra
 import { usePalaceSegmentsController } from '@/features/palace-edit/hooks/usePalaceSegmentsController'
 import { usePalaceVersionsController } from '@/features/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/features/palace-edit/model/palace-edit-types'
-import { splitMindMapNodeApi } from '@/entities/palace/api'
 import { getEnglishContinueCourseApi } from '@/entities/english/api'
-import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
+import { useAiSplitWorkbench } from '@/features/palace-edit/hooks/useAiSplitWorkbench'
 export type { PalaceMeta } from '@/features/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
   const node = nodes[0] ?? null
   return node?.uid ? String(node.uid) : null
-}
-
-function createAiSplitOperationId() {
-  return globalThis.crypto?.randomUUID?.() ?? `ai-split-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 export function usePalaceEditPage() {
@@ -45,14 +39,13 @@ export function usePalaceEditPage() {
     nonce: number
   }>({ nodeUid: null, nonce: 0 })
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
-  const [aiSplitBusy, setAiSplitBusy] = useState(false)
   const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
   const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
   const hardUnloadRef = useRef(false)
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
-  const aiSplitOperationRef = useRef<string | null>(null)
-  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const documentStateRef = useRef<ReturnType<typeof usePalaceEditorDocument> | null>(null)
+  const selectedNodesRef = useRef<MindMapSelection[]>([])
 
   const timer = useTimedSession({
     kind: 'palace_edit',
@@ -66,6 +59,8 @@ export function usePalaceEditPage() {
     palaceId,
     setReplaceSyncVersion,
   })
+  documentStateRef.current = documentState
+  selectedNodesRef.current = selectedNodes
   const palace = documentState.meta
   const palaceTitle = palace?.title || '未命名宫殿'
   const selectedNode = selectedNodes[0] ?? null
@@ -323,144 +318,61 @@ export function usePalaceEditPage() {
     }
   }, [navigate])
 
+  const aiSplitWorkbench = useAiSplitWorkbench({
+    palaceId,
+    navigateTarget: fullPath || (palaceId ? `/palaces/${palaceId}` : undefined),
+    getLatestEditorState: () => documentStateRef.current?.editorState ?? null,
+    getCurrentSelectedUid: () => {
+      const node = selectedNodesRef.current[0]
+      return node?.uid ? String(node.uid) : null
+    },
+    getCurrentSelectedLabel: () => {
+      const node = selectedNodesRef.current[0]
+      return node?.text ? String(node.text) : ''
+    },
+    applyEditorDoc: (nextDoc) => {
+      const latest = documentStateRef.current?.editorState
+      if (!latest) return
+      setAiSplitAppliedSyncVersion((value) => value + 1)
+      documentStateRef.current?.setEditorState({
+        ...latest,
+        editor_doc: nextDoc,
+      })
+    },
+    onApplied: ({ mode, nodeCount }) => {
+      timer.registerActivity('edit_operation', { source: 'mindmap_ai_split_applied' })
+      emitFeedbackFx('node_create', {
+        nodeUid: selectedNodeUidRef.current,
+        relatedNodeUids: selectedNodeUidRef.current ? [selectedNodeUidRef.current] : [],
+        source: mode === 'replace' ? 'mindmap_ai_split_replace' : 'mindmap_ai_split_append',
+      })
+      void nodeCount
+    },
+  })
+
   const handleAiSplitRequest = useCallback(
     async (payload: MindMapAiSplitRequestPayload) => {
       if (practice.editorMode !== 'edit' || !palaceId || !documentState.editorState) return
-      setAiSplitBusy(true)
-      timer.registerActivity('edit_operation', { source: 'mindmap_ai_split' })
-      const requestSummary = `知识点: ${payload.target_node_uid || 'unknown'}；模式: ${payload.split_mode}`
-      logAiCall({
-        feature: 'AI 分卡',
-        stage: 'start',
-        requestSummary,
-        meta: {
-          palaceId,
-          targetNodeUid: payload.target_node_uid,
-          splitMode: payload.split_mode,
-        },
-      })
-      let operationId: string | null = null
-      try {
-        const aiOptions = await promptForAiOptions({
-          scenarioKey: 'ai_split',
-          promptSceneKey: `ai_split_${payload.split_mode}`,
-          entrypointKey: `mindmap-ai-split-${payload.split_mode}`,
-          title: payload.split_mode === 'parallel' ? 'AI 并列分卡配置' : 'AI 层级分卡配置',
-          description: '模型只会处理当前无子节点卡片；生成结果将在原位置替换该卡片。',
-        })
-        if (!aiOptions) return
-        operationId = createAiSplitOperationId()
-        const ownerId = `palace:${palaceId}`
-        aiSplitOperationRef.current = operationId
-        const result = await splitMindMapNodeApi(palaceId, {
-          editor_doc: documentState.editorState.editor_doc,
-          target_node_uid: payload.target_node_uid,
-          split_mode: payload.split_mode,
-          owner_id: ownerId,
-          operation_id: operationId,
-          ai_options: aiOptions,
-        })
-        if (!result.ok || !result.editor_doc) {
-          throw new Error(result.error || 'AI 分卡失败，请稍后重试。')
-        }
-        if (
-          aiSplitOperationRef.current !== operationId
-          || result.operation_id !== operationId
-          || result.owner_id !== ownerId
-          || result.split_mode !== payload.split_mode
-        ) {
-          throw new Error('AI 分卡结果已过期，未应用到当前脑图。')
-        }
-        const replacementCount = result.replacement_node_count ?? result.generated_children_count ?? 0
-        logAiCall({
-          feature: 'AI 分卡',
-          stage: 'success',
-          requestSummary,
-          responseSummary: `原位置生成 ${replacementCount} 个顶层卡片`,
-          requestId:
-            typeof (result as { request_id?: unknown }).request_id === 'string'
-              ? (result as { request_id?: string }).request_id
-              : '',
-          meta: {
-            palaceId,
-            targetNodeUid: payload.target_node_uid,
-            splitMode: payload.split_mode,
-            operationId,
-            model: result.model ?? '',
-            aiCallLogId: result.ai_call_log_id ?? '',
-          },
-        })
-        setAiSplitAppliedSyncVersion((value) => value + 1)
-        documentState.setEditorState({
-          ...documentState.editorState,
-          editor_doc: result.editor_doc,
-        })
-        emitFeedbackFx('node_create', {
-          nodeUid: payload.target_node_uid,
-          relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
-          source: 'mindmap_ai_split_success',
-        })
-        const reviewPreview = result.review_preview
-        const reviewSummary = reviewPreview
-          ? `预计形成 ${reviewPreview.node_count} 个知识点，约 ${reviewPreview.estimated_review_time || `${Math.max(1, Math.round(reviewPreview.estimated_review_seconds / 60))} 分钟`}。`
-          : ''
-        toast.success(
-          payload.split_mode === 'parallel'
-            ? `AI 已在原位置拆成 ${replacementCount} 个并列卡片。${reviewSummary}`
-            : `AI 已在原位置生成层级卡片，共 ${replacementCount} 个顶层节点。${reviewSummary}`,
-          result.ai_call_log_id
-            ? {
-                action: {
-                  label: '查看AI详情',
-                  onClick: () =>
-                    requestOpenAiLogDetail({
-                      aiCallLogId: result.ai_call_log_id,
-                      title: 'AI 分卡',
-                    }),
-                },
-              }
-            : undefined,
-        )
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'AI 分卡失败，请稍后重试。'
-        const requestId =
-          error instanceof Error && 'requestId' in error && typeof error.requestId === 'string'
-            ? error.requestId
-            : ''
-        logAiCall({
-          feature: 'AI 分卡',
-          stage: 'failure',
-          requestSummary,
-          errorMessage: message,
-          requestId,
-          meta: {
-            palaceId,
-            targetNodeUid: payload.target_node_uid,
-            splitMode: payload.split_mode,
-            operationId,
-            requestId,
-          },
-        })
-        emitFeedbackFx('save_error', {
-          nodeUid: payload.target_node_uid,
-          relatedNodeUids: payload.target_node_uid ? [payload.target_node_uid] : [],
-          source: 'mindmap_ai_split_failure',
-        })
-        toast.error(message)
-      } finally {
-        if (operationId && aiSplitOperationRef.current === operationId) {
-          aiSplitOperationRef.current = null
-        }
-        setAiSplitBusy(false)
+      if (!payload.target_node_uid) {
+        toast.error('请先选中要分卡的目标节点。')
+        return
       }
+      timer.registerActivity('edit_operation', { source: 'mindmap_ai_split_open' })
+      const editorDoc = documentState.editorState.editor_doc as MindMapDoc
+      await aiSplitWorkbench.openWorkbench({
+        targetNodeUid: payload.target_node_uid,
+        targetNodeText: payload.target_node_text || '',
+        targetNodeNote: payload.target_node_note || '',
+        editorDoc,
+      })
     },
-    [documentState, emitFeedbackFx, palaceId, practice.editorMode, promptForAiOptions, timer],
+    [aiSplitWorkbench, documentState.editorState, palaceId, practice.editorMode, timer],
   )
 
   const statusBadge: StatusBadgeState = versions.statusBadge
 
   return {
-    aiRunConfigDialog,
+    aiSplitWorkbench,
     palaceId,
     palace,
     reload: documentState.reload,
@@ -530,7 +442,7 @@ export function usePalaceEditPage() {
     isCreatingDraft: documentState.isCreatingDraft,
     handleCreateBlankPalace,
     handleMindMapEditorStateChange,
-    aiSplitBusy,
+    aiSplitBusy: aiSplitWorkbench.phase === 'generating',
     aiSplitAppliedSyncVersion,
     handleSaveMeta: meta.handleSaveMeta,
     handleEstablishCreatedAt: meta.handleEstablishCreatedAt,

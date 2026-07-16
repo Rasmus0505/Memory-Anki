@@ -1292,10 +1292,10 @@ def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, m
     capabilities.parent.mkdir(parents=True)
     split_service.write_text("AI_SPLIT_REPLACEMENT_MODES\nfind_target_location\n", encoding="utf-8")
     prompt_composition.write_text(
-        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\nai_split_parallel\n",
+        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\n",
         encoding="utf-8",
     )
-    capabilities.write_text("AI 并列分卡\nsplit_mode\n", encoding="utf-8")
+    capabilities.write_text("AI 分卡\nsplit_mode\n", encoding="utf-8")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -1304,8 +1304,8 @@ def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, m
     check_architecture.check_mindmap_architecture(errors)
 
     assert any("operation_id" in error for error in errors)
-    assert any("ai_split_hierarchy" in error for error in errors)
-    assert any("AI 层级分卡" in error for error in errors)
+    assert any("task.split_structure_judgment" in error for error in errors)
+    assert any("auto" in error for error in errors)
 
 
 def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(

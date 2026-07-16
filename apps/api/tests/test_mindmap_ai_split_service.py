@@ -333,7 +333,7 @@ def _build_leaf_replacement_doc() -> dict:
     }
 
 
-def test_parallel_replacement_preserves_sibling_order_and_operation_identity(db_session: Session):
+def test_auto_replacement_preserves_sibling_order_and_operation_identity(db_session: Session):
     palace = _get_palace(db_session)
     with patch.object(
         service,
@@ -352,9 +352,9 @@ def test_parallel_replacement_preserves_sibling_order_and_operation_identity(db_
             "target-leaf",
             ai_runtime=_ai_runtime(db_session),
             prompt_catalog=_prompt_catalog(db_session),
-            split_mode="parallel",
+            split_mode="auto",
             owner_id=f"palace:{palace.id}",
-            operation_id="operation-parallel",
+            operation_id="operation-auto",
         )
 
     children = result.editor_doc["root"]["children"]
@@ -364,14 +364,18 @@ def test_parallel_replacement_preserves_sibling_order_and_operation_identity(db_
         "例子与结论",
         "后置节点",
     ]
-    assert result.split_mode == "parallel"
+    assert result.split_mode == "auto"
     assert result.replacement_node_count == 2
-    assert result.operation_id == "operation-parallel"
+    assert result.replacement_nodes is not None
+    assert len(result.replacement_nodes) == 2
+    assert result.replacement_nodes[0]["data"]["text"] == "定义与条件"
+    assert result.operation_id == "operation-auto"
     assert result.owner_id == f"palace:{palace.id}"
-    assert children[1]["data"]["uid"] == "ai-split-9f724920860152b5beafb0a351208e6f"
+    assert str(children[1]["data"]["uid"]).startswith("ai-split-")
+    assert children[1]["data"]["uid"] != "target-leaf"
 
 
-def test_hierarchy_replacement_accepts_bounded_tree(db_session: Session):
+def test_auto_replacement_accepts_bounded_tree(db_session: Session):
     palace = _get_palace(db_session)
     with patch.object(
         service,
@@ -395,7 +399,7 @@ def test_hierarchy_replacement_accepts_bounded_tree(db_session: Session):
             "target-leaf",
             ai_runtime=_ai_runtime(db_session),
             prompt_catalog=_prompt_catalog(db_session),
-            split_mode="hierarchy",
+            split_mode="auto",
             owner_id=f"palace:{palace.id}",
             operation_id="operation-hierarchy",
         )
@@ -410,7 +414,7 @@ def test_replacement_modes_reject_root_non_leaf_and_stale_owner(db_session: Sess
     base_kwargs = {
         "ai_runtime": _ai_runtime(db_session),
         "prompt_catalog": _prompt_catalog(db_session),
-        "split_mode": "parallel",
+        "split_mode": "auto",
         "owner_id": f"palace:{palace.id}",
         "operation_id": "operation-safe",
     }
@@ -440,18 +444,51 @@ def test_replacement_modes_reject_root_non_leaf_and_stale_owner(db_session: Sess
         )
 
 
-def test_parallel_mode_rejects_nested_model_result(db_session: Session):
+def test_auto_mode_accepts_nested_model_result(db_session: Session):
     palace = _get_palace(db_session)
     with patch.object(
         service,
         "_call_mindmap_ai_split_model",
         return_value={
             "replacement_nodes": [
-                {"text": "错误嵌套", "children": [{"text": "子节点", "children": []}]}
+                {"text": "合法嵌套", "children": [{"text": "子节点", "children": []}]}
             ]
         },
-    ), pytest.raises(service.MindMapAiSplitError, match="不能包含子节点"):
-        service.split_palace_editor_doc_with_ai(
+    ):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="auto",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-nested",
+        )
+    replacement = result.editor_doc["root"]["children"][1]
+    assert replacement["data"]["text"] == "合法嵌套"
+    assert replacement["children"][0]["data"]["text"] == "子节点"
+
+
+def test_parallel_mode_flattens_nested_children(db_session: Session):
+    palace = _get_palace(db_session)
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={
+            "replacement_nodes": [
+                {
+                    "text": "主题",
+                    "children": [
+                        {"text": "要点一", "children": []},
+                        {"text": "要点二", "children": []},
+                    ],
+                }
+            ]
+        },
+    ):
+        result = service.split_palace_editor_doc_with_ai(
             db_session,
             palace,
             _build_leaf_replacement_doc(),
@@ -460,27 +497,78 @@ def test_parallel_mode_rejects_nested_model_result(db_session: Session):
             prompt_catalog=_prompt_catalog(db_session),
             split_mode="parallel",
             owner_id=f"palace:{palace.id}",
-            operation_id="operation-invalid",
+            operation_id="operation-parallel",
         )
 
+    children = result.editor_doc["root"]["children"]
+    assert [item["data"]["text"] for item in children] == [
+        "前置节点",
+        "主题",
+        "要点一",
+        "要点二",
+        "后置节点",
+    ]
+    for item in children[1:4]:
+        assert item["children"] == []
+    assert result.split_mode == "parallel"
+
+
+def test_target_card_count_passed_to_model_and_raises_cap(db_session: Session):
+    palace = _get_palace(db_session)
+    captured: dict = {}
+
+    def fake_call(**kwargs):
+        captured.update(kwargs)
+        return {
+            "replacement_nodes": [
+                {"text": "一", "children": []},
+                {"text": "二", "children": []},
+                {"text": "三", "children": []},
+            ]
+        }
+
+    with patch.object(service, "_call_mindmap_ai_split_model", side_effect=fake_call):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="auto",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-count",
+            target_card_count=3,
+        )
+
+    assert captured.get("target_card_count") == 3
+    assert result.replacement_node_count == 3
+    # Soft target 3 → hard cap at least 5 (3+2 headroom) on config.max_children
+    assert captured["config"].max_children >= 3
 
 
 def test_ai_split_prompt_scenes_compile_with_required_blocks(db_session: Session):
     catalog = _prompt_catalog(db_session)
-    parallel = catalog.compose("ai_split_parallel")
-    hierarchy = catalog.compose("ai_split_hierarchy")
+    unified = catalog.compose("ai_split")
+    parallel_alias = catalog.compose("ai_split_parallel")
+    hierarchy_alias = catalog.compose("ai_split_hierarchy")
 
     required = {
         "role.strict_json",
         "content.split_source_fidelity",
+        "task.split_structure_judgment",
+        "task.split_examples",
         "boundary.split_in_place",
         "output.mindmap_split_json",
     }
-    assert required.issubset(set(parallel.block_keys))
-    assert required.issubset(set(hierarchy.block_keys))
-    assert "replacement_nodes" in parallel.text
-    assert "children 必须为空数组" in parallel.text
-    assert "最多三层" in hierarchy.text
+    assert required.issubset(set(unified.block_keys))
+    assert required.issubset(set(parallel_alias.block_keys))
+    assert required.issubset(set(hierarchy_alias.block_keys))
+    assert "replacement_nodes" in unified.text
+    assert "保留原句" in unified.text
+    assert "实科中学" in unified.text
+    assert "骑士学院" in unified.text
+    assert "最多四层" in unified.text
 
 
 def test_scene_runtime_model_wins_over_stale_legacy_split_model(db_session: Session):

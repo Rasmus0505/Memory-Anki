@@ -46,9 +46,14 @@ def split_palace_editor_doc_with_ai(
     split_mode: str = "legacy_children",
     owner_id: str | None = None,
     operation_id: str | None = None,
+    target_card_count: int | None = None,
 ) -> MindMapAiSplitResult:
     if split_mode not in {"legacy_children", *split_contracts.AI_SPLIT_REPLACEMENT_MODES}:
         raise MindMapAiSplitError("不支持的 AI 分卡模式。")
+    preferred_card_count = tree_ops.normalize_target_card_count(
+        target_card_count,
+        hard_cap=split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT,
+    )
     config = resolve_mindmap_ai_split_config(
         session,
         ai_runtime=ai_runtime,
@@ -86,7 +91,12 @@ def split_palace_editor_doc_with_ai(
             [],
             configured_max_children=config.max_children,
         )
-        runtime_config = replace(config, max_children=inferred_max_children)
+        max_top_level = tree_ops.resolve_max_top_level_nodes(
+            inferred_max=inferred_max_children,
+            target_card_count=preferred_card_count,
+            hard_cap=split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT,
+        )
+        runtime_config = replace(config, max_children=max_top_level)
         ai_payload = _call_mindmap_ai_split_model(
             config=runtime_config,
             target_node=target_node,
@@ -95,11 +105,12 @@ def split_palace_editor_doc_with_ai(
             split_mode=split_mode,
             ai_options=ai_options,
             operation_id=operation_id,
+            target_card_count=preferred_card_count,
         )
         replacements = tree_ops.normalize_replacement_nodes(
             ai_payload.get("replacement_nodes"),
             split_mode=split_mode,
-            max_top_level_nodes=inferred_max_children,
+            max_top_level_nodes=max_top_level,
             operation_id=operation_id,
         )
         tree_ops.replace_target_at_location(parent_children, target_index, replacements)
@@ -113,6 +124,7 @@ def split_palace_editor_doc_with_ai(
             review_preview=build_review_preview_payload(editor_doc=normalized_doc),
             split_mode=split_mode,
             replacement_node_count=len(replacements),
+            replacement_nodes=replacements,
             owner_id=owner_id,
             operation_id=operation_id,
         )
@@ -181,6 +193,7 @@ def _call_mindmap_ai_split_model(
     split_mode: str = "legacy_children",
     ai_options: AiRuntimeOptions | None = None,
     operation_id: str | None = None,
+    target_card_count: int | None = None,
 ) -> dict[str, Any]:
     return gateway.call_model(
         config=config,
@@ -191,4 +204,5 @@ def _call_mindmap_ai_split_model(
         split_mode=split_mode,
         prompt_options=ai_options.prompt_options if ai_options else None,
         operation_id=operation_id,
+        target_card_count=target_card_count,
     )

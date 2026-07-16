@@ -148,9 +148,12 @@ export function useMindMapEditHistory(
     }
     if (fingerprint(currentEditorDocRef.current) === incomingFingerprint) return
 
+    // Parent/session writes that bypass commit() (AI 分卡应用、导入应用、版本预览写回等)
+    // must still enter the global undo stack. Only wipe future (new branch), never clear past.
+    const previous = currentEditorDocRef.current
     currentEditorDocRef.current = incomingEditorDoc
     pendingLocalFingerprintsRef.current.clear()
-    replaceHistory({ past: [], future: [] })
+    replaceHistory(pushMindMapHistory(historyRef.current, previous))
   }, [incomingEditorDoc, incomingFingerprint, replaceHistory])
 
   return {

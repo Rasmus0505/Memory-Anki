@@ -53,14 +53,46 @@ def infer_split_max_children(
     return min(cap, inferred)
 
 
+def normalize_target_card_count(value: Any, *, hard_cap: int = 12) -> int | None:
+    """Soft target for sibling card count after replace. None = auto."""
+    if value is None or value == "":
+        return None
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    if count < 2:
+        return 2
+    if count > hard_cap:
+        return hard_cap
+    return count
+
+
+def resolve_max_top_level_nodes(
+    *,
+    inferred_max: int,
+    target_card_count: int | None,
+    hard_cap: int = 12,
+) -> int:
+    """Hard safety cap for validation; soft target may be lower."""
+    cap = max(1, hard_cap)
+    base = max(1, inferred_max)
+    if target_card_count is None:
+        return min(cap, base)
+    # Headroom above soft target so the model is not forced to exact N.
+    return min(cap, max(base, target_card_count, target_card_count + 2))
+
+
 def build_model_input(
     *,
     target_node: dict[str, Any],
     existing_children: list[dict[str, Any]],
     include_note: bool,
     max_children: int,
+    split_mode: str = "legacy_children",
+    target_card_count: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "task": "split_mindmap_node",
         "max_children": max_children,
         "target_node": serialize_prompt_node(
@@ -77,6 +109,19 @@ def build_model_input(
             for child in existing_children
         ],
     }
+    if split_mode in {"auto", "parallel", "hierarchy"}:
+        payload["structure_preference"] = {
+            "auto": "根据内容自行判断：纯并列要点用同级卡片；有分类/时间线/目的-内容关系时用父子树。",
+            "parallel": "只要并列：只输出同级卡片，每个节点的 children 必须是空数组 []，不要创建父子。",
+            "hierarchy": "可以分层：允许父子树；中间标题只作组织，事实落在保留原句的叶子上；优先最少必要层级。",
+        }.get(split_mode, "")
+    if target_card_count is not None:
+        payload["prefer_about_n_sibling_cards"] = target_card_count
+        payload["card_count_guidance"] = (
+            f"替换原长卡后，并排出现的卡片（第一层）大约 {target_card_count} 张；"
+            "这是软目标，可按内容略多或略少，不要为凑数硬拆或硬并，也不得删减原句信息。"
+        )
+    return payload
 
 
 def collect_first_level_children(target_node: dict[str, Any]) -> list[dict[str, Any]]:
@@ -343,6 +388,33 @@ def find_target_location(
     return None, None, None
 
 
+def flatten_replacement_nodes_for_parallel(raw_value: Any) -> list[dict[str, Any]]:
+    """Promote nested nodes to a single sibling list for parallel mode."""
+    if not isinstance(raw_value, list):
+        return []
+    flat: list[dict[str, Any]] = []
+
+    def walk(nodes: list[Any]) -> None:
+        for value in nodes:
+            if not isinstance(value, dict):
+                continue
+            raw_children = value.get("children")
+            children = raw_children if isinstance(raw_children, list) else []
+            text = plain_text(
+                first_non_empty(value.get("text"), value.get("title"), value.get("name")),
+                fallback="",
+            ).strip()
+            if text:
+                next_node = dict(value)
+                next_node["children"] = []
+                flat.append(next_node)
+            if children:
+                walk(children)
+
+    walk(raw_value)
+    return flat
+
+
 def normalize_replacement_nodes(
     raw_value: Any,
     *,
@@ -352,10 +424,23 @@ def normalize_replacement_nodes(
     max_depth: int = AI_SPLIT_DEFAULT_MAX_DEPTH,
     max_total_nodes: int = AI_SPLIT_MAX_TOTAL_NODES,
 ) -> list[dict[str, Any]]:
+    if split_mode not in {"auto", "parallel", "hierarchy"}:
+        raise MindMapAiSplitError(f"不支持的 AI 分卡模式：{split_mode}")
     if not isinstance(raw_value, list):
         return []
-    if len(raw_value) > max_top_level_nodes:
-        raise MindMapAiSplitError(f"AI 分卡顶层节点超过限制（最多 {max_top_level_nodes} 个）。")
+    working = (
+        flatten_replacement_nodes_for_parallel(raw_value)
+        if split_mode == "parallel"
+        else raw_value
+    )
+    # Parallel flatten may expand nested model output; allow up to the safety hard cap.
+    effective_max_top = (
+        max(max_top_level_nodes, min(12, max_total_nodes))
+        if split_mode == "parallel"
+        else max_top_level_nodes
+    )
+    if len(working) > effective_max_top:
+        raise MindMapAiSplitError(f"AI 分卡顶层节点超过限制（最多 {effective_max_top} 个）。")
     total_nodes = 0
 
     def normalize_node(value: Any, path: tuple[int, ...], depth: int) -> dict[str, Any]:
@@ -372,8 +457,8 @@ def normalize_replacement_nodes(
             raise MindMapAiSplitError("AI 分卡返回了空标题节点。")
         raw_children = value.get("children")
         children_values = raw_children if isinstance(raw_children, list) else []
-        if split_mode == "parallel" and children_values:
-            raise MindMapAiSplitError("并列分卡结果不能包含子节点。")
+        if split_mode == "parallel":
+            children_values = []
         total_nodes += 1
         if total_nodes > max_total_nodes:
             raise MindMapAiSplitError(f"AI 分卡节点总数超过限制（最多 {max_total_nodes} 个）。")
@@ -390,7 +475,7 @@ def normalize_replacement_nodes(
             ],
         }
 
-    normalized = [normalize_node(item, (index,), 1) for index, item in enumerate(raw_value)]
+    normalized = [normalize_node(item, (index,), 1) for index, item in enumerate(working)]
     if not normalized:
         raise MindMapAiSplitError("AI 没有返回可用的替换节点。")
     return normalized

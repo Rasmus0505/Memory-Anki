@@ -1,4 +1,4 @@
-﻿export type MindMapAiSplitMode = 'parallel' | 'hierarchy'
+﻿export type MindMapAiSplitMode = 'auto' | 'parallel' | 'hierarchy'
 
 export interface MindMapAiSplitRequestPayload {
   target_node_uid: string | null

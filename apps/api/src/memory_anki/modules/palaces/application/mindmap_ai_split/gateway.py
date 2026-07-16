@@ -44,6 +44,25 @@ def _prompt_selection(prompt_options: dict[str, Any] | None) -> PromptRunSelecti
     )
 
 
+_STRUCTURE_SYSTEM_HINTS: dict[str, str] = {
+    "auto": (
+        "本次结构偏好：自动判断。"
+        "纯并列要点输出同级卡片（children 为空数组）；"
+        "有分类/时间线/目的-内容等关系时输出父子树。"
+    ),
+    "parallel": (
+        "本次结构偏好：只要并列。"
+        "只输出同级卡片，每个节点的 children 必须是空数组 []；"
+        "不要创建中间标题层或父子关系。"
+    ),
+    "hierarchy": (
+        "本次结构偏好：可以分层。"
+        "允许父子树；中间标题只作组织，事实落在保留原句的叶子节点；"
+        "优先最少且必要的层级。"
+    ),
+}
+
+
 def call_model(
     *,
     config: MindMapAiSplitConfig,
@@ -54,18 +73,33 @@ def call_model(
     split_mode: str,
     prompt_options: dict[str, Any] | None,
     operation_id: str | None,
+    target_card_count: int | None = None,
 ) -> dict[str, Any]:
     request_url = build_chat_completions_url(config.base_url)
     compiled_prompt = None
-    if split_mode in {"parallel", "hierarchy"}:
+    if split_mode in {"auto", "parallel", "hierarchy"}:
+        # Unified composition scene; legacy parallel/hierarchy entrypoints share the same defaults.
         compiled_prompt = prompt_catalog.compose(
-            f"ai_split_{split_mode}",
+            "ai_split",
             selection=_prompt_selection(prompt_options),
         )
         system_prompt = compiled_prompt.text
     else:
         system_prompt = prompt_catalog.render("ai_prompt_mindmap_ai_split_system")
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    structure_hint = _STRUCTURE_SYSTEM_HINTS.get(split_mode)
+    if structure_hint:
+        messages.append({"role": "system", "content": structure_hint})
+    if target_card_count is not None:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    f"本次数量偏好：替换后并排卡片大约 {target_card_count} 张（软目标，可略多略少）；"
+                    "不要为凑数硬拆/硬并，不得删减原句信息。"
+                ),
+            }
+        )
     if config.custom_instruction:
         messages.append(
             {
@@ -81,6 +115,8 @@ def call_model(
         existing_children=existing_children,
         include_note=config.include_note,
         max_children=config.max_children,
+        split_mode=split_mode,
+        target_card_count=target_card_count,
     )
     model_input["split_mode"] = split_mode
     if operation_id:

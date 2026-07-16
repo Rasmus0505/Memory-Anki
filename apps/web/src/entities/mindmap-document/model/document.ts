@@ -162,6 +162,39 @@ export function addMindMapSiblingWithResult(document: MindMapDocumentInput, node
   return { document: nextDocument, nodeUid: createdNodeUid }
 }
 
+/**
+ * Insert nodes as **siblings after** the selected node (same parent).
+ * If the selected node is the root, append as first-level children of the root.
+ * Never inserts as children of a non-root selected node.
+ */
+export function insertMindMapSiblingsAfter(
+  document: MindMapDocumentInput,
+  selectedUid: string,
+  nodes: MindMapNode[],
+): MindMapDocumentV1 {
+  const uid = String(selectedUid || '').trim()
+  if (!uid) {
+    throw new Error('请先在脑图上选中一张卡片。')
+  }
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    throw new Error('没有可追加的节点。')
+  }
+  return updateDocument(document, (draft) => {
+    const found = findNode(draft.root, uid)
+    if (!found) {
+      throw new Error('未找到当前选中卡片，请重新点选后再追加。')
+    }
+    // Root has no parent: first-level cards under root (still "同级" under the palace root).
+    if (!found.parent) {
+      draft.root.children = [...(draft.root.children ?? []), ...nodes]
+      return
+    }
+    const siblings = [...(found.parent.children ?? [])]
+    siblings.splice(found.index + 1, 0, ...nodes)
+    found.parent.children = siblings
+  })
+}
+
 export function deleteMindMapNode(document: MindMapDocumentInput, nodeUid: string) {
   return updateDocument(document, (draft) => {
     const found = findNode(draft.root, nodeUid)

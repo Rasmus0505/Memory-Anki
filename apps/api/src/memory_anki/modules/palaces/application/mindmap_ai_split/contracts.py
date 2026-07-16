@@ -16,8 +16,10 @@ AI_SPLIT_FALLBACK_BUCKET = "待归类"
 AI_SPLIT_DEFAULT_TEMPERATURE = 0.2
 AI_SPLIT_DEFAULT_MAX_CHILDREN = 5
 AI_SPLIT_MAX_CHILDREN_LIMIT = 12
-AI_SPLIT_REPLACEMENT_MODES = ("parallel", "hierarchy")
-AI_SPLIT_DEFAULT_MAX_DEPTH = 3
+# auto: unified replacement mode where the model chooses flat vs hierarchical structure.
+# parallel/hierarchy remain accepted aliases for older clients.
+AI_SPLIT_REPLACEMENT_MODES = ("auto", "parallel", "hierarchy")
+AI_SPLIT_DEFAULT_MAX_DEPTH = 4
 AI_SPLIT_MAX_TOTAL_NODES = 40
 
 
@@ -52,5 +54,6 @@ class MindMapAiSplitResult:
     review_preview: dict[str, Any] | None = None
     split_mode: MindMapAiSplitMode = "legacy_children"
     replacement_node_count: int = 0
+    replacement_nodes: list[dict[str, Any]] | None = None
     owner_id: str | None = None
     operation_id: str | None = None
