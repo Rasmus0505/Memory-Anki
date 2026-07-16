@@ -52,6 +52,31 @@ describe('MindMapEditorSurface native host', () => {
     expect(document.querySelector('iframe')).toBeNull()
   })
 
+  it('applies scene chrome class, data attribute, and label', () => {
+    const { rerender } = render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        sceneChrome="rating"
+      />,
+    )
+
+    const frame = screen.getByTestId('mindmap-frame-native')
+    expect(frame.dataset.sceneChrome).toBe('rating')
+    expect(frame.className).toContain('memory-anki-mindmap-scene-rating')
+    expect(screen.getByTestId('mindmap-scene-label').textContent).toBe('评分')
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        sceneChrome="default"
+      />,
+    )
+    expect(screen.getByTestId('mindmap-frame-native').dataset.sceneChrome).toBe('default')
+    expect(screen.queryByTestId('mindmap-scene-label')).toBeNull()
+  })
+
   it('requests the browser Fullscreen API when the platform supports it', async () => {
     const ref = createRef<MindMapEditorSurfaceHandle>()
     const requestFullscreen = vi.fn(async () => {})
@@ -125,11 +150,17 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(webkitCancelFullScreen).toHaveBeenCalledTimes(1)
   })
-  it('toggles fullscreen from the canvas toolbar control', async () => {
+  it('toggles system fullscreen from the canvas toolbar control', async () => {
     const onFullscreenChange = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
     render(
       <MindMapEditorSurface
         editorState={editorState}
+        presentationStrategy="native-preferred"
         onEditorStateChange={vi.fn()}
         onFullscreenChange={onFullscreenChange}
       />,
@@ -140,7 +171,9 @@ describe('MindMapEditorSurface native host', () => {
     await act(async () => {
       fireEvent.click(screen.getByTitle('进入系统全屏'))
     })
+    expect(requestFullscreen).toHaveBeenCalledTimes(1)
     expect(frame.className).toContain('memory-anki-mindmap-native-fullscreen')
+    expect(frame.dataset.presentationMode).toBe('native')
     expect(frame.firstElementChild).toBe(canvasRoot)
     expect(onFullscreenChange).toHaveBeenLastCalledWith(true)
 
@@ -149,6 +182,44 @@ describe('MindMapEditorSurface native host', () => {
     })
     expect(frame.className).not.toContain('memory-anki-mindmap-native-fullscreen')
     expect(frame.firstElementChild).toBe(canvasRoot)
+    expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('toggles webpage fullscreen without requesting the native Fullscreen API', async () => {
+    const onFullscreenChange = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        presentationStrategy="native-preferred"
+        onEditorStateChange={vi.fn()}
+        onFullscreenChange={onFullscreenChange}
+      />,
+    )
+
+    const frame = screen.getByTestId('mindmap-frame-native')
+    expect(screen.getByTitle('进入系统全屏')).toBeTruthy()
+    expect(screen.getByTitle('进入网页全屏')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入网页全屏'))
+    })
+
+    expect(requestFullscreen).not.toHaveBeenCalled()
+    expect(frame.className).toContain('memory-anki-mindmap-native-fullscreen')
+    expect(frame.dataset.presentationMode).toBe('viewport')
+    expect(onFullscreenChange).toHaveBeenLastCalledWith(true)
+    expect(screen.getByTitle('退出网页全屏')).toBeTruthy()
+    expect(screen.getByTitle('进入系统全屏')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('退出网页全屏'))
+    })
+    expect(frame.dataset.presentationMode).toBe('embedded')
     expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
   })
 

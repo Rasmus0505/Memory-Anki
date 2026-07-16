@@ -1,37 +1,65 @@
 import {
+  Expand,
   Maximize2,
   Minimize2,
   Redo2,
   RefreshCw,
+  Shrink,
   Undo2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 interface MindMapCanvasToolbarProps {
+  /** True when either system or webpage fullscreen presentation is active. */
   focusMode: boolean
-  focusModeLabel?: string
+  /** Presentation mode for dual-button active styling. */
+  presentationMode?: 'embedded' | 'native' | 'viewport'
+  /**
+   * When true, show both system fullscreen and webpage fullscreen controls
+   * (desktop). When false, only webpage/viewport fullscreen is shown (PWA).
+   */
+  showSystemFullscreenControl?: boolean
   canUndo: boolean
   canRedo: boolean
   showHistoryControls: boolean
   leadingContent?: ReactNode
   onRefreshHost: () => void
+  onToggleSystemFullscreen?: () => void
+  onToggleWebpageFullscreen?: () => void
+  /** @deprecated Prefer dual toggles; kept for single-control callers. */
   onToggleFocusMode?: () => void
   onUndo?: () => void
   onRedo?: () => void
 }
 
+function toolbarButtonClass(active: boolean) {
+  return `flex size-9 items-center justify-center rounded-xl border transition-colors ${
+    active
+      ? 'border-info/30 bg-info/5 text-info hover:border-info/50 hover:bg-info/10'
+      : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
+  }`
+}
+
 export function MindMapCanvasToolbar({
   focusMode,
-  focusModeLabel = '网页内全屏',
+  presentationMode = 'embedded',
+  showSystemFullscreenControl = false,
   canUndo,
   canRedo,
   showHistoryControls,
   leadingContent,
   onRefreshHost,
+  onToggleSystemFullscreen,
+  onToggleWebpageFullscreen,
   onToggleFocusMode,
   onUndo,
   onRedo,
 }: MindMapCanvasToolbarProps) {
+  const systemActive = presentationMode === 'native'
+  const webpageActive = presentationMode === 'viewport' || (!showSystemFullscreenControl && focusMode)
+  const handleSystemToggle = onToggleSystemFullscreen ?? onToggleFocusMode
+  const handleWebpageToggle = onToggleWebpageFullscreen ?? onToggleFocusMode
+
   return (
     <div className="flex h-[62px] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-background px-3 py-2">
       {leadingContent}
@@ -44,21 +72,31 @@ export function MindMapCanvasToolbar({
       >
         <RefreshCw className="size-4" />
       </button>
+      {showSystemFullscreenControl ? (
+        <button
+          type="button"
+          onClick={handleSystemToggle}
+          className={toolbarButtonClass(systemActive)}
+          title={systemActive ? '退出系统全屏' : '进入系统全屏'}
+        >
+          {systemActive ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </button>
+      ) : null}
       <button
         type="button"
-        onClick={onToggleFocusMode}
-        className={`flex size-9 items-center justify-center rounded-xl border transition-colors ${
-          focusMode
-            ? 'border-info/30 bg-info/5 text-info hover:border-info/50 hover:bg-info/10'
-            : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
-        }`}
-        title={`${focusMode ? '退出' : '进入'}${focusModeLabel}`}
+        onClick={handleWebpageToggle}
+        className={toolbarButtonClass(webpageActive)}
+        title={
+          showSystemFullscreenControl
+            ? webpageActive
+              ? '退出网页全屏'
+              : '进入网页全屏'
+            : webpageActive
+              ? '退出全屏'
+              : '进入全屏'
+        }
       >
-        {focusMode ? (
-          <Minimize2 className="size-4" />
-        ) : (
-          <Maximize2 className="size-4" />
-        )}
+        {webpageActive ? <Shrink className="size-4" /> : <Expand className="size-4" />}
       </button>
       {showHistoryControls ? <div className="mx-1 h-5 w-px bg-border" /> : null}
       {onUndo ? (

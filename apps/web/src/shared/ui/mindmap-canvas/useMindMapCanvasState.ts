@@ -85,6 +85,7 @@ export function useMindMapCanvasState(
   const {
     graphData,
     selectedNodeId,
+    selectedNodeIds: selectedNodeIdsProp,
     editingNodeId = null,
     editingDraft = null,
     selectEditingText = false,
@@ -95,7 +96,9 @@ export function useMindMapCanvasState(
     onAddSibling,
     onDelete,
     onDeleteNodeOnly,
+    onRelocate,
     onReparent,
+    onExtractSelection,
     onEdit,
     canUndo = false,
     canRedo = false,
@@ -126,6 +129,8 @@ export function useMindMapCanvasState(
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const isDraggingNodeRef = useRef(false)
+  /** Graph/measure layout landed while a structure drag was active — apply after drag ends. */
+  const pendingLayoutSyncRef = useRef(false)
   const displayNodesRef = useRef<Node[]>([])
   const displayEdgesRef = useRef<Edge[]>([])
   const [nodeSizeVersion, setNodeSizeVersion] = useState(0)
@@ -156,6 +161,11 @@ export function useMindMapCanvasState(
     viewCommand,
     setNodeSizeVersion,
   })
+  const selectedNodeIds = useMemo(() => {
+    if (selectedNodeIdsProp && selectedNodeIdsProp.length > 0) return selectedNodeIdsProp
+    return selectedNodeId ? [selectedNodeId] : []
+  }, [selectedNodeId, selectedNodeIdsProp])
+
   const menus = useMindMapMenusAndEdges({
     onNodeSelect,
     onNodeActivate,
@@ -167,6 +177,7 @@ export function useMindMapCanvasState(
     contextActionOnly: practiceModeActive,
     nodeClickViewportPolicy,
     centerNodeInCanvas: viewport.centerNodeInCanvas,
+    readonly,
   })
   const drag = useMindMapDragInteractions({
     readonly,
@@ -177,7 +188,9 @@ export function useMindMapCanvasState(
     setNodes,
     setEdges,
     onNodeSelect,
+    selectedNodeIds,
     onEdit,
+    onRelocate,
     onReparent,
     onReorderSibling,
     checkOverlap: viewport.checkOverlap,
@@ -187,10 +200,12 @@ export function useMindMapCanvasState(
     resetPreviewFeedback: viewport.resetPreviewFeedback,
   })
   const {
-    previewLayout,
     previewState,
     isDraggingNode,
+    liveDragVersion,
+    liveDragPositionsRef,
     draggingNodeIdRef,
+    dragSourceIdsRef,
     handleFinishEdit,
     resetDragState,
   } = drag
@@ -206,22 +221,28 @@ export function useMindMapCanvasState(
   const handleStartEdit = useCallback(
     (nodeId: string) => {
       if (readonly) return
-      onNodeSelect(nodeId)
+      // Enter edit in one step: surface beginEditing already selects the node.
+      // Avoid select→edit double-write races that can drop the edit session.
       onEditingNodeChange?.(nodeId)
     },
-    [onEditingNodeChange, onNodeSelect, readonly],
+    [onEditingNodeChange, readonly],
   )
   const handleNodeDoubleClick = useCallback(
     (event: MouseEvent, node: Node) => {
       if (readonly) return
       const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest('.mindmap-node-drag-handle')) return
+      if (target?.closest('.mindmap-node-drag-surface') && !target.closest('.mindmap-node-text')) {
+        // Dragging the selected surface should not fall through to edit.
+        return
+      }
+      // NodeCard also handles double-click; RF path is a fallback when the
+      // event does not originate from card shell handlers.
+      if (target?.closest('[data-mindmap-node-id]')) return
       event.preventDefault()
       event.stopPropagation()
-      onNodeSelect(node.id)
       onEditingNodeChange?.(node.id)
     },
-    [onEditingNodeChange, onNodeSelect, readonly],
+    [onEditingNodeChange, readonly],
   )
   const handleCancelEdit = useCallback(
     (nodeId: string) => {
@@ -237,15 +258,45 @@ export function useMindMapCanvasState(
     [editingNodeId, handleFinishEdit, onEditingNodeChange],
   )
 
+  const [extractDrop, setExtractDrop] = useState<{
+    targetId: string
+    mode: 'before' | 'inside' | 'after'
+  } | null>(null)
+
+  const handleExtractDropPreview = useCallback(
+    (next: { targetId: string; mode: 'before' | 'inside' | 'after' } | null) => {
+      setExtractDrop(next)
+    },
+    [],
+  )
+
+  const handleExtractSelection = useCallback(
+    (payload: {
+      sourceId: string
+      liveText: string
+      start: number
+      end: number
+      placement: { mode: 'inside' | 'before' | 'after'; targetUid: string }
+    }) => {
+      setExtractDrop(null)
+      onExtractSelection?.(payload)
+    },
+    [onExtractSelection],
+  )
+
   const displayNodes = useMemo(() => {
     const nextDisplayNodes = buildDisplayNodes({
       nodes,
-      previewNodes: previewLayout?.nodes ?? [],
+      // Structure drag freezes layout: only drop chrome / source ghost, no position preview.
+      previewNodes: [],
       previewState,
       previousDisplayNodes: displayNodesRef.current,
       sourceId: draggingNodeIdRef.current,
+      sourceIds: dragSourceIdsRef.current,
       isDraggingNode,
+      liveDragPositions: isDraggingNode ? liveDragPositionsRef.current : null,
       selectedNodeId,
+      selectedNodeIds,
       editingNodeId,
       editingDraft,
       selectEditingText,
@@ -257,35 +308,65 @@ export function useMindMapCanvasState(
       onDelete,
       onFinishEdit: handleFinishEditAndClose,
       onMeasure: viewport.handleNodeMeasure,
+      onExtractSelection: onExtractSelection ? handleExtractSelection : undefined,
+      onExtractDropPreview: onExtractSelection ? handleExtractDropPreview : undefined,
       readonly,
       touchLongPressEnabled,
       onTouchLongPress: handleTouchLongPress,
+      buildSelectionToolbarActions: props.buildSelectionToolbarActions,
+      selectionToolbarPreferPosition: props.selectionToolbarPreferPosition,
+      extractDropTargetId: extractDrop?.targetId ?? null,
+      extractDropMode: extractDrop?.mode ?? null,
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
-  }, [draggingNodeIdRef, editingDraft, editingNodeId, handleCancelEdit, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, previewLayout, previewState, readonly, selectEditingText, selectedNodeId, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
-    const baseEdges = previewLayout?.edges ?? edges
-    const nextDisplayEdges = buildDisplayEdges(baseEdges, menus.selectedEdgeId, displayEdgesRef.current)
+    const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)
     displayEdgesRef.current = nextDisplayEdges
     return nextDisplayEdges
-  }, [edges, menus.selectedEdgeId, previewLayout])
+  }, [edges, menus.selectedEdgeId])
+
+  const applyGraphLayout = useCallback(
+    (options?: { resetDrag?: boolean }) => {
+      const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+      setNodes(nextLayout.nodes)
+      setEdges(nextLayout.edges)
+      if (options?.resetDrag) {
+        clearEdgeSelection()
+        resetDragState()
+      }
+    },
+    [clearEdgeSelection, graphData, resetDragState, setEdges, setNodes],
+  )
 
   useEffect(() => {
-    const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
-    setNodes(nextLayout.nodes)
-    setEdges(nextLayout.edges)
-    clearEdgeSelection()
-    resetDragState()
-  }, [clearEdgeSelection, graphData, resetDragState, setEdges, setNodes])
+    // Mid-drag layout resets are the main "flash back to origin" source.
+    if (isDraggingNodeRef.current) {
+      pendingLayoutSyncRef.current = true
+      return
+    }
+    pendingLayoutSyncRef.current = false
+    applyGraphLayout({ resetDrag: true })
+  }, [applyGraphLayout])
 
   useEffect(() => {
-    if (nodeSizeVersion === 0 || isDraggingNodeRef.current) return
-    const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
-    setNodes(nextLayout.nodes)
-    setEdges(nextLayout.edges)
-  }, [graphData, nodeSizeVersion, setEdges, setNodes])
+    if (nodeSizeVersion === 0) return
+    if (isDraggingNodeRef.current) {
+      pendingLayoutSyncRef.current = true
+      return
+    }
+    applyGraphLayout()
+  }, [applyGraphLayout, nodeSizeVersion])
+
+  // After a structure drag ends, flush any graph/measure layout deferred above.
+  useEffect(() => {
+    if (isDraggingNode) return
+    if (!pendingLayoutSyncRef.current) return
+    pendingLayoutSyncRef.current = false
+    applyGraphLayout()
+  }, [applyGraphLayout, isDraggingNode])
 
   const nodeActions = useMemo(
     () => buildNodeActions({

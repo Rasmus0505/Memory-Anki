@@ -18,7 +18,7 @@ export interface MindMapEdgeMenuState {
 }
 
 interface UseMindMapMenusAndEdgesInput {
-  onNodeSelect: (nodeId: string | null) => void
+  onNodeSelect: (nodeId: string | null, options?: { additive?: boolean }) => void
   onNodeActivate?: (nodeId: string) => void
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
@@ -28,6 +28,7 @@ interface UseMindMapMenusAndEdgesInput {
   contextActionOnly: boolean
   nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
+  readonly?: boolean
 }
 
 export function useMindMapMenusAndEdges({
@@ -41,6 +42,7 @@ export function useMindMapMenusAndEdges({
   contextActionOnly,
   nodeClickViewportPolicy,
   centerNodeInCanvas,
+  readonly = false,
 }: UseMindMapMenusAndEdgesInput) {
   const [ctxMenu, setCtxMenu] = useState<MindMapNodeMenuState | null>(null)
   const [edgeMenu, setEdgeMenu] = useState<MindMapEdgeMenuState | null>(null)
@@ -90,9 +92,12 @@ export function useMindMapMenusAndEdges({
     (event: MouseEvent, node: Node) => {
       setSelectedEdgeId(null)
       setEdgeMenu(null)
-      onNodeSelect(node.id)
-      onNodeActivate?.(node.id)
-      if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center') {
+      const additive = !readonly && (event.ctrlKey || event.metaKey)
+      onNodeSelect(node.id, additive ? { additive: true } : undefined)
+      if (!additive) {
+        onNodeActivate?.(node.id)
+      }
+      if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center' && !additive) {
         centerNodeInCanvas(node.id)
       }
       dispatchGlobalFeedback('node_select', {
@@ -100,7 +105,14 @@ export function useMindMapMenusAndEdges({
         origin: 'node',
       })
     },
-    [centerNodeInCanvas, mobileGuidedActive, nodeClickViewportPolicy, onNodeActivate, onNodeSelect],
+    [
+      centerNodeInCanvas,
+      mobileGuidedActive,
+      nodeClickViewportPolicy,
+      onNodeActivate,
+      onNodeSelect,
+      readonly,
+    ],
   )
 
   const handleNodeMouseEnter = useCallback(

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { applyMindMapLayout, buildPreviewGraph, getNodeSize, NODE_SAFE_GAP } from './layout'
+import {
+  applyMindMapLayout,
+  buildPreviewGraph,
+  getNodeSize,
+  isWithinStructureDropLeaveZone,
+  NODE_SAFE_GAP,
+  resolveStructureDropMode,
+} from './layout'
 import type { GraphData } from './adapter'
 
 describe('mind map layout sizing', () => {
@@ -56,8 +63,7 @@ describe('mind map layout sizing', () => {
     const { nodes } = applyMindMapLayout(graphData)
 
     expect(nodes[0]).toMatchObject({
-      draggable: true,
-      dragHandle: '.mindmap-node-drag-handle',
+      draggable: false,
     })
   })
 
@@ -401,6 +407,41 @@ describe('mind map layout sizing', () => {
     expect(layout.nodes).toHaveLength(800)
     expect(layout.edges).toHaveLength(799)
     expect(elapsed).toBeLessThan(250)
+  })
+})
+
+describe('resolveStructureDropMode', () => {
+  const rect = { x: 100, y: 200, width: 120, height: 40 }
+
+  it('treats any pointer on the card body as becoming a child', () => {
+    expect(resolveStructureDropMode(110, 205, rect)).toBe('inside')
+    expect(resolveStructureDropMode(110, 202, rect)).toBe('inside')
+    expect(resolveStructureDropMode(110, 238, rect)).toBe('inside')
+  })
+
+  it('offers sibling modes only in the vertical gap above or below a non-root card', () => {
+    expect(resolveStructureDropMode(160, 180, rect)).toBe('before')
+    expect(resolveStructureDropMode(160, 260, rect)).toBe('after')
+  })
+
+  it('does not treat pure horizontal near-miss as sibling reorder', () => {
+    expect(resolveStructureDropMode(40, 220, rect)).toBeNull()
+    expect(resolveStructureDropMode(250, 220, rect)).toBeNull()
+  })
+
+  it('only accepts on-card child drops for the root', () => {
+    expect(resolveStructureDropMode(110, 220, rect, { isRoot: true })).toBe('inside')
+    expect(resolveStructureDropMode(160, 180, rect, { isRoot: true })).toBeNull()
+    expect(resolveStructureDropMode(160, 260, rect, { isRoot: true })).toBeNull()
+  })
+
+  it('keeps an active inside preview sticky inside the leave zone', () => {
+    expect(
+      isWithinStructureDropLeaveZone(160, 185, rect, 'inside', { leaveExtraPx: 24 }),
+    ).toBe(true)
+    expect(
+      isWithinStructureDropLeaveZone(160, 80, rect, 'inside', { leaveExtraPx: 24 }),
+    ).toBe(false)
   })
 })
 

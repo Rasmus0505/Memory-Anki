@@ -27,7 +27,11 @@ interface CapabilityFactoryOptions {
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
   highlightedNodeUids: string[]
-  masteryByNodeUid: Record<string, { status: string; manualLabel?: string | null }>
+  masteryByNodeUid: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
+  statusChipsByNodeUid?: Record<
+    string,
+    Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
+  >
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   aiSplitBusy: boolean
@@ -46,6 +50,13 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
     { key: 'search-decoration', graphOptions: { highlightedNodeUids: options.highlightedNodeUids } },
     { key: 'mastery-decoration', graphOptions: { masteryByNodeUid: options.masteryByNodeUid } },
   ]
+
+  if (options.statusChipsByNodeUid && Object.keys(options.statusChipsByNodeUid).length > 0) {
+    capabilities.push({
+      key: 'status-chips',
+      graphOptions: { statusChipsByNodeUid: options.statusChipsByNodeUid },
+    })
+  }
 
   if (options.revealMap) capabilities.push({ key: 'review-reveal', graphOptions: { revealMap: options.revealMap } })
 

@@ -510,6 +510,7 @@ export default function PalaceEdit() {
                     <FlipCardMindMapPanel
                       ref={mindMapFrameRef}
                       fullscreen={page.mindMapFullscreen}
+                      sessionKind="practice"
                       modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
                       viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
                       toolbarExtensions={mindMapToolbarExtensions}
@@ -555,6 +556,7 @@ export default function PalaceEdit() {
                     <MindMapEditorSurface
                       ref={mindMapFrameRef}
                       editorState={activeFrameEditorState}
+                      sceneChrome="edit"
                       toolbarContent={
                         <MindMapPageToolbar
                           {...mindMapToolbarExtensions}

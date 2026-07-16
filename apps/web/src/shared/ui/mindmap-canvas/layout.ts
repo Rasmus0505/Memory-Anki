@@ -13,11 +13,22 @@ const CHILD_GAP_X = 30
 const ROOT_STACK_GAP = 28
 const CHILD_GAP_Y = 18
 export const NODE_SAFE_GAP = 18
-export const DROP_HIT_PADDING_X = 16
-export const DROP_HIT_PADDING_Y = 12
+export const DROP_HIT_PADDING_X = 28
+export const DROP_HIT_PADDING_Y = 24
+/** Pointer distance outside a card that still counts as a near drop candidate (flow px). */
+export const DROP_NEAR_THRESHOLD_PX = 56
+/** Extra distance beyond enter threshold before an active preview is cleared (anti-flash). */
+export const DROP_LEAVE_EXTRA_PX = 24
 
 export type LayoutRole = 'root' | 'branch' | 'leaf'
 export type DropMode = 'before' | 'inside' | 'after'
+
+export interface StructureDropRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 interface LayoutTreeNode {
   node: MindMapNode
@@ -49,9 +60,15 @@ export interface PositionedGraph {
 
 export interface PreviewState {
   sourceId: string
+  /** When multi-dragging, all top-level source ids (includes sourceId). */
+  sourceIds?: readonly string[]
   targetId: string
   mode: DropMode
 }
+
+/** Vertical band ratios on the target card for drop mode (relativeY / height). */
+export const DROP_MODE_BEFORE_RATIO = 0.2
+export const DROP_MODE_AFTER_RATIO = 0.8
 
 type NodeSizeSource =
   | LayoutRole
@@ -322,8 +339,8 @@ function layoutTreeNodes(
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
     position: { x, y },
-    draggable: true,
-    dragHandle: '.mindmap-node-drag-handle',
+    // Selection-only drag is applied in buildDisplayNodes (selected && !editing).
+    draggable: false,
     data: {
       ...node.node,
       metadata: {
@@ -601,21 +618,98 @@ export function buildPreviewGraph(
   preview: PreviewState,
   measuredSizes?: NodeSizeMap,
 ): PositionedGraph {
-  const source = graphData.nodes.find((node) => node.id === preview.sourceId)
+  const sourceIds = preview.sourceIds?.length
+    ? [...preview.sourceIds]
+    : [preview.sourceId]
   const target = graphData.nodes.find((node) => node.id === preview.targetId)
-  if (!source || !target) return applyMindMapLayout(graphData, measuredSizes)
-  if (
-    source.id === target.id ||
-    isDescendant(graphData.nodes, source.id, target.id)
-  ) {
-    return applyMindMapLayout(graphData, measuredSizes)
-  }
+  if (!target) return applyMindMapLayout(graphData, measuredSizes)
 
-  const nodes = movePreviewNode(
-    graphData.nodes,
-    preview.sourceId,
-    preview.targetId,
-    preview.mode,
-  )
+  let nodes = graphData.nodes
+  for (const sourceId of sourceIds) {
+    const source = nodes.find((node) => node.id === sourceId)
+    if (!source || source.id === target.id) continue
+    if (isDescendant(nodes, source.id, target.id)) {
+      return applyMindMapLayout(graphData, measuredSizes)
+    }
+    nodes = movePreviewNode(nodes, sourceId, preview.targetId, preview.mode)
+  }
   return applyMindMapLayout({ ...graphData, nodes }, measuredSizes)
+}
+
+export function resolveDropMode(relativeY: number, height: number): DropMode {
+  if (height <= 0) return 'inside'
+  const ratio = relativeY / height
+  if (ratio < DROP_MODE_BEFORE_RATIO) return 'before'
+  if (ratio > DROP_MODE_AFTER_RATIO) return 'after'
+  return 'inside'
+}
+
+/**
+ * Structure-drag drop mode:
+ * - pointer on the card body → always become a child (`inside`)
+ * - pointer in the vertical gap above/below a non-root card → sibling before/after
+ * - pure horizontal near-miss → no drop intent for that candidate
+ * - root only accepts on-card child drops
+ */
+export function resolveStructureDropMode(
+  probeX: number,
+  probeY: number,
+  rect: StructureDropRect,
+  options?: { isRoot?: boolean; nearThresholdPx?: number },
+): DropMode | null {
+  const { x, y, width, height } = rect
+  if (width <= 0 || height <= 0) return null
+
+  const isRoot = Boolean(options?.isRoot)
+  const nearThreshold = options?.nearThresholdPx ?? DROP_NEAR_THRESHOLD_PX
+  const inside =
+    probeX >= x &&
+    probeX <= x + width &&
+    probeY >= y &&
+    probeY <= y + height
+
+  if (inside) return 'inside'
+
+  // Distance from probe to the unpadded card rectangle.
+  const left = x
+  const right = x + width
+  const top = y
+  const bottom = y + height
+  const dx = probeX < left ? left - probeX : probeX > right ? probeX - right : 0
+  const dy = probeY < top ? top - probeY : probeY > bottom ? probeY - bottom : 0
+  const edgeDist = Math.hypot(dx, dy)
+  if (edgeDist > nearThreshold) return null
+
+  // Root never accepts sibling before/after.
+  if (isRoot) return null
+
+  // Pure horizontal near-miss is not a sibling-gap intent.
+  if (dy === 0) return null
+
+  // Vertical gap above/below the card.
+  if (probeY < top) return 'before'
+  if (probeY > bottom) return 'after'
+  return null
+}
+
+/** Whether the pointer is still close enough to keep an active drop preview (leave hysteresis). */
+export function isWithinStructureDropLeaveZone(
+  probeX: number,
+  probeY: number,
+  rect: StructureDropRect,
+  mode: DropMode,
+  options?: { isRoot?: boolean; nearThresholdPx?: number; leaveExtraPx?: number },
+): boolean {
+  const nearThreshold = options?.nearThresholdPx ?? DROP_NEAR_THRESHOLD_PX
+  const leaveExtra = options?.leaveExtraPx ?? DROP_LEAVE_EXTRA_PX
+  const leaveThreshold = nearThreshold + leaveExtra
+  const resolved = resolveStructureDropMode(probeX, probeY, rect, {
+    isRoot: options?.isRoot,
+    nearThresholdPx: leaveThreshold,
+  })
+  if (!resolved) return false
+  // Same semantic family: inside stays inside; before/after may stick to either sibling side
+  // only if the leave zone still resolves to the same mode, or still on-card inside for that target.
+  if (mode === 'inside') return resolved === 'inside' || resolved === 'before' || resolved === 'after'
+  return resolved === mode || resolved === 'inside'
 }

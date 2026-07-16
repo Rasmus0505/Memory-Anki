@@ -33,13 +33,21 @@ export interface MindMapCanvasViewCommand {
   nonce: number
 }
 
+export type MindMapDropMode = 'before' | 'inside' | 'after'
+
+export interface MindMapNodeSelectOptions {
+  additive?: boolean
+}
+
 export interface MindMapCanvasProps {
   graphData: GraphData
   selectedNodeId: string | null
+  /** Multi-select set; when omitted, falls back to [selectedNodeId]. */
+  selectedNodeIds?: string[]
   editingNodeId?: string | null
   editingDraft?: string | null
   selectEditingText?: boolean
-  onNodeSelect: (nodeId: string | null) => void
+  onNodeSelect: (nodeId: string | null, options?: MindMapNodeSelectOptions) => void
   onEditingNodeChange?: (nodeId: string | null) => void
   onEditingDraftChange?: (nodeId: string, text: string) => void
   onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void
@@ -47,14 +55,27 @@ export interface MindMapCanvasProps {
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
   onDeleteNodeOnly?: (nodeId: string) => void
+  /** Preferred drop commit for structure moves (supports multi-source). */
+  onRelocate?: (sourceIds: string[], targetId: string, mode: MindMapDropMode) => void
   onReparent?: (sourceId: string, targetId: string) => void
+  onExtractSelection?: (payload: {
+    sourceId: string
+    liveText: string
+    start: number
+    end: number
+    placement: { mode: 'inside' | 'before' | 'after'; targetUid: string }
+  }) => void
   onEdit?: (nodeId: string, text: string) => void
   canUndo?: boolean
   canRedo?: boolean
   onUndo?: () => void
   onRedo?: () => void
   focusMode?: boolean
-  focusModeLabel?: string
+  presentationMode?: 'embedded' | 'native' | 'viewport'
+  showSystemFullscreenControl?: boolean
+  onToggleSystemFullscreen?: () => void
+  onToggleWebpageFullscreen?: () => void
+  /** @deprecated Prefer dual toggles; kept for single-control callers. */
   onToggleFocusMode?: () => void
   onEdgeDelete?: (edgeId: string, sourceId: string, targetId: string) => void
   onEdgeInsert?: (edgeId: string, sourceId: string, targetId: string) => void
@@ -70,6 +91,8 @@ export interface MindMapCanvasProps {
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   buildNodeActions?: (nodeId: string) => ContextMenuAction[]
+  buildSelectionToolbarActions?: (nodeId: string) => import('./selectionToolbar').SelectionToolbarAction[]
+  selectionToolbarPreferPosition?: import('./selectionToolbar').SelectionToolbarPreferPosition
   practiceModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
@@ -170,7 +193,10 @@ type MindMapCanvasInnerProps = MindMapCanvasProps & {
 
 function MindMapCanvasInner({
   focusMode = false,
-  focusModeLabel = '网页内全屏',
+  presentationMode = 'embedded',
+  showSystemFullscreenControl = false,
+  onToggleSystemFullscreen,
+  onToggleWebpageFullscreen,
   onToggleFocusMode,
   showToolbar = true,
   className,
@@ -239,12 +265,22 @@ function MindMapCanvasInner({
     state.canvasSize.width,
   ])
 
-  const handleToggleFocusMode = () => {
+  const dispatchFullscreenFeedback = (label: string, nextActive: boolean) => {
     dispatchGlobalFeedback('mode_switch', {
       origin: 'toolbar',
-      label: focusMode ? 'EXIT' : 'FOCUS',
+      label: nextActive ? 'EXIT' : label,
     })
-    onToggleFocusMode?.()
+  }
+
+  const handleToggleSystemFullscreen = () => {
+    dispatchFullscreenFeedback('SYSTEM_FOCUS', presentationMode === 'native')
+    ;(onToggleSystemFullscreen ?? onToggleFocusMode)?.()
+  }
+
+  const handleToggleWebpageFullscreen = () => {
+    const webpageActive = presentationMode === 'viewport' || (!showSystemFullscreenControl && focusMode)
+    dispatchFullscreenFeedback('VIEWPORT_FOCUS', webpageActive)
+    ;(onToggleWebpageFullscreen ?? onToggleFocusMode)?.()
   }
 
   return (
@@ -258,13 +294,15 @@ function MindMapCanvasInner({
       {showToolbar ? (
         <MindMapCanvasToolbar
           focusMode={focusMode}
-          focusModeLabel={focusModeLabel}
+          presentationMode={presentationMode}
+          showSystemFullscreenControl={showSystemFullscreenControl}
           canUndo={state.canUndo}
           canRedo={state.canRedo}
           showHistoryControls={state.canShowHistoryControls}
           leadingContent={props.toolbarContent}
           onRefreshHost={onHostRefresh}
-          onToggleFocusMode={handleToggleFocusMode}
+          onToggleSystemFullscreen={handleToggleSystemFullscreen}
+          onToggleWebpageFullscreen={handleToggleWebpageFullscreen}
           onUndo={props.onUndo}
           onRedo={props.onRedo}
         />

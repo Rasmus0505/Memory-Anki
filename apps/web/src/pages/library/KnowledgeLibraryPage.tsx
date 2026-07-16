@@ -631,6 +631,7 @@ export default function Knowledge() {
                   ref={mindMapFrameRef}
                   key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                   editorState={editorState}
+                  sceneChrome={mindMapExperience.task === 'learn' ? 'default' : 'edit'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   readonly={mindMapExperience.task === 'learn'}
                   highlightedNodeUids={mindMapExperience.highlightedNodeUids}

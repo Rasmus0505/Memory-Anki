@@ -105,7 +105,7 @@ describe('mindMapCanvasDisplay', () => {
   })
 
   it('marks only drag source and drop target during lightweight preview', () => {
-    const nodes = [makeNode('source'), makeNode('target'), makeNode('other')]
+    const nodes = [makeNode('source', 10, 20), makeNode('target', 100, 200), makeNode('other', 300, 400)]
     const displayNodes = buildDisplayNodes({
       nodes,
       previewNodes: [],
@@ -130,6 +130,138 @@ describe('mindMapCanvasDisplay', () => {
     expect(displayNodes.find((node) => node.id === 'target')?.data.previewAdopt).toBe(true)
     expect(displayNodes.find((node) => node.id === 'other')?.data.dropHighlight).toBe(false)
     expect(displayNodes.every((node) => node.data.readonly === true)).toBe(true)
+    // Frozen layout: empty previewNodes must not shift non-source cards.
+    expect(displayNodes.find((node) => node.id === 'target')?.position).toEqual({ x: 100, y: 200 })
+    expect(displayNodes.find((node) => node.id === 'other')?.position).toEqual({ x: 300, y: 400 })
+    expect(displayNodes.find((node) => node.id === 'target')?.data.previewShifted).toBe(false)
+    expect(displayNodes.find((node) => node.id === 'other')?.data.previewShifted).toBe(false)
+  })
+
+  it('enables structure drag for idle non-editing nodes without requiring selection', () => {
+    const nodes = [makeNode('a'), makeNode('b')]
+    const displayNodes = buildDisplayNodes({
+      nodes,
+      previewNodes: [],
+      previewState: null,
+      sourceId: null,
+      isDraggingNode: false,
+      selectedNodeId: 'a',
+      selectedNodeIds: ['a'],
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: false,
+    })
+
+    expect(displayNodes.find((node) => node.id === 'a')?.draggable).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'a')?.dragHandle).toBe(
+      '.mindmap-node-drag-surface',
+    )
+    expect(displayNodes.find((node) => node.id === 'b')?.draggable).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'b')?.dragHandle).toBe(
+      '.mindmap-node-drag-surface',
+    )
+  })
+
+  it('disables structure drag while a node is being edited', () => {
+    const nodes = [makeNode('a'), makeNode('b')]
+    const displayNodes = buildDisplayNodes({
+      nodes,
+      previewNodes: [],
+      previewState: null,
+      sourceId: null,
+      isDraggingNode: false,
+      selectedNodeId: 'a',
+      selectedNodeIds: ['a'],
+      editingNodeId: 'a',
+      editingDraft: 'draft',
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: false,
+    })
+
+    expect(displayNodes.find((node) => node.id === 'a')?.draggable).toBe(false)
+    expect(displayNodes.find((node) => node.id === 'b')?.draggable).toBe(true)
+  })
+
+  it('prefers live drag positions so drop-chrome re-renders do not snap sources back', () => {
+    const nodes = [makeNode('source', 10, 20), makeNode('target', 100, 200)]
+    const liveDragPositions = new Map([['source', { x: 240, y: 320 }]])
+    const displayNodes = buildDisplayNodes({
+      nodes,
+      previewNodes: [],
+      previewState: { sourceId: 'source', targetId: 'target', mode: 'inside' },
+      sourceId: 'source',
+      isDraggingNode: true,
+      liveDragPositions,
+      selectedNodeId: 'source',
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: false,
+    })
+
+    expect(displayNodes.find((node) => node.id === 'source')?.position).toEqual({
+      x: 240,
+      y: 320,
+    })
+    expect(displayNodes.find((node) => node.id === 'target')?.position).toEqual({
+      x: 100,
+      y: 200,
+    })
+  })
+
+  it('marks multi-selected nodes and multi-drag sources as ghost', () => {
+    const nodes = [makeNode('a'), makeNode('b'), makeNode('c')]
+    const displayNodes = buildDisplayNodes({
+      nodes,
+      previewNodes: [],
+      previewState: {
+        sourceId: 'a',
+        sourceIds: ['a', 'b'],
+        targetId: 'c',
+        mode: 'inside',
+      },
+      sourceId: 'a',
+      sourceIds: ['a', 'b'],
+      isDraggingNode: true,
+      selectedNodeId: 'a',
+      selectedNodeIds: ['a', 'b'],
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: false,
+    })
+
+    expect(displayNodes.find((node) => node.id === 'a')?.data.selected).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'b')?.data.selected).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'c')?.data.selected).toBe(false)
+    expect(displayNodes.find((node) => node.id === 'a')?.data.previewGhost).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'b')?.data.previewGhost).toBe(true)
+    expect(displayNodes.find((node) => node.id === 'c')?.data.dropHighlight).toBe(true)
   })
 
   it('reuses unchanged edge objects and only replaces selected edge styling', () => {

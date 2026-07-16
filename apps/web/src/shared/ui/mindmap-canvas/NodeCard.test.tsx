@@ -2,6 +2,7 @@ import * as React from 'react'
 import { act, createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import NodeCard from '@/shared/ui/mindmap-canvas/NodeCard'
+import { getNodeSize } from '@/shared/ui/mindmap-canvas/layout'
 
 const LONG_PRESS_DELAY_MS = 550
 
@@ -104,17 +105,52 @@ describe('NodeCard', () => {
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
 
-  it('limits node dragging to a dedicated handle and keeps text non-draggable', () => {
+  it('makes the whole idle card a drag surface with grab cursor without selection', () => {
+    const { container } = renderNodeCard({
+      label: '可编辑内容',
+      selected: false,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+
+    const shell = container.querySelector('[data-mindmap-node-id]')
+    expect(shell?.className).toContain('mindmap-node-drag-surface')
+    expect(shell?.className).toContain('cursor-grab')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).not.toContain('nodrag')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-grab')
+    expect(screen.queryByRole('button', { name: '拖动节点' })).toBeNull()
+  })
+
+  it('keeps unselected idle cards draggable and removes the old grip handle', () => {
     renderNodeCard({ label: '可编辑内容' })
 
-    const dragHandle = screen.getByRole('button', { name: '拖动节点' })
-    expect(dragHandle.className).toContain(
-      'mindmap-node-drag-handle',
-    )
-    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nodrag')
+    expect(screen.queryByRole('button', { name: '拖动节点' })).toBeNull()
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).not.toContain('nodrag')
     expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nopan')
-    fireEvent.doubleClick(dragHandle)
-    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-grab')
+  })
+
+  it('widens the edit shell so thicker edit borders do not wrap earlier than display', () => {
+    const label = '一二三四五六'
+    const displaySize = getNodeSize('branch', label)
+    const display = renderNodeCard({
+      label,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+    const displayShell = display.container.querySelector('[data-mindmap-node-id]') as HTMLElement
+    expect(displayShell.style.width).toBe(`${displaySize.width}px`)
+    display.unmount()
+
+    const edit = renderNodeCard({
+      label,
+      editing: true,
+      editText: label,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+    const editShell = edit.container.querySelector('[data-mindmap-node-id]') as HTMLElement
+    const editor = screen.getByRole('textbox')
+    expect(Number.parseFloat(editShell.style.width)).toBeGreaterThan(displaySize.width)
+    expect(editor.className).toContain('break-all')
+    expect(editor.className).toContain('whitespace-pre-wrap')
   })
 
   it('keeps the text editor isolated from node dragging while selecting text', () => {
@@ -128,27 +164,71 @@ describe('NodeCard', () => {
     expect(editor.className).toContain('nowheel')
   })
 
-  it('shows non-destructive structural actions in the selected-node toolbar', () => {
-    const onAddChild = vi.fn()
-    const onAddSibling = vi.fn()
-    const onStartEdit = vi.fn()
+  it('does not show the default structural toolbar on selected cards', () => {
     renderNodeCard({
       selected: true,
       parentId: 'root',
       metadata: { depth: 1, layoutRole: 'branch', branchColor: '#2563eb' },
-      onAddChild,
-      onAddSibling,
-      onStartEdit,
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onStartEdit: vi.fn(),
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '新增子节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增同级节点' }))
-    fireEvent.click(screen.getByRole('button', { name: '编辑节点' }))
+    expect(screen.queryByRole('button', { name: '新增子节点' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增同级节点' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑节点' })).toBeNull()
+    expect(getNodeShell().shell.getAttribute('data-node-mode')).toBe('selected')
+  })
 
-    expect(onAddChild).toHaveBeenCalledWith('peg-1')
-    expect(onAddSibling).toHaveBeenCalledWith('peg-1')
-    expect(onStartEdit).toHaveBeenCalledWith('peg-1')
-    expect(screen.queryByRole('button', { name: /删除/ })).toBeNull()
+  it('marks editing mode distinctly from selection', () => {
+    renderNodeCard({
+      selected: true,
+      editing: true,
+      editText: '正在编辑',
+      label: '正在编辑',
+    })
+
+    const editor = screen.getByRole('textbox')
+    expect(editor.getAttribute('data-node-mode')).toBe('editing')
+    expect(editor.className).toContain('border-sky-500')
+    expect(editor.className).toContain('bg-sky-50')
+    expect(document.querySelector('[data-node-mode="editing"]')).toBeTruthy()
+  })
+
+  it('renders selection toolbar actions for a selected node', () => {
+    const onRate = vi.fn()
+    renderNodeCard({
+      selected: true,
+      readonly: true,
+      selectionToolbarPreferPosition: 'bottom',
+      selectionToolbarActions: [
+        { id: 'rate-3', label: '记得 · 1', variant: 'default', onClick: onRate },
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '记得 · 1' }))
+    expect(onRate).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders status chips above the card and hides the mastery dot', () => {
+    renderNodeCard({
+      selected: false,
+      readonly: true,
+      metadata: {
+        depth: 1,
+        layoutRole: 'branch',
+        visual: {
+          statusChips: [
+            { text: '记得', tone: 'info', style: 'filled' },
+            { text: '64', tone: 'warning', style: 'outline' },
+          ],
+          badge: { tone: 'danger', title: 'weak' },
+        },
+      },
+    })
+
+    expect(screen.getByText('记得')).toBeTruthy()
+    expect(screen.getByText('64')).toBeTruthy()
   })
 
   it('preserves line breaks in display mode', () => {
@@ -279,7 +359,7 @@ describe('NodeCard', () => {
     fireEvent.doubleClick(screen.getByRole('button', { name: '编辑视觉' }))
     const textarea = screen.getByRole('textbox')
 
-    expect(textarea.className).toContain('border-blue-500')
+    expect(textarea.className).toContain('border-sky-500')
     expect(textarea.className).toContain('overflow-hidden')
     expect(textarea.style.scrollbarWidth).toBe('none')
   })
@@ -350,8 +430,12 @@ describe('NodeCard', () => {
     expect(container.className).not.toContain('shadow-md')
   })
 
-  it('shows emerald feedback when dropping inside a node', () => {
+  it('shows emerald feedback and child-slot placeholder when dropping inside a node', () => {
     renderNodeCard({ dropHighlight: true, dropMode: 'inside' })
+    expect(document.querySelector('[data-drop-placeholder="inside"]')).toBeTruthy()
+    expect(document.querySelector('[data-drop-placeholder-label="inside"]')?.textContent).toContain(
+      '成为子卡片',
+    )
 
     const { container } = getNodeShell()
     expect(container.className).toContain('ring-emerald-400/70')
@@ -362,7 +446,7 @@ describe('NodeCard', () => {
     renderNodeCard({ dropHighlight: true, dropMode: 'before' })
 
     const { container } = getNodeShell()
-    expect(container.className).toContain('ring-blue-400/60')
+    expect(container.className).toContain('ring-sky-400/70')
   })
 
   it('makes dragged nodes ghosted even when the node is also muted', () => {

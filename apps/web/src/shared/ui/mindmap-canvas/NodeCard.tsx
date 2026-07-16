@@ -10,20 +10,28 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
-  type ReactNode,
 } from 'react'
 import {
   Handle,
-  NodeToolbar,
   Position,
   type NodeProps,
-  useStore,
   useUpdateNodeInternals,
 } from '@xyflow/react'
-import { CornerDownRight, GripVertical, Pencil, Plus } from 'lucide-react'
+import { Scissors } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNode, MindMapNodeVisual } from './adapter'
 import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
+import type {
+  SelectionToolbarAction,
+  SelectionToolbarPreferPosition,
+} from './selectionToolbar'
+import {
+  AdaptiveNodeToolbar,
+  selectionToolbarButtonClass,
+  statusChipClassName,
+} from './NodeCardToolbar'
+import { ExtractDropPlaceholders, ExtractGhostPortal } from './MindMapExtractUi'
+import { useMindMapExtractDrag } from './useMindMapExtractDrag'
 
 type NodeCardData = MindMapNode & {
   depth?: number
@@ -47,57 +55,31 @@ type NodeCardData = MindMapNode & {
   onMeasure?: (nodeId: string, size: NodeSize) => void
   onReadonlyDoubleClick?: (nodeId: string) => void
   onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
+  onExtractSelection?: (payload: {
+    sourceId: string
+    liveText: string
+    start: number
+    end: number
+    placement: { mode: 'inside' | 'before' | 'after'; targetUid: string }
+  }) => void
+  onExtractDropPreview?: (
+    next: { targetId: string; mode: 'before' | 'inside' | 'after' } | null,
+  ) => void
+  selectionToolbarActions?: SelectionToolbarAction[]
+  selectionToolbarPreferPosition?: SelectionToolbarPreferPosition
 }
 
 const MEASURE_DELTA_PX = 1
 const LONG_PRESS_DELAY_MS = 550
 const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
+/** Ignore blur right after entering edit (layout/toolbar teardown can steal focus). */
+const EDIT_BLUR_GUARD_MS = 180
 
 interface EditSnapshot {
   value: string
   selectionStart: number
   selectionEnd: number
-}
-
-function AdaptiveNodeToolbar({ nodeId, children }: { nodeId: string; children: ReactNode }) {
-  const placement = useStore(
-    useCallback((state) => {
-      const internalNode = state.nodeLookup.get(nodeId)
-      if (!internalNode) return 'top:center'
-      const [translateX, translateY, zoom] = state.transform
-      const absolute = internalNode.internals.positionAbsolute
-      const measuredWidth = internalNode.measured.width ?? 220
-      const screenTop = absolute.y * zoom + translateY
-      const screenCenterX = (absolute.x + measuredWidth / 2) * zoom + translateX
-      const position = screenTop < 76 ? 'bottom' : 'top'
-      const align =
-        screenCenterX < 170
-          ? 'start'
-          : screenCenterX > state.width - 170
-            ? 'end'
-            : 'center'
-      return `${position}:${align}`
-    }, [nodeId]),
-  )
-  const [position, align] = placement.split(':') as [
-    'top' | 'bottom',
-    'start' | 'center' | 'end',
-  ]
-
-  return (
-    <NodeToolbar
-      isVisible
-      position={position === 'bottom' ? Position.Bottom : Position.Top}
-      align={align}
-      offset={12}
-      className="nodrag nopan flex items-center gap-1 rounded-xl border border-border bg-background p-1 shadow-xl"
-      style={{ zIndex: 1000 }}
-      aria-label="卡片快捷操作"
-    >
-      {children}
-    </NodeToolbar>
-  )
 }
 
 function getMouseFeedbackPoint(event?: MouseEvent) {
@@ -149,6 +131,14 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const compositionStartSnapshotRef = useRef<EditSnapshot | null>(null)
   const isComposingRef = useRef(false)
   const editSessionClosedRef = useRef(false)
+  const editStartedAtRef = useRef(0)
+  const extract = useMindMapExtractDrag({
+    nodeId: id,
+    editValue,
+    inputRef,
+    onExtractSelection: nodeData.onExtractSelection,
+    onExtractDropPreview: nodeData.onExtractDropPreview,
+  })
 
   const visual = (metadata.visual ?? {}) as MindMapNodeVisual
   const concealed = Boolean(visual.concealText)
@@ -222,6 +212,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     }
     if (wasEditingRef.current) return
     wasEditingRef.current = true
+    editStartedAtRef.current = Date.now()
     const initialValue = typeof nodeData.editText === 'string' ? nodeData.editText : nodeData.label
     setEditText(initialValue)
     editHistoryRef.current = { past: [], future: [] }
@@ -231,26 +222,29 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     editSessionClosedRef.current = false
     const input = inputRef.current
     if (input) {
-      input.focus()
+      input.focus({ preventScroll: true })
       resizeEditor()
     }
     requestAnimationFrame(() => {
-      const input = inputRef.current
-      if (!input) return
+      const nextInput = inputRef.current
+      if (!nextInput) return
+      nextInput.focus({ preventScroll: true })
       const selectionStart = nodeData.selectEditText ? 0 : initialValue.length
       const selectionEnd = nodeData.selectEditText ? initialValue.length : initialValue.length
-      input.setSelectionRange(selectionStart, selectionEnd)
+      nextInput.setSelectionRange(selectionStart, selectionEnd)
     })
   }, [isEditing, nodeData.editText, nodeData.label, nodeData.selectEditText, resizeEditor])
 
   const startEdit = useCallback(
     (event?: MouseEvent) => {
       if (readonly) return
+      event?.preventDefault()
       event?.stopPropagation()
       dispatchGlobalFeedback('node_edit_start', {
         point: getMouseFeedbackPoint(event),
         origin: 'node',
       })
+      editStartedAtRef.current = Date.now()
       if (!editingIsControlled) setLocalEdit(true)
       setEditText(nodeData.label)
       nodeData.onStartEdit?.(id)
@@ -260,8 +254,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const handleDoubleClick = useCallback(
     (event: MouseEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest('.mindmap-node-drag-handle')) return
+      event.preventDefault()
       event.stopPropagation()
       if (readonly) {
         nodeData.onReadonlyDoubleClick?.(id)
@@ -274,6 +267,18 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const commitEdit = useCallback(() => {
     if (editSessionClosedRef.current) return
+    if (extract.isExtractDraggingNow()) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true })
+      })
+      return
+    }
+    if (Date.now() - editStartedAtRef.current < EDIT_BLUR_GUARD_MS) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true })
+      })
+      return
+    }
     editSessionClosedRef.current = true
     if (editValue.trim()) {
       dispatchGlobalFeedback('text_commit', {
@@ -285,7 +290,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       nodeData.onCancelEdit?.(id)
     }
     setLocalEdit(false)
-  }, [editValue, id, nodeData])
+  }, [editValue, extract, id, nodeData])
 
   const updateEditValue = useCallback(
     (nextValue: string) => {
@@ -356,6 +361,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         !event.nativeEvent.isComposing
       ) {
         event.preventDefault()
+        // Intentional commit — do not apply the post-enter blur guard.
+        editStartedAtRef.current = 0
         event.currentTarget.blur()
       }
     },
@@ -412,17 +419,24 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     requestAnimationFrame(resizeEditor)
   }, [resizeEditor, updateEditValue])
 
-  const dropHighlightCls = nodeData.dropHighlight
-    ? dropMode === 'inside'
+  const effectiveDropMode = extract.localHoverMode ?? dropMode
+  const showDropChrome = Boolean(extract.localHoverMode || nodeData.dropHighlight)
+  const dropHighlightCls = showDropChrome
+    ? effectiveDropMode === 'inside'
       ? 'ring-2 ring-emerald-400/70 bg-emerald-50/20'
-      : 'ring-2 ring-blue-400/60'
+      : 'ring-2 ring-sky-400/70 bg-sky-50/25'
     : ''
+
+  const selectedCls =
+    nodeData.selected && !isEditing
+      ? 'ring-2 ring-zinc-400/70 ring-offset-1 ring-offset-white border-zinc-300'
+      : ''
 
   const containerCls = [
     'flex items-center rounded-xl border bg-white',
-    'transition-[box-shadow,opacity,transform] duration-100',
+    'transition-[box-shadow,opacity,transform,background-color,border-color] duration-100',
     isRoot ? 'border-zinc-300 shadow-sm justify-center' : 'border-zinc-200 shadow-sm',
-    nodeData.selected ? 'ring-2 ring-blue-500/55 ring-offset-1 ring-offset-white' : '',
+    selectedCls,
     dropHighlightCls,
     previewAdopt ? 'ring-1 ring-blue-400/40' : '',
     placeholder ? 'ring-2 ring-amber-400/35' : '',
@@ -430,9 +444,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     outlineTones.has('info') ? 'outline outline-2 outline-sky-400/70' : '',
   ].filter(Boolean).join(' ')
 
+  const nodeMode = isEditing ? 'editing' : nodeData.selected ? 'selected' : 'idle'
+
+  // Idle cards are structure-draggable; only editing / readonly need a deliberate mode change.
+  const canStructureDrag = Boolean(!isEditing && !readonly)
   const textCls = [
     'w-full appearance-none border-0 bg-transparent p-0 break-all whitespace-pre-wrap',
-    readonly ? 'cursor-default' : 'cursor-text',
+    readonly ? 'cursor-default' : canStructureDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-text',
     concealed ? 'blur-[3px] select-none' : '',
     isRoot
       ? 'text-[14px] font-semibold leading-5 text-zinc-900 text-center'
@@ -443,11 +461,14 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const paddingCls = isRoot ? 'px-4 py-2.5' : depth === 1 ? 'px-3 py-2' : 'px-2.5 py-1.5'
   const editorTextCls = isRoot
-    ? 'text-center text-[14px] font-semibold leading-5'
+    ? 'text-center text-[14px] font-semibold leading-5 break-all whitespace-pre-wrap'
     : depth === 1
-      ? 'text-left text-[13px] font-medium leading-[17px]'
-      : 'text-left text-[12.5px] font-normal leading-[17px]'
+      ? 'text-left text-[13px] font-medium leading-[17px] break-all whitespace-pre-wrap'
+      : 'text-left text-[12.5px] font-normal leading-[17px] break-all whitespace-pre-wrap'
   const borderStyle = visual.borderColor ? { borderColor: visual.borderColor } : undefined
+  // Edit uses a thicker border than display; keep content width equal to display getNodeSize.
+  const EDIT_BORDER_EXTRA_PX = 3
+  const shellWidth = isEditing ? nodeSize.width + EDIT_BORDER_EXTRA_PX : nodeSize.width
 
   const clearLongPress = useCallback(() => {
     if (longPressTimerRef.current !== null) {
@@ -548,14 +569,16 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       onPointerUp={finishPointerInteraction}
       onPointerCancel={finishPointerInteraction}
       data-mindmap-node-id={id}
+      data-node-mode={nodeMode}
       className={[
         'group relative transition-[opacity,transform] duration-100',
+        canStructureDrag ? 'mindmap-node-drag-surface cursor-grab active:cursor-grabbing' : '',
         previewShifted ? 'translate-y-2' : '',
         previewGhost ? 'opacity-35 scale-[0.97]' : '',
         visual.highlighted ? 'ring-4 ring-warning/45 rounded-2xl' : '',
         visual.muted && !previewGhost ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
-      style={{ width: nodeSize.width, WebkitTouchCallout: 'none' }}
+      style={{ width: shellWidth, WebkitTouchCallout: 'none' }}
     >
       {longPressPending ? (
         <span
@@ -563,46 +586,26 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           className="pointer-events-none absolute inset-[-3px] z-20 rounded-[14px] border-2 border-amber-400/80 animate-pulse"
         />
       ) : null}
-      {nodeData.selected && !readonly && !isEditing ? (
-        <AdaptiveNodeToolbar nodeId={id}>
-          <button
-            type="button"
-            aria-label="新增子节点"
-            title="新增子级（Tab）"
-            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={(event) => {
-              event.stopPropagation()
-              nodeData.onAddChild?.(id)
-            }}
-          >
-            <Plus className="size-3.5" />
-            子级
-          </button>
-          {!isRoot ? (
+      {nodeData.selected && !isEditing && (nodeData.selectionToolbarActions?.length ?? 0) > 0 ? (
+        <AdaptiveNodeToolbar
+          nodeId={id}
+          preferPosition={nodeData.selectionToolbarPreferPosition ?? 'auto'}
+          ariaLabel="节点操作"
+        >
+          {nodeData.selectionToolbarActions!.map((action) => (
             <button
+              key={action.id}
               type="button"
-              aria-label="新增同级节点"
-              title="新增同级（Shift+Enter）"
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              disabled={action.disabled}
+              className={selectionToolbarButtonClass(action.variant)}
               onClick={(event) => {
                 event.stopPropagation()
-                nodeData.onAddSibling?.(id)
+                action.onClick()
               }}
             >
-              <CornerDownRight className="size-3.5" />
-              同级
+              {action.label}
             </button>
-          ) : null}
-          <button
-            type="button"
-            aria-label="编辑节点"
-            title="编辑（Enter / F2）"
-            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={(event) => startEdit(event)}
-          >
-            <Pencil className="size-3.5" />
-            编辑
-          </button>
+          ))}
         </AdaptiveNodeToolbar>
       ) : null}
 
@@ -613,41 +616,78 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       />
 
       {isEditing ? (
-        <textarea
-          ref={inputRef}
-          value={editValue}
-          onChange={handleInput}
-          onBeforeInput={handleBeforeInput}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          onKeyDown={handleKeyDown}
-          onBlur={commitEdit}
-          aria-label="编辑节点文本"
-          className={[
-            'nodrag nopan nowheel block w-full resize-none overflow-hidden rounded-xl border-2 border-blue-500 bg-blue-50/45 text-zinc-900 outline-none ring-4 ring-blue-400/20',
-            paddingCls,
-            editorTextCls,
-          ].join(' ')}
-          style={{ height: nodeSize.height, minHeight: nodeSize.height, scrollbarWidth: 'none' }}
-          rows={1}
-        />
-      ) : (
-        <div
-          className={`${containerCls} ${paddingCls}`}
-          style={{ minHeight: nodeSize.height, ...borderStyle }}
-        >
-          {!readonly ? (
+        <div className={`relative ${showDropChrome ? dropHighlightCls : ''}`}>
+          <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
+          <textarea
+            ref={inputRef}
+            value={editValue}
+            onChange={handleInput}
+            onBeforeInput={handleBeforeInput}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            onKeyDown={handleKeyDown}
+            onSelect={(event) => extract.syncTextSelection(event.currentTarget)}
+            onKeyUp={(event) => extract.syncTextSelection(event.currentTarget)}
+            onMouseUp={(event) => extract.syncTextSelection(event.currentTarget)}
+            onBlur={commitEdit}
+            aria-label="编辑节点文本"
+            data-node-mode="editing"
+            className={[
+              'nodrag nopan nowheel box-border block w-full resize-none overflow-hidden rounded-xl border-[2.5px] border-sky-500 bg-sky-50/90 text-zinc-900 outline-none ring-4 ring-sky-400/30 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]',
+              paddingCls,
+              editorTextCls,
+            ].join(' ')}
+            style={{
+              height: nodeSize.height,
+              minHeight: nodeSize.height,
+              // Match display card content width (shell already compensates thicker edit border).
+              width: '100%',
+              maxWidth: '100%',
+              scrollbarWidth: 'none',
+            }}
+            rows={1}
+          />
+          {extract.showExtractHandle ? (
             <button
               type="button"
-              className="mindmap-node-drag-handle absolute -left-3 top-1/2 z-20 flex h-8 w-6 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground group-hover:opacity-100 data-[selected=true]:opacity-100 active:cursor-grabbing"
-              data-selected={nodeData.selected ? 'true' : 'false'}
-              aria-label="拖动节点"
-              title="拖动卡片"
+              data-extract-handle="true"
+              aria-label="拖出选中文字为新卡片"
+              title="拖到目标卡片：成为其子节点或同级"
+              className="nodrag nopan absolute -right-2 -top-2 z-40 flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-sky-400 bg-white text-sky-600 shadow-md active:cursor-grabbing"
+              onMouseDown={extract.handleExtractMouseDown}
+              onPointerDown={extract.handleExtractPointerDown}
             >
-              <GripVertical className="size-3.5" />
+              <Scissors className="size-3.5" />
             </button>
           ) : null}
-          {visual.badge && !isRoot ? (
+          <ExtractGhostPortal ghost={extract.extractGhost} />
+        </div>
+      ) : (
+        <div
+          className={`relative ${containerCls} ${paddingCls}`}
+          style={{ minHeight: nodeSize.height, ...borderStyle }}
+        >
+          <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
+          {visual.statusChips && visual.statusChips.length > 0 ? (
+            <div
+              className="pointer-events-none absolute left-1/2 z-30 flex max-w-full -translate-x-1/2 items-center justify-center gap-0.5"
+              style={{ top: '-1.35rem' }}
+              aria-hidden="true"
+            >
+              {visual.statusChips.map((chip, index) => (
+                <span
+                  key={`${chip.text}-${chip.style}-${index}`}
+                  title={chip.text}
+                  className={[
+                    'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[10px] font-medium leading-4 shadow-sm',
+                    statusChipClassName(chip.tone, chip.style),
+                  ].join(' ')}
+                >
+                  {chip.text}
+                </span>
+              ))}
+            </div>
+          ) : visual.badge && !isRoot ? (
             <span
               className={`absolute -left-2 -top-2 z-20 size-3 rounded-full border-2 border-background ${
                 visual.badge.tone === 'danger'
@@ -665,7 +705,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             type="button"
             onClick={handleClick}
             onContextMenu={handleContextMenu}
-            className={`mindmap-node-text nodrag nopan ${textCls}`}
+            className={[
+              'mindmap-node-text nopan',
+              // Editing/readonly: isolate from RF drag. Idle: whole card is the drag surface.
+              canStructureDrag ? '' : 'nodrag',
+              textCls,
+            ].filter(Boolean).join(' ')}
           >
             {concealed
               ? '待回忆'

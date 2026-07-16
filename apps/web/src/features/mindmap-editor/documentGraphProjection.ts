@@ -15,14 +15,20 @@ import {
   deleteMindMapNode,
   deleteMindMapNodeOnly,
   editMindMapNode,
+  extractMindMapSelectionWithResult,
   getMindMapNodeText,
   getMindMapNodeUid,
   normalizeMindMapDocument,
   parseMindMapDocument,
   reparentMindMapNode,
   reorderMindMapNode,
+  relocateMindMapNode,
+  relocateMindMapNodes,
+  deleteMindMapNodes,
   moveMindMapNode,
   selectMindMapNode,
+  type MindMapExtractPlacement,
+  type MindMapRelocateMode,
 } from '@/entities/mindmap-document'
 import type { GraphData, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
 import { BRANCH_COLORS } from '@/shared/ui/mindmap-canvas/branchColors'
@@ -37,7 +43,11 @@ export interface EditorDocGraphOptions {
   revealMap?: Record<string, RevealState>
   readonly?: boolean
   highlightedNodeUids?: string[]
-  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
+  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
+  statusChipsByNodeUid?: Record<
+    string,
+    Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
+  >
 }
 
 export interface EditorDocCreateResult {
@@ -92,6 +102,7 @@ export function editorDocToGraph(
           secondaryMarked: false,
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
+          statusChips: options.statusChipsByNodeUid?.[uid] ?? null,
         }),
       },
     })
@@ -124,8 +135,28 @@ export const deleteEditorDocNodeOnly = deleteMindMapNodeOnly
 export const countEditorDocSubtree = countMindMapSubtree
 export const reparentEditorDocNode = reparentMindMapNode
 export const reorderEditorDocNode = reorderMindMapNode
+export const relocateEditorDocNode = relocateMindMapNode
+export const relocateEditorDocNodes = relocateMindMapNodes
+export const deleteEditorDocNodes = deleteMindMapNodes
 export const moveEditorDocNode = moveMindMapNode
 export const canMoveEditorDocNode = canMoveMindMapNode
+export type { MindMapRelocateMode as EditorDocRelocateMode }
+
+export function extractEditorDocSelectionWithResult(
+  editorDoc: MindMapEditorState['editor_doc'],
+  sourceUid: string,
+  liveText: string,
+  start: number,
+  end: number,
+  placement: MindMapExtractPlacement,
+): EditorDocCreateResult & { extractedText: string | null } {
+  const result = extractMindMapSelectionWithResult(editorDoc, sourceUid, liveText, start, end, placement)
+  return {
+    editorDoc: result.document as MindMapDoc,
+    nodeUid: result.nodeUid,
+    extractedText: result.extractedText,
+  }
+}
 
 export function addEditorDocChildWithResult(
   editorDoc: MindMapEditorState['editor_doc'],
@@ -155,7 +186,12 @@ function buildNodeVisual(options: {
   muted: boolean
   secondaryMarked: boolean
   highlighted: boolean
-  mastery?: { status: string; manualLabel?: string | null }
+  mastery?: { status: string; manualLabel?: string | null; masteryScore?: number | null }
+  statusChips?: Array<{
+    text: string
+    tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'
+    style: 'filled' | 'outline'
+  }> | null
 }) {
   const masteryStatus = options.mastery?.status ?? ''
   const manualLabel = options.mastery?.manualLabel ?? ''
@@ -165,7 +201,9 @@ function buildNodeVisual(options: {
     'rating-good': { tone: 'info' as const, title: '记得' },
     'rating-easy': { tone: 'success' as const, title: '轻松' },
   }[masteryStatus as 'rating-forgot' | 'rating-hard' | 'rating-good' | 'rating-easy']
-  const badge = ratingBadge ?? (manualLabel === 'weak' || masteryStatus === 'weak'
+  const badge = options.statusChips?.length
+    ? null
+    : ratingBadge ?? (manualLabel === 'weak' || masteryStatus === 'weak'
     ? { tone: 'danger' as const, title: manualLabel === 'weak' ? '手动标记薄弱' : masteryStatus }
     : manualLabel === 'mastered' || masteryStatus === 'stable'
       ? { tone: 'success' as const, title: manualLabel === 'mastered' ? '手动标记已掌握' : masteryStatus }
@@ -184,5 +222,6 @@ function buildNodeVisual(options: {
     highlighted: options.highlighted,
     muted: options.muted,
     badge,
+    statusChips: options.statusChips?.length ? options.statusChips : null,
   }
 }

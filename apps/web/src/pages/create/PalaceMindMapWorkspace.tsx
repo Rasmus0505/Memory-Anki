@@ -223,6 +223,7 @@ export function PalaceMindMapWorkspace({ palace, activeKey, onActiveKeyChange, o
               ref={frameRef}
               key={`palace-subject:${selectedSubjectId}`}
               editorState={session.editorState}
+              sceneChrome="edit"
               presentationStrategy={isPwa ? 'viewport-only' : 'native-preferred'}
               highlightedNodeUids={highlightedNodeUids}
               immersiveModeActive={fullscreen}
