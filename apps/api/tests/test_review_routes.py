@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -23,7 +22,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
     Peg,
     ReviewLog,
     ReviewSchedule,
-    SessionProgress,
 )
 from memory_anki.modules.backups.application.backup_lifecycle import (
     ROLLING_EDIT_BACKUP_INTERVAL,
@@ -67,9 +65,12 @@ class ReviewRouteTests(RouterTestCase):
             editor_doc=json.dumps(
                 {
                     "root": {
-                            "data": {"text": "Test Palace"},
-                            "children": [
-                            {"data": {"text": "Branch A", "note": "Detail A", "uid": "branch-a"}, "children": []},
+                        "data": {"text": "Test Palace"},
+                        "children": [
+                            {
+                                "data": {"text": "Branch A", "note": "Detail A", "uid": "branch-a"},
+                                "children": [],
+                            },
                             {"data": {"text": "Branch B", "uid": "branch-b"}, "children": []},
                         ],
                     }
@@ -92,10 +93,18 @@ class ReviewRouteTests(RouterTestCase):
         )
         session.commit()
 
-    def test_overdue_count_route_is_not_captured_by_schedule_id(self):
-        response = self.client.get("/api/v1/review/overdue-count")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["count"], 1)
+    def test_legacy_stage_runtime_routes_are_removed(self):
+        requests = (
+            self.client.post("/api/v1/review/spread-overdue", json={"days": 7}),
+            self.client.post("/api/v1/review/spread-overdue/undo", json={}),
+            self.client.get("/api/v1/review/stage-progress-health"),
+            self.client.post("/api/v1/review/repair-stage-progress", json={}),
+            self.client.post(
+                "/api/v1/review/palaces/1/stage-adjustment/preview",
+                json={"target_completed_count": 1},
+            ),
+        )
+        self.assertTrue(all(response.status_code in {404, 405} for response in requests))
 
     def test_review_queries_do_not_unarchive_palaces(self):
         with self.SessionLocal() as session:
@@ -129,79 +138,6 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(queue_response.json()["overdue_count"], 0)
         self.assertEqual(queue_response.json()["reviews"], [])
         self.assertEqual(session_response.status_code, 404)
-
-    def test_load_forecast_counts_overdue_and_future_active_schedules(self):
-        today = date.today()
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            archived_palace = Palace(title="Archived Palace", archived=True)
-            mastered_palace = Palace(title="Mastered Palace", mastered=True)
-            session.add_all([archived_palace, mastered_palace])
-            session.flush()
-            session.add_all(
-                [
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=today,
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=1,
-                        review_type="standard",
-                    ),
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=today + timedelta(days=3),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=2,
-                        review_type="standard",
-                    ),
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=today + timedelta(days=3),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=True,
-                        review_number=3,
-                        review_type="standard",
-                    ),
-                    ReviewSchedule(
-                        palace_id=archived_palace.id,
-                        scheduled_date=today + timedelta(days=3),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                    ReviewSchedule(
-                        palace_id=mastered_palace.id,
-                        scheduled_date=today + timedelta(days=3),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.get("/api/v1/review/load-forecast?days=7")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["days"], 7)
-        self.assertEqual(payload["overdue_count"], 1)
-        self.assertEqual(payload["total_upcoming"], 2)
-        self.assertEqual(len(payload["items"]), 7)
-        self.assertEqual(payload["items"][0]["date"], today.isoformat())
-        self.assertTrue(payload["items"][0]["is_today"])
-        self.assertEqual(payload["items"][0]["due_count"], 1)
-        self.assertEqual(payload["items"][3]["date"], (today + timedelta(days=3)).isoformat())
-        self.assertEqual(payload["items"][3]["due_count"], 1)
 
     def test_load_forecast_days_is_clamped(self):
         response = self.client.get("/api/v1/review/load-forecast?days=999")
@@ -254,266 +190,6 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(payload["items"][0]["palace_title"], "Manual Palace Title")
         self.assertEqual(payload["items"][0]["review_date"], today.isoformat())
 
-    def test_repair_review_stage_progress_route_returns_repair_counts(self):
-        with patch.object(
-            review_router,
-            "repair_review_stage_progress",
-            return_value={"palace_count": 2, "segment_count": 0},
-        ) as repair:
-            response = self.client.post("/api/v1/review/repair-stage-progress")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"ok": True, "palace_count": 2, "segment_count": 0})
-        repair.assert_called_once()
-
-    def test_review_stage_progress_health_counts_read_only_repair_issues(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            session.add_all(
-                [
-                    SessionProgress(
-                        session_kind="review",
-                        palace_id=palace.id,
-                        review_schedule_id=999999,
-                        reveal_map="{}",
-                        red_node_ids="[]",
-                        completed=False,
-                        updated_at=utc_now_naive(),
-                    ),
-                    StudySession(
-                        id="orphan-review-session",
-                        status="active",
-                        scene="review",
-                        target_type="review_schedule",
-                        target_id=999999,
-                        palace_id=palace.id,
-                        title="Orphan Review",
-                        started_at=utc_now_naive(),
-                        progress_json="{}",
-                        events_json="[]",
-                        summary_json="{}",
-                    ),
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=date.today() - timedelta(days=2),
-                        interval_days=2,
-                        algorithm_used="ebbinghaus",
-                        completed=True,
-                        completed_at=utc_now_naive(),
-                        review_number=2,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        response = self.client.get("/api/v1/review/stage-progress-health")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["ok"])
-        self.assertTrue(payload["needs_repair"])
-        self.assertEqual(payload["orphan_progress_count"], 1)
-        self.assertEqual(payload["orphan_study_session_count"], 1)
-        self.assertEqual(payload["stage_gap_palace_count"], 1)
-        self.assertEqual(payload["total_issues"], 3)
-
-    def test_repair_review_stage_progress_preserves_active_session_progress(self):
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            session.add(
-                SessionProgress(
-                    session_kind="review",
-                    palace_id=schedule.palace_id,
-                    review_schedule_id=schedule.id,
-                    reveal_map=json.dumps({"branch-a": "revealed", "branch-b": "hidden"}),
-                    red_node_ids="[]",
-                    completed=False,
-                    updated_at=utc_now_naive(),
-                )
-            )
-            session.commit()
-
-        response = self.client.post("/api/v1/review/repair-stage-progress")
-        self.assertEqual(response.status_code, 200)
-
-        with self.SessionLocal() as session:
-            progress = (
-                session.query(SessionProgress)
-                .filter_by(session_kind="review", palace_id=1)
-                .first()
-            )
-            self.assertIsNotNone(progress)
-            restored_schedule = (
-                session.query(ReviewSchedule)
-                .filter_by(id=progress.review_schedule_id)
-                .first()
-            )
-            self.assertIsNotNone(restored_schedule)
-            self.assertEqual(restored_schedule.review_number, 0)
-            self.assertFalse(restored_schedule.completed)
-            self.assertEqual(
-                json.loads(progress.reveal_map),
-                {"branch-a": "revealed", "branch-b": "hidden"},
-            )
-
-    def test_repair_review_stage_progress_preserves_ambiguous_orphan_progress(self):
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            session.add(
-                SessionProgress(
-                    session_kind="review",
-                    palace_id=schedule.palace_id,
-                    review_schedule_id=999999,
-                    reveal_map=json.dumps({"branch-a": "revealed", "branch-b": "hidden"}),
-                    red_node_ids=json.dumps(["branch-a"]),
-                    completed=False,
-                    updated_at=utc_now_naive(),
-                )
-            )
-            session.commit()
-
-        preview = self.client.post(
-            "/api/v1/review/repair-stage-progress",
-            json={"dry_run": True},
-        )
-        self.assertEqual(preview.status_code, 200)
-        self.assertTrue(preview.json()["dry_run"])
-        self.assertEqual(preview.json()["after"]["orphan_progress_count"], 1)
-
-        response = self.client.post("/api/v1/review/repair-stage-progress", json={})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["dry_run"])
-
-        with self.SessionLocal() as session:
-            progress = (
-                session.query(SessionProgress)
-                .filter_by(session_kind="review", palace_id=1)
-                .first()
-            )
-            self.assertIsNotNone(progress)
-            self.assertEqual(progress.review_schedule_id, 999999)
-            self.assertEqual(
-                json.loads(progress.reveal_map),
-                {"branch-a": "revealed", "branch-b": "hidden"},
-            )
-            self.assertIsNone(
-                session.query(StudySession)
-                .filter_by(scene="review", target_type="review_schedule", status="active")
-                .first()
-            )
-
-    def test_review_queue_groups_multiple_due_schedules_by_palace(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            session.add(
-                ReviewSchedule(
-                    palace_id=palace.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=2,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=1,
-                    review_type="standard",
-                )
-            )
-            session.commit()
-
-        response = self.client.get("/api/v1/review/queue")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["due_count"], 1)
-        self.assertEqual(payload["overdue_count"], 1)
-        self.assertEqual(len(payload["reviews"]), 1)
-        self.assertEqual(payload["reviews"][0]["schedule_count"], 2)
-        self.assertEqual(payload["reviews"][0]["overdue_schedule_count"], 2)
-
-    def test_review_queue_lists_only_next_later_today_schedule_per_palace(self):
-        now = datetime.combine(date.today(), time(hour=12))
-        first_due_at = now + timedelta(hours=1)
-        second_due_at = now + timedelta(hours=2)
-        tomorrow_due_at = now + timedelta(days=1)
-
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return now if tz is None else now.replace(tzinfo=tz)
-
-        with self.SessionLocal() as session:
-            subject = Subject(name="稍后复习学科", color="#6366f1")
-            chapter = Chapter(subject=subject, name="稍后复习章节", sort_order=0)
-            later_palace = Palace(title="Today Later Palace", description="")
-            tomorrow_palace = Palace(title="Tomorrow Palace", description="")
-            session.add_all([subject, chapter, later_palace, tomorrow_palace])
-            session.flush()
-            later_palace.chapters.append(chapter)
-            session.add_all(
-                [
-                    ReviewSchedule(
-                        palace_id=later_palace.id,
-                        scheduled_date=first_due_at.date(),
-                        scheduled_at=first_due_at,
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="1h",
-                    ),
-                    ReviewSchedule(
-                        palace_id=later_palace.id,
-                        scheduled_date=second_due_at.date(),
-                        scheduled_at=second_due_at,
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=1,
-                        review_type="sleep",
-                    ),
-                    ReviewSchedule(
-                        palace_id=tomorrow_palace.id,
-                        scheduled_date=tomorrow_due_at.date(),
-                        scheduled_at=tomorrow_due_at,
-                        interval_days=1,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=0,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-            chapter_id = chapter.id
-
-        with patch(
-            "memory_anki.modules.reviews.application.review_queue_service.datetime",
-            FixedDateTime,
-        ):
-            response = self.client.get("/api/v1/review/queue")
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["later_today_count"], 1)
-        self.assertEqual(len(payload["later_today_reviews"]), 1)
-        later_review = payload["later_today_reviews"][0]
-        self.assertEqual(later_review["palace"]["title"], "Today Later Palace")
-        self.assertEqual(later_review["review_number"], 0)
-        self.assertEqual(later_review["due_at"], first_due_at.isoformat(timespec="minutes"))
-
-        with patch(
-            "memory_anki.modules.reviews.application.review_queue_service.datetime",
-            FixedDateTime,
-        ):
-            chapter_response = self.client.get(f"/api/v1/review/chapter/{chapter_id}/queue")
-        self.assertEqual(chapter_response.status_code, 200)
-        self.assertEqual(chapter_response.json()["later_today_count"], 1)
-
-        with self.SessionLocal() as session:
-            log, _ = submit_review(session, later_review["id"], commit=False)
-            self.assertIsNotNone(log)
-            session.rollback()
-
     def test_review_queue_auto_smoothing_skips_unstarted_overdue_palace(self):
         with self.SessionLocal() as session:
             session.add_all(
@@ -543,12 +219,15 @@ class ReviewRouteTests(RouterTestCase):
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
             self.assertIsNotNone(schedule)
             schedule.completed = True
-            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(
+                days=2
+            )
             session.add(
                 ReviewSchedule(
                     palace_id=1,
                     scheduled_date=date.today() - timedelta(days=1),
-                    scheduled_at=datetime.now().replace(second=0, microsecond=0) - timedelta(days=1),
+                    scheduled_at=datetime.now().replace(second=0, microsecond=0)
+                    - timedelta(days=1),
                     interval_days=2,
                     algorithm_used="ebbinghaus",
                     completed=False,
@@ -584,7 +263,9 @@ class ReviewRouteTests(RouterTestCase):
             schedule = session.query(ReviewSchedule).filter_by(id=1).first()
             self.assertIsNotNone(schedule)
             schedule.completed = True
-            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=2)
+            schedule.completed_at = datetime.now().replace(second=0, microsecond=0) - timedelta(
+                days=2
+            )
             pending = ReviewSchedule(
                 palace_id=1,
                 scheduled_date=date.today() - timedelta(days=1),
@@ -616,71 +297,6 @@ class ReviewRouteTests(RouterTestCase):
             self.assertEqual(unchanged.scheduled_date, original_date)
             undo_snapshot = session.query(Config).filter_by(key="review_spread_undo").first()
             self.assertTrue(undo_snapshot is None or not undo_snapshot.value)
-
-    def test_submit_review_only_advances_current_due_schedule(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            session.add_all(
-                [
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=date.today() - timedelta(days=2),
-                        interval_days=2,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=1,
-                        review_type="standard",
-                    ),
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=date.today() - timedelta(days=1),
-                        interval_days=4,
-                        algorithm_used="ebbinghaus",
-                        completed=False,
-                        review_number=2,
-                        review_type="standard",
-                    ),
-                ]
-            )
-            session.commit()
-
-        submit = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
-        )
-        self.assertEqual(submit.status_code, 200)
-        payload = submit.json()
-        self.assertTrue(payload["ok"])
-        self.assertIsNone(payload["next_id"])
-        self.assertEqual(payload["duration_seconds"], 12)
-        self.assertEqual(payload["completed_stage_count"], 1)
-        self.assertEqual(payload["total_stage_count"], 9)
-        completion = self.client.get(
-            f"/api/v1/review/completions/{payload['review_log_id']}"
-        )
-        self.assertEqual(completion.status_code, 200)
-        self.assertEqual(completion.json()["duration_seconds"], 12)
-        self.assertEqual(completion.json()["completed_stage_count"], 1)
-
-        with self.SessionLocal() as session:
-            study_session = session.get(
-                StudySession,
-                f"review-log-{payload['review_log_id']}",
-            )
-            self.assertIsNotNone(study_session)
-            receipt = json.loads(study_session.summary_json)["completion_receipt"]
-            self.assertEqual(receipt["review_log_id"], payload["review_log_id"])
-            self.assertEqual(receipt["duration_seconds"], 12)
-            self.assertEqual(receipt["completed_stage_count"], 1)
-            schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.id).all()
-            self.assertEqual(len(schedules), 2)
-            completed = [schedule for schedule in schedules if schedule.completed]
-            self.assertEqual(len(completed), 1)
-            self.assertEqual(completed[0].review_number, 0)
-            pending = [schedule for schedule in schedules if not schedule.completed]
-            self.assertEqual(len(pending), 1)
-            self.assertEqual([schedule.review_number for schedule in pending], [1])
 
     def test_submit_review_session_persists_trimmed_note(self):
         response = self.client.post(
@@ -717,122 +333,6 @@ class ReviewRouteTests(RouterTestCase):
         with self.SessionLocal() as session:
             self.assertEqual(session.query(ReviewLog).count(), 1)
             self.assertEqual(session.query(StudySession).filter_by(scene="review").count(), 1)
-
-    def test_submit_review_rolls_back_when_idempotency_save_fails(self):
-        with self.SessionLocal() as session:
-            session.add(
-                SessionProgress(
-                    session_kind="review",
-                    palace_id=1,
-                    review_schedule_id=1,
-                    reveal_map=json.dumps({"branch-a": "revealed"}),
-                    red_node_ids="[]",
-                    completed=False,
-                    updated_at=utc_now_naive(),
-                )
-            )
-            session.commit()
-
-        failing_client = TestClient(self.app, raise_server_exceptions=False)
-        with patch.object(
-            review_router.SqlAlchemyMutationResponseStore,
-            "save",
-            side_effect=RuntimeError("idempotency write failed"),
-        ):
-            response = failing_client.post(
-                "/api/v1/review/session/1/submit",
-                headers={"X-Memory-Anki-Mutation-ID": "review-submit-rollback"},
-                json={"duration_seconds": 12, "completion_mode": "manual_complete"},
-            )
-
-        self.assertEqual(response.status_code, 500)
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            self.assertFalse(schedule.completed)
-            self.assertEqual(session.query(ReviewLog).count(), 0)
-            self.assertEqual(session.query(StudySession).filter_by(scene="review").count(), 0)
-            self.assertIsNotNone(
-                session.query(SessionProgress)
-                .filter_by(session_kind="review", review_schedule_id=1)
-                .first()
-            )
-
-    def test_submit_review_schedules_next_round_from_completion_time(self):
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.created_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=3)
-            session.commit()
-
-        before = datetime.now().replace(second=0, microsecond=0)
-        response = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
-        )
-        after = datetime.now().replace(second=0, microsecond=0)
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-
-        with self.SessionLocal() as session:
-            next_schedule = (
-                session.query(ReviewSchedule)
-                .filter_by(palace_id=1, completed=False, review_number=1)
-                .first()
-            )
-            self.assertIsNotNone(next_schedule)
-            self.assertIsNotNone(next_schedule.scheduled_at)
-            self.assertGreaterEqual(next_schedule.scheduled_at, before + timedelta(days=2))
-            self.assertLessEqual(next_schedule.scheduled_at, after + timedelta(days=2))
-            self.assertEqual(next_schedule.scheduled_date, next_schedule.scheduled_at.date())
-
-    def test_submit_review_rebuilds_stale_future_pending_schedule(self):
-        stale_due_at = datetime.now().replace(second=0, microsecond=0) + timedelta(days=5)
-        with self.SessionLocal() as session:
-            session.add(Config(key="ebbinghaus_intervals", value="1,2,4"))
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            palace.created_at = datetime.now().replace(second=0, microsecond=0) - timedelta(days=3)
-            current_schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(current_schedule)
-            current_schedule.scheduled_date = date.today() - timedelta(days=1)
-            current_schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) - timedelta(hours=1)
-            session.add(
-                ReviewSchedule(
-                    palace_id=palace.id,
-                    scheduled_date=stale_due_at.date(),
-                    scheduled_at=stale_due_at,
-                    interval_days=2,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=1,
-                    review_type="standard",
-                    anchor_date=palace.created_at.date(),
-                )
-            )
-            session.commit()
-
-        before = datetime.now().replace(second=0, microsecond=0)
-        response = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
-        )
-        after = datetime.now().replace(second=0, microsecond=0)
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-
-        with self.SessionLocal() as session:
-            pending = (
-                session.query(ReviewSchedule)
-                .filter_by(palace_id=1, completed=False, review_number=1)
-                .all()
-            )
-            self.assertEqual(len(pending), 1)
-            self.assertIsNotNone(pending[0].scheduled_at)
-            self.assertNotEqual(pending[0].scheduled_at, stale_due_at)
-            self.assertGreaterEqual(pending[0].scheduled_at, before + timedelta(days=2))
-            self.assertLessEqual(pending[0].scheduled_at, after + timedelta(days=2))
 
     def test_submit_review_uses_scheduled_time_as_anchor_when_enabled(self):
         with self.SessionLocal() as session:
@@ -1082,90 +582,6 @@ class ReviewRouteTests(RouterTestCase):
             editor_palace["review_stage_completed"],
         )
 
-    def test_review_session_allows_later_today_submission_and_sets_needs_practice(self):
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            self.assertIsNotNone(palace)
-            session.add(Config(key='ebbinghaus_intervals', value='1,2,4'))
-            schedule.scheduled_date = date.today()
-            schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
-            palace.needs_practice = False
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={
-                "duration_seconds": 30,
-                "completion_mode": "manual_complete",
-                "needs_practice": True,
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            self.assertTrue(palace.needs_practice)
-            schedules = (
-                session.query(ReviewSchedule)
-                .filter_by(palace_id=palace.id)
-                .order_by(ReviewSchedule.review_number, ReviewSchedule.id)
-                .all()
-            )
-            self.assertEqual([schedule.review_number for schedule in schedules if schedule.completed], [0])
-            pending = [schedule for schedule in schedules if not schedule.completed]
-            self.assertEqual([schedule.review_number for schedule in pending], [1])
-            self.assertGreater(pending[0].scheduled_at, datetime.now())
-
-        catalog = self.client.get('/api/v1/palaces/subjects')
-        self.assertEqual(catalog.status_code, 200)
-        catalog_item = catalog.json()['items'][0]
-        self.assertEqual(catalog_item['review_status'], 'idle')
-        self.assertFalse(catalog_item['has_due_review'])
-        self.assertFalse(catalog_item['has_due_later_today'])
-
-    def test_formal_review_submission_clears_catalog_due_status(self):
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            session.add(Config(key='ebbinghaus_intervals', value='1,2,4'))
-            schedule.scheduled_date = date.today()
-            schedule.scheduled_at = datetime.now().replace(second=0, microsecond=0) - timedelta(minutes=1)
-            session.commit()
-
-        response = self.client.post(
-            '/api/v1/review/session/1/submit',
-            json={'duration_seconds': 30, 'completion_mode': 'manual_complete'},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()['ok'])
-        catalog = self.client.get('/api/v1/palaces/subjects')
-        self.assertEqual(catalog.status_code, 200)
-        catalog_item = catalog.json()['items'][0]
-        self.assertEqual(catalog_item['review_status'], 'idle')
-        self.assertFalse(catalog_item['has_due_review'])
-        self.assertFalse(catalog_item['has_due_later_today'])
-
-    def test_review_session_rejects_future_day_submission(self):
-        with self.SessionLocal() as session:
-            schedule = session.query(ReviewSchedule).filter_by(id=1).first()
-            self.assertIsNotNone(schedule)
-            schedule.scheduled_date = date.today() + timedelta(days=1)
-            schedule.scheduled_at = datetime.combine(schedule.scheduled_date, time(hour=10))
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["detail"]["code"], "review_submit_conflict")
-
     def test_virtual_default_review_payload_exposes_pending_schedule_timing(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
@@ -1195,18 +611,6 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(default_payload["current_review_schedule_id"], 1)
         self.assertEqual(default_payload["current_review_type"], "standard")
         self.assertTrue(default_payload["next_review_at"].startswith(due_at.date().isoformat()))
-
-    def test_review_session_routes_return_404_for_missing_schedule(self):
-        response = self.client.get("/api/v1/review/session/999999")
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "not found")
-
-        submit_response = self.client.post(
-            "/api/v1/review/session/999999/submit",
-            json={"duration_seconds": 30, "completion_mode": "manual_complete"},
-        )
-        self.assertEqual(submit_response.status_code, 404)
-        self.assertEqual(submit_response.json()["detail"], "not found")
 
     def test_review_session_includes_editor_doc(self):
         response = self.client.get("/api/v1/review/session/1")
@@ -1315,7 +719,8 @@ class ReviewRouteTests(RouterTestCase):
                 ReviewSchedule(
                     palace_id=1,
                     scheduled_date=date.today() + timedelta(days=1),
-                    scheduled_at=datetime.now().replace(second=0, microsecond=0) + timedelta(days=1),
+                    scheduled_at=datetime.now().replace(second=0, microsecond=0)
+                    + timedelta(days=1),
                     interval_days=1,
                     algorithm_used="ebbinghaus",
                     completed=False,
@@ -1335,7 +740,9 @@ class ReviewRouteTests(RouterTestCase):
         with self.SessionLocal() as session:
             palace = session.query(Palace).filter_by(id=1).first()
             self.assertIsNotNone(palace)
-            palace.created_at = datetime.combine(date.today() - timedelta(days=2), datetime.min.time())
+            palace.created_at = datetime.combine(
+                date.today() - timedelta(days=2), datetime.min.time()
+            )
             session.add_all(
                 [
                     ReviewLog(
@@ -1381,7 +788,12 @@ class ReviewRouteTests(RouterTestCase):
 
             changed = ensure_current_review_schedule_model(session)
             self.assertGreater(changed, 0)
-            schedules = session.query(ReviewSchedule).filter_by(palace_id=1).order_by(ReviewSchedule.review_number, ReviewSchedule.id).all()
+            schedules = (
+                session.query(ReviewSchedule)
+                .filter_by(palace_id=1)
+                .order_by(ReviewSchedule.review_number, ReviewSchedule.id)
+                .all()
+            )
 
             self.assertEqual(len(schedules), 2)
             self.assertTrue(schedules[0].completed)
@@ -1426,55 +838,6 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(deleted.status_code, 200)
         self.assertIsNone(self.client.get("/api/v1/practice/session/1").json()["progress"])
 
-    def test_review_progress_round_trip_and_submit_clears_it(self):
-        save = self.client.put(
-            "/api/v1/review/session/1/progress",
-            json={
-                "reveal_map": {"root": "revealed", "1": "revealed"},
-                "red_node_ids": ["1"],
-                "completed": False,
-            },
-        )
-        self.assertEqual(save.status_code, 200)
-        self.assertEqual(save.json()["progress"]["review_schedule_id"], 1)
-
-        fetched = self.client.get("/api/v1/review/session/1/progress")
-        self.assertEqual(fetched.status_code, 200)
-        self.assertEqual(fetched.json()["progress"]["red_node_ids"], ["1"])
-
-        submit = self.client.post(
-            "/api/v1/review/session/1/submit",
-            json={"duration_seconds": 12, "completion_mode": "manual_complete"},
-        )
-        self.assertEqual(submit.status_code, 200)
-        self.assertTrue(submit.json()["ok"])
-
-        cleared = self.client.get("/api/v1/review/session/1/progress")
-        self.assertEqual(cleared.status_code, 200)
-        self.assertIsNone(cleared.json()["progress"])
-
-    def test_review_progress_does_not_conflict_with_practice_progress_for_same_palace(self):
-        practice = self.client.put(
-            "/api/v1/practice/session/1",
-            json={
-                "reveal_map": {"root": "revealed", "1": "placeholder"},
-                "red_node_ids": [],
-                "completed": False,
-            },
-        )
-        self.assertEqual(practice.status_code, 200)
-
-        review = self.client.put(
-            "/api/v1/review/session/1/progress",
-            json={
-                "reveal_map": {"root": "revealed", "1": "revealed"},
-                "red_node_ids": ["1"],
-                "completed": False,
-            },
-        )
-        self.assertEqual(review.status_code, 200)
-        self.assertEqual(review.json()["progress"]["review_schedule_id"], 1)
-
     def test_palace_version_detail_includes_editor_doc(self):
         versions_response = self.client.get("/api/v1/palaces/1/versions")
         self.assertEqual(versions_response.status_code, 200)
@@ -1513,7 +876,9 @@ class ReviewRouteTests(RouterTestCase):
             self.assertIsNotNone(palace)
             before_count = session.query(PalaceVersion).filter_by(palace_id=1).count()
             payload = json.loads(palace.editor_doc)
-            save_palace_editor_state(session, palace, {"editor_doc": payload, "editor_source": "palace_edit"})
+            save_palace_editor_state(
+                session, palace, {"editor_doc": payload, "editor_source": "palace_edit"}
+            )
             after_count = session.query(PalaceVersion).filter_by(palace_id=1).count()
 
         self.assertEqual(after_count, before_count)
@@ -1529,14 +894,18 @@ class ReviewRouteTests(RouterTestCase):
 
             editor_doc = json.loads(palace.editor_doc)
             editor_doc["root"]["children"][0]["data"]["text"] = "Changed once"
-            save_palace_editor_state(session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"})
+            save_palace_editor_state(
+                session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"}
+            )
             after_first_change = session.query(PalaceVersion).filter_by(palace_id=1).count()
 
             palace = session.query(Palace).filter_by(id=1).first()
             self.assertIsNotNone(palace)
             editor_doc = json.loads(palace.editor_doc)
             editor_doc["root"]["children"][1]["data"]["text"] = "Changed twice"
-            save_palace_editor_state(session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"})
+            save_palace_editor_state(
+                session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"}
+            )
             after_second_change = session.query(PalaceVersion).filter_by(palace_id=1).count()
 
         self.assertEqual(after_first_change, 1)
@@ -1553,8 +922,15 @@ class ReviewRouteTests(RouterTestCase):
 
             editor_doc = json.loads(palace.editor_doc)
             editor_doc["root"]["children"][0]["data"]["text"] = "Changed after interval"
-            save_palace_editor_state(session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"})
-            versions = session.query(PalaceVersion).filter_by(palace_id=1).order_by(PalaceVersion.id.desc()).all()
+            save_palace_editor_state(
+                session, palace, {"editor_doc": editor_doc, "editor_source": "palace_edit"}
+            )
+            versions = (
+                session.query(PalaceVersion)
+                .filter_by(palace_id=1)
+                .order_by(PalaceVersion.id.desc())
+                .all()
+            )
 
         self.assertEqual(len(versions), 2)
         self.assertEqual(versions[0].trigger_reason, "editor_save")
@@ -1571,7 +947,12 @@ class ReviewRouteTests(RouterTestCase):
 
             create_palace_version(session, palace, "before-version-restore")
             session.commit()
-            versions = session.query(PalaceVersion).filter_by(palace_id=1).order_by(PalaceVersion.id.desc()).all()
+            versions = (
+                session.query(PalaceVersion)
+                .filter_by(palace_id=1)
+                .order_by(PalaceVersion.id.desc())
+                .all()
+            )
 
         self.assertEqual(len(versions), 1)
         self.assertEqual(versions[0].trigger_reason, "editor_save")
@@ -1664,7 +1045,10 @@ class ReviewRouteTests(RouterTestCase):
         response = self.client.get("/api/v1/palaces/1/versions")
         self.assertEqual(response.status_code, 200)
         versions = response.json()["versions"]
-        self.assertEqual([item["trigger_reason"] for item in versions], ["editor_save", "before-version-restore", "editor_save"])
+        self.assertEqual(
+            [item["trigger_reason"] for item in versions],
+            ["editor_save", "before-version-restore", "editor_save"],
+        )
 
     def test_interval_backup_skips_when_recent_backup_exists(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1694,7 +1078,10 @@ class ReviewRouteTests(RouterTestCase):
                     "root": {
                         "data": {"text": "Test Palace"},
                         "children": [
-                            {"data": {"text": "Branch A"}, "children": [{"data": {"text": "Leaf A1"}, "children": []}]},
+                            {
+                                "data": {"text": "Branch A"},
+                                "children": [{"data": {"text": "Leaf A1"}, "children": []}],
+                            },
                             {"data": {"text": "Branch B"}, "children": []},
                         ],
                     }
@@ -1728,7 +1115,10 @@ class ReviewRouteTests(RouterTestCase):
                     "root": {
                         "data": {"text": "Test Palace"},
                         "children": [
-                            {"data": {"text": "Branch A"}, "children": [{"data": {"text": "Leaf A1"}, "children": []}]},
+                            {
+                                "data": {"text": "Branch A"},
+                                "children": [{"data": {"text": "Leaf A1"}, "children": []}],
+                            },
                             {"data": {"text": "Branch B"}, "children": []},
                         ],
                     }
@@ -2128,7 +1518,10 @@ class ReviewRouteTests(RouterTestCase):
                     editor_doc=json.dumps(
                         {
                             "root": {
-                                "data": {"text": "Recovered Palace", "memoryAnkiRootKind": "palace"},
+                                "data": {
+                                    "text": "Recovered Palace",
+                                    "memoryAnkiRootKind": "palace",
+                                },
                                 "children": [
                                     {"data": {"text": "A", "memoryAnkiId": 10}, "children": []},
                                     {"data": {"text": "B", "memoryAnkiId": 11}, "children": []},
@@ -2159,7 +1552,9 @@ class ReviewRouteTests(RouterTestCase):
                 session.commit()
 
             with self.SessionLocal() as session:
-                restored = restore_palace_from_backup(session, backup_db_path=str(backup_db_path), palace_id=1)
+                restored = restore_palace_from_backup(
+                    session, backup_db_path=str(backup_db_path), palace_id=1
+                )
                 self.assertEqual(restored["restored_title"], "Recovered Palace")
                 self.assertEqual(restored["restored_node_count"], 4)
                 self.assertTrue(restored["rescue_snapshot_path"])
@@ -2187,7 +1582,10 @@ class ReviewRouteTests(RouterTestCase):
                     editor_doc=json.dumps(
                         {
                             "root": {
-                                "data": {"text": "Recovered Palace", "memoryAnkiRootKind": "palace"},
+                                "data": {
+                                    "text": "Recovered Palace",
+                                    "memoryAnkiRootKind": "palace",
+                                },
                                 "children": [
                                     {"data": {"text": "A", "memoryAnkiId": 10}, "children": []},
                                     {"data": {"text": "B", "memoryAnkiId": 11}, "children": []},
@@ -2228,16 +1626,23 @@ class ReviewRouteTests(RouterTestCase):
 
             self.assertEqual(comparison["palace_id"], 1)
             self.assertEqual(len(comparison["snapshots"]), 2)
-            current_snapshot = next(item for item in comparison["snapshots"] if item["source_kind"] == "current_db")
-            backup_snapshot = next(item for item in comparison["snapshots"] if item["source_kind"] == "backup_db")
+            current_snapshot = next(
+                item for item in comparison["snapshots"] if item["source_kind"] == "current_db"
+            )
+            backup_snapshot = next(
+                item for item in comparison["snapshots"] if item["source_kind"] == "backup_db"
+            )
             self.assertEqual(current_snapshot["node_count"], 2)
             self.assertEqual(backup_snapshot["node_count"], 3)
             current_vs_backup = next(
-                item for item in comparison["comparisons"] if item["compare_key"] == "current_vs_backup"
+                item
+                for item in comparison["comparisons"]
+                if item["compare_key"] == "current_vs_backup"
             )
             self.assertEqual(current_vs_backup["node_count_delta"], -1)
             self.assertIn("B", current_vs_backup["missing_top_level_texts"])
             self.assertIn("C", current_vs_backup["missing_top_level_texts"])
+
 
 if __name__ == "__main__":
     unittest.main()

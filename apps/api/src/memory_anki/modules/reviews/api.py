@@ -1,7 +1,8 @@
-﻿"""Public review context facade for cross-context composition."""
+"""Public review context facade for cross-context composition."""
 
 from .application.node_memory_service import (
     get_completion_summary,
+    get_palace_mastery_trend,
     get_palace_memory_projection,
     list_due_nodes,
     rate_nodes,
@@ -46,6 +47,7 @@ __all__ = [
     "load_review_schedule_policy",
     "get_completion_summary",
     "get_palace_memory_projection",
+    "get_palace_mastery_trend",
     "list_due_nodes",
     "rate_nodes",
     "undo_rating_operation",

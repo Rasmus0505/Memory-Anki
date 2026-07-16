@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class OverdueCountResponse(BaseModel):
     count: int
+
+
+class MasteryTrendPoint(BaseModel):
+    at: str
+    mastery_progress: float
+    mastery_percent: int
+
+
+class MasteryTrendResponse(BaseModel):
+    palace_id: int
+    points: list[MasteryTrendPoint]
 
 
 class ChapterInfo(BaseModel):
@@ -21,16 +31,22 @@ class ChapterInfo(BaseModel):
 class ReviewScheduleItem(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    id: int
+    id: str | int
     palace_id: int
-    scheduled_date: str
+    scheduled_date: str | None = None
     due_at: str | None = None
+    next_due_at: str | None = None
     interval_days: int | None = None
     algorithm_used: str | None = None
-    completed: bool
+    completed: bool = False
     completed_at: str | None = None
     review_number: int | None = None
     review_type: str | None = None
+    session_id: str | None = None
+    due_node_count: int = 0
+    overdue_node_count: int = 0
+    frozen_due_node_uids: list[str] = []
+    memory_summary: dict[str, Any] | None = None
     palace: dict[str, Any] | None = None
 
 
@@ -59,44 +75,18 @@ class SubmitReviewResponse(BaseModel):
     ok: bool
     completion_mode: str | None = None
     score: float | None = None
-    next_id: int | None = None
-    mastered: bool = False
+    next_id: int | str | None = None
     review_log_id: int
     palace_id: int
     chapter_id: int | None = None
     duration_seconds: int
-    completed_stage_count: int
-    total_stage_count: int
-    completed_stage_label: str | None = None
-    next_stage_label: str | None = None
+    scope_node_count: int = 0
+    rated_node_count: int = 0
+    unrated_due_node_count: int = 0
+    rating_counts: dict[str, int] = {}
+    mastery_progress: float = 0
+    mastery_percent: int = 0
+    memory_health: float = 0
+    memory_health_percent: int = 0
+    remaining_due_node_count: int = 0
     next_review_at: str | None = None
-    needs_practice: bool = False
-
-class ReviewStageAdjustmentPreviewRequest(BaseModel):
-    target_completed_count: int = Field(ge=0)
-    completed_at: datetime | None = None
-    needs_practice: bool = False
-
-
-class ReviewStageAdjustmentRequest(ReviewStageAdjustmentPreviewRequest):
-    expected_completed_count: int = Field(ge=0)
-    note: str = Field(default="", max_length=2000)
-
-
-class ReviewStageAdjustmentResponse(BaseModel):
-    ok: bool
-    palace_id: int
-    palace_title: str
-    previous_completed_count: int
-    target_completed_count: int
-    total_stage_count: int
-    direction: Literal["forward", "backward", "reset", "unchanged"]
-    current_stage_label: str | None = None
-    target_stage_label: str | None = None
-    preserved_stage_labels: list[str]
-    added_stage_labels: list[str]
-    removed_stage_labels: list[str]
-    next_stage_label: str | None = None
-    next_review_at: str | None = None
-    mastered: bool
-    needs_practice: bool

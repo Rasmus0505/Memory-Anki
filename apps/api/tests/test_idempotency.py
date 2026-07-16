@@ -1,4 +1,5 @@
 """Route-level mutation replay tests."""
+
 import json
 from datetime import date, timedelta
 
@@ -9,11 +10,14 @@ from memory_anki.infrastructure.db._tables.palaces import (
     ReviewLog,
     ReviewSchedule,
 )
+from memory_anki.modules.reviews.application.formal_review_service import (
+    start_or_resume_formal_review,
+)
 from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 
-def _seed_schedule(session_factory) -> int:
+def _seed_schedule(session_factory) -> str:
     with session_factory() as session:
         palace = Palace(
             title="Idempotency Palace",
@@ -24,7 +28,7 @@ def _seed_schedule(session_factory) -> int:
                 {
                     "root": {
                         "data": {"text": "Idempotency Palace", "uid": "root"},
-                        "children": [],
+                        "children": [{"data": {"text": "Node", "uid": "node-1"}, "children": []}],
                     }
                 }
             ),
@@ -42,7 +46,7 @@ def _seed_schedule(session_factory) -> int:
         )
         session.add(schedule)
         session.commit()
-        return schedule.id
+        return start_or_resume_formal_review(session, palace.id).id
 
 
 class TestSubmitRouteIdempotency:
@@ -95,13 +99,10 @@ class TestSubmitRouteIdempotency:
             json=body,
             headers={MUTATION_ID_HEADER: "id-b"},
         )
-        assert second.status_code == 409
-        assert second.json() == {
-            "detail": {
-                "code": "review_submit_conflict",
-                "message": "该复习阶段已经完成，请刷新复习队列。",
-            }
-        }
+        assert second.status_code == 200
+        assert second.json() == first.json()
+        with session_factory() as session:
+            assert session.query(ReviewLog).count() == 1
 
     def test_no_header_executes_normally(self, client, session_factory):
         schedule_id = _seed_schedule(session_factory)

@@ -1,4 +1,4 @@
-﻿"""Node-level FSRS scheduling and rating operations."""
+"""Node-level FSRS scheduling and rating operations."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
-from memory_anki.infrastructure.db._tables.misc import Config
+from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
@@ -51,7 +51,9 @@ def _schedule_settings(session: Session | None = None) -> tuple[float, int, int]
     horizon = MASTERY_HORIZON_DAYS
     if session is not None:
         keys = ["desired_retention", "maximum_interval", "mastery_horizon_days"]
-        values = {row.key: row.value for row in session.query(Config).filter(Config.key.in_(keys)).all()}
+        values = {
+            row.key: row.value for row in session.query(Config).filter(Config.key.in_(keys)).all()
+        }
         try:
             retention = float(values.get("desired_retention", retention))
         except (TypeError, ValueError):
@@ -67,7 +69,11 @@ def _schedule_settings(session: Session | None = None) -> tuple[float, int, int]
     return retention, maximum_interval, horizon
 
 
-def _scheduler(session: Session | None = None, retention: float | None = None, maximum_interval: int | None = None) -> Scheduler:
+def _scheduler(
+    session: Session | None = None,
+    retention: float | None = None,
+    maximum_interval: int | None = None,
+) -> Scheduler:
     configured_retention, configured_maximum, _ = _schedule_settings(session)
     retention = configured_retention if retention is None else retention
     maximum_interval = configured_maximum if maximum_interval is None else maximum_interval
@@ -90,7 +96,9 @@ def _content_fingerprint(raw: dict[str, Any]) -> str:
     value = raw.get("data")
     data: dict[str, Any] = value if isinstance(value, dict) else {}
     payload = {"text": data.get("text", ""), "note": data.get("note", "")}
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
 
 
 def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
@@ -107,7 +115,11 @@ def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
         uid = _node_uid(raw, fallback)
         value = raw.get("children")
         children_raw: list[Any] = value if isinstance(value, list) else []
-        children = [walk(child, uid, f"{fallback}-{index}") for index, child in enumerate(children_raw) if isinstance(child, dict)]
+        children = [
+            walk(child, uid, f"{fallback}-{index}")
+            for index, child in enumerate(children_raw)
+            if isinstance(child, dict)
+        ]
         result[uid] = {
             "uid": uid,
             "parent_uid": parent_uid,
@@ -167,7 +179,9 @@ def _state_dict(state: ReviewNodeState | None) -> dict[str, Any] | None:
     }
 
 
-def _restore_state(session: Session, palace_id: int, node_uid: str, snapshot: dict[str, Any] | None) -> None:
+def _restore_state(
+    session: Session, palace_id: int, node_uid: str, snapshot: dict[str, Any] | None
+) -> None:
     row = session.query(ReviewNodeState).filter_by(palace_id=palace_id, node_uid=node_uid).first()
     if snapshot is None:
         if row is not None:
@@ -181,7 +195,11 @@ def _restore_state(session: Session, palace_id: int, node_uid: str, snapshot: di
     row.stability = snapshot.get("stability")
     row.difficulty = snapshot.get("difficulty")
     row.due_at = datetime.fromisoformat(snapshot["due_at"])
-    row.last_review_at = datetime.fromisoformat(snapshot["last_review_at"]) if snapshot.get("last_review_at") else None
+    row.last_review_at = (
+        datetime.fromisoformat(snapshot["last_review_at"])
+        if snapshot.get("last_review_at")
+        else None
+    )
     row.desired_retention = float(snapshot.get("desired_retention", DEFAULT_RETENTION))
     row.maximum_interval = int(snapshot.get("maximum_interval", DEFAULT_MAXIMUM_INTERVAL))
     row.content_fingerprint = str(snapshot.get("content_fingerprint") or "")
@@ -190,7 +208,9 @@ def _restore_state(session: Session, palace_id: int, node_uid: str, snapshot: di
     row.parameter_version = str(snapshot.get("parameter_version") or PARAMETER_VERSION)
 
 
-def _apply_card(row: ReviewNodeState, card: Card, *, fingerprint: str, source: str = "manual") -> None:
+def _apply_card(
+    row: ReviewNodeState, card: Card, *, fingerprint: str, source: str = "manual"
+) -> None:
     row.state = int(card.state)
     row.step = card.step
     row.stability = card.stability
@@ -224,7 +244,9 @@ def _latest_rating(session: Session, palace_id: int, node_uid: str) -> int | Non
     )
     undone_ids = {
         item.id
-        for item in session.query(ReviewRatingOperation).filter(ReviewRatingOperation.undone_at.is_not(None)).all()
+        for item in session.query(ReviewRatingOperation)
+        .filter(ReviewRatingOperation.undone_at.is_not(None))
+        .all()
     }
     for row in rows:
         if row.operation_id and row.operation_id in undone_ids:
@@ -233,11 +255,57 @@ def _latest_rating(session: Session, palace_id: int, node_uid: str) -> int | Non
     return None
 
 
+def _session_direct_rated_uids(
+    session: Session,
+    *,
+    study_session_id: str,
+    palace_id: int,
+    recall_round: str,
+) -> set[str]:
+    """Nodes whose latest non-undone event in this session/round is a direct rating."""
+    rows = (
+        session.query(MindMapRecallEvent)
+        .filter_by(
+            study_session_id=study_session_id,
+            palace_id=palace_id,
+            recall_round=recall_round,
+        )
+        .order_by(MindMapRecallEvent.occurred_at.desc(), MindMapRecallEvent.created_at.desc())
+        .all()
+    )
+    if not rows:
+        return set()
+    undone_ids = {
+        item.id
+        for item in session.query(ReviewRatingOperation)
+        .filter(
+            ReviewRatingOperation.study_session_id == study_session_id,
+            ReviewRatingOperation.undone_at.is_not(None),
+        )
+        .all()
+    }
+    latest_by_node: dict[str, MindMapRecallEvent] = {}
+    for row in rows:
+        if row.operation_id and row.operation_id in undone_ids:
+            continue
+        if row.node_uid in latest_by_node:
+            continue
+        latest_by_node[row.node_uid] = row
+    return {
+        uid
+        for uid, event in latest_by_node.items()
+        if event.evidence_origin == "direct"
+    }
+
+
 def _projection(session: Session, palace: Palace, *, now: datetime | None = None) -> dict[str, Any]:
     now = now or _utc_now()
     root_uid, nodes = _tree(palace)
     valid_uids = [uid for uid in nodes if uid != root_uid]
-    states = {row.node_uid: row for row in session.query(ReviewNodeState).filter_by(palace_id=palace.id).all()}
+    states = {
+        row.node_uid: row
+        for row in session.query(ReviewNodeState).filter_by(palace_id=palace.id).all()
+    }
     scheduler = _scheduler(session)
     details: list[dict[str, Any]] = []
     for uid in valid_uids:
@@ -251,21 +319,31 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
         else:
             card = _card_from_state(row, card_id=_card_id(palace.id, uid))
             stability = float(card.stability or 0.0)
-            retrievability = scheduler.get_card_retrievability(card, current_datetime=now) if row and row.last_review_at else 0.0
+            retrievability = (
+                scheduler.get_card_retrievability(card, current_datetime=now)
+                if row and row.last_review_at
+                else 0.0
+            )
             due_at = _aware(row.due_at) if row else now
             state_source = row.state_source if row else "new"
-        details.append({
-            "node_uid": uid,
-            "stability_days": round(stability, 3),
-            "retrievability": round(max(0.0, min(retrievability, 1.0)), 4),
-            "due_at": due_at.isoformat() if due_at else None,
-            "due": bool(due_at and due_at <= now),
-            "state_source": state_source,
-            "rating": _latest_rating(session, palace.id, uid),
-        })
+        details.append(
+            {
+                "node_uid": uid,
+                "stability_days": round(stability, 3),
+                "retrievability": round(max(0.0, min(retrievability, 1.0)), 4),
+                "due_at": due_at.isoformat() if due_at else None,
+                "due": bool(due_at and due_at <= now),
+                "state_source": state_source,
+                "rating": _latest_rating(session, palace.id, uid),
+            }
+        )
     total = len(details)
     _, _, mastery_horizon_days = _schedule_settings(session)
-    mastery_progress = (sum(min(item["stability_days"] / mastery_horizon_days, 1.0) for item in details) / total) if total else 0.0
+    mastery_progress = (
+        (sum(min(item["stability_days"] / mastery_horizon_days, 1.0) for item in details) / total)
+        if total
+        else 0.0
+    )
     memory_health = (sum(item["retrievability"] for item in details) / total) if total else 0.0
     due_items = [item for item in details if item["due"]]
     severe = sum(1 for item in details if item["rating"] == 1)
@@ -281,7 +359,9 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
         "mastered_node_count": mastered_count,
         "mastery_horizon_days": mastery_horizon_days,
         "due_node_count": len(due_items),
-        "overdue_node_count": sum(1 for item in due_items if item["due_at"] and item["due_at"] < now.isoformat()),
+        "overdue_node_count": sum(
+            1 for item in due_items if item["due_at"] and item["due_at"] < now.isoformat()
+        ),
         "next_review_at": next_due,
         "mastered": total > 0 and mastered_count / total >= 0.9 and severe == 0,
         "severe_weak_node_count": severe,
@@ -296,6 +376,47 @@ def get_palace_memory_projection(session: Session, palace_id: int) -> dict[str, 
     return _projection(session, palace)
 
 
+def get_palace_mastery_trend(session: Session, palace_id: int) -> dict[str, Any]:
+    """Return one mastery snapshot for each completed formal FSRS review."""
+    palace = session.get(Palace, palace_id)
+    if palace is None or palace.deleted_at is not None:
+        raise ValueError("palace not found")
+
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.palace_id == palace_id,
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.ended_at.is_not(None),
+        )
+        .order_by(StudySession.ended_at.asc(), StudySession.id.asc())
+        .all()
+    )
+    points: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            summary = json.loads(row.summary_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        receipt = summary.get("completion_receipt")
+        if not isinstance(receipt, dict):
+            continue
+        mastery_progress = receipt.get("mastery_progress")
+        mastery_percent = receipt.get("mastery_percent")
+        if not isinstance(mastery_progress, int | float) or not isinstance(mastery_percent, int | float):
+            continue
+        points.append(
+            {
+                "at": row.ended_at.isoformat(),
+                "mastery_progress": round(float(mastery_progress), 4),
+                "mastery_percent": round(float(mastery_percent)),
+            }
+        )
+    return {"palace_id": palace_id, "points": points}
+
+
 def rate_nodes(
     session: Session,
     *,
@@ -305,28 +426,81 @@ def rate_nodes(
     study_session_id: str,
     operation_id: str,
     rating_scope: str = "subtree",
+    conflict_policy: str = "overwrite",
     source_scene: str = "formal_review",
+    recall_round: str = "first",
+    rating_source: str = "manual",
+    inference_confidence: float | None = None,
+    response_ms: int | None = None,
+    hint_count: int = 0,
+    retry_count: int = 0,
 ) -> dict[str, Any]:
     if rating not in VALID_RATINGS:
         raise ValueError("rating must be between 1 and 4")
     if rating_scope not in {"single", "subtree"}:
         raise ValueError("rating_scope must be single or subtree")
+    if conflict_policy not in {"overwrite", "skip_direct"}:
+        raise ValueError("conflict_policy must be overwrite or skip_direct")
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None:
         raise ValueError("palace not found")
     existing = session.get(ReviewRatingOperation, operation_id)
     if existing is not None:
-        return {"operation_id": operation_id, "affected_node_count": existing.affected_node_count, "idempotent": True, **_projection(session, palace)}
+        if (
+            existing.study_session_id != study_session_id
+            or existing.palace_id != palace_id
+            or existing.root_node_uid != node_uid
+            or existing.rating != rating
+            or existing.rating_scope != rating_scope
+        ):
+            raise ValueError("rating operation belongs to another request")
+        return {
+            "operation_id": operation_id,
+            "affected_node_count": existing.affected_node_count,
+            "idempotent": True,
+            **_projection(session, palace),
+        }
     root_uid, nodes = _tree(palace)
     if node_uid not in nodes:
         raise ValueError("node not found")
-    selected = [node_uid] if rating_scope == "single" else [node_uid, *_descendants(nodes, node_uid)]
+    selected = (
+        [node_uid] if rating_scope == "single" else [node_uid, *_descendants(nodes, node_uid)]
+    )
     selected = [uid for uid in selected if uid != root_uid]
+    if source_scene == "formal_review" and (
+        study_session_id.startswith("review-")
+        or session.get(StudySession, study_session_id) is not None
+    ):
+        from memory_anki.modules.reviews.application.formal_review_service import (
+            get_formal_review_scope,
+        )
+
+        selected = [
+            uid
+            for uid in selected
+            if uid in get_formal_review_scope(session, study_session_id, palace_id)
+        ]
+    if conflict_policy == "skip_direct" and rating_scope == "subtree":
+        direct_uids = _session_direct_rated_uids(
+            session,
+            study_session_id=study_session_id,
+            palace_id=palace_id,
+            recall_round=recall_round,
+        )
+        # Always re-rate the target node; only skip descendants with direct ratings.
+        selected = [uid for uid in selected if uid == node_uid or uid not in direct_uids]
     if not selected:
-        raise ValueError("root node cannot be scheduled")
+        if node_uid == root_uid:
+            raise ValueError("root node cannot be scheduled alone; rate descendants or expand scope")
+        raise ValueError("没有可评分节点（可能不在本次复习范围，或子节点均已单独评分并选择避开）")
     operation = ReviewRatingOperation(
-        id=operation_id, study_session_id=study_session_id, palace_id=palace_id,
-        root_node_uid=node_uid, rating=rating, rating_scope=rating_scope, affected_node_count=len(selected),
+        id=operation_id,
+        study_session_id=study_session_id,
+        palace_id=palace_id,
+        root_node_uid=node_uid,
+        rating=rating,
+        rating_scope=rating_scope,
+        affected_node_count=len(selected),
     )
     session.add(operation)
     before_projection = _projection(session, palace)
@@ -345,17 +519,36 @@ def rate_nodes(
             session.add(row)
         _apply_card(row, card, fingerprint=fingerprint, source="manual")
         event_id = _event_id(operation_id, uid)
-        session.add(MindMapRecallEvent(
-            id=event_id, study_session_id=study_session_id, palace_id=palace_id, node_uid=uid,
-            source_scene=source_scene, recall_round="first", rating=rating, rating_source="manual",
-            rating_scope=rating_scope, evidence_origin="direct" if uid == node_uid else "batch_inherited",
-            operation_id=operation_id, response_ms=None, hint_count=0, retry_count=0,
-        ))
-        session.add(ReviewRatingOperationItem(
-            operation_id=operation_id, palace_id=palace_id, node_uid=uid, event_id=event_id,
-            before_state_json=json.dumps(before, ensure_ascii=False) if before else None,
-            after_state_json=json.dumps(_state_dict(row), ensure_ascii=False), before_rating=before_rating,
-        ))
+        session.add(
+            MindMapRecallEvent(
+                id=event_id,
+                study_session_id=study_session_id,
+                palace_id=palace_id,
+                node_uid=uid,
+                source_scene=source_scene,
+                recall_round=recall_round,
+                rating=rating,
+                rating_source=rating_source,
+                rating_scope=rating_scope,
+                evidence_origin="direct" if uid == node_uid else "batch_inherited",
+                inference_confidence=inference_confidence,
+                operation_id=operation_id,
+                response_ms=response_ms,
+                hint_count=max(0, hint_count),
+                retry_count=max(0, retry_count),
+            )
+        )
+        session.add(
+            ReviewRatingOperationItem(
+                operation_id=operation_id,
+                palace_id=palace_id,
+                node_uid=uid,
+                event_id=event_id,
+                before_state_json=json.dumps(before, ensure_ascii=False) if before else None,
+                after_state_json=json.dumps(_state_dict(row), ensure_ascii=False),
+                before_rating=before_rating,
+            )
+        )
     session.flush()
     after_projection = _projection(session, palace)
     session.commit()
@@ -374,7 +567,9 @@ def rate_nodes(
     }
 
 
-def undo_rating_operation(session: Session, *, operation_id: str, study_session_id: str) -> dict[str, Any]:
+def undo_rating_operation(
+    session: Session, *, operation_id: str, study_session_id: str
+) -> dict[str, Any]:
     operation = session.get(ReviewRatingOperation, operation_id)
     if operation is None:
         raise ValueError("rating operation not found")
@@ -382,11 +577,15 @@ def undo_rating_operation(session: Session, *, operation_id: str, study_session_
         raise ValueError("rating operation belongs to another session")
     if operation.undone_at is not None:
         return {"operation_id": operation_id, "undone": True, "idempotent": True}
-    newer = session.query(ReviewRatingOperation).filter(
-        ReviewRatingOperation.study_session_id == study_session_id,
-        ReviewRatingOperation.created_at > operation.created_at,
-        ReviewRatingOperation.undone_at.is_(None),
-    ).first()
+    newer = (
+        session.query(ReviewRatingOperation)
+        .filter(
+            ReviewRatingOperation.study_session_id == study_session_id,
+            ReviewRatingOperation.created_at > operation.created_at,
+            ReviewRatingOperation.undone_at.is_(None),
+        )
+        .first()
+    )
     if newer is not None:
         raise ValueError("only the latest rating operation can be undone")
     palace = session.get(Palace, operation.palace_id)
@@ -401,11 +600,19 @@ def undo_rating_operation(session: Session, *, operation_id: str, study_session_
     session.flush()
     after = _projection(session, palace)
     session.commit()
-    return {"operation_id": operation_id, "undone": True, "affected_node_count": len(items), "previous_mastery_progress": before["mastery_progress"], "current_mastery_progress": after["mastery_progress"], **after}
+    return {
+        "operation_id": operation_id,
+        "undone": True,
+        "affected_node_count": len(items),
+        "previous_mastery_progress": before["mastery_progress"],
+        "current_mastery_progress": after["mastery_progress"],
+        **after,
+    }
 
 
-
-def get_completion_summary(session: Session, palace_id: int, *, node_uids: list[str] | None = None) -> dict[str, Any]:
+def get_completion_summary(
+    session: Session, palace_id: int, *, node_uids: list[str] | None = None
+) -> dict[str, Any]:
     projection = get_palace_memory_projection(session, palace_id)
     selected = set(node_uids or [item["node_uid"] for item in projection["nodes"]])
     scoped = [item for item in projection["nodes"] if item["node_uid"] in selected]
@@ -417,7 +624,9 @@ def get_completion_summary(session: Session, palace_id: int, *, node_uids: list[
         "palace_id": palace_id,
         "scope_node_count": len(scoped),
         "rated_node_count": len(rated),
-        "unrated_due_node_count": sum(1 for item in scoped if item["due"] and item["rating"] is None),
+        "unrated_due_node_count": sum(
+            1 for item in scoped if item["due"] and item["rating"] is None
+        ),
         "rating_counts": rating_counts,
         "mastery_progress": projection["mastery_progress"],
         "memory_health": projection["memory_health"],
@@ -426,9 +635,7 @@ def get_completion_summary(session: Session, palace_id: int, *, node_uids: list[
         "projection": projection,
     }
 
+
 def list_due_nodes(session: Session, palace_id: int, *, now: datetime | None = None) -> list[str]:
     projection = get_palace_memory_projection(session, palace_id)
     return [item["node_uid"] for item in projection["nodes"] if item["due"]]
-
-
-
