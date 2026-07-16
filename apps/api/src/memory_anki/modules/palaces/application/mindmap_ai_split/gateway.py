@@ -60,6 +60,18 @@ _STRUCTURE_SYSTEM_HINTS: dict[str, str] = {
         "允许父子树；中间标题只作组织，事实落在保留原句的叶子节点；"
         "优先最少且必要的层级。"
     ),
+    "add_children": (
+        "本次任务：AI 添卡（插入中间分类）。"
+        "在目标节点与其一级子节点之间新建更少数量的中间分类标题；"
+        "用 child_assignments 把每个已有一级子节点整体归到某个 new_children；"
+        "不要改写、复制、拆分已有子节点；new_children 数量必须严格少于一级子节点数。"
+    ),
+    "legacy_children": (
+        "本次任务：AI 添卡（插入中间分类）。"
+        "在目标节点与其一级子节点之间新建更少数量的中间分类标题；"
+        "用 child_assignments 把每个已有一级子节点整体归到某个 new_children；"
+        "不要改写、复制、拆分已有子节点；new_children 数量必须严格少于一级子节点数。"
+    ),
 }
 
 
@@ -77,6 +89,7 @@ def call_model(
 ) -> dict[str, Any]:
     request_url = build_chat_completions_url(config.base_url)
     compiled_prompt = None
+    is_add_mode = split_mode in {"add_children", "legacy_children"}
     if split_mode in {"auto", "parallel", "hierarchy"}:
         # Unified composition scene; legacy parallel/hierarchy entrypoints share the same defaults.
         compiled_prompt = prompt_catalog.compose(
@@ -85,21 +98,47 @@ def call_model(
         )
         system_prompt = compiled_prompt.text
     else:
-        system_prompt = prompt_catalog.render("ai_prompt_mindmap_ai_split_system")
+        # Critical: do NOT use prompt_catalog.render("ai_prompt_mindmap_ai_split_system").
+        # That key is bound to the composition scene `ai_split`, which forces replacement_nodes
+        # and makes the model ignore new_children — leading to empty category parse failures.
+        from .add_children_prompt import ADD_CHILDREN_SYSTEM_PROMPT
+
+        system_prompt = ADD_CHILDREN_SYSTEM_PROMPT
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     structure_hint = _STRUCTURE_SYSTEM_HINTS.get(split_mode)
     if structure_hint:
         messages.append({"role": "system", "content": structure_hint})
     if target_card_count is not None:
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    f"本次数量偏好：替换后并排卡片大约 {target_card_count} 张（软目标，可略多略少）；"
-                    "不要为凑数硬拆/硬并，不得删减原句信息。"
-                ),
-            }
-        )
+        if is_add_mode:
+            count_hint = (
+                f"本次数量偏好：中间分类大约 {target_card_count} 张（软目标，可略多略少）；"
+                "仍必须严格少于一级子节点数；不要为凑数硬拆；不得改写已有子节点；"
+                "只输出 new_children 与 child_assignments。"
+            )
+        else:
+            count_hint = (
+                f"本次数量偏好：替换后并排卡片大约 {target_card_count} 张（软目标，可略多略少）；"
+                "不要为凑数硬拆/硬并，不得删减原句信息。"
+            )
+        messages.append({"role": "system", "content": count_hint})
+    if is_add_mode and prompt_options:
+        run_instruction = prompt_options.get("run_instruction")
+        scene_instruction = prompt_options.get("scene_instruction")
+        extra_bits: list[str] = []
+        if isinstance(scene_instruction, str) and scene_instruction.strip():
+            extra_bits.append(f"场景特殊说明：\n{scene_instruction.strip()}")
+        if isinstance(run_instruction, str) and run_instruction.strip():
+            extra_bits.append(f"本次运行追加要求：\n{run_instruction.strip()}")
+        if extra_bits:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "用户附加说明（仍须遵守 new_children/child_assignments 输出协议）：\n"
+                        + "\n\n".join(extra_bits)
+                    ),
+                }
+            )
     if config.custom_instruction:
         messages.append(
             {

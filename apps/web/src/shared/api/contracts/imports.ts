@@ -80,12 +80,13 @@ export interface ImageTextPreviewResponse {
   resolved_ai?: ResolvedAiRuntimeMeta | null
   review_preview?: MindMapReviewPreview | null
 }
-export type MindMapAiSplitMode = 'auto' | 'parallel' | 'hierarchy'
+/** Replacement split modes, plus add_children for intermediate grouping under a parent. */
+export type MindMapAiSplitMode = 'auto' | 'parallel' | 'hierarchy' | 'add_children'
 export interface MindMapAiSplitRequest {
   editor_doc: MindMapDoc | string | null
   target_node_uid: string | null
-  split_mode?: MindMapAiSplitMode
-  /** Soft target for sibling cards after replace; omit for auto. */
+  split_mode?: MindMapAiSplitMode | 'legacy_children'
+  /** Soft target for sibling/group cards; omit for auto. */
   target_card_count?: number | null
   owner_id?: string
   operation_id?: string
@@ -117,7 +118,7 @@ export interface MindMapAiSplitResponse {
   review_preview?: MindMapReviewPreview | null
   split_mode?: MindMapAiSplitMode | 'legacy_children'
   replacement_node_count?: number
-  /** Preview/apply payload: tree to place (not yet confirmed by user). */
+  /** Preview/apply payload: tree to place (not yet confirmed by user). For add_children this is the new first-level group tree under the parent. */
   replacement_nodes?: MindMapAiSplitReplacementNode[] | null
   owner_id?: string | null
   operation_id?: string | null

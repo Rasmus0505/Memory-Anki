@@ -77,11 +77,28 @@ const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
 /** Ignore blur right after entering edit (layout/toolbar teardown can steal focus). */
 const EDIT_BLUR_GUARD_MS = 180
+/** Retry focus after enter-edit; RF toolbar teardown / layout can steal it once. */
+const EDIT_FOCUS_RETRY_DELAYS_MS = [0, 16, 50, 120] as const
 
 interface EditSnapshot {
   value: string
   selectionStart: number
   selectionEnd: number
+}
+
+function placeTextareaCaret(
+  input: HTMLTextAreaElement,
+  options: { selectAll: boolean; value?: string },
+) {
+  const value = options.value ?? input.value
+  const start = options.selectAll ? 0 : value.length
+  const end = value.length
+  input.focus({ preventScroll: true })
+  try {
+    input.setSelectionRange(start, end)
+  } catch {
+    // Ignore when the node unmounts mid-focus.
+  }
 }
 
 function getMouseFeedbackPoint(event?: MouseEvent) {
@@ -203,39 +220,88 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     nodeData.onEditTextChange?.(id, snapshot.value)
     requestAnimationFrame(() => {
       resizeEditor()
-      inputRef.current?.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)
+      const input = inputRef.current
+      if (!input) return
+      input.focus({ preventScroll: true })
+      try {
+        input.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)
+      } catch {
+        // Ignore when the node unmounts mid-restore.
+      }
     })
   }, [id, nodeData, resizeEditor])
 
-  useEffect(() => {
+  const focusEditorCaret = useCallback(
+    (options?: { selectAll?: boolean; value?: string }) => {
+      const input = inputRef.current
+      if (!input || editSessionClosedRef.current) return false
+      const selectAll = options?.selectAll ?? Boolean(nodeData.selectEditText)
+      placeTextareaCaret(input, {
+        selectAll,
+        value: options?.value,
+      })
+      resizeEditor()
+      return document.activeElement === input
+    },
+    [nodeData.selectEditText, resizeEditor],
+  )
+
+  // Enter-edit: put caret at end (or select-all for new nodes). Retry because toolbar
+  // teardown / React Flow layout can steal focus right after the first attempt.
+  // Intentionally depends only on isEditing / select-all mode so draft keystrokes
+  // do not re-init the session or thrash focus.
+  useLayoutEffect(() => {
     if (!isEditing) {
       wasEditingRef.current = false
-      return
+      return undefined
     }
-    if (wasEditingRef.current) return
-    wasEditingRef.current = true
-    editStartedAtRef.current = Date.now()
-    const initialValue = typeof nodeData.editText === 'string' ? nodeData.editText : nodeData.label
-    setEditText(initialValue)
-    editHistoryRef.current = { past: [], future: [] }
-    pendingInputSnapshotRef.current = null
-    compositionStartSnapshotRef.current = null
-    isComposingRef.current = false
-    editSessionClosedRef.current = false
-    const input = inputRef.current
-    if (input) {
-      input.focus({ preventScroll: true })
-      resizeEditor()
+
+    const initialValue =
+      typeof nodeData.editText === 'string' ? nodeData.editText : nodeData.label
+    const selectAll = Boolean(nodeData.selectEditText)
+
+    if (!wasEditingRef.current) {
+      wasEditingRef.current = true
+      editStartedAtRef.current = Date.now()
+      setEditText(initialValue)
+      editHistoryRef.current = { past: [], future: [] }
+      pendingInputSnapshotRef.current = null
+      compositionStartSnapshotRef.current = null
+      isComposingRef.current = false
+      editSessionClosedRef.current = false
     }
-    requestAnimationFrame(() => {
-      const nextInput = inputRef.current
-      if (!nextInput) return
-      nextInput.focus({ preventScroll: true })
-      const selectionStart = nodeData.selectEditText ? 0 : initialValue.length
-      const selectionEnd = nodeData.selectEditText ? initialValue.length : initialValue.length
-      nextInput.setSelectionRange(selectionStart, selectionEnd)
+
+    // Always re-apply caret on effect run (covers Strict Mode remount).
+    focusEditorCaret({ selectAll, value: initialValue })
+
+    const restoreIfBlurred = () => {
+      if (!wasEditingRef.current || editSessionClosedRef.current) return
+      const input = inputRef.current
+      if (!input) return
+      // If focus held, do not clobber caret while the user is already typing.
+      if (document.activeElement === input) return
+      focusEditorCaret({ selectAll })
+    }
+
+    const timers: number[] = []
+    for (const delay of EDIT_FOCUS_RETRY_DELAYS_MS) {
+      timers.push(window.setTimeout(restoreIfBlurred, delay))
+    }
+
+    let nestedRaf = 0
+    const rafId = requestAnimationFrame(() => {
+      restoreIfBlurred()
+      nestedRaf = requestAnimationFrame(restoreIfBlurred)
     })
-  }, [isEditing, nodeData.editText, nodeData.label, nodeData.selectEditText, resizeEditor])
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      cancelAnimationFrame(nestedRaf)
+      for (const timer of timers) window.clearTimeout(timer)
+    }
+    // nodeData.editText / label are read only when isEditing flips true.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter-edit snapshot
+  }, [focusEditorCaret, isEditing, nodeData.selectEditText])
 
   const startEdit = useCallback(
     (event?: MouseEvent) => {
@@ -271,13 +337,14 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     if (editSessionClosedRef.current) return
     if (extract.isExtractDraggingNow()) {
       requestAnimationFrame(() => {
-        inputRef.current?.focus({ preventScroll: true })
+        focusEditorCaret()
       })
       return
     }
     if (Date.now() - editStartedAtRef.current < EDIT_BLUR_GUARD_MS) {
+      // Toolbar / layout blur: refocus and keep caret at end (or select-all).
       requestAnimationFrame(() => {
-        inputRef.current?.focus({ preventScroll: true })
+        focusEditorCaret()
       })
       return
     }
@@ -292,7 +359,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       nodeData.onCancelEdit?.(id)
     }
     setLocalEdit(false)
-  }, [editValue, extract, id, nodeData])
+  }, [editValue, extract, focusEditorCaret, id, nodeData])
 
   const updateEditValue = useCallback(
     (nextValue: string) => {

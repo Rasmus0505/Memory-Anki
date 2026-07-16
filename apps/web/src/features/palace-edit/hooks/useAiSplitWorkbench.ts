@@ -29,22 +29,28 @@ import {
   addPreviewChild,
   appendSiblingsAfterUid,
   applyReplacementAtUid,
+  countFirstLevelChildren,
   countPreviewNodes,
   deletePreviewNode,
   editorNodesToPreviewTree,
   fingerprintEditorDoc,
+  listFirstLevelChildTexts,
   previewTreeToEditorNodes,
+  replaceChildrenUnderUid,
   type AiSplitPreviewNode,
   updatePreviewNodeNote,
   updatePreviewNodeText,
 } from '@/features/palace-edit/model/aiSplitPreview'
 
 export type AiSplitWorkbenchPhase = 'config' | 'generating' | 'preview'
-export type AiSplitStructureMode = MindMapAiSplitMode
+/** Structure preference for replacement split only (not add_children). */
+export type AiSplitStructureMode = 'auto' | 'parallel' | 'hierarchy'
+export type AiSplitTaskMode = 'split' | 'add'
 export type AiSplitCardCountMode = 'auto' | 'about'
 
-export const AI_SPLIT_CARD_COUNT_MIN = 2
-export const AI_SPLIT_CARD_COUNT_MAX = 12
+/** User may type any positive integer; no tight product cap (server hard-caps at 99). */
+export const AI_SPLIT_CARD_COUNT_MIN = 1
+export const AI_SPLIT_CARD_COUNT_MAX = 99
 export const AI_SPLIT_CARD_COUNT_DEFAULT = 3
 
 export interface AiSplitWorkbenchSource {
@@ -53,6 +59,8 @@ export interface AiSplitWorkbenchSource {
   targetNodeNote: string
   editorDocSnapshot: MindMapDoc
   editorFingerprint: string
+  existingChildCount: number
+  existingChildTexts: string[]
 }
 
 function clampCardCount(value: number): number {
@@ -68,7 +76,7 @@ export interface UseAiSplitWorkbenchOptions {
   getCurrentSelectedLabel: () => string
   applyEditorDoc: (nextDoc: MindMapDoc) => void
   onApplied?: (meta: {
-    mode: 'replace' | 'append'
+    mode: 'replace' | 'append' | 'write_children'
     nodeCount: number
     aiCallLogId?: string | null
   }) => void
@@ -98,7 +106,8 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
   const [promptBlocks, setPromptBlocks] = useState<AiPromptBlock[]>([])
   const [promptScene, setPromptScene] = useState<AiPromptSceneDefault | null>(null)
   const [aiConfig, setAiConfig] = useState<AiRuntimeOptions>({})
-  /** Session-only structure prefs; reset each time the workbench opens. */
+  /** Session-only task/structure prefs; reset each time the workbench opens. */
+  const [taskMode, setTaskMode] = useState<AiSplitTaskMode>('split')
   const [structureMode, setStructureMode] = useState<AiSplitStructureMode>('auto')
   const [cardCountMode, setCardCountMode] = useState<AiSplitCardCountMode>('auto')
   const [targetCardCount, setTargetCardCountState] = useState(AI_SPLIT_CARD_COUNT_DEFAULT)
@@ -158,14 +167,20 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       editorDoc: MindMapDoc
     }) => {
       const fingerprint = fingerprintEditorDoc(payload.editorDoc)
+      const existingChildCount = countFirstLevelChildren(payload.editorDoc, payload.targetNodeUid)
+      const existingChildTexts = listFirstLevelChildTexts(payload.editorDoc, payload.targetNodeUid)
       setSource({
         targetNodeUid: payload.targetNodeUid,
         targetNodeText: payload.targetNodeText,
         targetNodeNote: payload.targetNodeNote,
         editorDocSnapshot: payload.editorDoc,
         editorFingerprint: fingerprint,
+        existingChildCount,
+        existingChildTexts,
       })
       setPhase('config')
+      // Prefer 添卡 when the node already has enough first-level children to group.
+      setTaskMode(existingChildCount >= 2 ? 'add' : 'split')
       setStructureMode('auto')
       setCardCountMode('auto')
       setTargetCardCountState(AI_SPLIT_CARD_COUNT_DEFAULT)
@@ -189,6 +204,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
     setSource(null)
     setPreviewTree([])
     setGeneratingError(null)
+    setTaskMode('split')
     setStructureMode('auto')
     setCardCountMode('auto')
     setTargetCardCountState(AI_SPLIT_CARD_COUNT_DEFAULT)
@@ -218,21 +234,31 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       run_instruction: aiConfig.prompt_options?.run_instruction ?? '',
     }
     const manualOverride = aiConfig.prompt_override?.trim() || ''
-    const compiled = manualOverride
-      ? null
-      : await previewAiPromptCompositionApi(PROMPT_SCENE_KEY, promptOptions)
+    // 添卡 uses a dedicated backend system prompt (new_children schema). Do not send the
+    // leaf-split composition text as prompt_override — it forces replacement_nodes and breaks parsing.
+    let promptOverride: string | undefined = manualOverride || undefined
+    if (!promptOverride && taskMode === 'split') {
+      const compiled = await previewAiPromptCompositionApi(PROMPT_SCENE_KEY, promptOptions)
+      promptOverride = compiled?.text || undefined
+    }
     const payload: AiRuntimeOptions = {
       model: modelMeta.key,
       thinking_enabled: modelMeta.supports_thinking ? Boolean(aiConfig.thinking_enabled) : false,
-      prompt_override: manualOverride || compiled?.text || undefined,
+      prompt_override: promptOverride,
       prompt_options: promptOptions,
     }
     writeRecentAiConfig(ENTRYPOINT, SCENARIO_KEY, payload)
     return payload
-  }, [aiConfig, scenario])
+  }, [aiConfig, scenario, taskMode])
 
   const runGenerate = useCallback(async () => {
     if (!options.palaceId || !source) return
+    if (taskMode === 'add' && source.existingChildCount < 2) {
+      const message = 'AI 添卡需要至少 2 个一级子节点。'
+      setGeneratingError(message)
+      toast.error(message)
+      return
+    }
     setPhase('generating')
     setGeneratingError(null)
     setSteps(DEFAULT_STEPS.map((step, index) => ({
@@ -243,20 +269,24 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
     const operationId = createOperationId()
     operationIdRef.current = operationId
     const ownerId = `palace:${options.palaceId}`
+    const requestSplitMode: MindMapAiSplitMode =
+      taskMode === 'add' ? 'add_children' : structureMode
+    // No tight client-side cap: send whatever the user typed (server soft-caps / structural clamps).
     const resolvedCardCount =
       cardCountMode === 'about' ? clampCardCount(targetCardCount) : null
     const requestSummary =
-      `知识点: ${source.targetNodeUid}；结构: ${structureMode}`
-      + (resolvedCardCount != null ? `；约 ${resolvedCardCount} 张并列卡` : '；张数自动')
+      `知识点: ${source.targetNodeUid}；任务: ${taskMode === 'add' ? '添卡' : '分卡'}；结构: ${requestSplitMode}`
+      + (resolvedCardCount != null ? `；约 ${resolvedCardCount} 张` : '；张数自动')
 
     logAiCall({
-      feature: 'AI 分卡',
+      feature: taskMode === 'add' ? 'AI 添卡' : 'AI 分卡',
       stage: 'start',
       requestSummary,
       meta: {
         palaceId: options.palaceId,
         targetNodeUid: source.targetNodeUid,
-        splitMode: structureMode,
+        splitMode: requestSplitMode,
+        taskMode,
         targetCardCount: resolvedCardCount ?? '',
       },
     })
@@ -266,7 +296,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       const result = await runTrackedAiTask({
         id: `ai-split-${operationId}`,
         section: 'palaces',
-        title: 'AI 分卡 · 生成中',
+        title: taskMode === 'add' ? 'AI 添卡 · 生成中' : 'AI 分卡 · 生成中',
         navigateTarget: options.navigateTarget,
         initialDetail: '准备请求…',
         steps: [
@@ -288,11 +318,15 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
             )
           }
           mark('prepare', '正在编译提示词并提交…', 0)
-          mark('generate', '模型正在拆分卡片…', 1)
+          mark(
+            'generate',
+            taskMode === 'add' ? '模型正在生成中间分类…' : '模型正在拆分卡片…',
+            1,
+          )
           const response = await splitMindMapNodeApi(options.palaceId!, {
             editor_doc: source.editorDocSnapshot,
             target_node_uid: source.targetNodeUid,
-            split_mode: structureMode,
+            split_mode: requestSplitMode,
             target_card_count: resolvedCardCount,
             owner_id: ownerId,
             operation_id: operationId,
@@ -300,19 +334,21 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
           })
           mark('validate', '正在校验返回结构…', 2)
           if (!response.ok) {
-            throw new Error(response.error || 'AI 分卡失败，请稍后重试。')
+            throw new Error(response.error || (taskMode === 'add' ? 'AI 添卡失败，请稍后重试。' : 'AI 分卡失败，请稍后重试。'))
           }
           if (response.operation_id && response.operation_id !== operationId) {
-            throw new Error('AI 分卡结果已过期，请重新分卡。')
+            throw new Error(taskMode === 'add' ? 'AI 添卡结果已过期，请重新生成。' : 'AI 分卡结果已过期，请重新分卡。')
           }
           if (response.owner_id && response.owner_id !== ownerId) {
-            throw new Error('宫殿已切换，分卡结果未采用。')
+            throw new Error('宫殿已切换，结果未采用。')
           }
           const rawNodes = response.replacement_nodes
           if (!rawNodes || rawNodes.length === 0) {
-            // Fallback: if server only returned full editor_doc, still fail clearly
-            // rather than silently applying.
-            throw new Error('服务端未返回可预览的分卡树，请重试或检查提示词。')
+            throw new Error(
+              taskMode === 'add'
+                ? '服务端未返回可预览的添卡树，请重试或检查提示词。'
+                : '服务端未返回可预览的分卡树，请重试或检查提示词。',
+            )
           }
           mark('preview', '正在整理预览…', 3)
           return response
@@ -321,7 +357,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
 
       const tree = editorNodesToPreviewTree(result.replacement_nodes ?? [])
       if (tree.length === 0) {
-        throw new Error('分卡结果为空。')
+        throw new Error(taskMode === 'add' ? '添卡结果为空。' : '分卡结果为空。')
       }
       setPreviewTree(tree)
       setAiCallLogId(result.ai_call_log_id ?? null)
@@ -329,7 +365,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       setProgressDetail('预览已就绪（尚未写入脑图）')
       setPhase('preview')
       logAiCall({
-        feature: 'AI 分卡',
+        feature: taskMode === 'add' ? 'AI 添卡' : 'AI 分卡',
         stage: 'success',
         requestSummary,
         responseSummary: `预览就绪：${tree.length} 个顶层节点（未写入）`,
@@ -342,7 +378,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
         },
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'AI 分卡失败'
+      const message = error instanceof Error ? error.message : (taskMode === 'add' ? 'AI 添卡失败' : 'AI 分卡失败')
       setGeneratingError(message)
       setPhase('config')
       setSteps((current) =>
@@ -353,7 +389,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
         ),
       )
       logAiCall({
-        feature: 'AI 分卡',
+        feature: taskMode === 'add' ? 'AI 添卡' : 'AI 分卡',
         stage: 'failure',
         requestSummary,
         errorMessage: message,
@@ -372,6 +408,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
     source,
     structureMode,
     targetCardCount,
+    taskMode,
   ])
 
   const ensureDocUnchangedOrConfirm = useCallback(async (): Promise<MindMapEditorState | null> => {
@@ -393,41 +430,70 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       const latest = await ensureDocUnchangedOrConfirm()
       if (!latest) throw new Error('当前没有可写入的脑图。')
       const nodes = previewTreeToEditorNodes(previewTree)
-      const nextDoc = applyReplacementAtUid(
-        latest.editor_doc as MindMapDoc,
-        source.targetNodeUid,
-        nodes,
-      )
-      options.applyEditorDoc(nextDoc)
-      options.onApplied?.({
-        mode: 'replace',
-        nodeCount: nodes.length,
-        aiCallLogId,
-      })
-      toast.success(
-        `已原位替换为 ${nodes.length} 个顶层卡片`,
-        aiCallLogId
-          ? {
-              action: {
-                label: '查看AI详情',
-                onClick: () =>
-                  requestOpenAiLogDetail({
-                    aiCallLogId,
-                    title: 'AI 分卡',
-                  }),
-              },
-            }
-          : undefined,
-      )
+      if (taskMode === 'add') {
+        const nextDoc = replaceChildrenUnderUid(
+          latest.editor_doc as MindMapDoc,
+          source.targetNodeUid,
+          nodes,
+        )
+        options.applyEditorDoc(nextDoc)
+        options.onApplied?.({
+          mode: 'write_children',
+          nodeCount: nodes.length,
+          aiCallLogId,
+        })
+        toast.success(
+          `已在源父卡下写入 ${nodes.length} 个中间分类`,
+          aiCallLogId
+            ? {
+                action: {
+                  label: '查看AI详情',
+                  onClick: () =>
+                    requestOpenAiLogDetail({
+                      aiCallLogId,
+                      title: 'AI 添卡',
+                    }),
+                },
+              }
+            : undefined,
+        )
+      } else {
+        const nextDoc = applyReplacementAtUid(
+          latest.editor_doc as MindMapDoc,
+          source.targetNodeUid,
+          nodes,
+        )
+        options.applyEditorDoc(nextDoc)
+        options.onApplied?.({
+          mode: 'replace',
+          nodeCount: nodes.length,
+          aiCallLogId,
+        })
+        toast.success(
+          `已原位替换为 ${nodes.length} 个顶层卡片`,
+          aiCallLogId
+            ? {
+                action: {
+                  label: '查看AI详情',
+                  onClick: () =>
+                    requestOpenAiLogDetail({
+                      aiCallLogId,
+                      title: 'AI 分卡',
+                    }),
+                },
+              }
+            : undefined,
+        )
+      }
       setOpen(false)
       setSource(null)
       setPhase('config')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '应用分卡失败')
+      toast.error(error instanceof Error ? error.message : '应用失败')
     } finally {
       setApplying(false)
     }
-  }, [aiCallLogId, ensureDocUnchangedOrConfirm, options, previewTree, source])
+  }, [aiCallLogId, ensureDocUnchangedOrConfirm, options, previewTree, source, taskMode])
 
   const applyAppendAfterSelection = useCallback(async () => {
     const selectedUid = options.getCurrentSelectedUid()
@@ -474,6 +540,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
     availableBlocks,
     promptScene,
     aiConfig,
+    taskMode,
     structureMode,
     cardCountMode,
     targetCardCount,
@@ -488,6 +555,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
     closeWorkbench,
     updateAiConfig,
     resetConfigToDefault,
+    setTaskMode,
     setStructureMode,
     setCardCountMode,
     setTargetCardCount: (value: number) => {

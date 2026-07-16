@@ -344,7 +344,12 @@ export function usePalaceEditPage() {
       emitFeedbackFx('node_create', {
         nodeUid: selectedNodeUidRef.current,
         relatedNodeUids: selectedNodeUidRef.current ? [selectedNodeUidRef.current] : [],
-        source: mode === 'replace' ? 'mindmap_ai_split_replace' : 'mindmap_ai_split_append',
+        source:
+          mode === 'replace'
+            ? 'mindmap_ai_split_replace'
+            : mode === 'write_children'
+              ? 'mindmap_ai_split_write_children'
+              : 'mindmap_ai_split_append',
       })
       void nodeCount
     },

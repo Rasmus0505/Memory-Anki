@@ -1508,8 +1508,26 @@ def check_mindmap_architecture(errors: list[str]) -> None:
     ai_split_contracts = {
         API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py": (
             "AI_SPLIT_REPLACEMENT_MODES",
+            "AI_SPLIT_ADD_CHILDREN",
+            "add_children",
             "find_target_location",
             "operation_id",
+            "replacement_nodes",
+            "coerce_add_children_from_replacement_nodes",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "contracts.py": (
+            "AI_SPLIT_ADD_CHILDREN_MODE",
+            "add_children",
+            "legacy_children",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
+            "new_children",
+            "child_assignments",
+            "骑士学院",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "gateway.py": (
+            "ADD_CHILDREN_SYSTEM_PROMPT",
+            "add_children",
         ),
         API_SRC / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py": (
             "content.split_source_fidelity",
@@ -1523,6 +1541,15 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             "AI 分卡",
             "split_mode",
             "auto",
+        ),
+        WEB_SRC / "features" / "palace-edit" / "hooks" / "useAiSplitWorkbench.ts": (
+            "add_children",
+            "taskMode",
+            "replaceChildrenUnderUid",
+        ),
+        WEB_SRC / "features" / "palace-edit" / "model" / "aiSplitPreview.ts": (
+            "replaceChildrenUnderUid",
+            "shouldPreservePreviewUid",
         ),
     }
     for path, required_tokens in ai_split_contracts.items():

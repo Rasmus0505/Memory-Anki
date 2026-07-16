@@ -105,6 +105,31 @@ describe('NodeCard', () => {
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
 
+  it('focuses the editor and places the caret at the end when double-click starts edit', () => {
+    renderNodeCard({ label: '可编辑内容' })
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: '可编辑内容' }))
+    const editor = screen.getByRole('textbox', { name: '编辑节点文本' }) as HTMLTextAreaElement
+
+    expect(document.activeElement).toBe(editor)
+    expect(editor.selectionStart).toBe('可编辑内容'.length)
+    expect(editor.selectionEnd).toBe('可编辑内容'.length)
+  })
+
+  it('selects all text when selectEditText is set on enter-edit', () => {
+    renderNodeCard({
+      label: '新知识点',
+      editing: true,
+      editText: '新知识点',
+      selectEditText: true,
+    })
+
+    const editor = screen.getByRole('textbox', { name: '编辑节点文本' }) as HTMLTextAreaElement
+    expect(document.activeElement).toBe(editor)
+    expect(editor.selectionStart).toBe(0)
+    expect(editor.selectionEnd).toBe('新知识点'.length)
+  })
+
   it('makes the whole idle card a drag surface with grab cursor without selection', () => {
     const { container } = renderNodeCard({
       label: '可编辑内容',

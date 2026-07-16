@@ -100,13 +100,17 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可恢复复用；同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
 - 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿视觉、OCR、整理和预览阶段。
 - 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；OCR 重整与视觉重试均创建新的 operation，不覆盖历史任务。
-## AI 分卡替换边界
+## AI 分卡 / AI 添卡边界
 
-- 脑图编辑页通过 capability 提供统一的“AI 分卡”；由模型自行判断并列或层级结构。根节点、只读模式和练习模式不开放替换式分卡。
-- 替换式分卡只处理无子节点的长内容卡片。旧请求仍保留原有“新增一级分类并重挂旧子节点”兼容流程，不自动迁移复杂子树。
-- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`（默认 `auto`；`parallel`/`hierarchy` 为兼容别名）。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
-- 服务端在父级 `children` 的原索引执行一次切片替换（删除原卡并插入新卡），目标前后的兄弟顺序保持不变；新 UID 由 operation 和树路径确定生成。
-- 统一场景 `ai_split` 使用保真、结构自判、样例对照、原位边界和 `replacement_nodes` JSON 块；允许最多四层、节点总量受服务端限制；叶子尽量保留原句，禁止总结删减。
+- 脑图编辑页通过 capability 提供统一的“AI 分卡”入口；工作台配置里选择任务类型：
+  - **分卡**（`split_mode=auto|parallel|hierarchy`）：原位替换无子节点的长内容卡。
+  - **添卡**（`split_mode=add_children`，兼容别名 `legacy_children`）：在父卡与一级子卡之间插入更少数量的中间分类，并把已有一级子节点整棵子树重挂（uid 不变）。
+- 根节点、只读模式和练习模式不开放右键入口；替换式分卡只处理无子节点的长内容卡片；添卡要求至少 2 个一级子节点，中间分类数必须严格少于子节点数。
+- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
+- 分卡：服务端在父级 `children` 的原索引执行一次切片替换；新 UID 由 operation 和树路径确定生成。统一场景 `ai_split` 输出 `replacement_nodes`。
+- 添卡：服务端使用专用系统提示词（`add_children_prompt.py`，含骑士学院样例），**不得**经 `ai_split` composition/`render(ai_prompt_mindmap_ai_split_system)`（后者强制 `replacement_nodes`）。协议为 `new_children` + `child_assignments`；若模型误返回 `replacement_nodes`，服务端可尝试恢复分组。结果同样以 `replacement_nodes` 字段返回预览树；前端确认后「写入源父卡下」或「追加到选中卡之后」。
+- 用户「指定约 N 张」为软目标，前端不设 2–12 硬顶；服务端仅做安全上限，添卡中间层仍须少于一级子节点数。
+- 两种任务都先预览、后确认，后台不得直接修改正式导图；叶子/已有子节点尽量保留原句与原 uid，禁止总结删减。
 
 
 ## 统一文档工作区与宫殿学科标签

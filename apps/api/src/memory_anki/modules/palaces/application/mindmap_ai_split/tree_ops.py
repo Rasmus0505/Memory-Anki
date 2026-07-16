@@ -53,16 +53,21 @@ def infer_split_max_children(
     return min(cap, inferred)
 
 
-def normalize_target_card_count(value: Any, *, hard_cap: int = 12) -> int | None:
-    """Soft target for sibling card count after replace. None = auto."""
+def normalize_target_card_count(
+    value: Any,
+    *,
+    hard_cap: int = 99,
+    minimum: int = 1,
+) -> int | None:
+    """Soft target for sibling/group card count. None = auto. User may request any positive count."""
     if value is None or value == "":
         return None
     try:
         count = int(value)
     except (TypeError, ValueError):
         return None
-    if count < 2:
-        return 2
+    if count < minimum:
+        return minimum
     if count > hard_cap:
         return hard_cap
     return count
@@ -83,6 +88,25 @@ def resolve_max_top_level_nodes(
     return min(cap, max(base, target_card_count, target_card_count + 2))
 
 
+def resolve_add_children_max(
+    *,
+    existing_child_count: int,
+    inferred_max: int,
+    target_card_count: int | None,
+    hard_cap: int = 12,
+) -> int:
+    """Hard cap for intermediate group cards: strictly fewer than existing first-level children."""
+    if existing_child_count < 2:
+        return 0
+    absolute_max = min(max(1, hard_cap), existing_child_count - 1)
+    base = max(1, min(inferred_max, absolute_max))
+    if target_card_count is None:
+        return base
+    preferred = max(1, min(target_card_count, absolute_max))
+    # Soft headroom above preferred, still strictly below child count.
+    return min(absolute_max, max(base, preferred, min(absolute_max, preferred + 1)))
+
+
 def build_model_input(
     *,
     target_node: dict[str, Any],
@@ -92,8 +116,10 @@ def build_model_input(
     split_mode: str = "legacy_children",
     target_card_count: int | None = None,
 ) -> dict[str, Any]:
+    existing_count = len(existing_children)
+    is_add_mode = split_mode in {"add_children", "legacy_children"}
     payload: dict[str, Any] = {
-        "task": "split_mindmap_node",
+        "task": "add_mindmap_group_nodes" if is_add_mode else "split_mindmap_node",
         "max_children": max_children,
         "target_node": serialize_prompt_node(
             target_node,
@@ -109,6 +135,15 @@ def build_model_input(
             for child in existing_children
         ],
     }
+    if is_add_mode:
+        payload["max_new_categories"] = max_children
+        payload["existing_first_level_count"] = existing_count
+        payload["grouping_guidance"] = (
+            f"在目标节点与其 {existing_count} 个一级子节点之间插入中间分类；"
+            f"new_children 数量必须严格小于 {existing_count}（最多 {max_children} 个）；"
+            "只新建一层中间标题，把已有一级子节点整体归类到这些中间分类下；"
+            "绝对不要改写、拆分或合并任何已有一级子节点及其后代。"
+        )
     if split_mode in {"auto", "parallel", "hierarchy"}:
         payload["structure_preference"] = {
             "auto": "根据内容自行判断：纯并列要点用同级卡片；有分类/时间线/目的-内容关系时用父子树。",
@@ -116,11 +151,18 @@ def build_model_input(
             "hierarchy": "可以分层：允许父子树；中间标题只作组织，事实落在保留原句的叶子上；优先最少必要层级。",
         }.get(split_mode, "")
     if target_card_count is not None:
-        payload["prefer_about_n_sibling_cards"] = target_card_count
-        payload["card_count_guidance"] = (
-            f"替换原长卡后，并排出现的卡片（第一层）大约 {target_card_count} 张；"
-            "这是软目标，可按内容略多或略少，不要为凑数硬拆或硬并，也不得删减原句信息。"
-        )
+        if is_add_mode:
+            payload["prefer_about_n_group_cards"] = target_card_count
+            payload["card_count_guidance"] = (
+                f"中间分类大约 {target_card_count} 张（软目标，可略多略少）；"
+                f"但仍必须严格少于一级子节点数（{existing_count}），不要为凑数硬拆。"
+            )
+        else:
+            payload["prefer_about_n_sibling_cards"] = target_card_count
+            payload["card_count_guidance"] = (
+                f"替换原长卡后，并排出现的卡片（第一层）大约 {target_card_count} 张；"
+                "这是软目标，可按内容略多或略少，不要为凑数硬拆或硬并，也不得删减原句信息。"
+            )
     return payload
 
 
@@ -186,7 +228,140 @@ def serialize_prompt_node(
     return payload
 
 
+def extract_raw_new_children(ai_payload: dict[str, Any]) -> Any:
+    """Pick the new-group list from common model shapes."""
+    if not isinstance(ai_payload, dict):
+        return None
+    for key in (
+        "new_children",
+        "categories",
+        "groups",
+        "intermediate_nodes",
+        "group_nodes",
+        "new_categories",
+    ):
+        if key in ai_payload:
+            return ai_payload.get(key)
+    return None
+
+
+def coerce_add_children_from_replacement_nodes(
+    raw_value: Any,
+    *,
+    existing_children: list[dict[str, Any]],
+    max_children: int,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """
+    Recover add_children payload when the model wrongly returns replacement_nodes
+    (e.g. composition prompt for leaf split was used by mistake).
+    Top-level short titles become intermediate groups; nested nodes matched to existing children.
+    """
+    if not isinstance(raw_value, list) or max_children < 1:
+        return [], []
+    existing_by_uid: dict[str, str] = {}
+    existing_by_text: dict[str, str] = {}
+    for child in existing_children:
+        source_ref = str(child.get("source_ref") or "").strip()
+        if not source_ref:
+            continue
+        uid = stringify(child.get("uid")).strip()
+        if uid:
+            existing_by_uid[uid] = source_ref
+            existing_by_uid[f"uid:{uid}"] = source_ref
+        node = child.get("node") if isinstance(child.get("node"), dict) else {}
+        data = ensure_dict(node.get("data"))
+        text = plain_text(data.get("text"), fallback="").strip()
+        if text:
+            existing_by_text[text.casefold()] = source_ref
+
+    generated: list[dict[str, str]] = []
+    assignments: list[dict[str, str]] = []
+    assigned_refs: set[str] = set()
+    seen_texts: set[str] = set()
+
+    def match_existing(node: dict[str, Any]) -> str | None:
+        data = ensure_dict(node.get("data")) if isinstance(node.get("data"), dict) else {}
+        uid = first_non_empty(data.get("uid"), node.get("uid"), node.get("source_ref"))
+        uid = stringify(uid).strip()
+        if uid:
+            if uid in existing_by_uid:
+                return existing_by_uid[uid]
+            if uid.startswith("uid:") and uid in existing_by_uid:
+                return existing_by_uid[uid]
+            bare = uid.removeprefix("uid:")
+            if bare in existing_by_uid:
+                return existing_by_uid[bare]
+        text = plain_text(
+            first_non_empty(data.get("text"), node.get("text"), node.get("title")),
+            fallback="",
+        ).strip()
+        if text:
+            return existing_by_text.get(text.casefold())
+        return None
+
+    def walk_match(nodes: list[Any], category_id: str) -> None:
+        for value in nodes:
+            if not isinstance(value, dict):
+                continue
+            source_ref = match_existing(value)
+            if source_ref and source_ref not in assigned_refs:
+                assignments.append(
+                    {
+                        "source_ref": source_ref,
+                        "target_new_child_id": category_id,
+                    }
+                )
+                assigned_refs.add(source_ref)
+            raw_children = value.get("children")
+            if isinstance(raw_children, list):
+                walk_match(raw_children, category_id)
+
+    for item in raw_value:
+        if len(generated) >= max_children:
+            break
+        if not isinstance(item, dict):
+            continue
+        data = ensure_dict(item.get("data")) if isinstance(item.get("data"), dict) else {}
+        text = plain_text(
+            first_non_empty(data.get("text"), item.get("text"), item.get("title"), item.get("name")),
+            fallback="",
+        ).strip()
+        if not text:
+            continue
+        normalized = text.casefold()
+        if normalized in seen_texts:
+            continue
+        # Prefer short intermediate titles; long leaf-like text as a group is still accepted.
+        cat_id = plain_identifier(first_non_empty(item.get("id"), f"category_{len(generated) + 1}"))
+        if not cat_id:
+            cat_id = f"category_{len(generated) + 1}"
+        while any(g["id"] == cat_id for g in generated):
+            cat_id = f"{cat_id}_{len(generated) + 1}"
+        seen_texts.add(normalized)
+        generated.append({"id": cat_id, "text": text})
+        raw_children = item.get("children")
+        if isinstance(raw_children, list):
+            walk_match(raw_children, cat_id)
+
+    return generated, assignments
+
+
 def normalize_generated_children(raw_value: Any, *, max_children: int) -> list[dict[str, str]]:
+    if max_children < 1:
+        return []
+    if isinstance(raw_value, dict):
+        # {"category_1": "目的", ...} or {"category_1": {"text": "目的"}}
+        items: list[Any] = []
+        for key, value in raw_value.items():
+            if isinstance(value, str):
+                items.append({"id": key, "text": value})
+            elif isinstance(value, dict):
+                next_item = dict(value)
+                next_item.setdefault("id", key)
+                items.append(next_item)
+            else:
+                continue
+        raw_value = items
     if not isinstance(raw_value, list):
         return []
     generated: list[dict[str, str]] = []
@@ -287,7 +462,16 @@ def build_split_children(
             "generated": {"id": "fallback", "text": fallback_bucket},
         }
 
-    next_children = [payload["node"] for payload in bucket_lookup.values()]
+    # Drop empty intermediate buckets (no assigned children) so users don't get blank groups.
+    ordered_buckets = [
+        payload
+        for payload in bucket_lookup.values()
+        if payload["node"]["children"] or payload["generated"].get("id") == "fallback"
+    ]
+    # If every generated bucket was empty but we still have unassigned (already in fallback), keep fallback only.
+    if not ordered_buckets and bucket_lookup:
+        ordered_buckets = list(bucket_lookup.values())
+    next_children = [payload["node"] for payload in ordered_buckets]
     return next_children, len(existing_children)
 
 

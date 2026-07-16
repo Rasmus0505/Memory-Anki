@@ -76,9 +76,12 @@ function ConfigPanel({ workbench }: { workbench: Workbench }) {
     loadingCatalog,
     updateAiConfig,
     resetConfigToDefault,
+    taskMode,
     structureMode,
     cardCountMode,
     targetCardCount,
+    source,
+    setTaskMode,
     setStructureMode,
     setCardCountMode,
     setTargetCardCount,
@@ -87,6 +90,8 @@ function ConfigPanel({ workbench }: { workbench: Workbench }) {
   const selectedModelMeta =
     scenario?.available_models.find((item) => item.key === selectedModel) ?? null
   const selectedBlockKeys = aiConfig.prompt_options?.block_keys ?? []
+  const childCount = source?.existingChildCount ?? 0
+  const canUseAdd = childCount >= 2
 
   const patchPrompt = (patch: Partial<NonNullable<AiRuntimeOptions['prompt_options']>>) => {
     updateAiConfig((current) => ({
@@ -110,40 +115,86 @@ function ConfigPanel({ workbench }: { workbench: Workbench }) {
       <div className="space-y-3">
         <div className="rounded-lg border border-border/60 bg-muted/10 p-3 text-xs text-muted-foreground">
           <div>场景默认模型：{scenario.default_model}</div>
-          <div>提示词场景：ai_split</div>
+          <div>提示词场景：{taskMode === 'add' ? 'ai_split（添卡）' : 'ai_split'}</div>
+          <div className="mt-1">当前一级子节点：{childCount} 个</div>
           <div className="mt-1 text-amber-700">生成结果会先进入预览，确认前不会写入脑图。</div>
         </div>
 
         <fieldset className="space-y-2 rounded-lg border border-border/60 p-3">
-          <legend className="px-1 text-sm font-medium">结构</legend>
-          <p className="text-xs text-muted-foreground">
-            「并列卡」= 替换原长卡后并排出现的那一批；选「可以分层」时，它们下面还可以再有子卡。
-          </p>
-          {(
-            [
-              { value: 'auto' as const, label: '自动判断（推荐）', hint: 'AI 决定只要并列，还是带父子' },
-              { value: 'parallel' as const, label: '只要并列', hint: '全部同级，不要子卡' },
-              { value: 'hierarchy' as const, label: '可以分层', hint: '允许父子树（最多约 4 层）' },
-            ] as const
-          ).map((option) => (
-            <label key={option.value} className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="radio"
-                className="mt-1 size-4"
-                name="ai-split-structure"
-                checked={structureMode === option.value}
-                onChange={() => setStructureMode(option.value)}
-              />
-              <span>
-                <span className="font-medium">{option.label}</span>
-                <span className="block text-xs text-muted-foreground">{option.hint}</span>
+          <legend className="px-1 text-sm font-medium">任务</legend>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="radio"
+              className="mt-1 size-4"
+              name="ai-split-task"
+              checked={taskMode === 'split'}
+              onChange={() => setTaskMode('split')}
+            />
+            <span>
+              <span className="font-medium">AI 分卡</span>
+              <span className="block text-xs text-muted-foreground">
+                把无子节点的长内容卡原位拆成并列/层级小卡
               </span>
-            </label>
-          ))}
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="radio"
+              className="mt-1 size-4"
+              name="ai-split-task"
+              checked={taskMode === 'add'}
+              disabled={!canUseAdd}
+              onChange={() => setTaskMode('add')}
+            />
+            <span className={!canUseAdd ? 'opacity-60' : undefined}>
+              <span className="font-medium">AI 添卡</span>
+              <span className="block text-xs text-muted-foreground">
+                在父卡与一级子卡之间插入更少的中间分类，并重挂子卡归属
+                {!canUseAdd ? '（需要至少 2 个一级子节点）' : ''}
+              </span>
+            </span>
+          </label>
         </fieldset>
 
+        {taskMode === 'split' ? (
+          <fieldset className="space-y-2 rounded-lg border border-border/60 p-3">
+            <legend className="px-1 text-sm font-medium">结构</legend>
+            <p className="text-xs text-muted-foreground">
+              「并列卡」= 替换原长卡后并排出现的那一批；选「可以分层」时，它们下面还可以再有子卡。
+            </p>
+            {(
+              [
+                { value: 'auto' as const, label: '自动判断（推荐）', hint: 'AI 决定只要并列，还是带父子' },
+                { value: 'parallel' as const, label: '只要并列', hint: '全部同级，不要子卡' },
+                { value: 'hierarchy' as const, label: '可以分层', hint: '允许父子树（最多约 4 层）' },
+              ] as const
+            ).map((option) => (
+              <label key={option.value} className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  className="mt-1 size-4"
+                  name="ai-split-structure"
+                  checked={structureMode === option.value}
+                  onChange={() => setStructureMode(option.value)}
+                />
+                <span>
+                  <span className="font-medium">{option.label}</span>
+                  <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        ) : (
+          <div className="rounded-lg border border-border/60 bg-muted/10 p-3 text-xs text-muted-foreground">
+            添卡会把当前一级子节点整体搬家到新的中间分类下（uid 不变）。中间分类数量应少于子节点数
+            {canUseAdd ? `（当前 ${childCount} 个子节点）` : ''}；服务端会自动截断过多分类。
+          </div>
+        )}
+
         <fieldset className="space-y-2 rounded-lg border border-border/60 p-3">
-          <legend className="px-1 text-sm font-medium">并列卡大约几张</legend>
+          <legend className="px-1 text-sm font-medium">
+            {taskMode === 'add' ? '中间分类大约几张' : '并列卡大约几张'}
+          </legend>
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input
               type="radio"
@@ -154,7 +205,9 @@ function ConfigPanel({ workbench }: { workbench: Workbench }) {
             />
             <span>
               <span className="font-medium">自动</span>
-              <span className="block text-xs text-muted-foreground">由内容长短决定</span>
+              <span className="block text-xs text-muted-foreground">
+                {taskMode === 'add' ? '由子节点数量决定' : '由内容长短决定'}
+              </span>
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-2 text-sm">
@@ -169,15 +222,14 @@ function ConfigPanel({ workbench }: { workbench: Workbench }) {
               <span className="font-medium">指定约</span>
               <input
                 type="number"
-                min={2}
-                max={12}
+                min={1}
                 value={targetCardCount}
                 disabled={cardCountMode !== 'about'}
                 onChange={(event) => setTargetCardCount(Number(event.target.value))}
                 onFocus={() => setCardCountMode('about')}
-                className="h-8 w-16 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+                className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
               />
-              <span className="text-muted-foreground">张（2–12，软目标）</span>
+              <span className="text-muted-foreground">张（自行填写，软目标）</span>
             </span>
           </label>
         </fieldset>
@@ -290,6 +342,7 @@ export function AiSplitWorkbench({
     open,
     phase,
     source,
+    taskMode,
     steps,
     progressDetail,
     generatingError,
@@ -305,6 +358,7 @@ export function AiSplitWorkbench({
     applyReplace,
     applyAppendAfterSelection,
   } = workbench
+  const isAdd = taskMode === 'add'
 
   return (
     <Dialog
@@ -318,7 +372,7 @@ export function AiSplitWorkbench({
         floatingId="ai-split-workbench"
         floating
         layout="centered"
-        capsuleLabel="AI 分卡"
+        capsuleLabel={isAdd ? 'AI 添卡' : 'AI 分卡'}
         expandOnOpen
         className="flex max-h-[min(92vh,900px)] max-w-[min(96vw,1100px)] flex-col overflow-hidden rounded-lg border bg-card/98 p-0 shadow-floating"
         dismissOnInteractOutside={false}
@@ -326,9 +380,11 @@ export function AiSplitWorkbench({
         <DialogHeader>
           <DialogTitle>AI 分卡工作台</DialogTitle>
           <DialogDescription>
-            {phase === 'config' && '配置模型与提示词后开始分卡；结果会先预览，确认前不会写入脑图。'}
-            {phase === 'generating' && '正在生成分卡结果，请稍候。可把窗口拖开继续查看脑图。'}
-            {phase === 'preview' && '左侧原文、右侧可编辑结果。尚未写入脑图；可替换原卡或追加到当前选中卡之后。'}
+            {phase === 'config' && '配置任务、模型与提示词后开始；结果会先预览，确认前不会写入脑图。'}
+            {phase === 'generating' && (isAdd ? '正在生成中间分类，请稍候。可把窗口拖开继续查看脑图。' : '正在生成分卡结果，请稍候。可把窗口拖开继续查看脑图。')}
+            {phase === 'preview' && (isAdd
+              ? '左侧为源父卡与当前子节点，右侧可编辑添卡结果。可写入源父卡下，或追加到当前选中卡之后。'
+              : '左侧原文、右侧可编辑结果。尚未写入脑图；可替换原卡或追加到当前选中卡之后。')}
           </DialogDescription>
         </DialogHeader>
 
@@ -364,11 +420,14 @@ export function AiSplitWorkbench({
           {phase === 'preview' ? (
             <div className="space-y-3">
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
-                尚未写入脑图。约 {previewNodeCount} 张卡 · 主操作「替换原卡片」会在源位置原位替换。
+                尚未写入脑图。约 {previewNodeCount} 张卡 ·
+                {isAdd
+                  ? ' 主操作「写入源父卡下」会把中间分类插到源父卡与原子卡之间。'
+                  : ' 主操作「替换原卡片」会在源位置原位替换。'}
               </div>
               <div className="grid gap-3 lg:grid-cols-2">
                 <section className="space-y-2">
-                  <h3 className="text-sm font-medium">原文（只读）</h3>
+                  <h3 className="text-sm font-medium">{isAdd ? '源父卡与一级子节点（只读）' : '原文（只读）'}</h3>
                   <div className="max-h-[48vh] overflow-auto whitespace-pre-wrap rounded-lg border bg-background p-3 text-sm leading-6">
                     {source?.targetNodeText || '（无正文）'}
                     {source?.targetNodeNote ? (
@@ -377,11 +436,24 @@ export function AiSplitWorkbench({
                         <span className="text-muted-foreground">备注：{source.targetNodeNote}</span>
                       </>
                     ) : null}
+                    {isAdd && source?.existingChildTexts?.length ? (
+                      <>
+                        {'\n\n'}
+                        <span className="font-medium">当前一级子节点：</span>
+                        {'\n'}
+                        {source.existingChildTexts.map((text, index) => (
+                          <span key={`${index}-${text.slice(0, 12)}`}>
+                            {index + 1}. {text}
+                            {index < source.existingChildTexts.length - 1 ? '\n' : ''}
+                          </span>
+                        ))}
+                      </>
+                    ) : null}
                   </div>
                 </section>
                 <section className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-medium">分卡结果（可编辑）</h3>
+                    <h3 className="text-sm font-medium">{isAdd ? '添卡结果（可编辑）' : '分卡结果（可编辑）'}</h3>
                     <Button type="button" size="sm" variant="outline" onClick={() => addPreviewChild(null)}>
                       添加顶层卡
                     </Button>
@@ -417,7 +489,7 @@ export function AiSplitWorkbench({
                 }}
                 disabled={!source || workbench.loadingCatalog || !workbench.scenario}
               >
-                开始分卡
+                {isAdd ? '开始添卡' : '开始分卡'}
               </Button>
             </>
           ) : null}
@@ -439,7 +511,7 @@ export function AiSplitWorkbench({
                 }}
                 disabled={applying}
               >
-                重新分卡
+                {isAdd ? '重新添卡' : '重新分卡'}
               </Button>
               <Button
                 type="button"
@@ -463,7 +535,7 @@ export function AiSplitWorkbench({
                 }}
                 disabled={applying || previewTree.length === 0}
               >
-                {applying ? '应用中…' : '替换原卡片'}
+                {applying ? '应用中…' : isAdd ? '写入源父卡下' : '替换原卡片'}
               </Button>
             </>
           ) : null}

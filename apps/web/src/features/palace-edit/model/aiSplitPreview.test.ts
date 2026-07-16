@@ -4,9 +4,11 @@ import {
   addPreviewChild,
   appendSiblingsAfterUid,
   applyReplacementAtUid,
+  countFirstLevelChildren,
   deletePreviewNode,
   editorNodesToPreviewTree,
   previewTreeToEditorNodes,
+  replaceChildrenUnderUid,
   updatePreviewNodeText,
 } from './aiSplitPreview'
 
@@ -122,5 +124,73 @@ describe('aiSplitPreview', () => {
     expect(tree[0].children).toHaveLength(1)
     tree = deletePreviewNode(tree, tree[0].children[0].id)
     expect(tree[0].children).toHaveLength(0)
+  })
+
+  it('preserves stable uids when converting preview tree back (AI 添卡)', () => {
+    const preview = editorNodesToPreviewTree([
+      {
+        data: { text: '目的', uid: 'ai-split-group-1' },
+        children: [
+          { data: { text: '子一', uid: 'child-1' }, children: [] },
+          { data: { text: '子二', uid: 'child-2' }, children: [] },
+        ],
+      },
+      {
+        data: { text: '内容', uid: 'ai-split-group-2' },
+        children: [{ data: { text: '子三', uid: 'child-3' }, children: [] }],
+      },
+    ])
+    const nodes = previewTreeToEditorNodes(preview)
+    expect(nodes[0].data?.uid).toBe('ai-split-group-1')
+    expect(nodes[0].children?.[0].data?.uid).toBe('child-1')
+    expect(nodes[0].children?.[1].data?.uid).toBe('child-2')
+    expect(nodes[1].children?.[0].data?.uid).toBe('child-3')
+  })
+
+  it('mints new uids only for preview- temporary nodes', () => {
+    const nodes = previewTreeToEditorNodes([
+      { id: 'preview-tmp-1', text: '新建中间卡', note: '', children: [] },
+      { id: 'stable-uid-x', text: '已有卡', note: '', children: [] },
+    ])
+    expect(nodes[0].data?.uid).toMatch(/^ai-split-applied-/)
+    expect(nodes[1].data?.uid).toBe('stable-uid-x')
+  })
+
+  it('rewrites children under parent without replacing the parent (AI 添卡 apply)', () => {
+    const doc: MindMapDoc = {
+      root: {
+        data: { text: '根', uid: 'root' },
+        children: [
+          {
+            data: { text: '骑士学院', uid: 'parent' },
+            children: [
+              { data: { text: '点1', uid: 'c1' }, children: [] },
+              { data: { text: '点2', uid: 'c2' }, children: [] },
+              { data: { text: '点3', uid: 'c3' }, children: [] },
+            ],
+          },
+          { data: { text: '兄弟', uid: 'sib' }, children: [] },
+        ],
+      },
+    }
+    const next = replaceChildrenUnderUid(doc, 'parent', [
+      {
+        data: { text: '目的', uid: 'g1' },
+        children: [
+          { data: { text: '点1', uid: 'c1' }, children: [] },
+          { data: { text: '点2', uid: 'c2' }, children: [] },
+        ],
+      },
+      {
+        data: { text: '内容', uid: 'g2' },
+        children: [{ data: { text: '点3', uid: 'c3' }, children: [] }],
+      },
+    ])
+    expect(next.root?.children?.[0].data?.uid).toBe('parent')
+    expect(next.root?.children?.[0].data?.text).toBe('骑士学院')
+    expect((next.root?.children?.[0].children ?? []).map((n) => n.data?.text)).toEqual(['目的', '内容'])
+    expect(next.root?.children?.[0].children?.[0].children?.[0].data?.uid).toBe('c1')
+    expect(next.root?.children?.[1].data?.uid).toBe('sib')
+    expect(countFirstLevelChildren(doc, 'parent')).toBe(3)
   })
 })

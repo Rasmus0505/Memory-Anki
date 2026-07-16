@@ -60,7 +60,15 @@ export function editorNodesToPreviewTree(nodes: unknown): AiSplitPreviewNode[] {
   })
 }
 
-/** Preview tree → editor nodes (fresh uids if missing). */
+function shouldPreservePreviewUid(id: string | undefined): boolean {
+  const value = (id ?? '').trim()
+  if (!value) return false
+  // Workbench-minted temporary ids must not become permanent card uids.
+  if (value.startsWith('preview-')) return false
+  return true
+}
+
+/** Preview tree → editor nodes. Preserves existing/stable uids (FSRS); mints only for new cards. */
 export function previewTreeToEditorNodes(
   nodes: AiSplitPreviewNode[],
   options?: { uidPrefix?: string },
@@ -73,8 +81,8 @@ export function previewTreeToEditorNodes(
       const text = item.text.trim()
       if (!text) continue
       counter += 1
-      const uid = item.id?.startsWith('ai-split-')
-        ? item.id
+      const uid = shouldPreservePreviewUid(item.id)
+        ? item.id.trim()
         : `${prefix}-${counter}-${newPreviewId().slice(0, 8)}`
       result.push({
         data: {
@@ -193,6 +201,75 @@ export function applyReplacementAtUid(
   }
   location.children.splice(location.index, 1, ...replacementNodes)
   return next
+}
+
+/**
+ * AI 添卡：rewrite first-level children under targetUid without replacing the parent card.
+ * Root is allowed (groups under palace root).
+ */
+export function replaceChildrenUnderUid(
+  doc: MindMapDoc,
+  targetUid: string,
+  nextChildren: MindMapDocNode[],
+): MindMapDoc {
+  if (!targetUid.trim()) {
+    throw new Error('缺少要写入的目标父卡片。')
+  }
+  if (nextChildren.length === 0) {
+    throw new Error('没有可应用的添卡结果。')
+  }
+  const next = cloneDoc(doc)
+  const root = next.root
+  if (!root || typeof root !== 'object') {
+    throw new Error('脑图文档无效，无法应用添卡。')
+  }
+  if (readUid(root) === targetUid) {
+    root.children = nextChildren
+    return next
+  }
+  const location = findTargetLocation(root, targetUid)
+  if (!location) {
+    throw new Error('未找到源父卡片，可能脑图已变化，请重新添卡。')
+  }
+  location.children[location.index].children = nextChildren
+  return next
+}
+
+/** Count first-level children of a node uid (0 if missing). */
+export function countFirstLevelChildren(
+  doc: MindMapDoc | null | undefined,
+  targetUid: string | null | undefined,
+): number {
+  if (!doc?.root || !targetUid) return 0
+  const stack: MindMapDocNode[] = [doc.root]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (readUid(node) === targetUid) {
+      return Array.isArray(node.children) ? node.children.length : 0
+    }
+    const children = Array.isArray(node.children) ? node.children : []
+    for (const child of children) stack.push(child)
+  }
+  return 0
+}
+
+/** Read first-level child texts under target for read-only preview source panel. */
+export function listFirstLevelChildTexts(
+  doc: MindMapDoc | null | undefined,
+  targetUid: string | null | undefined,
+): string[] {
+  if (!doc?.root || !targetUid) return []
+  const stack: MindMapDocNode[] = [doc.root]
+  while (stack.length > 0) {
+    const node = stack.pop()!
+    if (readUid(node) === targetUid) {
+      const children = Array.isArray(node.children) ? node.children : []
+      return children.map((child) => readText(child)).filter(Boolean)
+    }
+    const children = Array.isArray(node.children) ? node.children : []
+    for (const child of children) stack.push(child)
+  }
+  return []
 }
 
 /**

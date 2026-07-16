@@ -34,6 +34,12 @@ MindMapAiSplitError = split_contracts.MindMapAiSplitError
 MindMapAiSplitResult = split_contracts.MindMapAiSplitResult
 
 
+def _normalize_split_mode(split_mode: str) -> str:
+    if split_mode in split_contracts.AI_SPLIT_ADD_CHILDREN_ALIASES:
+        return split_contracts.AI_SPLIT_ADD_CHILDREN_MODE
+    return split_mode
+
+
 def split_palace_editor_doc_with_ai(
     session: Session,
     palace: Palace,
@@ -48,11 +54,17 @@ def split_palace_editor_doc_with_ai(
     operation_id: str | None = None,
     target_card_count: int | None = None,
 ) -> MindMapAiSplitResult:
-    if split_mode not in {"legacy_children", *split_contracts.AI_SPLIT_REPLACEMENT_MODES}:
+    requested_mode = str(split_mode or "legacy_children").strip() or "legacy_children"
+    if requested_mode not in {
+        *split_contracts.AI_SPLIT_ADD_CHILDREN_ALIASES,
+        *split_contracts.AI_SPLIT_REPLACEMENT_MODES,
+    }:
         raise MindMapAiSplitError("不支持的 AI 分卡模式。")
+    effective_mode = _normalize_split_mode(requested_mode)
     preferred_card_count = tree_ops.normalize_target_card_count(
         target_card_count,
-        hard_cap=split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT,
+        hard_cap=split_contracts.AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP,
+        minimum=1,
     )
     config = resolve_mindmap_ai_split_config(
         session,
@@ -70,7 +82,7 @@ def split_palace_editor_doc_with_ai(
     if target_node is None:
         raise MindMapAiSplitError("未找到要分卡的目标节点，请重新选中节点后再试。")
 
-    if split_mode in split_contracts.AI_SPLIT_REPLACEMENT_MODES:
+    if effective_mode in split_contracts.AI_SPLIT_REPLACEMENT_MODES:
         expected_owner_id = f"palace:{palace.id}"
         if owner_id != expected_owner_id:
             raise MindMapAiSplitError("AI 分卡操作所属宫殿已变化，请重新发起操作。")
@@ -94,7 +106,7 @@ def split_palace_editor_doc_with_ai(
         max_top_level = tree_ops.resolve_max_top_level_nodes(
             inferred_max=inferred_max_children,
             target_card_count=preferred_card_count,
-            hard_cap=split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT,
+            hard_cap=split_contracts.AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP,
         )
         runtime_config = replace(config, max_children=max_top_level)
         ai_payload = _call_mindmap_ai_split_model(
@@ -102,14 +114,14 @@ def split_palace_editor_doc_with_ai(
             target_node=target_node,
             existing_children=[],
             prompt_catalog=prompt_catalog,
-            split_mode=split_mode,
+            split_mode=effective_mode,
             ai_options=ai_options,
             operation_id=operation_id,
             target_card_count=preferred_card_count,
         )
         replacements = tree_ops.normalize_replacement_nodes(
             ai_payload.get("replacement_nodes"),
-            split_mode=split_mode,
+            split_mode=effective_mode,
             max_top_level_nodes=max_top_level,
             operation_id=operation_id,
         )
@@ -122,38 +134,85 @@ def split_palace_editor_doc_with_ai(
             ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
             resolved_ai=serialize_resolved_ai_runtime(resolved_runtime),
             review_preview=build_review_preview_payload(editor_doc=normalized_doc),
-            split_mode=split_mode,
+            split_mode=effective_mode,
             replacement_node_count=len(replacements),
             replacement_nodes=replacements,
             owner_id=owner_id,
             operation_id=operation_id,
         )
+
+    # AI 添卡：在父卡与一级子卡之间插入中间分类，并重挂已有一级子树。
+    expected_owner_id = f"palace:{palace.id}"
+    if owner_id is not None and owner_id != expected_owner_id:
+        raise MindMapAiSplitError("AI 添卡操作所属宫殿已变化，请重新发起操作。")
+    if owner_id is None:
+        owner_id = expected_owner_id
+    if not operation_id:
+        raise MindMapAiSplitError("AI 添卡缺少稳定的操作标识，请重新发起操作。")
+
     existing_children = tree_ops.collect_first_level_children(target_node)
+    existing_count = len(existing_children)
+    if existing_count < 2:
+        raise MindMapAiSplitError("AI 添卡需要至少 2 个一级子节点。")
+
     inferred_max_children = tree_ops.infer_split_max_children(
         target_node,
         existing_children,
         configured_max_children=config.max_children,
     )
-    runtime_config = replace(config, max_children=inferred_max_children)
+    max_new_categories = tree_ops.resolve_add_children_max(
+        existing_child_count=existing_count,
+        inferred_max=inferred_max_children,
+        target_card_count=preferred_card_count,
+        hard_cap=split_contracts.AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP,
+    )
+    if max_new_categories < 1:
+        raise MindMapAiSplitError("AI 添卡需要至少 2 个一级子节点。")
+
+    runtime_config = replace(config, max_children=max_new_categories)
     ai_payload = _call_mindmap_ai_split_model(
         config=runtime_config,
         target_node=target_node,
         existing_children=existing_children,
         prompt_catalog=prompt_catalog,
+        split_mode=effective_mode,
+        ai_options=ai_options,
+        operation_id=operation_id,
+        target_card_count=preferred_card_count,
     )
     generated_children = tree_ops.normalize_generated_children(
-        ai_payload.get("new_children"),
-        max_children=inferred_max_children,
+        tree_ops.extract_raw_new_children(ai_payload),
+        max_children=max_new_categories,
     )
+    raw_assignments = ai_payload.get("child_assignments")
     if not generated_children:
-        raise MindMapAiSplitError("AI 没有返回可用的新分类节点，请调整提示词后重试。")
+        # Model may still return replacement_nodes if it followed the leaf-split composition schema.
+        recovered, recovered_assignments = tree_ops.coerce_add_children_from_replacement_nodes(
+            ai_payload.get("replacement_nodes"),
+            existing_children=existing_children,
+            max_children=max_new_categories,
+        )
+        generated_children = recovered
+        if recovered_assignments and not raw_assignments:
+            raw_assignments = recovered_assignments
+    if not generated_children:
+        raise MindMapAiSplitError(
+            "AI 没有返回可用的新分类节点（需要 new_children）。"
+            "请确认模型输出含中间分类标题；若反复失败，可在「本次运行追加要求」中写明分类名称。"
+        )
+    if len(generated_children) >= existing_count:
+        generated_children = generated_children[: existing_count - 1]
+    if not generated_children:
+        raise MindMapAiSplitError("AI 返回的中间分类数量无效，请重试。")
 
     next_children, reassigned_count = tree_ops.build_split_children(
         generated_children=generated_children,
         existing_children=existing_children,
-        raw_assignments=ai_payload.get("child_assignments"),
+        raw_assignments=raw_assignments,
         fallback_bucket=AI_SPLIT_FALLBACK_BUCKET,
     )
+    if not next_children:
+        raise MindMapAiSplitError("AI 没有产生可用的添卡结果，请调整提示词后重试。")
     target_node["children"] = next_children
     return MindMapAiSplitResult(
         editor_doc=normalized_doc,
@@ -163,6 +222,11 @@ def split_palace_editor_doc_with_ai(
         ai_call_log_id=str(ai_payload.get("_ai_call_log_id") or "") or None,
         resolved_ai=serialize_resolved_ai_runtime(resolved_runtime),
         review_preview=build_review_preview_payload(editor_doc=normalized_doc),
+        split_mode=effective_mode,
+        replacement_node_count=len(next_children),
+        replacement_nodes=next_children,
+        owner_id=owner_id,
+        operation_id=operation_id,
     )
 
 
@@ -190,7 +254,7 @@ def _call_mindmap_ai_split_model(
     target_node: dict[str, Any],
     existing_children: list[dict[str, Any]],
     prompt_catalog: PromptCatalog,
-    split_mode: str = "legacy_children",
+    split_mode: str = "add_children",
     ai_options: AiRuntimeOptions | None = None,
     operation_id: str | None = None,
     target_card_count: int | None = None,
