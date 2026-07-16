@@ -224,10 +224,21 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
       </div>
 
       {activeTab === 'scenes' ? (
-        <div className="space-y-4">
-          {scenes.map((scene) => {
+        <div className="space-y-6">
+          {Object.entries(
+            scenes.reduce<Record<string, typeof scenes>>((groups, scene) => {
+              const category = scene.category || '其他'
+              if (!groups[category]) groups[category] = []
+              groups[category].push(scene)
+              return groups
+            }, {}),
+          ).map(([category, categoryScenes]) => (
+            <div key={category} className="space-y-4">
+              <h2 className="text-sm font-semibold tracking-wide text-muted-foreground">{category}</h2>
+              {categoryScenes.map((scene) => {
             const draft = sceneDrafts[scene.scene_key] ?? scene
             const versions = sceneVersions[scene.scene_key] ?? []
+            const recommended = new Set(scene.recommended_block_keys ?? [])
             return (
               <Card key={scene.scene_key}>
                 <CardHeader className="space-y-2">
@@ -266,7 +277,12 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                           }}
                         />
                         <span>
-                          <span className="block font-medium">{block.label}</span>
+                          <span className="block font-medium">
+                            {block.label}
+                            {recommended.has(block.key) ? (
+                              <Badge variant="secondary" className="ml-2 align-middle text-[10px]">推荐</Badge>
+                            ) : null}
+                          </span>
                           <span className="text-xs text-muted-foreground">{block.description}</span>
                         </span>
                       </label>
@@ -316,7 +332,9 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                 </CardContent>
               </Card>
             )
-          })}
+              })}
+            </div>
+          ))}
         </div>
       ) : null}
 

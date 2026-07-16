@@ -110,6 +110,7 @@ export interface AiPromptSceneDefault {
   prompt_key: string
   label: string
   description: string
+  category?: string
   block_keys: string[]
   blocks: AiPromptBlock[]
   scene_instruction: string

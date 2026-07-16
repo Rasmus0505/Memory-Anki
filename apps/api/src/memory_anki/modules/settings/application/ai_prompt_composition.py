@@ -1,8 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -17,300 +16,22 @@ from memory_anki.infrastructure.db._tables.misc import (
 )
 
 from .ai_prompt_compiler import lint_compiled_prompt, render_prompt_text
-from .ai_prompt_split_seeds import AI_SPLIT_BLOCK_SEEDS, AI_SPLIT_SCENE_SEEDS
+from .ai_prompt_composition_catalog import (
+    BUILTIN_BLOCKS,
+    BUILTIN_SCENES,
+    LAYER_ORDER,
+    PROMPT_SCENE_BINDINGS,
+    SCENE_CATEGORY_ORDER,
+    PromptSceneSeed,
+    _scene_display_description,
+    _scene_display_label,
+)
 from .ai_prompts import (
     PLACEHOLDER_PATTERN,
     PROMPT_DEFINITIONS,
     AiPromptValidationError,
     get_prompt_template,
 )
-
-LAYER_ORDER = {
-    "role": 10,
-    "task": 20,
-    "content": 30,
-    "boundary": 40,
-    "output": 50,
-    "quality": 60,
-}
-
-
-@dataclass(frozen=True, slots=True)
-class PromptBlockSeed:
-    key: str
-    label: str
-    description: str
-    layer: str
-    sort_order: int
-    template: str
-
-
-@dataclass(frozen=True, slots=True)
-class PromptSceneSeed:
-    scene_key: str
-    prompt_key: str
-    block_keys: tuple[str, ...]
-    scene_instruction: str
-    recommended_block_keys: tuple[str, ...] = ()
-
-
-BUILTIN_BLOCKS = (
-    PromptBlockSeed(
-        key="role.strict_json",
-        label="严格 JSON 助手",
-        description="要求模型只输出可解析 JSON，不输出解释或 Markdown。",
-        layer="role",
-        sort_order=10,
-        template="你是一个严格输出 JSON 的助手。只输出 JSON，不要输出 Markdown，不要输出解释。",
-    ),
-    PromptBlockSeed(
-        key="role.source_extractor",
-        label="忠实资料提取助手",
-        description="用于 OCR、转写和资料抽取，不主动组织或补充内容。",
-        layer="role",
-        sort_order=20,
-        template="你是一个忠实的资料提取助手，只处理输入中实际可见或明确提供的内容。",
-    ),
-    PromptBlockSeed(
-        key="content.fidelity",
-        label="忠实原文与禁止编造",
-        description="保留来源措辞和信息，不总结、删减、改写或编造。",
-        layer="content",
-        sort_order=10,
-        template=(
-            "严格保留目标范围内的原文信息，不要总结、删减、改写或补充来源中不存在的内容；"
-            "允许按原意拆分并列要点。"
-        ),
-    ),
-    PromptBlockSeed(
-        key="content.semantic_preservation",
-        label="语义保持",
-        description="允许调整表达，但必须保持原意、事实和关键限制。",
-        layer="content",
-        sort_order=20,
-        template="允许调整表达和组织方式，但必须保持原意、事实、条件和关键限制，不得引入新结论。",
-    ),
-    PromptBlockSeed(
-        key="content.literal_ocr",
-        label="OCR 逐字提取",
-        description="用于文字识别，禁止总结和结构化改写。",
-        layer="content",
-        sort_order=30,
-        template="按自然阅读顺序逐字提取正文；不要总结、解释、补全缺失文字或改写表达。",
-    ),
-    PromptBlockSeed(
-        key="boundary.document_chapter",
-        label="教材章节边界",
-        description="综合正文层级，保留跨页续文并在下一同级章节停止。",
-        layer="boundary",
-        sort_order=10,
-        template=(
-            "不要假设任何页面天然是结构页。综合标题、编号、段落、缩进和并列关系判断层级；"
-            "精华提要、目录、表格和示意图只能辅助判断，不能代替正文。"
-            "保留跨页续文，遇到下一同级章节标题时立即停止。"
-        ),
-    ),
-    PromptBlockSeed(
-        key="boundary.noise_filter",
-        label="页面噪声排除",
-        description="排除页眉页脚、页码、广告、群号和水印。",
-        layer="boundary",
-        sort_order=20,
-        template="排除页眉、页脚、页码、广告、群号、版权信息和扫描水印。",
-    ),
-    PromptBlockSeed(
-        key="boundary.explicit_structure",
-        label="显式结构图补全",
-        description="仅在用户明确指定结构图时，以其为骨架补充正文。",
-        layer="boundary",
-        sort_order=30,
-        template=(
-            "用户已显式指定结构图。以识别出的结构为主骨架，用其余正文补全节点；"
-            "不得让正文中的下一同级章节扩展当前结构。"
-        ),
-    ),
-    PromptBlockSeed(
-        key="output.mindmap_json",
-        label="脑图 JSON Schema",
-        description="统一脑图根节点和 children 递归结构。",
-        layer="output",
-        sort_order=10,
-        template=(
-            '顶层格式必须为 {"title":"根节点标题","children":[{"text":"节点文字","children":[]}]}。'
-            "每个节点必须有非空 text 和数组 children；无子节点也必须输出 children: []。"
-            "多个并列要点必须拆成并列 children。"
-        ),
-    ),
-    PromptBlockSeed(
-        key="quality.json_integrity",
-        label="JSON 完整性自检",
-        description="输出前检查 JSON、必填字段和有效内容节点。",
-        layer="quality",
-        sort_order=10,
-        template="输出前检查括号、引号和数组完整闭合，并确认至少包含一个有效内容节点。",
-    ),
-    PromptBlockSeed(
-        key="quality.source_grounding",
-        label="来源证据自检",
-        description="检查生成内容是否都能回溯到输入证据。",
-        layer="quality",
-        sort_order=20,
-        template="输出前逐项检查：每个事实、题目或结论都必须能回溯到输入资料，不得凭常识补写。",
-    ),
-    *(PromptBlockSeed(**seed) for seed in AI_SPLIT_BLOCK_SEEDS),
-)
-
-
-PROMPT_SCENE_BINDINGS = {
-    "ai_prompt_import_image_mindmap": "vision_image_mindmap",
-    "ai_prompt_import_image_text": "vision_image_text",
-    "ai_prompt_import_document_mindmap": "vision_batch_mindmap",
-    "ai_prompt_import_batch_mindmap": "vision_structure_mindmap",
-    "ai_prompt_import_ocr_mindmap_format": "mindmap_ocr_formatter",
-    "ai_prompt_mindmap_ai_split_system": "ai_split",
-    "ai_prompt_peg_association": "peg_association_suggestions",
-    "ai_prompt_ai_learning_workbench": "review_ai_learning",
-    "ai_prompt_batch_palace_generation": "batch_palace_generation",
-    "ai_prompt_batch_quiz_generation": "batch_quiz_generation",
-    "ai_prompt_palace_quiz_generate": "quiz_image_generation",
-    "ai_prompt_palace_quiz_short_answer_feedback": "quiz_short_answer_feedback",
-    "ai_prompt_palace_quiz_group_by_mini_palace": "quiz_mini_palace_grouping",
-    "ai_prompt_palace_quiz_classify_existing_to_mini_palace": "quiz_mini_palace_grouping_existing",
-    "ai_prompt_palace_quiz_text_formatting": "quiz_text_generation",
-    "ai_prompt_palace_quiz_review_mindmap": "quiz_review_mindmap_generation",
-    "ai_prompt_palace_quiz_source_pair_transcription": "quiz_source_pair_transcription",
-    "ai_prompt_english_reading_generate": "english_reading",
-    "ai_prompt_english_translation_batch": "translation_course_batch",
-    "ai_prompt_english_translation_single": "translation_reading_sentence",
-}
-
-SCENE_PROMPT_BINDINGS = {scene: prompt for prompt, scene in PROMPT_SCENE_BINDINGS.items()}
-
-
-def _mindmap_scene_instruction(task: str) -> str:
-    return f"任务：{task}\n根据输入中实际出现的标题、编号、段落、缩进和并列关系建立层级。"
-
-
-BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
-    **{seed["scene_key"]: PromptSceneSeed(**seed) for seed in AI_SPLIT_SCENE_SEEDS},
-    "vision_image_mindmap": PromptSceneSeed(
-        scene_key="vision_image_mindmap",
-        prompt_key="ai_prompt_import_image_mindmap",
-        block_keys=("role.strict_json", "content.fidelity", "output.mindmap_json", "quality.json_integrity"),
-        scene_instruction=_mindmap_scene_instruction("识别单张现成脑图截图，尽量一比一还原图中的层级和顺序。"),
-        recommended_block_keys=("role.strict_json", "content.fidelity", "output.mindmap_json"),
-    ),
-    "vision_batch_mindmap": PromptSceneSeed(
-        scene_key="vision_batch_mindmap",
-        prompt_key="ai_prompt_import_document_mindmap",
-        block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "boundary.document_chapter",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        scene_instruction=_mindmap_scene_instruction("读取全部教材正文页面，生成目标章节的完整思维导图。"),
-        recommended_block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "boundary.document_chapter",
-            "output.mindmap_json",
-        ),
-    ),
-    "vision_structure_mindmap": PromptSceneSeed(
-        scene_key="vision_structure_mindmap",
-        prompt_key="ai_prompt_import_batch_mindmap",
-        block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "boundary.explicit_structure",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        scene_instruction=(
-            "任务：根据用户显式指定的结构图和其余正文图片补全脑图。\n"
-            "已识别的结构图 JSON：\n{{structure_tree_json}}"
-        ),
-        recommended_block_keys=("role.strict_json", "boundary.explicit_structure", "output.mindmap_json"),
-    ),
-    "mindmap_ocr_formatter": PromptSceneSeed(
-        scene_key="mindmap_ocr_formatter",
-        prompt_key="ai_prompt_import_ocr_mindmap_format",
-        block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "boundary.document_chapter",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        scene_instruction=(
-            "任务：把带页码的逐页 OCR 原文整理为目标章节脑图。\n"
-            "目标章节标题：{{target_title}}\n\n逐页 OCR 原文：\n{{ocr_text}}"
-        ),
-        recommended_block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "boundary.document_chapter",
-            "output.mindmap_json",
-        ),
-    ),
-    "vision_image_text": PromptSceneSeed(
-        scene_key="vision_image_text",
-        prompt_key="ai_prompt_import_image_text",
-        block_keys=("role.source_extractor", "content.literal_ocr", "boundary.noise_filter"),
-        scene_instruction="任务：提取图片或 PDF 页面中的正文文字，保持自然阅读顺序和段落。",
-        recommended_block_keys=("content.literal_ocr",),
-    ),
-    "peg_association_suggestions": PromptSceneSeed(
-        scene_key="peg_association_suggestions",
-        prompt_key="ai_prompt_peg_association",
-        block_keys=("role.strict_json", "content.semantic_preservation", "quality.source_grounding"),
-        scene_instruction=PROMPT_DEFINITIONS["ai_prompt_peg_association"].default_template,
-        recommended_block_keys=("quality.source_grounding",),
-    ),
-    "review_ai_learning": PromptSceneSeed(
-        scene_key="review_ai_learning",
-        prompt_key="ai_prompt_ai_learning_workbench",
-        block_keys=("content.semantic_preservation", "quality.source_grounding"),
-        scene_instruction=(
-            "任务：在复习 AI 学习工作台中处理冻结的学习上下文。"
-            "优先依据上下文，明确区分事实、推断和待核实内容；不要声称已经修改或发布学习内容。"
-        ),
-        recommended_block_keys=("content.semantic_preservation",),
-    ),
-    "batch_palace_generation": PromptSceneSeed(
-        scene_key="batch_palace_generation",
-        prompt_key="ai_prompt_batch_palace_generation",
-        block_keys=("content.fidelity", "boundary.document_chapter", "boundary.noise_filter", "quality.source_grounding"),
-        scene_instruction=PROMPT_DEFINITIONS["ai_prompt_batch_palace_generation"].default_template,
-        recommended_block_keys=("content.fidelity", "boundary.document_chapter"),
-    ),
-    "batch_quiz_generation": PromptSceneSeed(
-        scene_key="batch_quiz_generation",
-        prompt_key="ai_prompt_batch_quiz_generation",
-        block_keys=("quality.source_grounding",),
-        scene_instruction=PROMPT_DEFINITIONS["ai_prompt_batch_quiz_generation"].default_template,
-        recommended_block_keys=("quality.source_grounding",),
-    ),
-}
-
-
-for _prompt_key, _scene_key in PROMPT_SCENE_BINDINGS.items():
-    if _scene_key in BUILTIN_SCENES:
-        continue
-    _definition = PROMPT_DEFINITIONS[_prompt_key]
-    _blocks = ("quality.source_grounding",) if "quiz" in _scene_key else ()
-    BUILTIN_SCENES[_scene_key] = PromptSceneSeed(
-        scene_key=_scene_key,
-        prompt_key=_prompt_key,
-        block_keys=_blocks,
-        scene_instruction=_definition.default_template,
-        recommended_block_keys=_blocks,
-    )
 
 
 def _json_load(value: str | None, default: Any) -> Any:
@@ -363,12 +84,47 @@ def ensure_prompt_composition_seed(session: Session) -> None:
     for scene_seed in BUILTIN_SCENES.values():
         scene_row = session.get(AiPromptSceneDefault, scene_seed.scene_key)
         if scene_row is not None:
+            # Repair empty builtin defaults so newly added recommended blocks take effect
+            # without wiping user customizations.
+            active = (
+                session.get(AiPromptSceneVersion, scene_row.active_version_id)
+                if scene_row.active_version_id
+                else None
+            )
+            active_keys = [str(item) for item in _json_load(active.block_keys_json if active else "[]", [])]
+            missing_recommended = [
+                key for key in scene_seed.recommended_block_keys if key not in active_keys
+            ]
+            should_refresh_builtin = active is not None and active.source == "builtin" and (
+                (not active_keys and scene_seed.block_keys)
+                or bool(missing_recommended and scene_seed.scene_key.startswith("ai_split"))
+            )
+            if should_refresh_builtin and active is not None:
+                active.status = "archived"
+                version_id = uuid.uuid4().hex
+                session.add(
+                    AiPromptSceneVersion(
+                        id=version_id,
+                        scene_key=scene_seed.scene_key,
+                        block_keys_json=json.dumps(list(scene_seed.block_keys), ensure_ascii=False),
+                        scene_instruction=scene_seed.scene_instruction,
+                        status="active",
+                        source="builtin",
+                        activated_at=now,
+                    )
+                )
+                scene_row.active_version_id = version_id
+                changed = True
             continue
         override = session.query(Config).filter_by(key=scene_seed.prompt_key).first()
         block_keys = list(scene_seed.block_keys)
         scene_instruction = scene_seed.scene_instruction
         source = "builtin"
-        if override is not None and override.value.strip():
+        # Only migrate legacy full-template overrides onto the primary scene for a prompt_key.
+        # Alias scenes (e.g. ai_split_parallel) always use modular defaults.
+        primary_scene = PROMPT_SCENE_BINDINGS.get(scene_seed.prompt_key)
+        allow_legacy_migration = primary_scene is None or primary_scene == scene_seed.scene_key
+        if allow_legacy_migration and override is not None and override.value.strip():
             legacy_key = f"legacy.{scene_seed.prompt_key}"
             legacy = session.get(AiPromptBlock, legacy_key)
             if legacy is None:
@@ -638,7 +394,17 @@ def list_scene_defaults(session: Session) -> list[dict[str, Any]]:
     ensure_prompt_composition_seed(session)
     blocks = {item["key"]: item for item in list_prompt_blocks(session)}
     items: list[dict[str, Any]] = []
-    for seed in BUILTIN_SCENES.values():
+    ordered_seeds = sorted(
+        BUILTIN_SCENES.values(),
+        key=lambda seed: (
+            SCENE_CATEGORY_ORDER.index(seed.category)
+            if seed.category in SCENE_CATEGORY_ORDER
+            else len(SCENE_CATEGORY_ORDER),
+            _scene_display_label(seed),
+            seed.scene_key,
+        ),
+    )
+    for seed in ordered_seeds:
         version = _active_scene_version(session, seed.scene_key)
         block_keys = [str(item) for item in _json_load(version.block_keys_json, [])]
         compiled = compile_prompt(seed.scene_key, session=session)
@@ -646,8 +412,9 @@ def list_scene_defaults(session: Session) -> list[dict[str, Any]]:
             {
                 "scene_key": seed.scene_key,
                 "prompt_key": seed.prompt_key,
-                "label": PROMPT_DEFINITIONS[seed.prompt_key].label,
-                "description": PROMPT_DEFINITIONS[seed.prompt_key].description,
+                "label": _scene_display_label(seed),
+                "description": _scene_display_description(seed),
+                "category": seed.category,
                 "block_keys": block_keys,
                 "blocks": [blocks[key] for key in block_keys if key in blocks],
                 "scene_instruction": version.scene_instruction,

@@ -25,6 +25,7 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT,
     PALACE_QUIZ_GENERATE_PROMPT,
     PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT,
+    PALACE_QUIZ_NODE_BINDING_PROMPT,
     PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT,
     PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
     PEG_ASSOCIATION_PROMPT,
@@ -47,6 +48,7 @@ PROMPT_CONFIG_KEYS = (
     "ai_prompt_palace_quiz_generate",
     "ai_prompt_palace_quiz_classify_existing_to_mini_palace",
     "ai_prompt_palace_quiz_group_by_mini_palace",
+    "ai_prompt_palace_quiz_node_binding",
     "ai_prompt_palace_quiz_short_answer_feedback",
     "ai_prompt_palace_quiz_source_pair_transcription",
     "ai_prompt_palace_quiz_generation_user_text",
@@ -104,6 +106,7 @@ _DEFAULT_PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_TEMPLATE = (
 )
 
 _DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE = PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT
+_DEFAULT_PALACE_QUIZ_NODE_BINDING_TEMPLATE = PALACE_QUIZ_NODE_BINDING_PROMPT
 
 PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_import_image_mindmap": PromptTemplateDefinition(
@@ -153,7 +156,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_mindmap_ai_split_system": PromptTemplateDefinition(
         key="ai_prompt_mindmap_ai_split_system",
         label="AI 分卡系统提示词",
-        description="脑图 AI 分卡发送给文本模型的系统提示词。",
+        description="脑图 AI 分卡（原位替换叶节点）的系统提示词；默认由场景组合块编译，此完整模板仅用于兼容旧路径。",
         default_template=MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split/contracts.py",
     ),
@@ -208,6 +211,13 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         label="生成题目按学习组分组",
         description="把视觉模型刚生成的题目草稿按学习组语义分组时使用的系统提示词。",
         default_template=_DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE,
+        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
+    ),
+    "ai_prompt_palace_quiz_node_binding": PromptTemplateDefinition(
+        key="ai_prompt_palace_quiz_node_binding",
+        label="题库结合（题目绑定知识点）",
+        description="把宫殿题库题目绑定到思维导图知识点卡片时使用的系统提示词。",
+        default_template=_DEFAULT_PALACE_QUIZ_NODE_BINDING_TEMPLATE,
         source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
     ),
     "ai_prompt_palace_quiz_short_answer_feedback": PromptTemplateDefinition(
