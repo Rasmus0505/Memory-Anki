@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from memory_anki.core.file_sync_lock import SyncError, SyncLock
 from memory_anki.core.files import safe_filename_part
 from memory_anki.core.local_config import LocalRuntimeConfig
 from memory_anki.core.runtime import detect_git_commit
@@ -24,17 +25,11 @@ from memory_anki.core.time import iso_utc_now
 SYNC_STATE_NAME = "state.json"
 LOCAL_SYNC_STATE_NAME = "sync-state.json"
 SYNC_MANIFEST_NAME = "sync-manifest.json"
-LOCK_STALE_SECONDS = 15 * 60
 SYNC_STATE_VERSION = 1
 SNAPSHOT_PROGRESS_INTERVAL_SECONDS = 5
 SNAPSHOT_CHUNK_SIZE = 1024 * 1024
 
 logger = logging.getLogger(__name__)
-
-
-class SyncError(RuntimeError):
-    pass
-
 
 @dataclass(frozen=True, slots=True)
 class SyncResult:
@@ -383,39 +378,6 @@ def restore_snapshot_zip(zip_path: Path, app_home: Path) -> dict[str, Any]:
         return manifest
 
 
-class SyncLock:
-    def __init__(self, lock_dir: Path, config: LocalRuntimeConfig):
-        self.lock_dir = lock_dir
-        self.config = config
-        self.acquired = False
-
-    def __enter__(self) -> SyncLock:
-        self.lock_dir.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            self.lock_dir.mkdir()
-        except FileExistsError:
-            age = time.time() - self.lock_dir.stat().st_mtime
-            if age <= LOCK_STALE_SECONDS:
-                raise SyncError(f"同步锁仍在使用中，请稍后再试: {self.lock_dir}") from None
-            shutil.rmtree(self.lock_dir, ignore_errors=True)
-            self.lock_dir.mkdir()
-        _write_json(
-            self.lock_dir / "lock.json",
-            {
-                "device_id": self.config.device_id,
-                "device_name": self.config.device_name,
-                "created_at": iso_now(),
-                "pid": os.getpid(),
-            },
-        )
-        self.acquired = True
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        if self.acquired:
-            shutil.rmtree(self.lock_dir, ignore_errors=True)
-
-
 def _remote_snapshot_path(remote_state: dict[str, Any], paths: dict[str, Path]) -> Path:
     snapshot_name = str(remote_state.get("snapshot_name") or "").strip()
     if not snapshot_name:
@@ -704,6 +666,8 @@ def push_on_stop(config: LocalRuntimeConfig) -> SyncResult:
 
 
 __all__ = [
+    "SyncError",
+    "SyncLock",
     "SyncResult",
     "compute_snapshot_hash",
     "create_snapshot_zip",
