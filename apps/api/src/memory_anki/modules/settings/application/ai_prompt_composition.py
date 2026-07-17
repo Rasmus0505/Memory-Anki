@@ -262,6 +262,7 @@ def compile_prompt(
         else str(resolved["scene_instruction"] or "").strip()
     )
     run_instruction = str((selection or {}).get("run_instruction") or "").strip()
+    emphasis_mark_description = str((selection or {}).get("emphasis_mark_description") or "").strip()
     parts: list[tuple[int, int, str, str]] = []
     block_versions: dict[str, str | None] = {}
     for key in selected_keys:
@@ -279,6 +280,16 @@ def compile_prompt(
     rendered_parts = [render_prompt_text(item[3], variables) for item in parts if item[3].strip()]
     if scene_instruction:
         rendered_parts.append(render_prompt_text(scene_instruction, variables))
+    if emphasis_mark_description:
+        rendered_parts.append(
+            "重点标记线索：用户要求识别图中（"
+            f"{emphasis_mark_description}"
+            "）的文字作为知识重点。"
+            "请仅将这些原文片段写入对应节点的 emphasis_marks，"
+            '格式为 [{"kind":"highlight","text":"原文子串"}]；'
+            "节点 text 保持纯文本；emphasis_marks.text 必须是节点 text 的子串。"
+            "产品侧会渲染为黄色底色。"
+        )
     if run_instruction:
         rendered_parts.append(f"本次运行追加要求：\n{run_instruction}")
     text = "\n\n".join(part for part in rendered_parts if part).strip()
@@ -294,6 +305,7 @@ def compile_prompt(
         "block_versions": block_versions,
         "scene_instruction": scene_instruction,
         "run_instruction": run_instruction,
+        "emphasis_mark_description": emphasis_mark_description,
         "scene_version_id": resolved["scene_version_id"],
         "warnings": list(dict.fromkeys(warnings)),
         "estimated_tokens": max(1, (len(text) + 1) // 2),

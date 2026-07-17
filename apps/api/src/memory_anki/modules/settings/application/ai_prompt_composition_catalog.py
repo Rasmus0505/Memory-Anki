@@ -123,6 +123,21 @@ BUILTIN_BLOCKS = (
         template="按自然阅读顺序逐字提取正文；不要总结、解释、补全缺失文字或改写表达。",
     ),
     PromptBlockSeed(
+        key="content.knowledge_emphasis",
+        label="知识重点标记",
+        description="当用户提供重点视觉线索时，用 emphasis_marks 标出原文重点片段。",
+        layer="content",
+        sort_order=40,
+        template=(
+            "若本次运行提供了“重点标记线索”，请按该线索识别教材中的知识重点原文片段，"
+            "并在对应节点输出可选字段 emphasis_marks："
+            '[{"kind":"highlight","text":"原文子串"}]。'
+            "text 字段保持纯文本；emphasis_marks.text 必须是该节点 text 的子串，不要改写。"
+            "未提供线索时可以不输出 emphasis_marks。"
+            "不要用 markdown 标记重点；产品侧会把 emphasis_marks 渲染为黄色底色。"
+        ),
+    ),
+    PromptBlockSeed(
         key="boundary.document_chapter",
         label="教材章节边界",
         description="综合正文层级，保留跨页续文并在下一同级章节停止。",
@@ -163,6 +178,8 @@ BUILTIN_BLOCKS = (
             '顶层格式必须为 {"title":"根节点标题","children":[{"text":"节点文字","children":[]}]}。'
             "每个节点必须有非空 text 和数组 children；无子节点也必须输出 children: []。"
             "多个并列要点必须拆成并列 children。"
+            "可选：节点可含 emphasis_marks（数组），每项为 "
+            '{"kind":"highlight","text":"原文子串"}，用于标识知识重点。'
         ),
     ),
     PromptBlockSeed(
@@ -248,9 +265,20 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
     "vision_image_mindmap": PromptSceneSeed(
         scene_key="vision_image_mindmap",
         prompt_key="ai_prompt_import_image_mindmap",
-        block_keys=("role.strict_json", "content.fidelity", "output.mindmap_json", "quality.json_integrity"),
+        block_keys=(
+            "role.strict_json",
+            "content.fidelity",
+            "content.knowledge_emphasis",
+            "output.mindmap_json",
+            "quality.json_integrity",
+        ),
         scene_instruction=_mindmap_scene_instruction("识别单张现成脑图截图，尽量一比一还原图中的层级和顺序。"),
-        recommended_block_keys=("role.strict_json", "content.fidelity", "output.mindmap_json"),
+        recommended_block_keys=(
+            "role.strict_json",
+            "content.fidelity",
+            "content.knowledge_emphasis",
+            "output.mindmap_json",
+        ),
         label="图片转脑图",
         description="识别单张脑图截图并还原层级。",
         category="脑图导入",
@@ -261,6 +289,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",
@@ -270,6 +299,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "output.mindmap_json",
         ),
@@ -283,6 +313,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.explicit_structure",
             "boundary.noise_filter",
             "output.mindmap_json",
@@ -292,7 +323,12 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "任务：根据用户显式指定的结构图和其余正文图片补全脑图。\n"
             "已识别的结构图 JSON：\n{{structure_tree_json}}"
         ),
-        recommended_block_keys=("role.strict_json", "boundary.explicit_structure", "output.mindmap_json"),
+        recommended_block_keys=(
+            "role.strict_json",
+            "content.knowledge_emphasis",
+            "boundary.explicit_structure",
+            "output.mindmap_json",
+        ),
         label="结构图补全脑图",
         description="以用户指定结构图为骨架补全正文。",
         category="脑图导入",
@@ -303,6 +339,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",
@@ -315,6 +352,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "output.mindmap_json",
         ),
