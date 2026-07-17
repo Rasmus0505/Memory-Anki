@@ -74,6 +74,10 @@ export function readRecentAiConfig(
                 typeof parsed.prompt_options.run_instruction === 'string'
                   ? parsed.prompt_options.run_instruction
                   : undefined,
+              emphasis_mark_description:
+                typeof parsed.prompt_options.emphasis_mark_description === 'string'
+                  ? parsed.prompt_options.emphasis_mark_description
+                  : undefined,
             }
           : undefined,
     }
@@ -94,7 +98,10 @@ export function writeRecentAiConfig(
       JSON.stringify({
         model: value.model,
         thinking_enabled: value.thinking_enabled,
-        prompt_options: { run_instruction: value.prompt_options?.run_instruction },
+        prompt_options: {
+          run_instruction: value.prompt_options?.run_instruction,
+          emphasis_mark_description: value.prompt_options?.emphasis_mark_description,
+        },
       }),
     )
   } catch {
@@ -116,10 +123,12 @@ export function buildDefaultAiConfig(
           block_keys: promptScene.block_keys,
           scene_instruction: promptScene.scene_instruction,
           run_instruction: '',
+          emphasis_mark_description: '',
         }
       : {
           scene_instruction: promptTemplate?.template || promptTemplate?.defaultTemplate || '',
           run_instruction: '',
+          emphasis_mark_description: '',
         },
   }
 }
@@ -145,6 +154,7 @@ export function normalizeScenarioAiConfig(
       block_keys: fallback.prompt_options?.block_keys,
       scene_instruction: fallback.prompt_options?.scene_instruction,
       run_instruction: value?.prompt_options?.run_instruction ?? '',
+      emphasis_mark_description: value?.prompt_options?.emphasis_mark_description ?? '',
     },
   }
 }

@@ -218,6 +218,8 @@ export function useAiRunConfigDialog() {
             entry.contextOptions ?? [],
             selectedContexts[entry.scenarioKey] ?? [],
           ),
+          emphasis_mark_description:
+            selectedConfig?.prompt_options?.emphasis_mark_description?.trim() || '',
         }
         const manualOverride = selectedConfig?.prompt_override?.trim() || ''
         const promptKey = resolvePromptSceneKey(entry.scenarioKey, entry.promptSceneKey)
@@ -344,6 +346,8 @@ export function useAiRunConfigDialog() {
             block_keys: saved.block_keys,
             scene_instruction: saved.scene_instruction,
             run_instruction: current[scenarioKey]?.prompt_options?.run_instruction ?? '',
+            emphasis_mark_description:
+              current[scenarioKey]?.prompt_options?.emphasis_mark_description ?? '',
           },
         },
       }))

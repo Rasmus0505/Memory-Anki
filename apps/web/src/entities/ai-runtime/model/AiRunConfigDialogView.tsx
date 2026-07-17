@@ -8,6 +8,7 @@ import type {
 import type { PromptTemplateSnapshot } from './aiRunConfigPersistence'
 import {
   compileLocalPromptPreview,
+  supportsEmphasisMarkDescription,
   type MultiScenarioEntry,
 } from './aiRunConfigDialogHelpers'
 import { Button } from '@/shared/components/ui/button'
@@ -282,6 +283,31 @@ export function AiRunConfigDialogView({
                       className="min-h-[110px] resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
                     />
                   </label>
+
+                  {supportsEmphasisMarkDescription(entry.scenarioKey) ? (
+                    <label className="grid gap-2">
+                      <span className="font-medium">重点标记线索</span>
+                      <div className="text-xs text-muted-foreground">
+                        识别图中（下方填写）的文字作为知识重点；脑图会渲染为黄色底色。留空则不强制识别重点标记。
+                      </div>
+                      <input
+                        type="text"
+                        aria-label="重点标记线索"
+                        value={selection.emphasis_mark_description ?? ''}
+                        onChange={(event) => {
+                          onUpdateScenarioConfig(entry.scenarioKey, (current) => ({
+                            ...current,
+                            prompt_options: {
+                              ...current?.prompt_options,
+                              emphasis_mark_description: event.target.value,
+                            },
+                          }))
+                        }}
+                        placeholder="带有下划线的文字、带有颜色的文字"
+                        className="min-h-10 rounded-lg border border-input bg-background px-4 py-2 text-sm"
+                      />
+                    </label>
+                  ) : null}
 
                   <label className="grid gap-2">
                     <span className="font-medium">本次运行追加要求</span>

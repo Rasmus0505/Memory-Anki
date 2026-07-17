@@ -73,6 +73,16 @@ export function compileLocalPromptPreview(
     ))
   const parts = selectedBlocks.map((block) => block.template.trim()).filter(Boolean)
   if (selection.scene_instruction?.trim()) parts.push(selection.scene_instruction.trim())
+  const emphasis = selection.emphasis_mark_description?.trim()
+  if (emphasis) {
+    parts.push(
+      `重点标记线索：用户要求识别图中（${emphasis}）的文字作为知识重点。`
+      + '请仅将这些原文片段写入对应节点的 emphasis_marks，'
+      + '格式为 [{"kind":"highlight","text":"原文子串"}]；'
+      + '节点 text 保持纯文本；emphasis_marks.text 必须是节点 text 的子串。'
+      + '产品侧会渲染为黄色底色。',
+    )
+  }
   if (selection.run_instruction?.trim()) {
     parts.push(`本次运行追加要求：\n${selection.run_instruction.trim()}`)
   }
@@ -92,4 +102,16 @@ export function compileLocalPromptPreview(
 
 export function resolvePromptSceneKey(scenarioKey: string, promptSceneKey?: string) {
   return promptSceneKey ?? scenarioKey
+}
+
+/** Scenarios that support user-filled textbook emphasis mark clues. */
+export const MINDMAP_EMPHASIS_SCENARIO_KEYS = new Set([
+  'vision_image_mindmap',
+  'vision_batch_mindmap',
+  'vision_structure_mindmap',
+  'mindmap_ocr_formatter',
+])
+
+export function supportsEmphasisMarkDescription(scenarioKey: string) {
+  return MINDMAP_EMPHASIS_SCENARIO_KEYS.has(scenarioKey)
 }

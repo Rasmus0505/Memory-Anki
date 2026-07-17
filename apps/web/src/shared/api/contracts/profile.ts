@@ -90,6 +90,8 @@ export interface AiPromptRunSelection {
   block_keys?: string[]
   scene_instruction?: string
   run_instruction?: string
+  /** User-filled visual cues for textbook knowledge emphasis, e.g. 带有下划线的文字 */
+  emphasis_mark_description?: string
 }
 
 export interface CompiledPromptSnapshot {
@@ -100,6 +102,7 @@ export interface CompiledPromptSnapshot {
   block_versions: Record<string, string | null>
   scene_instruction: string
   run_instruction: string
+  emphasis_mark_description?: string
   scene_version_id?: string | null
   warnings: string[]
   estimated_tokens: number
