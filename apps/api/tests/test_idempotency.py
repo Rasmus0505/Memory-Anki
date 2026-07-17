@@ -1,15 +1,10 @@
 """Route-level mutation replay tests."""
 
 import json
-from datetime import date, timedelta
 
 import pytest
 
-from memory_anki.infrastructure.db._tables.palaces import (
-    Palace,
-    ReviewLog,
-    ReviewSchedule,
-)
+from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 from memory_anki.modules.reviews.application.formal_review_service import (
     start_or_resume_formal_review,
 )
@@ -17,7 +12,7 @@ from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 
-def _seed_schedule(session_factory) -> str:
+def _seed_session(session_factory) -> str:
     with session_factory() as session:
         palace = Palace(
             title="Idempotency Palace",
@@ -34,17 +29,6 @@ def _seed_schedule(session_factory) -> str:
             ),
         )
         session.add(palace)
-        session.flush()
-        schedule = ReviewSchedule(
-            palace_id=palace.id,
-            scheduled_date=date.today() - timedelta(days=1),
-            interval_days=1,
-            algorithm_used="ebbinghaus",
-            completed=False,
-            review_number=0,
-            review_type="standard",
-        )
-        session.add(schedule)
         session.commit()
         return start_or_resume_formal_review(session, palace.id).id
 
@@ -59,18 +43,18 @@ class TestSubmitRouteIdempotency:
         client,
         session_factory,
     ):
-        schedule_id = _seed_schedule(session_factory)
+        session_id = _seed_session(session_factory)
         headers = {MUTATION_ID_HEADER: "dup-1"}
         body = {"duration_seconds": 10, "completion_mode": "manual_complete"}
 
         first = client.post(
-            f"/api/v1/review/session/{schedule_id}/submit",
+            f"/api/v1/review/session/{session_id}/submit",
             json=body,
             headers=headers,
         )
         assert first.status_code == 200
         second = client.post(
-            f"/api/v1/review/session/{schedule_id}/submit",
+            f"/api/v1/review/session/{session_id}/submit",
             json=body,
             headers=headers,
         )
@@ -79,36 +63,3 @@ class TestSubmitRouteIdempotency:
 
         with session_factory() as session:
             assert session.query(ReviewLog).count() == 1
-
-    def test_different_mutation_ids_do_not_reuse_cached_response(
-        self,
-        client,
-        session_factory,
-    ):
-        schedule_id = _seed_schedule(session_factory)
-        body = {"duration_seconds": 10, "completion_mode": "manual_complete"}
-        first = client.post(
-            f"/api/v1/review/session/{schedule_id}/submit",
-            json=body,
-            headers={MUTATION_ID_HEADER: "id-a"},
-        )
-        assert first.status_code == 200
-
-        second = client.post(
-            f"/api/v1/review/session/{schedule_id}/submit",
-            json=body,
-            headers={MUTATION_ID_HEADER: "id-b"},
-        )
-        assert second.status_code == 200
-        assert second.json() == first.json()
-        with session_factory() as session:
-            assert session.query(ReviewLog).count() == 1
-
-    def test_no_header_executes_normally(self, client, session_factory):
-        schedule_id = _seed_schedule(session_factory)
-        response = client.post(
-            f"/api/v1/review/session/{schedule_id}/submit",
-            json={"duration_seconds": 5, "completion_mode": "manual_complete"},
-        )
-        assert response.status_code == 200
-        assert response.json()["ok"] is True

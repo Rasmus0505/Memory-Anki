@@ -20,7 +20,7 @@ METRIC_TABLES = [
     "palace_segments",
     "palace_mini_palaces",
     "palace_quiz_questions",
-    "review_schedules",
+
     "review_logs",
     "study_sessions",
     "external_ai_call_logs",

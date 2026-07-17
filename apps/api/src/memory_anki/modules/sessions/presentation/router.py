@@ -6,18 +6,14 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceSegment,
-    ReviewSchedule,
 )
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.sessions.application.session_progress_service import (
     clear_practice_progress,
-    clear_review_progress,
     clear_segment_practice_progress,
     get_practice_progress,
-    get_review_progress,
     get_segment_practice_progress,
     upsert_practice_progress,
-    upsert_review_progress,
     upsert_segment_practice_progress,
 )
 from memory_anki.modules.sessions.application.study_session_commands import (
@@ -374,10 +370,9 @@ def api_delete_segment_practice_progress(segment_id: int, session: Session = Dep
 
 @legacy_router.get("/sessions/review/{schedule_id}/progress")
 def api_get_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
-    if not schedule:
-        _raise_not_found()
-    return {"progress": get_review_progress(session, schedule_id)}
+    del schedule_id, session
+    # Legacy ReviewSchedule progress retired; formal review uses /review/session/{id}/progress.
+    _raise_not_found()
 
 
 @legacy_router.put("/sessions/review/{schedule_id}/progress")
@@ -386,20 +381,11 @@ def api_upsert_review_progress(
     data: PracticeProgressUpsert,
     session: Session = Depends(session_dep),
 ):
-    schedule = session.query(ReviewSchedule).filter_by(id=schedule_id).first()
-    if not schedule:
-        _raise_not_found()
-    return {
-        "progress": upsert_review_progress(
-            session,
-            schedule_id,
-            schedule.palace_id,
-            _payload(data),
-        )
-    }
+    del schedule_id, data, session
+    _raise_not_found()
 
 
 @legacy_router.delete("/sessions/review/{schedule_id}/progress")
 def api_delete_review_progress(schedule_id: int, session: Session = Depends(session_dep)):
-    clear_review_progress(session, schedule_id)
-    return {"ok": True}
+    del schedule_id, session
+    _raise_not_found()

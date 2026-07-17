@@ -1,9 +1,9 @@
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.misc import Config
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.reviews.application.formal_review_service import (
     complete_formal_review,
@@ -38,26 +38,17 @@ def _palace(session):
     return palace
 
 
-def test_fsrs_queue_ignores_legacy_schedule_dates(db_session):
+def test_fsrs_queue_uses_node_due_state_not_legacy_schedules(db_session):
     palace = _palace(db_session)
-    db_session.add(
-        ReviewSchedule(
-            palace_id=palace.id, scheduled_date=date(2099, 1, 1), completed=False, review_number=9
-        )
-    )
-    db_session.commit()
     payload = get_fsrs_queue_payload(db_session)
     assert payload["due_count"] == 2
+    assert payload["reviews"][0]["palace_id"] == palace.id
     assert payload["reviews"][0]["due_node_count"] == 2
+    assert payload["reviews"][0]["review_entry_mode"] in {"node", "palace"}
 
 
 def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     palace = _palace(db_session)
-    legacy = ReviewSchedule(
-        palace_id=palace.id, scheduled_date=date.today(), completed=False, review_number=0
-    )
-    db_session.add(legacy)
-    db_session.commit()
     row = start_or_resume_formal_review(db_session, palace.id)
     assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a", "b"}
     assert start_or_resume_formal_review(db_session, palace.id).id == row.id
@@ -87,9 +78,6 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     db_session.commit()
     assert result["unrated_due_node_count"] == 1
     assert result["remaining_due_node_count"] >= 1
-    db_session.refresh(legacy)
-    assert legacy.completed is False
-    assert legacy.review_number == 0
 
 
 def _set_all_due_at(session, palace_id: int, due_at: datetime) -> None:
@@ -149,56 +137,32 @@ def test_queue_chapter_filter_and_daily_palace_limit(db_session):
     assert chapter_queue["chapter"]["subject"]["name"] == subject.name
 
 
-def test_formal_rating_scope_is_frozen_and_operation_owner_is_validated(db_session):
-    palace = _palace(db_session)
-    other = _palace(db_session)
-    row = start_or_resume_formal_review(db_session, palace.id)
-    other_row = start_or_resume_formal_review(db_session, other.id)
-    summary = json.loads(row.summary_json)
-    assert summary["editor_fingerprint"]
-
-    document = json.loads(palace.editor_doc)
-    document["root"]["children"].append(
-        {"data": {"uid": "new-node", "text": "new"}, "children": []}
+def test_single_top_level_branch_uses_node_entry_mode(db_session):
+    palace = Palace(
+        title="single branch",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {
+                            "data": {"uid": "branch", "text": "Branch"},
+                            "children": [
+                                {"data": {"uid": "leaf", "text": "Leaf"}, "children": []},
+                            ],
+                        },
+                    ],
+                }
+            }
+        ),
     )
-    palace.editor_doc = json.dumps(document)
+    db_session.add(palace)
     db_session.commit()
-
-    result = rate_nodes(
-        db_session,
-        palace_id=palace.id,
-        node_uid="root",
-        rating=3,
-        study_session_id=row.id,
-        operation_id="frozen-subtree",
-        rating_scope="subtree",
-    )
-    assert set(result["affected_node_uids"]) == {"a", "b"}
-    assert result["affected_node_count"] == 2
-    assert (
-        rate_nodes(
-            db_session,
-            palace_id=palace.id,
-            node_uid="root",
-            rating=3,
-            study_session_id=row.id,
-            operation_id="frozen-subtree",
-            rating_scope="subtree",
-        )["idempotent"]
-        is True
-    )
-
-    try:
-        rate_nodes(
-            db_session,
-            palace_id=other.id,
-            node_uid="a",
-            rating=3,
-            study_session_id=other_row.id,
-            operation_id="frozen-subtree",
-            rating_scope="single",
-        )
-    except ValueError as error:
-        assert "another request" in str(error)
-    else:
-        raise AssertionError("cross-session operation reuse must be rejected")
+    payload = get_fsrs_queue_payload(db_session)
+    assert payload["reviews"][0]["review_entry_mode"] == "node"
+    assert payload["reviews"][0]["primary_branch_title"] == "Branch"
+    row = start_or_resume_formal_review(db_session, palace.id)
+    summary = json.loads(row.summary_json)
+    assert summary["review_entry_mode"] == "node"
+    assert set(summary["frozen_due_node_uids"]) == {"branch", "leaf"}

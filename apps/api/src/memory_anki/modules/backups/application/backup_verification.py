@@ -17,7 +17,7 @@ KEY_TABLES = [
     "pegs",
     "palace_segments",
     "palace_quiz_questions",
-    "review_schedules",
+
     "review_logs",
     "study_sessions",
     "subjects",

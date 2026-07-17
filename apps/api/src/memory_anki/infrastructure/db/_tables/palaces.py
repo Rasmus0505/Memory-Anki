@@ -93,7 +93,6 @@ class Palace(Base):
     review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     mastered: Mapped[bool] = mapped_column(Boolean, default=False)
-    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     editor_doc: Mapped[str] = mapped_column(Text, default="")
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")
@@ -117,18 +116,8 @@ class Palace(Base):
         back_populates="palace",
         cascade="all, delete-orphan",
     )
-    review_schedules: Mapped[list[ReviewSchedule]] = relationship(
-        "ReviewSchedule",
-        back_populates="palace",
-        cascade="all, delete-orphan",
-    )
     review_logs: Mapped[list[ReviewLog]] = relationship(
         "ReviewLog",
-        back_populates="palace",
-        cascade="all, delete-orphan",
-    )
-    review_stage_adjustments: Mapped[list[ReviewStageAdjustment]] = relationship(
-        "ReviewStageAdjustment",
         back_populates="palace",
         cascade="all, delete-orphan",
     )
@@ -255,7 +244,6 @@ class PalaceSegment(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     color: Mapped[str] = mapped_column(String(24), nullable=False, default="#14b8a6")
     node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
-    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
@@ -286,7 +274,6 @@ class PalaceMiniPalace(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     node_uids_json: Mapped[str] = mapped_column(Text, default="[]")
-    needs_practice: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
@@ -300,42 +287,6 @@ class PalaceMiniPalace(Base):
         "PalaceQuizQuestion",
         back_populates="mini_palace",
     )
-
-
-class ReviewSchedule(Base):
-    __tablename__ = "review_schedules"
-    __table_args__ = (
-        Index(
-            "ix_review_schedules_due_lookup",
-            "completed",
-            "scheduled_date",
-            "scheduled_at",
-            "id",
-        ),
-        Index(
-            "ix_review_schedules_palace_progress",
-            "palace_id",
-            "completed",
-            "review_number",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palaces.id", ondelete="CASCADE"),
-    )
-    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    interval_days: Mapped[int] = mapped_column(Integer, default=0)
-    algorithm_used: Mapped[str] = mapped_column(String(30), default="ebbinghaus")
-    completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    review_number: Mapped[int] = mapped_column(Integer, default=0)
-    review_type: Mapped[str] = mapped_column(String(20), default="standard")
-    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    palace: Mapped[Palace] = relationship("Palace", back_populates="review_schedules")
 
 
 class ReviewLog(Base):
@@ -357,35 +308,6 @@ class ReviewLog(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
-
-
-class ReviewStageAdjustment(Base):
-    __tablename__ = "review_stage_adjustments"
-    __table_args__ = (
-        Index(
-            "ix_review_stage_adjustments_palace_created",
-            "palace_id",
-            "created_at",
-            "id",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palaces.id", ondelete="CASCADE"),
-    )
-    previous_completed_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    target_completed_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    needs_practice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
-
-    palace: Mapped[Palace] = relationship(
-        "Palace",
-        back_populates="review_stage_adjustments",
-    )
 
 
 class SessionProgress(Base):
@@ -430,11 +352,8 @@ class SessionProgress(Base):
         ForeignKey("palaces.id", ondelete="CASCADE"),
         nullable=True,
     )
-    review_schedule_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("review_schedules.id", ondelete="CASCADE"),
-        nullable=True,
-    )
+    # Legacy schedule id retained as optional int without FK (review_schedules dropped).
+    review_schedule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     palace_segment_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("palace_segments.id", ondelete="CASCADE"),

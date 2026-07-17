@@ -3,15 +3,7 @@ from typing import NoReturn
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.palaces.api import (
-    palace_json as palace_detail_json,
-)
-from memory_anki.modules.palaces.api import (
-    palace_review_stages_json,
-)
 from memory_anki.modules.reviews.application.formal_review_service import (
     clear_formal_review_progress,
     complete_formal_review,
@@ -23,6 +15,7 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     get_fsrs_queue_payload,
     resolve_formal_review_session,
     save_formal_review_progress,
+    start_or_resume_formal_review,
 )
 from memory_anki.modules.reviews.application.node_memory_service import (
     get_completion_summary,
@@ -35,15 +28,10 @@ from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
     list_recent_review_notes,
 )
-from memory_anki.modules.reviews.application.schedule_service import (
-    get_algorithm_stage_labels,
-    schedule_display_datetime,
-)
 from memory_anki.modules.reviews.presentation.response_models import (
     MasteryTrendResponse,
     OverdueCountResponse,
     ReviewQueueResponse,
-    ReviewScheduleItem,
     SubmitReviewResponse,
 )
 from memory_anki.platform.application import mutation_identity_from_headers
@@ -57,85 +45,6 @@ router = APIRouter(tags=["review"])
 
 def raise_not_found(message: str = "not found") -> NoReturn:
     raise HTTPException(status_code=404, detail=message)
-
-
-def active_schedule_by_id(session: Session, schedule_id: int) -> ReviewSchedule | None:
-    return (
-        session.query(ReviewSchedule)
-        .join(Palace)
-        .filter(
-            ReviewSchedule.id == schedule_id,
-            Palace.deleted_at.is_(None),
-        )
-        .first()
-    )
-
-
-def chapter_json(chapter: Chapter | None) -> dict | None:
-    if chapter is None:
-        return None
-    return {
-        "id": chapter.id,
-        "name": chapter.name,
-        "subject_id": chapter.subject_id,
-        "subject": (
-            {"id": chapter.subject.id, "name": chapter.subject.name} if chapter.subject else None
-        ),
-    }
-
-
-def schedule_json(schedule: ReviewSchedule, session: Session | None = None) -> dict:
-    palace_data = palace_detail_json(schedule.palace, session) if schedule.palace else None
-    if palace_data and session:
-        stage_labels = get_algorithm_stage_labels(session)
-        palace_data["stage_labels"] = stage_labels
-        palace_data["review_stages"] = palace_review_stages_json(
-            session, schedule.palace, stage_labels
-        )
-    completed_at = schedule.completed_at
-    due_at = (
-        schedule_display_datetime(schedule, schedule.palace, session)
-        if schedule.palace and session
-        else None
-    )
-    return {
-        "id": schedule.id,
-        "palace_id": schedule.palace_id,
-        "scheduled_date": schedule.scheduled_date.isoformat(),
-        "due_at": due_at.isoformat(timespec="minutes") if due_at else None,
-        "interval_days": schedule.interval_days,
-        "algorithm_used": schedule.algorithm_used,
-        "completed": schedule.completed,
-        "completed_at": completed_at.isoformat(timespec="minutes") if completed_at else None,
-        "review_number": schedule.review_number,
-        "review_type": schedule.review_type,
-        "palace": palace_data,
-    }
-
-
-def grouped_schedule_json(group: dict, session: Session | None = None) -> dict:
-    schedule = group["schedule"]
-    return {
-        **schedule_json(schedule, session),
-        "schedule_count": group["schedule_count"],
-        "overdue_schedule_count": group["overdue_schedule_count"],
-        "next_due_date": group["next_due_date"].isoformat(),
-    }
-
-
-def queue_payload_json(payload: dict, session: Session | None = None) -> dict:
-    return {
-        "due_count": payload["due_count"],
-        "later_today_count": payload["later_today_count"],
-        "overdue_count": payload["overdue_count"],
-        "smoothed_count": payload["smoothed_count"],
-        "stats": payload["stats"],
-        "chapter": chapter_json(payload.get("chapter")),
-        "reviews": [grouped_schedule_json(group, session) for group in payload["reviews"]],
-        "later_today_reviews": [
-            grouped_schedule_json(group, session) for group in payload["later_today_reviews"]
-        ],
-    }
 
 
 @router.get("/review/overdue-count", response_model=OverdueCountResponse)
@@ -248,7 +157,23 @@ def api_chapter_queue(chapter_id: int, session: Session = Depends(session_dep)):
     return get_fsrs_queue_payload(session, chapter_id)
 
 
-@router.get("/review/session/{session_id}", response_model=ReviewScheduleItem)
+@router.post("/review/palaces/{palace_id}/sessions")
+def api_start_formal_review_session(palace_id: int, data: dict | None = None, session: Session = Depends(session_dep)):
+    payload = data or {}
+    try:
+        row = start_or_resume_formal_review(
+            session,
+            palace_id,
+            chapter_id=int(payload["chapter_id"]) if payload.get("chapter_id") is not None else None,
+            entry_mode=str(payload.get("entry_mode") or "") or None,
+            branch_uid=str(payload.get("branch_uid") or "") or None,
+        )
+        return formal_review_session_payload(session, row)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/review/session/{session_id}")
 def api_review_session(session_id: str, session: Session = Depends(session_dep)):
     try:
         return formal_review_session_payload(
@@ -338,16 +263,16 @@ def api_reviews(session: Session = Depends(session_dep)):
     return get_fsrs_queue_payload(session)
 
 
-@router.get("/review/{schedule_id}", response_model=ReviewScheduleItem)
-def api_review_item(schedule_id: str, session: Session = Depends(session_dep)):
-    return api_review_session(schedule_id, session)
+@router.get("/review/{session_id}")
+def api_review_item(session_id: str, session: Session = Depends(session_dep)):
+    return api_review_session(session_id, session)
 
 
-@router.post("/review/{schedule_id}/submit", response_model=SubmitReviewResponse)
+@router.post("/review/{session_id}/submit", response_model=SubmitReviewResponse)
 def api_submit(
-    schedule_id: str,
+    session_id: str,
     data: dict,
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    return api_submit_session(schedule_id, data, request, session)
+    return api_submit_session(session_id, data, request, session)

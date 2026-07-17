@@ -4,29 +4,43 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, cast
 
-from fsrs import Card, Rating, Scheduler, State
+from fsrs import Card, Rating, State
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
     ReviewRatingOperation,
     ReviewRatingOperationItem,
 )
+from memory_anki.modules.reviews.application.fsrs_runtime import (
+    DEFAULT_MAXIMUM_INTERVAL,
+    DEFAULT_RETENTION,
+    PARAMETER_VERSION,
+    RATING_LABELS,
+    SCHEDULER_VERSION,
+    VALID_RATINGS,
+    build_scheduler,
+    load_fsrs_settings,
+)
 
-RATING_LABELS = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
-VALID_RATINGS = frozenset(RATING_LABELS)
-SCHEDULER_VERSION = "fsrs-6.3.1"
-PARAMETER_VERSION = "default"
-DEFAULT_RETENTION = 0.9
-DEFAULT_MAXIMUM_INTERVAL = 180
-MASTERY_HORIZON_DAYS = 60
+# Re-export for existing imports/tests.
+__all__ = [
+    "RATING_LABELS",
+    "VALID_RATINGS",
+    "get_completion_summary",
+    "get_palace_mastery_trend",
+    "get_palace_memory_projection",
+    "list_due_nodes",
+    "rate_nodes",
+    "undo_rating_operation",
+]
 
 
 def _utc_now() -> datetime:
@@ -46,43 +60,21 @@ def _aware(value: datetime | None) -> datetime | None:
 
 
 def _schedule_settings(session: Session | None = None) -> tuple[float, int, int]:
-    retention = DEFAULT_RETENTION
-    maximum_interval = DEFAULT_MAXIMUM_INTERVAL
-    horizon = MASTERY_HORIZON_DAYS
-    if session is not None:
-        keys = ["desired_retention", "maximum_interval", "mastery_horizon_days"]
-        values = {
-            row.key: row.value for row in session.query(Config).filter(Config.key.in_(keys)).all()
-        }
-        try:
-            retention = float(values.get("desired_retention", retention))
-        except (TypeError, ValueError):
-            pass
-        try:
-            maximum_interval = int(values.get("maximum_interval", maximum_interval))
-        except (TypeError, ValueError):
-            pass
-        try:
-            horizon = int(values.get("mastery_horizon_days", horizon))
-        except (TypeError, ValueError):
-            pass
-    return retention, maximum_interval, horizon
+    settings = load_fsrs_settings(session)
+    return (
+        float(settings["desired_retention"]),
+        int(settings["maximum_interval"]),
+        int(settings["mastery_horizon_days"]),
+    )
 
 
 def _scheduler(
     session: Session | None = None,
     retention: float | None = None,
     maximum_interval: int | None = None,
-) -> Scheduler:
-    configured_retention, configured_maximum, _ = _schedule_settings(session)
-    retention = configured_retention if retention is None else retention
-    maximum_interval = configured_maximum if maximum_interval is None else maximum_interval
-    return Scheduler(
-        desired_retention=retention,
-        maximum_interval=maximum_interval,
-        learning_steps=(timedelta(minutes=10), timedelta(hours=1)),
-        relearning_steps=(timedelta(minutes=10), timedelta(hours=1)),
-        enable_fuzzing=False,
+):
+    return build_scheduler(
+        session, retention=retention, maximum_interval=maximum_interval
     )
 
 
@@ -90,6 +82,12 @@ def _node_uid(raw: dict[str, Any], fallback: str) -> str:
     value = raw.get("data")
     data: dict[str, Any] = value if isinstance(value, dict) else {}
     return str(data.get("uid") or data.get("memoryAnkiId") or fallback).strip()
+
+
+def _node_text(raw: dict[str, Any]) -> str:
+    value = raw.get("data")
+    data: dict[str, Any] = value if isinstance(value, dict) else {}
+    return str(data.get("text") or "").strip()
 
 
 def _content_fingerprint(raw: dict[str, Any]) -> str:
@@ -124,12 +122,74 @@ def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
             "uid": uid,
             "parent_uid": parent_uid,
             "children": children,
+            "text": _node_text(raw),
             "content_fingerprint": _content_fingerprint(raw),
         }
         return uid
 
     root_uid = walk(root, None, "root")
     return root_uid, result
+
+
+def _top_level_branch_uid(
+    nodes: dict[str, dict[str, Any]], root_uid: str | None, node_uid: str
+) -> str | None:
+    if root_uid is None or node_uid == root_uid:
+        return None
+    current = node_uid
+    while current and current in nodes:
+        parent = nodes[current].get("parent_uid")
+        if parent == root_uid:
+            return current
+        if parent is None:
+            return current if current != root_uid else None
+        current = parent
+    return None
+
+
+def _entry_mode_payload(
+    *,
+    root_uid: str | None,
+    nodes: dict[str, dict[str, Any]],
+    due_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    due_uids = [item["node_uid"] for item in due_items]
+    branch_uids: list[str] = []
+    seen: set[str] = set()
+    for uid in due_uids:
+        branch = _top_level_branch_uid(nodes, root_uid, uid)
+        if branch and branch not in seen:
+            seen.add(branch)
+            branch_uids.append(branch)
+    count = len(due_uids)
+    if count == 0:
+        return {
+            "review_entry_mode": "none",
+            "review_entry_label": None,
+            "primary_branch_uid": None,
+            "primary_branch_title": None,
+            "due_branch_count": 0,
+            "due_node_uids": [],
+        }
+    if len(branch_uids) == 1:
+        branch_uid = branch_uids[0]
+        title = str(nodes.get(branch_uid, {}).get("text") or "未命名节点").strip() or "未命名节点"
+        return {
+            "review_entry_mode": "node",
+            "review_entry_label": f"节点复习 · {count}",
+            "primary_branch_uid": branch_uid,
+            "primary_branch_title": title,
+            "due_branch_count": 1,
+            "due_node_uids": due_uids,
+        }
+    return {
+        "review_entry_mode": "palace",
+        "review_entry_label": f"开始复习 · {count}",
+        "primary_branch_uid": None,
+        "primary_branch_title": None,
+        "due_branch_count": len(branch_uids),
+        "due_node_uids": due_uids,
+    }
 
 
 def _descendants(nodes: dict[str, dict[str, Any]], uid: str) -> list[str]:
@@ -326,9 +386,12 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
             )
             due_at = _aware(row.due_at) if row else now
             state_source = row.state_source if row else "new"
+        branch_uid = _top_level_branch_uid(nodes, root_uid, uid)
         details.append(
             {
                 "node_uid": uid,
+                "text": nodes[uid].get("text") or "",
+                "branch_uid": branch_uid,
                 "stability_days": round(stability, 3),
                 "retrievability": round(max(0.0, min(retrievability, 1.0)), 4),
                 "due_at": due_at.isoformat() if due_at else None,
@@ -349,6 +412,7 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
     severe = sum(1 for item in details if item["rating"] == 1)
     mastered_count = sum(1 for item in details if item["stability_days"] >= mastery_horizon_days)
     next_due = min((item["due_at"] for item in details if item["due_at"]), default=None)
+    entry = _entry_mode_payload(root_uid=root_uid, nodes=nodes, due_items=due_items)
     return {
         "palace_id": palace.id,
         "node_count": total,
@@ -365,8 +429,34 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
         "next_review_at": next_due,
         "mastered": total > 0 and mastered_count / total >= 0.9 and severe == 0,
         "severe_weak_node_count": severe,
+        "has_due_review": len(due_items) > 0,
+        **entry,
         "nodes": details,
     }
+
+
+def due_node_uids_for_entry(
+    session: Session,
+    palace_id: int,
+    *,
+    entry_mode: str | None = None,
+    branch_uid: str | None = None,
+) -> list[str]:
+    """Resolve frozen due UIDs for formal review entry (palace or single top-level branch)."""
+    projection = get_palace_memory_projection(session, palace_id)
+    mode = entry_mode or projection.get("review_entry_mode") or "none"
+    if mode == "none" or not projection.get("due_node_uids"):
+        return []
+    if mode == "node":
+        target_branch = branch_uid or projection.get("primary_branch_uid")
+        if not target_branch:
+            return list(projection["due_node_uids"])
+        return [
+            item["node_uid"]
+            for item in projection["nodes"]
+            if item.get("due") and item.get("branch_uid") == target_branch
+        ]
+    return list(projection["due_node_uids"])
 
 
 def get_palace_memory_projection(session: Session, palace_id: int) -> dict[str, Any]:
@@ -515,9 +605,13 @@ def rate_nodes(
         before = _state_dict(row)
         before_rating = _latest_rating(session, palace_id, uid)
         fingerprint = nodes[uid]["content_fingerprint"]
-        if row and row.content_fingerprint != fingerprint:
-            row = None
-        card = _card_from_state(row, card_id=_card_id(palace_id, uid))
+        # Content edit invalidates prior schedule, but the unique key is still
+        # (palace_id, node_uid). Keep the existing row and start a fresh card
+        # instead of INSERT (which raised IntegrityError → HTTP 500).
+        schedule_row = (
+            row if row is not None and row.content_fingerprint == fingerprint else None
+        )
+        card = _card_from_state(schedule_row, card_id=_card_id(palace_id, uid))
         card, _log = scheduler.review_card(card, Rating(rating), review_datetime=_utc_now())
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)

@@ -214,3 +214,59 @@ def test_subtree_overwrite_replaces_child_direct_rating(db_session):
     assert set(result["affected_node_uids"]) == {"a", "a1"}
     after_child = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a1").one()
     assert after_child.stability != before_stability or after_child.difficulty != before_child.difficulty
+
+
+def test_content_fingerprint_change_reuses_existing_node_state(db_session):
+    """Edited node text must not INSERT a second review_node_states row (UNIQUE crash → HTTP 500)."""
+    palace = _palace(db_session)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id="s-fp",
+        operation_id="op-fp-1",
+        rating_scope="subtree",
+        source_scene="practice",
+    )
+    states_before = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id)
+        .order_by(ReviewNodeState.node_uid)
+        .all()
+    )
+    assert {row.node_uid for row in states_before} == {"a", "a1"}
+    old_ids = {row.node_uid: row.id for row in states_before}
+
+    document = json.loads(palace.editor_doc or "{}")
+    for node in document["root"]["children"]:
+        if node["data"]["uid"] == "a":
+            node["data"]["text"] = "A edited"
+            for child in node.get("children") or []:
+                if child["data"]["uid"] == "a1":
+                    child["data"]["text"] = "A1 edited"
+    palace.editor_doc = json.dumps(document)
+    db_session.commit()
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=4,
+        study_session_id="s-fp",
+        operation_id="op-fp-2",
+        rating_scope="subtree",
+        source_scene="practice",
+    )
+    assert set(result["affected_node_uids"]) == {"a", "a1"}
+    states_after = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id)
+        .order_by(ReviewNodeState.node_uid)
+        .all()
+    )
+    assert len(states_after) == 2
+    for row in states_after:
+        assert row.id == old_ids[row.node_uid]
+        assert row.content_fingerprint  # refreshed after content edit
+        assert row.state_source == "manual"

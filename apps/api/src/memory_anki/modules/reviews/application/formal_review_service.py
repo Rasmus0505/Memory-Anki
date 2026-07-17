@@ -13,10 +13,11 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 from memory_anki.infrastructure.db._tables.misc import Config, StudySession
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog, ReviewSchedule
+from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 from memory_anki.infrastructure.db._tables.reviews import ReviewRatingOperation
 from memory_anki.modules.reviews.application.node_memory_service import (
     RATING_LABELS,
+    due_node_uids_for_entry,
     get_palace_memory_projection,
 )
 
@@ -71,11 +72,16 @@ def _palace_payload(palace: Palace) -> dict[str, Any]:
 
 
 def _queue_item(
-    session: Session, palace: Palace, nodes: list[dict[str, Any]], now: datetime
+    session: Session,
+    palace: Palace,
+    nodes: list[dict[str, Any]],
+    now: datetime,
+    projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     times = [parsed for item in nodes if (parsed := _dt(item.get("due_at"))) is not None]
     next_due = min(times).isoformat() if times else None
     overdue = sum(1 for item in times if item < now)
+    projection = projection or {}
     return {
         "id": palace.id,
         "palace_id": palace.id,
@@ -93,6 +99,11 @@ def _queue_item(
         "schedule_count": len(nodes),
         "overdue_schedule_count": overdue,
         "next_due_date": next_due[:10] if next_due else now.date().isoformat(),
+        "review_entry_mode": projection.get("review_entry_mode") or "palace",
+        "review_entry_label": projection.get("review_entry_label"),
+        "primary_branch_uid": projection.get("primary_branch_uid"),
+        "primary_branch_title": projection.get("primary_branch_title"),
+        "due_branch_count": projection.get("due_branch_count") or 0,
         "palace": _palace_payload(palace),
     }
 
@@ -102,7 +113,8 @@ def get_fsrs_queue_payload(session: Session, chapter_id: int | None = None) -> d
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
     due, later = [], []
     for palace in _palaces(session, chapter_id):
-        nodes = get_palace_memory_projection(session, palace.id)["nodes"]
+        projection = get_palace_memory_projection(session, palace.id)
+        nodes = projection["nodes"]
         due_nodes = [item for item in nodes if item.get("due")]
         later_nodes = [
             item
@@ -110,9 +122,9 @@ def get_fsrs_queue_payload(session: Session, chapter_id: int | None = None) -> d
             if not item.get("due") and (at := _dt(item.get("due_at"))) and now < at < tomorrow
         ]
         if due_nodes:
-            due.append(_queue_item(session, palace, due_nodes, now))
+            due.append(_queue_item(session, palace, due_nodes, now, projection))
         elif later_nodes:
-            later.append(_queue_item(session, palace, later_nodes, now))
+            later.append(_queue_item(session, palace, later_nodes, now, projection))
     due.sort(key=lambda item: (item["next_due_at"] or "", item["palace_id"]))
     later.sort(key=lambda item: (item["next_due_at"] or "", item["palace_id"]))
     overdue_count = sum(item["overdue_node_count"] for item in due)
@@ -199,7 +211,12 @@ def get_formal_review_scope(
 
 
 def start_or_resume_formal_review(
-    session: Session, palace_id: int, *, chapter_id: int | None = None
+    session: Session,
+    palace_id: int,
+    *,
+    chapter_id: int | None = None,
+    entry_mode: str | None = None,
+    branch_uid: str | None = None,
 ) -> StudySession:
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None or palace.archived:
@@ -217,11 +234,16 @@ def start_or_resume_formal_review(
     )
     if active is not None:
         return active
-    frozen = [
-        item["node_uid"]
-        for item in get_palace_memory_projection(session, palace_id)["nodes"]
-        if item["due"]
-    ]
+    projection = get_palace_memory_projection(session, palace_id)
+    resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
+    if resolved_mode == "none":
+        raise ValueError("palace has no due FSRS nodes")
+    frozen = due_node_uids_for_entry(
+        session,
+        palace_id,
+        entry_mode=resolved_mode if resolved_mode in {"node", "palace"} else "palace",
+        branch_uid=branch_uid or projection.get("primary_branch_uid"),
+    )
     if not frozen:
         raise ValueError("palace has no due FSRS nodes")
     row = StudySession(
@@ -239,6 +261,16 @@ def start_or_resume_formal_review(
             {
                 "frozen_due_node_uids": frozen,
                 "chapter_id": chapter_id,
+                "review_entry_mode": resolved_mode,
+                "primary_branch_uid": (
+                    branch_uid or projection.get("primary_branch_uid")
+                    if resolved_mode == "node"
+                    else None
+                ),
+                "primary_branch_title": (
+                    projection.get("primary_branch_title") if resolved_mode == "node" else None
+                ),
+                "review_entry_label": projection.get("review_entry_label"),
                 "editor_fingerprint": hashlib.sha256(
                     (palace.editor_doc or "").encode("utf-8")
                 ).hexdigest(),
@@ -256,11 +288,9 @@ def resolve_formal_review_session(session: Session, identifier: str) -> StudySes
     row = session.get(StudySession, identifier)
     if row is not None and row.scene == "review" and row.deleted_at is None:
         return row
+    # Digit ids are palace ids (legacy schedule ids are no longer accepted).
     if identifier.isdigit():
-        legacy = session.get(ReviewSchedule, int(identifier))
-        return start_or_resume_formal_review(
-            session, legacy.palace_id if legacy is not None else int(identifier)
-        )
+        return start_or_resume_formal_review(session, int(identifier))
     raise ValueError("formal review session not found")
 
 
@@ -270,6 +300,8 @@ def formal_review_session_payload(session: Session, row: StudySession) -> dict[s
         raise ValueError("palace not found")
     summary = _json(row.summary_json)
     frozen = _scope(row)
+    projection = get_palace_memory_projection(session, palace.id)
+    entry_mode = summary.get("review_entry_mode") or projection.get("review_entry_mode") or "palace"
     return {
         "id": row.id,
         "session_id": row.id,
@@ -280,7 +312,12 @@ def formal_review_session_payload(session: Session, row: StudySession) -> dict[s
         "frozen_due_node_uids": frozen,
         "due_node_count": len(frozen),
         "chapter_id": summary.get("chapter_id"),
-        "memory_summary": get_palace_memory_projection(session, palace.id),
+        "review_entry_mode": entry_mode,
+        "review_entry_label": summary.get("review_entry_label")
+        or projection.get("review_entry_label"),
+        "primary_branch_uid": summary.get("primary_branch_uid"),
+        "primary_branch_title": summary.get("primary_branch_title"),
+        "memory_summary": projection,
         "palace": _palace_payload(palace),
     }
 
