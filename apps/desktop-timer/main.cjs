@@ -27,6 +27,24 @@ function writeDesktopReady() {
 }
 
 if (!hasSingleInstanceLock) {
+  // Another desktop is already running (and will focus via 'second-instance').
+  // Still write the ready file so a second start-desktop.bat can detach cleanly
+  // instead of treating this intentional exit as "Desktop startup failed".
+  if (READY_FILE) {
+    try {
+      fs.mkdirSync(path.dirname(READY_FILE), { recursive: true })
+      fs.writeFileSync(
+        READY_FILE,
+        JSON.stringify({
+          readyAt: new Date().toISOString(),
+          pid: process.pid,
+          reusedExistingInstance: true,
+        }),
+      )
+    } catch {
+      // Best-effort signal for the launcher; focus still happens in the first instance.
+    }
+  }
   app.quit()
 } else {
   app.on('second-instance', () => {

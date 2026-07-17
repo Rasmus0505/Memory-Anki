@@ -100,6 +100,14 @@ def main() -> int:
                 return 0
             return_code = process.poll()
             if return_code is not None:
+                # Process may exit in the same tick the ready file is written
+                # (common when reusing an existing single-instance desktop).
+                if ready_path.is_file():
+                    log(
+                        f"Desktop window ready after {time.perf_counter() - started_at:.2f}s"
+                        " (ready signal after process exit)"
+                    )
+                    return 0
                 log(f"Desktop exited before ready with code {return_code}")
                 return int(return_code or 1)
             time.sleep(0.2)

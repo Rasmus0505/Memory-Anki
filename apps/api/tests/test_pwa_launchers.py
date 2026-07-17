@@ -480,11 +480,14 @@ def test_desktop_launcher_detaches_after_electron_ready_signal():
     assert 'env["MEMORY_ANKI_DESKTOP_READY_FILE"]' in desktop_timer
     assert "process = subprocess.Popen(" in desktop_timer
     assert "ready_path.is_file()" in desktop_timer
+    assert "ready signal after process exit" in desktop_timer
     assert 'log_file = log_path.open("a", encoding="utf-8")' in desktop_timer
     assert "log_file.close()" in desktop_timer
     assert "subprocess.run(" not in desktop_timer
     assert "MEMORY_ANKI_DESKTOP_READY_FILE" in electron_main
     assert "writeDesktopReady()" in electron_main
+    assert "reusedExistingInstance" in electron_main
+    assert "hasSingleInstanceLock" in electron_main
 
 
 def test_shared_backend_never_inherits_launcher_diagnostic_pipe():
