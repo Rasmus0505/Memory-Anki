@@ -37,4 +37,4 @@ The projection does not replace the existing review scheduler. AI may evaluate o
 
 The current evidence contract uses four direct ratings: `1=忘记`, `2=困难`, `3=记得`, `4=轻松`. Subtree operations append one event per affected non-root node; the selected node is `direct`, descendants are `batch_inherited`, and every event carries a stable operation identity and scope. A later single-node event supersedes the effective rating for that node without rewriting history.
 
-Reviews consumes this public evidence capability and owns FSRS state, scheduling, due queues, and palace-level projections. Legacy Ebbinghaus schedules and logs remain queryable for audit and migration provenance, but are not the source of bookshelf progress or new node scheduling.
+Reviews consumes this public evidence capability and owns FSRS state, scheduling, due queues, and palace-level projections. Legacy Ebbinghaus schedules were dropped by migration `0039`; formal review and vocabulary scheduling are FSRS-only.

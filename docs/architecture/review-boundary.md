@@ -8,9 +8,10 @@ The review context owns scheduling, queue selection, progress, and review submis
 reviews.application -> mindmap_document.api
 reviews.presentation -> palaces.api (response composition only)
 palaces application/presentation -> reviews.api
+knowledge.application -> reviews.api (read-only FSRS projections on chapter palace cards)
 ```
 
-`reviews.application` must not import the palace context. Generic mind-map traversal belongs to the pure `mindmap_document` context. Palace response composition remains in presentation and crosses the context through `palaces.api`.
+`reviews.application` must not import the palace context. Generic mind-map traversal belongs to the pure `mindmap_document` context. Palace response composition remains in presentation and crosses the context through `palaces.api`. Knowledge may read public FSRS projections only.
 
 ## Read Invariants
 
@@ -20,9 +21,9 @@ palaces application/presentation -> reviews.api
 
 The remaining `palaces -> reviews` dependency is explicit and restricted to the public `reviews.api` facade. Future slices may replace read-heavy calls with precomputed projections, but private review application modules are not cross-context APIs.
 
-## Legacy review audit ownership
+## Legacy review tables retired
 
-Legacy `ReviewSchedule`, stage-adjustment audit rows, and Ebbinghaus configuration remain persisted only for migration inspection. They are not repaired during startup, exposed through normal runtime APIs, or rebuilt by formal completion. Any future migration tooling must be an explicit offline/maintenance command and must not be reachable from the review UI.
+`ReviewSchedule`, stage-adjustment rows, and Ebbinghaus schedule configuration are dropped by migration `0039_unify_fsrs_drop_legacy_schedules`. Runtime code must not import or rebuild them. Old schedule history is discarded by product decision; formal review and vocabulary scheduling are FSRS-only.
 
 ## Review mutation commands
 
@@ -43,16 +44,23 @@ Manual stage adjustment, stage reset, stage-health repair, and overdue spreading
 
 Reviews now owns an independent FSRS card for every non-root palace node, keyed by `palace_id + node_uid`. The root node is a batch-rating entry point and is excluded from progress and scheduling. The public Reviews facade exposes projection, four-level rating, subtree rating, undo, due-node listing, and completion-summary capabilities.
 
-Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Legacy stage schedules remain audit data only during migration.
+Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo.
 
-Formal review, palace practice, and learning-group practice must use the same node-state key. A review session freezes its due-node scope on entry; ratings that create new due nodes are deferred to the next session.
+Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
+
+Entry UX is derived from due-node top-level branch coverage:
+- one top-level branch due → `review_entry_mode=node` / label `节点复习 · N`
+- multiple top-level branches due → `review_entry_mode=palace` / label `开始复习 · N`
+- none due → `none`
+
+A formal session freezes its due-node UID scope on entry (whole palace or single branch). Ratings that create new due nodes are deferred to the next session.
 
 ## FSRS formal review runtime
 
-Formal review runtime scheduling is exclusively derived from `ReviewNodeState.due_at`. Queue, overdue count, later-today grouping, and load forecasting must not read `ReviewSchedule`; that table and stage-adjustment history are migration audit data only.
+Formal review runtime scheduling is exclusively derived from `ReviewNodeState.due_at`. Queue, overdue count, later-today grouping, and load forecasting read node projections only.
 
 Entering a formal review creates or resumes an active UUID `StudySession` and freezes the due-node UID scope. Formal subtree ratings intersect that scope. Nodes added later are deferred, deleted nodes drop out of completion counts, and unrated nodes remain unchanged and due.
 
-Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time. Completion must never rebuild legacy stage schedules or write `target_review_number` / `needs_practice` progress controls.
+Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time.
 
-The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. User-facing stage selectors, stage progress bars, manual stage adjustment, and overdue date spreading are retired.
+The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. Catalog CTAs prefer backend `review_entry_label` when due.

@@ -8,9 +8,12 @@ Knowledge owns subjects, chapters, chapter trees, and subject mind-map documents
 knowledge.application -> mindmap_document.api
 knowledge.application -> palaces.api
 knowledge.application -> backups.api
+knowledge.application -> reviews.api (read-only FSRS projections for chapter palace cards)
 ```
 
 Knowledge invokes the single `update_palace_chapter_binding` public command instead of coordinating Palace link expansion and reconciliation itself. Read endpoints never reconcile bindings; inconsistent state remains observable until an explicit write or maintenance command repairs it.
+
+Chapter palace list cards may call `reviews.api.get_palace_memory_projection` for due counts, mastery, and next due time. Knowledge must not import private review application modules or mutate FSRS state.
 
 `ChapterCreate` and `ChapterUpdate` belong to Knowledge request contracts and must not be defined in Palace domain schemas. Rolling backup triggering is an explicit post-commit capability exported by `backups.api`.
 

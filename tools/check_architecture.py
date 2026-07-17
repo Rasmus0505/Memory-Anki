@@ -227,6 +227,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     "0028_remove_focus_practice.py": (
         "Explicitly retires the removed focus-practice field after deleting its obsolete progress rows."
     ),
+    "0039_unify_fsrs_drop_legacy_schedules.py": (
+        "Retires ReviewSchedule/stage tables and Ebbinghaus history; formal review and vocabulary are FSRS-only."
+    ),
 }
 REQUIRED_STORAGE_KEYS = {
     "database",

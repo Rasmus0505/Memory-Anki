@@ -83,6 +83,12 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 可最小化的业务入口浮层应使用稳定 `floatingId`；需要每次显式打开完整窗口时使用 `expandOnOpen`，避免持久化胶囊状态让入口看似失效。
 - 需要持续与背景内容交互的非模态工作台应设置 `dismissOnInteractOutside={false}`，只通过显式关闭按钮或 Escape 退出；焦点归还和背景点击不得改变业务 open 状态。
 
+## 知识重点黄底标记
+
+- AI 转脑图可在节点上返回可选 `emphasis_marks: [{ kind: "highlight", text: "原文子串" }]`；用户在 AI 运行配置中填写“重点标记线索”（如带有下划线的文字），未填写时不强制识别。
+- 服务端将 marks / `rich_text_html` 归一为带 `data-emphasis="highlight"` 的黄底 HTML，写入 `data.text` 并置 `data.richText`。
+- 画布展示安全 HTML；编辑态选中文字可 toggle 黄色底色（再点取消）。产品语义是知识重点，不复刻教材下划线样式。
+
 ## 图片与 PDF 导入边界
 
 - 新图片任务统一使用 `image-batch`；一张和多张图片都先进入可排序、可删除的图片队列，再由用户显式开始识别。`image-single` 只用于兼容读取旧历史。

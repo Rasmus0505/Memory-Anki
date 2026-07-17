@@ -116,7 +116,8 @@
       "knowledge": [
         "backups",
         "mindmap_document",
-        "palaces"
+        "palaces",
+        "reviews"
       ],
       "palace_quiz": [
         "backups",
@@ -160,8 +161,6 @@
       "modules/palaces/application/palace_template_service.py",
       "modules/palaces/application/segment_management_service.py",
       "modules/palace_quiz/application/question_mutation_commands.py",
-      "modules/reviews/application/review_commands.py",
-      "modules/reviews/application/review_repair_service.py",
       "modules/sessions/application/study_session_commands.py"
     ]
   },
