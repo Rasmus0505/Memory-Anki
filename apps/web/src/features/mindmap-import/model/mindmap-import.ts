@@ -6,6 +6,10 @@ import type {
   MindMapImportSourceTree,
 } from '@/shared/api/contracts'
 import { formatKnowledgeImportError } from '@/entities/knowledge-import/model/importError'
+import {
+  applyEmphasisMarksToHtml,
+  sanitizeMindMapRichHtml,
+} from '@/shared/lib/mindmapRichText'
 
 export interface ImportHistoryItem {
   id: string
@@ -115,12 +119,16 @@ function createNodeUid() {
 }
 
 function buildDocNodeFromSourceNode(node: MindMapImportSourceNode): MindMapDocNode {
+  const plain = node.text || ''
+  const fromMarks = applyEmphasisMarksToHtml(plain, node.emphasis_marks)
+  const richHtml = sanitizeMindMapRichHtml(node.rich_text_html) || fromMarks
   const data: MindMapDocNode['data'] = {
     uid: createNodeUid(),
-    text: node.rich_text_html || node.text || '',
+    text: richHtml || plain,
   }
-  if (node.rich_text_html) {
+  if (richHtml) {
     data.richText = true
+    data.text = richHtml
   }
   return {
     data,

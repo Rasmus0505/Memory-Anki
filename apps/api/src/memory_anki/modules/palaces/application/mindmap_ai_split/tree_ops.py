@@ -268,7 +268,8 @@ def coerce_add_children_from_replacement_nodes(
         if uid:
             existing_by_uid[uid] = source_ref
             existing_by_uid[f"uid:{uid}"] = source_ref
-        node = child.get("node") if isinstance(child.get("node"), dict) else {}
+        raw_node = child.get("node")
+        node: dict[str, Any] = raw_node if isinstance(raw_node, dict) else {}
         data = ensure_dict(node.get("data"))
         text = plain_text(data.get("text"), fallback="").strip()
         if text:

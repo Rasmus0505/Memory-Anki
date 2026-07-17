@@ -14,7 +14,7 @@ export interface MindMapImportSourceNode {
   text: string
   rich_text_html?: string
   emphasis_marks?: Array<{
-    kind: 'underline' | 'wavy-underline'
+    kind: 'highlight' | 'underline' | 'wavy-underline'
     text: string
   }>
   children: MindMapImportSourceNode[]
