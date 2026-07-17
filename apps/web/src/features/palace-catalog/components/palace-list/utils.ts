@@ -173,6 +173,9 @@ export function getReviewActionLabel(
     loading?: boolean
     isSleepReview?: boolean
     unscheduledLabel?: string
+    /** Backend FSRS entry label, e.g. "节点复习 · 3" or "开始复习 · 5". */
+    entryLabel?: string | null
+    entryMode?: 'none' | 'node' | 'palace' | null
   } = {},
 ): string {
   const {
@@ -180,12 +183,18 @@ export function getReviewActionLabel(
     loading = false,
     isSleepReview = false,
     unscheduledLabel = '未排入复习',
+    entryLabel = null,
+    entryMode = null,
   } = options
 
   if (loading) return '加载中...'
   if (isSleepReview) return '睡前复习'
   if (state === 'practice') return '练习'
-  if (state === 'due_now') return '开始复习'
+  if (state === 'due_now') {
+    if (entryLabel && entryLabel.trim()) return entryLabel.trim()
+    if (entryMode === 'node') return '节点复习'
+    return '开始复习'
+  }
   if (state === 'unscheduled') return unscheduledLabel
   if (state === 'due_later_today') {
     const target = value ? parseApiDateTime(value) : null

@@ -61,19 +61,19 @@ import {
 export function PalaceMemoryLookupDialog({
   open,
   onOpenChange,
-  currentPalaceId,
+  currentPalaceId = null,
   followCurrentPalace = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  currentPalaceId: number
+  currentPalaceId?: number | null
   followCurrentPalace?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>(createEmptyGroupedData)
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
-  const [selectedPalaceId, setSelectedPalaceId] = useState<number | null>(currentPalaceId)
+  const [selectedPalaceId, setSelectedPalaceId] = useState<number | null>(currentPalaceId ?? null)
   const [previewTitle, setPreviewTitle] = useState('')
   const [previewState, setPreviewState] = useState<MindMapEditorState | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -189,11 +189,17 @@ export function PalaceMemoryLookupDialog({
         setGroupedData(data)
         const flattened = flattenPalaces(data)
         setSelectedPalaceId((current) => {
-          if (followCurrentPalace && flattened.some((palace) => palace.id === currentPalaceId)) {
+          if (
+            currentPalaceId != null
+            && followCurrentPalace
+            && flattened.some((palace) => palace.id === currentPalaceId)
+          ) {
             return currentPalaceId
           }
           if (current && flattened.some((palace) => palace.id === current)) return current
-          if (flattened.some((palace) => palace.id === currentPalaceId)) return currentPalaceId
+          if (currentPalaceId != null && flattened.some((palace) => palace.id === currentPalaceId)) {
+            return currentPalaceId
+          }
           return flattened[0]?.id ?? null
         })
       } catch (error) {

@@ -62,7 +62,7 @@ describe('AppShell residency navigation memory', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns to the last palace child route and keeps the cached page instance alive', async () => {
+  it('keeps the create nav fixed on /palaces/new instead of reopening the last edited palace', async () => {
     render(
       <MemoryRouter initialEntries={['/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit']}>
         <AppShell>
@@ -87,18 +87,13 @@ describe('AppShell residency navigation memory', () => {
 
     fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit')).toBeTruthy()
-      expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('true')
+      expect(screen.getByTestId('page:/palaces/new').getAttribute('data-active')).toBe('true')
     })
 
-    expect((screen.getByLabelText('input:/palaces/30/edit') as HTMLInputElement).value).toBe(
-      'persisted palace state',
-    )
     expect((screen.getByLabelText('input:/freestyle') as HTMLInputElement).value).toBe(
       'persisted english state',
     )
-    expect(screen.getAllByRole('link', { name: '创建' })[1]?.getAttribute('href')).toBe(
-      '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
-    )
+    expect(screen.getAllByRole('link', { name: '创建' })[0]?.getAttribute('href')).toBe('/palaces/new')
+    expect(screen.getAllByRole('link', { name: '创建' })[1]?.getAttribute('href')).toBe('/palaces/new')
   })
 })

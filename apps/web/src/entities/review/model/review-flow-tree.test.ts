@@ -2,14 +2,104 @@ import { describe, expect, it } from 'vitest'
 import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
 import {
   advanceRevealStateForNodeClick,
+  applyQuestionCardAutoReveal,
   buildInitialRevealState,
   buildReviewTree,
   buildVisibleEditorState,
   flattenNodes,
+  hideRevealStateBranch,
   parseEditorDoc,
 } from './review-flow-tree'
 
 describe('review-flow-tree visible editor state', () => {
+  it('preserves yellow emphasis markup on revealed cards in review/practice projections', () => {
+    const highlighted =
+      '<div><span data-emphasis="highlight" style="background-color:#fef08c;color:inherit">重点概念</span></div>'
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: {
+              text: highlighted,
+              uid: 'child-highlight',
+              richText: true,
+            },
+            children: [],
+          },
+          { data: { text: 'Plain child', uid: 'child-plain' }, children: [] },
+        ],
+      },
+    }
+    const editorState: MindMapEditorState = {
+      editor_doc: sourceDoc,
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+    const parsedDoc = parseEditorDoc(editorState.editor_doc)
+    const root = buildReviewTree(parsedDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+
+    const visibleState = buildVisibleEditorState(
+      editorState,
+      parsedDoc,
+      {
+        root: 'revealed',
+        'child-highlight': 'revealed',
+        'child-plain': 'placeholder',
+      },
+      nodeMap,
+      'Root',
+      new Set(),
+    )
+    const visibleDoc = visibleState.editor_doc as MindMapDoc
+    const highlightedNode = visibleDoc.root?.children?.find(
+      (node) => node.data?.uid === 'child-highlight',
+    )
+    const placeholderNode = visibleDoc.root?.children?.find(
+      (node) => node.data?.uid === 'child-plain',
+    )
+
+    expect(String(highlightedNode?.data?.text)).toContain('data-emphasis="highlight"')
+    expect(String(highlightedNode?.data?.text)).toContain('重点概念')
+    expect(highlightedNode?.data?.richText).toBe(true)
+    expect(placeholderNode?.data?.text).toBe('待回忆')
+    // Source document must stay untouched.
+    expect(String(sourceDoc.root?.children?.[0]?.data?.text)).toContain('data-emphasis="highlight"')
+  })
+
+  it('restores richText flag from markup alone when source flag is missing', () => {
+    const highlighted =
+      '<div><span data-emphasis="highlight" style="background-color:#fef08c;color:inherit">只有标记</span></div>'
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [{ data: { text: highlighted, uid: 'only-markup' }, children: [] }],
+      },
+    }
+    const editorState: MindMapEditorState = {
+      editor_doc: sourceDoc,
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+    const parsedDoc = parseEditorDoc(editorState.editor_doc)
+    const root = buildReviewTree(parsedDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const visibleState = buildVisibleEditorState(
+      editorState,
+      parsedDoc,
+      { root: 'revealed', 'only-markup': 'revealed' },
+      nodeMap,
+      'Root',
+      new Set(),
+    )
+    const node = (visibleState.editor_doc as MindMapDoc).root?.children?.[0]
+    expect(String(node?.data?.text)).toContain('data-emphasis="highlight"')
+    expect(node?.data?.richText).toBe(true)
+  })
+
   it('applies paper-map review styles without mutating the source document', () => {
     const sourceDoc: MindMapDoc = {
       root: {
@@ -170,5 +260,89 @@ describe('review-flow-tree visible editor state', () => {
 
     const afterCheckpointReveal = advanceRevealStateForNodeClick('a1', nodeMap, initial)
     expect(afterCheckpointReveal.a1).toBe('revealed')
+  })
+
+  it('auto-reveals question-card children when a parent becomes revealed', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          { data: { text: 'A', uid: 'a' }, children: [] },
+          {
+            data: { text: 'B', uid: 'b', memoryAnkiQuestionCard: true },
+            children: [{ data: { text: 'B1', uid: 'b1' }, children: [] }],
+          },
+          { data: { text: 'C', uid: 'c', memoryAnkiQuestionCard: true }, children: [] },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+
+    expect(nodeMap.get('b')?.isQuestionCard).toBe(true)
+    expect(nodeMap.get('c')?.isQuestionCard).toBe(true)
+
+    const initial = buildInitialRevealState(root)
+    expect(initial).toEqual({
+      root: 'revealed',
+      a: 'hidden',
+      b: 'revealed',
+      b1: 'hidden',
+      c: 'revealed',
+    })
+
+    const afterRootClick = advanceRevealStateForNodeClick('root', nodeMap, initial)
+    expect(afterRootClick.a).toBe('placeholder')
+    expect(afterRootClick.b).toBe('revealed')
+    expect(afterRootClick.c).toBe('revealed')
+    expect(afterRootClick.b1).toBe('hidden')
+
+    const afterBClick = advanceRevealStateForNodeClick('b', nodeMap, afterRootClick)
+    expect(afterBClick.b1).toBe('placeholder')
+
+    const afterHide = hideRevealStateBranch('root', nodeMap, afterBClick)
+    expect(afterHide.b).toBe('hidden')
+    expect(afterHide.c).toBe('hidden')
+    expect(afterHide.a).toBe('hidden')
+    expect(afterHide.root).toBe('revealed')
+
+    // Parent still revealed: next advance re-runs cascade so question cards return.
+    const afterRecover = advanceRevealStateForNodeClick('root', nodeMap, afterHide)
+    expect(afterRecover.a).toBe('placeholder')
+    expect(afterRecover.b).toBe('revealed')
+    expect(afterRecover.c).toBe('revealed')
+  })
+
+  it('cascades nested question cards through applyQuestionCardAutoReveal', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'Q1', uid: 'q1', memoryAnkiQuestionCard: true },
+            children: [
+              {
+                data: { text: 'Q2', uid: 'q2', memoryAnkiQuestionCard: true },
+                children: [{ data: { text: 'Leaf', uid: 'leaf' }, children: [] }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const next = applyQuestionCardAutoReveal(nodeMap, {
+      root: 'revealed',
+      q1: 'hidden',
+      q2: 'hidden',
+      leaf: 'hidden',
+    })
+    expect(next).toEqual({
+      root: 'revealed',
+      q1: 'revealed',
+      q2: 'revealed',
+      leaf: 'hidden',
+    })
   })
 })

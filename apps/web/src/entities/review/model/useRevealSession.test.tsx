@@ -95,4 +95,28 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.a).toBe('hidden')
     expect(result.current.revealMap.b).toBe('hidden')
   })
+
+  it('auto-reveals question-card children when the session starts with a revealed root', () => {
+    const withQuestionCards: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            { data: { text: '知识点 A', uid: 'a' }, children: [] },
+            {
+              data: { text: '题目 B', uid: 'b', memoryAnkiQuestionCard: true },
+              children: [],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: withQuestionCards }),
+    )
+
+    expect(result.current.revealMap.a).toBe('hidden')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
 })

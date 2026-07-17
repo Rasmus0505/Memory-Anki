@@ -57,6 +57,8 @@ type FlipCardSurfaceExtensions = Pick<
   | 'focusRequestNonce'
   | 'feedbackFxSignal'
   | 'presentationStrategy'
+  | 'aiSplitBusy'
+  | 'onAiSplitRequest'
   | 'onSegmentSelect'
   | 'onCreateSegmentFromSelection'
   | 'onSegmentRangeDraftChange'
@@ -80,11 +82,18 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
+  /** Shared host identity across build/learn so ReactFlow/fullscreen are not rebuilt on mode switch. */
+  hostForceSyncKey?: string | number | null
+  hostExternalSyncKey?: string | number | null
+  preserveViewOnSync?: boolean
+  initialViewPolicy?: 'preserve' | 'reset'
+  forceSyncIntent?: 'soft' | 'replace'
   currentPalaceId?: number | null
   reviewFxSignal?: MindMapReviewFxPayload | null
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
   onNodeContextMenu: (nodes: MindMapSelection[]) => void
+  onEditNodeClick?: (nodes: MindMapSelection[]) => void
   onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
@@ -117,11 +126,17 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   visibleEditorState,
   editableEditorState = null,
   visibleEditorSyncKey = null,
+  hostForceSyncKey = null,
+  hostExternalSyncKey = null,
+  preserveViewOnSync,
+  initialViewPolicy,
+  forceSyncIntent,
   currentPalaceId = null,
   reviewFxSignal = null,
   onEditorStateChange,
   onNodeClick,
   onNodeContextMenu,
+  onEditNodeClick,
   onEditNodeContextMenu,
   onNodeActive,
   onNodeHover,
@@ -135,6 +150,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   focusRequestNonce,
   feedbackFxSignal,
   presentationStrategy,
+  aiSplitBusy = false,
+  onAiSplitRequest,
   onSegmentSelect,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
@@ -185,7 +202,15 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }), [])
 
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
-  const frameForceSyncKey = modeSyncVersion > 0 ? `${displayMode}:${modeSyncVersion}` : undefined
+  // Prefer a host-stable key so build/learn toggles do not remount the canvas provider.
+  const frameForceSyncKey = hostForceSyncKey
+    ?? (modeSyncVersion > 0 ? `mode-sync:${modeSyncVersion}` : undefined)
+  const frameExternalSyncKey = isEditMode
+    ? (hostExternalSyncKey ?? null)
+    : (visibleEditorSyncKey ?? hostExternalSyncKey ?? null)
+  const framePreserveViewOnSync = preserveViewOnSync ?? !isEditMode
+  const frameInitialViewPolicy = initialViewPolicy ?? (isEditMode ? 'reset' : 'preserve')
+  const frameForceSyncIntent = forceSyncIntent ?? (isEditMode ? 'replace' : 'soft')
   const guidedModel = useMemo(() => buildGuidedMindMapModel(frameEditorState), [frameEditorState])
   const guidedCurrentUid =
     activeGuidedUid && guidedModel.byUid.has(activeGuidedUid)
@@ -480,16 +505,17 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         }
         syncOnPropChange
         syncIntent="soft"
-        preserveViewOnSync
+        preserveViewOnSync={framePreserveViewOnSync}
         syncReason={isEditMode ? null : 'review_flip'}
-        externalSyncKey={isEditMode ? null : visibleEditorSyncKey}
+        externalSyncKey={frameExternalSyncKey}
         forceSyncKey={frameForceSyncKey}
-        forceSyncIntent="soft"
-        initialViewPolicy="preserve"
+        forceSyncIntent={frameForceSyncIntent}
+        initialViewPolicy={frameInitialViewPolicy}
         mobileViewPolicy={isEditMode ? 'map' : 'auto'}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
         reviewFxSignal={reviewFxSignal}
         feedbackFxSignal={feedbackFxSignal}
+        aiSplitBusy={aiSplitBusy}
         segments={segments}
         activeSegmentId={activeSegmentId}
         segmentColorMode={segmentColorMode}
@@ -506,7 +532,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         focusRequestNonce={focusRequestNonce}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={handleNodeActive}
-        onNodeClick={isEditMode ? undefined : handlePanelNodeClick}
+        onNodeClick={isEditMode ? onEditNodeClick : handlePanelNodeClick}
         onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
         onNodeHover={isEditMode ? undefined : onNodeHover}
         onSegmentSelect={onSegmentSelect}
@@ -514,6 +540,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onSegmentRangeDraftChange={onSegmentRangeDraftChange}
         onSegmentRangeModeToggle={onSegmentRangeModeToggle}
         onSegmentRangeConfirm={onSegmentRangeConfirm}
+        onAiSplitRequest={onAiSplitRequest}
         onFullscreenToggle={onToggleFullscreen}
         onFullscreenChange={(active) => {
           setNativeFullscreenActive(active)

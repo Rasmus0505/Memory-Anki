@@ -231,6 +231,8 @@ export function PalaceListCard({
                   <ReviewActionButton
                     label={getReviewActionLabel(memoryNextReviewAt, {
                       state: singleSegmentReviewState,
+                      entryLabel: palace.review_entry_label,
+                      entryMode: palace.review_entry_mode,
                     })}
                     className={cn(
                       'h-8 min-w-[84px] max-w-[156px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',

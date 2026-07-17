@@ -356,7 +356,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('returns content creation to the last visited editor route', async () => {
+  it('always routes content creation to a fresh /palaces/new draft', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -382,15 +382,14 @@ describe('AppShell', () => {
       expect(screen.getByText('/freestyle')).toBeTruthy()
     })
 
-    const rememberedPalacePath = '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap'
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     const desktopLinks = screen.getAllByRole('link').filter((link) => !mobileNav.contains(link))
-    expect(desktopLinks.some((link) => link.getAttribute('href') === rememberedPalacePath)).toBe(true)
-    expect(mobileNav.querySelector(`a[href="${rememberedPalacePath}"]`)).toBeTruthy()
+    expect(desktopLinks.some((link) => link.getAttribute('href') === '/palaces/new')).toBe(true)
+    expect(mobileNav.querySelector('a[href="/palaces/new"]')).toBeTruthy()
 
     fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
-      expect(screen.getByText(rememberedPalacePath)).toBeTruthy()
+      expect(screen.getByText('/palaces/new')).toBeTruthy()
     })
   })
 

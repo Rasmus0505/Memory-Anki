@@ -33,8 +33,13 @@ describe('usePalaceEditPage draft creation', () => {
     fireEvent.click(await screen.findByRole('button', { name: /测试学科/ }))
     fireEvent.click(screen.getByRole('button', { name: '创建并进入编辑器' }))
 
-    await waitFor(() => expect(createPalaceApi).toHaveBeenCalledWith(expect.objectContaining({ title: '教育史宫殿', subject_ids: [1] })))
+    await waitFor(() =>
+      expect(createPalaceApi).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '教育史宫殿', subject_ids: [1] }),
+      ),
+    )
   })
+
   it('does not auto start on page enter by default', async () => {
     vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
       palace: {

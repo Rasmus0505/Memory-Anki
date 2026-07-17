@@ -70,6 +70,11 @@ export interface PalaceListItem {
   memory_next_review_at?: string | null
   memory_mastered?: boolean
   severe_weak_node_count?: number
+  review_entry_mode?: 'none' | 'node' | 'palace'
+  review_entry_label?: string | null
+  primary_branch_uid?: string | null
+  primary_branch_title?: string | null
+  due_branch_count?: number
   segments: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }

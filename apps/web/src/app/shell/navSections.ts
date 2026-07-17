@@ -97,7 +97,9 @@ export const navSections: NavSectionDefinition[] = [
     to: '/palaces/new',
     label: '创建',
     icon: FolderTree,
-    rememberLastVisited: true,
+    // Always open a fresh create route. Remembering the last /palaces/:id/edit
+    // made "创建" reopen the previous palace and blocked starting a new one.
+    rememberLastVisited: false,
     matches: isCreationRoute,
     warmup: () => {
       void preloadPalaceEditPage()
