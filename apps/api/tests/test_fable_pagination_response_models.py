@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
-    ReviewSchedule,
 )
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
@@ -45,17 +44,6 @@ class FablePaginationResponseModelTests(RouterTestCase):
         )
         session.add_all([palace_old, palace_new])
         session.flush()
-        session.add(
-            ReviewSchedule(
-                palace_id=palace_new.id,
-                scheduled_date=date.today() - timedelta(days=1),
-                interval_days=1,
-                algorithm_used="ebbinghaus",
-                completed=False,
-                review_number=0,
-                review_type="standard",
-            )
-        )
         session.add_all(
             [
                 PalaceQuizQuestion(

@@ -5,23 +5,21 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
-from memory_anki.modules.reviews.api import (
-    is_schedule_due,
-    schedule_display_datetime,
-)
-
-
-def _next_pending_palace_schedule(palace: Palace) -> ReviewSchedule | None:
-    pending_schedules = [schedule for schedule in (palace.review_schedules or []) if not schedule.completed]
-    if not pending_schedules:
-        return None
-    return min(pending_schedules, key=lambda schedule: (schedule.review_number, schedule.id))
+from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.modules.reviews.api import get_palace_memory_projection
 
 
 def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
     if not dt:
         return False
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return False
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
+        now = now.replace(tzinfo=None) if now.tzinfo else now
     if dt <= now:
         return False
     return dt.date() == now.date()
@@ -36,21 +34,14 @@ def count_palace_review_units(
     current = now or datetime.now()
     due_now_count = 0
     due_later_today_count = 0
-    needs_practice_count = 1 if bool(getattr(palace, "needs_practice", False)) else 0
-
     if palace_has_due_review(session, palace, now=current):
         due_now_count += 1
     elif palace_has_due_later_today(session, palace, now=current):
         due_later_today_count += 1
-
-    for mini_palace in list(getattr(palace, "mini_palaces", []) or []):
-        if bool(getattr(mini_palace, "needs_practice", False)):
-            needs_practice_count += 1
-
     return {
         "due_now_count": due_now_count,
         "due_later_today_count": due_later_today_count,
-        "needs_practice_count": needs_practice_count,
+        "needs_practice_count": 0,
     }
 
 
@@ -60,9 +51,12 @@ def palace_has_due_review(
     *,
     now: datetime | None = None,
 ) -> bool:
-    current = now or datetime.now()
-    next_schedule = _next_pending_palace_schedule(palace)
-    return bool(next_schedule and is_schedule_due(next_schedule, palace, session, now=current))
+    del now
+    try:
+        projection = get_palace_memory_projection(session, palace.id)
+    except ValueError:
+        return False
+    return bool(projection.get("has_due_review") or projection.get("due_node_count"))
 
 
 def palace_has_due_later_today(
@@ -72,13 +66,16 @@ def palace_has_due_later_today(
     now: datetime | None = None,
 ) -> bool:
     current = now or datetime.now()
-    next_schedule = _next_pending_palace_schedule(palace)
-    due_at = schedule_display_datetime(next_schedule, palace, session) if next_schedule else None
-    return _review_datetime_is_later_today(due_at, current)
+    try:
+        projection = get_palace_memory_projection(session, palace.id)
+    except ValueError:
+        return False
+    if projection.get("has_due_review") or projection.get("due_node_count"):
+        return False
+    return _review_datetime_is_later_today(projection.get("next_review_at"), current)
 
 
 __all__ = [
-    "_next_pending_palace_schedule",
     "_review_datetime_is_later_today",
     "count_palace_review_units",
     "palace_has_due_later_today",

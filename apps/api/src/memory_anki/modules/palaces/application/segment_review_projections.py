@@ -9,22 +9,12 @@ from memory_anki.modules.palaces.application.segment_nodes import (
     build_segments_editor_doc,
     cleanup_segment_node_uids,
     collect_doc_nodes_with_descendants,
-    get_reviewable_doc_node_uids,
     parse_segment_node_uids,
     remaining_unclaimed_node_uids,
 )
-from memory_anki.modules.reviews.api import (
-    get_algorithm_stage_labels,
-    is_schedule_due,
-    schedule_display_datetime,
-)
-from memory_anki.modules.sessions.api import (
-    calculate_reveal_progress,
-    get_review_progress,
-)
+from memory_anki.modules.reviews.api import get_palace_memory_projection
 
 from .segment_review_support import (
-    palace_stage_completed_count,
     palace_stage_progress,
     review_stages_json,
 )
@@ -48,19 +38,8 @@ def palace_review_stages_json(
     palace: Palace,
     stage_labels: list[str],
 ) -> list[dict[str, Any]]:
-    schedules = {
-        schedule.review_number: schedule
-        for schedule in sorted(palace.review_schedules or [], key=lambda item: item.id)
-    }
-    completed_count = palace_stage_completed_count(session, palace, len(stage_labels))
-    return review_stages_json(
-        stage_labels=stage_labels,
-        schedules=schedules,
-        completed_count=completed_count,
-        scheduled_at_for=lambda schedule: (
-            schedule_display_datetime(schedule, palace, session) if schedule else None
-        ),
-    )
+    del session, palace, stage_labels
+    return []
 
 
 def estimate_segment_review_seconds(segment: PalaceSegment) -> int:
@@ -112,7 +91,6 @@ def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, 
         "sort_order": segment.sort_order,
         "node_uids": node_uids,
         "node_count": len(node_uids),
-        "needs_practice": bool(getattr(segment, "needs_practice", False)),
         "estimated_review_seconds": estimate_segment_review_seconds(segment),
         "review_stage_total": 0,
         "review_stage_completed": 0,
@@ -158,7 +136,6 @@ def build_virtual_default_segment_summary(
         "sort_order": -1,
         "node_uids": remaining_uids,
         "node_count": len(remaining_uids),
-        "needs_practice": False,
         "estimated_review_seconds": estimated_review_seconds,
         "review_stage_total": review_stage_total,
         "review_stage_completed": review_stage_completed,
@@ -180,33 +157,17 @@ def build_palace_default_segment_summary(
     palace: Palace,
 ) -> dict[str, Any] | None:
     total, completed, progress = palace_stage_progress(session, palace)
-    stage_labels = get_algorithm_stage_labels(session)
     remaining_uids = remaining_unclaimed_node_uids(palace)
     if not remaining_uids:
         return None
-    pending_schedules = sorted(
-        [schedule for schedule in (palace.review_schedules or []) if not schedule.completed],
-        key=lambda schedule: (schedule.review_number, schedule.id),
-    )
-    next_schedule = pending_schedules[0] if pending_schedules else None
     next_review_at = None
     has_due_review = False
-    current_review_schedule_id = None
-    current_review_type = None
-    active_review_progress = None
-    if next_schedule is not None:
-        next_review_at_value = schedule_display_datetime(next_schedule, palace, session)
-        next_review_at = next_review_at_value.isoformat(timespec="minutes") if next_review_at_value else None
-        has_due_review = is_schedule_due(next_schedule, palace, session)
-        current_review_schedule_id = next_schedule.id
-        current_review_type = next_schedule.review_type
-        review_progress = get_review_progress(session, next_schedule.id)
-        if review_progress:
-            review_doc = build_segments_editor_doc(palace, [remaining_uids])
-            active_review_progress = calculate_reveal_progress(
-                review_progress,
-                get_reviewable_doc_node_uids(review_doc),
-            )
+    try:
+        projection = get_palace_memory_projection(session, palace.id)
+        next_review_at = projection.get("next_review_at")
+        has_due_review = bool(projection.get("has_due_review"))
+    except ValueError:
+        pass
     return build_virtual_default_segment_summary(
         palace,
         session=session,
@@ -214,13 +175,13 @@ def build_palace_default_segment_summary(
         review_stage_total=total,
         review_stage_completed=completed,
         review_stage_progress=progress,
-        stage_labels=stage_labels,
+        stage_labels=[],
         remaining_uids=remaining_uids,
-        active_review_progress=active_review_progress,
+        active_review_progress=None,
         next_review_at=next_review_at,
         has_due_review=has_due_review,
-        current_review_schedule_id=current_review_schedule_id,
-        current_review_type=current_review_type,
+        current_review_schedule_id=None,
+        current_review_type="fsrs",
     )
 
 

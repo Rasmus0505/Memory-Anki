@@ -39,9 +39,6 @@ from memory_anki.modules.palaces.presentation.response_models import (
     PalaceDetailResponse,
     PalaceSummaryResponse,
 )
-from memory_anki.modules.reviews.api import (
-    trigger_review_for_palace,
-)
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
@@ -109,7 +106,6 @@ def api_create(
     if existing_response is not None:
         return existing_response
     def prepare_atomic_side_effects(palace) -> None:
-        trigger_review_for_palace(s, palace.id, commit=False)
         mutation_store.save(mutation_identity, palace_json(palace, s))
 
     palace = create_palace(

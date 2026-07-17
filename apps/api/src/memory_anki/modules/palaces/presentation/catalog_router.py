@@ -28,10 +28,6 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     get_explicit_chapter_ids_by_palace,
 )
 from memory_anki.modules.palaces.presentation.response_models import PalaceListResponse
-from memory_anki.modules.reviews.api import (
-    get_algorithm_stage_labels,
-    trigger_review_for_palace,
-)
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -44,8 +40,7 @@ router = APIRouter()
 def _precomputed_palace_serialization_context(s: Session, palaces) -> tuple[dict[int, set[int]], list[str]]:
     palace_ids = [p.id for p in palaces]
     explicit_map = get_explicit_chapter_ids_by_palace(s, palace_ids)
-    stage_labels = get_algorithm_stage_labels(s) if palace_ids else []
-    return explicit_map, stage_labels
+    return explicit_map, []
 
 
 @router.get("/palaces", response_model=PalaceListResponse)
@@ -202,7 +197,6 @@ def api_instantiate_palace_template(
     response: dict = {}
 
     def prepare_atomic_side_effects(palace) -> None:
-        trigger_review_for_palace(s, palace.id, commit=False)
         response.update(palace_json(palace, s))
         mutation_store.save(mutation_identity, response)
 

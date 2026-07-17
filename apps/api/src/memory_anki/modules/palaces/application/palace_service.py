@@ -147,7 +147,8 @@ def set_palace_practice_flag(
     *,
     uow: UnitOfWork,
 ) -> Palace:
-    palace.needs_practice = needs_practice
+    """Compatibility no-op: manual needs_practice flags were removed for FSRS-only."""
+    del needs_practice
     uow.commit()
     uow.refresh(palace)
     return palace

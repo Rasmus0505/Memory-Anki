@@ -53,7 +53,6 @@ def palace_context(palace: Palace) -> dict[str, Any]:
         ),
         "primary_chapter": chapter_context(primary_chapter),
         "parent_chapter": chapter_context(parent_chapter),
-        "needs_practice": bool(getattr(palace, "needs_practice", False)),
     }
 
 
@@ -63,7 +62,6 @@ def segment_context(segment: PalaceSegment) -> dict[str, Any]:
         "palace_id": segment.palace_id,
         "name": segment.name or f"学习组 {segment.sort_order + 1}",
         "sort_order": segment.sort_order,
-        "needs_practice": bool(getattr(segment, "needs_practice", False)),
     }
 
 

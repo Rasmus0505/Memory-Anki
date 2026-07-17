@@ -41,21 +41,33 @@ def _subject_json(s) -> dict:
     }
 
 
-def _palace_out(p: Palace) -> dict:
-    schedules = list(p.review_schedules or [])
-    completed = sum(1 for item in schedules if item.completed)
-    pending_dates = sorted(
-        item.scheduled_date for item in schedules if not item.completed
-    )
+def _palace_out(p: Palace, session: Session | None = None) -> dict:
+    due_node_count = 0
+    mastery_percent = 0
+    next_due = None
+    mastered = bool(getattr(p, "mastered", False))
+    if session is not None:
+        from memory_anki.modules.reviews.api import get_palace_memory_projection
+
+        try:
+            projection = get_palace_memory_projection(session, p.id)
+            due_node_count = int(projection.get("due_node_count") or 0)
+            mastery_percent = int(projection.get("mastery_percent") or 0)
+            next_due = projection.get("next_review_at")
+            mastered = bool(projection.get("mastered"))
+        except ValueError:
+            pass
     return {
         "id": p.id,
         "title": p.title,
         "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
-        "mastered": bool(p.mastered),
+        "mastered": mastered,
         "archived": bool(p.archived),
-        "review_stage_completed": completed,
-        "review_stage_total": len(schedules),
-        "next_due_date": pending_dates[0].isoformat() if pending_dates else None,
+        "review_stage_completed": mastery_percent,
+        "review_stage_total": 100,
+        "due_node_count": due_node_count,
+        "mastery_percent": mastery_percent,
+        "next_due_date": next_due[:10] if isinstance(next_due, str) and next_due else None,
     }
 
 
@@ -67,7 +79,7 @@ def get_chapter_detail(session: Session, chapter_id: int) -> dict | None:
             selectinload(Chapter.children).selectinload(Chapter.children),
             selectinload(Chapter.children).selectinload(Chapter.palaces),
             selectinload(Chapter.palaces).selectinload(Palace.pegs),
-            selectinload(Chapter.palaces).selectinload(Palace.review_schedules),
+            selectinload(Chapter.palaces),
         )
         .filter_by(id=chapter_id)
         .first()
@@ -99,7 +111,7 @@ def get_chapter_detail(session: Session, chapter_id: int) -> dict | None:
             "children": [chapter_json(ch) for ch in (c.children or [])],
             "breadcrumbs": breadcrumbs,
         },
-        "palaces": [_palace_out(p) for p in c.palaces],
+        "palaces": [_palace_out(p, session) for p in c.palaces],
     }
 
 

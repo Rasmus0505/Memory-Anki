@@ -37,9 +37,6 @@ from memory_anki.modules.palaces.application.mindmap_import_job_service import (
     wait_for_job_completion,
 )
 from memory_anki.modules.palaces.presentation.errors import raise_bad_request
-from memory_anki.modules.reviews.api import (
-    trigger_review_for_palace,
-)
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
@@ -141,8 +138,6 @@ async def api_import(
     response: dict = {}
 
     def prepare_atomic_side_effects(palaces) -> None:
-        for palace in palaces:
-            trigger_review_for_palace(s, palace.id, commit=False)
         response.update({"ok": True, "count": len(palaces)})
         mutation_store.save(mutation_identity, response)
 

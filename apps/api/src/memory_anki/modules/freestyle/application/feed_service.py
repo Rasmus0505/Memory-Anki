@@ -1,36 +1,31 @@
 from __future__ import annotations
 
-from collections import OrderedDict
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy.orm import Session, load_only, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
-    ReviewSchedule,
 )
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
 from memory_anki.modules.palaces.api import resolve_palace_title
-from memory_anki.modules.reviews.api import is_schedule_due
+from memory_anki.modules.reviews.api import get_palace_memory_projection
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
 
 FREESTYLE_RANGE_ALL = "all"
 FREESTYLE_RANGE_DUE = "due"
-FREESTYLE_RANGE_NEEDS_PRACTICE = "needs_practice"
 FREESTYLE_RANGE_SPECIFIC_PALACES = "specific_palaces"
 FREESTYLE_RANGE_WRONG = "wrong"
 
 FREESTYLE_RANGES = {
     FREESTYLE_RANGE_ALL,
     FREESTYLE_RANGE_DUE,
-    FREESTYLE_RANGE_NEEDS_PRACTICE,
     FREESTYLE_RANGE_SPECIFIC_PALACES,
     FREESTYLE_RANGE_WRONG,
 }
@@ -165,48 +160,21 @@ def _load_active_palaces(
 
 
 def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int]:
-    now = datetime.now()
     ids: set[int] = set()
-    review_query = (
-        session.query(ReviewSchedule)
-        .options(
-            load_only(
-                ReviewSchedule.id,
-                ReviewSchedule.palace_id,
-                ReviewSchedule.scheduled_date,
-                ReviewSchedule.scheduled_at,
-                ReviewSchedule.completed,
-                ReviewSchedule.review_number,
-                ReviewSchedule.review_type,
-                ReviewSchedule.anchor_date,
-            )
-        )
-        .join(Palace)
-        .filter(
-            ReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-            Palace.deleted_at.is_(None),
-        )
+    query = session.query(Palace).filter(
+        Palace.archived == False,
+        Palace.deleted_at.is_(None),
     )
     if candidate_ids is not None:
         if not candidate_ids:
             return ids
-        review_query = review_query.filter(ReviewSchedule.palace_id.in_(candidate_ids))
-    schedules = review_query.order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()).all()
-    for schedule in schedules:
-        if schedule.palace and is_schedule_due(schedule, schedule.palace, session, now=now):
-            ids.add(schedule.palace_id)
-
-    return ids
-
-
-def _practice_palace_ids(palaces: list[Palace]) -> set[int]:
-    ids: set[int] = set()
-    for palace in palaces:
-        if bool(getattr(palace, "needs_practice", False)):
-            ids.add(palace.id)
-        if any(bool(getattr(item, "needs_practice", False)) for item in palace.segments or []):
+        query = query.filter(Palace.id.in_(candidate_ids))
+    for palace in query.all():
+        try:
+            projection = get_palace_memory_projection(session, palace.id)
+        except ValueError:
+            continue
+        if projection.get("has_due_review") or projection.get("due_node_count"):
             ids.add(palace.id)
     return ids
 
@@ -217,70 +185,49 @@ def _build_review_cards(
     candidate_ids: set[int] | None,
     range_filter: str,
 ) -> list[dict[str, Any]]:
-    if range_filter in (FREESTYLE_RANGE_NEEDS_PRACTICE, FREESTYLE_RANGE_WRONG):
+    if range_filter == FREESTYLE_RANGE_WRONG:
         return []
-    now = datetime.now()
-    groups: OrderedDict[int, dict[str, Any]] = OrderedDict()
-    query = (
-        session.query(ReviewSchedule)
-        .options(
-            load_only(
-                ReviewSchedule.id,
-                ReviewSchedule.palace_id,
-                ReviewSchedule.scheduled_date,
-                ReviewSchedule.scheduled_at,
-                ReviewSchedule.completed,
-                ReviewSchedule.review_number,
-                ReviewSchedule.review_type,
-                ReviewSchedule.anchor_date,
-            )
-        )
-        .join(Palace)
-        .filter(
-            ReviewSchedule.completed == False,
-            Palace.archived == False,
-            Palace.mastered == False,
-            Palace.deleted_at.is_(None),
-        )
+    query = session.query(Palace).filter(
+        Palace.archived == False,
+        Palace.deleted_at.is_(None),
     )
     if candidate_ids is not None:
         if not candidate_ids:
             return []
-        query = query.filter(ReviewSchedule.palace_id.in_(candidate_ids))
-    schedules = query.order_by(ReviewSchedule.review_number.asc(), ReviewSchedule.id.asc()).all()
-    for schedule in schedules:
-        if not schedule.palace or not is_schedule_due(schedule, schedule.palace, session, now=now):
-            continue
-        group = groups.setdefault(
-            schedule.palace_id,
-            {"schedule": schedule, "count": 0, "overdue": 0},
-        )
-        group["count"] += 1
-        due_at = schedule.scheduled_at or datetime.combine(schedule.scheduled_date, datetime.min.time())
-        if due_at.date() < now.date():
-            group["overdue"] += 1
-        current = group["schedule"]
-        if (schedule.review_number, schedule.id) < (current.review_number, current.id):
-            group["schedule"] = schedule
-
+        query = query.filter(Palace.id.in_(candidate_ids))
     cards: list[dict[str, Any]] = []
-    for group in groups.values():
-        schedule = group["schedule"]
-        palace = schedule.palace
+    for palace in query.order_by(Palace.id.asc()).all():
+        try:
+            projection = get_palace_memory_projection(session, palace.id)
+        except ValueError:
+            continue
+        due_count = int(projection.get("due_node_count") or 0)
+        if due_count <= 0:
+            continue
+        overdue = int(projection.get("overdue_node_count") or 0)
         palace_title = resolve_palace_title(palace)
-        overdue = int(group["overdue"])
+        label = projection.get("review_entry_label") or f"开始复习 · {due_count}"
+        mode = projection.get("review_entry_mode") or "palace"
+        branch = projection.get("primary_branch_title")
+        subtitle = label
+        if mode == "node" and branch:
+            subtitle = f"{label} · {branch}"
         cards.append(
             _action_card(
-                card_id=f"review:{schedule.id}",
+                card_id=f"review:palace:{palace.id}",
                 content_type=CONTENT_TYPE_REVIEW,
                 action_kind="review",
-                title=f"正式复习：{palace_title}",
-                subtitle=f"第 {schedule.review_number + 1} 轮 · {int(group['count'])} 个待复习",
-                href=f"/review/session/{schedule.id}",
+                title=f"{'节点复习' if mode == 'node' else '正式复习'}：{palace_title}",
+                subtitle=subtitle,
+                href=f"/review/session/{palace.id}",
                 priority=110 if overdue else 100,
-                reason=f"{overdue} 个逾期复习" if overdue else "今天待复习",
+                reason=f"{overdue} 个逾期节点" if overdue else "今天有到期节点",
                 palace=palace,
-                extra={"schedule_id": schedule.id},
+                extra={
+                    "palace_id": palace.id,
+                    "due_node_count": due_count,
+                    "review_entry_mode": mode,
+                },
             )
         )
     return cards
@@ -292,49 +239,9 @@ def _build_practice_cards(
     candidate_ids: set[int] | None,
     range_filter: str,
 ) -> list[dict[str, Any]]:
-    if range_filter in (FREESTYLE_RANGE_DUE, FREESTYLE_RANGE_WRONG):
-        return []
-    cards: list[dict[str, Any]] = []
-    for palace in palaces:
-        if candidate_ids is not None and palace.id not in candidate_ids:
-            continue
-        palace_title = resolve_palace_title(palace)
-        if bool(getattr(palace, "needs_practice", False)):
-            cards.append(
-                _action_card(
-                    card_id=f"practice:palace:{palace.id}",
-                    content_type=CONTENT_TYPE_PRACTICE,
-                    action_kind="practice",
-                    title=f"加强练习：{palace_title}",
-                    subtitle="这个宫殿被标记为需要练习",
-                    href=f"/palaces/{palace.id}/practice",
-                    priority=72,
-                    reason="需要练习",
-                    palace=palace,
-                )
-            )
-        for segment in palace.segments or []:
-            if not bool(getattr(segment, "needs_practice", False)):
-                continue
-            name = segment.name or f"学习组 {segment.sort_order + 1}"
-            cards.append(
-                _action_card(
-                    card_id=f"practice:segment:{segment.id}",
-                    content_type=CONTENT_TYPE_PRACTICE,
-                    action_kind="segment_practice",
-                    title=f"学习组训练：{name}",
-                    subtitle=palace_title,
-                    href=f"/segments/{segment.id}/practice",
-                    priority=68,
-                    reason="学习组需要练习",
-                    palace=palace,
-                    extra={
-                        "palace_segment_id": segment.id,
-                        "segment_name": name,
-                    },
-                )
-            )
-    return cards
+    # Manual needs_practice flags are retired; practice cards no longer emit.
+    del palaces, candidate_ids, range_filter
+    return []
 
 
 def _build_english_card_from_course(session: Session, range_filter: str) -> list[dict[str, Any]]:
@@ -517,7 +424,7 @@ def build_freestyle_feed(
     candidate_ids = {palace.id for palace in palaces}
     candidate_filter = candidate_ids if range_filter == FREESTYLE_RANGE_SPECIFIC_PALACES else None
     due_ids = _due_palace_ids(session, candidate_filter)
-    practice_ids = _practice_palace_ids(palaces)
+    practice_ids: set[int] = set()
 
     cards: list[dict[str, Any]] = []
     if CONTENT_TYPE_QUIZ_QUESTION in content_types:
@@ -529,7 +436,7 @@ def build_freestyle_feed(
                 due_ids=due_ids,
                 practice_ids=practice_ids,
                 due_range=FREESTYLE_RANGE_DUE,
-                needs_practice_range=FREESTYLE_RANGE_NEEDS_PRACTICE,
+                needs_practice_range="needs_practice",
                 wrong_range=FREESTYLE_RANGE_WRONG,
             )
         )
@@ -542,17 +449,10 @@ def build_freestyle_feed(
             )
         )
     if CONTENT_TYPE_PRACTICE in content_types:
-        practice_candidate_ids = (
-            candidate_filter
-            if range_filter == FREESTYLE_RANGE_SPECIFIC_PALACES
-            else practice_ids
-            if range_filter == FREESTYLE_RANGE_NEEDS_PRACTICE
-            else None
-        )
         cards.extend(
             _build_practice_cards(
                 palaces,
-                candidate_ids=practice_candidate_ids,
+                candidate_ids=None,
                 range_filter=range_filter,
             )
         )
