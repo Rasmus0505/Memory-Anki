@@ -75,6 +75,9 @@ _DEBUG_FALLBACK.json
 /.playwright-mcp/
 /skills-lock.json
 
+# ===== Local study source PDFs (synced via Baidu disk, not part of app code) =====
+/原版/
+
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul
