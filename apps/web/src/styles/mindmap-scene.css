@@ -1,5 +1,20 @@
 /* Mind-map frame scene chrome: border + soft glow + top accent by product mode. */
 
+/*
+ * Yellow knowledge emphasis — must remain visible in every mind-map surface
+ * (edit / review / practice / lookup / import / rating), not only the editor chrome.
+ * Markup may include inline styles; these rules are a mode-independent fallback
+ * so highlights never disappear when a host omits Tailwind utilities.
+ */
+[data-emphasis='highlight'],
+.mindmap-node-text [data-emphasis='highlight'],
+.mindmap-rich-text [data-emphasis='highlight'],
+.mindmap-import-richtext [data-emphasis='highlight'] {
+  background-color: #fef08c !important;
+  color: inherit;
+  border-radius: 0.125rem;
+}
+
 .memory-anki-mindmap-scene {
   position: relative;
   /* Keep glow visible outside the rounded frame. */

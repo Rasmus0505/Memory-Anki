@@ -8,14 +8,19 @@ import {
   deleteMindMapNodes,
   extractMindMapSelectionWithResult,
   getMindMapNodeText,
+  highlightMindMapNodes,
+  isMindMapQuestionCard,
   normalizeMindMapDocument,
   relocateMindMapNode,
   relocateMindMapNodes,
   searchMindMapDocument,
   selectMindMapNode,
+  setMindMapQuestionCards,
+  type MindMapDocumentV1,
 } from './document'
 
-const document = {
+const document: MindMapDocumentV1 = {
+  schemaVersion: 1,
   root: {
     data: { uid: 'root', text: '生物学' },
     children: [
@@ -91,6 +96,39 @@ describe('mind-map document entity', () => {
     )
     expect(result.nodeUid).toBeNull()
     expect(result.extractedText).toBeNull()
+  })
+
+  it('marks full card text as yellow emphasis for multi-select nodes', () => {
+    const result = highlightMindMapNodes(document, ['cell', 'mito', 'empty'])
+    expect(result.count).toBe(2)
+    const cell = result.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    const mito = cell.children!.find((node) => node.data?.uid === 'mito')!
+    expect(String(cell.data?.text)).toContain('data-emphasis="highlight"')
+    expect(String(cell.data?.text)).toContain('细胞')
+    expect(cell.data?.richText).toBe(true)
+    expect(String(mito.data?.text)).toContain('线粒体')
+    expect(getMindMapNodeText(cell)).toBe('细胞')
+    // Original document stays untouched.
+    expect(document.root.children![0].data?.text).toBe('细胞')
+  })
+
+  it('sets and clears question-card flags on non-root multi-select nodes', () => {
+    const enabled = setMindMapQuestionCards(document, ['cell', 'mito', 'root', 'missing'], true)
+    expect(enabled.count).toBe(2)
+    const cell = enabled.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    const mito = cell.children!.find((node) => node.data?.uid === 'mito')!
+    expect(isMindMapQuestionCard(cell)).toBe(true)
+    expect(isMindMapQuestionCard(mito)).toBe(true)
+    expect(enabled.document.root.data?.memoryAnkiQuestionCard).toBeUndefined()
+
+    const again = setMindMapQuestionCards(enabled.document, ['cell', 'mito'], true)
+    expect(again.count).toBe(0)
+
+    const cleared = setMindMapQuestionCards(enabled.document, ['cell'], false)
+    expect(cleared.count).toBe(1)
+    const clearedCell = cleared.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    expect(isMindMapQuestionCard(clearedCell)).toBe(false)
+    expect(document.root.children![0].data?.memoryAnkiQuestionCard).toBeUndefined()
   })
 
   it('reparents a node as the last child when relocating inside', () => {

@@ -16,8 +16,12 @@ import {
   deleteMindMapNodeOnly,
   editMindMapNode,
   extractMindMapSelectionWithResult,
+  getMindMapNodeStoredText,
   getMindMapNodeText,
   getMindMapNodeUid,
+  getMindMapStoredTextByUid,
+  highlightMindMapNodes,
+  isMindMapQuestionCard,
   normalizeMindMapDocument,
   parseMindMapDocument,
   reparentMindMapNode,
@@ -27,9 +31,11 @@ import {
   deleteMindMapNodes,
   moveMindMapNode,
   selectMindMapNode,
+  setMindMapQuestionCards,
   type MindMapExtractPlacement,
   type MindMapRelocateMode,
 } from '@/entities/mindmap-document'
+import { hasHighlightMarkup } from '@/shared/lib/mindmapRichText'
 import type { GraphData, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
 import { BRANCH_COLORS } from '@/shared/ui/mindmap-canvas/branchColors'
 
@@ -80,20 +86,35 @@ export function editorDocToGraph(
 
   const walk = (node: MindMapDocNode, parentId: string | null, depth: number, indexPath: number[]) => {
     const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
-    const text = getMindMapNodeText(node) || (depth === 0 ? '未命名导图' : '未命名知识点')
+    // Plain label for sizing/search; stored text (may include yellow emphasis HTML) stays on metadata.text.
+    const plainText = getMindMapNodeText(node) || (depth === 0 ? '未命名导图' : '未命名知识点')
+    const storedText = getMindMapNodeStoredText(node)
     const segment = segmentByNodeUid.get(uid) ?? null
     const activeSegment = segment != null && segment.id === options.activeSegmentId
     const segmentVisible = segment != null && (options.segmentColorMode !== 'active-only' || activeSegment)
     const revealState = options.revealMap?.[uid]
     const branchColor = BRANCH_COLORS[(indexPath[0] ?? 0) % BRANCH_COLORS.length]
+    const nodeData = { ...(node.data ?? {}) } as Record<string, unknown>
+    // Always expose full stored markup so NodeCard can render yellow emphasis in every mode.
+    if (storedText) {
+      nodeData.text = storedText
+    }
+    if (hasHighlightMarkup(storedText)) {
+      nodeData.richText = true
+    }
+    const hostStatusChips = options.statusChipsByNodeUid?.[uid] ?? []
+    const questionCardChip = isMindMapQuestionCard(node)
+      ? [{ text: '题', tone: 'info' as const, style: 'outline' as const }]
+      : []
+    const statusChips = [...questionCardChip, ...hostStatusChips]
     nodes.push({
       id: uid,
       type: 'peg',
-      label: text,
+      label: plainText,
       originalId: nodes.length + 1,
       parentId,
       metadata: {
-        ...(node.data ?? {}),
+        ...nodeData,
         depth,
         uid,
         layoutRole: depth === 0 ? 'root' : depth >= 2 ? 'leaf' : 'branch',
@@ -106,7 +127,7 @@ export function editorDocToGraph(
           secondaryMarked: false,
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
-          statusChips: options.statusChipsByNodeUid?.[uid] ?? null,
+          statusChips: statusChips.length > 0 ? statusChips : null,
           countBadge: options.countBadgeByNodeUid?.[uid] ?? null,
         }),
       },
@@ -133,6 +154,9 @@ function getRuntimeEdgeRenderStyle(data: MindMapDocNode['data']) {
 
 export const buildSelectionFromDoc = selectMindMapNode
 export const editEditorDocNode = editMindMapNode
+export const highlightEditorDocNodes = highlightMindMapNodes
+export const setEditorDocQuestionCards = setMindMapQuestionCards
+export const getEditorDocStoredText = getMindMapStoredTextByUid
 export const addEditorDocChild = addMindMapChild
 export const addEditorDocSibling = addMindMapSibling
 export const deleteEditorDocNode = deleteMindMapNode

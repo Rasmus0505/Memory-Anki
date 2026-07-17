@@ -13,8 +13,10 @@ import {
   deleteEditorDocNodes,
   editEditorDocNode,
   extractEditorDocSelectionWithResult,
+  highlightEditorDocNodes,
   moveEditorDocNode,
   relocateEditorDocNodes,
+  setEditorDocQuestionCards,
 } from './documentGraphProjection'
 import {
   selectedInteraction,
@@ -138,6 +140,57 @@ export function useMindMapEditorDocActions(deps: {
     [commitEditorDoc, getCurrentEditorDoc, handleDeleteNode, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
+  const handleHighlightNodes = useCallback(
+    (nodeIds: readonly string[]) => {
+      if (!canEdit) return
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      if (unique.length === 0) return
+      const { document: nextEditorDoc, count } = highlightEditorDocNodes(
+        getCurrentEditorDoc(),
+        unique,
+      )
+      if (count === 0) {
+        toast.warning('所选卡片没有可标记的文字')
+        return
+      }
+      if (!commitEditorDoc(nextEditorDoc)) return
+      toast.success(
+        count > 1 ? `已将 ${count} 张卡片全文标记为重点` : '已将全文标记为重点',
+        { action: { label: '撤销', onClick: undoEditorDoc } },
+      )
+    },
+    [canEdit, commitEditorDoc, getCurrentEditorDoc, undoEditorDoc],
+  )
+
+  const handleToggleQuestionCards = useCallback(
+    (nodeIds: readonly string[], enabled: boolean) => {
+      if (!canEdit) return
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      if (unique.length === 0) return
+      const { document: nextEditorDoc, count } = setEditorDocQuestionCards(
+        getCurrentEditorDoc(),
+        unique,
+        enabled,
+      )
+      if (count === 0) {
+        toast.info(enabled ? '所选卡片已是题目卡' : '所选卡片不是题目卡')
+        return
+      }
+      if (!commitEditorDoc(nextEditorDoc)) return
+      toast.success(
+        enabled
+          ? count > 1
+            ? `已将 ${count} 张卡片设为题目卡`
+            : '已设为题目卡'
+          : count > 1
+            ? `已取消 ${count} 张题目卡`
+            : '已取消题目卡',
+        { action: { label: '撤销', onClick: undoEditorDoc } },
+      )
+    },
+    [canEdit, commitEditorDoc, getCurrentEditorDoc, undoEditorDoc],
+  )
+
   const handleDeleteNodeOnly = useCallback(
     (nodeId: string) => {
       const nextEditorDoc = deleteEditorDocNodeOnly(getCurrentEditorDoc(), nodeId)
@@ -253,6 +306,8 @@ export function useMindMapEditorDocActions(deps: {
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,
+    handleHighlightNodes,
+    handleToggleQuestionCards,
     handleEditNode,
     handleRelocateNodes,
     handleExtractSelection,

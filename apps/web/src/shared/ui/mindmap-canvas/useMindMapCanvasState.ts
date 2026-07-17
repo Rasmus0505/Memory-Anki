@@ -37,7 +37,7 @@ type UseMindMapCanvasStateProps = MindMapCanvasProps & {
 export interface UseMindMapCanvasStateResult {
   frameRef: RefObject<HTMLDivElement | null>
   canvasRef: RefObject<HTMLDivElement | null>
-  ctxMenu: { x: number; y: number; nodeId: string } | null
+  ctxMenu: { x: number; y: number; nodeId: string; targetNodeIds: string[] } | null
   edgeMenu: { x: number; y: number; edgeId: string; sourceId: string; targetId: string } | null
   canvasSize: { width: number; height: number }
   isCanvasReady: boolean
@@ -95,7 +95,10 @@ export function useMindMapCanvasState(
     onAddChild,
     onAddSibling,
     onDelete,
+    onDeleteNodes,
     onDeleteNodeOnly,
+    onHighlightNodes,
+    onToggleQuestionCards,
     onRelocate,
     onReparent,
     onExtractSelection,
@@ -177,6 +180,7 @@ export function useMindMapCanvasState(
     contextActionOnly: practiceModeActive,
     nodeClickViewportPolicy,
     centerNodeInCanvas: viewport.centerNodeInCanvas,
+    selectedNodeIds,
     readonly,
   })
   const drag = useMindMapDragInteractions({
@@ -231,7 +235,12 @@ export function useMindMapCanvasState(
     (event: MouseEvent, node: Node) => {
       if (readonly) return
       const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest('.mindmap-node-drag-surface') && !target.closest('.mindmap-node-text')) {
+      // Yellow emphasis spans live under .mindmap-node-text; also treat data-emphasis
+      // as text so RF fallback still enters edit if DOM nesting is unusual.
+      const onCardText =
+        Boolean(target?.closest('.mindmap-node-text'))
+        || Boolean(target?.closest('[data-emphasis="highlight"]'))
+      if (target?.closest('.mindmap-node-drag-surface') && !onCardText) {
         // Dragging the selected surface should not fall through to edit.
         return
       }
@@ -379,7 +388,14 @@ export function useMindMapCanvasState(
       onAddChild,
       onAddSibling,
       onDelete,
+      onDeleteNodes,
       onDeleteNodeOnly,
+      onHighlightNodes,
+      onToggleQuestionCards,
+      isQuestionCard: (nodeId) => {
+        const node = graphData.nodes.find((item) => item.id === nodeId)
+        return node?.metadata?.memoryAnkiQuestionCard === true
+      },
       onStartEdit: handleStartEdit,
       isRootNode: (nodeId) => graphData.nodes.find((node) => node.id === nodeId)?.parentId == null,
       getSubtreeSize: (nodeId) => {
@@ -404,7 +420,24 @@ export function useMindMapCanvasState(
       canMoveUp,
       canMoveDown,
     }),
-    [buildCustomNodeActions, canMoveDown, canMoveUp, graphData.nodes, handleStartEdit, menus.ctxMenu, onAddChild, onAddSibling, onDelete, onDeleteNodeOnly, onMoveDown, onMoveUp, readonly],
+    [
+      buildCustomNodeActions,
+      canMoveDown,
+      canMoveUp,
+      graphData.nodes,
+      handleStartEdit,
+      menus.ctxMenu,
+      onAddChild,
+      onAddSibling,
+      onDelete,
+      onDeleteNodeOnly,
+      onDeleteNodes,
+      onHighlightNodes,
+      onToggleQuestionCards,
+      onMoveDown,
+      onMoveUp,
+      readonly,
+    ],
   )
   const edgeActions = useMemo(
     () => buildEdgeActions({

@@ -103,6 +103,36 @@ describe('MindMapEditorSurface viewport preservation', () => {
     )
   })
 
+  it('keeps the canvas recovery key stable when only practice/edit presentation props change', () => {
+    const { rerender } = renderFrame({
+      forceSyncKey: 'edit:0:0:0',
+      preserveViewOnSync: false,
+      practiceModeActive: false,
+      syncReason: null,
+      externalSyncKey: 0,
+    })
+    const initialRecoveryKey = screen
+      .getByTestId('mock-mind-map-canvas')
+      .getAttribute('data-recovery-key')
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        forceSyncKey="edit:0:0:0"
+        preserveViewOnSync
+        practiceModeActive
+        syncReason="review_flip"
+        externalSyncKey='{"docFingerprint":"x"}'
+      />,
+    )
+
+    expect(screen.getByTestId('mock-mind-map-canvas').getAttribute('data-recovery-key')).toBe(
+      initialRecoveryKey,
+    )
+    expect(initialRecoveryKey).toBe('edit:0:0:0')
+  })
+
   it('derives preserve viewport policies for practice sync updates', () => {
     renderFrame({
       practiceModeActive: true,

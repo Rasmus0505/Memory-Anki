@@ -10,7 +10,6 @@ vi.mock('@xyflow/react', () => ({
     Dots: 'dots',
   },
   Controls: () => <div data-testid="controls" />,
-  MiniMap: () => <div data-testid="minimap" />,
   ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport }: {
     children: React.ReactNode
     nodesDraggable: boolean
@@ -80,10 +79,9 @@ function renderViewport(overrides?: Partial<React.ComponentProps<typeof MindMapC
 }
 
 describe('MindMapCanvasViewport', () => {
-  it('renders minimap and background for small interactive maps', () => {
+  it('renders background for small interactive maps', () => {
     renderViewport()
 
-    expect(screen.getByTestId('minimap')).toBeTruthy()
     expect(screen.getByTestId('background')).toBeTruthy()
     expect(screen.getByTestId('react-flow').dataset.nodesDraggable).toBe('true')
     expect(screen.getByTestId('react-flow').dataset.nodesFocusable).toBe('false')
@@ -97,14 +95,12 @@ describe('MindMapCanvasViewport', () => {
   it('hides decorative layers while dragging', () => {
     renderViewport({ isDraggingNode: true })
 
-    expect(screen.queryByTestId('minimap')).toBeNull()
     expect(screen.queryByTestId('background')).toBeNull()
   })
 
   it('hides decorative layers for large maps and keeps readonly nodes fixed', () => {
     renderViewport({ nodes: buildNodes(240), readonly: true })
 
-    expect(screen.queryByTestId('minimap')).toBeNull()
     expect(screen.queryByTestId('background')).toBeNull()
     expect(screen.getByTestId('react-flow').dataset.nodesDraggable).toBe('false')
   })
@@ -114,6 +110,6 @@ describe('MindMapCanvasViewport', () => {
 
     expect(screen.getByTestId('react-flow').dataset.panOnScroll).toBe('false')
     expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('false')
-    expect(screen.queryByTestId('minimap')).toBeNull()
+    expect(screen.queryByTestId('background')).toBeNull()
   })
 })

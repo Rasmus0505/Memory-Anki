@@ -27,7 +27,6 @@ vi.mock('@xyflow/react', async () => {
     BackgroundVariant: { Dots: 'dots' },
     Controls: () => null,
     Handle: () => null,
-    MiniMap: () => null,
     NodeToolbar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Position: {
       Left: 'left',
@@ -275,6 +274,35 @@ describe('MindMapCanvas recovery', () => {
     expect(screen.getByTestId('react-flow').textContent).toContain('root')
   })
 
+  it('recovers from canvas render errors when the host refresh control is used', () => {
+    let allowRender = false
+    function FlakyCanvasChild() {
+      if (!allowRender) throw new Error('canvas boom')
+      return <div data-testid="recovered-canvas">recovered</div>
+    }
+
+    // Suppress expected error boundary noise from the intentional throw.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        toolbarContent={<FlakyCanvasChild />}
+      />,
+    )
+
+    expect(screen.getByText('脑图渲染异常')).toBeTruthy()
+    allowRender = true
+    fireEvent.click(screen.getByRole('button', { name: '刷新脑图' }))
+    expect(screen.getByTestId('recovered-canvas')).toBeTruthy()
+    consoleError.mockRestore()
+  })
+
   it('measures the canvas host directly instead of subtracting a toolbar height', () => {
     render(
       <MindMapCanvas
@@ -366,6 +394,7 @@ describe('MindMapCanvas recovery', () => {
         onAddChild={vi.fn()}
         onAddSibling={vi.fn()}
         onDelete={vi.fn()}
+        onHighlightNodes={vi.fn()}
         onNodeContextAction={vi.fn()}
       />,
     )
@@ -376,6 +405,7 @@ describe('MindMapCanvas recovery', () => {
     })
 
     expect(screen.getByRole('button', { name: '添加子知识点 (Tab)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '标记重点' })).toBeTruthy()
   })
 
   it('runs the practice context action without leaving a stale node menu open', () => {

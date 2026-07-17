@@ -49,6 +49,21 @@ function renderNodeCard(overrides?: Record<string, unknown>) {
   )
 }
 
+function selectEditorText(editor: HTMLElement, start: number, end: number) {
+  editor.focus()
+  if (!editor.firstChild || editor.firstChild.nodeType !== Node.TEXT_NODE) {
+    editor.textContent = editor.textContent || ''
+  }
+  const textNode = editor.firstChild as Text
+  const range = document.createRange()
+  range.setStart(textNode, Math.min(start, textNode.length))
+  range.setEnd(textNode, Math.min(end, textNode.length))
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  fireEvent.mouseUp(editor)
+}
+
 describe('NodeCard extract drag', () => {
   it('shows an extract drag handle when a text range is selected while editing', () => {
     const onExtractSelection = vi.fn()
@@ -60,11 +75,11 @@ describe('NodeCard extract drag', () => {
       onExtractSelection,
     })
 
-    const editor = screen.getByRole('textbox') as HTMLTextAreaElement
+    const editor = screen.getByRole('textbox')
     act(() => {
-      editor.focus()
-      editor.setSelectionRange(0, 3)
-      fireEvent.select(editor)
+      // Seed plain text into contentEditable for selection APIs.
+      editor.textContent = '细胞膜与细胞质'
+      selectEditorText(editor, 0, 3)
     })
 
     expect(screen.getByRole('button', { name: '拖出选中文字为新卡片' })).toBeTruthy()
@@ -137,11 +152,10 @@ describe('NodeCard extract drag', () => {
       </div>,
     )
 
-    const editor = screen.getByRole('textbox') as HTMLTextAreaElement
+    const editor = screen.getByRole('textbox')
     act(() => {
-      editor.focus()
-      editor.setSelectionRange(0, 3)
-      fireEvent.select(editor)
+      editor.textContent = '细胞膜与细胞质'
+      selectEditorText(editor, 0, 3)
     })
 
     const handle = screen.getByRole('button', { name: '拖出选中文字为新卡片' })

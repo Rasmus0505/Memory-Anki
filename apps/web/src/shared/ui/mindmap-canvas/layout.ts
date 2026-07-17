@@ -7,7 +7,13 @@ const ROOT_Y = 280
 const ROOT_NODE_MIN_HEIGHT = 40
 const BRANCH_NODE_MIN_HEIGHT = 34
 const LEAF_NODE_MIN_HEIGHT = 30
-const NODE_MAX_VISUAL_CHARACTERS = 20
+/** Soft wrap budget: cards grow with text until this many full-width characters. */
+export const NODE_MAX_VISUAL_CHARACTERS = 20
+/**
+ * Extra shell width so real CJK/font metrics never wrap earlier than the character
+ * budget (formula uses average char width; YaHei/subpixel/zoom can run slightly wider).
+ */
+const NODE_WIDTH_SAFETY_PX = 8
 const ROOT_GAP_X = 48
 const CHILD_GAP_X = 30
 const ROOT_STACK_GAP = 28
@@ -164,6 +170,15 @@ function getWeightedTextLength(text: string): number {
   }, 0)
 }
 
+export function getNodeMaxWidth(source?: NodeSizeSource): number {
+  const base = getBaseNodeSize(getNodeRole(source))
+  return Math.ceil(
+    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth +
+      base.horizontalChrome +
+      NODE_WIDTH_SAFETY_PX,
+  )
+}
+
 export function getNodeSize(
   source?: NodeSizeSource,
   labelOverride?: string,
@@ -174,14 +189,20 @@ export function getNodeSize(
   const longestLineLength = label
     .split(/\r?\n/)
     .reduce((longest, line) => Math.max(longest, getWeightedTextLength(line)), 0)
+  // Safety is applied to natural width so short labels keep a full single line under real fonts.
   const naturalWidth = Math.ceil(
-    longestLineLength * base.averageCharWidth + base.horizontalChrome,
+    longestLineLength * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
   )
-  const maxWidth = Math.ceil(
-    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth + base.horizontalChrome,
+  const maxWidth = getNodeMaxWidth(role)
+  const width = Math.min(
+    maxWidth,
+    Math.max(base.horizontalChrome + base.averageCharWidth + NODE_WIDTH_SAFETY_PX, naturalWidth),
   )
-  const width = Math.min(maxWidth, Math.max(base.horizontalChrome + base.averageCharWidth, naturalWidth))
-  const contentWidth = Math.max(width - base.horizontalChrome, base.averageCharWidth)
+  // Height uses the content box without safety so line count still tracks the character budget.
+  const contentWidth = Math.max(
+    width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX,
+    base.averageCharWidth,
+  )
   const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
   const textLineCount = label
     .split(/\r?\n/)

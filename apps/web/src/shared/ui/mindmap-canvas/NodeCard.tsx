@@ -1,15 +1,11 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type ChangeEvent,
-  type CompositionEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type PointerEvent,
 } from 'react'
 import {
   Handle,
@@ -17,14 +13,17 @@ import {
   type NodeProps,
   useUpdateNodeInternals,
 } from '@xyflow/react'
-import { Scissors } from 'lucide-react'
+import { Highlighter, Scissors } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
-import type { MindMapNode, MindMapNodeVisual } from './adapter'
+import {
+  hasHighlightMarkup,
+  sanitizeMindMapRichHtml,
+  serializeContentEditable,
+  stripMindMapHtml,
+  toggleHighlightOnDomSelection,
+} from '@/shared/lib/mindmapRichText'
+import type { MindMapNodeVisual } from './adapter'
 import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
-import type {
-  SelectionToolbarAction,
-  SelectionToolbarPreferPosition,
-} from './selectionToolbar'
 import {
   AdaptiveNodeToolbar,
   selectionToolbarButtonClass,
@@ -33,91 +32,18 @@ import {
 import { NodeCountBadge } from './NodeCountBadge'
 import { ExtractDropPlaceholders, ExtractGhostPortal } from './MindMapExtractUi'
 import { useMindMapExtractDrag } from './useMindMapExtractDrag'
-
-type NodeCardData = MindMapNode & {
-  depth?: number
-  selected?: boolean
-  dropHighlight?: boolean
-  dropMode?: 'before' | 'inside' | 'after' | null
-  previewShifted?: boolean
-  previewAdopt?: boolean
-  previewGhost?: boolean
-  editing?: boolean
-  editText?: string | null
-  selectEditText?: boolean
-  readonly?: boolean
-  onStartEdit?: (nodeId: string) => void
-  onCancelEdit?: (nodeId: string) => void
-  onEditTextChange?: (nodeId: string, text: string) => void
-  onFinishEdit?: (nodeId: string, text: string) => void
-  onAddChild?: (nodeId: string) => void
-  onAddSibling?: (nodeId: string) => void
-  onDelete?: (nodeId: string) => void
-  onMeasure?: (nodeId: string, size: NodeSize) => void
-  onCountBadgeClick?: (nodeId: string) => void
-  onReadonlyDoubleClick?: (nodeId: string) => void
-  onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
-  onExtractSelection?: (payload: {
-    sourceId: string
-    liveText: string
-    start: number
-    end: number
-    placement: { mode: 'inside' | 'before' | 'after'; targetUid: string }
-  }) => void
-  onExtractDropPreview?: (
-    next: { targetId: string; mode: 'before' | 'inside' | 'after' } | null,
-  ) => void
-  selectionToolbarActions?: SelectionToolbarAction[]
-  selectionToolbarPreferPosition?: SelectionToolbarPreferPosition
-}
-
-const MEASURE_DELTA_PX = 1
-const LONG_PRESS_DELAY_MS = 550
-const LONG_PRESS_MOVE_TOLERANCE_PX = 18
-const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
-/** Ignore blur right after entering edit (layout/toolbar teardown can steal focus). */
-const EDIT_BLUR_GUARD_MS = 180
-/** Retry focus after enter-edit; RF toolbar teardown / layout can steal it once. */
-const EDIT_FOCUS_RETRY_DELAYS_MS = [0, 16, 50, 120] as const
-
-interface EditSnapshot {
-  value: string
-  selectionStart: number
-  selectionEnd: number
-}
-
-function placeTextareaCaret(
-  input: HTMLTextAreaElement,
-  options: { selectAll: boolean; value?: string },
-) {
-  const value = options.value ?? input.value
-  const start = options.selectAll ? 0 : value.length
-  const end = value.length
-  input.focus({ preventScroll: true })
-  try {
-    input.setSelectionRange(start, end)
-  } catch {
-    // Ignore when the node unmounts mid-focus.
-  }
-}
-
-function getMouseFeedbackPoint(event?: MouseEvent) {
-  return event
-    ? {
-        x: event.clientX,
-        y: event.clientY,
-      }
-    : undefined
-}
-
-function getElementFeedbackPoint(element: HTMLElement | null) {
-  if (!element) return undefined
-  const rect = element.getBoundingClientRect()
-  return {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2,
-  }
-}
+import {
+  EDIT_BLUR_GUARD_MS,
+  EDIT_FOCUS_RETRY_DELAYS_MS,
+  MEASURE_DELTA_PX,
+  getElementFeedbackPoint,
+  getMouseFeedbackPoint,
+  placeContentEditableCaret,
+  resolveNodeRawText,
+  type EditSnapshot,
+  type NodeCardData,
+} from './nodeCardModel'
+import { useNodeCardLongPress } from './useNodeCardLongPress'
 
 function MindMapNodeCard({ data, id }: NodeProps) {
   const nodeData = data as unknown as NodeCardData
@@ -127,21 +53,21 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     metadata.layoutRole ?? (depth === 0 ? 'root' : 'branch'),
   ) as LayoutRole
   const isRoot = layoutRole === 'root'
+  const rawNodeText = resolveNodeRawText(nodeData)
+  const isRichNode = Boolean(metadata.richText) || hasHighlightMarkup(rawNodeText)
+  const displayHtml = isRichNode ? sanitizeMindMapRichHtml(rawNodeText) : ''
+  const plainLabel = stripMindMapHtml(nodeData.label) || nodeData.label || ''
   const [localEdit, setLocalEdit] = useState(false)
-  const [editText, setEditText] = useState(nodeData.label)
+  const [editText, setEditText] = useState(rawNodeText)
   const shellRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inputRef = useRef<HTMLDivElement>(null)
   const lastMeasuredRef = useRef<NodeSize | null>(null)
   const updateNodeInternals = useUpdateNodeInternals()
-  const longPressTimerRef = useRef<number | null>(null)
-  const longPressStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
-  const longPressTriggeredRef = useRef(false)
-  const suppressSyntheticContextMenuUntilRef = useRef(0)
-  const [longPressPending, setLongPressPending] = useState(false)
   const editingIsControlled = typeof nodeData.editing === 'boolean'
   const isEditing = editingIsControlled ? Boolean(nodeData.editing) : localEdit
   const editValue = editText
-  const nodeSize = getNodeSize(layoutRole, isEditing ? editValue : nodeData.label)
+  const measureText = stripMindMapHtml(isEditing ? editValue : plainLabel) || plainLabel
+  const nodeSize = getNodeSize(layoutRole, measureText)
   const readonly = Boolean(nodeData.readonly)
   const onMeasure = nodeData.onMeasure
   const wasEditingRef = useRef(false)
@@ -157,6 +83,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     inputRef,
     onExtractSelection: nodeData.onExtractSelection,
     onExtractDropPreview: nodeData.onExtractDropPreview,
+  })
+  const longPress = useNodeCardLongPress({
+    nodeId: id,
+    readonly,
+    onTouchLongPress: nodeData.onTouchLongPress,
   })
 
   const visual = (metadata.visual ?? {}) as MindMapNodeVisual
@@ -212,34 +143,39 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     const input = inputRef.current
     if (!input) return
     input.style.height = 'auto'
-    input.style.height = `${input.scrollHeight}px`
-  }, [])
+    input.style.height = `${Math.max(input.scrollHeight, nodeSize.height)}px`
+  }, [nodeSize.height])
 
   const restoreEditSnapshot = useCallback((snapshot: EditSnapshot) => {
     setEditText(snapshot.value)
     nodeData.onEditTextChange?.(id, snapshot.value)
     requestAnimationFrame(() => {
-      resizeEditor()
       const input = inputRef.current
       if (!input) return
-      input.focus({ preventScroll: true })
-      try {
-        input.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)
-      } catch {
-        // Ignore when the node unmounts mid-restore.
+      if (hasHighlightMarkup(snapshot.value)) {
+        input.innerHTML = sanitizeMindMapRichHtml(snapshot.value)
+      } else {
+        input.textContent = snapshot.value
       }
+      resizeEditor()
+      placeContentEditableCaret(input, { selectAll: false })
     })
   }, [id, nodeData, resizeEditor])
 
   const focusEditorCaret = useCallback(
-    (options?: { selectAll?: boolean; value?: string }) => {
+    (options?: { selectAll?: boolean; value?: string; seedContent?: boolean }) => {
       const input = inputRef.current
       if (!input || editSessionClosedRef.current) return false
       const selectAll = options?.selectAll ?? Boolean(nodeData.selectEditText)
-      placeTextareaCaret(input, {
-        selectAll,
-        value: options?.value,
-      })
+      // Only seed DOM content when entering edit; later focus retries must not clobber typing.
+      if (options?.seedContent && typeof options.value === 'string') {
+        if (hasHighlightMarkup(options.value)) {
+          input.innerHTML = sanitizeMindMapRichHtml(options.value)
+        } else {
+          input.textContent = options.value
+        }
+      }
+      placeContentEditableCaret(input, { selectAll })
       resizeEditor()
       return document.activeElement === input
     },
@@ -257,10 +193,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     }
 
     const initialValue =
-      typeof nodeData.editText === 'string' ? nodeData.editText : nodeData.label
+      typeof nodeData.editText === 'string' ? nodeData.editText : resolveNodeRawText(nodeData)
     const selectAll = Boolean(nodeData.selectEditText)
 
-    if (!wasEditingRef.current) {
+    const isEnterEdit = !wasEditingRef.current
+    if (isEnterEdit) {
       wasEditingRef.current = true
       editStartedAtRef.current = Date.now()
       setEditText(initialValue)
@@ -271,8 +208,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       editSessionClosedRef.current = false
     }
 
-    // Always re-apply caret on effect run (covers Strict Mode remount).
-    focusEditorCaret({ selectAll, value: initialValue })
+    // Seed content on enter-edit (and if Strict Mode remount wiped the editor DOM).
+    const editorDomEmpty = !(inputRef.current?.textContent || inputRef.current?.innerHTML)
+    focusEditorCaret({
+      selectAll,
+      value: initialValue,
+      seedContent: isEnterEdit || editorDomEmpty,
+    })
 
     const restoreIfBlurred = () => {
       if (!wasEditingRef.current || editSessionClosedRef.current) return
@@ -314,7 +256,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       })
       editStartedAtRef.current = Date.now()
       if (!editingIsControlled) setLocalEdit(true)
-      setEditText(nodeData.label)
+      setEditText(resolveNodeRawText(nodeData))
       nodeData.onStartEdit?.(id)
     },
     [editingIsControlled, id, nodeData, readonly],
@@ -344,19 +286,32 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     if (Date.now() - editStartedAtRef.current < EDIT_BLUR_GUARD_MS) {
       // Toolbar / layout blur: refocus and keep caret at end (or select-all).
       requestAnimationFrame(() => {
-        focusEditorCaret()
+        focusEditorCaret({
+          selectAll: Boolean(nodeData.selectEditText),
+          value: editValue,
+          seedContent: !(inputRef.current?.textContent || inputRef.current?.innerHTML),
+        })
       })
       return
     }
     editSessionClosedRef.current = true
-    if (editValue.trim()) {
+    const input = inputRef.current
+    const committed = input ? serializeContentEditable(input) : editValue
+    const trimmed = committed.trim()
+    if (trimmed) {
       dispatchGlobalFeedback('text_commit', {
         point: getElementFeedbackPoint(inputRef.current),
         origin: 'keyboard',
       })
-      nodeData.onFinishEdit?.(id, editValue.trim())
+      nodeData.onFinishEdit?.(id, trimmed)
     } else {
-      nodeData.onCancelEdit?.(id)
+      // Empty editor after a failed seed must not cancel when we still have draft text.
+      const fallback = (editValue || resolveNodeRawText(nodeData)).trim()
+      if (fallback) {
+        nodeData.onFinishEdit?.(id, fallback)
+      } else {
+        nodeData.onCancelEdit?.(id)
+      }
     }
     setLocalEdit(false)
   }, [editValue, extract, focusEditorCaret, id, nodeData])
@@ -369,19 +324,40 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     [id, nodeData],
   )
 
+  const readEditorSnapshot = useCallback((): EditSnapshot => {
+    const input = inputRef.current
+    const value = input ? serializeContentEditable(input) : editValue
+    return {
+      value,
+      selectionStart: 0,
+      selectionEnd: 0,
+    }
+  }, [editValue])
+
+  const handleToggleHighlight = useCallback(() => {
+    const input = inputRef.current
+    if (!input || isComposingRef.current) return
+    const before = serializeContentEditable(input)
+    if (!toggleHighlightOnDomSelection(input)) return
+    const after = serializeContentEditable(input)
+    if (before !== after) {
+      editHistoryRef.current.past.push({ value: before, selectionStart: 0, selectionEnd: 0 })
+      editHistoryRef.current.future = []
+      updateEditValue(after)
+      requestAnimationFrame(resizeEditor)
+    }
+    extract.syncTextSelection(input)
+  }, [extract, resizeEditor, updateEditValue])
+
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    (event: KeyboardEvent<HTMLDivElement>) => {
       const primaryModifier = event.ctrlKey || event.metaKey
       const lowerKey = event.key.toLowerCase()
       if (primaryModifier && (lowerKey === 'z' || lowerKey === 'y')) {
         event.preventDefault()
         event.stopPropagation()
         const history = editHistoryRef.current
-        const currentSnapshot = {
-          value: editValue,
-          selectionStart: event.currentTarget.selectionStart,
-          selectionEnd: event.currentTarget.selectionEnd,
-        }
+        const currentSnapshot = readEditorSnapshot()
         const redoRequested = lowerKey === 'y' || event.shiftKey
         if (redoRequested) {
           const next = history.future.pop()
@@ -401,7 +377,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.stopPropagation()
         editSessionClosedRef.current = true
         setLocalEdit(false)
-        setEditText(nodeData.label)
+        setEditText(resolveNodeRawText(nodeData))
         nodeData.onCancelEdit?.(id)
         return
       }
@@ -411,14 +387,21 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         !event.metaKey &&
         !event.altKey
       ) {
+        // Keep Tab inside the card editor (do not steal for structure shortcuts).
         event.preventDefault()
-        const start = event.currentTarget.selectionStart
-        const end = event.currentTarget.selectionEnd
-        const nextValue = `${editValue.slice(0, start)}\t${editValue.slice(end)}`
-        updateEditValue(nextValue)
-        requestAnimationFrame(() => {
-          inputRef.current?.setSelectionRange(start + 1, start + 1)
-        })
+        if (typeof document.execCommand === 'function') {
+          document.execCommand('insertText', false, '\t')
+        } else {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            selection.getRangeAt(0).insertNode(document.createTextNode('\t'))
+            selection.collapseToEnd()
+          }
+          const input = inputRef.current
+          if (input) {
+            updateEditValue(serializeContentEditable(input))
+          }
+        }
         return
       }
       if (
@@ -435,56 +418,49 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.currentTarget.blur()
       }
     },
-    [editValue, id, nodeData, restoreEditSnapshot, updateEditValue],
+    [id, nodeData, readEditorSnapshot, restoreEditSnapshot, updateEditValue],
   )
 
   const handleBeforeInput = useCallback(() => {
     const input = inputRef.current
     if (!input || isComposingRef.current) return
-    pendingInputSnapshotRef.current = {
-      value: editValue,
-      selectionStart: input.selectionStart,
-      selectionEnd: input.selectionEnd,
-    }
-  }, [editValue])
+    pendingInputSnapshotRef.current = readEditorSnapshot()
+  }, [readEditorSnapshot])
 
-  const handleInput = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInput = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    const nextValue = serializeContentEditable(input)
     if (!isComposingRef.current) {
-      const snapshot = pendingInputSnapshotRef.current ?? {
-        value: editValue,
-        selectionStart: Math.min(event.target.selectionStart, editValue.length),
-        selectionEnd: Math.min(event.target.selectionEnd, editValue.length),
-      }
-      if (snapshot.value !== event.target.value) {
+      const snapshot = pendingInputSnapshotRef.current ?? { value: editValue, selectionStart: 0, selectionEnd: 0 }
+      if (snapshot.value !== nextValue) {
         editHistoryRef.current.past.push(snapshot)
         editHistoryRef.current.future = []
       }
       pendingInputSnapshotRef.current = null
     }
-    updateEditValue(event.target.value)
+    updateEditValue(nextValue)
     requestAnimationFrame(resizeEditor)
-  }, [editValue, resizeEditor, updateEditValue])
+    extract.syncTextSelection(input)
+  }, [editValue, extract, resizeEditor, updateEditValue])
 
   const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true
+    compositionStartSnapshotRef.current = readEditorSnapshot()
+  }, [readEditorSnapshot])
+
+  const handleCompositionEnd = useCallback(() => {
+    isComposingRef.current = false
     const input = inputRef.current
     if (!input) return
-    isComposingRef.current = true
-    compositionStartSnapshotRef.current = {
-      value: editValue,
-      selectionStart: input.selectionStart,
-      selectionEnd: input.selectionEnd,
-    }
-  }, [editValue])
-
-  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLTextAreaElement>) => {
-    isComposingRef.current = false
+    const nextValue = serializeContentEditable(input)
     const snapshot = compositionStartSnapshotRef.current
     compositionStartSnapshotRef.current = null
-    if (snapshot && snapshot.value !== event.currentTarget.value) {
+    if (snapshot && snapshot.value !== nextValue) {
       editHistoryRef.current.past.push(snapshot)
       editHistoryRef.current.future = []
     }
-    updateEditValue(event.currentTarget.value)
+    updateEditValue(nextValue)
     requestAnimationFrame(resizeEditor)
   }, [resizeEditor, updateEditValue])
 
@@ -536,107 +512,18 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       : 'text-left text-[12.5px] font-normal leading-[17px] break-all whitespace-pre-wrap'
   const borderStyle = visual.borderColor ? { borderColor: visual.borderColor } : undefined
   // Edit uses a thicker border than display; keep content width equal to display getNodeSize.
+  // getNodeSize already includes a safety margin so short CJK labels do not wrap early.
   const EDIT_BORDER_EXTRA_PX = 3
   const shellWidth = isEditing ? nodeSize.width + EDIT_BORDER_EXTRA_PX : nodeSize.width
-
-  const clearLongPress = useCallback(() => {
-    if (longPressTimerRef.current !== null) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-    longPressStartRef.current = null
-    setLongPressPending(false)
-  }, [])
-
-  const abortLongPress = useCallback(() => {
-    clearLongPress()
-    longPressTriggeredRef.current = false
-  }, [clearLongPress])
-
-  useEffect(() => {
-    return () => {
-      abortLongPress()
-    }
-  }, [abortLongPress])
-
-  const triggerLongPress = useCallback(
-    (point: { x: number; y: number }) => {
-      longPressTriggeredRef.current = true
-      suppressSyntheticContextMenuUntilRef.current = Date.now() + SYNTHETIC_CONTEXT_MENU_WINDOW_MS
-      setLongPressPending(false)
-      navigator.vibrate?.(35)
-      nodeData.onTouchLongPress?.(id, point)
-    },
-    [id, nodeData],
-  )
-
-  const handlePointerDown = useCallback(
-    (event: PointerEvent<HTMLDivElement>) => {
-      const pointerType = event.pointerType || 'touch'
-      if (!nodeData.onTouchLongPress || !readonly || pointerType === 'mouse' || event.isPrimary === false) return
-      clearLongPress()
-      longPressTriggeredRef.current = false
-      longPressStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
-      event.currentTarget.setPointerCapture?.(event.pointerId)
-      setLongPressPending(true)
-      longPressTimerRef.current = window.setTimeout(() => {
-        longPressTimerRef.current = null
-        triggerLongPress({
-          x: longPressStartRef.current?.x ?? event.clientX,
-          y: longPressStartRef.current?.y ?? event.clientY,
-        })
-      }, LONG_PRESS_DELAY_MS)
-    },
-    [clearLongPress, nodeData, readonly, triggerLongPress],
-  )
-
-  const finishPointerInteraction = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    clearLongPress()
-  }, [clearLongPress])
-
-  const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (longPressTriggeredRef.current) return
-    const start = longPressStartRef.current
-    if (!start || event.pointerId !== start.pointerId) return
-    const movedTooFar = Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_MOVE_TOLERANCE_PX
-    if (movedTooFar) abortLongPress()
-  }, [abortLongPress])
-
-  const handleClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    if (!longPressTriggeredRef.current) return
-    event.preventDefault()
-    event.stopPropagation()
-    longPressTriggeredRef.current = false
-  }, [])
-
-  const handleContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    const nativeEvent = event.nativeEvent as globalThis.MouseEvent & {
-      pointerType?: string
-      sourceCapabilities?: { firesTouchEvents?: boolean } | null
-    }
-    const isSyntheticTouchContextMenu = nativeEvent.pointerType === 'touch'
-      || nativeEvent.sourceCapabilities?.firesTouchEvents === true
-    const shouldSuppressSyntheticContextMenu =
-      isSyntheticTouchContextMenu
-      && Date.now() <= suppressSyntheticContextMenuUntilRef.current
-
-    if (!shouldSuppressSyntheticContextMenu) return
-    event.preventDefault()
-    event.stopPropagation()
-    suppressSyntheticContextMenuUntilRef.current = 0
-  }, [])
 
   return (
     <div
       ref={shellRef}
       onDoubleClick={handleDoubleClick}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={finishPointerInteraction}
-      onPointerCancel={finishPointerInteraction}
+      onPointerDown={longPress.handlePointerDown}
+      onPointerMove={longPress.handlePointerMove}
+      onPointerUp={longPress.finishPointerInteraction}
+      onPointerCancel={longPress.finishPointerInteraction}
       data-mindmap-node-id={id}
       data-node-mode={nodeMode}
       className={[
@@ -649,7 +536,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       ].filter(Boolean).join(' ')}
       style={{ width: shellWidth, WebkitTouchCallout: 'none' }}
     >
-      {longPressPending ? (
+      {longPress.longPressPending ? (
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-[-3px] z-20 rounded-[14px] border-2 border-amber-400/80 animate-pulse"
@@ -687,34 +574,58 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       {isEditing ? (
         <div className={`relative ${showDropChrome ? dropHighlightCls : ''}`}>
           <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
-          <textarea
+          {extract.textSelection ? (
+            <div className="nodrag nopan absolute -top-10 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-amber-300 bg-white px-1.5 py-1 shadow-md">
+              <button
+                type="button"
+                aria-label="黄色底色"
+                title="黄色底色（再点取消）"
+                className="inline-flex h-7 items-center gap-1 rounded-full bg-amber-100 px-2.5 text-xs font-medium text-amber-900 hover:bg-amber-200"
+                onMouseDown={(event) => {
+                  // Keep contentEditable focused.
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  handleToggleHighlight()
+                }}
+              >
+                <Highlighter className="size-3.5" />
+                黄色底色
+              </button>
+            </div>
+          ) : null}
+          <div
             ref={inputRef}
-            value={editValue}
-            onChange={handleInput}
+            role="textbox"
+            aria-multiline="true"
+            contentEditable
+            suppressContentEditableWarning
+            onInput={handleInput}
             onBeforeInput={handleBeforeInput}
             onCompositionStart={handleCompositionStart}
             onCompositionEnd={handleCompositionEnd}
             onKeyDown={handleKeyDown}
-            onSelect={(event) => extract.syncTextSelection(event.currentTarget)}
             onKeyUp={(event) => extract.syncTextSelection(event.currentTarget)}
             onMouseUp={(event) => extract.syncTextSelection(event.currentTarget)}
             onBlur={commitEdit}
             aria-label="编辑节点文本"
             data-node-mode="editing"
             className={[
-              'nodrag nopan nowheel box-border block w-full resize-none overflow-hidden rounded-xl border-[2.5px] border-sky-500 bg-sky-50/90 text-zinc-900 outline-none ring-4 ring-sky-400/30 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]',
+              'nodrag nopan nowheel box-border block w-full overflow-hidden rounded-xl border-[2.5px] border-sky-500 bg-sky-50/90 text-zinc-900 outline-none ring-4 ring-sky-400/30 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]',
+              '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]',
               paddingCls,
               editorTextCls,
             ].join(' ')}
             style={{
               height: nodeSize.height,
               minHeight: nodeSize.height,
-              // Match display card content width (shell already compensates thicker edit border).
               width: '100%',
               maxWidth: '100%',
               scrollbarWidth: 'none',
             }}
-            rows={1}
           />
           {extract.showExtractHandle ? (
             <button
@@ -776,21 +687,38 @@ function MindMapNodeCard({ data, id }: NodeProps) {
               onClick={() => nodeData.onCountBadgeClick?.(id)}
             />
           ) : null}
-          <button
-            type="button"
-            onClick={handleClick}
-            onContextMenu={handleContextMenu}
+          {/*
+            Use role=button div (not <button>) so highlight markup can legally contain
+            block tags (div/br). Nested div inside <button> can break browser hit-testing
+            and prevent double-click from entering edit mode on yellow-emphasis cards.
+          */}
+          <div
+            role="button"
+            tabIndex={-1}
+            onClick={longPress.handleClick}
+            onDoubleClick={handleDoubleClick}
+            onContextMenu={longPress.handleContextMenu}
             className={[
               'mindmap-node-text nopan',
               // Editing/readonly: isolate from RF drag. Idle: whole card is the drag surface.
               canStructureDrag ? '' : 'nodrag',
               textCls,
+              displayHtml
+                ? '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]'
+                : '',
             ].filter(Boolean).join(' ')}
           >
-            {concealed
-              ? '待回忆'
-              : nodeData.label || (isRoot ? '未命名主题' : '未命名知识点')}
-          </button>
+            {concealed ? (
+              '待回忆'
+            ) : displayHtml ? (
+              <span
+                className="block w-full mindmap-rich-text"
+                dangerouslySetInnerHTML={{ __html: displayHtml }}
+              />
+            ) : (
+              nodeData.label || (isRoot ? '未命名主题' : '未命名知识点')
+            )}
+          </div>
         </div>
       )}
 

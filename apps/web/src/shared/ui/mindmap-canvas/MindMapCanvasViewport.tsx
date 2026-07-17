@@ -2,7 +2,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   ReactFlow,
   type OnEdgesChange,
   type OnNodesChange,
@@ -12,7 +11,6 @@ import {
   type OnMove,
   type Viewport,
 } from '@xyflow/react'
-import type { LayoutRole } from './layout'
 import { nodeTypes } from './NodeCard'
 
 interface MindMapCanvasViewportProps {
@@ -120,21 +118,6 @@ export function MindMapCanvasViewport({
           showInteractive={false}
           className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
         />
-        {!simplifiedDecorations ? (
-          <MiniMap
-            pannable
-            zoomable
-            nodeStrokeWidth={2.5}
-            nodeColor={(node) => {
-              const data = node.data as {
-                metadata?: { branchColor?: string; layoutRole?: LayoutRole }
-              }
-              if (data?.metadata?.layoutRole === 'root') return '#18181b'
-              return data?.metadata?.branchColor ?? '#2563eb'
-            }}
-            className="!bottom-4 !right-4 !h-[116px] !w-[190px] !overflow-hidden !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
-          />
-        ) : null}
         {!simplifiedDecorations ? (
           <Background
             variant={BackgroundVariant.Dots}

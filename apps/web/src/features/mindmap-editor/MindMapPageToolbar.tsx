@@ -38,7 +38,16 @@ export interface MindMapPageToolbarProps {
   embedded?: boolean
   className?: string
   taskControl?: { value: MindMapTask; onChange: (value: MindMapTask) => void; disabled?: boolean } | null
-  searchControl?: { value: string; onChange: (value: string) => void; placeholder?: string; resultCount?: number } | null
+  searchControl?: {
+    value: string
+    onChange: (value: string) => void
+    placeholder?: string
+    resultCount?: number
+    /** Opens global palace lookup (or other overlay) without local filtering. */
+    onFocus?: () => void
+    onClick?: () => void
+    readOnly?: boolean
+  } | null
   focusAction?: MindMapToolbarAction | null
   fitAction?: MindMapToolbarAction | null
   ratingAction?: MindMapToolbarToggleAction | null
@@ -89,7 +98,15 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {searchControl ? (
           <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchControl.value} onChange={(event) => searchControl.onChange(event.target.value)} placeholder={searchControl.placeholder ?? '搜索标题和备注'} className="min-h-10 pl-9 pr-12" />
+            <Input
+              value={searchControl.value}
+              readOnly={searchControl.readOnly}
+              onChange={(event) => searchControl.onChange(event.target.value)}
+              onFocus={() => searchControl.onFocus?.()}
+              onClick={() => searchControl.onClick?.()}
+              placeholder={searchControl.placeholder ?? '搜索标题和备注'}
+              className="min-h-10 pl-9 pr-12"
+            />
             {searchControl.value ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{searchControl.resultCount ?? 0}</span> : null}
           </div>
         ) : null}

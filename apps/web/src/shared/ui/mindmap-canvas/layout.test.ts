@@ -18,22 +18,26 @@ describe('mind map layout sizing', () => {
     )
 
     expect(longSize.width).toBeGreaterThan(shortSize.width)
-    expect(shortSize.width).toBe(65)
-    expect(longSize.width).toBeLessThanOrEqual(286)
+    expect(shortSize.width).toBe(73)
+    expect(longSize.width).toBeLessThanOrEqual(294)
     expect(longSize.height).toBeGreaterThan(shortSize.height)
   })
 
   it('uses intrinsic width until the shared twenty-character visual limit', () => {
     const oneCharacter = getNodeSize('branch', '一')
+    const fourCharacters = getNodeSize('branch', '一二三四')
     const fiveCharacters = getNodeSize('branch', '一二三四五')
     const twentyCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八九十')
     const twentyOneCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八九十一')
     const mixedText = getNodeSize('branch', 'Memory Anki 记忆卡片')
 
-    expect(oneCharacter.width).toBe(39)
-    expect(fiveCharacters.width).toBe(91)
-    expect(twentyCharacters.width).toBe(286)
-    expect(twentyOneCharacters.width).toBe(286)
+    expect(oneCharacter.width).toBe(47)
+    // Short CJK labels keep a single-line shell (content box >= 4 full-width chars).
+    expect(fourCharacters.width).toBe(86)
+    expect(fourCharacters.height).toBe(oneCharacter.height)
+    expect(fiveCharacters.width).toBe(99)
+    expect(twentyCharacters.width).toBe(294)
+    expect(twentyOneCharacters.width).toBe(294)
     expect(twentyOneCharacters.height).toBeGreaterThan(twentyCharacters.height)
     expect(mixedText.width).toBeLessThan(twentyCharacters.width)
   })

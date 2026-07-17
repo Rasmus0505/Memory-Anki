@@ -21,6 +21,7 @@ import {
   buildSelectionFromDoc,
   editEditorDocNode,
   editorDocToGraph,
+  getEditorDocStoredText,
   normalizeEditorDocTree,
 } from './documentGraphProjection'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
@@ -51,7 +52,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   practiceModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
-  syncReason = null,
   externalSyncKey = null,
   forceSyncKey = null,
   preserveViewOnSync = false,
@@ -166,24 +166,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       }),
     [graphOptions, normalizedEditorState.editor_doc, readonly],
   )
-  const canvasRecoveryKey = useMemo(
-    () =>
-      [
-        syncReason ?? '',
-        preserveViewOnSync ? '' : (externalSyncKey ?? ''),
-        forceSyncKey ?? '',
-        preserveViewOnSync ? '' : graphData.nodes.length,
-        preserveViewOnSync ? '' : graphData.edges.length,
-      ].join(':'),
-    [
-      externalSyncKey,
-      forceSyncKey,
-      graphData.edges.length,
-      graphData.nodes.length,
-      preserveViewOnSync,
-      syncReason,
-    ],
-  )
+  // Host remounts only on intentional document-identity changes.
+  // Mode switches (build/learn, flip syncReason, preserveView flag) must not rebuild ReactFlow.
+  const canvasRecoveryKey = useMemo(() => {
+    if (forceSyncKey != null && String(forceSyncKey) !== '') return String(forceSyncKey)
+    if (preserveViewOnSync) return ''
+    return String(externalSyncKey ?? '')
+  }, [externalSyncKey, forceSyncKey, preserveViewOnSync])
 
   useEffect(() => {
     onReady?.()
@@ -310,8 +299,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       const current = interactionRef.current
       if (current.mode === 'editing' && current.nodeId === nodeId) return
       if (current.mode === 'editing' && current.nodeId !== nodeId) commitEditingDraft()
-      const selection = buildSelectionFromDoc(getCurrentEditorDoc(), nodeId)
-      const text = selection[0]?.text || '未命名知识点'
+      const editorDoc = getCurrentEditorDoc()
+      const selection = buildSelectionFromDoc(editorDoc, nodeId)
+      // Prefer stored markup (yellow emphasis HTML) so double-click edit keeps highlights.
+      const stored = getEditorDocStoredText(editorDoc, nodeId).trim()
+      const text = stored || selection[0]?.text || '未命名知识点'
       replaceInteraction({
         mode: 'editing',
         nodeId,
@@ -494,6 +486,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,
+    handleHighlightNodes,
+    handleToggleQuestionCards,
     handleEditNode: commitEditedNodeText,
     handleRelocateNodes,
     handleExtractSelection,
@@ -611,7 +605,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onAddChild={handleAddChild}
         onAddSibling={handleAddSibling}
         onDelete={handleDeleteNode}
+        onDeleteNodes={handleDeleteNodes}
         onDeleteNodeOnly={handleDeleteNodeOnly}
+        onHighlightNodes={handleHighlightNodes}
+        onToggleQuestionCards={handleToggleQuestionCards}
         onEdit={handleEditNode}
         canUndo={canUndo}
         canRedo={canRedo}

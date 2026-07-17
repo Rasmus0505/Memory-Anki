@@ -1,10 +1,14 @@
-﻿export interface MindMapNodeData {
+﻿import { highlightEntireNodeText } from '@/shared/lib/mindmapRichText'
+
+export interface MindMapNodeData {
   text?: string
   note?: string
   uid?: string
   memoryAnkiId?: number | null
   memoryAnkiNodeType?: string | null
   memoryAnkiRootKind?: string | null
+  /** When true, parent reveal auto-shows this node's body during review flip. */
+  memoryAnkiQuestionCard?: boolean
   [key: string]: unknown
 }
 
@@ -121,11 +125,89 @@ export function selectMindMapNode(documentInput: MindMapDocumentInput, nodeUid: 
   }]
 }
 
+/** Stored node text as-is (may include yellow-emphasis HTML). */
+export function getMindMapNodeStoredText(node: MindMapNode): string {
+  return typeof node.data?.text === 'string' ? node.data.text : ''
+}
+
+/** Look up stored text (including highlight markup) by node uid. */
+export function getMindMapStoredTextByUid(
+  documentInput: MindMapDocumentInput,
+  nodeUid: string | null | undefined,
+): string {
+  if (!nodeUid) return ''
+  const document = normalizeMindMapDocument(documentInput)
+  const found = findNode(document.root, nodeUid)
+  if (!found) return ''
+  return getMindMapNodeStoredText(found.node)
+}
+
 export function editMindMapNode(document: MindMapDocumentInput, nodeUid: string, text: string) {
   return updateDocument(document, (draft) => {
     const found = findNode(draft.root, nodeUid)
-    if (found) found.node.data = { ...(found.node.data ?? {}), text }
+    if (!found) return
+    applyNodeText(found.node, text)
   })
+}
+
+/**
+ * Apply full-card yellow emphasis markup to one or more nodes.
+ * Uses the shared highlight HTML format (`data-emphasis="highlight"`).
+ */
+export function highlightMindMapNodes(
+  document: MindMapDocumentInput,
+  nodeUids: readonly string[],
+): { document: MindMapDocumentV1; count: number } {
+  const uids = uniqueUids(nodeUids)
+  let count = 0
+  const nextDocument = updateDocument(document, (draft) => {
+    for (const uid of uids) {
+      const found = findNode(draft.root, uid)
+      if (!found) continue
+      const raw = typeof found.node.data?.text === 'string' ? found.node.data.text : ''
+      const highlighted = highlightEntireNodeText(raw)
+      if (!highlighted) continue
+      applyNodeText(found.node, highlighted)
+      count += 1
+    }
+  })
+  return { document: nextDocument, count }
+}
+
+export function isMindMapQuestionCard(node: MindMapNode | null | undefined): boolean {
+  return node?.data?.memoryAnkiQuestionCard === true
+}
+
+/**
+ * Batch set/clear the question-card flag on non-root nodes.
+ * Root is skipped so palace roots cannot become auto-revealed question cards.
+ */
+export function setMindMapQuestionCards(
+  document: MindMapDocumentInput,
+  nodeUids: readonly string[],
+  enabled: boolean,
+): { document: MindMapDocumentV1; count: number } {
+  const uids = uniqueUids(nodeUids)
+  let count = 0
+  const nextDocument = updateDocument(document, (draft) => {
+    const rootUid = getMindMapNodeUid(draft.root, 'root')
+    for (const uid of uids) {
+      if (!uid || uid === rootUid) continue
+      const found = findNode(draft.root, uid)
+      if (!found || !found.parent) continue
+      const currentlyEnabled = found.node.data?.memoryAnkiQuestionCard === true
+      if (currentlyEnabled === enabled) continue
+      const nextData: MindMapNodeData = { ...(found.node.data ?? {}) }
+      if (enabled) {
+        nextData.memoryAnkiQuestionCard = true
+      } else {
+        delete nextData.memoryAnkiQuestionCard
+      }
+      found.node.data = nextData
+      count += 1
+    }
+  })
+  return { document: nextDocument, count }
 }
 
 export function addMindMapChild(document: MindMapDocumentInput, parentUid: string) {
@@ -465,6 +547,20 @@ export function getMindMapNodeText(node: MindMapNode) {
 
 function createDefaultDocument(): MindMapDocumentV1 {
   return { schemaVersion: 1, root: makeNode('未命名导图'), layout: 'mindMap', theme: DEFAULT_THEME }
+}
+
+function applyNodeText(node: MindMapNode, text: string) {
+  const nextData: MindMapNodeData = { ...(node.data ?? {}), text }
+  if (typeof text === 'string' && /data-emphasis=["']highlight["']/.test(text)) {
+    nextData.richText = true
+  } else {
+    delete nextData.richText
+    // Prefer plain text storage when no highlight markup remains.
+    if (typeof text === 'string' && /<[^>]+>/.test(text) && !/data-emphasis=["']highlight["']/.test(text)) {
+      nextData.text = plainText(text) || text
+    }
+  }
+  node.data = nextData
 }
 
 function updateDocument(document: MindMapDocumentInput, apply: (draft: MindMapDocumentV1) => void) {

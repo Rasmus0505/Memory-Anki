@@ -7,6 +7,8 @@ export interface MindMapNodeMenuState {
   x: number
   y: number
   nodeId: string
+  /** Multi-capable actions apply to this set (frozen when the menu opens). */
+  targetNodeIds: string[]
 }
 
 export interface MindMapEdgeMenuState {
@@ -29,6 +31,8 @@ interface UseMindMapMenusAndEdgesInput {
   nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
   readonly?: boolean
+  /** Current multi-select set; used to preserve selection on right-click. */
+  selectedNodeIds?: readonly string[]
 }
 
 export function useMindMapMenusAndEdges({
@@ -43,6 +47,7 @@ export function useMindMapMenusAndEdges({
   nodeClickViewportPolicy,
   centerNodeInCanvas,
   readonly = false,
+  selectedNodeIds = [],
 }: UseMindMapMenusAndEdgesInput) {
   const [ctxMenu, setCtxMenu] = useState<MindMapNodeMenuState | null>(null)
   const [edgeMenu, setEdgeMenu] = useState<MindMapEdgeMenuState | null>(null)
@@ -66,19 +71,32 @@ export function useMindMapMenusAndEdges({
       event.preventDefault()
       setEdgeMenu(null)
       setSelectedEdgeId(null)
-      onNodeSelect(node.id)
+      // Same rule as multi-drag: right-clicking an already-selected node keeps the multi-set.
+      const alreadySelected = selectedNodeIds.includes(node.id)
+      const targetNodeIds =
+        alreadySelected && selectedNodeIds.length > 1
+          ? [...selectedNodeIds]
+          : [node.id]
+      if (!alreadySelected) {
+        onNodeSelect(node.id)
+      }
       if (contextActionOnly && onNodeContextAction) {
         setCtxMenu(null)
         onNodeContextAction(node.id)
       } else {
-        setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
+        setCtxMenu({
+          x: event.clientX,
+          y: event.clientY,
+          nodeId: node.id,
+          targetNodeIds,
+        })
       }
       dispatchGlobalFeedback('context_menu', {
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
     },
-    [contextActionOnly, onNodeContextAction, onNodeSelect],
+    [contextActionOnly, onNodeContextAction, onNodeSelect, selectedNodeIds],
   )
 
   const handlePaneClick = useCallback(() => {

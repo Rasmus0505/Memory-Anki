@@ -7,6 +7,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react'
+import { plainOffsetsFromContentEditable, stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import {
   EXTRACT_DRAG_THRESHOLD_PX,
   resolveExtractDropTarget,
@@ -21,12 +22,46 @@ export type MindMapExtractSelectionPayload = {
   placement: { mode: 'inside' | 'before' | 'after'; targetUid: string }
 }
 
+type EditorElement = HTMLTextAreaElement | HTMLElement
+
 interface UseMindMapExtractDragInput {
   nodeId: string
   editValue: string
-  inputRef: RefObject<HTMLTextAreaElement | null>
+  inputRef: RefObject<EditorElement | null>
   onExtractSelection?: (payload: MindMapExtractSelectionPayload) => void
   onExtractDropPreview?: (next: ExtractDropTarget | null) => void
+}
+
+function readEditorPlainText(input: EditorElement | null, fallback: string) {
+  if (!input) return stripMindMapHtml(fallback) || fallback
+  if (input instanceof HTMLTextAreaElement) return input.value
+  return (input.innerText || input.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+function readEditorSelectionRange(input: EditorElement | null) {
+  if (!input) return null
+  if (input instanceof HTMLTextAreaElement) {
+    if (input.selectionStart === input.selectionEnd) return null
+    return {
+      start: Math.min(input.selectionStart, input.selectionEnd),
+      end: Math.max(input.selectionStart, input.selectionEnd),
+    }
+  }
+  const offsets = plainOffsetsFromContentEditable(input)
+  if (!offsets) return null
+  return { start: offsets.start, end: offsets.end }
+}
+
+function restoreEditorSelection(input: EditorElement | null, range: { start: number; end: number }) {
+  if (!input) return
+  input.focus({ preventScroll: true })
+  if (input instanceof HTMLTextAreaElement) {
+    try {
+      input.setSelectionRange(range.start, range.end)
+    } catch {
+      // ignore
+    }
+  }
 }
 
 export function useMindMapExtractDrag({
@@ -70,38 +105,29 @@ export function useMindMapExtractDrag({
 
   const isExtractDraggingNow = () => extractDraggingRef.current
 
-  const syncTextSelection = useCallback((input: HTMLTextAreaElement) => {
+  const syncTextSelection = useCallback((input: EditorElement) => {
     // While extracting, ignore selection collapses caused by temporary focus shifts.
     if (extractDraggingRef.current) return
-    const start = input.selectionStart
-    const end = input.selectionEnd
-    if (start === end) {
+    const next = readEditorSelectionRange(input)
+    if (!next) {
       setTextSelection(null)
       extractRangeRef.current = null
       return
     }
-    const next = { start: Math.min(start, end), end: Math.max(start, end) }
     setTextSelection(next)
     extractRangeRef.current = next
   }, [])
 
   const readActiveSelectionRange = useCallback(() => {
-    const input = inputRef.current
-    if (input && input.selectionStart !== input.selectionEnd) {
-      return {
-        start: Math.min(input.selectionStart, input.selectionEnd),
-        end: Math.max(input.selectionStart, input.selectionEnd),
-      }
-    }
-    return extractRangeRef.current ?? textSelection
+    return readEditorSelectionRange(inputRef.current) ?? extractRangeRef.current ?? textSelection
   }, [inputRef, textSelection])
 
   const snapshotExtractSelection = useCallback(() => {
     const range = readActiveSelectionRange()
     if (range) extractRangeRef.current = range
-    if (inputRef.current) extractLiveTextRef.current = inputRef.current.value
+    extractLiveTextRef.current = readEditorPlainText(inputRef.current, editValue)
     return range
-  }, [inputRef, readActiveSelectionRange])
+  }, [editValue, inputRef, readActiveSelectionRange])
 
   // Document-level listeners outlive React re-renders of the scissors button
   // (setState on pointerdown would otherwise detach element-bound handlers).
@@ -167,19 +193,14 @@ export function useMindMapExtractDrag({
       endSessionUi()
 
       if (!wasActive) {
-        const input = inputRef.current
-        if (input) {
-          input.focus({ preventScroll: true })
-          input.setSelectionRange(range.start, range.end)
-          setTextSelection(range)
-        }
+        restoreEditorSelection(inputRef.current, range)
+        setTextSelection(range)
         return
       }
 
       const target = resolveExtractDropTarget(clientX, clientY)
       if (!target) {
-        inputRef.current?.focus({ preventScroll: true })
-        inputRef.current?.setSelectionRange(range.start, range.end)
+        restoreEditorSelection(inputRef.current, range)
         setTextSelection(range)
         return
       }
@@ -221,7 +242,8 @@ export function useMindMapExtractDrag({
 
       const range = snapshotExtractSelection()
       if (!range) return
-      const liveText = extractLiveTextRef.current || inputRef.current?.value || editValue
+      const liveText =
+        extractLiveTextRef.current || readEditorPlainText(inputRef.current, editValue)
       const selectedText = liveText.slice(range.start, range.end).replace(/\s+/g, ' ').trim()
       if (!selectedText) return
 
@@ -277,6 +299,7 @@ export function useMindMapExtractDrag({
     extractGhost,
     localHoverMode,
     showExtractHandle,
+    textSelection,
     syncTextSelection,
     handleExtractPointerDown,
     handleExtractMouseDown,

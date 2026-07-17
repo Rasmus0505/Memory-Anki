@@ -54,7 +54,13 @@ export interface MindMapCanvasProps {
   onAddChild: (parentId: string) => void
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
+  /** Multi-select context-menu delete (Delete key already uses the same handler). */
+  onDeleteNodes?: (nodeIds: string[]) => void
   onDeleteNodeOnly?: (nodeId: string) => void
+  /** Mark full card text with yellow emphasis (`data-emphasis="highlight"`). */
+  onHighlightNodes?: (nodeIds: string[]) => void
+  /** Toggle question-card flag for review auto-reveal. */
+  onToggleQuestionCards?: (nodeIds: string[], enabled: boolean) => void
   /** Preferred drop commit for structure moves (supports multi-source). */
   onRelocate?: (sourceIds: string[], targetId: string, mode: MindMapDropMode) => void
   onReparent?: (sourceId: string, targetId: string) => void
@@ -169,6 +175,13 @@ class MindMapCanvasErrorBoundary extends Component<
     }
   }
 
+  handleRecover = () => {
+    // Clear the boundary immediately so a same-tick host remount can render children.
+    // Relying only on resetKey updates can leave users stuck if recover re-throws once.
+    this.setState({ error: null })
+    this.props.onRecover()
+  }
+
   render() {
     if (this.state.error) {
       return (
@@ -176,7 +189,7 @@ class MindMapCanvasErrorBoundary extends Component<
           <MindMapCanvasRecoveryPanel
             title="脑图渲染异常"
             description="当前脑图区域遇到渲染错误，可以刷新脑图宿主恢复当前翻卡进度。"
-            onRefresh={this.props.onRecover}
+            onRefresh={this.handleRecover}
           />
         </div>
       )
@@ -394,6 +407,8 @@ export function MindMapCanvas(props: MindMapCanvasProps) {
       origin: 'toolbar',
       label: 'HOST_REFRESH',
     })
+    // Manual refresh may retry after a previous auto-recover of the same signature.
+    autoRecoveredSignaturesRef.current.clear()
     setHostEpoch((version) => version + 1)
   }, [])
   const handleAutoRecover = useCallback(
