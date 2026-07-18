@@ -43,6 +43,7 @@ _EMPTY_MEMORY: dict[str, Any] = {
     "primary_branch_title": None,
     "due_branch_count": 0,
     "due_node_uids": [],
+    "review_branch_summaries": [],
 }
 
 
@@ -86,6 +87,9 @@ def _memory_fields(memory_projection: dict) -> dict:
         "primary_branch_uid": memory_projection.get("primary_branch_uid"),
         "primary_branch_title": memory_projection.get("primary_branch_title"),
         "due_branch_count": memory_projection.get("due_branch_count") or 0,
+        "review_branch_summaries": list(
+            memory_projection.get("review_branch_summaries") or []
+        ),
     }
 
 

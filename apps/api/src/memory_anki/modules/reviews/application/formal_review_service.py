@@ -104,6 +104,9 @@ def _queue_item(
         "primary_branch_uid": projection.get("primary_branch_uid"),
         "primary_branch_title": projection.get("primary_branch_title"),
         "due_branch_count": projection.get("due_branch_count") or 0,
+        "review_branch_summaries": list(
+            projection.get("review_branch_summaries") or []
+        ),
         "palace": _palace_payload(palace),
     }
 

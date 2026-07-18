@@ -29,6 +29,15 @@ from memory_anki.modules.reviews.application.fsrs_runtime import (
     build_scheduler,
     load_fsrs_settings,
 )
+from memory_anki.modules.reviews.application.node_entry_projection import (
+    branch_review_summaries as _branch_review_summaries,
+)
+from memory_anki.modules.reviews.application.node_entry_projection import (
+    entry_mode_payload as _entry_mode_payload,
+)
+from memory_anki.modules.reviews.application.node_entry_projection import (
+    top_level_branch_uid as _top_level_branch_uid,
+)
 
 # Re-export for existing imports/tests.
 __all__ = [
@@ -129,67 +138,6 @@ def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
 
     root_uid = walk(root, None, "root")
     return root_uid, result
-
-
-def _top_level_branch_uid(
-    nodes: dict[str, dict[str, Any]], root_uid: str | None, node_uid: str
-) -> str | None:
-    if root_uid is None or node_uid == root_uid:
-        return None
-    current = node_uid
-    while current and current in nodes:
-        parent = nodes[current].get("parent_uid")
-        if parent == root_uid:
-            return current
-        if parent is None:
-            return current if current != root_uid else None
-        current = parent
-    return None
-
-
-def _entry_mode_payload(
-    *,
-    root_uid: str | None,
-    nodes: dict[str, dict[str, Any]],
-    due_items: list[dict[str, Any]],
-) -> dict[str, Any]:
-    due_uids = [item["node_uid"] for item in due_items]
-    branch_uids: list[str] = []
-    seen: set[str] = set()
-    for uid in due_uids:
-        branch = _top_level_branch_uid(nodes, root_uid, uid)
-        if branch and branch not in seen:
-            seen.add(branch)
-            branch_uids.append(branch)
-    count = len(due_uids)
-    if count == 0:
-        return {
-            "review_entry_mode": "none",
-            "review_entry_label": None,
-            "primary_branch_uid": None,
-            "primary_branch_title": None,
-            "due_branch_count": 0,
-            "due_node_uids": [],
-        }
-    if len(branch_uids) == 1:
-        branch_uid = branch_uids[0]
-        title = str(nodes.get(branch_uid, {}).get("text") or "未命名节点").strip() or "未命名节点"
-        return {
-            "review_entry_mode": "node",
-            "review_entry_label": f"节点复习 · {count}",
-            "primary_branch_uid": branch_uid,
-            "primary_branch_title": title,
-            "due_branch_count": 1,
-            "due_node_uids": due_uids,
-        }
-    return {
-        "review_entry_mode": "palace",
-        "review_entry_label": f"开始复习 · {count}",
-        "primary_branch_uid": None,
-        "primary_branch_title": None,
-        "due_branch_count": len(branch_uids),
-        "due_node_uids": due_uids,
-    }
 
 
 def _descendants(nodes: dict[str, dict[str, Any]], uid: str) -> list[str]:
@@ -413,6 +361,9 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
     mastered_count = sum(1 for item in details if item["stability_days"] >= mastery_horizon_days)
     next_due = min((item["due_at"] for item in details if item["due_at"]), default=None)
     entry = _entry_mode_payload(root_uid=root_uid, nodes=nodes, due_items=due_items)
+    branch_summaries = _branch_review_summaries(
+        root_uid=root_uid, nodes=nodes, details=details, now=now
+    )
     return {
         "palace_id": palace.id,
         "node_count": total,
@@ -431,6 +382,7 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
         "severe_weak_node_count": severe,
         "has_due_review": len(due_items) > 0,
         **entry,
+        "review_branch_summaries": branch_summaries,
         "nodes": details,
     }
 
@@ -562,9 +514,17 @@ def rate_nodes(
         [node_uid] if rating_scope == "single" else [node_uid, *_descendants(nodes, node_uid)]
     )
     selected = [uid for uid in selected if uid != root_uid]
-    if source_scene == "formal_review" and (
-        study_session_id.startswith("review-")
-        or session.get(StudySession, study_session_id) is not None
+    # Formal single ratings stay inside the frozen due scope so accidental leaf
+    # clicks outside this session do not mutate distant cards. Subtree ratings
+    # intentionally write the full document descendants (including non-due /
+    # unrevealed nodes) so parent scores cascade regardless of expand state.
+    if (
+        rating_scope == "single"
+        and source_scene == "formal_review"
+        and (
+            study_session_id.startswith("review-")
+            or session.get(StudySession, study_session_id) is not None
+        )
     ):
         from memory_anki.modules.reviews.application.formal_review_service import (
             get_formal_review_scope,

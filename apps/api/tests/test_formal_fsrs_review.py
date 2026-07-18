@@ -162,7 +162,75 @@ def test_single_top_level_branch_uses_node_entry_mode(db_session):
     payload = get_fsrs_queue_payload(db_session)
     assert payload["reviews"][0]["review_entry_mode"] == "node"
     assert payload["reviews"][0]["primary_branch_title"] == "Branch"
+    assert payload["reviews"][0]["review_entry_label"] == "节点复习"
     row = start_or_resume_formal_review(db_session, palace.id)
     summary = json.loads(row.summary_json)
     assert summary["review_entry_mode"] == "node"
     assert set(summary["frozen_due_node_uids"]) == {"branch", "leaf"}
+
+
+def test_formal_subtree_rating_updates_non_due_descendants(db_session):
+    """Parent subtree in formal review must cascade to non-due / out-of-frozen nodes."""
+    palace = Palace(
+        title="cascade",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {
+                            "data": {"uid": "a", "text": "A"},
+                            "children": [
+                                {"data": {"uid": "a1", "text": "A1"}, "children": []},
+                            ],
+                        },
+                        {"data": {"uid": "b", "text": "B"}, "children": []},
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+    # Mark a1 as not due yet, while a and b remain due for session freeze.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a1",
+        rating=4,
+        study_session_id="seed-a1",
+        operation_id="seed-a1",
+        rating_scope="single",
+        source_scene="practice",
+    )
+    before = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a1")
+        .one()
+    )
+    before_due = before.due_at
+    before_stability = before.stability
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    frozen = set(json.loads(row.summary_json)["frozen_due_node_uids"])
+    assert "a1" not in frozen
+    assert "a" in frozen
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=2,
+        study_session_id=row.id,
+        operation_id="formal-subtree-cascade",
+        rating_scope="subtree",
+        source_scene="formal_review",
+    )
+    assert "a1" in set(result["affected_node_uids"])
+    after = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a1")
+        .one()
+    )
+    assert after.due_at != before_due or after.stability != before_stability

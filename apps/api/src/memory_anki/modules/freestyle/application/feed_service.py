@@ -206,7 +206,7 @@ def _build_review_cards(
             continue
         overdue = int(projection.get("overdue_node_count") or 0)
         palace_title = resolve_palace_title(palace)
-        label = projection.get("review_entry_label") or f"开始复习 · {due_count}"
+        label = projection.get("review_entry_label") or "开始复习"
         mode = projection.get("review_entry_mode") or "palace"
         branch = projection.get("primary_branch_title")
         subtitle = label

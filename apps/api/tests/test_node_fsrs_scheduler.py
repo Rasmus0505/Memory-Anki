@@ -87,6 +87,12 @@ def test_projection_excludes_root_and_reports_due_nodes(db_session):
     assert projection["node_count"] == 3
     assert projection["due_node_count"] == 3
     assert projection["mastery_percent"] == 0
+    assert projection["review_entry_mode"] == "palace"
+    assert projection["review_entry_label"] == "开始复习"
+    assert isinstance(projection["review_branch_summaries"], list)
+    assert len(projection["review_branch_summaries"]) >= 2
+    assert all("branch_uid" in row for row in projection["review_branch_summaries"])
+    assert all("status" in row for row in projection["review_branch_summaries"])
 
 
 def test_mastery_trend_uses_only_completed_formal_review_receipts(db_session):
