@@ -1,6 +1,8 @@
 import type {
   AiPromptBlock,
+  AiPromptLayer,
   AiPromptRunSelection,
+  AiPromptSceneDefault,
 } from '@/shared/api/contracts'
 
 export interface AiGenerationContextOption {
@@ -8,6 +10,82 @@ export interface AiGenerationContextOption {
   label: string
   description?: string
   content: string
+}
+
+export const PROMPT_LAYER_LABELS: Record<AiPromptLayer, string> = {
+  role: '角色',
+  task: '任务',
+  content: '内容规则',
+  boundary: '边界',
+  output: '输出格式',
+  quality: '质量自检',
+}
+
+export const PROMPT_LAYER_DISPLAY_ORDER: AiPromptLayer[] = [
+  'role',
+  'task',
+  'content',
+  'boundary',
+  'output',
+  'quality',
+]
+
+/** Resolve modular default block keys; never leave a scene with an empty combination when catalog has defaults. */
+export function resolveDefaultBlockKeys(
+  promptScene?: Pick<AiPromptSceneDefault, 'block_keys' | 'recommended_block_keys'> | null,
+) {
+  const selected = promptScene?.block_keys ?? []
+  if (selected.length > 0) return [...selected]
+  const recommended = promptScene?.recommended_block_keys ?? []
+  return recommended.length > 0 ? [...recommended] : []
+}
+
+/**
+ * Only show blocks that belong to the current scene.
+ * Unscoped legacy blocks appear only if already selected or part of the scene default.
+ */
+export function filterBlocksForScene(
+  blocks: AiPromptBlock[],
+  sceneKey: string,
+  promptScene?: Pick<AiPromptSceneDefault, 'block_keys' | 'recommended_block_keys'> | null,
+  selectedBlockKeys: string[] = [],
+) {
+  const defaultKeys = new Set([
+    ...(promptScene?.block_keys ?? []),
+    ...(promptScene?.recommended_block_keys ?? []),
+    ...selectedBlockKeys,
+  ])
+  return blocks
+    .filter((block) => {
+      if (!block.is_active) return false
+      if (block.applicable_scene_keys.length > 0) {
+        return (
+          block.applicable_scene_keys.includes(sceneKey)
+          || selectedBlockKeys.includes(block.key)
+        )
+      }
+      // Empty applicable_scene_keys used to mean "all scenes"; treat as scene-local only.
+      return defaultKeys.has(block.key)
+    })
+    .sort((left, right) => (
+      PROMPT_LAYER_ORDER[left.layer] - PROMPT_LAYER_ORDER[right.layer]
+      || left.sort_order - right.sort_order
+      || left.key.localeCompare(right.key)
+    ))
+}
+
+export function groupBlocksByLayer(blocks: AiPromptBlock[]) {
+  const groups: Array<{ layer: AiPromptLayer; label: string; blocks: AiPromptBlock[] }> = []
+  for (const layer of PROMPT_LAYER_DISPLAY_ORDER) {
+    const layerBlocks = blocks.filter((block) => block.layer === layer)
+    if (layerBlocks.length === 0) continue
+    groups.push({
+      layer,
+      label: PROMPT_LAYER_LABELS[layer],
+      blocks: layerBlocks,
+    })
+  }
+  return groups
 }
 
 export interface AiRunConfigRequest {
@@ -49,7 +127,7 @@ export function buildPromptWithContexts(
   return `${prompt.trim()}\n\n以下内容是本次运行额外的只读上下文快照：\n${contextText}`.trim()
 }
 
-const PROMPT_LAYER_ORDER: Record<AiPromptBlock['layer'], number> = {
+export const PROMPT_LAYER_ORDER: Record<AiPromptLayer, number> = {
   role: 10,
   task: 20,
   content: 30,

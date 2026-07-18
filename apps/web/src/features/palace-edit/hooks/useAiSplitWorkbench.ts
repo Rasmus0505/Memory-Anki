@@ -17,6 +17,7 @@ import {
 } from '@/entities/preferences/api'
 import {
   buildDefaultAiConfig,
+  filterBlocksForScene,
   normalizeScenarioAiConfig,
   readRecentAiConfig,
   writeRecentAiConfig,
@@ -121,13 +122,13 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
 
   const availableBlocks = useMemo(
     () =>
-      promptBlocks.filter(
-        (block) =>
-          block.is_active
-          && (block.applicable_scene_keys.length === 0
-            || block.applicable_scene_keys.includes(PROMPT_SCENE_KEY)),
+      filterBlocksForScene(
+        promptBlocks,
+        PROMPT_SCENE_KEY,
+        promptScene,
+        aiConfig.prompt_options?.block_keys ?? [],
       ),
-    [promptBlocks],
+    [aiConfig.prompt_options?.block_keys, promptBlocks, promptScene],
   )
 
   const previewNodeCount = useMemo(() => countPreviewNodes(previewTree), [previewTree])

@@ -8,6 +8,8 @@ import type {
 import type { PromptTemplateSnapshot } from './aiRunConfigPersistence'
 import {
   compileLocalPromptPreview,
+  filterBlocksForScene,
+  groupBlocksByLayer,
   supportsEmphasisMarkDescription,
   type MultiScenarioEntry,
 } from './aiRunConfigDialogHelpers'
@@ -97,11 +99,14 @@ export function AiRunConfigDialogView({
             const selection = selectedConfig?.prompt_options ?? {}
             const selectedBlockKeys = selection.block_keys ?? []
             const promptKey = entry.promptSceneKey ?? entry.scenarioKey
-            const availableBlocks = promptBlocks.filter((block) => (
-              block.is_active
-              && (block.applicable_scene_keys.length === 0
-                || block.applicable_scene_keys.includes(promptKey))
-            ))
+            const availableBlocks = filterBlocksForScene(
+              promptBlocks,
+              promptKey,
+              promptScene,
+              selectedBlockKeys,
+            )
+            const blockGroups = groupBlocksByLayer(availableBlocks)
+            const recommendedKeys = new Set(promptScene?.recommended_block_keys ?? [])
             const localPreview = compileLocalPromptPreview(
               availableBlocks,
               selection,
@@ -222,7 +227,17 @@ export function AiRunConfigDialogView({
 
                 <div className="grid min-h-[260px] gap-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">提示词组合</span>
+                    <div className="space-y-0.5">
+                      <span className="font-medium">提示词组合</span>
+                      <div className="text-xs text-muted-foreground">
+                        仅显示本场景相关块
+                        {selectedBlockKeys.length > 0
+                          ? ` · 已选 ${selectedBlockKeys.length}/${availableBlocks.length}`
+                          : availableBlocks.length > 0
+                            ? ' · 尚未勾选（将使用空组合）'
+                            : ' · 本场景使用完整场景提示词'}
+                      </div>
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
@@ -236,35 +251,58 @@ export function AiRunConfigDialogView({
                     </Button>
                   </div>
 
-                  <div className="grid gap-2 rounded-lg border border-border/60 bg-background/70 p-3 sm:grid-cols-2">
-                    {availableBlocks.map((block) => (
-                      <label key={block.key} className="flex items-start gap-2 rounded-md border bg-background p-2">
-                        <input
-                          type="checkbox"
-                          className="mt-1 size-4"
-                          checked={selectedBlockKeys.includes(block.key)}
-                          onChange={(event) => {
-                            onUpdateScenarioConfig(entry.scenarioKey, (current) => {
-                              const currentKeys = current?.prompt_options?.block_keys ?? []
-                              return {
-                                ...current,
-                                prompt_options: {
-                                  ...current?.prompt_options,
-                                  block_keys: event.target.checked
-                                    ? [...currentKeys, block.key]
-                                    : currentKeys.filter((key) => key !== block.key),
-                                },
-                              }
-                            })
-                          }}
-                        />
-                        <span>
-                          <span className="block font-medium">{block.label}</span>
-                          <span className="text-xs text-muted-foreground">{block.description}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  {availableBlocks.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/60 bg-background/70 p-3 text-xs text-muted-foreground">
+                      本场景没有可勾选的提示词块，直接编辑下方「场景特殊提示词」即可。
+                    </div>
+                  ) : (
+                    <div className="space-y-3 rounded-lg border border-border/60 bg-background/70 p-3">
+                      {blockGroups.map((group) => (
+                        <div key={group.layer} className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {group.label}
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {group.blocks.map((block) => (
+                              <label
+                                key={block.key}
+                                className="flex items-start gap-2 rounded-md border bg-background p-2"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 size-4"
+                                  checked={selectedBlockKeys.includes(block.key)}
+                                  onChange={(event) => {
+                                    onUpdateScenarioConfig(entry.scenarioKey, (current) => {
+                                      const currentKeys = current?.prompt_options?.block_keys ?? []
+                                      return {
+                                        ...current,
+                                        prompt_options: {
+                                          ...current?.prompt_options,
+                                          block_keys: event.target.checked
+                                            ? [...currentKeys, block.key]
+                                            : currentKeys.filter((key) => key !== block.key),
+                                        },
+                                      }
+                                    })
+                                  }}
+                                />
+                                <span>
+                                  <span className="block font-medium">
+                                    {block.label}
+                                    {recommendedKeys.has(block.key) ? (
+                                      <span className="ml-2 text-[10px] font-normal text-primary">推荐</span>
+                                    ) : null}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{block.description}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   <label className="grid gap-2">
                     <span className="font-medium">场景特殊提示词</span>

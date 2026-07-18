@@ -114,6 +114,8 @@ export interface AiPromptSceneDefault {
   label: string
   description: string
   category?: string
+  /** Compatibility aliases kept for old entrypoints; hide from default settings lists. */
+  is_compatibility?: boolean
   block_keys: string[]
   blocks: AiPromptBlock[]
   scene_instruction: string

@@ -121,7 +121,9 @@ export function useAiRunConfigDialog() {
       let nextScenarios = scenarios
       let nextPromptTemplates = promptTemplates
       let nextPromptScenes = promptScenes
-      if (nextScenarios.length === 0) {
+      // Reload when scenarios are missing, or when scene defaults never loaded
+      // (otherwise modular block checkboxes open with an empty combination).
+      if (nextScenarios.length === 0 || Object.keys(nextPromptScenes).length === 0) {
         try {
           const catalog = await loadScenarios()
           nextScenarios = catalog.scenarios

@@ -33,6 +33,7 @@ business result actions -> owning public facade (palaces or palace_quiz)
 `entities/ai-runtime` also exposes the shared pre-run configuration dialog used by mind-map import and quiz generation. Business modules may provide scenario keys, prompt templates, optional context choices, and the command that consumes the result; they must not import `entities/ai-runtime/model` directly.
 
 1. The dialog shows the full effective per-run prompt, supports direct editing, restores the scenario default, and switches among models allowed by the selected scenario without changing global defaults.
+1a. Modular prompt blocks are scoped per scene (`applicable_scene_keys`). The run dialog only lists blocks for the current scene, groups them by layer (角色/任务/内容/边界/输出/质量), and pre-checks the scene default combination (`block_keys`, falling back to `recommended_block_keys`). Empty modular defaults are repaired from the catalog on seed.
 2. Mind-map and quiz context options default to unchecked. Selecting one appends a labeled, read-only snapshot to the final prompt; later document edits do not mutate the confirmed payload.
 3. The UI displays a conservative token estimate and blocks confirmation above the safe budget instead of silently truncating context.
 4. Confirmation returns an immutable `AiRuntimeOptions` payload. The owning import or quiz use case persists that payload with its operation record and still requires a separate result-application command.

@@ -7,3 +7,9 @@ export {
   writeRecentAiConfig,
 } from './model/aiRunConfigPersistence'
 export type { PromptTemplateSnapshot } from './model/aiRunConfigPersistence'
+export {
+  filterBlocksForScene,
+  groupBlocksByLayer,
+  PROMPT_LAYER_LABELS,
+  resolveDefaultBlockKeys,
+} from './model/aiRunConfigDialogHelpers'

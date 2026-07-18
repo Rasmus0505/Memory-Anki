@@ -114,13 +114,20 @@ export function buildDefaultAiConfig(
   promptTemplate?: PromptTemplateSnapshot | null,
   promptScene?: AiPromptSceneDefault | null,
 ): AiRuntimeOptions {
+  const defaultBlockKeys = promptScene
+    ? (
+        promptScene.block_keys?.length
+          ? promptScene.block_keys
+          : (promptScene.recommended_block_keys ?? [])
+      )
+    : undefined
   return {
     model: scenario.default_model,
     thinking_enabled: scenario.default_thinking_enabled,
     prompt_override: undefined,
     prompt_options: promptScene
       ? {
-          block_keys: promptScene.block_keys,
+          block_keys: defaultBlockKeys,
           scene_instruction: promptScene.scene_instruction,
           run_instruction: '',
           emphasis_mark_description: '',
