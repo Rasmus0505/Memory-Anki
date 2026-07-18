@@ -157,6 +157,22 @@ class SettingsAiRouteTests(RouterTestCase):
         block_keys = {item["key"] for item in blocks_response.json()["items"]}
         self.assertIn("content.fidelity", block_keys)
         self.assertIn("output.mindmap_json", block_keys)
+        fidelity = next(item for item in blocks_response.json()["items"] if item["key"] == "content.fidelity")
+        self.assertIn("vision_batch_mindmap", fidelity["applicable_scene_keys"])
+        self.assertNotIn("ai_split", fidelity["applicable_scene_keys"])
+        split_fidelity = next(
+            item for item in blocks_response.json()["items"] if item["key"] == "content.split_source_fidelity"
+        )
+        self.assertIn("ai_split", split_fidelity["applicable_scene_keys"])
+        self.assertNotIn("vision_batch_mindmap", split_fidelity["applicable_scene_keys"])
+
+        scenes = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
+        pdf_scene = next(item for item in scenes if item["scene_key"] == "vision_batch_mindmap")
+        self.assertGreaterEqual(len(pdf_scene["block_keys"]), 5)
+        self.assertTrue(set(pdf_scene["recommended_block_keys"]).issubset(set(pdf_scene["block_keys"])))
+        self.assertFalse(pdf_scene.get("is_compatibility"))
+        compat = next(item for item in scenes if item["scene_key"] == "ai_split_parallel")
+        self.assertTrue(compat.get("is_compatibility"))
 
         preview = self.client.post(
             "/api/v1/settings/ai-prompt-compose/preview",
@@ -174,6 +190,23 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertLess(payload["text"].index("严格保留"), payload["text"].index("输出前检查"))
         self.assertTrue(payload["text"].endswith("本次运行追加要求：\n本次只处理第 64-68 页"))
         self.assertTrue(any("boundary.document_chapter" in item for item in payload["warnings"]))
+
+    def test_empty_scene_default_is_repaired_to_catalog_blocks(self):
+        # Saving an empty modular combination is not sticky: seed repair restores
+        # catalog defaults before the response returns.
+        repaired = self.client.put(
+            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/default",
+            json={"block_keys": [], "scene_instruction": "空组合错误态"},
+        )
+        self.assertEqual(repaired.status_code, 200)
+        scene = repaired.json()
+        self.assertIn("role.strict_json", scene["block_keys"])
+        self.assertIn("output.mindmap_json", scene["block_keys"])
+        self.assertGreaterEqual(len(scene["block_keys"]), 5)
+
+        listed = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
+        listed_scene = next(item for item in listed if item["scene_key"] == "vision_batch_mindmap")
+        self.assertEqual(listed_scene["block_keys"], scene["block_keys"])
 
     def test_scene_default_activates_immediately_and_can_roll_back(self):
         before = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]

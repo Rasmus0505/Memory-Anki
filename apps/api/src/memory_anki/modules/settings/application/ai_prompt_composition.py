@@ -25,6 +25,7 @@ from .ai_prompt_composition_catalog import (
     PromptSceneSeed,
     _scene_display_description,
     _scene_display_label,
+    block_applicable_scene_keys,
 )
 from .ai_prompts import (
     PLACEHOLDER_PATTERN,
@@ -46,6 +47,10 @@ def ensure_prompt_composition_seed(session: Session) -> None:
     changed = False
     now = utc_now_naive()
     for block_seed in BUILTIN_BLOCKS:
+        applicable_json = json.dumps(
+            block_applicable_scene_keys(block_seed.key),
+            ensure_ascii=False,
+        )
         row = session.get(AiPromptBlock, block_seed.key)
         if row is None:
             version_id = uuid.uuid4().hex
@@ -56,7 +61,7 @@ def ensure_prompt_composition_seed(session: Session) -> None:
                     description=block_seed.description,
                     layer=block_seed.layer,
                     sort_order=block_seed.sort_order,
-                    applicable_scenes_json="[]",
+                    applicable_scenes_json=applicable_json,
                     placeholders_json=json.dumps(sorted(set(PLACEHOLDER_PATTERN.findall(block_seed.template)))),
                     active_version_id=version_id,
                     is_builtin=True,
@@ -80,12 +85,16 @@ def ensure_prompt_composition_seed(session: Session) -> None:
             row.layer = block_seed.layer
             row.sort_order = block_seed.sort_order
             row.is_builtin = True
+            # Keep scene scoping current so run dialogs only show relevant blocks.
+            if row.applicable_scenes_json != applicable_json:
+                row.applicable_scenes_json = applicable_json
+                changed = True
 
     for scene_seed in BUILTIN_SCENES.values():
         scene_row = session.get(AiPromptSceneDefault, scene_seed.scene_key)
         if scene_row is not None:
-            # Repair empty builtin defaults so newly added recommended blocks take effect
-            # without wiping user customizations.
+            # Repair empty or outdated builtin defaults so recommended blocks take effect
+            # without wiping intentional user customizations that still select some blocks.
             active = (
                 session.get(AiPromptSceneVersion, scene_row.active_version_id)
                 if scene_row.active_version_id
@@ -95,11 +104,17 @@ def ensure_prompt_composition_seed(session: Session) -> None:
             missing_recommended = [
                 key for key in scene_seed.recommended_block_keys if key not in active_keys
             ]
-            should_refresh_builtin = active is not None and active.source == "builtin" and (
-                (not active_keys and scene_seed.block_keys)
-                or bool(missing_recommended and scene_seed.scene_key.startswith("ai_split"))
+            empty_defaults = not active_keys and bool(scene_seed.block_keys)
+            outdated_builtin = (
+                active is not None
+                and active.source == "builtin"
+                and bool(missing_recommended)
             )
-            if should_refresh_builtin and active is not None:
+            # Empty selection is never a valid modular default for scenes that ship blocks.
+            should_refresh = active is not None and (
+                empty_defaults or outdated_builtin
+            )
+            if should_refresh and active is not None:
                 active.status = "archived"
                 version_id = uuid.uuid4().hex
                 session.add(
@@ -107,7 +122,11 @@ def ensure_prompt_composition_seed(session: Session) -> None:
                         id=version_id,
                         scene_key=scene_seed.scene_key,
                         block_keys_json=json.dumps(list(scene_seed.block_keys), ensure_ascii=False),
-                        scene_instruction=scene_seed.scene_instruction,
+                        scene_instruction=(
+                            scene_seed.scene_instruction
+                            if empty_defaults or active.source == "builtin"
+                            else active.scene_instruction
+                        ),
                         status="active",
                         source="builtin",
                         activated_at=now,
@@ -427,6 +446,7 @@ def list_scene_defaults(session: Session) -> list[dict[str, Any]]:
                 "label": _scene_display_label(seed),
                 "description": _scene_display_description(seed),
                 "category": seed.category,
+                "is_compatibility": bool(seed.is_compatibility),
                 "block_keys": block_keys,
                 "blocks": [blocks[key] for key in block_keys if key in blocks],
                 "scene_instruction": version.scene_instruction,

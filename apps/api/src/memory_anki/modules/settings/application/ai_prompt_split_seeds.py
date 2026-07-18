@@ -21,6 +21,7 @@ class PromptSceneSeedData(TypedDict):
     label: NotRequired[str]
     description: NotRequired[str]
     category: NotRequired[str]
+    is_compatibility: NotRequired[bool]
 
 
 AI_SPLIT_BLOCK_SEEDS: tuple[PromptBlockSeedData, ...] = (
@@ -163,6 +164,7 @@ AI_SPLIT_SCENE_SEEDS: tuple[PromptSceneSeedData, ...] = (
         "label": "AI 分卡（兼容·并列入口）",
         "description": "旧「并列分卡」入口兼容场景，默认与统一 AI 分卡相同。",
         "category": "脑图分卡",
+        "is_compatibility": True,
     },
     {
         "scene_key": "ai_split_hierarchy",
@@ -179,5 +181,6 @@ AI_SPLIT_SCENE_SEEDS: tuple[PromptSceneSeedData, ...] = (
         "label": "AI 分卡（兼容·层级入口）",
         "description": "旧「层级分卡」入口兼容场景，默认与统一 AI 分卡相同。",
         "category": "脑图分卡",
+        "is_compatibility": True,
     },
 )

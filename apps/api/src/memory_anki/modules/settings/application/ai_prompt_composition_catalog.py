@@ -16,6 +16,15 @@ LAYER_ORDER = {
     "quality": 60,
 }
 
+LAYER_LABELS = {
+    "role": "角色",
+    "task": "任务",
+    "content": "内容规则",
+    "boundary": "边界",
+    "output": "输出格式",
+    "quality": "质量自检",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class PromptBlockSeed:
@@ -37,6 +46,7 @@ class PromptSceneSeed:
     label: str | None = None
     description: str | None = None
     category: str = "其他"
+    is_compatibility: bool = False
 
 
 def _scene_seed_from_mapping(seed: Mapping[str, Any]) -> PromptSceneSeed:
@@ -49,6 +59,7 @@ def _scene_seed_from_mapping(seed: Mapping[str, Any]) -> PromptSceneSeed:
         label=str(seed["label"]) if seed.get("label") else None,
         description=str(seed["description"]) if seed.get("description") else None,
         category=str(seed.get("category") or "其他"),
+        is_compatibility=bool(seed.get("is_compatibility", False)),
     )
 
 
@@ -278,6 +289,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "content.fidelity",
             "content.knowledge_emphasis",
             "output.mindmap_json",
+            "quality.json_integrity",
         ),
         label="图片转脑图",
         description="识别单张脑图截图并还原层级。",
@@ -301,7 +313,9 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "content.fidelity",
             "content.knowledge_emphasis",
             "boundary.document_chapter",
+            "boundary.noise_filter",
             "output.mindmap_json",
+            "quality.json_integrity",
         ),
         label="PDF/教材转脑图",
         description="根据教材正文页面生成完整思维导图。",
@@ -325,9 +339,12 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         ),
         recommended_block_keys=(
             "role.strict_json",
+            "content.fidelity",
             "content.knowledge_emphasis",
             "boundary.explicit_structure",
+            "boundary.noise_filter",
             "output.mindmap_json",
+            "quality.json_integrity",
         ),
         label="结构图补全脑图",
         description="以用户指定结构图为骨架补全正文。",
@@ -354,7 +371,9 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "content.fidelity",
             "content.knowledge_emphasis",
             "boundary.document_chapter",
+            "boundary.noise_filter",
             "output.mindmap_json",
+            "quality.json_integrity",
         ),
         label="OCR 整理为脑图",
         description="把逐页 OCR 原文整理成章节脑图。",
@@ -365,7 +384,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         prompt_key="ai_prompt_import_image_text",
         block_keys=("role.source_extractor", "content.literal_ocr", "boundary.noise_filter"),
         scene_instruction="任务：提取图片或 PDF 页面中的正文文字，保持自然阅读顺序和段落。",
-        recommended_block_keys=("content.literal_ocr",),
+        recommended_block_keys=("role.source_extractor", "content.literal_ocr", "boundary.noise_filter"),
         label="图片/PDF 转文字",
         description="逐字提取图片或 PDF 页面正文。",
         category="OCR 与整理",
@@ -435,6 +454,17 @@ for _prompt_key, _scene_key in PROMPT_SCENE_BINDINGS.items():
         label=_definition.label,
         description=_definition.description,
         category=_category,
+        is_compatibility=False,
     )
+
+
+def block_applicable_scene_keys(block_key: str) -> list[str]:
+    """Scenes that ship this block in their modular default combination."""
+    scenes = [
+        seed.scene_key
+        for seed in BUILTIN_SCENES.values()
+        if block_key in seed.block_keys or block_key in seed.recommended_block_keys
+    ]
+    return sorted(set(scenes))
 
 
