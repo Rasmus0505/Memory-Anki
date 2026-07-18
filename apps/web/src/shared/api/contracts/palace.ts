@@ -75,7 +75,15 @@ export interface PalaceListItem {
   primary_branch_uid?: string | null
   primary_branch_title?: string | null
   due_branch_count?: number
-  segments: PalaceSegmentSummary[]
+  review_branch_summaries?: Array<{
+    branch_uid: string
+    title: string
+    due_node_count: number
+    next_review_at: string | null
+    status: 'due_now' | 'later_today' | 'future' | 'none'
+  }>
+  /** Catalog card payloads may omit segments; FSRS CTAs use palace-level fields. */
+  segments?: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {

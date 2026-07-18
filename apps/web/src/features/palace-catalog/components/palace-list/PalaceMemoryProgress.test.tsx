@@ -13,6 +13,8 @@ vi.mock('recharts', () => ({
   LineChart: ({ children }: { children: ReactNode }) => <div data-testid="trend-chart">{children}</div>,
   Line: () => null,
   XAxis: () => null,
+  YAxis: () => null,
+  CartesianGrid: () => null,
   Tooltip: () => null,
 }))
 
@@ -37,19 +39,49 @@ describe('PalaceMemoryProgress', () => {
     getTrendMock.mockReset()
   })
 
+  function trendTrigger(masteryPercent: number) {
+    return screen.getByRole('button', { name: `掌握度 ${masteryPercent}%，查看趋势` })
+  }
+
   it('shows only mastery and the progress bar before opening the trend card', () => {
     render(<PalaceMemoryProgress palace={palace(1, 42)} />)
 
     expect(screen.getByText('掌握 42%')).toBeTruthy()
     expect(screen.queryByText(/记忆|到期|逾期|弱点/)).toBeNull()
-    expect(screen.getByRole('button', { name: '掌握度 42%，查看趋势' })).toBeTruthy()
+    expect(trendTrigger(42)).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: '掌握度 42%' })).toBeTruthy()
+  })
+
+  it('opens trend only from the progress bar, not from the mastery label', async () => {
+    getTrendMock.mockResolvedValue({ palace_id: 1, points: [] })
+    render(<PalaceMemoryProgress palace={palace(1, 42)} />)
+
+    fireEvent.pointerEnter(screen.getByText('掌握 42%'))
+    expect(screen.queryByText('掌握度趋势')).toBeNull()
+    expect(getTrendMock).not.toHaveBeenCalled()
+
+    fireEvent.pointerEnter(trendTrigger(42))
+    expect(await screen.findByText('完成一次正式复习后，这里会显示掌握度变化')).toBeTruthy()
+  })
+
+  it('closes the trend card as soon as the pointer leaves the progress bar', async () => {
+    getTrendMock.mockResolvedValue({ palace_id: 1, points: [] })
+    render(<PalaceMemoryProgress palace={palace(1, 42)} />)
+
+    fireEvent.pointerEnter(trendTrigger(42))
+    expect(await screen.findByText('完成一次正式复习后，这里会显示掌握度变化')).toBeTruthy()
+
+    fireEvent.pointerLeave(trendTrigger(42))
+    await waitFor(() => {
+      expect(screen.queryByText('完成一次正式复习后，这里会显示掌握度变化')).toBeNull()
+    })
   })
 
   it('uses the same concise empty state when no formal review is completed', async () => {
     getTrendMock.mockResolvedValue({ palace_id: 1, points: [] })
     render(<PalaceMemoryProgress palace={palace(1, 0)} />)
 
-    fireEvent.focus(screen.getByRole('button', { name: '掌握度 0%，查看趋势' }))
+    fireEvent.focus(trendTrigger(0))
 
     expect(await screen.findByText('完成一次正式复习后，这里会显示掌握度变化')).toBeTruthy()
     expect(screen.queryByText(/到期|逾期|弱点|记忆健康/)).toBeNull()
@@ -69,11 +101,14 @@ describe('PalaceMemoryProgress', () => {
     })
     render(<PalaceMemoryProgress palace={palace(1, current)} />)
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: `掌握度 ${current}%，查看趋势` }))
+    fireEvent.pointerEnter(trendTrigger(current))
 
-    expect(await screen.findByText(label)).toBeTruthy()
+    expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
     expect(screen.getByTestId('trend-chart')).toBeTruthy()
-    expect(screen.getByText(/最近正式复习：2026\/07\/16/)).toBeTruthy()
+    expect(screen.getByText('最近正式复习')).toBeTruthy()
+    expect(screen.getByText(/较上次正式复习/)).toBeTruthy()
+    expect(screen.getByText(/共 2 次正式复习/)).toBeTruthy()
+    expect(screen.getByText(/每个点 = 一次正式复习结束后的宫殿掌握度/)).toBeTruthy()
   })
 
   it('labels a single formal completion as the first record', async () => {
@@ -85,9 +120,11 @@ describe('PalaceMemoryProgress', () => {
     })
     render(<PalaceMemoryProgress palace={palace(1, 42)} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '掌握度 42%，查看趋势' }))
+    fireEvent.click(trendTrigger(42))
 
     expect(await screen.findByText('首次记录')).toBeTruthy()
+    expect(screen.getByText(/这是第一次正式复习后的记录/)).toBeTruthy()
+    expect(screen.getByText('起点')).toBeTruthy()
   })
 
   it('does not let a stale palace trend update the next palace card', async () => {
@@ -96,9 +133,9 @@ describe('PalaceMemoryProgress', () => {
     getTrendMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     const view = render(<PalaceMemoryProgress palace={palace(1, 10)} />)
 
-    fireEvent.focus(screen.getByRole('button', { name: '掌握度 10%，查看趋势' }))
+    fireEvent.focus(trendTrigger(10))
     view.rerender(<PalaceMemoryProgress palace={palace(2, 20)} />)
-    fireEvent.focus(screen.getByRole('button', { name: '掌握度 20%，查看趋势' }))
+    fireEvent.focus(trendTrigger(20))
 
     first.resolve({
       palace_id: 1,
@@ -112,14 +149,14 @@ describe('PalaceMemoryProgress', () => {
       points: [{ at: '2026-07-16T09:00:00', mastery_progress: 0.2, mastery_percent: 20 }],
     })
     await waitFor(() => expect(screen.getByText('首次记录')).toBeTruthy())
-    expect(screen.getByText('20%')).toBeTruthy()
+    expect(screen.getAllByText('20%').length).toBeGreaterThan(0)
   })
 
   it('shows a non-blocking message when trend loading fails', async () => {
     getTrendMock.mockRejectedValue(new Error('offline'))
     render(<PalaceMemoryProgress palace={palace(1, 42)} />)
 
-    fireEvent.focus(screen.getByRole('button', { name: '掌握度 42%，查看趋势' }))
+    fireEvent.focus(trendTrigger(42))
 
     expect(await screen.findByText('暂时无法读取趋势，请稍后再试')).toBeTruthy()
     expect(screen.getByText('掌握 42%')).toBeTruthy()

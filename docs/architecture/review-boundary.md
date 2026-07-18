@@ -49,18 +49,22 @@ Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / G
 Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
 
 Entry UX is derived from due-node top-level branch coverage:
-- one top-level branch due → `review_entry_mode=node` / label `节点复习 · N`
-- multiple top-level branches due → `review_entry_mode=palace` / label `开始复习 · N`
+- one top-level branch due → `review_entry_mode=node` / label `节点复习` (node CTA uses a non-green solid color)
+- multiple top-level branches due → `review_entry_mode=palace` / label `开始复习` (green solid)
 - none due → `none`
 
-A formal session freezes its due-node UID scope on entry (whole palace or single branch). Ratings that create new due nodes are deferred to the next session.
+Node counts are not embedded in CTA labels. Per-branch schedule detail for tooltips lives in `review_branch_summaries` (top-level branches only: title, due count, next review, status).
+
+A formal session freezes its due-node UID scope on entry (whole palace or single branch). Completion progress and unrated-due counts still use that frozen set. **Subtree ratings** write FSRS state for the full document descendants of the rated node (including non-due / unrevealed nodes). **Single** ratings in formal review still require the target node to be in the frozen scope.
+
+Parent/root batch scoring must not depend on flip-card reveal state. Frontend rating scope walks the full `editor_doc` tree (`ratingTreeEditorState`), not the reveal-filtered visible tree.
 
 ## FSRS formal review runtime
 
 Formal review runtime scheduling is exclusively derived from `ReviewNodeState.due_at`. Queue, overdue count, later-today grouping, and load forecasting read node projections only.
 
-Entering a formal review creates or resumes an active UUID `StudySession` and freezes the due-node UID scope. Formal subtree ratings intersect that scope. Nodes added later are deferred, deleted nodes drop out of completion counts, and unrated nodes remain unchanged and due.
+Entering a formal review creates or resumes an active UUID `StudySession` and freezes the due-node UID scope. Nodes added later are deferred for completion counts, deleted nodes drop out of completion counts, and unrated frozen nodes remain due.
 
 Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time.
 
-The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. Catalog CTAs prefer backend `review_entry_label` when due.
+The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. Catalog CTAs prefer backend `review_entry_label` when due and show `review_branch_summaries` on hover.

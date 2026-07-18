@@ -46,11 +46,32 @@ export function usePalaceListCardActions({
     }
   }
 
+  const shouldOpenFormalReview = (palace: PalaceGroupedItem) => {
+    const nodeCount = Number(palace.memory_node_count ?? 0)
+    if (nodeCount <= 0) return false
+    const dueCount = Number(palace.due_node_count ?? 0)
+    const entryMode = palace.review_entry_mode
+    if (dueCount > 0 || entryMode === 'node' || entryMode === 'palace' || palace.has_due_review) {
+      return true
+    }
+    // Future / later-today FSRS cards still open formal review (early review).
+    return Boolean(palace.memory_next_review_at ?? palace.next_review_at)
+  }
+
   const handlePalacePractice = (palace: PalaceGroupedItem) => {
+    if (shouldOpenFormalReview(palace)) {
+      // Formal FSRS resolve accepts palace id and starts/resumes the review StudySession.
+      navigate(buildReviewSessionPath(palace.id))
+      return
+    }
     navigate(`/palaces/${palace.id}/practice`)
   }
 
   const handleWarmPalacePractice = (palace: PalaceGroupedItem) => {
+    if (shouldOpenFormalReview(palace)) {
+      prefetchReviewSession?.(palace.id)
+      return
+    }
     prefetchStudySession('palace-practice', palace.id, () =>
       Promise.all([getPalaceEditorApi(palace.id), getPracticeSessionProgressApi(palace.id)]).then(
         ([session, progress]) => ({ session, progress }),
@@ -63,12 +84,21 @@ export function usePalaceListCardActions({
       navigate(buildReviewSessionPath(segment.current_review_schedule_id))
       return
     }
+    // Virtual default / whole-palace segment → formal FSRS by palace id.
+    if (segment.is_virtual_default || segment.id === 0) {
+      navigate(buildReviewSessionPath(segment.palace_id))
+      return
+    }
     navigate(`/segments/${segment.id}/practice`)
   }
 
   const handleWarmSegmentPractice = (segment: PalaceSegmentSummary) => {
     if (segment.current_review_schedule_id) {
       prefetchReviewSession?.(segment.current_review_schedule_id)
+      return
+    }
+    if (segment.is_virtual_default || segment.id === 0) {
+      prefetchReviewSession?.(segment.palace_id)
       return
     }
     prefetchStudySession('segment-practice', segment.id, () =>

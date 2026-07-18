@@ -21,6 +21,7 @@ import {
   getSegmentDisplayName,
   getSegmentListClass,
 } from '@/features/palace-catalog/components/palace-list/utils'
+import { ReviewEntryTooltip } from '@/entities/review'
 
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
@@ -95,6 +96,7 @@ function ReviewActionButton({
   progress,
   onClick,
   onWarm,
+  tooltip,
 }: {
   label: string
   className: string
@@ -102,6 +104,12 @@ function ReviewActionButton({
   progress?: number | null
   onClick: () => void
   onWarm?: () => void
+  tooltip?: {
+    branches?: PalaceGroupedItem['review_branch_summaries']
+    nextReviewAt?: string | null
+    dueNodeCount?: number
+    entryMode?: 'none' | 'node' | 'palace' | null
+  } | null
 }) {
   const normalizedProgress = normalizeReviewProgress(progress)
   const showProgressFill =
@@ -110,7 +118,7 @@ function ReviewActionButton({
     normalizedProgress > 0 &&
     normalizedProgress < 1
 
-  return (
+  const button = (
     <button
       type="button"
       className={cn('relative isolate min-h-11 overflow-hidden sm:min-h-8', className)}
@@ -135,6 +143,18 @@ function ReviewActionButton({
       ) : null}
     </button>
   )
+
+  if (!tooltip?.branches?.length) return button
+  return (
+    <ReviewEntryTooltip
+      branches={tooltip.branches}
+      nextReviewAt={tooltip.nextReviewAt}
+      dueNodeCount={tooltip.dueNodeCount}
+      entryMode={tooltip.entryMode}
+    >
+      {button}
+    </ReviewEntryTooltip>
+  )
 }
 
 export function PalaceListCard({
@@ -151,31 +171,55 @@ export function PalaceListCard({
   const [menuOpen, setMenuOpen] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const segmentCount = Array.isArray(palace.segments) ? palace.segments.length : 0
+  const segments = Array.isArray(palace.segments) ? palace.segments : []
+  const segmentCount = segments.length
   const isMultiSegment = segmentCount > 1
   const hasSingleSegment = segmentCount === 1
-  const singleSegment = hasSingleSegment ? palace.segments[0] : null
-  const hasFsrsProjection = typeof palace.memory_node_count === 'number' || 'memory_next_review_at' in palace
-  const memoryNextReviewAt = hasFsrsProjection ? palace.memory_next_review_at ?? null : singleSegment?.next_review_at ?? null
-  const singleSegmentReviewState = getReviewButtonState(memoryNextReviewAt)
-  const showSingleSegmentReviewButton = Boolean(
-    singleSegment &&
-      !singleSegment.is_empty &&
-      (hasFsrsProjection
-        ? (palace.memory_node_count ?? singleSegment.node_count) > 0 && Boolean(memoryNextReviewAt)
-        : (singleSegment.has_due_review ||
-            (singleSegmentReviewState !== 'due_now' &&
-              singleSegment.current_review_schedule_id &&
-              singleSegment.next_review_at))),
+  const singleSegment = hasSingleSegment ? segments[0] : null
+  // Catalog uses palace_card_json (often without segments). Primary CTA must use palace FSRS fields.
+  const hasFsrsProjection =
+    typeof palace.memory_node_count === 'number' ||
+    typeof palace.due_node_count === 'number' ||
+    'memory_next_review_at' in palace ||
+    palace.review_entry_mode != null
+  const memoryNextReviewAt = hasFsrsProjection
+    ? palace.memory_next_review_at ?? palace.next_review_at ?? null
+    : singleSegment?.next_review_at ?? null
+  const dueNodeCount = Number(palace.due_node_count ?? 0)
+  const memoryNodeCount = Number(
+    palace.memory_node_count ?? singleSegment?.node_count ?? 0,
   )
+  const entryMode = palace.review_entry_mode ?? 'none'
+  const hasDueEntry =
+    dueNodeCount > 0 || entryMode === 'node' || entryMode === 'palace' || Boolean(palace.has_due_review)
+  const timestampState = getReviewButtonState(memoryNextReviewAt)
+  const primaryReviewState = hasDueEntry
+    ? 'due_now'
+    : timestampState
+  const showFsrsReviewButton = Boolean(
+    hasFsrsProjection &&
+      memoryNodeCount > 0 &&
+      (hasDueEntry || Boolean(memoryNextReviewAt)),
+  )
+  const showLegacySegmentReviewButton = Boolean(
+    !hasFsrsProjection &&
+      singleSegment &&
+      !singleSegment.is_empty &&
+      (singleSegment.has_due_review ||
+        (timestampState !== 'due_now' &&
+          singleSegment.current_review_schedule_id &&
+          singleSegment.next_review_at)),
+  )
+  const showPrimaryReviewButton = showFsrsReviewButton || showLegacySegmentReviewButton
   const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
-  const showPalacePracticeButton = !showSingleSegmentReviewButton
+  // Practice is only for empty / unscheduled cards — not a fallback when segments are missing.
+  const showPalacePracticeButton = !showPrimaryReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
   const singleSegmentActiveProgress = normalizeReviewProgress(singleSegment?.active_review_progress)
   const showSingleSegmentActiveProgress =
-    showSingleSegmentReviewButton &&
+    showPrimaryReviewButton &&
     singleSegmentActiveProgress !== null &&
     singleSegmentActiveProgress > 0 &&
     singleSegmentActiveProgress < 1
@@ -227,23 +271,47 @@ export function PalaceListCard({
                     />
                   </>
                 ) : null}
-                {singleSegment && showSingleSegmentReviewButton ? (
+                {showPrimaryReviewButton ? (
                   <ReviewActionButton
                     label={getReviewActionLabel(memoryNextReviewAt, {
-                      state: singleSegmentReviewState,
+                      state: primaryReviewState,
                       entryLabel: palace.review_entry_label,
-                      entryMode: palace.review_entry_mode,
+                      entryMode: entryMode === 'none' ? null : entryMode,
                     })}
                     className={cn(
                       'h-8 min-w-[84px] max-w-[156px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
                       getReviewActionButtonClass({
-                        state: singleSegmentReviewState,
+                        state: primaryReviewState,
+                        entryMode: entryMode === 'none' ? null : entryMode,
                       }),
                     )}
-                    disabled={singleSegmentReviewState === 'unscheduled'}
-                    progress={singleSegment.active_review_progress}
-                    onWarm={() => onWarmSegmentPractice(singleSegment)}
-                    onClick={() => onSegmentPractice(singleSegment)}
+                    disabled={primaryReviewState === 'unscheduled'}
+                    progress={singleSegment?.active_review_progress}
+                    tooltip={
+                      showFsrsReviewButton
+                        ? {
+                            branches: palace.review_branch_summaries,
+                            nextReviewAt: memoryNextReviewAt,
+                            dueNodeCount: dueNodeCount,
+                            entryMode: entryMode === 'none' ? null : entryMode,
+                          }
+                        : null
+                    }
+                    onWarm={() => {
+                      if (showFsrsReviewButton) {
+                        onWarmPalacePractice(palace)
+                        return
+                      }
+                      if (singleSegment) onWarmSegmentPractice(singleSegment)
+                    }}
+                    onClick={() => {
+                      // FSRS formal review is palace-scoped (session id = palace id).
+                      if (showFsrsReviewButton) {
+                        onPalacePractice(palace)
+                        return
+                      }
+                      if (singleSegment) onSegmentPractice(singleSegment)
+                    }}
                   />
                 ) : null}
               </div>
@@ -283,7 +351,7 @@ export function PalaceListCard({
 
           {expanded && shouldShowSegmentListWhenExpanded ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
-              {palace.segments.map((segment, index) => {
+              {segments.map((segment, index) => {
                 return (
                   <div
                     key={segment.id}

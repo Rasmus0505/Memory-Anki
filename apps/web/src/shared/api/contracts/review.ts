@@ -38,6 +38,14 @@ export interface ReviewMemorySummary {
   overdue_node_count: number
   next_review_at: string | null
 }
+export interface ReviewBranchSummary {
+  branch_uid: string
+  title: string
+  due_node_count: number
+  next_review_at: string | null
+  status: 'due_now' | 'later_today' | 'future' | 'none'
+}
+
 export interface ReviewScheduleSummary {
   id: string | number
   session_id?: string | null
@@ -58,6 +66,12 @@ export interface ReviewScheduleSummary {
   schedule_count: number
   overdue_schedule_count: number
   next_due_date: string
+  review_entry_mode?: 'none' | 'node' | 'palace'
+  review_entry_label?: string | null
+  primary_branch_uid?: string | null
+  primary_branch_title?: string | null
+  due_branch_count?: number
+  review_branch_summaries?: ReviewBranchSummary[]
   palace: ReviewPalaceSummary | null
 }
 export interface ReviewQueueResponse {
@@ -134,6 +148,9 @@ export interface PalaceMemoryProjection {
   next_review_at: string | null
   mastered: boolean
   severe_weak_node_count: number
+  review_entry_mode?: 'none' | 'node' | 'palace'
+  review_entry_label?: string | null
+  review_branch_summaries?: ReviewBranchSummary[]
   nodes: PalaceMemoryProjectionNode[]
 }
 

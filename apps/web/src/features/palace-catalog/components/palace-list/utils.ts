@@ -99,15 +99,20 @@ export function getSegmentCardClass(densityMode: PalaceListDensityMode) {
 
 export function getReviewActionButtonClass(options: {
   state: ReviewButtonState
+  /** Palace-level vs single-branch due entry; only affects due_now solid CTAs. */
+  entryMode?: 'none' | 'node' | 'palace' | null
   disabled?: boolean
   isSleepReview?: boolean
   className?: string
 }) {
-  const { state, disabled = false, isSleepReview = false, className } = options
+  const { state, entryMode = null, disabled = false, isSleepReview = false, className } = options
+  const dueNowClass =
+    entryMode === 'node'
+      ? 'border-warning bg-warning text-white hover:bg-warning/80'
+      : 'border-success bg-success text-white hover:bg-success/80'
   return cn(
     'h-8 w-full rounded-md border text-xs font-medium transition-colors',
-    state === 'due_now' &&
-      'border-success bg-success text-white hover:bg-success/80',
+    state === 'due_now' && dueNowClass,
     state === 'practice' &&
       'border-success bg-success text-white hover:bg-success/80',
     state === 'due_later_today' &&
@@ -191,8 +196,13 @@ export function getReviewActionLabel(
   if (isSleepReview) return '睡前复习'
   if (state === 'practice') return '练习'
   if (state === 'due_now') {
-    if (entryLabel && entryLabel.trim()) return entryLabel.trim()
+    // Prefer short labels without legacy "· N" node counts.
     if (entryMode === 'node') return '节点复习'
+    if (entryMode === 'palace') return '开始复习'
+    if (entryLabel && entryLabel.trim()) {
+      const cleaned = entryLabel.trim().replace(/\s*·\s*\d+\s*$/, '')
+      return cleaned || '开始复习'
+    }
     return '开始复习'
   }
   if (state === 'unscheduled') return unscheduledLabel

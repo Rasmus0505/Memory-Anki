@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import {
+  formatReviewAbsolute,
+  formatReviewIntervalLabel,
+} from '@/entities/review/model/reviewScheduleFormat'
 import { formatDuration } from '@/entities/session/model'
 import type { ReviewCompletionSummary } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
@@ -18,12 +22,6 @@ interface Props {
   onRetrySubmission?: () => void
   onConfirm: (note: string) => void
   onCancel: () => void
-}
-
-function nextReview(value: string | null) {
-  if (!value) return '暂无后续安排'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
 }
 
 export function FsrsCompletionDialog({ open, summary, durationSeconds, submitting = false, preparing = false, error = null, submissionFailed = false, onRetry, onRetrySubmission, onConfirm, onCancel }: Props) {
@@ -45,7 +43,11 @@ export function FsrsCompletionDialog({ open, summary, durationSeconds, submittin
             <div className="grid grid-cols-4 gap-2 text-center text-xs">
               {Object.entries(summary.rating_counts ?? { 忘记: 0, 困难: 0, 记得: 0, 轻松: 0 }).map(([label, count]) => <div key={label} className="rounded-lg border px-2 py-2"><div>{label}</div><b className="text-base">{count}</b></div>)}
             </div>
-            <div className="rounded-lg border p-3 text-sm"><div>下次复习：<b>{nextReview(summary.next_review_at)}</b></div><div className="mt-1 text-muted-foreground">当前仍到期 {summary.remaining_due_node_count} 个节点</div></div>
+            <div className="rounded-lg border p-3 text-sm">
+              <div className="text-muted-foreground">下次复习</div>
+              <b className="mt-0.5 block">{formatReviewAbsolute(summary.next_review_at)}</b>
+              <div className="mt-1 text-muted-foreground">{formatReviewIntervalLabel(summary.next_review_at)}</div>
+            </div>
             {summary.unrated_due_node_count > 0 ? <div className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" /><span>还有 {summary.unrated_due_node_count} 个未评分节点。结束后它们不会被推进，将保持到期并再次进入复习队列。</span></div> : null}
             <div><div className="mb-1 text-xs text-muted-foreground">复盘一句（可选）</div><Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} maxLength={500} placeholder="这次哪里卡了、下次注意什么" /></div>
           </> : null}

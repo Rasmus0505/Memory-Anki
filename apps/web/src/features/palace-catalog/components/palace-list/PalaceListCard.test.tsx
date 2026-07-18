@@ -87,7 +87,7 @@ function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedI
 }
 
 describe('PalaceListCard', () => {
-  it('does not render start review when due flag is false even if the timestamp is stale', () => {
+  it('uses palace FSRS due_node_count rather than segment-only flags for the primary CTA', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-12T10:00:00+08:00'))
 
@@ -95,6 +95,12 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
+            due_node_count: 0,
+            has_due_review: false,
+            review_entry_mode: 'none',
+            review_entry_label: null,
+            memory_next_review_at: '2026-06-13T10:00:00+08:00',
+            next_review_at: '2026-06-13T10:00:00+08:00',
             segments: [
               buildSegment({
                 next_review_at: '2026-06-12T09:00:00+08:00',
@@ -110,9 +116,37 @@ describe('PalaceListCard', () => {
       </MemoryRouter>,
     )
 
+    // Not due now → early-review label, not forced "开始复习" / practice.
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '今日稍后' })).toBeNull()
+    expect(screen.getByRole('button', { name: /提前复习/ })).toBeTruthy()
     vi.useRealTimers()
+  })
+
+  it('shows FSRS entry labels from palace card payloads even when segments are omitted', () => {
+    const onPalacePractice = vi.fn()
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            segments: undefined,
+            due_node_count: 4,
+            has_due_review: true,
+            review_entry_mode: 'palace',
+            review_entry_label: '开始复习',
+            memory_next_review_at: '2026-06-12T09:00:00+08:00',
+          })}
+          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          onPalacePractice={onPalacePractice}
+          onSegmentPractice={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '开始复习' }))
+    expect(onPalacePractice).toHaveBeenCalledTimes(1)
   })
 
   it('uses the shared primary button for palace practice and keeps quiz as a plain entry', () => {
@@ -227,27 +261,31 @@ describe('PalaceListCard', () => {
     expect(screen.getByText('19世纪')).toBeTruthy()
   })
 
-  it('passes virtual default review segments through with their schedule progress', () => {
+  it('opens formal FSRS review via the palace action and keeps resume progress fill', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-13T11:00:00+08:00'))
-    const onSegmentPractice = vi.fn()
+    const onPalacePractice = vi.fn()
 
     render(
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
+            due_node_count: 3,
+            has_due_review: true,
+            review_entry_mode: 'palace',
+            review_entry_label: '开始复习',
             segments: [
               buildSegment({
                 id: 0,
                 is_virtual_default: true,
-                current_review_schedule_id: 1001,
+                current_review_schedule_id: null,
                 active_review_progress: 0.4,
               }),
             ],
           })}
           viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={onSegmentPractice}
+          onPalacePractice={onPalacePractice}
+          onSegmentPractice={vi.fn()}
           onDelete={vi.fn()}
         />
       </MemoryRouter>,
@@ -256,12 +294,7 @@ describe('PalaceListCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /开始复习/ }))
     expect(screen.getByRole('progressbar', { name: '复习进度 40%' })).toBeTruthy()
     expect(screen.getByTestId('review-action-progress-fill').style.width).toBe('40%')
-    expect(onSegmentPractice).toHaveBeenCalledWith(
-      expect.objectContaining({
-        is_virtual_default: true,
-        current_review_schedule_id: 1001,
-      }),
-    )
+    expect(onPalacePractice).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 
