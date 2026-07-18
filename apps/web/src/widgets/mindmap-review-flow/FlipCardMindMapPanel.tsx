@@ -81,6 +81,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   onToggleMode?: () => void
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
+  /**
+   * Full palace document used only for rating scope / subtree cascade.
+   * Must not be the reveal-filtered visible tree, or unrevealed children are treated as leaves.
+   */
+  ratingTreeEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
   /** Shared host identity across build/learn so ReactFlow/fullscreen are not rebuilt on mode switch. */
   hostForceSyncKey?: string | number | null
@@ -125,6 +130,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onToggleMode,
   visibleEditorState,
   editableEditorState = null,
+  ratingTreeEditorState = null,
   visibleEditorSyncKey = null,
   hostForceSyncKey = null,
   hostExternalSyncKey = null,
@@ -212,6 +218,14 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const frameInitialViewPolicy = initialViewPolicy ?? (isEditMode ? 'reset' : 'preserve')
   const frameForceSyncIntent = forceSyncIntent ?? (isEditMode ? 'replace' : 'soft')
   const guidedModel = useMemo(() => buildGuidedMindMapModel(frameEditorState), [frameEditorState])
+  // Rating cascade must walk the full document, not the reveal-filtered visible tree.
+  const ratingTreeModel = useMemo(
+    () =>
+      buildGuidedMindMapModel(
+        ratingTreeEditorState ?? editableEditorState ?? frameEditorState,
+      ),
+    [editableEditorState, frameEditorState, ratingTreeEditorState],
+  )
   const guidedCurrentUid =
     activeGuidedUid && guidedModel.byUid.has(activeGuidedUid)
       ? activeGuidedUid
@@ -245,8 +259,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const ratingControls = useFlipCardRatingControls({
     ratingMode,
     isEditMode,
-    guidedNodes: guidedModel.nodes,
-    rootUid: guidedModel.rootUid,
+    guidedNodes: ratingTreeModel.nodes,
+    rootUid: ratingTreeModel.rootUid,
     byUid: guidedModel.byUid,
     guidedCurrentNode,
     recallRound,

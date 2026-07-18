@@ -505,6 +505,7 @@ export default function PalaceEdit() {
                     hidePresentationOverflowActions
                     visibleEditorState={activeFrameEditorState}
                     editableEditorState={page.editorState}
+                    ratingTreeEditorState={page.editorState}
                     visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
                     hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}:${page.aiSplitAppliedSyncVersion}`}
                     hostExternalSyncKey={mindMapImport.importExternalSyncKey}
