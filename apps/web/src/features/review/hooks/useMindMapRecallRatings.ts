@@ -8,8 +8,34 @@ function effectiveEvents(events: MindMapRecallEvent[]) {
   return events.filter((event) => !superseded.has(event.id))
 }
 
+/**
+ * Latest non-superseded event per node_uid + recall_round.
+ * Matches backend `_session_direct_rated_uids` (order by occurred_at desc).
+ */
+function latestEventsByNodeRound(events: MindMapRecallEvent[]) {
+  const latest = new Map<string, MindMapRecallEvent>()
+  for (const event of effectiveEvents(events)) {
+    const key = `${event.node_uid}:${event.recall_round}`
+    const previous = latest.get(key)
+    if (!previous || eventTime(event) >= eventTime(previous)) {
+      latest.set(key, event)
+    }
+  }
+  return latest
+}
+
+function eventTime(event: MindMapRecallEvent) {
+  const stamp = Date.parse(event.occurred_at)
+  return Number.isFinite(stamp) ? stamp : 0
+}
+
 function normalizeRating(rating: MindMapRecallEvent['rating']): MindMapRecallRating {
   return rating === 5 ? 3 : rating
+}
+
+function isDirectEvidence(event: MindMapRecallEvent) {
+  // Legacy rows / optimistic gaps default to direct (same as DB server_default).
+  return (event.evidence_origin ?? 'direct') === 'direct'
 }
 
 function makeOperationId() {
@@ -53,6 +79,8 @@ export function useMindMapRecallRatings({
   const [round, setRound] = useState<MindMapRecallRound>('first')
   const [historyOpen, setHistoryOpen] = useState(false)
 
+  // Session-scoped ratings must survive leaving/re-entering rating mode and
+  // remounting the page. Only a new studySessionId (e.g. after 完成) starts empty.
   useEffect(() => {
     if (!enabled || !studySessionId) {
       setEvents([])
@@ -63,17 +91,17 @@ export function useMindMapRecallRatings({
       .then((response) => {
         if (active) setEvents(response.items)
       })
-      .catch(() => {})
+      .catch(() => {
+        // Keep any in-memory events if reload fails so a flaky network does not
+        // wipe ratings the user just recorded in this tab.
+      })
     return () => {
       active = false
     }
   }, [enabled, studySessionId])
 
-  const currentEvents = useMemo(() => effectiveEvents(events), [events])
-  const byKey = useMemo(
-    () => new Map(currentEvents.map((event) => [`${event.node_uid}:${event.recall_round}`, event])),
-    [currentEvents],
-  )
+  const byKey = useMemo(() => latestEventsByNodeRound(events), [events])
+  const currentEvents = useMemo(() => [...byKey.values()], [byKey])
   const firstRatings = useMemo(
     () =>
       new Map(
@@ -99,17 +127,14 @@ export function useMindMapRecallRatings({
 
   /** Nodes whose latest effective event in the active round is a direct rating. */
   const directRatedUids = useMemo(() => {
-    const latest = new Map<string, MindMapRecallEvent>()
-    for (const event of currentEvents) {
-      if (event.recall_round !== round) continue
-      if (!latest.has(event.node_uid)) latest.set(event.node_uid, event)
-    }
     const direct = new Set<string>()
-    latest.forEach((event, uid) => {
-      if (event.evidence_origin === 'direct') direct.add(uid)
+    byKey.forEach((event, key) => {
+      const [uid, eventRound] = key.split(':')
+      if (eventRound !== round || !uid) return
+      if (isDirectEvidence(event)) direct.add(uid)
     })
     return direct
-  }, [currentEvents, round])
+  }, [byKey, round])
 
   const rateNode = useCallback(
     async (
@@ -161,21 +186,26 @@ export function useMindMapRecallRatings({
         })
         const affected = response.item.affected_node_uids ?? [nodeUid]
         setEvents((current) => {
-          const existingIds = new Set(
+          const latest = latestEventsByNodeRound(current)
+          const existingForOp = new Set(
             current.filter((event) => event.operation_id === operationId).map((event) => event.node_uid),
           )
           const inherited = affected
-            .filter((uid) => !existingIds.has(uid))
-            .map((uid) => ({
-              ...optimistic,
-              id: `${operationId}:${uid}`.slice(0, 64),
-              node_uid: uid,
-              rating_scope: scope,
-              evidence_origin: (uid === nodeUid ? 'direct' : 'batch_inherited') as
-                | 'direct'
-                | 'batch_inherited',
-              supersedes_event_id: null,
-            }))
+            .filter((uid) => !existingForOp.has(uid))
+            .map((uid) => {
+              const prior = latest.get(`${uid}:${targetRound}`)
+              return {
+                ...optimistic,
+                id: `${operationId}:${uid}`.slice(0, 64),
+                node_uid: uid,
+                rating_scope: scope,
+                evidence_origin: (uid === nodeUid ? 'direct' : 'batch_inherited') as
+                  | 'direct'
+                  | 'batch_inherited',
+                // Supersede prior event so latest-by-node stays consistent offline.
+                supersedes_event_id: prior?.id ?? null,
+              }
+            })
           // When skip_direct, parent may be the only optimistic row; drop optimistic if not in affected.
           if (!affected.includes(nodeUid)) {
             return [
@@ -196,8 +226,9 @@ export function useMindMapRecallRatings({
 
   const undoLastRating = useCallback(() => {
     const latest =
-      [...currentEvents].reverse().find((event) => event.evidence_origin !== 'batch_inherited') ??
-      currentEvents.at(-1) ??
+      [...currentEvents]
+        .sort((a, b) => eventTime(b) - eventTime(a))
+        .find((event) => (event.evidence_origin ?? 'direct') !== 'batch_inherited') ??
       null
     if (latest && palaceId && studySessionId && latest.operation_id) {
       void undoPalaceRatingApi(palaceId, latest.operation_id, studySessionId).catch(() => {})
