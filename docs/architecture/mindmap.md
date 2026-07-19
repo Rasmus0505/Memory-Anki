@@ -103,7 +103,8 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 用户显式指定结构图时使用独立场景 `vision_structure_mindmap` 和 `ai_prompt_import_batch_mindmap`，结构补全提示词不得进入普通正文流程。
 - 视觉模型目录公开 `vision_processing_role`：通用 VL 为 `direct_generation`，`qwen3.5-ocr` 与 `qwen-vl-ocr` 为 `ocr_extraction`。
 - 通用 VL 仅在流完整、JSON 可解析、根标题非空、节点 Schema 合法且至少有一个内容节点时直接进入预览；协议错误、网络中断、`finish_reason=length`、JSON 或 Schema 错误触发逐页 OCR 与文本模型整理。
-- OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可恢复复用；同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
+- OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可在同一任务内恢复复用；跨任务时按 `pdf_document_id + page` 写入 `%MEMORY_ANKI_HOME%/pdf_ocr_cache`，后续任务命中后复制进工件并跳过模型调用。覆盖查询：`GET /pdf-library/{id}/ocr-coverage`。
+- 同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
 - 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿视觉、OCR、整理和预览阶段。
 - 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；OCR 重整与视觉重试均创建新的 operation，不覆盖历史任务。
 ## AI 分卡 / AI 添卡边界
@@ -115,7 +116,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
 - 分卡：服务端在父级 `children` 的原索引执行一次切片替换；新 UID 由 operation 和树路径确定生成。统一场景 `ai_split` 输出 `replacement_nodes`。
 - 添卡：服务端使用专用系统提示词（`add_children_prompt.py`，含骑士学院样例），**不得**经 `ai_split` composition/`render(ai_prompt_mindmap_ai_split_system)`（后者强制 `replacement_nodes`）。协议为 `new_children` + `child_assignments`；若模型误返回 `replacement_nodes`，服务端可尝试恢复分组。结果同样以 `replacement_nodes` 字段返回预览树；前端确认后「写入源父卡下」或「追加到选中卡之后」。
-- 用户「指定约 N 张」为软目标，前端不设 2–12 硬顶；服务端仅做安全上限，添卡中间层仍须少于一级子节点数。
+- 用户「指定约 N 张」与字数启发式推断均为**软偏好**（只进 prompt 的 `max_children` / 数量说明），不因略多顶层而 400；用户在预览中自行删并后再应用。服务端替换式分卡仅在顶层超过安全上限（`AI_SPLIT_VALIDATION_MAX_TOP_LEVEL`，默认 12）或 depth/总数越界时拒绝。添卡中间层仍须严格少于一级子节点数。
 - 两种任务都先预览、后确认，后台不得直接修改正式导图；叶子/已有子节点尽量保留原句与原 uid，禁止总结删减。
 
 
