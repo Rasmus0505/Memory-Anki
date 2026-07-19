@@ -142,6 +142,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     pdfPageSelection: props.pdfPageSelection,
     onPdfPageSelectionChange: props.onPdfPageSelectionChange,
     pdfLibraryLoading: props.pdfLibraryLoading,
+    pdfOcrCoverage: props.pdfOcrCoverage,
     onPdfUpload: props.onPdfUpload,
     onPdfDelete: props.onPdfDelete,
     onPdfStart: props.onPdfStart,

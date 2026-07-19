@@ -12,7 +12,7 @@ import {
   parseImportStreamResponse,
   readImportJson,
 } from './importResponse'
-import type { PdfDocument } from '../model/importTypes'
+import type { PdfDocument, PdfOcrCoverage } from '../model/importTypes'
 
 export async function previewMindMapImportApi(file: File, handlers?: ImportStreamHandlers) {
   const form = new FormData()
@@ -152,6 +152,10 @@ export async function uploadPdfDocumentApi(file: File) {
 
 export async function deletePdfDocumentApi(documentId: string) {
   return request<{ ok: boolean }>(`/pdf-library/${documentId}`, { method: 'DELETE' })
+}
+
+export async function getPdfOcrCoverageApi(documentId: string) {
+  return request<PdfOcrCoverage>(`/pdf-library/${documentId}/ocr-coverage`)
 }
 
 export async function createPdfImportJobApi(options: {

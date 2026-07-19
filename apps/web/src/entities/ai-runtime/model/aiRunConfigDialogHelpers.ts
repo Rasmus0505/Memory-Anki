@@ -98,11 +98,17 @@ export interface AiRunConfigRequest {
   contextOptions?: AiGenerationContextOption[]
 }
 
+export type AiScenarioPathRole = 'primary' | 'fallback'
+
 export interface MultiScenarioEntry {
   scenarioKey: string
   entrypointKey: string
   label?: string
   description?: string
+  /** primary = almost always used; fallback = OCR/reformat only */
+  pathRole?: AiScenarioPathRole
+  /** When true with multiple entries, start collapsed (typically fallback). */
+  collapsedByDefault?: boolean
   promptSceneKey?: string
   syncScenarioKeys?: string[]
   contextOptions?: AiGenerationContextOption[]

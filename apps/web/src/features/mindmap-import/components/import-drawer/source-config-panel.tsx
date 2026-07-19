@@ -64,10 +64,18 @@ export function MindMapImportSourceConfigPanel({
     pdfPageSelection = '1',
     onPdfPageSelectionChange = () => {},
     pdfLibraryLoading = false,
+    pdfOcrCoverage = null,
     onPdfUpload = () => {},
     onPdfDelete = () => {},
     onPdfStart = () => {},
   } = model
+  const cachedPages = pdfOcrCoverage?.page_numbers ?? []
+  const cachedPagesLabel =
+    cachedPages.length === 0
+      ? ''
+      : cachedPages.length <= 12
+        ? cachedPages.join('、')
+        : `${cachedPages.slice(0, 12).join('、')}… 共 ${cachedPages.length} 页`
 
   return (
     <div className="border-b px-6 py-4">
@@ -148,6 +156,19 @@ export function MindMapImportSourceConfigPanel({
                     {loading ? '识别中…' : mode === 'mindmap' ? '开始转脑图' : '开始转文字'}
                   </Button>
                 </div>
+                {cachedPages.length > 0 ? (
+                  <div className="rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">已缓存 OCR 页：</span>
+                    {cachedPagesLabel}
+                    <span className="mt-1 block">
+                      再次识别这些页时会优先复用本地结果，无需重复调用模型。
+                    </span>
+                  </div>
+                ) : selectedPdfDocumentId ? (
+                  <div className="text-xs text-muted-foreground">
+                    尚无本 PDF 的跨任务 OCR 缓存；首次识别成功后会自动保存页级结果。
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">

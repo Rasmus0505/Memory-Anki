@@ -59,6 +59,24 @@ export interface AiRunConfigDialogViewProps {
   onSetSelectedContexts: React.Dispatch<React.SetStateAction<Record<string, string[]>>>
 }
 
+function pathRoleBadge(pathRole?: MultiScenarioEntry['pathRole']) {
+  if (pathRole === 'primary') {
+    return (
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+        主路径 · 几乎总会用
+      </span>
+    )
+  }
+  if (pathRole === 'fallback') {
+    return (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        回退路径 · 仅 OCR/重整
+      </span>
+    )
+  }
+  return null
+}
+
 export function AiRunConfigDialogView({
   open,
   title,
@@ -107,6 +125,11 @@ export function AiRunConfigDialogView({
             )
             const blockGroups = groupBlocksByLayer(availableBlocks)
             const recommendedKeys = new Set(promptScene?.recommended_block_keys ?? [])
+            const recommendedSelectedCount = selectedBlockKeys.filter((key) => recommendedKeys.has(key)).length
+            const allSelectedAreRecommended =
+              selectedBlockKeys.length > 0
+              && selectedBlockKeys.every((key) => recommendedKeys.has(key))
+              && recommendedKeys.size > 0
             const localPreview = compileLocalPromptPreview(
               availableBlocks,
               selection,
@@ -119,22 +142,23 @@ export function AiRunConfigDialogView({
               ((selectedConfig?.prompt_override || localPreview.text).length + contextCharacters) / 1.5,
             )
             const exceedsBudget = estimatedTokens > 24000
-            return (
-              <div
-                key={entry.scenarioKey}
-                className="grid gap-4 rounded-lg border border-border/60 bg-muted/10 p-4 lg:grid-cols-[320px_minmax(0,1fr)]"
-              >
+            const useCollapsible = Boolean(entry.collapsedByDefault) && currentEntries.length > 1
+            const panelBody = (
+              <div className="grid gap-4 p-4 lg:grid-cols-[320px_minmax(0,1fr)]">
                 <div className="space-y-4">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">
-                      {entry.label || scenario?.label || entry.scenarioKey}
+                  {!useCollapsible ? (
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                        <span>{entry.label || scenario?.label || entry.scenarioKey}</span>
+                        {pathRoleBadge(entry.pathRole)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {entry.description
+                          || scenario?.description
+                          || '本次请求会直接使用这份配置。'}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {entry.description
-                        || scenario?.description
-                        || '本次请求会直接使用这份配置。'}
-                    </div>
-                  </div>
+                  ) : null}
 
                   <div className="rounded-xl border border-border/60 bg-background/70 p-3 text-xs text-muted-foreground">
                     {scenario ? (
@@ -232,7 +256,13 @@ export function AiRunConfigDialogView({
                       <div className="text-xs text-muted-foreground">
                         仅显示本场景相关块
                         {selectedBlockKeys.length > 0
-                          ? ` · 已选 ${selectedBlockKeys.length}/${availableBlocks.length}`
+                          ? allSelectedAreRecommended
+                            && selectedBlockKeys.length === recommendedKeys.size
+                            ? ` · 已选 ${selectedBlockKeys.length}/${availableBlocks.length}（均为本场景推荐默认）`
+                            : ` · 已选 ${selectedBlockKeys.length}/${availableBlocks.length}`
+                              + (recommendedKeys.size > 0
+                                ? ` · 其中推荐 ${recommendedSelectedCount}/${recommendedKeys.size}`
+                                : '')
                           : availableBlocks.length > 0
                             ? ' · 尚未勾选（将使用空组合）'
                             : ' · 本场景使用完整场景提示词'}
@@ -431,6 +461,33 @@ export function AiRunConfigDialogView({
                     </div>
                   ) : null}
                 </div>
+              </div>
+            )
+            return useCollapsible ? (
+              <details
+                key={entry.scenarioKey}
+                className="rounded-lg border border-border/60 bg-muted/10"
+              >
+                <summary className="cursor-pointer list-none px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <span>{entry.label || scenario?.label || entry.scenarioKey}</span>
+                    {pathRoleBadge(entry.pathRole)}
+                    <span className="text-xs font-normal text-muted-foreground">点击展开配置</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {entry.description
+                      || scenario?.description
+                      || '本次请求会直接使用这份配置。'}
+                  </div>
+                </summary>
+                {panelBody}
+              </details>
+            ) : (
+              <div
+                key={entry.scenarioKey}
+                className="rounded-lg border border-border/60 bg-muted/10"
+              >
+                {panelBody}
               </div>
             )
           })}
