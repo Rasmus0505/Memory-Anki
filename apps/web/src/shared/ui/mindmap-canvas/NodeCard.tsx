@@ -1,5 +1,4 @@
 import {
-  memo,
   useCallback,
   useLayoutEffect,
   useRef,
@@ -27,9 +26,8 @@ import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
 import {
   AdaptiveNodeToolbar,
   selectionToolbarButtonClass,
-  statusChipClassName,
 } from './NodeCardToolbar'
-import { NodeCountBadge } from './NodeCountBadge'
+import { NodeCardStatusChrome, NodeCardTextFace } from './NodeCardChrome'
 import { ExtractDropPlaceholders, ExtractGhostPortal } from './MindMapExtractUi'
 import { useMindMapExtractDrag } from './useMindMapExtractDrag'
 import {
@@ -64,7 +62,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const lastMeasuredRef = useRef<NodeSize | null>(null)
   const updateNodeInternals = useUpdateNodeInternals()
   const editingIsControlled = typeof nodeData.editing === 'boolean'
-  const isEditing = editingIsControlled ? Boolean(nodeData.editing) : localEdit
+  // Parent `editing` is authoritative when true; localEdit covers optimistic enter
+  // and uncontrolled cards so a lagging host cannot drop the first double-click.
+  const isEditing = editingIsControlled
+    ? Boolean(nodeData.editing) || localEdit
+    : localEdit
   const editValue = editText
   const measureText = stripMindMapHtml(isEditing ? editValue : plainLabel) || plainLabel
   const nodeSize = getNodeSize(layoutRole, measureText)
@@ -77,6 +79,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const isComposingRef = useRef(false)
   const editSessionClosedRef = useRef(false)
   const editStartedAtRef = useRef(0)
+  /** True between optimistic startEdit and parent `editing=true` confirmation. */
+  const optimisticEditPendingRef = useRef(false)
   const extract = useMindMapExtractDrag({
     nodeId: id,
     editValue,
@@ -245,21 +249,39 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- enter-edit snapshot
   }, [focusEditorCaret, isEditing, nodeData.selectEditText])
 
+  // Drop optimistic local edit once the host confirms or ends the session.
+  // Do not clear while optimisticEditPendingRef is set — that would wipe the
+  // same frame's double-click before beginEditing propagates editing=true.
+  useLayoutEffect(() => {
+    if (!editingIsControlled) return
+    if (nodeData.editing) {
+      optimisticEditPendingRef.current = false
+      return
+    }
+    if (optimisticEditPendingRef.current) return
+    setLocalEdit(false)
+  }, [editingIsControlled, nodeData.editing])
+
   const startEdit = useCallback(
     (event?: MouseEvent) => {
       if (readonly) return
       event?.preventDefault()
       event?.stopPropagation()
+      // Clear native word-selection from double-click on yellow emphasis spans.
+      const selection = window.getSelection()
+      if (selection && !selection.isCollapsed) selection.removeAllRanges()
       dispatchGlobalFeedback('node_edit_start', {
         point: getMouseFeedbackPoint(event),
         origin: 'node',
       })
       editStartedAtRef.current = Date.now()
-      if (!editingIsControlled) setLocalEdit(true)
+      // Always optimistic: controlled path also flips local until parent editing=true.
+      optimisticEditPendingRef.current = true
+      setLocalEdit(true)
       setEditText(resolveNodeRawText(nodeData))
       nodeData.onStartEdit?.(id)
     },
-    [editingIsControlled, id, nodeData, readonly],
+    [id, nodeData, readonly],
   )
 
   const handleDoubleClick = useCallback(
@@ -295,6 +317,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       return
     }
     editSessionClosedRef.current = true
+    optimisticEditPendingRef.current = false
     const input = inputRef.current
     const committed = input ? serializeContentEditable(input) : editValue
     const trimmed = committed.trim()
@@ -376,6 +399,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.preventDefault()
         event.stopPropagation()
         editSessionClosedRef.current = true
+        optimisticEditPendingRef.current = false
         setLocalEdit(false)
         setEditText(resolveNodeRawText(nodeData))
         nodeData.onCancelEdit?.(id)
@@ -495,8 +519,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const canStructureDrag = Boolean(!isEditing && !readonly)
   const textCls = [
     'w-full appearance-none border-0 bg-transparent p-0 break-all whitespace-pre-wrap',
-    readonly ? 'cursor-default' : canStructureDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-text',
-    concealed ? 'blur-[3px] select-none' : '',
+    // Idle editable text: text cursor + select-none so yellow-emphasis double-click
+    // enters edit instead of native word-select / RF drag contention.
+    readonly ? 'cursor-default' : 'cursor-text',
+    concealed ? 'blur-[3px]' : '',
+    concealed || !readonly ? 'select-none' : '',
     isRoot
       ? 'text-[14px] font-semibold leading-5 text-zinc-900 text-center'
       : depth === 1
@@ -648,77 +675,22 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           style={{ minHeight: nodeSize.height, ...borderStyle }}
         >
           <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
-          {visual.statusChips && visual.statusChips.length > 0 ? (
-            <div
-              className="pointer-events-none absolute left-1/2 z-30 flex max-w-full -translate-x-1/2 items-center justify-center gap-0.5"
-              style={{ top: '-1.35rem' }}
-              aria-hidden="true"
-            >
-              {visual.statusChips.map((chip, index) => (
-                <span
-                  key={`${chip.text}-${chip.style}-${index}`}
-                  title={chip.text}
-                  className={[
-                    'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[10px] font-medium leading-4 shadow-sm',
-                    statusChipClassName(chip.tone, chip.style),
-                  ].join(' ')}
-                >
-                  {chip.text}
-                </span>
-              ))}
-            </div>
-          ) : visual.badge && !isRoot ? (
-            <span
-              className={`absolute -left-2 -top-2 z-20 size-3 rounded-full border-2 border-background ${
-                visual.badge.tone === 'danger'
-                  ? 'bg-destructive'
-                  : visual.badge.tone === 'success'
-                    ? 'bg-success'
-                    : visual.badge.tone === 'warning'
-                      ? 'bg-warning'
-                      : 'bg-muted-foreground/40'
-              }`}
-              title={visual.badge.title}
-            />
-          ) : null}
-          {visual.countBadge && !isRoot ? (
-            <NodeCountBadge
-              countBadge={visual.countBadge}
-              onClick={() => nodeData.onCountBadgeClick?.(id)}
-            />
-          ) : null}
-          {/*
-            Use role=button div (not <button>) so highlight markup can legally contain
-            block tags (div/br). Nested div inside <button> can break browser hit-testing
-            and prevent double-click from entering edit mode on yellow-emphasis cards.
-          */}
-          <div
-            role="button"
-            tabIndex={-1}
+          <NodeCardStatusChrome
+            visual={visual}
+            isRoot={isRoot}
+            nodeId={id}
+            onCountBadgeClick={nodeData.onCountBadgeClick}
+          />
+          <NodeCardTextFace
+            textCls={textCls}
+            displayHtml={displayHtml}
+            concealed={concealed}
+            label={nodeData.label}
+            isRoot={isRoot}
             onClick={longPress.handleClick}
             onDoubleClick={handleDoubleClick}
             onContextMenu={longPress.handleContextMenu}
-            className={[
-              'mindmap-node-text nopan',
-              // Editing/readonly: isolate from RF drag. Idle: whole card is the drag surface.
-              canStructureDrag ? '' : 'nodrag',
-              textCls,
-              displayHtml
-                ? '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]'
-                : '',
-            ].filter(Boolean).join(' ')}
-          >
-            {concealed ? (
-              '待回忆'
-            ) : displayHtml ? (
-              <span
-                className="block w-full mindmap-rich-text"
-                dangerouslySetInnerHTML={{ __html: displayHtml }}
-              />
-            ) : (
-              nodeData.label || (isRoot ? '未命名主题' : '未命名知识点')
-            )}
-          </div>
+          />
         </div>
       )}
 
@@ -731,6 +703,4 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   )
 }
 
-const nodeTypes = { mindmapNode: memo(MindMapNodeCard) }
-export { nodeTypes }
 export default MindMapNodeCard

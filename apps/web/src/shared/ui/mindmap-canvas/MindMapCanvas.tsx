@@ -104,6 +104,11 @@ export interface MindMapCanvasProps {
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
+  /**
+   * Product scene identity (edit / review / practice / rating / learn…).
+   * When it changes, the canvas re-centers the previous viewport-center card.
+   */
+  sceneTransitionKey?: string | null
   viewCommand?: MindMapCanvasViewCommand | null
   recoveryKey?: string | number | null
   className?: string

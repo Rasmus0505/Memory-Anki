@@ -124,6 +124,7 @@ export function useMindMapCanvasState(
     mobileViewPolicy = 'auto',
     nodeClickViewportPolicy = 'preserve',
     contentChangeViewportPolicy = 'preserve',
+    sceneTransitionKey = null,
     viewCommand = null,
     onHostRefresh,
     controlledViewport,
@@ -161,6 +162,7 @@ export function useMindMapCanvasState(
     readonly,
     mobileViewPolicy,
     contentChangeViewportPolicy,
+    sceneTransitionKey,
     viewCommand,
     setNodeSizeVersion,
   })
@@ -236,19 +238,20 @@ export function useMindMapCanvasState(
       if (readonly) return
       const target = event.target instanceof HTMLElement ? event.target : null
       // Yellow emphasis spans live under .mindmap-node-text; also treat data-emphasis
-      // as text so RF fallback still enters edit if DOM nesting is unusual.
+      // as text so RF fallback still enters edit if DOM nesting is unusual (browser
+      // reparenting of <div> highlight markup out of an invalid <span> wrapper).
       const onCardText =
         Boolean(target?.closest('.mindmap-node-text'))
         || Boolean(target?.closest('[data-emphasis="highlight"]'))
+        || Boolean(target?.closest('.mindmap-rich-text'))
       if (target?.closest('.mindmap-node-drag-surface') && !onCardText) {
         // Dragging the selected surface should not fall through to edit.
         return
       }
-      // NodeCard also handles double-click; RF path is a fallback when the
-      // event does not originate from card shell handlers.
-      if (target?.closest('[data-mindmap-node-id]')) return
+      // NodeCard handles double-click first (stopPropagation). RF path is a
+      // fallback when the event still reaches the node wrapper (e.g. reparented
+      // highlight DOM). Always re-assert edit — beginEditing is idempotent.
       event.preventDefault()
-      event.stopPropagation()
       onEditingNodeChange?.(node.id)
     },
     [onEditingNodeChange, readonly],

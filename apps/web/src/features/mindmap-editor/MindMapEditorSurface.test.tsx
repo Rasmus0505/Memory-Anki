@@ -423,4 +423,52 @@ describe('MindMapEditorSurface native host', () => {
     expect(frame.className).not.toContain('memory-anki-mindmap-native-fullscreen')
     expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
   })
+
+  it('handles each mode-switch focus request once even when onNodeActive identity changes', () => {
+    // Reproduces React #185: unstable onNodeActive + focusRequestNonce re-entry.
+    const onNodeActive = vi.fn()
+    const { rerender } = render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        onNodeActive={onNodeActive}
+        focusRequestNodeUid="child"
+        focusRequestNonce={1}
+        practiceModeActive={false}
+      />,
+    )
+
+    expect(onNodeActive).toHaveBeenCalledTimes(1)
+    expect(onNodeActive.mock.calls[0]?.[0]?.[0]?.uid).toBe('child')
+
+    // Parent re-renders with a new callback identity (common with inline lambdas)
+    // while the same focus nonce is still present after a build/learn toggle.
+    for (let i = 0; i < 12; i += 1) {
+      rerender(
+        <MindMapEditorSurface
+          editorState={editorState}
+          onEditorStateChange={vi.fn()}
+          onNodeActive={(nodes) => onNodeActive(nodes)}
+          focusRequestNodeUid="child"
+          focusRequestNonce={1}
+          practiceModeActive={i % 2 === 0}
+        />,
+      )
+    }
+
+    // Same nonce must not re-focus / re-setState in a loop.
+    expect(onNodeActive).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        onNodeActive={(nodes) => onNodeActive(nodes)}
+        focusRequestNodeUid="child"
+        focusRequestNonce={2}
+        practiceModeActive
+      />,
+    )
+    expect(onNodeActive).toHaveBeenCalledTimes(2)
+  })
 })

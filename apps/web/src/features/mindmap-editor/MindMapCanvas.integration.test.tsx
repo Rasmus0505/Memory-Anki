@@ -337,7 +337,9 @@ describe('MindMapCanvas recovery', () => {
 
     fireEvent.doubleClick(committedNewNode)
     const reopenedEditor = await screen.findByRole('textbox', { name: '编辑节点文本' })
-    fireEvent.change(reopenedEditor, { target: { value: '已更新知识点' } })
+    // contentEditable (not input/textarea): set textContent + input event.
+    reopenedEditor.textContent = '已更新知识点'
+    fireEvent.input(reopenedEditor)
     fireEvent.click(screen.getByRole('button', { name: '宫殿' }))
 
     await waitFor(() => {

@@ -55,6 +55,11 @@ export interface MindMapEditorSurfaceProps {
   className?: string
   /** Generic frame chrome key; hosts map product modes (edit/review/practice/rating). */
   sceneChrome?: 'default' | 'edit' | 'review' | 'practice' | 'rating'
+  /**
+   * Optional explicit scene identity for viewport re-anchor.
+   * Defaults to sceneChrome + practice/edit flags when omitted.
+   */
+  sceneTransitionKey?: string | null
   toolbarContent?: ReactNode
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null

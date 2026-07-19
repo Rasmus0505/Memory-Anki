@@ -60,6 +60,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   contentChangeViewportPolicy,
   className,
   sceneChrome = 'default',
+  sceneTransitionKey = null,
   toolbarContent,
   segments = [],
   activeSegmentId = null,
@@ -97,6 +98,15 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [interaction, setInteraction] = useState<MindMapInteractionState>({ mode: 'idle' })
   const interactionRef = useRef<MindMapInteractionState>(interaction)
+  // Hosts often pass inline lambdas; keep latest callbacks in refs so effects do not
+  // re-fire (and nest setState) solely because the prop identity changed.
+  const onNodeActiveRef = useRef(onNodeActive)
+  const onReadyRef = useRef(onReady)
+  const onUiClearedChangeRef = useRef(onUiClearedChange)
+  const handledFocusRequestNonceRef = useRef(0)
+  onNodeActiveRef.current = onNodeActive
+  onReadyRef.current = onReady
+  onUiClearedChangeRef.current = onUiClearedChange
   const selectedNodeId =
     interaction.mode === 'selected'
       ? interaction.primaryId
@@ -175,8 +185,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   }, [externalSyncKey, forceSyncKey, preserveViewOnSync])
 
   useEffect(() => {
-    onReady?.()
-  }, [onReady])
+    onReadyRef.current?.()
+  }, [])
 
   useEffect(() => {
     if (!reviewFxSignal) return
@@ -195,8 +205,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   }, [feedbackFxSignal])
 
   useEffect(() => {
-    onUiClearedChange?.(uiCleared)
-  }, [onUiClearedChange, uiCleared])
+    onUiClearedChangeRef.current?.(uiCleared)
+  }, [uiCleared])
 
   const publishEditorDoc = useCallback(
     (nextEditorDoc: MindMapEditorState['editor_doc']) => {
@@ -237,7 +247,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     }
     if (nextIds.length === 0) {
       replaceInteraction({ mode: 'idle' })
-      onNodeActive?.([])
+      onNodeActiveRef.current?.([])
       return
     }
     const primaryId =
@@ -245,11 +255,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         ? selectedNodeId
         : nextIds[nextIds.length - 1]!
     replaceInteraction(selectedInteraction(primaryId, nextIds))
-    onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), primaryId))
+    onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), primaryId))
   }, [
     getCurrentEditorDoc,
     graphData.nodes,
-    onNodeActive,
     replaceInteraction,
     selectedNodeId,
     selectedNodeIds,
@@ -297,7 +306,12 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const beginEditingNode = useCallback(
     (nodeId: string) => {
       const current = interactionRef.current
-      if (current.mode === 'editing' && current.nodeId === nodeId) return
+      if (current.mode === 'editing' && current.nodeId === nodeId) {
+        // Re-assert editing so a desynced card (e.g. after yellow-emphasis double-click
+        // races) remounts the editor instead of silently no-oping.
+        replaceInteraction({ ...current })
+        return
+      }
       if (current.mode === 'editing' && current.nodeId !== nodeId) commitEditingDraft()
       const editorDoc = getCurrentEditorDoc()
       const selection = buildSelectionFromDoc(editorDoc, nodeId)
@@ -333,6 +347,17 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       if (!nodeId) {
         replaceInteraction({ mode: 'idle' })
         onNodeActive?.([])
+        return
+      }
+      // Skip redundant select→re-render on the second click of a double-click;
+      // remounting yellow-emphasis markup mid-gesture can drop the dblclick event.
+      if (
+        !options?.additive &&
+        current.mode === 'selected' &&
+        current.primaryId === nodeId &&
+        current.nodeIds.length === 1 &&
+        current.nodeIds[0] === nodeId
+      ) {
         return
       }
       if (options?.additive) {
@@ -375,7 +400,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       const current = interactionRef.current
       if (current.mode === 'editing') commitEditingDraft()
       replaceInteraction(nodeUid ? selectedInteraction(nodeUid) : { mode: 'idle' })
-      onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
+      onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
       if (!nodeUid) return
       viewCommandNonceRef.current += 1
       setViewCommand({
@@ -384,7 +409,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         nonce: viewCommandNonceRef.current,
       })
     },
-    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+    [commitEditingDraft, getCurrentEditorDoc, replaceInteraction],
   )
 
   const requestFitView = useCallback(() => {
@@ -408,8 +433,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const toggleCanvasFullscreen = fullscreen.toggle
   const showSystemFullscreenControl = presentationStrategy !== 'viewport-only'
 
+  // Each focusRequestNonce must run at most once. Including requestFocusNode in deps is
+  // unsafe: hosts pass unstable onNodeActive, which used to recreate requestFocusNode and
+  // re-enter this effect, nesting setViewCommand until React #185 (max update depth).
   useEffect(() => {
     if (!focusRequestNodeUid || focusRequestNonce <= 0) return
+    if (handledFocusRequestNonceRef.current === focusRequestNonce) return
+    handledFocusRequestNonceRef.current = focusRequestNonce
     requestFocusNode(focusRequestNodeUid)
   }, [focusRequestNodeUid, focusRequestNonce, requestFocusNode])
 
@@ -473,6 +503,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     nodeClickViewportPolicy ?? 'preserve'
   const resolvedContentChangeViewportPolicy =
     contentChangeViewportPolicy ?? 'preserve'
+  // Scene identity for center-card re-anchor across edit/review/practice/rating.
+  const resolvedSceneTransitionKey =
+    sceneTransitionKey
+    ?? `${sceneChrome}:${readonly ? 'ro' : 'rw'}:${practiceModeActive ? 'practice' : 'plain'}`
   const sceneLabel = mindMapSceneChromeLabel(sceneChrome)
   const frameClassName = [
     buildMindMapEditorSurfaceClassName(className),
@@ -589,6 +623,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
+        sceneTransitionKey={resolvedSceneTransitionKey}
         viewCommand={viewCommand}
         recoveryKey={canvasRecoveryKey}
         onNodeSelect={selectNode}

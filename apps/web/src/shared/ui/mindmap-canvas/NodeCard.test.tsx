@@ -47,7 +47,7 @@ describe('NodeCard', () => {
     expect(selection?.toString()).toBe('新知识点')
   })
 
-  it('makes the whole idle card a drag surface with grab cursor without selection', () => {
+  it('keeps the shell as a drag surface while isolating text for reliable double-click edit', () => {
     const { container } = renderNodeCard({
       label: '可编辑内容',
       selected: false,
@@ -57,18 +57,20 @@ describe('NodeCard', () => {
     const shell = container.querySelector('[data-mindmap-node-id]')
     expect(shell?.className).toContain('mindmap-node-drag-surface')
     expect(shell?.className).toContain('cursor-grab')
-    expect(screen.getByRole('button', { name: '可编辑内容' }).className).not.toContain('nodrag')
-    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-grab')
+    // Text face is nodrag so yellow-emphasis double-click is not stolen by RF drag.
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nodrag')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-text')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('select-none')
     expect(screen.queryByRole('button', { name: '拖动节点' })).toBeNull()
   })
 
-  it('keeps unselected idle cards draggable and removes the old grip handle', () => {
+  it('keeps unselected idle cards draggable from the shell and removes the old grip handle', () => {
     renderNodeCard({ label: '可编辑内容' })
 
     expect(screen.queryByRole('button', { name: '拖动节点' })).toBeNull()
-    expect(screen.getByRole('button', { name: '可编辑内容' }).className).not.toContain('nodrag')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nodrag')
     expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('nopan')
-    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-grab')
+    expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-text')
   })
 
   it('widens the edit shell so thicker edit borders do not wrap earlier than display', () => {
@@ -418,9 +420,27 @@ describe('NodeCard', () => {
 
     const emphasis = document.querySelector('[data-emphasis="highlight"]')
     expect(emphasis).toBeTruthy()
+    // Highlight lives under a block wrapper (div.mindmap-rich-text), not an invalid span>div tree.
+    expect(emphasis?.closest('.mindmap-rich-text')?.tagName).toBe('DIV')
+    expect(emphasis?.closest('.mindmap-node-text')?.className).toContain('nodrag')
     fireEvent.doubleClick(emphasis!)
 
     expect(onStartEdit).toHaveBeenCalledWith('peg-1')
+    // Optimistic enter-edit even when parent still has editing=false.
+    expect(screen.getByRole('textbox', { name: '编辑节点文本' })).toBeTruthy()
+  })
+
+  it('enters edit optimistically on controlled cards when parent editing lags', () => {
+    const onStartEdit = vi.fn()
+    renderNodeCard({
+      label: '滞后控制',
+      editing: false,
+      onStartEdit,
+    })
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: '滞后控制' }))
+    expect(onStartEdit).toHaveBeenCalledWith('peg-1')
+    expect(screen.getByRole('textbox', { name: '编辑节点文本' })).toBeTruthy()
   })
 
   it('seeds the editor with existing yellow emphasis markup instead of stripping it', () => {

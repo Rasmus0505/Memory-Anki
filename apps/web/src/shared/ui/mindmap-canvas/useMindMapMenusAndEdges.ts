@@ -108,6 +108,9 @@ export function useMindMapMenusAndEdges({
 
   const handleNodeClick = useCallback(
     (event: MouseEvent, node: Node) => {
+      // Second click of a double-click (detail >= 2): do not re-select / re-render.
+      // Yellow-emphasis cards re-serialize HTML on select and can swallow dblclick.
+      if (event.detail > 1) return
       setSelectedEdgeId(null)
       setEdgeMenu(null)
       const additive = !readonly && (event.ctrlKey || event.metaKey)

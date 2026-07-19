@@ -20,6 +20,7 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
           data-recovery-key={String(props.recoveryKey ?? '')}
           data-node-click-viewport-policy={String(props.nodeClickViewportPolicy ?? '')}
           data-content-change-viewport-policy={String(props.contentChangeViewportPolicy ?? '')}
+          data-scene-transition-key={String(props.sceneTransitionKey ?? '')}
         />
       )
     },
@@ -145,6 +146,29 @@ describe('MindMapEditorSurface viewport preservation', () => {
 
     expect(canvas.getAttribute('data-node-click-viewport-policy')).toBe('preserve')
     expect(canvas.getAttribute('data-content-change-viewport-policy')).toBe('preserve')
+  })
+
+  it('forwards a scene transition key so mode switches can re-anchor the center card', () => {
+    renderFrame({
+      sceneChrome: 'review',
+      practiceModeActive: true,
+      readonly: true,
+      sceneTransitionKey: 'review:review:review',
+    })
+
+    const canvas = screen.getByTestId('mock-mind-map-canvas')
+    expect(canvas.getAttribute('data-scene-transition-key')).toBe('review:review:review')
+  })
+
+  it('derives a default scene transition key from chrome and practice flags', () => {
+    renderFrame({
+      sceneChrome: 'edit',
+      practiceModeActive: false,
+      readonly: false,
+    })
+
+    const canvas = screen.getByTestId('mock-mind-map-canvas')
+    expect(canvas.getAttribute('data-scene-transition-key')).toBe('edit:rw:plain')
   })
 
   it('keeps preserve defaults outside practice mode', () => {

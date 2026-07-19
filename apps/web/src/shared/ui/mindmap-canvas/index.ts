@@ -11,7 +11,7 @@ export type {
   MindMapNodeClickViewportPolicy,
 } from './MindMapCanvas'
 export { MindMapWorkspace } from './MindMapWorkspace'
-export { nodeTypes } from './NodeCard'
+export { nodeTypes } from './nodeTypes'
 export { NodeContextMenu } from './NodeContextMenu'
 export type { ContextMenuAction } from './NodeContextMenu'
 export { chapterTreeToGraph, pegTreeToGraph, mergeCustomConnections } from './adapter'

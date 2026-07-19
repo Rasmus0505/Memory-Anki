@@ -34,10 +34,6 @@ export function usePalaceEditPage() {
   const palaceId = id ? Number(id) : null
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
-  const [modeFocusRequest, setModeFocusRequest] = useState<{
-    nodeUid: string | null
-    nonce: number
-  }>({ nodeUid: null, nonce: 0 })
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
   const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
@@ -113,27 +109,19 @@ export function usePalaceEditPage() {
     selectedNodeUidRef.current = selectedNodeUid
   }, [selectedNodeUid])
 
-  const queueModeFocusRequest = useCallback((nodeUid: string | null = selectedNodeUidRef.current) => {
-    setModeFocusRequest((current) => ({
-      nodeUid,
-      nonce: current.nonce + 1,
-    }))
-  }, [])
-
+  // Mode switches re-anchor via the canvas sceneTransitionKey (previous center card).
+  // Do not force-focus the selected node — that jumps the camera away from what the user was viewing.
   const enterInlinePractice = useCallback(() => {
-    queueModeFocusRequest()
     practice.enterInlinePractice()
-  }, [practice, queueModeFocusRequest])
+  }, [practice])
 
   const exitInlinePractice = useCallback(() => {
-    queueModeFocusRequest()
     practice.exitInlinePractice()
-  }, [practice, queueModeFocusRequest])
+  }, [practice])
 
   const toggleInlinePractice = useCallback(() => {
-    queueModeFocusRequest()
     practice.toggleInlinePractice()
-  }, [practice, queueModeFocusRequest])
+  }, [practice])
 
   const handleMindMapNodeActive = useCallback((nodes: MindMapSelection[]) => {
     selectedNodeUidRef.current = readSelectionNodeUid(nodes)
@@ -430,8 +418,8 @@ export function usePalaceEditPage() {
     ) => Promise<void>,
     activeMindMapEditorState: practice.activeMindMapEditorState,
     practiceVisibleEditorSyncKey: practice.practiceVisibleEditorSyncKey,
-    modeFocusRequestNodeUid: modeFocusRequest.nodeUid,
-    modeFocusRequestNonce: modeFocusRequest.nonce,
+    modeFocusRequestNodeUid: null as string | null,
+    modeFocusRequestNonce: 0,
     replaceSyncVersion,
     selectedNodes,
     selectedNode,

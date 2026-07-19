@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -32,6 +32,7 @@ import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
+import type { MindMapSelection } from '@/entities/mindmap-document'
 
 function SaveStatusBadge({
   status,
@@ -119,7 +120,13 @@ export default function PalaceEdit() {
   const setMindMapTask = mindMapExperience.setTask
   const editorMode = page.editorMode
   const exitInlinePractice = page.exitInlinePractice
+  const pageHandleMindMapNodeActive = page.handleMindMapNodeActive
+  const registerTimerActivity = page.timer.registerActivity
   const lastBuildActivationRef = useRef<number | null>(null)
+  const handleMindMapNodeActive = useCallback((nodes: MindMapSelection[]) => {
+    registerTimerActivity('node_switch', { source: 'node_active' })
+    pageHandleMindMapNodeActive(nodes)
+  }, [pageHandleMindMapNodeActive, registerTimerActivity])
   useEffect(() => {
     if (!isActive || lastBuildActivationRef.current === becameActiveAt) return
     lastBuildActivationRef.current = becameActiveAt
@@ -509,13 +516,10 @@ export default function PalaceEdit() {
                     visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
                     hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}:${page.aiSplitAppliedSyncVersion}`}
                     hostExternalSyncKey={mindMapImport.importExternalSyncKey}
-                    preserveViewOnSync={
-                      recallModeActive
-                      || mindMapImport.importAppliedSyncVersion > 0
-                      || page.aiSplitAppliedSyncVersion > 0
-                    }
-                    initialViewPolicy={recallModeActive ? 'preserve' : 'reset'}
-                    forceSyncIntent={recallModeActive ? 'soft' : 'replace'}
+                    // Keep camera continuity across build/learn/recall; canvas re-anchors the center card.
+                    preserveViewOnSync
+                    initialViewPolicy="preserve"
+                    forceSyncIntent="soft"
                     currentPalaceId={page.palaceId}
                     reviewFxSignal={page.reviewFxSignal}
                     feedbackFxSignal={page.feedbackFxSignal}
@@ -536,10 +540,7 @@ export default function PalaceEdit() {
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
                     onEditorStateChange={page.handleMindMapEditorStateChange}
-                    onNodeActive={(nodes) => {
-                      page.timer.registerActivity('node_switch', { source: 'node_active' })
-                      page.handleMindMapNodeActive(nodes)
-                    }}
+                    onNodeActive={handleMindMapNodeActive}
                     onNodeClick={page.handleInlinePracticeNodeClick}
                     onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
                     onEditNodeClick={page.isSegmentRangeMode ? page.handleSegmentRangeNodeClick : undefined}
@@ -550,9 +551,7 @@ export default function PalaceEdit() {
                     onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
                     onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
                     onSegmentRangeConfirm={page.handleConfirmSegmentRange}
-                    onNativeFullscreenChange={(active) => {
-                      setMindMapNativeFullscreen(active)
-                    }}
+                    onNativeFullscreenChange={setMindMapNativeFullscreen}
                     onToggleFullscreen={page.toggleMindMapFullscreen}
                     onUiClearedChange={setMindMapUiCleared}
                     className="flex flex-1 flex-col"
@@ -641,6 +640,7 @@ export default function PalaceEdit() {
         pdfPageSelection={mindMapImport.pdfPageSelection}
         onPdfPageSelectionChange={mindMapImport.setPdfPageSelection}
         pdfLibraryLoading={mindMapImport.pdfLibraryLoading}
+        pdfOcrCoverage={mindMapImport.pdfOcrCoverage}
         onPdfUpload={mindMapImport.handlePdfUpload}
         onPdfDelete={(documentId) => void mindMapImport.handlePdfDelete(documentId)}
         onPdfStart={mindMapImport.handlePdfImportStart}

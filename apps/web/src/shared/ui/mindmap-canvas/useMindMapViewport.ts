@@ -14,7 +14,11 @@ import {
   type Viewport,
 } from '@xyflow/react'
 import type { GraphData } from './adapter'
-import { getEventFeedbackPoint, hasMeaningfulSizeChange } from './mindMapCanvasGeometry'
+import {
+  findNearestNodeIdToViewportCenter,
+  getEventFeedbackPoint,
+  hasMeaningfulSizeChange,
+} from './mindMapCanvasGeometry'
 import {
   DROP_HIT_PADDING_X,
   DROP_HIT_PADDING_Y,
@@ -46,6 +50,8 @@ interface UseMindMapViewportInput {
   readonly: boolean
   mobileViewPolicy: MindMapMobileViewPolicy
   contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
+  /** When this identity changes (edit/review/practice/rating), re-center the previous center card. */
+  sceneTransitionKey?: string | null
   viewCommand: MindMapCanvasViewCommand | null
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
@@ -62,6 +68,7 @@ export function useMindMapViewport({
   readonly,
   mobileViewPolicy,
   contentChangeViewportPolicy,
+  sceneTransitionKey = null,
   viewCommand,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
@@ -77,6 +84,14 @@ export function useMindMapViewport({
   const explicitViewportChangeRef = useRef(false)
   const manualViewportGestureRef = useRef(false)
   const explicitViewportTimeoutRef = useRef<number | null>(null)
+  /** Card nearest the viewport center while the scene is stable. */
+  const lastStableCenterNodeIdRef = useRef<string | null>(null)
+  /** After a scene switch, re-center this node once layout is ready. */
+  const pendingSceneRecenterNodeIdRef = useRef<string | null>(null)
+  /** Blocks preserve-camera restores while a scene re-center is in flight. */
+  const sceneRecenterLockRef = useRef(false)
+  const sceneRecenterLockTimeoutRef = useRef<number | null>(null)
+  const previousSceneTransitionKeyRef = useRef<string | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -97,6 +112,8 @@ export function useMindMapViewport({
   const restorePreservedViewport = useCallback((currentViewport?: Viewport) => {
     if (!preserveViewport || explicitViewportChangeRef.current) return
     if (manualViewportGestureRef.current) return
+    // Scene re-center intentionally moves the camera to the previous center card.
+    if (sceneRecenterLockRef.current || pendingSceneRecenterNodeIdRef.current) return
     const current = currentViewport ?? getViewport()
     const preserved = preservedViewportRef.current
     if (
@@ -240,12 +257,88 @@ export function useMindMapViewport({
         target.position.y + size.height / 2,
         {
           duration,
+          // Keep the user's zoom across scene switches; only mobile guided overrides it.
           zoom: mobileGuidedActive ? 1.02 : undefined,
         },
       ), duration)
     },
     [isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, setCenter],
   )
+
+  const resolveViewportCenterNodeId = useCallback(() => {
+    if (!isCanvasReady) return null
+    return findNearestNodeIdToViewportCenter(
+      nodes,
+      getViewport(),
+      canvasSize,
+      measuredNodeSizesRef.current,
+    )
+  }, [canvasSize, getViewport, isCanvasReady, measuredNodeSizesRef, nodes])
+
+  // Measure-driven re-layout rewrites node positions without changing graph
+  // payload identity. Also used as a settle signal for scene re-centering.
+  const layoutFingerprint = useMemo(
+    () =>
+      nodes
+        .map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}`)
+        .join('|'),
+    [nodes],
+  )
+
+  // Scene switch (edit ↔ review ↔ practice ↔ rating): keep the previous center card
+  // roughly centered after the graph re-layouts. Declared before the stable tracker so
+  // the pending flag is set before tracking can overwrite the old anchor.
+  useLayoutEffect(() => {
+    const nextKey = sceneTransitionKey ?? ''
+    const previousKey = previousSceneTransitionKeyRef.current
+    if (previousKey === null) {
+      previousSceneTransitionKeyRef.current = nextKey
+      return
+    }
+    if (previousKey === nextKey) return
+    previousSceneTransitionKeyRef.current = nextKey
+    // Prefer the last tracked center card; fall back to a live read of the old camera.
+    pendingSceneRecenterNodeIdRef.current =
+      lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId()
+    // Lock immediately so same-frame preserve restores cannot yank the camera.
+    if (pendingSceneRecenterNodeIdRef.current) {
+      sceneRecenterLockRef.current = true
+    }
+  }, [resolveViewportCenterNodeId, sceneTransitionKey])
+
+  // Track which card sits at the viewport center while the scene is stable.
+  useLayoutEffect(() => {
+    if (!isCanvasReady || pendingSceneRecenterNodeIdRef.current) return
+    if (manualViewportGestureRef.current || explicitViewportChangeRef.current) return
+    const centerId = resolveViewportCenterNodeId()
+    if (centerId) lastStableCenterNodeIdRef.current = centerId
+  }, [controlledViewport, isCanvasReady, layoutFingerprint, resolveViewportCenterNodeId])
+
+  // Apply deferred re-center once the post-switch layout has nodes.
+  useLayoutEffect(() => {
+    const anchorId = pendingSceneRecenterNodeIdRef.current
+    if (!anchorId || !isCanvasReady) return
+    if (isDraggingNodeRef.current) return
+    const exists = nodes.some((node) => node.id === anchorId)
+    if (!exists) {
+      // Center card may be hidden in the reveal tree — keep camera as-is.
+      pendingSceneRecenterNodeIdRef.current = null
+      sceneRecenterLockRef.current = false
+      return
+    }
+    pendingSceneRecenterNodeIdRef.current = null
+    sceneRecenterLockRef.current = true
+    if (sceneRecenterLockTimeoutRef.current !== null) {
+      window.clearTimeout(sceneRecenterLockTimeoutRef.current)
+    }
+    centerNodeInCanvas(anchorId, 180)
+    // Hold the lock until setCenter finishes updating the controlled viewport.
+    sceneRecenterLockTimeoutRef.current = window.setTimeout(() => {
+      sceneRecenterLockRef.current = false
+      sceneRecenterLockTimeoutRef.current = null
+      lastStableCenterNodeIdRef.current = anchorId
+    }, 230)
+  }, [centerNodeInCanvas, isCanvasReady, isDraggingNodeRef, layoutFingerprint, nodes])
 
   useLayoutEffect(() => {
     if (!preserveViewport || !isCanvasReady) return
@@ -256,16 +349,6 @@ export function useMindMapViewport({
     // Structure / graph payload changes re-layout nodes; keep the user's camera.
     restorePreservedViewport()
   }, [graphContentSignature, restorePreservedViewport])
-
-  // Measure-driven re-layout rewrites node positions without changing graph
-  // payload identity. Re-assert camera only when not mid node-drag.
-  const layoutFingerprint = useMemo(
-    () =>
-      nodes
-        .map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}`)
-        .join('|'),
-    [nodes],
-  )
 
   useLayoutEffect(() => {
     if (!preserveViewport || !isCanvasReady) return
@@ -528,6 +611,9 @@ export function useMindMapViewport({
       }
       if (explicitViewportTimeoutRef.current !== null) {
         window.clearTimeout(explicitViewportTimeoutRef.current)
+      }
+      if (sceneRecenterLockTimeoutRef.current !== null) {
+        window.clearTimeout(sceneRecenterLockTimeoutRef.current)
       }
     }
   }, [])

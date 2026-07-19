@@ -11,7 +11,7 @@ import {
   type OnMove,
   type Viewport,
 } from '@xyflow/react'
-import { nodeTypes } from './NodeCard'
+import { nodeTypes } from './nodeTypes'
 
 interface MindMapCanvasViewportProps {
   width: number
@@ -101,6 +101,9 @@ export function MindMapCanvasViewport({
         edgesFocusable={false}
         deleteKeyCode={null}
         elementsSelectable
+        // Default is 1px — micro-movement on double-click (esp. yellow text) starts
+        // a structure drag and can swallow enter-edit. Shell padding remains draggable.
+        nodeDragThreshold={5}
         nodeTypes={nodeTypes}
         minZoom={0.38}
         maxZoom={1.4}
