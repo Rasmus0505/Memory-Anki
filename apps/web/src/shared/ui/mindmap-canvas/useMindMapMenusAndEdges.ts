@@ -108,9 +108,11 @@ export function useMindMapMenusAndEdges({
 
   const handleNodeClick = useCallback(
     (event: MouseEvent, node: Node) => {
-      // Second click of a double-click (detail >= 2): do not re-select / re-render.
-      // Yellow-emphasis cards re-serialize HTML on select and can swallow dblclick.
-      if (event.detail > 1) return
+      // Edit mode only: ignore 2nd+ click of a double-click so yellow-emphasis
+      // re-select does not re-serialize HTML and swallow dblclick-to-edit.
+      // Readonly flip-card / review intentionally multi-clicks the same node
+      // (browser detail increments within the OS double-click window ~300–500ms).
+      if (!readonly && event.detail > 1) return
       setSelectedEdgeId(null)
       setEdgeMenu(null)
       const additive = !readonly && (event.ctrlKey || event.metaKey)
