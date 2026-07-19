@@ -66,6 +66,7 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     summary = formal_review_completion_summary(db_session, row)
     assert summary["rated_node_count"] == 1
     assert summary["unrated_due_node_count"] == 1
+    assert summary["unrated_node_uids"] == ["b"]
 
     result = complete_formal_review(
         db_session,

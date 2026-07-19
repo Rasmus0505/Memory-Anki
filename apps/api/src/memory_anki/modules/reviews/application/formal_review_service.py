@@ -380,10 +380,12 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
     counts = {label: 0 for label in RATING_LABELS.values()}
     for rating in ratings.values():
         counts[RATING_LABELS[rating]] += 1
+    unrated_uids = sorted(scope - set(ratings))
     return {
         "scope_node_count": len(scope),
         "rated_node_count": len(ratings),
-        "unrated_due_node_count": len(scope - set(ratings)),
+        "unrated_due_node_count": len(unrated_uids),
+        "unrated_node_uids": unrated_uids,
         "rating_counts": counts,
         "mastery_progress": projection["mastery_progress"],
         "mastery_percent": projection["mastery_percent"],

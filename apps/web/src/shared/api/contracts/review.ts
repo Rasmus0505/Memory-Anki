@@ -88,6 +88,10 @@ export interface ReviewCompletionSummary extends ReviewMemorySummary {
   scope_node_count: number
   rated_node_count: number
   unrated_due_node_count: number
+  /** Frozen due UIDs still missing a rating in this session (for one-tap bulk rate). */
+  unrated_node_uids?: string[]
+  /** Effective per-node ratings in this session's frozen due scope. */
+  ratings?: Record<string, number>
   rating_counts: FsrsRatingCounts
   remaining_due_node_count: number
 }
