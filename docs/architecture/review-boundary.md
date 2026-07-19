@@ -67,4 +67,4 @@ Entering a formal review creates or resumes an active UUID `StudySession` and fr
 
 Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time.
 
-The frontend may display the whole mind map for context, but formal completion UI uses only FSRS node evidence. Catalog CTAs prefer backend `review_entry_label` when due and show `review_branch_summaries` on hover.
+Node-mode formal review clips the flip-card `editor_doc` to root + `primary_branch_uid` so the session is a true branch review, not a full-palace walkthrough. The full palace document remains available for subtree rating cascade and inline edit. Formal completion UI uses only FSRS node evidence on the frozen due set. Catalog CTAs prefer backend `review_entry_label` when due and show `review_branch_summaries` on hover.

@@ -182,6 +182,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
   const frameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
+  const onNativeFullscreenChangeRef = useRef(onNativeFullscreenChange)
+  const onUiClearedChangePropRef = useRef(onUiClearedChange)
+  onNativeFullscreenChangeRef.current = onNativeFullscreenChange
+  onUiClearedChangePropRef.current = onUiClearedChange
   const [nativeFullscreenActive, setNativeFullscreenActive] = useState(false)
   const [uiCleared, setUiCleared] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
@@ -208,15 +212,17 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }), [])
 
   const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
-  // Prefer a host-stable key so build/learn toggles do not remount the canvas provider.
-  const frameForceSyncKey = hostForceSyncKey
-    ?? (modeSyncVersion > 0 ? `mode-sync:${modeSyncVersion}` : undefined)
+  // Prefer a host-stable key so review/edit/learn toggles do not remount the canvas provider.
+  // modeSyncVersion only bumps soft content identity — never force a ReactFlow recovery remount.
+  const frameForceSyncKey = hostForceSyncKey ?? undefined
   const frameExternalSyncKey = isEditMode
-    ? (hostExternalSyncKey ?? null)
-    : (visibleEditorSyncKey ?? hostExternalSyncKey ?? null)
-  const framePreserveViewOnSync = preserveViewOnSync ?? !isEditMode
-  const frameInitialViewPolicy = initialViewPolicy ?? (isEditMode ? 'reset' : 'preserve')
-  const frameForceSyncIntent = forceSyncIntent ?? (isEditMode ? 'replace' : 'soft')
+    ? (hostExternalSyncKey ?? (modeSyncVersion > 0 ? `mode-sync:${modeSyncVersion}` : null))
+    : (visibleEditorSyncKey ?? hostExternalSyncKey ?? (modeSyncVersion > 0 ? `mode-sync:${modeSyncVersion}` : null))
+  // Mode switches re-layout the tree; keep camera continuity and re-anchor the center card.
+  const framePreserveViewOnSync = preserveViewOnSync ?? true
+  const frameInitialViewPolicy = initialViewPolicy ?? 'preserve'
+  const frameForceSyncIntent = forceSyncIntent ?? 'soft'
+  const frameSceneTransitionKey = `${sceneChrome}:${isEditMode ? 'edit' : 'review'}:${sessionKind}`
   const guidedModel = useMemo(() => buildGuidedMindMapModel(frameEditorState), [frameEditorState])
   // Rating cascade must walk the full document, not the reveal-filtered visible tree.
   const ratingTreeModel = useMemo(
@@ -410,6 +416,24 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     navigate(`/palaces/${currentPalaceId}/quiz`)
   }, [currentPalaceId, navigate, onQuizBreakOpen])
 
+  const handleSurfaceFullscreenChange = useCallback((active: boolean) => {
+    setNativeFullscreenActive(active)
+    onNativeFullscreenChangeRef.current?.(active)
+  }, [])
+
+  const handleSurfaceUiClearedChange = useCallback((active: boolean) => {
+    setUiCleared(active)
+    onUiClearedChangePropRef.current?.(active)
+  }, [])
+
+  const handleSurfaceReady = useCallback(() => {
+    setHostReadyTimedOut(false)
+  }, [])
+
+  const handleSurfaceReadyTimeout = useCallback(() => {
+    setHostReadyTimedOut(true)
+  }, [])
+
   const ratingConflictOverlay = ratingControls.pendingSubtreeRating ? (
     <RatingSubtreeConflictOverlay
       conflictCount={ratingControls.pendingSubtreeRating.conflictCount}
@@ -469,6 +493,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         readonly={!isEditMode}
         practiceModeActive={!isEditMode}
         sceneChrome={sceneChrome}
+        sceneTransitionKey={frameSceneTransitionKey}
         viewMemoryScope={viewMemoryScope}
         immersiveModeActive={fullscreen}
         toolbarContent={
@@ -556,16 +581,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onSegmentRangeConfirm={onSegmentRangeConfirm}
         onAiSplitRequest={onAiSplitRequest}
         onFullscreenToggle={onToggleFullscreen}
-        onFullscreenChange={(active) => {
-          setNativeFullscreenActive(active)
-          onNativeFullscreenChange?.(active)
-        }}
-        onUiClearedChange={(active) => {
-          setUiCleared(active)
-          onUiClearedChange?.(active)
-        }}
-        onReady={() => setHostReadyTimedOut(false)}
-        onReadyTimeout={() => setHostReadyTimedOut(true)}
+        onFullscreenChange={handleSurfaceFullscreenChange}
+        onUiClearedChange={handleSurfaceUiClearedChange}
+        onReady={handleSurfaceReady}
+        onReadyTimeout={handleSurfaceReadyTimeout}
         className={cn(
           'w-full rounded-lg border border-border/70 bg-background',
           fullscreen ? 'h-full' : 'h-[64vh]',

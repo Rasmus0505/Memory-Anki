@@ -47,15 +47,21 @@ export interface ReviewSessionContainerSession {
   frozen_due_node_uids?: string[]
   due_node_count?: number
   memory_summary?: ReviewMemorySummary
+  review_entry_mode?: 'none' | 'node' | 'palace' | null
+  review_entry_label?: string | null
+  primary_branch_uid?: string | null
+  primary_branch_title?: string | null
   revealMode?: RevealFlowMode
   checkpointNodeUids?: string[]
   editor_doc?: Record<string, unknown> | string | null
 }
 
 interface ReviewSessionContainerProps {
-  eyebrow: string
+  eyebrow: string | ((session: ReviewSessionContainerSession) => string)
   buildTitle: (session: ReviewSessionContainerSession) => string
   buildReviewEditorState: (session: ReviewSessionContainerSession) => MindMapEditorState
+  /** Optional full-tree rating source when flip-card view is clipped (node review). */
+  buildRatingTreeEditorState?: (session: ReviewSessionContainerSession) => MindMapEditorState
   loadSession: (sessionId: string | number) => Promise<ReviewSessionContainerSession>
   loadProgress: (sessionId: string | number) => Promise<{ progress: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean } | null }>
   saveProgress: (sessionId: string | number, data: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean }) => Promise<unknown>
@@ -130,6 +136,7 @@ export function ReviewSessionContainer({
   eyebrow,
   buildTitle,
   buildReviewEditorState,
+  buildRatingTreeEditorState,
   loadSession,
   loadProgress,
   saveProgress,
@@ -236,7 +243,7 @@ export function ReviewSessionContainer({
     const sessionId = id
     const load = async () => {
       setLoadError(null)
-      const inflightKey = `${eyebrow}:${sessionId}`
+      const inflightKey = `${typeof eyebrow === 'function' ? 'review-session' : eyebrow}:${sessionId}`
       const loadSessionAndProgress = () => {
         let pending = inflightReviewSessionLoads.get(inflightKey)
         if (!pending) {
@@ -337,13 +344,16 @@ export function ReviewSessionContainer({
   }
 
   const title = buildTitle(session)
-  const resolvedViewMemoryScope = `review-session:${session.id}:${displayMode}`
+  const resolvedEyebrow = typeof eyebrow === 'function' ? eyebrow(session) : eyebrow
+  // One scope across review/edit so the previous center card can re-anchor after mode switches.
+  const resolvedViewMemoryScope = `review-session:${session.id}`
+  const frozenDueNodeUids = session.frozen_due_node_uids ?? []
 
   return (
     <div className="space-y-5">
       {!mindMapFullscreen ? (
         <PageIntro
-          eyebrow={eyebrow}
+          eyebrow={resolvedEyebrow}
           title={title}
           compact
           actions={
@@ -358,7 +368,10 @@ export function ReviewSessionContainer({
                 {displayMode === 'edit' ? '内联编辑中' : '翻卡复习中'}
               </Badge>
               <Badge variant="secondary">FSRS</Badge>
-              <Badge variant="outline">本次 {session.due_node_count ?? session.frozen_due_node_uids?.length ?? 0} 个到期节点</Badge>
+              {session.review_entry_mode === 'node' && session.primary_branch_title ? (
+                <Badge variant="outline">分支 · {session.primary_branch_title}</Badge>
+              ) : null}
+              <Badge variant="outline">本次 {session.due_node_count ?? frozenDueNodeUids.length} 个到期节点</Badge>
             </>
           }
         />
@@ -372,12 +385,16 @@ export function ReviewSessionContainer({
           studySessionId={String(session.id)}
           revealMode={session.revealMode ?? 'standard'}
           checkpointNodeUids={session.checkpointNodeUids ?? []}
+          reviewScopeNodeUids={frozenDueNodeUids}
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={resolvedViewMemoryScope}
           persistKey={`review:${session.id}`}
           reviewEditorState={reviewEditorState}
           editEditorState={resolvedEditEditorState}
+          ratingTreeEditorState={
+            buildRatingTreeEditorState ? buildRatingTreeEditorState(session) : null
+          }
           onModeToggle={handleModeToggle}
           onEditEditorStateChange={setEditEditorState}
           submitting={completion.submitting}

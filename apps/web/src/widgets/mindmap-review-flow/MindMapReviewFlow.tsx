@@ -284,7 +284,9 @@ export function MindMapReviewFlow({
                     }
                     visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
                     editableEditorState={props.editEditorState}
-                    ratingTreeEditorState={props.editEditorState ?? props.reviewEditorState}
+                    ratingTreeEditorState={
+                      props.editEditorState ?? props.ratingTreeEditorState ?? props.reviewEditorState
+                    }
                     visibleEditorSyncKey={review.mapVisibleSyncKey}
                     currentPalaceId={props.palaceId}
                     reviewFxSignal={review.flow.feedback.reviewFxSignal}

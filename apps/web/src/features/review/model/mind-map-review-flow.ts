@@ -20,12 +20,19 @@ export interface MindMapReviewFlowProps {
   studySessionId?: string | null;
   revealMode?: RevealFlowMode;
   checkpointNodeUids?: string[];
+  /** When set, weak-retry / AI review scope uses this frozen set instead of the whole visible tree. */
+  reviewScopeNodeUids?: string[];
   displayMode?: "review" | "edit";
   modeSyncVersion?: number;
   viewMemoryScope?: string | null;
   persistKey?: string | null;
   reviewEditorState: MindMapEditorState;
   editEditorState?: MindMapEditorState | null;
+  /**
+   * Full document for subtree rating cascade. Prefer this over the flip-card
+   * view when node-mode review has clipped the visible tree to one branch.
+   */
+  ratingTreeEditorState?: MindMapEditorState | null;
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>;
   onModeToggle?: () => void | Promise<void>;
   onEditEditorStateChange?: (nextState: MindMapEditorState) => void;

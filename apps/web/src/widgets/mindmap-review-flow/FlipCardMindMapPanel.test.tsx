@@ -44,6 +44,7 @@ describe('FlipCardMindMapPanel', () => {
       readonly: true,
       practiceModeActive: true,
       sceneChrome: 'practice',
+      sceneTransitionKey: 'practice:review:practice',
       viewMemoryScope: 'palace-edit:101',
       syncIntent: 'soft',
       preserveViewOnSync: true,
@@ -56,6 +57,30 @@ describe('FlipCardMindMapPanel', () => {
     })
     expect(screen.queryByRole('button', { name: '忘记 1' })).toBeNull()
     expect(screen.queryByRole('button', { name: '本轮评分记录' })).toBeNull()
+  })
+
+  it('keeps view preservation when switching into edit mode', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={false}
+        displayMode="edit"
+        editableEditorState={editorState}
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()).toMatchObject({
+      readonly: false,
+      practiceModeActive: false,
+      sceneChrome: 'edit',
+      sceneTransitionKey: 'edit:edit:practice',
+      preserveViewOnSync: true,
+      initialViewPolicy: 'preserve',
+      forceSyncIntent: 'soft',
+    })
   })
 
   it('maps sessionKind and ratingMode onto scene chrome', () => {

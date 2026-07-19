@@ -21,6 +21,7 @@ export function useMindMapReviewFlowController({
   studySessionId = null,
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
+  reviewScopeNodeUids,
   displayMode = "review",
   persistKey = null,
   reviewEditorState,
@@ -46,7 +47,13 @@ export function useMindMapReviewFlowController({
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
   const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: Boolean(studySessionId), sourceScene: sessionKind === 'review' ? 'formal_review' : 'practice' });
+  const reviewScopeKey = React.useMemo(
+    () => JSON.stringify(reviewScopeNodeUids ?? null),
+    [reviewScopeNodeUids],
+  );
   const reviewNodeUids = React.useMemo(() => {
+    const scoped = (JSON.parse(reviewScopeKey) as string[] | null)?.filter(Boolean) ?? [];
+    if (scoped.length > 0) return scoped;
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
     const result: string[] = [];
     const walk = (node: NonNullable<typeof doc.root>, isRoot = false) => {
@@ -56,7 +63,7 @@ export function useMindMapReviewFlowController({
     };
     if (doc.root) walk(doc.root, true);
     return result;
-  }, [reviewEditorState.editor_doc]);
+  }, [reviewEditorState.editor_doc, reviewScopeKey]);
 
 
   const flow = useReviewFlowSession({
