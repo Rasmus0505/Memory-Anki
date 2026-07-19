@@ -44,6 +44,7 @@ __pycache__/
 
 # ===== Logs & temp scratch files =====
 /logs/
+/tmp/
 *.log
 *.out.log
 *.err.log
