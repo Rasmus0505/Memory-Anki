@@ -156,8 +156,11 @@ BUILTIN_BLOCKS = (
         sort_order=10,
         template=(
             "不要假设任何页面天然是结构页。综合标题、编号、段落、缩进和并列关系判断层级；"
-            "精华提要、目录、表格和示意图只能辅助判断，不能代替正文。"
-            "保留跨页续文，遇到下一同级章节标题时立即停止。"
+            "教材页内的「精华提要」、彩色导图、总览框图只能辅助判断章节骨架，"
+            "绝不能把精华提要整棵树当作最终输出；最终脑图必须以知识点正文段落为准展开，"
+            "覆盖正文中的全部小标题、编号条目、事实、年代、人物与结论。"
+            "若输出节点数明显接近精华提要而远少于正文条目，视为失败，应继续按正文补全。"
+            "保留跨页续文，遇到下一同级章节标题（如「第X节」）时立即停止，不收录下一节内容。"
         ),
     ),
     PromptBlockSeed(
@@ -307,7 +310,10 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "output.mindmap_json",
             "quality.json_integrity",
         ),
-        scene_instruction=_mindmap_scene_instruction("读取全部教材正文页面，生成目标章节的完整思维导图。"),
+        scene_instruction=_mindmap_scene_instruction(
+            "读取全部教材页面中的正文，为目标章节生成完整思维导图。"
+            "禁止只复制页内精华提要/自带导图；必须展开知识点正文中的全部条目。"
+        ),
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
@@ -364,6 +370,8 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         ),
         scene_instruction=(
             "任务：把带页码的逐页 OCR 原文整理为目标章节脑图。\n"
+            "禁止把「精华提要」导图当作唯一内容；若 OCR 中同时出现提要与正文，"
+            "必须以「知识点」「（一）（二）」等正文结构展开，保留全部编号条目与关键事实。\n"
             "目标章节标题：{{target_title}}\n\n逐页 OCR 原文：\n{{ocr_text}}"
         ),
         recommended_block_keys=(
