@@ -8,13 +8,16 @@ import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
+import { ratePalaceNodesApi } from '@/features/review/api'
 import type {
   MindMapEditorState,
+  MindMapRecallRating,
   ReviewCompletionSummary,
   ReviewMemorySummary,
   ReviewPalaceSummary,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
+import { toast } from '@/shared/feedback/toast'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
@@ -159,6 +162,7 @@ export function ReviewSessionContainer({
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [bulkRating, setBulkRating] = useState(false)
   const modeTransitioningRef = useRef(false)
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
@@ -298,6 +302,61 @@ export function ReviewSessionContainer({
     }
   }, [displayMode, flushSave, id, reloadSession])
 
+  const handleBulkRateUnrated = useCallback(
+    async (rating: MindMapRecallRating) => {
+      const target = completion.target
+      if (!target || bulkRating) return
+      const palaceId = target.session.palace_id
+      const studySessionId = String(target.session.id)
+      if (!palaceId) return
+
+      const summaryUnrated = target.summary.unrated_node_uids?.filter(Boolean) ?? []
+      const frozenDue = target.session.frozen_due_node_uids?.filter(Boolean) ?? []
+      const alreadyRated = new Set(Object.keys(target.summary.ratings ?? {}))
+      // Prefer server-provided unrated list; otherwise freeze-scope minus already-rated map.
+      let unratedUids = summaryUnrated
+      if (unratedUids.length === 0 && target.summary.unrated_due_node_count > 0) {
+        unratedUids = frozenDue.filter((uid) => !alreadyRated.has(uid))
+      }
+      if (unratedUids.length === 0) {
+        toast.info('本轮没有未评分节点')
+        return
+      }
+
+      setBulkRating(true)
+      try {
+        // Rate each unrated node as single so formal scope filtering stays exact.
+        // Sequential keeps operation_id uniqueness and avoids server write races.
+        for (const nodeUid of unratedUids) {
+          const operationId =
+            typeof crypto !== 'undefined' && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `bulk-rate-${Date.now()}-${Math.random().toString(36).slice(2)}`
+          await ratePalaceNodesApi(palaceId, {
+            node_uid: nodeUid,
+            rating,
+            study_session_id: studySessionId,
+            operation_id: operationId,
+            rating_scope: 'single',
+            conflict_policy: 'skip_direct',
+            source_scene: 'formal_review',
+            recall_round: 'first',
+            rating_source: 'manual',
+          })
+        }
+        const label =
+          rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
+        toast.success(`已将 ${unratedUids.length} 个本轮节点记为「${label}」`)
+        await completion.retryPreparation()
+      } catch (error) {
+        toast.error(error instanceof Error && error.message ? error.message : '一键评分失败')
+      } finally {
+        setBulkRating(false)
+      }
+    },
+    [bulkRating, completion],
+  )
+
 
   const palace = session?.palace ?? editorPalace ?? null
   const displayLoadError = displayMode === 'edit' && !editEditorState ? editorError : null
@@ -425,9 +484,17 @@ export function ReviewSessionContainer({
         submitting={completion.submitting}
         preparing={completion.preparing}
         submissionFailed={completion.submissionFailed}
+        bulkRating={bulkRating}
         error={completion.error}
         onRetry={() => void completion.retryPreparation()}
         onRetrySubmission={() => void completion.retrySubmission()}
+        onBulkRateUnrated={
+          (completion.target?.summary.unrated_due_node_count ?? 0) > 0
+            ? (rating) => {
+                void handleBulkRateUnrated(rating)
+              }
+            : undefined
+        }
         onConfirm={(note) => { void completion.confirmCompletion({ note }) }}
         onCancel={completion.cancelCompletion}
       />

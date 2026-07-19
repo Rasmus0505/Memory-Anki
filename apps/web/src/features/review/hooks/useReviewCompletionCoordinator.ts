@@ -103,8 +103,14 @@ export function useReviewCompletionCoordinator<TTarget, TInput, TResult>({
 
   const retryPreparation = React.useCallback(async () => {
     const current = stateRef.current
-    if (current.status !== 'failed' || current.phase !== 'prepare') return
-    await prepareDraft(current.draft)
+    // Allow refresh after bulk-rating while the dialog is still open.
+    if (current.status === 'failed' && current.phase === 'prepare') {
+      await prepareDraft(current.draft)
+      return
+    }
+    if (current.status === 'awaiting_confirmation') {
+      await prepareDraft(current.draft)
+    }
   }, [prepareDraft])
 
   const performSubmission = React.useCallback(async (args: {
