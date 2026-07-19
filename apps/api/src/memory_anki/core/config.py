@@ -100,6 +100,7 @@ ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
 IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
 PDF_LIBRARY_DIR = APP_HOME / "pdf_library"
+PDF_OCR_CACHE_DIR = APP_HOME / "pdf_ocr_cache"
 AI_CALL_LOGS_DIR = APP_HOME / "ai_call_logs"
 ENGLISH_DIR = APP_HOME / "english"
 ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
@@ -203,6 +204,7 @@ def ensure_runtime_dirs() -> None:
         SUBJECT_DOCUMENTS_DIR,
         IMPORT_JOBS_DIR,
         PDF_LIBRARY_DIR,
+        PDF_OCR_CACHE_DIR,
         AI_CALL_LOGS_DIR,
         ENGLISH_DIR,
         ENGLISH_MEDIA_DIR,
