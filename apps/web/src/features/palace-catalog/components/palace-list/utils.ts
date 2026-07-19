@@ -7,15 +7,13 @@ import type {
 } from '@/entities/preferences/model/palaceViewSettings'
 
 
-export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled' | 'practice'
+export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
 
 export function resolveReviewButtonState(
   hasDueReview: boolean,
   value: string | null,
-  needsPractice = false,
 ): ReviewButtonState {
   if (hasDueReview) return 'due_now'
-  if (needsPractice) return 'practice'
   if (!value) return 'unscheduled'
   const target = parseApiDateTime(value)
   if (Number.isNaN(target.getTime())) return 'unscheduled'
@@ -113,8 +111,6 @@ export function getReviewActionButtonClass(options: {
   return cn(
     'h-8 w-full rounded-md border text-xs font-medium transition-colors',
     state === 'due_now' && dueNowClass,
-    state === 'practice' &&
-      'border-success bg-success text-white hover:bg-success/80',
     state === 'due_later_today' &&
       'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
     state === 'future' &&
@@ -194,7 +190,6 @@ export function getReviewActionLabel(
 
   if (loading) return '加载中...'
   if (isSleepReview) return '睡前复习'
-  if (state === 'practice') return '练习'
   if (state === 'due_now') {
     // Prefer short labels without legacy "· N" node counts.
     if (entryMode === 'node') return '节点复习'

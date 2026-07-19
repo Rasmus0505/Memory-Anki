@@ -5,15 +5,8 @@ import type {
   PalaceGroupedListResponse,
   PalaceSegmentSummary,
 } from '@/shared/api/contracts'
-import {
-  deletePalaceApi,
-  getPalaceEditorApi,
-  getPracticeSessionProgressApi,
-  getSegmentPracticeSessionProgressApi,
-} from '@/entities/palace/api'
+import { deletePalaceApi } from '@/entities/palace/api'
 import { buildReviewSessionPath } from '@/entities/review'
-import { getPalaceSegmentApi } from '@/entities/palace-segment/api'
-import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 
 interface UsePalaceListCardActionsOptions {
   allPalaces: PalaceGroupedItem[]
@@ -46,73 +39,36 @@ export function usePalaceListCardActions({
     }
   }
 
-  const shouldOpenFormalReview = (palace: PalaceGroupedItem) => {
-    const nodeCount = Number(palace.memory_node_count ?? 0)
-    if (nodeCount <= 0) return false
-    const dueCount = Number(palace.due_node_count ?? 0)
-    const entryMode = palace.review_entry_mode
-    if (dueCount > 0 || entryMode === 'node' || entryMode === 'palace' || palace.has_due_review) {
-      return true
-    }
-    // Future / later-today FSRS cards still open formal review (early review).
-    return Boolean(palace.memory_next_review_at ?? palace.next_review_at)
+  const handlePalaceReview = (palace: PalaceGroupedItem) => {
+    navigate(buildReviewSessionPath(palace.id))
   }
 
-  const handlePalacePractice = (palace: PalaceGroupedItem) => {
-    if (shouldOpenFormalReview(palace)) {
-      // Formal FSRS resolve accepts palace id and starts/resumes the review StudySession.
-      navigate(buildReviewSessionPath(palace.id))
-      return
-    }
-    navigate(`/palaces/${palace.id}/practice`)
+  const handleWarmPalaceReview = (palace: PalaceGroupedItem) => {
+    prefetchReviewSession?.(palace.id)
   }
 
-  const handleWarmPalacePractice = (palace: PalaceGroupedItem) => {
-    if (shouldOpenFormalReview(palace)) {
-      prefetchReviewSession?.(palace.id)
-      return
-    }
-    prefetchStudySession('palace-practice', palace.id, () =>
-      Promise.all([getPalaceEditorApi(palace.id), getPracticeSessionProgressApi(palace.id)]).then(
-        ([session, progress]) => ({ session, progress }),
-      ),
-    )
-  }
-
-  const handleSegmentPractice = (segment: PalaceSegmentSummary) => {
+  const handleSegmentReview = (segment: PalaceSegmentSummary) => {
     if (segment.current_review_schedule_id) {
       navigate(buildReviewSessionPath(segment.current_review_schedule_id))
       return
     }
     // Virtual default / whole-palace segment → formal FSRS by palace id.
-    if (segment.is_virtual_default || segment.id === 0) {
-      navigate(buildReviewSessionPath(segment.palace_id))
-      return
-    }
-    navigate(`/segments/${segment.id}/practice`)
+    navigate(buildReviewSessionPath(segment.palace_id))
   }
 
-  const handleWarmSegmentPractice = (segment: PalaceSegmentSummary) => {
+  const handleWarmSegmentReview = (segment: PalaceSegmentSummary) => {
     if (segment.current_review_schedule_id) {
       prefetchReviewSession?.(segment.current_review_schedule_id)
       return
     }
-    if (segment.is_virtual_default || segment.id === 0) {
-      prefetchReviewSession?.(segment.palace_id)
-      return
-    }
-    prefetchStudySession('segment-practice', segment.id, () =>
-      Promise.all([getPalaceSegmentApi(segment.id), getSegmentPracticeSessionProgressApi(segment.id)]).then(
-        ([session, progress]) => ({ session, progress }),
-      ),
-    )
+    prefetchReviewSession?.(segment.palace_id)
   }
 
   return {
-    onPalacePractice: (palace: PalaceGroupedItem) => void handlePalacePractice(palace),
-    onWarmPalacePractice: handleWarmPalacePractice,
-    onSegmentPractice: (segment: PalaceSegmentSummary) => void handleSegmentPractice(segment),
-    onWarmSegmentPractice: handleWarmSegmentPractice,
+    onPalaceReview: (palace: PalaceGroupedItem) => void handlePalaceReview(palace),
+    onWarmPalaceReview: handleWarmPalaceReview,
+    onSegmentReview: (segment: PalaceSegmentSummary) => void handleSegmentReview(segment),
+    onWarmSegmentReview: handleWarmSegmentReview,
     onDelete: (id: number, title: string) => void handleDelete(id, title),
   }
 }

@@ -212,10 +212,10 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
         palace={palace}
         viewSettings={expandedViewSettings}
         defaultExpanded
-        onPalacePractice={cardActions.onPalacePractice}
-        onWarmPalacePractice={cardActions.onWarmPalacePractice}
-        onSegmentPractice={cardActions.onSegmentPractice}
-        onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
+        onPalaceReview={cardActions.onPalaceReview}
+        onWarmPalaceReview={cardActions.onWarmPalaceReview}
+        onSegmentReview={cardActions.onSegmentReview}
+        onWarmSegmentReview={cardActions.onWarmSegmentReview}
         onDelete={cardActions.onDelete}
       />
     ),

@@ -28,10 +28,10 @@ interface PalaceListCardProps {
   viewSettings: PalaceListViewSettings
   searchQuery?: string
   defaultExpanded?: boolean
-  onPalacePractice: (palace: PalaceGroupedItem) => void
-  onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
-  onSegmentPractice: (segment: PalaceSegmentSummary) => void
-  onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
+  onPalaceReview: (palace: PalaceGroupedItem) => void
+  onWarmPalaceReview?: (palace: PalaceGroupedItem) => void
+  onSegmentReview: (segment: PalaceSegmentSummary) => void
+  onWarmSegmentReview?: (segment: PalaceSegmentSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -162,10 +162,10 @@ export function PalaceListCard({
   viewSettings,
   searchQuery,
   defaultExpanded = false,
-  onPalacePractice,
-  onWarmPalacePractice = () => {},
-  onSegmentPractice,
-  onWarmSegmentPractice = () => {},
+  onPalaceReview,
+  onWarmPalaceReview = () => {},
+  onSegmentReview,
+  onWarmSegmentReview = () => {},
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -213,8 +213,6 @@ export function PalaceListCard({
   const showPrimaryReviewButton = showFsrsReviewButton || showLegacySegmentReviewButton
   const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
-  // Practice is only for empty / unscheduled cards — not a fallback when segments are missing.
-  const showPalacePracticeButton = !showPrimaryReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
   const singleSegmentActiveProgress = normalizeReviewProgress(singleSegment?.active_review_progress)
@@ -257,20 +255,6 @@ export function PalaceListCard({
                 >
                   {renderHighlightedText(palaceTitle, searchQuery)}
                 </Link>
-                {showPalacePracticeButton ? (
-                  <>
-                    <ReviewActionButton
-                      label="练习"
-                      className={cn(
-                        'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
-                        getReviewActionButtonClass({ state: 'practice' }),
-                      )}
-                      disabled={false}
-                      onWarm={() => onWarmPalacePractice(palace)}
-                      onClick={() => onPalacePractice(palace)}
-                    />
-                  </>
-                ) : null}
                 {showPrimaryReviewButton ? (
                   <ReviewActionButton
                     label={getReviewActionLabel(memoryNextReviewAt, {
@@ -299,18 +283,18 @@ export function PalaceListCard({
                     }
                     onWarm={() => {
                       if (showFsrsReviewButton) {
-                        onWarmPalacePractice(palace)
+                        onWarmPalaceReview(palace)
                         return
                       }
-                      if (singleSegment) onWarmSegmentPractice(singleSegment)
+                      if (singleSegment) onWarmSegmentReview(singleSegment)
                     }}
                     onClick={() => {
                       // FSRS formal review is palace-scoped (session id = palace id).
                       if (showFsrsReviewButton) {
-                        onPalacePractice(palace)
+                        onPalaceReview(palace)
                         return
                       }
-                      if (singleSegment) onSegmentPractice(singleSegment)
+                      if (singleSegment) onSegmentReview(singleSegment)
                     }}
                   />
                 ) : null}
@@ -360,36 +344,19 @@ export function PalaceListCard({
                       getSegmentCardClass(viewSettings.densityMode),
                     )}
                   >
-                    <div className="flex flex-wrap items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block size-2.5 rounded-full"
-                            style={{ backgroundColor: segment.color }}
-                          />
-                          <span className="truncate text-sm font-medium">
-                            {getSegmentDisplayName(segment, index)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                          <span>{segment.node_count} 个知识点</span>
-                          <span>预计 {formatDuration(segment.estimated_review_seconds || 0)}</span>
-                        </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block size-2.5 rounded-full"
+                          style={{ backgroundColor: segment.color }}
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {getSegmentDisplayName(segment, index)}
+                        </span>
                       </div>
-
-                      <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
-                        {isMultiSegment ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
-                            onFocus={() => onWarmSegmentPractice(segment)}
-                            onMouseEnter={() => onWarmSegmentPractice(segment)}
-                            onClick={() => onSegmentPractice(segment)}
-                          >
-                            练习
-                          </Button>
-                        ) : null}
+                      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                        <span>{segment.node_count} 个知识点</span>
+                        <span>预计 {formatDuration(segment.estimated_review_seconds || 0)}</span>
                       </div>
                     </div>
                   </div>
