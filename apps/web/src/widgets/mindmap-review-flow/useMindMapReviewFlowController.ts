@@ -72,6 +72,8 @@ export function useMindMapReviewFlowController({
     sessionKind,
     revealMode,
     checkpointNodeUids,
+    // Frozen due set: auto-reveal non-due cards so formal/node review only flips due ones.
+    focusNodeUids: reviewScopeNodeUids,
     persistKey,
     editorState: reviewEditorState,
     onComplete,

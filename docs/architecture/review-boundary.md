@@ -55,7 +55,7 @@ Entry UX is derived from due-node top-level branch coverage:
 
 Node counts are not embedded in CTA labels. Per-branch schedule detail for tooltips lives in `review_branch_summaries` (top-level branches only: title, due count, next review, status).
 
-A formal session freezes its due-node UID scope on entry (whole palace or single branch). Completion progress and unrated-due counts still use that frozen set. **Subtree ratings** write FSRS state for the full document descendants of the rated node (including non-due / unrevealed nodes). **Single** ratings in formal review still require the target node to be in the frozen scope.
+A formal session freezes its due-node UID scope on entry (whole palace or single branch). Completion progress and unrated-due counts still use that frozen set. Flip-card reveal uses the same frozen set as `focusNodeIds`: non-due cards auto-reveal on entry; only due cards stay as flip targets (subtrees under unrevealed due cards stay hidden until that due card is flipped). **Subtree ratings** write FSRS state for the full document descendants of the rated node (including non-due / unrevealed nodes). **Single** ratings in formal review still require the target node to be in the frozen scope.
 
 Parent/root batch scoring must not depend on flip-card reveal state. Frontend rating scope walks the full `editor_doc` tree (`ratingTreeEditorState`), not the reveal-filtered visible tree.
 

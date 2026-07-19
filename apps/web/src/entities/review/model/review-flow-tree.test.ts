@@ -262,6 +262,111 @@ describe('review-flow-tree visible editor state', () => {
     expect(afterCheckpointReveal.a1).toBe('revealed')
   })
 
+  it('auto-reveals non-due cards for formal due-scope focusNodeIds (node review)', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'Branch', uid: 'branch' },
+            children: [
+              { data: { text: 'Fresh', uid: 'fresh' }, children: [] },
+              {
+                data: { text: 'Due parent', uid: 'due-parent' },
+                children: [
+                  { data: { text: 'Nested fresh', uid: 'nested-fresh' }, children: [] },
+                  { data: { text: 'Nested due', uid: 'nested-due' }, children: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const options = { focusNodeIds: ['due-parent', 'nested-due'] }
+
+    const initial = buildInitialRevealState(root, null, options)
+    expect(initial).toEqual({
+      root: 'revealed',
+      branch: 'revealed',
+      fresh: 'revealed',
+      'due-parent': 'placeholder',
+      'nested-fresh': 'hidden',
+      'nested-due': 'hidden',
+    })
+
+    // Flipping a due card only reveals that card — children stay hidden (same as normal review).
+    const afterDueParent = advanceRevealStateForNodeClick(
+      'due-parent',
+      nodeMap,
+      initial,
+      options,
+      root,
+    )
+    expect(afterDueParent).toEqual({
+      root: 'revealed',
+      branch: 'revealed',
+      fresh: 'revealed',
+      'due-parent': 'revealed',
+      'nested-fresh': 'hidden',
+      'nested-due': 'hidden',
+    })
+
+    // Next click on the revealed parent opens the first child as a placeholder.
+    const afterExpandChild = advanceRevealStateForNodeClick(
+      'due-parent',
+      nodeMap,
+      afterDueParent,
+      options,
+      root,
+    )
+    expect(afterExpandChild).toEqual({
+      root: 'revealed',
+      branch: 'revealed',
+      fresh: 'revealed',
+      'due-parent': 'revealed',
+      'nested-fresh': 'placeholder',
+      'nested-due': 'hidden',
+    })
+
+    // Flip the first child content, then open the next sibling placeholder.
+    const afterFlipNestedFresh = advanceRevealStateForNodeClick(
+      'nested-fresh',
+      nodeMap,
+      afterExpandChild,
+      options,
+      root,
+    )
+    expect(afterFlipNestedFresh['nested-fresh']).toBe('revealed')
+    const afterExpandNestedDue = advanceRevealStateForNodeClick(
+      'due-parent',
+      nodeMap,
+      afterFlipNestedFresh,
+      options,
+      root,
+    )
+    expect(afterExpandNestedDue['nested-due']).toBe('placeholder')
+
+    // Legacy "all hidden except root" progress heals into due-scope on rebuild.
+    const healed = buildInitialRevealState(
+      root,
+      {
+        root: 'revealed',
+        branch: 'hidden',
+        fresh: 'hidden',
+        'due-parent': 'hidden',
+        'nested-fresh': 'hidden',
+        'nested-due': 'hidden',
+      },
+      options,
+    )
+    expect(healed['due-parent']).toBe('placeholder')
+    expect(healed.fresh).toBe('revealed')
+    expect(healed.branch).toBe('revealed')
+  })
+
   it('auto-reveals question-card children when a parent becomes revealed', () => {
     const sourceDoc: MindMapDoc = {
       root: {

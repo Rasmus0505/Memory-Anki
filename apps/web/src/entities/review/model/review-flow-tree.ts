@@ -27,6 +27,11 @@ export type RevealFlowMode = 'standard' | 'segment-checkpoint'
 export interface RevealFlowOptions {
   mode?: RevealFlowMode
   checkpointIds?: Iterable<string>
+  /**
+   * Formal-review due scope: auto-reveal every non-focus node; only focus
+   * (frozen due) nodes stay as flip targets. Ignored in segment-checkpoint mode.
+   */
+  focusNodeIds?: Iterable<string>
 }
 
 export function parseEditorDoc(raw: unknown): MindMapDoc | null {
@@ -196,6 +201,12 @@ export function buildInitialRevealState(
     )
     return applyQuestionCardAutoReveal(flattenNodes(root), checkpointState)
   }
+  // Formal due-scope: skip flipping nodes that are not in the frozen due set.
+  const focusIds = sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
+  if (focusIds.length > 0) {
+    const focusState = buildCheckpointRevealState(root, focusIds, previous)
+    return applyQuestionCardAutoReveal(flattenNodes(root), focusState)
+  }
   const next: Record<string, RevealState> = {}
   const walk = (node: ReviewMindMapNode) => {
     const previousState = previous?.[node.id]
@@ -270,14 +281,26 @@ export function advanceRevealStateForNodeClick(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
+  options: RevealFlowOptions = {},
+  root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
   const node = nodeMap.get(nodeId)
   if (!node) return revealMap
   const state = revealMap[nodeId] ?? 'hidden'
+  void options
+  void root
+
+  // Formal due-scope only changes the *initial* map (non-due auto-shown).
+  // Click advance always matches normal review: one step per click —
+  // placeholder → revealed content, or revealed parent → next child placeholder.
   if (state === 'placeholder') {
-    return applyQuestionCardAutoReveal(nodeMap, { ...revealMap, [nodeId]: 'revealed' })
+    return applyQuestionCardAutoReveal(nodeMap, {
+      ...revealMap,
+      [nodeId]: 'revealed',
+    })
   }
   if (state !== 'revealed') return revealMap
+
   const nextChild = findNextHiddenChild(node, revealMap)
   if (!nextChild) return revealMap
   // Question cards never land on placeholder; auto-reveal cascade handles them.
@@ -654,52 +677,16 @@ export function buildVisibleEditorState(
   }
 }
 
-function collectAncestorIds(
-  focusIds: Set<string>,
-  nodeMap: Map<string, ReviewMindMapNode>,
-): Set<string> {
-  const visibleIds = new Set<string>()
-  focusIds.forEach((id) => {
-    let current = nodeMap.get(id) ?? null
-    while (current) {
-      visibleIds.add(current.id)
-      current = current.parentId ? (nodeMap.get(current.parentId) ?? null) : null
-    }
-  })
-  return visibleIds
-}
-
+/**
+ * Formal due-scope initial map: non-due nodes open, due nodes are flip targets,
+ * and subtrees under unrevealed due nodes stay hidden until that due card is flipped.
+ */
 export function buildFocusRevealState(
   root: ReviewMindMapNode,
   focusNodeIds: Iterable<string>,
   nodeMap: Map<string, ReviewMindMapNode>,
   previous: Record<string, RevealState> | null = null,
 ) {
-  const focusIds = sanitizeRedNodeIds(root, focusNodeIds)
-  const visibleIds = collectAncestorIds(focusIds, nodeMap)
-  // Build base without double-applying auto-reveal mid-walk; cascade once at the end.
-  const next: Record<string, RevealState> = {}
-  const walk = (node: ReviewMindMapNode) => {
-    next[node.id] = 'hidden'
-    node.children.forEach(walk)
-  }
-  walk(root)
-  next[root.id] = 'revealed'
-  collectNodeIds(root).forEach((id) => {
-    if (id === root.id) {
-      next[id] = 'revealed'
-      return
-    }
-    if (!visibleIds.has(id)) {
-      next[id] = 'hidden'
-      return
-    }
-    if (!focusIds.has(id)) {
-      next[id] = 'revealed'
-      return
-    }
-    const previousState = previous?.[id]
-    next[id] = previousState === 'revealed' ? 'revealed' : 'placeholder'
-  })
-  return applyQuestionCardAutoReveal(nodeMap, next)
+  const focusState = buildCheckpointRevealState(root, focusNodeIds, previous)
+  return applyQuestionCardAutoReveal(nodeMap, focusState)
 }

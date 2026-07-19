@@ -119,4 +119,18 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.a).toBe('hidden')
     expect(result.current.revealMap.b).toBe('revealed')
   })
+
+  it('auto-reveals non-due cards when focusNodeIds are provided for formal review', () => {
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState,
+        focusNodeIds: ['b'],
+      }),
+    )
+
+    expect(result.current.revealMap.root).toBe('revealed')
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('placeholder')
+  })
 })

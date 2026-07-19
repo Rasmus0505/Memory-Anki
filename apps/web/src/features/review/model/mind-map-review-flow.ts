@@ -20,7 +20,10 @@ export interface MindMapReviewFlowProps {
   studySessionId?: string | null;
   revealMode?: RevealFlowMode;
   checkpointNodeUids?: string[];
-  /** When set, weak-retry / AI review scope uses this frozen set instead of the whole visible tree. */
+  /**
+   * Frozen formal-review due UIDs. Used for weak-retry / AI scope, and to
+   * auto-reveal non-due cards so only due nodes need flipping.
+   */
   reviewScopeNodeUids?: string[];
   displayMode?: "review" | "edit";
   modeSyncVersion?: number;

@@ -16,6 +16,8 @@ interface UseReviewFlowSessionOptions {
   sessionKind: 'practice' | 'review'
   revealMode?: RevealFlowMode
   checkpointNodeUids?: Iterable<string>
+  /** Formal review frozen due UIDs — auto-reveal non-due cards on entry. */
+  focusNodeUids?: Iterable<string>
   persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
@@ -27,6 +29,7 @@ interface UseReviewFlowSessionOptions {
 }
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
+const EMPTY_FOCUS_NODE_UIDS: string[] = []
 const IMMERSIVE_REVIEW_AUTO_PAUSE_MS = 24 * 60 * 60 * 1000
 
 export function useReviewFlowSession({
@@ -35,6 +38,7 @@ export function useReviewFlowSession({
   sessionKind,
   revealMode = 'standard',
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
+  focusNodeUids = EMPTY_FOCUS_NODE_UIDS,
   persistKey = null,
   editorState,
   onComplete,
@@ -71,6 +75,7 @@ export function useReviewFlowSession({
     resetCompletedOnDocChange: sessionKind === 'review',
     mode: revealMode,
     checkpointIds: checkpointNodeUids,
+    focusNodeIds: sessionKind === 'review' ? focusNodeUids : EMPTY_FOCUS_NODE_UIDS,
   })
   const feedback = useReviewFeedback({
     root: reveal.root,
