@@ -5,6 +5,16 @@ import type {
   EnglishGenerationLogEvent,
   EnglishGenerationLogResponse,
   EnglishCourseProgress,
+  EnglishPatternCollectRequest,
+  EnglishPatternCollectResponse,
+  EnglishPatternCreateRequest,
+  EnglishPatternDetail,
+  EnglishPatternDueSentencesResponse,
+  EnglishPatternListResponse,
+  EnglishPatternReviewResult,
+  EnglishPatternSentence,
+  EnglishPatternSentenceUpsertRequest,
+  EnglishPatternUpdateRequest,
   EnglishSentenceCheckResponse,
   EnglishWorkspaceResponse,
 } from '@/shared/api/contracts'
@@ -205,4 +215,138 @@ export function deleteEnglishCourseApi(courseId: number) {
 
 export function buildEnglishCourseMediaUrl(courseId: number) {
   return `${API_BASE}/english/courses/${courseId}/media`
+}
+
+export function listEnglishPatternsApi(input?: {
+  includeArchived?: boolean
+  limit?: number
+}) {
+  const params = new URLSearchParams()
+  if (input?.includeArchived) params.set('includeArchived', 'true')
+  if (input?.limit != null) params.set('limit', String(input.limit))
+  const query = params.toString()
+  return request<EnglishPatternListResponse>(`/english/patterns${query ? `?${query}` : ''}`)
+}
+
+export function createEnglishPatternApi(payload: EnglishPatternCreateRequest) {
+  return request<EnglishPatternDetail>('/english/patterns', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: 'english-pattern:create',
+      description: '创建英语句模',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function getEnglishPatternApi(patternId: number) {
+  return request<EnglishPatternDetail>(`/english/patterns/${patternId}`)
+}
+
+export function updateEnglishPatternApi(
+  patternId: number,
+  payload: EnglishPatternUpdateRequest,
+) {
+  return request<EnglishPatternDetail>(`/english/patterns/${patternId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `english-pattern:${patternId}:update`,
+      description: '更新英语句模',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function deleteEnglishPatternApi(patternId: number) {
+  return request<{ ok: boolean; id: number }>(`/english/patterns/${patternId}`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `english-pattern:${patternId}:delete`,
+      description: '删除英语句模',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function upsertEnglishPatternPromptApi(
+  patternId: number,
+  payload: {
+    promptId?: number | null
+    textEn?: string
+    textZh?: string
+    promptIndex?: number
+  },
+) {
+  return request<EnglishPatternDetail>(`/english/patterns/${patternId}/prompts`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `english-pattern:${patternId}:prompt`,
+      description: '保存句模问题',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function upsertEnglishPatternSentenceApi(
+  promptId: number,
+  payload: EnglishPatternSentenceUpsertRequest,
+) {
+  return request<EnglishPatternSentence>(
+    `/english/patterns/prompts/${promptId}/sentences`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `english-pattern-prompt:${promptId}:sentence`,
+        description: '保存句模观点长句',
+        replayMode: 'manual',
+      },
+    },
+  )
+}
+
+export function listEnglishPatternDueSentencesApi(input?: {
+  patternId?: number
+  limit?: number
+}) {
+  const params = new URLSearchParams()
+  if (input?.patternId != null) params.set('patternId', String(input.patternId))
+  if (input?.limit != null) params.set('limit', String(input.limit))
+  const query = params.toString()
+  return request<EnglishPatternDueSentencesResponse>(
+    `/english/patterns/sentences/due${query ? `?${query}` : ''}`,
+  )
+}
+
+export function reviewEnglishPatternSentenceApi(
+  sentenceId: number,
+  result: EnglishPatternReviewResult,
+) {
+  return request<EnglishPatternSentence>(
+    `/english/patterns/sentences/${sentenceId}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ result }),
+      persistence: {
+        resourceKey: `english-pattern-sentence:${sentenceId}:review`,
+        description: '句模句子复习评分',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function collectEnglishPatternSentenceApi(payload: EnglishPatternCollectRequest) {
+  return request<EnglishPatternCollectResponse>('/english/patterns/collect', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: 'english-pattern:collect',
+      description: '收藏句子到句模',
+      replayMode: 'manual',
+    },
+  })
 }

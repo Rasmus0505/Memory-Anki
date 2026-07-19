@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
-  BookAudio,
   CircleAlert,
   LoaderCircle,
   RefreshCcw,
@@ -12,15 +12,29 @@ import {
 } from 'lucide-react'
 import type { EnglishGenerationTask } from '@/shared/api/contracts'
 import { formatDuration } from '@/entities/session/model'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import { EnglishWorkspaceSkeleton } from './EnglishWorkspaceSkeleton'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/shared/components/ui/sheet'
 import { EnglishGenerationLogDialog } from '@/features/english/components/EnglishGenerationLogDialog'
+import { EnglishHubReadingTab } from '@/features/english/components/EnglishHubReadingTab'
+import { EnglishPatternsPanel } from '@/features/english/components/EnglishPatternsPanel'
+import { EnglishVocabularyPanel } from '@/features/english/components/EnglishVocabularyPanel'
 import { useEnglishWorkspaceController } from '@/features/english/hooks/useEnglishWorkspaceController'
+import {
+  EnglishContinueHero,
+  EnglishStatStrip,
+  EnglishZoneLayout,
+  type EnglishHubTab,
+} from '@/features/english-shell'
 
 function formatFileSize(bytes: number) {
   const safe = Math.max(0, bytes)
@@ -57,7 +71,22 @@ function isInterruptedTask(task: EnglishGenerationTask) {
   return task.status === 'failed' && task.stage === 'interrupted'
 }
 
+function parseHubTab(value: string | null): EnglishHubTab {
+  if (
+    value === 'reading' ||
+    value === 'vocab' ||
+    value === 'listening' ||
+    value === 'patterns'
+  ) {
+    return value
+  }
+  return 'listening'
+}
+
 export default function EnglishWorkspacePage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = parseHubTab(searchParams.get('tab'))
+  const [importOpen, setImportOpen] = useState(false)
   const {
     actionLoading,
     aiRunConfigDialog,
@@ -82,286 +111,305 @@ export default function EnglishWorkspacePage() {
     workspace,
   } = useEnglishWorkspaceController()
 
+  const setTab = (next: EnglishHubTab) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'listening') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  const headerAside = useMemo(() => {
+    if (!workspace) return null
+    return (
+      <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 text-right shadow-soft">
+        <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">今日英语听力</div>
+        <div className="mt-1 text-lg font-semibold">
+          {formatDuration(workspace.stats.today_practice_seconds)}
+        </div>
+      </div>
+    )
+  }, [workspace])
+
   if (!workspace) {
-      return <EnglishWorkspaceSkeleton />
+    return <EnglishWorkspaceSkeleton />
   }
 
   return (
-    <div className="space-y-6">
+    <EnglishZoneLayout tab={tab} onTabChange={setTab} headerAside={headerAside}>
       {aiRunConfigDialog}
-      <PageIntro
-        title="英语听力"
-        description="把英语视频做成沉浸式拼写练习，生成过程现在也能实时追踪。"
-      />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <Card className="border-border/70 bg-card/95">
-          <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">{currentTask ? '当前生成任务' : '上传英语视频'}</CardTitle>
-              </div>
-              {currentTask ? (
-                <Badge variant={currentTask.status === 'failed' ? 'destructive' : 'secondary'}>
-                  {getTaskStatusLabel(currentTask.status)}
-                </Badge>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {currentTask ? (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-border/70 bg-background/70 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <div className="text-lg font-semibold">{currentTask.sourceFilename}</div>
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline">{getTaskStageLabel(currentTask.stage)}</Badge>
-                        <Badge variant={streamConnected ? 'secondary' : 'outline'}>
-                          {streamConnected ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Waves className="h-3.5 w-3.5" />
-                              实时流
-                            </span>
-                          ) : (
-                            '轮询回退'
-                          )}
-                        </Badge>
-                        {currentTask.resolved_ai?.model_label ? (
-                          <Badge variant="outline">{currentTask.resolved_ai.model_label}</Badge>
-                        ) : null}
-                        <span>{formatFileSize(currentTask.fileSize)}</span>
-                      </div>
-                    </div>
-                    <div className="min-w-[120px] text-right">
-                      <div className="text-2xl font-semibold">{currentTask.progressPercent}%</div>
-                      <div className="text-xs text-muted-foreground">当前进度</div>
-                    </div>
+      {tab === 'listening' ? (
+        <div className="space-y-5" data-testid="english-hub-listening-tab">
+          {currentTask ? (
+            <section className="rounded-3xl border border-border/70 bg-card/95 p-5 shadow-card sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-info">
+                    生成任务
                   </div>
-
-                  <div className="mt-4 rounded-lg border border-border/70 bg-card px-4 py-3 text-sm">
-                    {currentTask.message || '正在准备任务'}
-                  </div>
-
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.max(0, Math.min(100, currentTask.progressPercent))}%` }}
-                    />
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => void handleOpenLog()}>
-                      <ScrollText className="mr-2 size-4" />
-                      查看完整日志
-                    </Button>
-                    {currentTask.status === 'failed' ? (
-                      <>
-                        <Button size="sm" onClick={() => void handleRetry()} disabled={actionLoading !== null}>
-                          <RefreshCcw className="mr-2 size-4" />
-                          {actionLoading === 'retry' ? '重试中...' : '重试'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleClearTask()}
-                          disabled={actionLoading !== null}
-                        >
-                          <Trash2 className="mr-2 size-4" />
-                          {actionLoading === 'clear' ? '清除中...' : '清除'}
-                        </Button>
-                      </>
-                    ) : null}
+                  <h2 className="mt-2 text-lg font-semibold">{currentTask.sourceFilename}</h2>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <Badge variant={currentTask.status === 'failed' ? 'destructive' : 'secondary'}>
+                      {getTaskStatusLabel(currentTask.status)}
+                    </Badge>
+                    <Badge variant="outline">{getTaskStageLabel(currentTask.stage)}</Badge>
+                    <Badge variant={streamConnected ? 'secondary' : 'outline'}>
+                      {streamConnected ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Waves className="h-3.5 w-3.5" />
+                          实时流
+                        </span>
+                      ) : (
+                        '轮询回退'
+                      )}
+                    </Badge>
+                    <span>{formatFileSize(currentTask.fileSize)}</span>
                   </div>
                 </div>
-
-                <div className="rounded-lg border border-border/70 bg-background/70 p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium">最近关键日志</div>
-                    <div className="text-xs text-muted-foreground">
-                      课程生成完成后会自动进入练习页
-                    </div>
+                <div className="text-right">
+                  <div className="text-3xl font-semibold tracking-tight">
+                    {currentTask.progressPercent}%
                   </div>
-                  {visibleTaskEvents.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      {visibleTaskEvents.map((event) => (
-                        <div key={event.id} className="rounded-lg border border-border/70 bg-card px-3 py-3">
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="outline">{getTaskStageLabel(event.stage)}</Badge>
-                            <Badge variant="secondary">{event.kind}</Badge>
-                            <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
-                          </div>
-                          <div className="mt-2 text-sm">{event.message}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-lg border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
-                      正在等待任务写入第一条日志...
-                    </div>
-                  )}
+                  <div className="text-xs text-muted-foreground">进度</div>
                 </div>
+              </div>
 
-                {currentTask.status === 'failed' ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
-                    <div className="flex items-center gap-2 font-medium">
-                      <CircleAlert className="size-4" />
-                      {isInterruptedTask(currentTask) ? '生成被服务重启中断' : '生成失败'}
-                    </div>
-                    <div className="mt-2">
-                      {isInterruptedTask(currentTask)
-                        ? '点击重试将复用已完成的转写结果，不会重复计费。'
-                        : currentTask.errorMessage || '请稍后重试。'}
-                    </div>
-                  </div>
-                ) : null}
+              <div className="mt-4 rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm">
+                {currentTask.message || '正在准备任务'}
               </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-border/70 bg-background/70 p-5">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                  <Input
-                    type="file"
-                    accept="video/*"
-                    disabled={!canUpload}
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                  />
-                  <Button onClick={() => void handleUpload()} disabled={!selectedFile || !canUpload}>
-                    {uploading ? (
-                      <LoaderCircle className="mr-2 size-4 animate-spin" />
-                    ) : (
-                      <Upload className="mr-2 size-4" />
-                    )}
-                    {uploading ? '上传中...' : '上传并生成'}
-                  </Button>
-                </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  生成链路会先做 ASR，再直接按返回句子翻译成中文译文，不再额外生成词汇辅助。生成完成后会自动进入课程页。
-                </div>
-                {selectedFile ? (
-                  <div className="mt-3 rounded-lg border border-border/70 bg-card px-4 py-3 text-sm">
-                    已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card className="border-border/70 bg-card/95">
-            <CardHeader>
-              <CardTitle className="text-base">英语听力统计</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
-                <div className="text-xs text-muted-foreground">课程总数</div>
-                <div className="mt-2 text-2xl font-semibold">{workspace.stats.total_courses}</div>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
-                <div className="text-xs text-muted-foreground">未完成课程</div>
-                <div className="mt-2 text-2xl font-semibold">{workspace.stats.unfinished_courses}</div>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
-                <div className="text-xs text-muted-foreground">英语听力总时长</div>
-                <div className="mt-2 text-lg font-semibold">{formatDuration(workspace.stats.total_practice_seconds)}</div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-card/95">
-            <CardHeader>
-              <CardTitle className="text-base">继续未完成课程</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {workspace.continueCourse ? (
-                <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">{workspace.continueCourse.title}</div>
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        已进行到第 {workspace.continueCourse.currentSentenceIndex + 1} / {workspace.continueCourse.sentenceCount} 句
-                      </div>
-                    </div>
-                    <Badge variant="secondary">未完成</Badge>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button onClick={() => navigateToCourse(workspace.continueCourse?.id)}>
-                      <BookAudio className="mr-2 size-4" />
-                      继续练习
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link to={`/english/courses/${workspace.continueCourse.id}`}>
-                        查看课程
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border/70 py-12 text-center text-sm text-muted-foreground">
-                  暂时没有未完成的英语课程。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <Card className="border-border/70 bg-card/95">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle className="text-base">最近课程</CardTitle>
-          <div className="text-xs text-muted-foreground">
-            今日英语听力 {formatDuration(workspace.stats.today_practice_seconds)} · 本周 {formatDuration(workspace.stats.weekly_practice_seconds)}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {workspace.recentCourses.length > 0 ? (
-            <div className="space-y-3">
-              {workspace.recentCourses.map((course) => (
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
                 <div
-                  key={course.id}
-                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background/70 px-4 py-4 md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="truncate text-sm font-medium">{course.title}</div>
-                      <Badge variant={course.status === 'completed' ? 'outline' : 'secondary'}>
-                        {course.status === 'completed' ? '已完成' : '未完成'}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                      <span>{course.sentenceCount} 句</span>
-                      <span>{formatDuration(course.durationSeconds)}</span>
-                      <span>更新于 {course.updatedAt ? new Date(course.updatedAt).toLocaleString('zh-CN') : '刚刚'}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild>
-                      <Link to={`/english/courses/${course.id}`}>
-                        {course.status === 'completed' ? '再次练习' : '进入课程'}
-                        <ArrowRight className="ml-2 size-4" />
-                      </Link>
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, currentTask.progressPercent))}%` }}
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="rounded-xl" onClick={() => void handleOpenLog()}>
+                  <ScrollText className="size-4" />
+                  完整日志
+                </Button>
+                {currentTask.status === 'failed' ? (
+                  <>
+                    <Button
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => void handleRetry()}
+                      disabled={actionLoading !== null}
+                    >
+                      <RefreshCcw className="size-4" />
+                      {actionLoading === 'retry' ? '重试中…' : '重试'}
                     </Button>
                     <Button
+                      size="sm"
                       variant="outline"
-                      onClick={() => void handleDeleteCourse(course.id, course.title)}
-                      disabled={actionLoading === course.id}
+                      className="rounded-xl"
+                      onClick={() => void handleClearTask()}
+                      disabled={actionLoading !== null}
                     >
-                      <Trash2 className="mr-2 size-4" />
-                      {actionLoading === course.id ? '删除中...' : '删除'}
+                      <Trash2 className="size-4" />
+                      {actionLoading === 'clear' ? '清除中…' : '清除'}
                     </Button>
+                  </>
+                ) : null}
+              </div>
+
+              {visibleTaskEvents.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {visibleTaskEvents.slice(0, 3).map((event) => (
+                    <div
+                      key={event.id}
+                      className="rounded-xl border border-border/60 bg-background/60 px-3 py-2.5 text-sm"
+                    >
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline">{getTaskStageLabel(event.stage)}</Badge>
+                        <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                      <div className="mt-1">{event.message}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {currentTask.status === 'failed' ? (
+                <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  <div className="flex items-center gap-2 font-medium">
+                    <CircleAlert className="size-4" />
+                    {isInterruptedTask(currentTask) ? '生成被服务重启中断' : '生成失败'}
+                  </div>
+                  <div className="mt-1.5">
+                    {isInterruptedTask(currentTask)
+                      ? '点击重试将复用已完成的转写结果，不会重复计费。'
+                      : currentTask.errorMessage || '请稍后重试。'}
                   </div>
                 </div>
-              ))}
-            </div>
+              ) : null}
+            </section>
           ) : (
-            <EmptyState
-              variant="list"
-              title="还没有英语课程"
-              description="上传一段英语视频后，这里会自动出现历史记录。"
+            <EnglishContinueHero
+              eyebrow="Continue listening"
+              title={
+                workspace.continueCourse
+                  ? workspace.continueCourse.title
+                  : '上传一段视频，开始沉浸听写'
+              }
+              description={
+                workspace.continueCourse
+                  ? `已进行到第 ${workspace.continueCourse.currentSentenceIndex + 1} / ${workspace.continueCourse.sentenceCount} 句`
+                  : '把英语视频做成逐句拼写练习。生成完成后会自动进入课程。'
+              }
+              meta={
+                workspace.continueCourse ? (
+                  <Badge variant="secondary">未完成</Badge>
+                ) : (
+                  <span>支持常见视频格式</span>
+                )
+              }
+              primaryLabel={workspace.continueCourse ? '继续听写' : '导入视频'}
+              onPrimary={() => {
+                if (workspace.continueCourse) {
+                  navigateToCourse(workspace.continueCourse.id)
+                  return
+                }
+                setImportOpen(true)
+              }}
+              secondary={
+                workspace.continueCourse ? (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="min-h-11 rounded-xl"
+                    onClick={() => setImportOpen(true)}
+                  >
+                    <Upload className="size-4" />
+                    导入新视频
+                  </Button>
+                ) : null
+              }
             />
           )}
-        </CardContent>
-      </Card>
+
+          <EnglishStatStrip
+            items={[
+              { label: '课程', value: workspace.stats.total_courses },
+              { label: '未完成', value: workspace.stats.unfinished_courses },
+              { label: '累计听力', value: formatDuration(workspace.stats.total_practice_seconds) },
+            ]}
+          />
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">最近课程</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                onClick={() => setImportOpen(true)}
+                disabled={Boolean(currentTask)}
+              >
+                <Upload className="size-4" />
+                导入视频
+              </Button>
+            </div>
+
+            {workspace.recentCourses.length > 0 ? (
+              <div className="space-y-2.5">
+                {workspace.recentCourses.map((course) => (
+                  <div
+                    key={course.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-4 shadow-soft sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="truncate text-sm font-medium">{course.title}</div>
+                        <Badge variant={course.status === 'completed' ? 'outline' : 'secondary'}>
+                          {course.status === 'completed' ? '已完成' : '未完成'}
+                        </Badge>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span>{course.sentenceCount} 句</span>
+                        <span>{formatDuration(course.durationSeconds)}</span>
+                        <span>
+                          更新于{' '}
+                          {course.updatedAt
+                            ? new Date(course.updatedAt).toLocaleString('zh-CN')
+                            : '刚刚'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild className="rounded-xl">
+                        <Link to={`/english/courses/${course.id}`}>
+                          {course.status === 'completed' ? '再次练习' : '进入课程'}
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => void handleDeleteCourse(course.id, course.title)}
+                        disabled={actionLoading === course.id}
+                      >
+                        <Trash2 className="size-4" />
+                        {actionLoading === course.id ? '删除中…' : '删除'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                variant="list"
+                title="还没有英语课程"
+                description="上传一段英语视频后，这里会出现历史记录。"
+              />
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {tab === 'reading' ? <EnglishHubReadingTab /> : null}
+      {tab === 'patterns' ? <EnglishPatternsPanel /> : null}
+      {tab === 'vocab' ? <EnglishVocabularyPanel /> : null}
+
+      <Sheet open={importOpen} onOpenChange={setImportOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>导入英语视频</SheetTitle>
+            <SheetDescription>
+              生成链路会先做 ASR，再翻译成中文译文。完成后会自动进入课程页。
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <Input
+              type="file"
+              accept="video/*"
+              disabled={!canUpload}
+              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            />
+            {selectedFile ? (
+              <div className="rounded-2xl border border-border/70 bg-muted/40 px-4 py-3 text-sm">
+                已选择：{selectedFile.name} · {formatFileSize(selectedFile.size)}
+              </div>
+            ) : null}
+            <Button
+              className="min-h-11 w-full rounded-xl"
+              onClick={() => void handleUpload()}
+              disabled={!selectedFile || !canUpload}
+            >
+              {uploading ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {uploading ? '上传中…' : '上传并生成'}
+            </Button>
+            {!canUpload && currentTask ? (
+              <p className="text-xs text-muted-foreground">当前有生成任务进行中，请等待完成或清除后再上传。</p>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <EnglishGenerationLogDialog
         open={logDialogOpen}
@@ -371,6 +419,6 @@ export default function EnglishWorkspacePage() {
         error={logError}
         log={logData}
       />
-    </div>
+    </EnglishZoneLayout>
   )
 }

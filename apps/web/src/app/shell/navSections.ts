@@ -2,6 +2,7 @@ import {
   BookOpen,
   Brain,
   FolderTree,
+  Languages,
   LayoutDashboard,
   Shuffle,
 } from 'lucide-react'
@@ -25,6 +26,7 @@ import { prefetchReviewQueueApi } from '@/features/review/api'
 export type NavSectionKey =
   | 'freestyle'
   | 'palaces'
+  | 'english'
   | 'knowledge'
   | 'review'
 
@@ -52,11 +54,7 @@ const isLibraryRoute = (pathname: string) =>
   pathname === '/palaces/list' ||
   /^\/palaces\/\d+$/.test(pathname) ||
   pathname === '/knowledge' ||
-  pathname.startsWith('/knowledge/') ||
-  pathname === '/english' ||
-  pathname.startsWith('/english/') ||
-  pathname === '/english-reading' ||
-  pathname.startsWith('/english-reading/')
+  pathname.startsWith('/knowledge/')
 
 export const navSections: NavSectionDefinition[] = [
   {
@@ -88,6 +86,20 @@ export const navSections: NavSectionDefinition[] = [
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
       void preloadKnowledgePage()
+    },
+  },
+  {
+    key: 'english',
+    to: '/english',
+    label: '英语',
+    icon: Languages,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/english' ||
+      pathname.startsWith('/english/') ||
+      pathname === '/english-reading' ||
+      pathname.startsWith('/english-reading/'),
+    warmup: () => {
       void preloadEnglishWorkspacePage()
       void preloadEnglishReadingPage()
     },

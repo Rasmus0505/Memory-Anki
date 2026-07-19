@@ -33,3 +33,7 @@ Settings metrics consume backup catalog data through `backups.api`. This keeps S
 ## English Reading Vocabulary
 
 Vocabulary scheduling consumes reusable review policy and schedule-draft capabilities through `reviews.api`. English Reading owns vocabulary notes; Reviews owns the scheduling policy. The vocabulary service must not import `reviews.application.schedule_policy` directly.
+
+## English Topic Patterns (句模)
+
+Pattern sentence FSRS scheduling also consumes reusable scheduler helpers through `reviews.api` (`build_scheduler`, `load_fsrs_settings`, `normalize_rating`). English owns topic patterns, prompts, and viewpoint sentences; Reviews owns the scheduling policy only. Pattern services must not import `reviews.application` internals.

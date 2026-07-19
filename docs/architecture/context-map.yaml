@@ -98,6 +98,7 @@
         "sessions"
       ],
       "english": [
+        "reviews",
         "sessions",
         "settings"
       ],
@@ -174,8 +175,15 @@
       "shared"
     ],
     "allowedFeatureDependencies": {
-      "english": [],
-      "english-reading": [],
+      "english": [
+        "english-reading",
+        "english-shell"
+      ],
+      "english-reading": [
+        "english",
+        "english-shell"
+      ],
+      "english-shell": [],
       "freestyle": [],
       "knowledge": [],
       "mindmap-import": [],

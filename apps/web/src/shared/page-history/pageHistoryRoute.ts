@@ -8,8 +8,14 @@ export function resolvePageHistorySection(pathname: string): PageHistorySectionK
     pathname.startsWith('/palaces/') ||
     pathname.startsWith('/segments/')
   ) return 'palaces'
-  if (pathname === '/english' || pathname.startsWith('/english/')) return 'english'
-  if (pathname === '/english-reading' || pathname.startsWith('/english-reading/')) return 'englishReading'
+  if (
+    pathname === '/english' ||
+    pathname.startsWith('/english/') ||
+    pathname === '/english-reading' ||
+    pathname.startsWith('/english-reading/')
+  ) {
+    return 'english'
+  }
   if (pathname === '/knowledge' || pathname.startsWith('/knowledge/')) return 'knowledge'
   if (pathname === '/review' || pathname.startsWith('/review/')) return 'review'
   if (pathname === '/profile' || pathname.startsWith('/profile/')) return 'profile'

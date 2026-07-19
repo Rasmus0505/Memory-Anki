@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import type {
   ReadingRenderSentence,
   SentenceAnnotation,
@@ -89,6 +89,8 @@ function AnnotationMark({
   const resolutionSourceLabel =
     annotation.resolutionSource === "dictionary" ? "词典" : "AI";
 
+  const [open, setOpen] = useState(false);
+
   return (
     <span
       className={cn(
@@ -96,9 +98,37 @@ function AnnotationMark({
         palette,
       )}
       onMouseEnter={() => onHover(annotation.id)}
+      onClick={(event) => {
+        // Word lookup owns data-reading-word clicks; empty mark area toggles tip for touch.
+        if ((event.target as HTMLElement | null)?.closest?.("[data-reading-word='true']")) {
+          return;
+        }
+        setOpen((current) => !current);
+        onHover(annotation.id);
+      }}
     >
       <ReadingLookupText text={text} onLookupWord={onLookupWord} />
-      <span className="invisible absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-lg border border-border bg-background/98 p-3 text-left text-xs text-muted-foreground opacity-0 shadow-popover transition-all group-hover:visible group-hover:opacity-100">
+      <button
+        type="button"
+        className="ml-0.5 inline-flex size-4 items-center justify-center rounded-full bg-background/80 text-[10px] font-semibold text-muted-foreground ring-1 ring-border/70"
+        aria-label={`标注说明 ${annotation.originalText || annotation.displayText}`}
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((current) => !current);
+          onHover(annotation.id);
+        }}
+      >
+        i
+      </button>
+      <span
+        className={cn(
+          "absolute bottom-[calc(100%+10px)] left-1/2 z-20 w-72 -translate-x-1/2 rounded-xl border border-border bg-background/98 p-3 text-left text-xs text-muted-foreground shadow-popover transition-all",
+          open
+            ? "visible opacity-100"
+            : "invisible opacity-0 group-hover:visible group-hover:opacity-100",
+        )}
+      >
         <span className="block font-medium text-primary">
           {annotation.cefr}:{annotation.originalText || annotation.displayText}
         </span>
@@ -113,6 +143,9 @@ function AnnotationMark({
         {annotation.rewriteDecision ? (
           <span className="mt-1 block">改写：{annotation.rewriteDecision}</span>
         ) : null}
+        <span className="mt-2 block text-[11px] text-muted-foreground/80">
+          点击单词可查词典；点标注可固定/收起说明
+        </span>
       </span>
     </span>
   );

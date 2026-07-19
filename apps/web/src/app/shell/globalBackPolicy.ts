@@ -21,7 +21,7 @@ export function resolveGlobalBackPolicy(pathname: string): GlobalBackPolicy | nu
   if (pathname === '/freestyle/session') return { fallbackTo: '/freestyle', label: '返回随心学习' }
   if (pathname === '/palaces/list') return { fallbackTo: '/palaces', label: '返回宫殿书架' }
   if (pathname === '/batch-generation') return { fallbackTo: '/palaces/new', label: '退出批量生成' }
-  if (/^\/english\/courses\/\d+$/.test(pathname)) return { fallbackTo: '/english', label: '返回英语听力' }
+  if (/^\/english\/courses\/\d+$/.test(pathname)) return { fallbackTo: '/english', label: '返回英语' }
   if (/^\/review\/(?:session\/\d+|feedback-preview)$/.test(pathname)) {
     return { fallbackTo: '/review', label: '返回复习队列' }
   }

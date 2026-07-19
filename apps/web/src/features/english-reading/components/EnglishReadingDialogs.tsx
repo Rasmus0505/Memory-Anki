@@ -43,6 +43,10 @@ export function EnglishReadingDialogs({
   onToggleDictionaryPin,
   playDictionaryPronunciation,
   supportsSpeechSynthesis,
+  onSaveVocabulary,
+  savingVocabulary = false,
+  onSaveToPattern,
+  savingPattern = false,
   sentenceTranslationPanel,
   sentenceTranslationPanelRef,
   onCloseSentenceTranslationPanel,
@@ -79,6 +83,10 @@ export function EnglishReadingDialogs({
     options: { allowTtsFallback: boolean },
   ) => Promise<void>;
   supportsSpeechSynthesis: boolean;
+  onSaveVocabulary?: () => void;
+  savingVocabulary?: boolean;
+  onSaveToPattern?: () => void;
+  savingPattern?: boolean;
   sentenceTranslationPanel: SentenceTranslationPanelState | null;
   sentenceTranslationPanelRef: RefObject<HTMLDivElement | null>;
   onCloseSentenceTranslationPanel: () => void;
@@ -309,6 +317,22 @@ export function EnglishReadingDialogs({
                         : dictionaryPanel.entry.cachedAt || "刚刚"}
                     </span>
                   </div>
+
+                  {onSaveVocabulary ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-1 w-full rounded-xl"
+                      disabled={savingVocabulary}
+                      onClick={onSaveVocabulary}
+                      data-testid="dictionary-save-vocabulary"
+                    >
+                      {savingVocabulary ? (
+                        <LoaderCircle className="mr-2 size-4 animate-spin" />
+                      ) : null}
+                      加入生词本
+                    </Button>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -421,6 +445,25 @@ export function EnglishReadingDialogs({
                   </div>
                 )}
               </div>
+
+              {onSaveToPattern &&
+              sentenceTranslationPanel.originalText.trim() &&
+              !sentenceTranslationPanel.loading ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  disabled={savingPattern}
+                  onClick={onSaveToPattern}
+                  data-testid="sentence-save-pattern"
+                >
+                  {savingPattern ? (
+                    <LoaderCircle className="mr-2 size-4 animate-spin" />
+                  ) : null}
+                  加入句模
+                </Button>
+              ) : null}
             </div>
           </DialogContent>
         ) : null}

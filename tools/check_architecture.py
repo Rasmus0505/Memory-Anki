@@ -1606,7 +1606,7 @@ def check_prompt_catalog_boundaries(errors: list[str]) -> None:
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_content = nav_path.read_text(encoding="utf-8")
-    expected_labels = ("今日", "知识", "创建", "洞察")
+    expected_labels = ("今日", "知识", "英语", "创建", "洞察")
     labels = re.findall(r"label: '([^']+)'", nav_content)
     if labels != list(expected_labels):
         errors.append(
