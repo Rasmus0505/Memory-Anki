@@ -66,6 +66,7 @@ export interface MindMapEditorSurfaceProps {
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
   highlightedNodeUids?: string[]
+  mutedNodeUids?: string[]
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
   statusChipsByNodeUid?: Record<
     string,

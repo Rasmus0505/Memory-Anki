@@ -144,6 +144,52 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: /记得/ })).toBeNull()
   })
 
+  it('mutes out-of-scope nodes and only rates formal due nodes', async () => {
+    const onRateNode = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        rateableNodeUids={['child']}
+        onRateNode={onRateNode}
+        onUndoRating={vi.fn()}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).toEqual(
+      expect.arrayContaining(['grandchild']),
+    )
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).not.toContain('child')
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'grandchild', text: 'Grandchild' }])
+    })
+    const outOfScope =
+      getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('grandchild') ?? []
+    expect(outOfScope.map((action: { id: string }) => action.id)).toContain('out-of-scope')
+    expect(outOfScope.some((action: { id: string }) => action.id.startsWith('rate-'))).toBe(false)
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    const inScope = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
+    const remember = inScope.find((action: { id: string }) => action.id === 'rate-3')
+    remember?.onClick()
+    expect(onRateNode).toHaveBeenCalledWith(
+      'child',
+      3,
+      'first',
+      'single',
+      expect.any(Object),
+      'overwrite',
+    )
+  })
+
   it('exposes selection toolbar actions after a node click in rating mode', async () => {
     const onRateNode = vi.fn()
     const onToggleRatingMode = vi.fn()
@@ -296,6 +342,50 @@ describe('FlipCardMindMapPanel', () => {
       expect.any(Object),
       'overwrite',
     )
+  })
+
+  it('collapses the branch only after 忘记, not after 困难', async () => {
+    const onRateNode = vi.fn()
+    const onNodeContextMenu = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={onNodeContextMenu}
+        ratingMode
+        onRateNode={onRateNode}
+      />,
+    )
+
+    // Rating mode must not wire long-press/right-click hide (PWA accidental collapse).
+    expect(getLatestMindMapEditorSurfaceProps()?.onNodeContextMenu).toBeUndefined()
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'grandchild', text: 'Grandchild' }])
+    })
+    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('grandchild') ?? []
+
+    await act(async () => {
+      actions.find((action: { id: string }) => action.id === 'rate-2')?.onClick()
+    })
+    expect(onRateNode).toHaveBeenCalledWith(
+      'grandchild',
+      2,
+      'first',
+      'single',
+      expect.any(Object),
+      'overwrite',
+    )
+    expect(onNodeContextMenu).not.toHaveBeenCalled()
+
+    await act(async () => {
+      actions.find((action: { id: string }) => action.id === 'rate-1')?.onClick()
+    })
+    expect(onNodeContextMenu).toHaveBeenCalledWith([
+      expect.objectContaining({ uid: 'grandchild' }),
+    ])
   })
 
   it('builds dual status chips for session rating and long-term mastery score', async () => {

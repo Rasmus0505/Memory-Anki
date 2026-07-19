@@ -27,6 +27,7 @@ interface CapabilityFactoryOptions {
   segmentColorMode: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft: MindMapHostSegmentRangeDraft
   highlightedNodeUids: string[]
+  mutedNodeUids?: string[]
   masteryByNodeUid: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
   statusChipsByNodeUid?: Record<
     string,
@@ -54,6 +55,13 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
     { key: 'search-decoration', graphOptions: { highlightedNodeUids: options.highlightedNodeUids } },
     { key: 'mastery-decoration', graphOptions: { masteryByNodeUid: options.masteryByNodeUid } },
   ]
+
+  if (options.mutedNodeUids && options.mutedNodeUids.length > 0) {
+    capabilities.push({
+      key: 'muted-nodes',
+      graphOptions: { mutedNodeUids: options.mutedNodeUids },
+    })
+  }
 
   if (options.statusChipsByNodeUid && Object.keys(options.statusChipsByNodeUid).length > 0) {
     capabilities.push({

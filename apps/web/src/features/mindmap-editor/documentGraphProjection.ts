@@ -49,6 +49,8 @@ export interface EditorDocGraphOptions {
   revealMap?: Record<string, RevealState>
   readonly?: boolean
   highlightedNodeUids?: string[]
+  /** Soft-dim these nodes (e.g. out-of-scope cards in formal rating mode). */
+  mutedNodeUids?: string[]
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
   statusChipsByNodeUid?: Record<
     string,
@@ -83,6 +85,7 @@ export function editorDocToGraph(
   const segmentByNodeUid = buildSegmentByNodeUid(options.segments ?? [])
   const rangeSelected = new Set(options.segmentRangeDraft?.selectedNodeUids ?? [])
   const highlightedSet = new Set(options.highlightedNodeUids ?? [])
+  const mutedSet = new Set(options.mutedNodeUids ?? [])
 
   const walk = (node: MindMapDocNode, parentId: string | null, depth: number, indexPath: number[]) => {
     const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
@@ -107,6 +110,8 @@ export function editorDocToGraph(
       ? [{ text: '题', tone: 'info' as const, style: 'outline' as const }]
       : []
     const statusChips = [...questionCardChip, ...hostStatusChips]
+    const segmentMuted =
+      options.segmentColorMode === 'active-only' && segment != null && !activeSegment
     nodes.push({
       id: uid,
       type: 'peg',
@@ -123,7 +128,7 @@ export function editorDocToGraph(
         visual: buildNodeVisual({
           revealState,
           borderColor: rangeSelected.has(uid) ? '#0ea5e9' : segmentVisible ? segment?.color : null,
-          muted: options.segmentColorMode === 'active-only' && segment != null && !activeSegment,
+          muted: segmentMuted || mutedSet.has(uid),
           secondaryMarked: false,
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],

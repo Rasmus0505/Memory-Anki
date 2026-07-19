@@ -50,6 +50,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'segmentColorMode'
   | 'segmentRangeDraft'
   | 'highlightedNodeUids'
+  | 'mutedNodeUids'
   | 'masteryByNodeUid'
   | 'countBadgeByNodeUid'
   | 'onCountBadgeClick'
@@ -109,6 +110,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   recallRound?: MindMapRecallRound
   weakNodeUids?: string[]
   directRatedUids?: ReadonlySet<string>
+  /**
+   * Formal due-scope UIDs for this review round. When set in rating mode:
+   * only these nodes can be rated; others are muted/translucent.
+   */
+  rateableNodeUids?: string[] | null
   onRateNode?: FlipCardRateNodeHandler
   onUndoRating?: () => { node_uid: string } | null
   onOpenRatingHistory?: () => void
@@ -167,6 +173,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   recallRound = 'first',
   weakNodeUids = [],
   directRatedUids,
+  rateableNodeUids = null,
   onRateNode,
   onUndoRating,
   onOpenRatingHistory,
@@ -177,6 +184,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   segmentColorMode,
   segmentRangeDraft,
   highlightedNodeUids,
+  mutedNodeUids: mutedNodeUidsProp,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const navigate = useNavigate()
   const resolvedPresentationStrategy = presentationStrategy
@@ -190,7 +198,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const [uiCleared, setUiCleared] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const [activeGuidedUid, setActiveGuidedUid] = useState<string | null>(null)
-  const [ratingAdvancePending, setRatingAdvancePending] = useState(false)
   const [longTermMasteryByUid, setLongTermMasteryByUid] = useState<
     Record<string, { masteryScore: number; status: string }>
   >({})
@@ -262,6 +269,34 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     if (node) onNodeActive?.([toGuidedSelection(node)])
   }, [guidedModel.byUid, onNodeActive])
 
+  // 评分模式下禁止长按/右键收起（避免 PWA 误触）；仅「忘记」评分后显式收起。
+  const handleCollapseAfterForgot = useCallback(
+    (nodeUid: string) => {
+      const node = guidedModel.byUid.get(nodeUid) ?? ratingTreeModel.byUid.get(nodeUid)
+      if (!node) return
+      onNodeContextMenu([toGuidedSelection(node)])
+    },
+    [guidedModel.byUid, onNodeContextMenu, ratingTreeModel.byUid],
+  )
+
+  const rateableUidSet = useMemo(() => {
+    if (!rateableNodeUids || rateableNodeUids.length === 0) return null
+    return new Set(rateableNodeUids.filter(Boolean))
+  }, [rateableNodeUids])
+
+  const ratingScopeMutedUids = useMemo(() => {
+    if (!ratingMode || isEditMode || !rateableUidSet) return [] as string[]
+    return guidedModel.nodes
+      .map((node) => node.uid)
+      .filter((uid) => uid !== guidedModel.rootUid && !rateableUidSet.has(uid))
+  }, [guidedModel.nodes, guidedModel.rootUid, isEditMode, rateableUidSet, ratingMode])
+
+  const resolvedMutedNodeUids = useMemo(() => {
+    if (!mutedNodeUidsProp?.length) return ratingScopeMutedUids
+    if (!ratingScopeMutedUids.length) return mutedNodeUidsProp
+    return [...new Set([...mutedNodeUidsProp, ...ratingScopeMutedUids])]
+  }, [mutedNodeUidsProp, ratingScopeMutedUids])
+
   const ratingControls = useFlipCardRatingControls({
     ratingMode,
     isEditMode,
@@ -271,10 +306,12 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     guidedCurrentNode,
     recallRound,
     directRatedUids,
+    rateableNodeUids: rateableUidSet,
     onRateNode,
     onUndoRating,
     onNodeActive,
     selectGuidedNode,
+    onCollapseAfterForgot: handleCollapseAfterForgot,
   })
 
   const ratingMasteryByNodeUid = useMemo(() => {
@@ -291,8 +328,13 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
 
   const guidedEligibleNodes = useMemo(() => {
     const nonRoot = guidedModel.nodes.filter((node) => node.uid !== guidedModel.rootUid)
-    return recallRound === 'weak_retry' ? nonRoot.filter((node) => weakNodeUids.includes(node.uid)) : nonRoot
-  }, [guidedModel.nodes, guidedModel.rootUid, recallRound, weakNodeUids])
+    const roundScoped =
+      recallRound === 'weak_retry'
+        ? nonRoot.filter((node) => weakNodeUids.includes(node.uid))
+        : nonRoot
+    if (!rateableUidSet) return roundScoped
+    return roundScoped.filter((node) => rateableUidSet.has(node.uid))
+  }, [guidedModel.nodes, guidedModel.rootUid, rateableUidSet, recallRound, weakNodeUids])
 
   const statusChipsByNodeUid = useMemo(() => {
     if (!ratingMode || isEditMode) return undefined
@@ -365,14 +407,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     const first = guidedEligibleNodes[0]
     if (first) selectGuidedNode(first.uid)
   }, [activeGuidedUid, guidedEligibleNodes, onRateNode, selectGuidedNode])
-
-  useEffect(() => {
-    if (!ratingAdvancePending) return
-    const next = guidedEligibleNodes.find((node) => !recallRatings.has(node.uid)) ?? null
-    if (!next) return
-    setRatingAdvancePending(false)
-    selectGuidedNode(next.uid, { syncCanvas: true })
-  }, [guidedEligibleNodes, ratingAdvancePending, recallRatings, selectGuidedNode])
 
   const handleGuidedGlobal = useCallback(() => {
     selectGuidedNode(guidedModel.rootUid, { syncCanvas: true })
@@ -560,6 +594,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         segmentColorMode={segmentColorMode}
         segmentRangeDraft={segmentRangeDraft}
         highlightedNodeUids={highlightedNodeUids}
+        mutedNodeUids={resolvedMutedNodeUids}
         masteryByNodeUid={ratingMasteryByNodeUid}
         statusChipsByNodeUid={statusChipsByNodeUid}
         countBadgeByNodeUid={countBadgeByNodeUid}
@@ -572,7 +607,13 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         onNodeActive={handleNodeActive}
         onNodeClick={isEditMode ? onEditNodeClick : handlePanelNodeClick}
-        onNodeContextMenu={isEditMode ? onEditNodeContextMenu : onNodeContextMenu}
+        onNodeContextMenu={
+          isEditMode
+            ? onEditNodeContextMenu
+            : ratingMode
+              ? undefined
+              : onNodeContextMenu
+        }
         onNodeHover={isEditMode ? undefined : onNodeHover}
         onSegmentSelect={onSegmentSelect}
         onCreateSegmentFromSelection={onCreateSegmentFromSelection}

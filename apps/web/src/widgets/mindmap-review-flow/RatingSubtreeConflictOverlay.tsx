@@ -10,7 +10,8 @@ export function RatingSubtreeConflictOverlay({
 }) {
   return (
     <div
-      className="absolute inset-0 z-[1200] flex items-center justify-center bg-background/70 p-4 backdrop-blur-[1px]"
+      // fixed + high z-index so PWA / fullscreen / overflow-hidden frames still show the dialog
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/70 p-4 backdrop-blur-[1px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="rating-conflict-title"

@@ -285,7 +285,9 @@ export function MindMapReviewFlow({
                     visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
                     editableEditorState={props.editEditorState}
                     ratingTreeEditorState={
-                      props.editEditorState ?? props.ratingTreeEditorState ?? props.reviewEditorState
+                      // Prefer the explicit full rating tree (e.g. node-mode review keeps a
+                      // clipped flip-card view but still cascades scores on the full palace).
+                      props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
                     }
                     visibleEditorSyncKey={review.mapVisibleSyncKey}
                     currentPalaceId={props.palaceId}
@@ -302,6 +304,11 @@ export function MindMapReviewFlow({
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
                     directRatedUids={review.recallRatings.directRatedUids}
+                    rateableNodeUids={
+                      props.sessionKind === 'review' && review.reviewNodeUids.length > 0
+                        ? review.reviewNodeUids
+                        : null
+                    }
                     onRateNode={
                       props.studySessionId
                         ? (
