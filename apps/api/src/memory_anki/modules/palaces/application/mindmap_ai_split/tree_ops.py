@@ -79,7 +79,11 @@ def resolve_max_top_level_nodes(
     target_card_count: int | None,
     hard_cap: int = 12,
 ) -> int:
-    """Hard safety cap for validation; soft target may be lower."""
+    """Soft preference for model guidance (prompt max_children only).
+
+    Must not be used as a validation reject threshold. Validation uses
+    AI_SPLIT_VALIDATION_MAX_TOP_LEVEL so users can preview/apply and edit.
+    """
     cap = max(1, hard_cap)
     base = max(1, inferred_max)
     if target_card_count is None:
@@ -150,6 +154,11 @@ def build_model_input(
             "parallel": "只要并列：只输出同级卡片，每个节点的 children 必须是空数组 []，不要创建父子。",
             "hierarchy": "可以分层：允许父子树；中间标题只作组织，事实落在保留原句的叶子上；优先最少必要层级。",
         }.get(split_mode, "")
+        # Soft guidance only: service accepts more top-level nodes up to a safety cap.
+        payload["card_count_guidance"] = (
+            f"并排顶层卡片尽量接近 max_children={max_children}（软偏好，可按内容略多或略少）；"
+            "不要为凑数硬拆或硬并，也不得删减原句信息。用户可在预览中再改。"
+        )
     if target_card_count is not None:
         if is_add_mode:
             payload["prefer_about_n_group_cards"] = target_card_count
@@ -618,12 +627,9 @@ def normalize_replacement_nodes(
         if split_mode == "parallel"
         else raw_value
     )
-    # Parallel flatten may expand nested model output; allow up to the safety hard cap.
-    effective_max_top = (
-        max(max_top_level_nodes, min(12, max_total_nodes))
-        if split_mode == "parallel"
-        else max_top_level_nodes
-    )
+    # Safety net only. Soft preferences (inferred length / about-N) must not reject here;
+    # users preview and edit. Parallel flatten can expand width, so still bound by this cap.
+    effective_max_top = max(1, min(max_top_level_nodes, max_total_nodes))
     if len(working) > effective_max_top:
         raise MindMapAiSplitError(f"AI 分卡顶层节点超过限制（最多 {effective_max_top} 个）。")
     total_nodes = 0

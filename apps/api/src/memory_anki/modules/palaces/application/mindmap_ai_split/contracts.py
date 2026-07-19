@@ -17,6 +17,9 @@ AI_SPLIT_DEFAULT_TEMPERATURE = 0.2
 AI_SPLIT_DEFAULT_MAX_CHILDREN = 5
 # Settings default cap for mindmap_ai_split_max_children config key.
 AI_SPLIT_MAX_CHILDREN_LIMIT = 12
+# Absolute top-level safety net for replacement_nodes validation only.
+# Content heuristics / "about N" are soft preferences and must not use this as a tight reject.
+AI_SPLIT_VALIDATION_MAX_TOP_LEVEL = AI_SPLIT_MAX_CHILDREN_LIMIT
 # Soft target for user-specified card/group count (no tight UI cap; server safety only).
 AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP = 99
 # auto: unified replacement mode where the model chooses flat vs hierarchical structure.

@@ -103,12 +103,13 @@ def split_palace_editor_doc_with_ai(
             [],
             configured_max_children=config.max_children,
         )
-        max_top_level = tree_ops.resolve_max_top_level_nodes(
+        # Soft preference for the model only; do not reject results that exceed it.
+        prompt_max_children = tree_ops.resolve_max_top_level_nodes(
             inferred_max=inferred_max_children,
             target_card_count=preferred_card_count,
-            hard_cap=split_contracts.AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP,
+            hard_cap=split_contracts.AI_SPLIT_MAX_CHILDREN_LIMIT,
         )
-        runtime_config = replace(config, max_children=max_top_level)
+        runtime_config = replace(config, max_children=prompt_max_children)
         ai_payload = _call_mindmap_ai_split_model(
             config=runtime_config,
             target_node=target_node,
@@ -122,7 +123,7 @@ def split_palace_editor_doc_with_ai(
         replacements = tree_ops.normalize_replacement_nodes(
             ai_payload.get("replacement_nodes"),
             split_mode=effective_mode,
-            max_top_level_nodes=max_top_level,
+            max_top_level_nodes=split_contracts.AI_SPLIT_VALIDATION_MAX_TOP_LEVEL,
             operation_id=operation_id,
         )
         tree_ops.replace_target_at_location(parent_children, target_index, replacements)

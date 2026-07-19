@@ -651,8 +651,75 @@ def test_target_card_count_passed_to_model_and_raises_cap(db_session: Session):
 
     assert captured.get("target_card_count") == 3
     assert result.replacement_node_count == 3
-    # Soft target 3 → hard cap at least 5 (3+2 headroom) on config.max_children
+    # Soft target 3 → prompt max_children at least 3 (typically 3+2 headroom), not a reject bar
     assert captured["config"].max_children >= 3
+
+
+def test_auto_accepts_more_top_level_than_inferred_soft_preference(db_session: Session):
+    """Short leaf would infer ~2 top-level; model may return more — still previewable."""
+    palace = _get_palace(db_session)
+    five_nodes = [{"text": f"要点{i}", "children": []} for i in range(1, 6)]
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={"replacement_nodes": five_nodes},
+    ):
+        result = service.split_palace_editor_doc_with_ai(
+            db_session,
+            palace,
+            _build_leaf_replacement_doc(),
+            "target-leaf",
+            ai_runtime=_ai_runtime(db_session),
+            prompt_catalog=_prompt_catalog(db_session),
+            split_mode="auto",
+            owner_id=f"palace:{palace.id}",
+            operation_id="operation-soft-top",
+            # card count auto → soft preference only
+            target_card_count=None,
+        )
+
+    assert result.replacement_node_count == 5
+    assert result.replacement_nodes is not None
+    assert [node["data"]["text"] for node in result.replacement_nodes] == [
+        "要点1",
+        "要点2",
+        "要点3",
+        "要点4",
+        "要点5",
+    ]
+    children = result.editor_doc["root"]["children"]
+    assert [item["data"]["text"] for item in children] == [
+        "前置节点",
+        "要点1",
+        "要点2",
+        "要点3",
+        "要点4",
+        "要点5",
+        "后置节点",
+    ]
+
+
+def test_auto_rejects_only_safety_top_level_cap(db_session: Session):
+    palace = _get_palace(db_session)
+    # Safety cap is AI_SPLIT_VALIDATION_MAX_TOP_LEVEL (12); 13 top-level nodes must fail.
+    too_many = [{"text": f"卡{i}", "children": []} for i in range(1, 14)]
+    with patch.object(
+        service,
+        "_call_mindmap_ai_split_model",
+        return_value={"replacement_nodes": too_many},
+    ):
+        with pytest.raises(service.MindMapAiSplitError, match="顶层节点超过限制"):
+            service.split_palace_editor_doc_with_ai(
+                db_session,
+                palace,
+                _build_leaf_replacement_doc(),
+                "target-leaf",
+                ai_runtime=_ai_runtime(db_session),
+                prompt_catalog=_prompt_catalog(db_session),
+                split_mode="auto",
+                owner_id=f"palace:{palace.id}",
+                operation_id="operation-safety-top",
+            )
 
 
 def test_ai_split_prompt_scenes_compile_with_required_blocks(db_session: Session):
