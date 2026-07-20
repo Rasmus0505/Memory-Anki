@@ -144,7 +144,7 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: /记得/ })).toBeNull()
   })
 
-  it('mutes out-of-scope nodes and only rates formal due nodes', async () => {
+  it('mutes out-of-scope nodes and only lets formal due nodes start a rating', async () => {
     const onRateNode = vi.fn()
     renderInRouter(
       <FlipCardMindMapPanel
@@ -178,16 +178,119 @@ describe('FlipCardMindMapPanel', () => {
       getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
     })
     const inScope = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
+    // Parent still cascades on the full rating tree even when only the parent is due.
+    expect(inScope.some((action: { id: string; label: string }) => action.id === 'rate-3' && action.label.includes('2'))).toBe(
+      true,
+    )
     const remember = inScope.find((action: { id: string }) => action.id === 'rate-3')
     remember?.onClick()
     expect(onRateNode).toHaveBeenCalledWith(
       'child',
       3,
       'first',
-      'single',
+      'subtree',
       expect.any(Object),
       'overwrite',
     )
+  })
+
+  it('cascades formal parent rating onto unrevealed children via ratingTreeEditorState', async () => {
+    const onRateNode = vi.fn()
+    const visibleOnlyParent: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [{ data: { text: 'Child', uid: 'child' }, children: [] }],
+        },
+      },
+      editor_fingerprint: 'visible-only-parent',
+    }
+    const fullTree: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Child', uid: 'child' },
+              children: [{ data: { text: 'Grandchild', uid: 'grandchild' }, children: [] }],
+            },
+          ],
+        },
+      },
+      editor_fingerprint: 'full-rating-tree',
+    }
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={visibleOnlyParent}
+        ratingTreeEditorState={fullTree}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        rateableNodeUids={['child', 'grandchild']}
+        onRateNode={onRateNode}
+        onUndoRating={vi.fn()}
+      />,
+    )
+
+    // Unrevealed due grandchild is not on the visible tree, so it must not be muted as out-of-scope.
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids ?? []).not.toContain('grandchild')
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids ?? []).not.toContain('child')
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
+    const remember = actions.find((action: { id: string }) => action.id === 'rate-3')
+    remember?.onClick()
+    expect(onRateNode).toHaveBeenCalledWith(
+      'child',
+      3,
+      'first',
+      'subtree',
+      expect.any(Object),
+      'overwrite',
+    )
+  })
+
+  it('keeps memoryAnkiId-only due nodes unmuted in rating mode', async () => {
+    const idOnlyState: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', memoryAnkiId: 1 },
+          children: [
+            {
+              data: { text: 'Due', memoryAnkiId: 42 },
+              children: [{ data: { text: 'Fresh', memoryAnkiId: 99 }, children: [] }],
+            },
+          ],
+        },
+      },
+      editor_fingerprint: 'memory-anki-id-only',
+    }
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={idOnlyState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        rateableNodeUids={['42']}
+        onRateNode={vi.fn()}
+      />,
+    )
+
+    const muted = getLatestMindMapEditorSurfaceProps()?.mutedNodeUids ?? []
+    expect(muted).not.toContain('42')
+    expect(muted).toEqual(expect.arrayContaining(['99']))
   })
 
   it('exposes selection toolbar actions after a node click in rating mode', async () => {

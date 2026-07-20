@@ -82,29 +82,31 @@ export function useFlipCardRatingControls({
 
   const getRatingScopeForNode = useCallback(
     (nodeUid: string): 'single' | 'subtree' => {
-      // Formal due-scope: only rate the selected due node itself so non-due
-      // (muted) descendants are not cascade-scheduled from a parent click.
-      if (rateableSet) return 'single'
+      // rateableSet only gates *who can start* a rating. Parent ratings still
+      // cascade on the full rating tree (including unrevealed due children),
+      // matching backend formal subtree behavior.
       return guidedNodes.some((node) => node.parentUid === nodeUid) ? 'subtree' : 'single'
     },
-    [guidedNodes, rateableSet],
+    [guidedNodes],
   )
 
   const countAffectedNodes = useCallback(
     (nodeUid: string, scope: 'single' | 'subtree') => {
       if (!isRateableNode(nodeUid)) return 0
       if (scope === 'single') return 1
-      return collectSubtreeUids(guidedNodes, nodeUid, rootUid).filter((uid) => isRateableNode(uid)).length
+      // Count full cascade targets (revealed or not). Backend subtree updates
+      // all non-root descendants, not only frozen-due / currently visible ones.
+      return collectSubtreeUids(guidedNodes, nodeUid, rootUid).length
     },
     [guidedNodes, isRateableNode, rootUid],
   )
 
   const countDirectConflicts = useCallback(
     (nodeUid: string) => {
-      const subtree = collectSubtreeUids(guidedNodes, nodeUid, rootUid).filter((uid) => isRateableNode(uid))
+      const subtree = collectSubtreeUids(guidedNodes, nodeUid, rootUid)
       return subtree.filter((uid) => uid !== nodeUid && directRatedSet.has(uid)).length
     },
-    [directRatedSet, guidedNodes, isRateableNode, rootUid],
+    [directRatedSet, guidedNodes, rootUid],
   )
 
   const submitRateNodeUid = useCallback(

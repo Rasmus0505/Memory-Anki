@@ -57,6 +57,7 @@ export function useMindMapReviewFlowController({
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
     const result: string[] = [];
     const walk = (node: NonNullable<typeof doc.root>, isRoot = false) => {
+      // Same identity order as canvas / guided rating model.
       const uid = String(node.data?.uid ?? node.data?.memoryAnkiId ?? '');
       if (!isRoot && uid) result.push(uid);
       (node.children ?? []).forEach((child) => walk(child, false));

@@ -30,7 +30,9 @@ export function buildGuidedMindMapModel(editorState: MindMapEditorState) {
     indexPath: number[],
   ) => {
     const data = node.data ?? {}
-    const uid = String(data.uid ?? (indexPath.join('-') || 'root'))
+    // Align with canvas / backend node identity (uid → memoryAnkiId → path).
+    // Mismatch here makes in-round nodes look out-of-scope (muted) in rating mode.
+    const uid = String(data.uid ?? data.memoryAnkiId ?? (indexPath.join('-') || 'root'))
     const fallback = indexPath.length === 0 ? '未命名导图' : '未命名知识点'
     const guidedNode = {
       uid,

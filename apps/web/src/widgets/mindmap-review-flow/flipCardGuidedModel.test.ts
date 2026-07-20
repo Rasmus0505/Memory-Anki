@@ -53,4 +53,23 @@ describe('flipCardGuidedModel rating scope tree', () => {
     expect(full.nodes.some((node) => node.parentUid === 'root')).toBe(true)
     expect(collectSubtreeUids(full.nodes, 'root', full.rootUid).length).toBe(3)
   })
+
+  it('resolves node identity from memoryAnkiId when uid is absent', () => {
+    const idOnly: MindMapEditorState = {
+      editor_doc: {
+        root: {
+          data: { text: 'Root', memoryAnkiId: 1 },
+          children: [{ data: { text: 'Leaf', memoryAnkiId: 7 }, children: [] }],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+      editor_fingerprint: 'id-only',
+    }
+    const model = buildGuidedMindMapModel(idOnly)
+    expect(model.rootUid).toBe('1')
+    expect(model.byUid.has('7')).toBe(true)
+    expect(collectSubtreeUids(model.nodes, '1', model.rootUid)).toEqual(['7'])
+  })
 })

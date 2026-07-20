@@ -112,7 +112,9 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   directRatedUids?: ReadonlySet<string>
   /**
    * Formal due-scope UIDs for this review round. When set in rating mode:
-   * only these nodes can be rated; others are muted/translucent.
+   * only these nodes may *start* a rating; others are muted/translucent.
+   * Parent subtree cascade still walks the full rating tree (including
+   * unrevealed due children) and follows backend formal-review behavior.
    */
   rateableNodeUids?: string[] | null
   onRateNode?: FlipCardRateNodeHandler

@@ -6,6 +6,7 @@ import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
 } from "@/shared/feedback/reviewFeedbackSettings";
+import type { MindMapEditorState } from "@/shared/api/contracts";
 
 export const persistStudySessionRecordMock = vi.fn();
 
@@ -214,7 +215,7 @@ vi.mock("@/features/mindmap-editor", () => ({
   ),
 }));
 
-export const editorState = {
+export const editorState: MindMapEditorState = {
   editor_doc: {
     root: {
       data: { text: "Root", uid: "root" },
@@ -236,7 +237,7 @@ export const editorState = {
   lang: "zh",
 };
 
-export const editEditorState = {
+export const editEditorState: MindMapEditorState = {
   ...editorState,
   editor_doc: {
     root: {
