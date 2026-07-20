@@ -21,6 +21,10 @@ DEFAULT_RELEARNING_STEPS: tuple[timedelta, ...] = (
     timedelta(minutes=10),
     timedelta(hours=1),
 )
+# 忘记 / 困难 must re-enter the queue soon. Multi-day intervals only after 记得/轻松.
+# (py-fsrs Hard on mature Review cards can otherwise jump ~10 days.)
+WEAK_AGAIN_MAX_INTERVAL = timedelta(minutes=10)
+WEAK_HARD_MAX_INTERVAL = timedelta(minutes=30)
 
 RATING_LABELS = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
 VALID_RATINGS = frozenset(RATING_LABELS)
@@ -122,6 +126,31 @@ def build_scheduler(
         relearning_steps=settings["relearning_steps"],
         enable_fuzzing=False,
     )
+
+
+def cap_weak_rating_due(card: Any, rating: int, *, now: Any | None = None) -> Any:
+    """Keep 忘记/困难 inside a short same-day re-study window.
+
+    Multi-day FSRS intervals are allowed only after 记得 (3) / 轻松 (4). Without
+    this cap, Hard on a mature Review card can schedule ~10 days out even though
+    the learner still needs the card soon.
+    """
+    if rating not in (1, 2):
+        return card
+    from datetime import datetime, timezone
+
+    review_now = now or datetime.now(timezone.utc)
+    if getattr(review_now, "tzinfo", None) is None:
+        review_now = review_now.replace(tzinfo=timezone.utc)
+    max_interval = WEAK_AGAIN_MAX_INTERVAL if rating == 1 else WEAK_HARD_MAX_INTERVAL
+    max_due = review_now + max_interval
+    due = getattr(card, "due", None)
+    if due is None:
+        return card
+    due_aware = due if getattr(due, "tzinfo", None) is not None else due.replace(tzinfo=timezone.utc)
+    if due_aware > max_due:
+        card.due = max_due
+    return card
 
 
 def normalize_rating(value: int | str) -> int:

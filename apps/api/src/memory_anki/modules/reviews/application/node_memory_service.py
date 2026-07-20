@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from fsrs import Card, Rating, State
@@ -27,6 +27,7 @@ from memory_anki.modules.reviews.application.fsrs_runtime import (
     SCHEDULER_VERSION,
     VALID_RATINGS,
     build_scheduler,
+    cap_weak_rating_due,
     load_fsrs_settings,
 )
 from memory_anki.modules.reviews.application.node_entry_projection import (
@@ -43,6 +44,7 @@ from memory_anki.modules.reviews.application.node_entry_projection import (
 __all__ = [
     "RATING_LABELS",
     "VALID_RATINGS",
+    "finalize_formal_review_schedules",
     "get_completion_summary",
     "get_palace_due_rollup",
     "get_palace_mastery_trend",
@@ -289,14 +291,14 @@ def _latest_rating(session: Session, palace_id: int, node_uid: str) -> int | Non
     return _latest_ratings_for_palace(session, palace_id, [node_uid]).get(node_uid)
 
 
-def _session_direct_rated_uids(
+def _session_latest_events_by_node(
     session: Session,
     *,
     study_session_id: str,
     palace_id: int,
     recall_round: str,
-) -> set[str]:
-    """Nodes whose latest non-undone event in this session/round is a direct rating."""
+) -> dict[str, MindMapRecallEvent]:
+    """Latest non-undone MindMapRecallEvent per node for this session/round."""
     rows = (
         session.query(MindMapRecallEvent)
         .filter_by(
@@ -308,7 +310,7 @@ def _session_direct_rated_uids(
         .all()
     )
     if not rows:
-        return set()
+        return {}
     undone_ids = {
         item.id
         for item in session.query(ReviewRatingOperation)
@@ -325,11 +327,30 @@ def _session_direct_rated_uids(
         if row.node_uid in latest_by_node:
             continue
         latest_by_node[row.node_uid] = row
-    return {
-        uid
-        for uid, event in latest_by_node.items()
-        if event.evidence_origin == "direct"
-    }
+    return latest_by_node
+
+
+def _session_rated_uids(
+    session: Session,
+    *,
+    study_session_id: str,
+    palace_id: int,
+    recall_round: str,
+) -> set[str]:
+    """Nodes with a latest non-undone rating in this session/round (any evidence_origin).
+
+    Used by conflict_policy=skip_direct ("避开"): skip every descendant that already
+    has a score, including batch_inherited grandchildren from a prior child subtree
+    rating — not only nodes whose latest event is evidence_origin=direct.
+    """
+    return set(
+        _session_latest_events_by_node(
+            session,
+            study_session_id=study_session_id,
+            palace_id=palace_id,
+            recall_round=recall_round,
+        ).keys()
+    )
 
 
 def _projection(
@@ -634,18 +655,22 @@ def rate_nodes(
             if uid in get_formal_review_scope(session, study_session_id, palace_id)
         ]
     if conflict_policy == "skip_direct" and rating_scope == "subtree":
-        direct_uids = _session_direct_rated_uids(
+        # "避开": leave every already-scored descendant alone (direct or
+        # batch_inherited). Otherwise a mid-node subtree score (hard on child +
+        # grandchildren) is half-overwritten when the parent later chooses 避开 —
+        # only the direct child was skipped, grandchildren got the parent score.
+        already_rated_uids = _session_rated_uids(
             session,
             study_session_id=study_session_id,
             palace_id=palace_id,
             recall_round=recall_round,
         )
-        # Always re-rate the target node; only skip descendants with direct ratings.
-        selected = [uid for uid in selected if uid == node_uid or uid not in direct_uids]
+        # Always re-rate the target node; skip descendants that already have a score.
+        selected = [uid for uid in selected if uid == node_uid or uid not in already_rated_uids]
     if not selected:
         if node_uid == root_uid:
             raise ValueError("root node cannot be scheduled alone; rate descendants or expand scope")
-        raise ValueError("没有可评分节点（可能不在本次复习范围，或子节点均已单独评分并选择避开）")
+        raise ValueError("没有可评分节点（可能不在本次复习范围，或子树节点均已评分并选择避开）")
     operation = ReviewRatingOperation(
         id=operation_id,
         study_session_id=study_session_id,
@@ -671,7 +696,22 @@ def rate_nodes(
             row if row is not None and row.content_fingerprint == fingerprint else None
         )
         card = _card_from_state(schedule_row, card_id=_card_id(palace_id, uid))
-        card, _log = scheduler.review_card(card, Rating(rating), review_datetime=_utc_now())
+        # Legacy migration seeds often carry multi-week overdue clocks. Rating them
+        # "as late but remembered" inflates stability into mastery 100% in one pass.
+        # Normalize clocks (not S/D) right before the first real FSRS write.
+        if schedule_row is not None and (
+            schedule_row.state_source == "legacy_estimate"
+            or "legacy" in str(schedule_row.parameter_version or "").lower()
+        ):
+            from memory_anki.modules.reviews.application.legacy_fsrs_repair import (
+                normalize_legacy_card_clock,
+            )
+
+            card = normalize_legacy_card_clock(card)
+        reviewed_at = _utc_now()
+        card, _log = scheduler.review_card(card, Rating(rating), review_datetime=reviewed_at)
+        # 忘记/困难 → 十几分钟到半小时内再遇到；记得/轻松才允许多天间隔。
+        card = cap_weak_rating_due(card, rating, now=reviewed_at)
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
             session.add(row)
@@ -799,3 +839,78 @@ def get_completion_summary(
 def list_due_nodes(session: Session, palace_id: int, *, now: datetime | None = None) -> list[str]:
     projection = get_palace_memory_projection(session, palace_id)
     return [item["node_uid"] for item in projection["nodes"] if item["due"]]
+
+
+def finalize_formal_review_schedules(
+    session: Session,
+    *,
+    study_session_id: str,
+    palace_id: int,
+    finalized_at: datetime | None = None,
+) -> int:
+    """Re-anchor schedules for nodes rated in a formal session to completion time.
+
+    Mid-session ratings still write FSRS S/D for undo and progress, but the
+    review clock must not start until the learner clicks complete. Otherwise
+    忘记/困难 (capped at 10/30 minutes from the click) become overdue while
+    the session is still open, and the palace reappears as due immediately
+    after completion.
+
+    Preserves each card's current FSRS parameters and intended interval length;
+    only shifts ``last_review_at`` / ``due_at`` so the interval originates at
+    session completion. Undone operations are ignored.
+    """
+    finalized = _naive(finalized_at) or utc_now_naive()
+    if finalized.tzinfo is not None:
+        finalized = finalized.astimezone(UTC).replace(tzinfo=None)
+
+    op_ids = [
+        op_id
+        for (op_id,) in session.query(ReviewRatingOperation.id)
+        .filter(
+            ReviewRatingOperation.study_session_id == study_session_id,
+            ReviewRatingOperation.palace_id == palace_id,
+            ReviewRatingOperation.undone_at.is_(None),
+        )
+        .all()
+    ]
+    if not op_ids:
+        return 0
+
+    node_uids = {
+        node_uid
+        for (node_uid,) in session.query(ReviewRatingOperationItem.node_uid)
+        .filter(ReviewRatingOperationItem.operation_id.in_(op_ids))
+        .all()
+    }
+    if not node_uids:
+        return 0
+
+    rows = (
+        session.query(ReviewNodeState)
+        .filter(
+            ReviewNodeState.palace_id == palace_id,
+            ReviewNodeState.node_uid.in_(node_uids),
+        )
+        .all()
+    )
+    changed = 0
+    for row in rows:
+        if row.due_at is None or row.last_review_at is None:
+            continue
+        interval = row.due_at - row.last_review_at
+        if interval.total_seconds() < 0:
+            interval = timedelta(0)
+        # Re-applying with the same finalized_at is idempotent: interval is
+        # preserved so a second call keeps last/due at finalized + interval.
+        if row.last_review_at == finalized and row.due_at == finalized + interval:
+            continue
+        row.last_review_at = finalized
+        row.due_at = finalized + interval
+        row.updated_at = finalized
+        changed += 1
+
+    if changed:
+        session.flush()
+        _clear_due_rollup_cache(session)
+    return changed

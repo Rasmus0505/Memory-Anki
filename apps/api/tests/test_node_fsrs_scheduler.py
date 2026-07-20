@@ -70,6 +70,58 @@ def test_all_fsrs_ratings_persist(db_session):
     assert [row.rating for row in rows] == [1, 2, 3, 4]
 
 
+def test_again_and_hard_schedule_within_short_window_not_days(db_session):
+    """忘记 ≤10min, 困难 ≤30min; multi-day only after 记得/轻松 on mature cards."""
+    from datetime import UTC, datetime, timedelta
+
+    palace = _palace(db_session)
+    # Grow a mature review card first (Good chain).
+    for index in range(3):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid="b",
+            rating=3,
+            study_session_id="s-mature",
+            operation_id=f"op-good-{index}",
+            rating_scope="single",
+        )
+        row = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+        # Advance due into the past so the next rating is not learning-step only.
+        row.due_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+        db_session.commit()
+
+    mature = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    assert mature.due_at is not None
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=2,
+        study_session_id="s-hard",
+        operation_id="op-hard",
+        rating_scope="single",
+    )
+    hard = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    hard_delta = hard.due_at - (hard.last_review_at or hard.due_at)
+    assert hard_delta <= timedelta(minutes=30, seconds=5)
+    assert hard_delta < timedelta(days=1)
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=1,
+        study_session_id="s-again",
+        operation_id="op-again",
+        rating_scope="single",
+    )
+    again = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    again_delta = again.due_at - (again.last_review_at or again.due_at)
+    assert again_delta <= timedelta(minutes=10, seconds=5)
+
+
 def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):
     palace = _palace(db_session)
     rate_nodes(db_session, palace_id=palace.id, node_uid="a", rating=4, study_session_id="s1", operation_id="op1")
@@ -249,6 +301,107 @@ def test_subtree_skip_direct_preserves_child_direct_rating(db_session):
     # Child kept Again (1); parent got Easy (4) — stability should differ
     assert parent.stability is not None
     assert child.stability is not None
+
+
+def test_subtree_skip_direct_preserves_batch_inherited_grandchildren(db_session):
+    """避开 must keep grandchild scores inherited from a prior child subtree rating.
+
+    Tree: parent (p) → child (c) → grandchild (g).
+    Rate c as Hard (subtree) → c direct Hard, g batch_inherited Hard.
+    Rate p as Easy with skip_direct → only p is updated; c and g stay Hard.
+    """
+    from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
+
+    document = {
+        "root": {
+            "data": {"uid": "root", "text": "root"},
+            "children": [
+                {
+                    "data": {"uid": "p", "text": "Parent"},
+                    "children": [
+                        {
+                            "data": {"uid": "c", "text": "Child"},
+                            "children": [
+                                {"data": {"uid": "g", "text": "Grandchild"}, "children": []},
+                            ],
+                        },
+                        {"data": {"uid": "sib", "text": "Sibling"}, "children": []},
+                    ],
+                }
+            ],
+        }
+    }
+    palace = Palace(
+        title="Skip inherited",
+        description="",
+        difficulty=0,
+        review_mode="review",
+        editor_doc=json.dumps(document),
+    )
+    db_session.add(palace)
+    db_session.commit()
+
+    child_result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="c",
+        rating=2,  # 困难
+        study_session_id="s-skip-g",
+        operation_id="op-child-subtree",
+        rating_scope="subtree",
+        source_scene="practice",
+    )
+    assert set(child_result["affected_node_uids"]) == {"c", "g"}
+    origins = {
+        row.node_uid: row.evidence_origin
+        for row in db_session.query(MindMapRecallEvent)
+        .filter_by(study_session_id="s-skip-g", palace_id=palace.id)
+        .all()
+    }
+    assert origins["c"] == "direct"
+    assert origins["g"] == "batch_inherited"
+
+    before_g = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="g").one()
+    before_c = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="c").one()
+    before_g_stability = before_g.stability
+    before_c_stability = before_c.stability
+
+    parent_result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="p",
+        rating=4,  # 轻松
+        study_session_id="s-skip-g",
+        operation_id="op-parent-skip",
+        rating_scope="subtree",
+        conflict_policy="skip_direct",
+        source_scene="practice",
+    )
+    # Unrated sibling still gets parent score; already-rated c/g are skipped.
+    assert set(parent_result["affected_node_uids"]) == {"p", "sib"}
+
+    after_g = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="g").one()
+    after_c = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="c").one()
+    after_p = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="p").one()
+    after_sib = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="sib").one()
+    assert after_g.stability == before_g_stability
+    assert after_c.stability == before_c_stability
+    assert after_p.state_source == "manual"
+    assert after_sib.state_source == "manual"
+
+    # Latest events for c/g remain Hard (2); p/sib are Easy (4).
+    latest = {}
+    for row in (
+        db_session.query(MindMapRecallEvent)
+        .filter_by(study_session_id="s-skip-g", palace_id=palace.id)
+        .order_by(MindMapRecallEvent.occurred_at.desc(), MindMapRecallEvent.created_at.desc())
+        .all()
+    ):
+        latest.setdefault(row.node_uid, row.rating)
+    assert latest["c"] == 2
+    assert latest["g"] == 2
+    assert latest["p"] == 4
+    assert latest["sib"] == 4
 
 
 def test_subtree_overwrite_replaces_child_direct_rating(db_session):

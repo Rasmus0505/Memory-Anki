@@ -19,6 +19,7 @@ from memory_anki.modules.reviews.application.node_memory_service import (
     RATING_LABELS,
     VALID_RATINGS,
     due_node_uids_for_entry,
+    finalize_formal_review_schedules,
     get_palace_due_rollup,
     get_palace_memory_projection,
     rate_nodes,
@@ -116,12 +117,80 @@ def _queue_item(
     }
 
 
+# Default: earliest next_due first so long-overdue palaces surface first.
+# String ISO sort is unsafe when naive/aware formats mix; always parse to datetime.
+QUEUE_SORT_MODES = frozenset(
+    {"due_asc", "due_desc", "due_nodes_desc", "overdue_desc", "title_asc"}
+)
+_QUEUE_SORT_FAR_FUTURE = datetime(9999, 1, 1, tzinfo=UTC)
+_QUEUE_SORT_FAR_PAST = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _queue_item_due_at(item: dict[str, Any]) -> datetime | None:
+    return _dt(item.get("next_due_at") or item.get("due_at"))
+
+
+def _queue_item_title(item: dict[str, Any]) -> str:
+    palace = item.get("palace") or {}
+    return str(palace.get("title") or "").casefold()
+
+
+def sort_queue_items(
+    items: list[dict[str, Any]],
+    sort_by: str = "due_asc",
+) -> list[dict[str, Any]]:
+    """Stable multi-key sort for formal FSRS queue rows."""
+    mode = sort_by if sort_by in QUEUE_SORT_MODES else "due_asc"
+    ordered = list(items)
+    if mode == "due_asc":
+        ordered.sort(
+            key=lambda item: (
+                _queue_item_due_at(item) or _QUEUE_SORT_FAR_FUTURE,
+                int(item.get("palace_id") or 0),
+            )
+        )
+    elif mode == "due_desc":
+        ordered.sort(
+            key=lambda item: (
+                _queue_item_due_at(item) or _QUEUE_SORT_FAR_PAST,
+                -int(item.get("palace_id") or 0),
+            ),
+            reverse=True,
+        )
+    elif mode == "due_nodes_desc":
+        ordered.sort(
+            key=lambda item: (
+                -int(item.get("due_node_count") or 0),
+                _queue_item_due_at(item) or _QUEUE_SORT_FAR_FUTURE,
+                int(item.get("palace_id") or 0),
+            )
+        )
+    elif mode == "overdue_desc":
+        ordered.sort(
+            key=lambda item: (
+                -int(item.get("overdue_node_count") or 0),
+                _queue_item_due_at(item) or _QUEUE_SORT_FAR_FUTURE,
+                int(item.get("palace_id") or 0),
+            )
+        )
+    else:  # title_asc
+        ordered.sort(
+            key=lambda item: (
+                _queue_item_title(item),
+                _queue_item_due_at(item) or _QUEUE_SORT_FAR_FUTURE,
+                int(item.get("palace_id") or 0),
+            )
+        )
+    return ordered
+
+
 def get_fsrs_queue_payload(
     session: Session,
     chapter_id: int | None = None,
     *,
     include_stats: bool = True,
     include_items: bool = True,
+    sort_by: str = "due_asc",
 ) -> dict[str, Any]:
     now = datetime.now(UTC)
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
@@ -140,8 +209,9 @@ def get_fsrs_queue_payload(
             due.append(_queue_item(session, palace, due_nodes, now, projection))
         elif later_nodes:
             later.append(_queue_item(session, palace, later_nodes, now, projection))
-    due.sort(key=lambda item: (item["next_due_at"] or "", item["palace_id"]))
-    later.sort(key=lambda item: (item["next_due_at"] or "", item["palace_id"]))
+    # Always earliest-due first before daily limit so overdue work is not dropped.
+    due = sort_queue_items(due, "due_asc")
+    later = sort_queue_items(later, "due_asc")
     overdue_count = sum(item["overdue_node_count"] for item in due)
     if chapter_id is None:
         config = session.query(Config).filter_by(key="daily_max_reviews").first()
@@ -151,6 +221,10 @@ def get_fsrs_queue_payload(
             daily_limit = 0
         if daily_limit > 0:
             due = due[:daily_limit]
+    # Optional display sort after limit (next-due / dashboard still default due_asc).
+    if sort_by != "due_asc":
+        due = sort_queue_items(due, sort_by)
+        later = sort_queue_items(later, sort_by)
     chapter = None
     if chapter_id is not None:
         from memory_anki.infrastructure.db._tables.knowledge import Chapter
@@ -238,6 +312,28 @@ def _scope(row: StudySession) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
+def _has_frozen_scope(row: StudySession) -> bool:
+    """Real FSRS formal sessions always freeze a non-empty due set at start."""
+    return bool(_scope(row))
+
+
+def _abandon_legacy_review_session(row: StudySession, *, reason: str) -> None:
+    """Close a review-scene row that is not a valid formal FSRS session.
+
+    Migrated progress rows (e.g. session-progress-*) can stay ``active`` for
+    months without ``frozen_due_node_uids``. Resuming them as formal review makes
+    ratings save under that id while completion summary reports 0 scope / 0 rated.
+    """
+    now = utc_now_naive()
+    summary = _json(row.summary_json)
+    summary["superseded_reason"] = reason
+    summary["superseded_at"] = now.isoformat()
+    row.status = "abandoned"
+    row.ended_at = now
+    row.updated_at = now
+    row.summary_json = json.dumps(summary, ensure_ascii=False)
+
+
 def ensure_formal_review_session_active(row: StudySession) -> StudySession:
     """Keep formal review ratable while the user is still on the session page.
 
@@ -275,7 +371,7 @@ def start_or_resume_formal_review(
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None or palace.archived:
         raise ValueError("palace not found")
-    active = (
+    active_rows = (
         session.query(StudySession)
         .filter(
             StudySession.scene == "review",
@@ -284,10 +380,15 @@ def start_or_resume_formal_review(
             StudySession.deleted_at.is_(None),
         )
         .order_by(StudySession.started_at.desc())
-        .first()
+        .all()
     )
-    if active is not None:
-        return ensure_formal_review_session_active(active)
+    for active in active_rows:
+        if _has_frozen_scope(active):
+            return ensure_formal_review_session_active(active)
+        # Legacy progress / migrated review rows: do not resume without a frozen due set.
+        _abandon_legacy_review_session(
+            active, reason="missing_frozen_due_node_uids"
+        )
     projection = get_palace_memory_projection(session, palace_id)
     resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
     if resolved_mode == "none":
@@ -341,6 +442,16 @@ def start_or_resume_formal_review(
 def resolve_formal_review_session(session: Session, identifier: str) -> StudySession:
     row = session.get(StudySession, identifier)
     if row is not None and row.scene == "review" and row.deleted_at is None:
+        if _has_frozen_scope(row):
+            return row
+        # Completed legacy rows keep their id so historical receipts/summaries still load
+        # (summary falls back to session events when frozen scope is empty).
+        if row.status == "completed":
+            return row
+        # Active/paused/recovered/abandoned progress rows without a frozen due set must
+        # not keep serving as formal review (settlement would show 0 rated).
+        if row.palace_id is not None:
+            return start_or_resume_formal_review(session, int(row.palace_id))
         return row
     # Digit ids are palace ids (legacy schedule ids are no longer accepted).
     if identifier.isdigit():
@@ -425,8 +536,15 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
     if palace is None:
         raise ValueError("palace not found")
     projection = get_palace_memory_projection(session, palace.id)
-    scope = set(_scope(row)) & {item["node_uid"] for item in projection["nodes"]}
-    ratings = _effective_ratings(session, row, scope)
+    projection_uids = {item["node_uid"] for item in projection["nodes"]}
+    scope = set(_scope(row)) & projection_uids
+    # Legacy sessions (migrated progress, healed receipts) may lack a frozen due
+    # set even though MindMapRecallEvent rows were written for this session id.
+    # Fall back to "nodes scored in this session ∩ projection" so settlement
+    # never reports 0/0 after the user already rated.
+    if not scope:
+        scope = set(_effective_ratings(session, row, projection_uids))
+    ratings = _effective_ratings(session, row, scope) if scope else {}
     counts = {label: 0 for label in RATING_LABELS.values()}
     for rating in ratings.values():
         counts[RATING_LABELS[rating]] += 1
@@ -536,6 +654,22 @@ def complete_formal_review(
     ratings = summary.pop("ratings")
     score = round(sum(ratings.values()) / len(ratings)) if ratings else 0
     ended_at = utc_now_naive()
+    # Scheduling clock starts at completion, not at each mid-session click.
+    # 忘记/困难 caps (10/30 min) would otherwise expire during a long session.
+    finalize_formal_review_schedules(
+        session,
+        study_session_id=str(row.id),
+        palace_id=int(palace.id),
+        finalized_at=ended_at,
+    )
+    # Receipt due/next fields must reflect post-finalize schedules.
+    projection = get_palace_memory_projection(session, palace.id)
+    summary["remaining_due_node_count"] = projection["due_node_count"]
+    summary["next_review_at"] = projection["next_review_at"]
+    summary["mastery_progress"] = projection["mastery_progress"]
+    summary["mastery_percent"] = projection["mastery_percent"]
+    summary["memory_health"] = projection["memory_health"]
+    summary["memory_health_percent"] = projection["memory_health_percent"]
     log = ReviewLog(
         palace_id=palace.id,
         review_date=ended_at.date(),

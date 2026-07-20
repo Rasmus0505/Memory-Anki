@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
-from memory_anki.infrastructure.db._tables.misc import Config
+from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.reviews.application.formal_review_service import (
@@ -11,12 +11,14 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     get_fsrs_load_forecast,
     get_fsrs_queue_payload,
     rate_unrated_formal_review_nodes,
+    resolve_formal_review_session,
     start_or_resume_formal_review,
 )
 from memory_anki.modules.reviews.application.node_memory_service import (
     rate_nodes,
 )
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
+from memory_anki.core.time import utc_now_naive
 
 
 def _palace(session):
@@ -81,6 +83,100 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     db_session.commit()
     assert result["unrated_due_node_count"] == 1
     assert result["remaining_due_node_count"] >= 1
+
+
+def test_completion_reanchors_hard_schedule_after_long_session(db_session):
+    """困难 interval starts at complete time, not mid-session click time.
+
+    Regression: rate Hard early in a long session → 30min cap expires before
+    the learner clicks 完成 → palace immediately reappears as due.
+    """
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=2,
+        study_session_id=row.id,
+        operation_id="hard-early",
+        rating_scope="single",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id=row.id,
+        operation_id="good-later",
+        rating_scope="single",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+
+    hard = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    good = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    hard_interval = hard.due_at - hard.last_review_at
+    good_interval = good.due_at - good.last_review_at
+    assert hard_interval <= timedelta(minutes=30, seconds=5)
+
+    # Simulate a long session: Hard was scored ~45 minutes before completion.
+    past = utc_now_naive() - timedelta(minutes=45)
+    hard.last_review_at = past
+    hard.due_at = past + hard_interval
+    good.last_review_at = past + timedelta(minutes=40)
+    good.due_at = good.last_review_at + good_interval
+    db_session.commit()
+
+    # Without finalization, Hard would already be overdue at complete time.
+    assert hard.due_at < utc_now_naive()
+
+    before_complete = utc_now_naive()
+    result = complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=2700,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+    after_complete = utc_now_naive()
+
+    hard = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    good = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+
+    assert hard.last_review_at is not None
+    assert before_complete <= hard.last_review_at <= after_complete + timedelta(seconds=1)
+    assert hard.due_at == hard.last_review_at + hard_interval
+    assert hard.due_at > after_complete - timedelta(seconds=1)
+    assert (hard.due_at - hard.last_review_at) <= timedelta(minutes=30, seconds=5)
+
+    assert good.last_review_at == hard.last_review_at
+    assert good.due_at == good.last_review_at + good_interval
+
+    # Fully rated session: nothing should remain due right after complete.
+    assert result["unrated_due_node_count"] == 0
+    assert result["remaining_due_node_count"] == 0
 
 
 def test_rate_unrated_only_scores_missing_nodes_not_already_rated(db_session):
@@ -155,6 +251,93 @@ def test_recovered_formal_session_can_still_rate_single_nodes(db_session):
     assert "a" in set(result["affected_node_uids"])
     db_session.refresh(row)
     assert row.status == "active"
+
+
+def test_legacy_active_review_without_frozen_scope_does_not_hijack_resume(db_session):
+    """Migrated session-progress rows must not become formal FSRS sessions."""
+    palace = _palace(db_session)
+    legacy = StudySession(
+        id="session-progress-legacy",
+        status="active",
+        scene="review",
+        target_type="review_schedule",
+        target_id=999,
+        palace_id=palace.id,
+        title="legacy",
+        started_at=utc_now_naive(),
+        progress_json="{}",
+        events_json="[]",
+        summary_json=json.dumps({"migrated_from": "session_progress"}),
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    formal = start_or_resume_formal_review(db_session, palace.id)
+    assert formal.id != legacy.id
+    assert formal.id.startswith("review-")
+    assert set(json.loads(formal.summary_json)["frozen_due_node_uids"]) == {"a", "b"}
+
+    db_session.refresh(legacy)
+    assert legacy.status == "abandoned"
+    assert json.loads(legacy.summary_json).get("superseded_reason") == "missing_frozen_due_node_uids"
+
+    # Resolving the old id must also promote to a real formal session.
+    resolved = resolve_formal_review_session(db_session, "session-progress-legacy")
+    assert resolved.id == formal.id
+
+
+def test_completion_summary_counts_ratings_when_frozen_scope_missing(db_session):
+    """Settlement must not show 0 scored after ratings land on a scope-less row."""
+    palace = _palace(db_session)
+    legacy = StudySession(
+        id="session-progress-scopedless",
+        status="active",
+        scene="review",
+        target_type="review_schedule",
+        target_id=1001,
+        palace_id=palace.id,
+        title="legacy",
+        started_at=utc_now_naive(),
+        progress_json="{}",
+        events_json="[]",
+        summary_json=json.dumps({"migrated_from": "session_progress"}),
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    # Subtree ratings (PWA flip-card default) are not gated by frozen scope; they
+    # still write session events that settlement must count when scope is empty.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id=legacy.id,
+        operation_id="legacy-rate-a",
+        rating_scope="subtree",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=4,
+        study_session_id=legacy.id,
+        operation_id="legacy-rate-b",
+        rating_scope="subtree",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+
+    summary = formal_review_completion_summary(db_session, legacy)
+    assert summary["rated_node_count"] == 2
+    assert summary["scope_node_count"] == 2
+    assert summary["unrated_due_node_count"] == 0
+    assert summary["rating_counts"]["记得"] == 1
+    assert summary["rating_counts"]["轻松"] == 1
+    assert summary["ratings"]["a"] == 3
+    assert summary["ratings"]["b"] == 4
 
 
 def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
@@ -242,6 +425,28 @@ def test_queue_chapter_filter_and_daily_palace_limit(db_session):
     assert [item["palace_id"] for item in chapter_queue["reviews"]] == [first.id]
     assert chapter_queue["chapter"]["id"] == chapter.id
     assert chapter_queue["chapter"]["subject"]["name"] == subject.name
+
+
+def test_queue_orders_by_earliest_due_first(db_session):
+    """Long-overdue palaces must surface before recently-due ones."""
+    older = _palace(db_session)
+    older.title = "Older overdue"
+    newer = _palace(db_session)
+    newer.title = "Newer overdue"
+    db_session.commit()
+    _set_all_due_at(db_session, newer.id, datetime.now(UTC) - timedelta(hours=1))
+    _set_all_due_at(db_session, older.id, datetime.now(UTC) - timedelta(days=5))
+
+    queue = get_fsrs_queue_payload(db_session)
+    ids = [item["palace_id"] for item in queue["reviews"]]
+    assert ids.index(older.id) < ids.index(newer.id)
+
+    by_nodes = get_fsrs_queue_payload(db_session, sort_by="due_nodes_desc")
+    assert [item["palace_id"] for item in by_nodes["reviews"]] == ids  # same counts; due tie-break
+
+    by_title = get_fsrs_queue_payload(db_session, sort_by="title_asc")
+    titles = [item["palace"]["title"] for item in by_title["reviews"]]
+    assert titles == sorted(titles, key=str.casefold)
 
 
 def test_single_top_level_branch_uses_node_entry_mode(db_session):

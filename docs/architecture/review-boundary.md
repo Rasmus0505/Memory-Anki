@@ -44,9 +44,11 @@ Manual stage adjustment, stage reset, stage-health repair, and overdue spreading
 
 Reviews now owns an independent FSRS card for every non-root palace node, keyed by `palace_id + node_uid`. The root node is a batch-rating entry point and is excluded from progress and scheduling. The public Reviews facade exposes projection, four-level rating, subtree rating, undo, due-node listing, and completion-summary capabilities.
 
-Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo.
+Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Formal completion re-anchors every non-undone session-rated node's schedule clock to session end (interval preserved) so mid-session 忘记/困难 short caps do not expire before “完成”.
 
 Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
+
+Legacy stage → node FSRS migration may leave `state_source=legacy_estimate` cards with historical overdue clocks. Rating those cards once as Good can inflate stability into full mastery. Runtime `rate_nodes` normalizes legacy clocks before the first real FSRS write; one-shot data repair lives in `tools/repair_legacy_fsrs_inflation.py` (`legacy_fsrs_repair.repair_legacy_fsrs_inflation`).
 
 Entry UX is derived from due-node top-level branch coverage:
 - one top-level branch due → `review_entry_mode=node` / label `节点复习` (node CTA uses a non-green solid color)
@@ -67,4 +69,6 @@ Entering a formal review creates or resumes an active UUID `StudySession` and fr
 
 Completion atomically creates a `ReviewLog`, finalizes the active `StudySession`, clears reveal progress, and stores a receipt containing rating counts, mastery, memory health, remaining due nodes, and the next FSRS due time.
 
-Node-mode formal review clips the flip-card `editor_doc` to root + `primary_branch_uid` so the session is a true branch review, not a full-palace walkthrough. The full palace document remains available for subtree rating cascade and inline edit. Formal completion UI uses only FSRS node evidence on the frozen due set. Catalog CTAs prefer backend `review_entry_label` when due and show `review_branch_summaries` on hover.
+**Session schedule finalization:** Mid-session node ratings still write FSRS state (S/D, evidence, undo snapshots) for progress UX, but completion re-anchors every non-undone session-rated node's `last_review_at` / `due_at` to the session end time while preserving the intended interval. Without this, 忘记/困难 caps (10/30 minutes from the click) expire during a long session and the palace reappears as due immediately after “完成”.
+
+Node-mode formal review still shows the full palace `editor_doc` as context. Only the frozen due-node set needs manual flip-card review; non-due cards auto-reveal via `focusNodeIds`. Entry mode/label/`primary_branch_*` remain for CTA and session chrome (e.g. “节点复习 · branch title”), not for document clipping. The full palace document is also used for subtree rating cascade and inline edit. Formal completion UI uses only FSRS node evidence on the frozen due set. Catalog CTAs prefer backend `review_entry_label` when due and show `review_branch_summaries` on hover.
