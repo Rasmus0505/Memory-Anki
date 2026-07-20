@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { getPalaceEditorApi, getPalacesGroupedApi } from '@/entities/palace/api'
+import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
 import { useRevealSession } from '@/entities/review/model/useRevealSession'
 import { buildAllRevealedState } from '@/entities/review/model/review-flow-tree'
 import { useReviewFeedback } from '@/entities/review/model/useReviewFeedback'
@@ -139,6 +140,21 @@ export function PalaceMemoryLookupDialog({
     setRevealMap(buildAllRevealedState(revealRoot))
     setRedNodeIds(new Set<string>())
   }, [revealRoot, setRedNodeIds, setRevealMap])
+
+  const flipShortcutHandlers = useMemo(
+    () => ({
+      flip_subtree_cards_practice: () => {
+        if (previewMode !== 'flip') return
+        revealSession.handleBulkRevealSubtree(null)
+      },
+      flip_direct_child_cards_practice: () => {
+        if (previewMode !== 'flip') return
+        revealSession.handleBulkRevealDirectChildren(null)
+      },
+    }),
+    [previewMode, revealSession],
+  )
+  useMemoryAnkiShortcuts('practice', flipShortcutHandlers, open && previewMode === 'flip')
 
   useEffect(() => () => {
     if (fullscreenExitGuardTimerRef.current != null) {
@@ -504,6 +520,7 @@ export function PalaceMemoryLookupDialog({
             onEditorStateChange={() => {}}
             onNodeClick={revealSession.handleNodeClick}
             onNodeContextMenu={revealSession.handleNodeContextMenu}
+            onNodeHover={revealSession.handleNodeHover}
             reviewFxSignal={feedback.reviewFxSignal}
             className="h-full min-h-[180px] w-full border-0"
           />

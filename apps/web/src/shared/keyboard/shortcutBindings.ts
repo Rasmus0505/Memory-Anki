@@ -31,6 +31,11 @@ const BARE_ALLOWED_SHORTCUT_KEYS = new Set([
   'pagedown',
 ])
 
+/** Single letters are valid bare shortcuts for review/practice (inputs still block via target checks). */
+function isBareLetterShortcutKey(key: string) {
+  return /^[a-z]$/.test(key)
+}
+
 const SHORTCUT_KEY_LABELS: Record<string, string> = {
   ' ': 'Space',
   space: 'Space',
@@ -131,6 +136,8 @@ export function isShortcutBindingAllowed(bindingValue: unknown) {
   const key = normalizeShortcutKeyValue(binding.key)
   const hasModifier = Boolean(binding.shift || binding.ctrl || binding.alt || binding.meta)
   if (!key || MODIFIER_ONLY_KEYS.has(key) || RESERVED_SHORTCUT_KEYS.has(key)) return false
+  // Bare single letters (A–Z) are allowed for flip-card and similar non-typing scenes.
+  if (!hasModifier && isBareLetterShortcutKey(key)) return true
   if (!hasModifier && isPrintableShortcutKey(key)) return false
   if (!hasModifier && !isAllowedBareShortcut(binding)) return false
   return true
@@ -214,7 +221,7 @@ export function captureShortcutFromKeyboardEvent(
       ),
     }
   }
-  if (!hasModifier && isPrintableShortcutKey(key)) {
+  if (!hasModifier && isPrintableShortcutKey(key) && !isBareLetterShortcutKey(key)) {
     return { value: null, error: resolvedMessages.barePrintable(key) }
   }
 

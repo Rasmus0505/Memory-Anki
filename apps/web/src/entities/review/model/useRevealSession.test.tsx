@@ -133,4 +133,63 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.a).toBe('revealed')
     expect(result.current.revealMap.b).toBe('placeholder')
   })
+
+  it('bulk-reveals descendants from hover with selection fallback', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [
+                { data: { text: 'A1', uid: 'a1' }, children: [] },
+                { data: { text: 'A2', uid: 'a2' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('placeholder')
+
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('placeholder')
+    expect(result.current.revealMap.a2).toBe('placeholder')
+
+    act(() => {
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+    expect(result.current.revealMap.a2).toBe('revealed')
+
+    // Selection fallback when hover cleared.
+    act(() => {
+      result.current.handleNodeHover([])
+      result.current.handleBulkRevealDirectChildren('a')
+    })
+    // Both children already revealed — no-op.
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+  })
 })

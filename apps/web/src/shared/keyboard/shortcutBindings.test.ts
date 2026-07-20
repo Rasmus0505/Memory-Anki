@@ -53,10 +53,21 @@ describe('shortcutBindings', () => {
     ).toBe('ctrl+alt+shift+meta+KeyA')
   })
 
-  it('rejects bare typing keys and reserved keys during capture', () => {
+  it('allows bare letter keys and rejects reserved keys during capture', () => {
     const typed = captureShortcutFromKeyboardEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }))
-    expect(typed.value).toBeNull()
-    expect(typed.error).toContain('输入冲突')
+    expect(typed.error).toBe('')
+    expect(typed.value).toEqual({
+      code: 'KeyA',
+      key: 'a',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
+
+    const digit = captureShortcutFromKeyboardEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1' }))
+    expect(digit.value).toBeNull()
+    expect(digit.error).toContain('输入冲突')
 
     const escaped = captureShortcutFromKeyboardEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }))
     expect(escaped.value).toBeNull()

@@ -3,6 +3,7 @@ import type { RevealState } from '@/entities/session/model'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/entities/mindmap-document'
 import {
+  advanceBulkRevealState,
   advanceRevealStateForNodeClick,
   checkpointNodesRevealed,
   buildInitialRevealState,
@@ -15,6 +16,7 @@ import {
   hideRevealStateBranch,
   parseEditorDoc,
   pourCheckpointRevealState,
+  type BulkRevealScope,
   type RevealFlowMode,
   type RevealFlowOptions,
   sanitizeRedNodeIds,
@@ -38,6 +40,7 @@ const EMPTY_FOCUS_NODE_IDS: string[] = []
 type RevealAction =
   | { type: 'advance'; nodeId: string }
   | { type: 'hide'; nodeId: string }
+  | { type: 'bulk'; nodeId: string; scope: BulkRevealScope }
 
 export function useRevealSession({
   title,
@@ -165,6 +168,14 @@ export function useRevealSession({
             root,
           )
         }
+        if (action.type === 'bulk') {
+          return advanceBulkRevealState(
+            action.nodeId,
+            nodeMap,
+            nextRevealMap,
+            action.scope,
+          )
+        }
         return hideRevealStateBranch(action.nodeId, nodeMap, nextRevealMap)
       }, current),
     )
@@ -211,6 +222,32 @@ export function useRevealSession({
     hoveredNodeIdRef.current = nodeId
     setHoveredNodeId(nodeId)
   }, [])
+
+  /**
+   * Bulk two-phase flip under hover, with optional selection fallback when nothing is hovered.
+   */
+  const handleBulkReveal = React.useCallback(
+    (scope: BulkRevealScope, fallbackNodeId: string | null = null) => {
+      const targetId = hoveredNodeIdRef.current ?? fallbackNodeId
+      if (!targetId) return
+      enqueueRevealAction({ type: 'bulk', nodeId: targetId, scope })
+    },
+    [enqueueRevealAction],
+  )
+
+  const handleBulkRevealSubtree = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      handleBulkReveal('subtree', fallbackNodeId)
+    },
+    [handleBulkReveal],
+  )
+
+  const handleBulkRevealDirectChildren = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      handleBulkReveal('direct-children', fallbackNodeId)
+    },
+    [handleBulkReveal],
+  )
 
   const handleSpacePour = React.useCallback(() => {
     if (mode !== 'segment-checkpoint') return
@@ -279,6 +316,9 @@ export function useRevealSession({
     handleNodeClick,
     handleNodeContextMenu,
     handleNodeHover,
+    handleBulkReveal,
+    handleBulkRevealSubtree,
+    handleBulkRevealDirectChildren,
     handleSpacePour,
   }
 }

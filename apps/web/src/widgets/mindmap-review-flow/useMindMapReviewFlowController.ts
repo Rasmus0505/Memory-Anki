@@ -89,17 +89,8 @@ export function useMindMapReviewFlowController({
     flow.timer.registerActivity("practice_interaction", { source: "review_node_navigation" });
     setActiveNodes(nodes);
   }, [flow.timer]);
-  const { startWeakRetryRound } = flow;
-  const { firstRatings, round: recallRound, setRound: setRecallRound, weakNodeUids } = recallRatings;
-
-  React.useEffect(() => {
-    if (recallRound !== 'first' || reviewNodeUids.length === 0) return;
-    if (!reviewNodeUids.every((uid) => firstRatings.has(uid))) return;
-    if (weakNodeUids.length > 0) {
-      startWeakRetryRound(weakNodeUids);
-      setRecallRound('weak_retry');
-    }
-  }, [firstRatings, recallRound, reviewNodeUids, setRecallRound, startWeakRetryRound, weakNodeUids]);
+  // weakNodeUids / firstRatings stay on recallRatings for chips & AI; no auto
+  // weak-retry re-hide — rating mode never mutates flip/placeholder state.
   const inlineEditEnabled =
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
@@ -171,24 +162,52 @@ React.useEffect(() => {
 
 
   const handleShortcutHideChildCards = React.useCallback(() => {
-    if (isInlineEditMode) return;
+    if (isInlineEditMode || ratingMode) return;
     const node = activeNodes[0];
     if (!node?.uid) return;
     flow.handleNodeContextMenu([node]);
-  }, [activeNodes, flow, isInlineEditMode]);
+  }, [activeNodes, flow, isInlineEditMode, ratingMode]);
 
-  const shortcutHandlers = React.useMemo(
-    () => ({
-      hide_child_cards_review: handleShortcutHideChildCards,
-    }),
-    [handleShortcutHideChildCards],
-  );
+  const handleShortcutFlipSubtree = React.useCallback(() => {
+    if (isInlineEditMode || ratingMode || flow.completed) return;
+    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
+    // Prefer hover; fall back to selection inside reveal session when hover is empty.
+    if (!flow.hoveredNodeId && !selectedNodeUid) return;
+    flow.handleBulkRevealSubtree(selectedNodeUid);
+  }, [flow, isInlineEditMode, ratingMode, selectedNodeUid]);
 
-  useMemoryAnkiShortcuts(
-    isInlineEditMode ? "edit" : "review",
-    shortcutHandlers,
-    true,
-  );
+  const handleShortcutFlipDirectChildren = React.useCallback(() => {
+    if (isInlineEditMode || ratingMode || flow.completed) return;
+    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
+    if (!flow.hoveredNodeId && !selectedNodeUid) return;
+    flow.handleBulkRevealDirectChildren(selectedNodeUid);
+  }, [flow, isInlineEditMode, ratingMode, selectedNodeUid]);
+
+  const shortcutScene =
+    isInlineEditMode ? "edit" : sessionKind === "review" ? "review" : "practice";
+
+  const shortcutHandlers = React.useMemo(() => {
+    if (shortcutScene === "edit") return {};
+    if (shortcutScene === "review") {
+      return {
+        hide_child_cards_review: handleShortcutHideChildCards,
+        flip_subtree_cards_review: handleShortcutFlipSubtree,
+        flip_direct_child_cards_review: handleShortcutFlipDirectChildren,
+      };
+    }
+    return {
+      hide_child_cards_practice: handleShortcutHideChildCards,
+      flip_subtree_cards_practice: handleShortcutFlipSubtree,
+      flip_direct_child_cards_practice: handleShortcutFlipDirectChildren,
+    };
+  }, [
+    handleShortcutFlipDirectChildren,
+    handleShortcutFlipSubtree,
+    handleShortcutHideChildCards,
+    shortcutScene,
+  ]);
+
+  useMemoryAnkiShortcuts(shortcutScene, shortcutHandlers, true);
 
   const handleShortcutAdvanceReview = React.useCallback(() => {
     if (

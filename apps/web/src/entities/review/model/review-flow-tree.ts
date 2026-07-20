@@ -277,6 +277,76 @@ export function findNextHiddenChild(
   )
 }
 
+/** Bulk flip target set: full descendant tree or only direct children. */
+export type BulkRevealScope = 'subtree' | 'direct-children'
+
+/**
+ * Collect target cards under `nodeId` (never includes the anchor card itself).
+ * - subtree: every descendant
+ * - direct-children: only immediate children
+ */
+export function collectBulkRevealTargets(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  scope: BulkRevealScope,
+): ReviewMindMapNode[] {
+  const node = nodeMap.get(nodeId)
+  if (!node) return []
+  if (scope === 'direct-children') {
+    return [...node.children]
+  }
+  const targets: ReviewMindMapNode[] = []
+  const walk = (current: ReviewMindMapNode) => {
+    for (const child of current.children) {
+      targets.push(child)
+      walk(child)
+    }
+  }
+  walk(node)
+  return targets
+}
+
+/**
+ * Two-phase bulk flip under a hover/selection anchor:
+ * 1) If any target is still hidden → turn those into placeholders
+ *    (question cards skip placeholder and open as revealed).
+ * 2) Else if any target is still placeholder → turn those into revealed content.
+ * Already-revealed cards are never forced back to placeholder.
+ */
+export function advanceBulkRevealState(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+  scope: BulkRevealScope,
+): Record<string, RevealState> {
+  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
+  if (targets.length === 0) return revealMap
+
+  const hasHidden = targets.some((target) => (revealMap[target.id] ?? 'hidden') === 'hidden')
+  if (hasHidden) {
+    const next = { ...revealMap }
+    for (const target of targets) {
+      if ((next[target.id] ?? 'hidden') !== 'hidden') continue
+      next[target.id] = target.isQuestionCard ? 'revealed' : 'placeholder'
+    }
+    return applyQuestionCardAutoReveal(nodeMap, next)
+  }
+
+  const hasPlaceholder = targets.some(
+    (target) => (revealMap[target.id] ?? 'hidden') === 'placeholder',
+  )
+  if (hasPlaceholder) {
+    const next = { ...revealMap }
+    for (const target of targets) {
+      if ((next[target.id] ?? 'hidden') !== 'placeholder') continue
+      next[target.id] = 'revealed'
+    }
+    return applyQuestionCardAutoReveal(nodeMap, next)
+  }
+
+  return revealMap
+}
+
 export function advanceRevealStateForNodeClick(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,

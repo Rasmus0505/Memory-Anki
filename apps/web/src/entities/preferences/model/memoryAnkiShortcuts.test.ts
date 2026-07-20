@@ -15,13 +15,59 @@ describe('memoryAnkiShortcuts', () => {
     expect(readMemoryAnkiShortcuts()).toEqual(DEFAULT_MEMORY_ANKI_SHORTCUTS)
   })
 
-  it('rejects invalid bare typing keys', () => {
+  it('allows bare letter keys for flip-card actions and scene-local uniqueness', () => {
     const sanitized = sanitizeMemoryAnkiShortcutMap({
       hide_child_cards_practice: { code: 'KeyH', key: 'h', shift: false, ctrl: false, alt: false, meta: false },
       hide_child_cards_review: { code: 'KeyH', key: 'h', shift: true, ctrl: false, alt: false, meta: false },
+      flip_subtree_cards_practice: { code: 'KeyA', key: 'a', shift: false, ctrl: false, alt: false, meta: false },
+      flip_subtree_cards_review: { code: 'KeyA', key: 'a', shift: false, ctrl: false, alt: false, meta: false },
+      flip_direct_child_cards_practice: { code: 'KeyS', key: 's', shift: false, ctrl: false, alt: false, meta: false },
+      flip_direct_child_cards_review: { code: 'KeyS', key: 's', shift: false, ctrl: false, alt: false, meta: false },
     })
-    expect(sanitized.hide_child_cards_practice).toBeNull()
+    expect(sanitized.hide_child_cards_practice).toEqual({
+      code: 'KeyH',
+      key: 'h',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
     expect(sanitized.hide_child_cards_review).not.toBeNull()
+    expect(sanitized.flip_subtree_cards_review).toEqual({
+      code: 'KeyA',
+      key: 'a',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
+    expect(sanitized.flip_direct_child_cards_review).toEqual({
+      code: 'KeyS',
+      key: 's',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
+  })
+
+  it('defaults include bare A/S for bulk flip actions', () => {
+    expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.flip_subtree_cards_review).toEqual({
+      code: 'KeyA',
+      key: 'a',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
+    expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.flip_direct_child_cards_practice).toEqual({
+      code: 'KeyS',
+      key: 's',
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+    })
   })
 
   it('writes sanitized settings and resets back to defaults', () => {

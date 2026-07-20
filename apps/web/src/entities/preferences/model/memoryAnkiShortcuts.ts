@@ -19,6 +19,10 @@ export type ShortcutScene = 'edit' | 'practice' | 'review'
 export type MemoryAnkiShortcutActionId =
   | 'hide_child_cards_practice'
   | 'hide_child_cards_review'
+  | 'flip_subtree_cards_practice'
+  | 'flip_subtree_cards_review'
+  | 'flip_direct_child_cards_practice'
+  | 'flip_direct_child_cards_review'
 
 export interface MemoryAnkiShortcutActionDefinition {
   id: MemoryAnkiShortcutActionId
@@ -33,6 +37,23 @@ export type MemoryAnkiShortcutHandlers = Partial<Record<MemoryAnkiShortcutAction
 
 export const MEMORY_ANKI_SHORTCUTS_STORAGE_KEY = 'memory_anki_shortcuts'
 export const MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT = 'memory-anki-shortcuts-change'
+
+const BARE_KEY_A: ShortcutBinding = {
+  code: 'KeyA',
+  key: 'a',
+  shift: false,
+  ctrl: false,
+  alt: false,
+  meta: false,
+}
+const BARE_KEY_S: ShortcutBinding = {
+  code: 'KeyS',
+  key: 's',
+  shift: false,
+  ctrl: false,
+  alt: false,
+  meta: false,
+}
 
 export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] = [
   {
@@ -49,6 +70,42 @@ export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] 
     description: '在复习模式对当前选中知识点执行右键同款隐藏子级操作。',
     defaultBinding: { code: 'KeyH', key: 'h', shift: true, ctrl: false, alt: false, meta: false },
   },
+  {
+    id: 'flip_subtree_cards_practice',
+    scene: 'practice',
+    label: '翻开下方全部子卡',
+    description: '悬停卡片上：第一次翻出全部后代占位符，再按一次翻出内容。无悬停时用当前选中卡片。',
+    defaultBinding: BARE_KEY_A,
+  },
+  {
+    id: 'flip_subtree_cards_review',
+    scene: 'review',
+    label: '翻开下方全部子卡',
+    description: '悬停卡片上：第一次翻出全部后代占位符，再按一次翻出内容。无悬停时用当前选中卡片。',
+    defaultBinding: BARE_KEY_A,
+  },
+  {
+    id: 'flip_direct_child_cards_practice',
+    scene: 'practice',
+    label: '翻开下方一级子卡',
+    description: '悬停卡片上：第一次翻出一级子卡占位符，再按一次翻出内容。无悬停时用当前选中卡片。',
+    defaultBinding: BARE_KEY_S,
+  },
+  {
+    id: 'flip_direct_child_cards_review',
+    scene: 'review',
+    label: '翻开下方一级子卡',
+    description: '悬停卡片上：第一次翻出一级子卡占位符，再按一次翻出内容。无悬停时用当前选中卡片。',
+    defaultBinding: BARE_KEY_S,
+  },
+]
+
+/** Flip-card bulk actions shown in the toolbar overflow shortcut dialog. */
+export const FLIP_CARD_SHORTCUT_ACTION_IDS: MemoryAnkiShortcutActionId[] = [
+  'flip_subtree_cards_practice',
+  'flip_subtree_cards_review',
+  'flip_direct_child_cards_practice',
+  'flip_direct_child_cards_review',
 ]
 
 export const DEFAULT_MEMORY_ANKI_SHORTCUTS: MemoryAnkiShortcutMap = MEMORY_ANKI_SHORTCUT_ACTIONS.reduce(

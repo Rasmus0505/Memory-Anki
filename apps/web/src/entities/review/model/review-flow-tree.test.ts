@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
 import {
+  advanceBulkRevealState,
   advanceRevealStateForNodeClick,
   applyQuestionCardAutoReveal,
   buildInitialRevealState,
@@ -448,6 +449,132 @@ describe('review-flow-tree visible editor state', () => {
       q1: 'revealed',
       q2: 'revealed',
       leaf: 'hidden',
+    })
+  })
+
+  it('bulk flips all descendants in two phases without resetting revealed cards', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [
+              { data: { text: 'A1', uid: 'a1' }, children: [] },
+              { data: { text: 'A2', uid: 'a2' }, children: [] },
+            ],
+          },
+          { data: { text: 'B', uid: 'b' }, children: [] },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const initial = {
+      root: 'revealed' as const,
+      a: 'revealed' as const,
+      a1: 'hidden' as const,
+      a2: 'hidden' as const,
+      b: 'revealed' as const,
+    }
+
+    const phase1 = advanceBulkRevealState('a', nodeMap, initial, 'subtree')
+    expect(phase1).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'placeholder',
+      a2: 'placeholder',
+      b: 'revealed',
+    })
+
+    const phase2 = advanceBulkRevealState('a', nodeMap, phase1, 'subtree')
+    expect(phase2).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'revealed',
+      a2: 'revealed',
+      b: 'revealed',
+    })
+
+    // Already fully revealed: third press is a no-op.
+    expect(advanceBulkRevealState('a', nodeMap, phase2, 'subtree')).toEqual(phase2)
+  })
+
+  it('bulk direct-children scope only opens one level and keeps deeper nodes hidden', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [
+              {
+                data: { text: 'A1', uid: 'a1' },
+                children: [{ data: { text: 'A1a', uid: 'a1a' }, children: [] }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const initial = {
+      root: 'revealed' as const,
+      a: 'revealed' as const,
+      a1: 'hidden' as const,
+      a1a: 'hidden' as const,
+    }
+
+    const phase1 = advanceBulkRevealState('a', nodeMap, initial, 'direct-children')
+    expect(phase1).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'placeholder',
+      a1a: 'hidden',
+    })
+
+    const phase2 = advanceBulkRevealState('a', nodeMap, phase1, 'direct-children')
+    expect(phase2).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'revealed',
+      a1a: 'hidden',
+    })
+  })
+
+  it('bulk subtree opens deep hidden descendants in one placeholder pass', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [
+              {
+                data: { text: 'A1', uid: 'a1' },
+                children: [{ data: { text: 'A1a', uid: 'a1a' }, children: [] }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const initial = {
+      root: 'revealed' as const,
+      a: 'revealed' as const,
+      a1: 'hidden' as const,
+      a1a: 'hidden' as const,
+    }
+
+    const phase1 = advanceBulkRevealState('a', nodeMap, initial, 'subtree')
+    expect(phase1).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'placeholder',
+      a1a: 'placeholder',
     })
   })
 })

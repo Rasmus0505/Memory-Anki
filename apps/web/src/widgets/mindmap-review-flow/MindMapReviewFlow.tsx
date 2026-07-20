@@ -7,6 +7,7 @@ import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-re
 import { usePalaceQuizNodeBindings } from "@/features/palace-quiz/hooks/usePalaceQuizNodeBindings";
 import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
+import { FlipCardShortcutsDialog } from "@/features/shortcuts/FlipCardShortcutsDialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -47,9 +48,12 @@ export function MindMapReviewFlow({
   });
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
+  const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
   const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
+  const flipShortcutScene =
+    props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
   const editorDocForBindings =
     (review.mapEditorState ?? review.flow.visibleEditorState ?? props.reviewEditorState)?.editor_doc;
   const quizNodeBindings = usePalaceQuizNodeBindings({
@@ -285,8 +289,7 @@ export function MindMapReviewFlow({
                     visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
                     editableEditorState={props.editEditorState}
                     ratingTreeEditorState={
-                      // Prefer the explicit full rating tree (e.g. node-mode review keeps a
-                      // clipped flip-card view but still cascades scores on the full palace).
+                      // Prefer the explicit full rating tree over reveal-filtered visible state.
                       props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
                     }
                     visibleEditorSyncKey={review.mapVisibleSyncKey}
@@ -296,14 +299,26 @@ export function MindMapReviewFlow({
                     onNodeActive={review.handleActiveNodes}
                     onNodeClick={review.flow.handleNodeClick}
                     onNodeContextMenu={review.flow.handleNodeContextMenu}
-                    onNodeHover={review.isCheckpointMode ? review.flow.handleNodeHover : undefined}
+                    onNodeHover={review.flow.handleNodeHover}
+                    toolbarExtensions={{
+                      moreActions: [
+                        {
+                          label: "翻卡快捷键",
+                          onClick: () => setFlipShortcutsOpen(true),
+                          opensOverlay: true,
+                        },
+                      ],
+                    }}
                     onQuizBreakOpen={review.handleQuizBreakOpen}
                     countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
                     onCountBadgeClick={handleOpenNodeQuiz}
-                    recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
+                    // Always merge first + weak_retry so entering the retry round
+                    // never blanks already-scored chips (记得/困难/轻松).
+                    recallRatings={review.recallRatings.displayRatings}
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
                     directRatedUids={review.recallRatings.directRatedUids}
+                    sessionRatedUids={review.recallRatings.sessionRatedUids}
                     rateableNodeUids={
                       props.sessionKind === 'review' && review.reviewNodeUids.length > 0
                         ? review.reviewNodeUids
@@ -378,6 +393,12 @@ export function MindMapReviewFlow({
         nodeUid={nodeQuizNodeUid}
         questionIds={nodeQuizQuestionIds}
         onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
+      />
+
+      <FlipCardShortcutsDialog
+        open={flipShortcutsOpen}
+        onOpenChange={setFlipShortcutsOpen}
+        scene={flipShortcutScene}
       />
 
     </div>

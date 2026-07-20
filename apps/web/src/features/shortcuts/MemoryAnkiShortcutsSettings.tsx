@@ -101,7 +101,7 @@ export function MemoryAnkiShortcutsSettings() {
         <CardContent className="flex flex-col gap-5">
           <Alert variant="info">
             <AlertDescription>
-              快捷键保存在当前浏览器。录制时按下组合键即可覆盖；输入框、文本编辑和录制状态中不会触发业务快捷键。
+              快捷键保存在当前浏览器。录制时按下目标键即可覆盖（支持单独字母键，如翻卡 A / S）；输入框、文本编辑和录制状态中不会触发业务快捷键。
             </AlertDescription>
           </Alert>
 
