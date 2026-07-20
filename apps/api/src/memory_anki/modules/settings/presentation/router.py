@@ -86,6 +86,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "study_goals",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
+    "review_queue_view_settings",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

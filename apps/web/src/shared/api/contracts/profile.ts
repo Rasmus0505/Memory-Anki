@@ -403,6 +403,7 @@ export interface ClientPreferences {
   study_goals: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
+  review_queue_view_settings: Record<string, unknown> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

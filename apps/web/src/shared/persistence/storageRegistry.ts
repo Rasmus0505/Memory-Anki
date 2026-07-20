@@ -132,6 +132,13 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Legacy palace shelf view preference before backend preference migration.',
   },
   {
+    id: 'clientPreference.reviewQueueViewSettings',
+    key: 'review_queue_view_settings',
+    area: 'localStorage',
+    owner: 'features/review',
+    purpose: 'Review queue sort mode (due / node count / overdue / title).',
+  },
+  {
     id: 'clientPreference.dashboardDurationFilter',
     key: 'memory_anki_dashboard_total_duration_filter',
     area: 'localStorage',

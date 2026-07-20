@@ -9,6 +9,11 @@ import {
   PALACE_SHELF_VIEW_SETTINGS_KEY,
 } from '@/entities/preferences/model'
 import {
+  DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
+  isReviewQueueViewSettings,
+  REVIEW_QUEUE_VIEW_SETTINGS_KEY,
+} from '@/features/review/model/reviewQueueSort'
+import {
   DEFAULT_ENGLISH_PRACTICE_SETTINGS,
   ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY,
   ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
@@ -115,6 +120,12 @@ export async function bootstrapClientPreferences() {
       DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
       isPalaceShelfViewSettings,
     ),
+    migrateAndNotify(
+      'review_queue_view_settings',
+      REVIEW_QUEUE_VIEW_SETTINGS_KEY,
+      DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
+      isReviewQueueViewSettings,
+    ),
   ]
 
   const hadLegacyLocalState =
@@ -125,7 +136,8 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
+    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY))
 
   await Promise.all(migrations)
 
@@ -137,7 +149,8 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY))
+    Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY))
 
   if (hadLegacyLocalState && !hasRemainingLegacyLocalState) {
     toast.success('关键个人设置已迁移到后端保存，改代码和切版本时会更稳。')

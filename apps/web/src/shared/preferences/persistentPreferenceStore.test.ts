@@ -33,6 +33,7 @@ function emptyPreferences() {
     study_goals: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
+    review_queue_view_settings: null,
   }
 }
 
