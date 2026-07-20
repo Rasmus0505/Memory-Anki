@@ -385,3 +385,6 @@ from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
 from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
     ensure_review_log_study_sessions as ensure_review_log_study_sessions,
 )
+from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
+    reclassify_ghost_formal_review_time_sessions as reclassify_ghost_formal_review_time_sessions,
+)

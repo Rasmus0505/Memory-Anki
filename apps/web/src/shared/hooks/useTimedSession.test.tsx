@@ -825,6 +825,33 @@ describe('useTimedSession automation config', () => {
     expect(screen.getByTestId('status').textContent).toBe('completed')
   })
 
+  it('does not persist leave or autosave records when formal-review persistence is disabled', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'review',
+        title: '俄国近代教育',
+        palaceId: 35,
+        autoPauseMs: 60_000,
+        persistKey: 'review:no-ghost-timer',
+        persistCompletionRecord: false,
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(3_000)
+    })
+
+    await act(async () => {
+      await result.current.leaveScene({ source: 'route_leave' })
+    })
+
+    expect(persistStudySessionRecordSpy).not.toHaveBeenCalled()
+    expect(result.current.status).toBe('paused')
+  })
+
   it('returns the completed record when persistence fails after the API layer queues it', async () => {
     persistStudySessionRecordSpy.mockRejectedValueOnce(new Error('network down'))
     const { result } = renderHook(() =>

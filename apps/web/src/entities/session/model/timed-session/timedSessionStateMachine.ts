@@ -292,26 +292,39 @@ export function useTimedSession({
     })
   }, [closeActiveSceneSegment, englishCourseId, ensureRecordId, kind, palaceId, sourceKind, title])
 
+  // Formal review keeps a local timer only. Study-session rows (and mastery
+  // receipts) must come from /review/session/{id}/submit — never from leave,
+  // autosave, unload, or complete. Otherwise ghost scene=review rows appear in
+  // time records while mastery trend stays empty.
   const persistRecord = React.useCallback(async (
     record: TimeSessionRecord | null,
   ) => {
+    if (!persistCompletionRecord) {
+      return record
+    }
     return persistTimedSessionRecord(record)
-  }, [])
+  }, [persistCompletionRecord])
 
   const saveInProgressRecord = React.useCallback(async () => {
+    if (!persistCompletionRecord) {
+      return
+    }
     await saveInProgressTimedSessionRecord({
       startedAt: startedAtRef.current,
       completed: statusRef.current === 'completed',
       buildRecord: () => buildRecord('saved', nowIso()),
       persistRecord,
     })
-  }, [buildRecord, persistRecord])
+  }, [buildRecord, persistCompletionRecord, persistRecord])
 
   const persistExpiredSuspendedSnapshot = React.useCallback(async (
     snapshot: RestorableTimedSessionSnapshot,
   ) => {
+    if (!persistCompletionRecord) {
+      return null
+    }
     return persistRecord(buildRecordFromExpiredSuspendedTimedSessionSnapshot(snapshot))
-  }, [persistRecord])
+  }, [persistCompletionRecord, persistRecord])
 
   const finalizeExpiredSuspendedState = React.useCallback(() => {
     const pendingSnapshot: RestorableTimedSessionSnapshot | null =
@@ -475,11 +488,11 @@ export function useTimedSession({
 
   const persistRecordForUnload = React.useCallback(
     async (record: TimeSessionRecord | null) => {
-      if (!record) return null
+      if (!record || !persistCompletionRecord) return record
       await fireAndQueueTimeRecordOnUnload(record)
       return record
     },
-    [],
+    [persistCompletionRecord],
   )
 
   const { leaveScene, leaveSceneForUnload } = useTimedSessionSceneLeave({

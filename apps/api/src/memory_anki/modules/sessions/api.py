@@ -12,6 +12,7 @@ from .application.session_progress_service import (
 from .application.study_session_bridge import (
     create_review_study_session,
     ensure_review_log_study_sessions,
+    reclassify_ghost_formal_review_time_sessions,
 )
 from .application.study_session_constants import ACTIVE_STATUSES, ENGLISH_READING_SCENES
 from .application.study_session_service import (
@@ -42,6 +43,7 @@ __all__ = [
     "date_range_bounds",
     "get_all_time_study_session_duration_seconds",
     "ensure_review_log_study_sessions",
+    "reclassify_ghost_formal_review_time_sessions",
     "get_english_study_stats",
     "get_practice_progress",
     "get_review_progress",
