@@ -25,14 +25,20 @@ def get_study_session_duration_seconds(
     start: datetime,
     end: datetime,
 ) -> int:
+    """Sum completed session seconds whose completion day falls in [start, end).
+
+    Attribution uses ``ended_at`` (with ``started_at`` fallback) so multi-day
+    recovered formal reviews count on the day they actually finished.
+    """
+    attributed_at = _session_attribution_at()
     total = (
         session.query(_positive_effective_seconds_sum())
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(scenes),
-            StudySession.started_at >= start,
-            StudySession.started_at < end,
+            attributed_at >= start,
+            attributed_at < end,
         )
         .scalar()
     )
@@ -56,6 +62,11 @@ def get_all_time_study_session_duration_seconds(
     return int(total or 0)
 
 
+def _session_attribution_at():
+    """When a completed session counts toward daily/weekly stats."""
+    return func.coalesce(StudySession.ended_at, StudySession.started_at)
+
+
 def _positive_effective_seconds_sum():
     return func.coalesce(
         func.sum(
@@ -70,6 +81,7 @@ def _positive_effective_seconds_sum():
 
 def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]]:
     start, end = today_bounds()
+    attributed_at = _session_attribution_at()
     rows = (
         session.query(StudySession)
         .filter(
@@ -77,10 +89,10 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
             StudySession.status == "completed",
             StudySession.scene.in_(STUDY_DASHBOARD_SCENES),
             StudySession.palace_id.is_not(None),
-            StudySession.started_at >= start,
-            StudySession.started_at < end,
+            attributed_at >= start,
+            attributed_at < end,
         )
-        .order_by(StudySession.started_at.asc(), StudySession.id.asc())
+        .order_by(attributed_at.asc(), StudySession.id.asc())
         .all()
     )
     palace_ids = {int(row.palace_id) for row in rows if row.palace_id is not None}
@@ -168,8 +180,9 @@ def _range_start(
 ) -> date:
     if range_value != "all":
         return today - timedelta(days=max(1, int(range_value)) - 1)
+    attributed_at = _session_attribution_at()
     earliest = (
-        session.query(func.min(StudySession.started_at))
+        session.query(func.min(attributed_at))
         .filter(StudySession.deleted_at.is_(None))
         .scalar()
     )
@@ -185,17 +198,18 @@ def _build_time_record_trend(
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
     start = datetime.combine(start_date, time.min)
+    attributed_at = _session_attribution_at()
     rows = (
         session.query(
-            func.date(StudySession.started_at),
+            func.date(attributed_at),
             func.coalesce(func.sum(StudySession.effective_seconds), 0),
         )
         .filter(
             StudySession.deleted_at.is_(None),
-            StudySession.started_at >= start,
-            StudySession.started_at < tomorrow,
+            attributed_at >= start,
+            attributed_at < tomorrow,
         )
-        .group_by(func.date(StudySession.started_at))
+        .group_by(func.date(attributed_at))
         .all()
     )
     totals = {str(date_key): int(seconds or 0) for date_key, seconds in rows}
@@ -222,6 +236,7 @@ def _build_time_record_breakdown(
     tomorrow: datetime,
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
+    attributed_at = _session_attribution_at()
     rows = (
         session.query(
             StudySession.scene,
@@ -230,8 +245,8 @@ def _build_time_record_breakdown(
         )
         .filter(
             StudySession.deleted_at.is_(None),
-            StudySession.started_at >= datetime.combine(start_date, time.min),
-            StudySession.started_at < tomorrow,
+            attributed_at >= datetime.combine(start_date, time.min),
+            attributed_at < tomorrow,
         )
         .group_by(StudySession.scene)
         .all()

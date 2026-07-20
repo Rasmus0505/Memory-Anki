@@ -227,6 +227,15 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                     _study_session("active", "active", "review", start + timedelta(hours=2), 60),
                     _study_session("other-scene", "completed", "english", start + timedelta(hours=3), 90),
                     _study_session("end-boundary", "completed", "review", end, 45),
+                    # Started before the window, finished inside it → counts for the range.
+                    _study_session(
+                        "recovered-cross-day",
+                        "completed",
+                        "review",
+                        start - timedelta(days=3),
+                        80,
+                        ended_at=start + timedelta(hours=6),
+                    ),
                     _study_session(
                         "deleted",
                         "completed",
@@ -250,8 +259,8 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 scenes=STUDY_DASHBOARD_SCENES,
             )
 
-        self.assertEqual(ranged_total, 120)
-        self.assertEqual(all_time_total, 165)
+        self.assertEqual(ranged_total, 200)
+        self.assertEqual(all_time_total, 245)
 
     def test_storage_backup_checkpoints_wal_before_copying_database_file(self):
         events: list[str] = []
@@ -602,6 +611,7 @@ def _study_session(
     started_at: datetime,
     effective_seconds: int,
     *,
+    ended_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> StudySession:
     return StudySession(
@@ -610,6 +620,7 @@ def _study_session(
         scene=scene,
         target_type="none",
         started_at=started_at,
+        ended_at=ended_at,
         effective_seconds=effective_seconds,
         deleted_at=deleted_at,
     )
