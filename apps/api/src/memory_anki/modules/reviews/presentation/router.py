@@ -13,6 +13,7 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     get_fsrs_completion,
     get_fsrs_load_forecast,
     get_fsrs_queue_payload,
+    rate_unrated_formal_review_nodes,
     resolve_formal_review_session,
     save_formal_review_progress,
     start_or_resume_formal_review,
@@ -223,6 +224,26 @@ def api_formal_review_completion_summary(session_id: str, session: Session = Dep
         }
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/review/session/{session_id}/rate-unrated")
+def api_rate_unrated_formal_review_nodes(
+    session_id: str,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    """One-tap settlement scoring for still-unrated frozen-due nodes only."""
+    try:
+        return {
+            "item": rate_unrated_formal_review_nodes(
+                session,
+                resolve_formal_review_session(session, session_id),
+                rating=int(str(data.get("rating") or "")),
+                operation_id=str(data.get("operation_id") or "").strip(),
+            )
+        }
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/review/session/{session_id}/submit", response_model=SubmitReviewResponse)

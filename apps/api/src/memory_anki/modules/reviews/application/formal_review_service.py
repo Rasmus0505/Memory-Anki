@@ -17,11 +17,16 @@ from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 from memory_anki.infrastructure.db._tables.reviews import ReviewRatingOperation
 from memory_anki.modules.reviews.application.node_memory_service import (
     RATING_LABELS,
+    VALID_RATINGS,
     due_node_uids_for_entry,
+    get_palace_due_rollup,
     get_palace_memory_projection,
+    rate_nodes,
 )
 
-ACTIVE_REVIEW_STATUSES = ("active", "paused")
+# Align with general study-session active set so recovered formal rows stay ratable.
+ACTIVE_REVIEW_STATUSES = ("active", "paused", "recovered")
+INACTIVE_REVIEW_MESSAGE = "本轮正式复习已结束，请返回复习队列重新开始"
 
 
 def _json(raw: str | None) -> dict[str, Any]:
@@ -51,14 +56,14 @@ def _palaces(session: Session, chapter_id: int | None = None) -> list[Palace]:
     return query.order_by(Palace.id).all()
 
 
-def _palace_payload(palace: Palace) -> dict[str, Any]:
+def _palace_payload(palace: Palace, *, include_editor_doc: bool = True) -> dict[str, Any]:
     return {
         "id": palace.id,
         "title": palace.manual_title or palace.title or "未命名宫殿",
         "description": palace.description or "",
         "archived": bool(palace.archived),
         "mastered": False,
-        "editor_doc": palace.editor_doc,
+        "editor_doc": palace.editor_doc if include_editor_doc else None,
         "pegs": [],
         "attachments": [
             {"id": item.id, "filename": item.filename, "original_name": item.original_name}
@@ -107,16 +112,23 @@ def _queue_item(
         "review_branch_summaries": list(
             projection.get("review_branch_summaries") or []
         ),
-        "palace": _palace_payload(palace),
+        "palace": _palace_payload(palace, include_editor_doc=False),
     }
 
 
-def get_fsrs_queue_payload(session: Session, chapter_id: int | None = None) -> dict[str, Any]:
+def get_fsrs_queue_payload(
+    session: Session,
+    chapter_id: int | None = None,
+    *,
+    include_stats: bool = True,
+    include_items: bool = True,
+) -> dict[str, Any]:
     now = datetime.now(UTC)
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
     due, later = [], []
     for palace in _palaces(session, chapter_id):
-        projection = get_palace_memory_projection(session, palace.id)
+        # List/queue paths only need due rollups; skip per-node rating N+1.
+        projection = get_palace_due_rollup(session, palace.id, now=now)
         nodes = projection["nodes"]
         due_nodes = [item for item in nodes if item.get("due")]
         later_nodes = [
@@ -155,18 +167,42 @@ def get_fsrs_queue_payload(session: Session, chapter_id: int | None = None) -> d
                     else None
                 ),
             }
-    from memory_anki.modules.reviews.application.review_metrics_service import get_weekly_stats
+    stats = {}
+    if include_stats:
+        from memory_anki.modules.reviews.application.review_metrics_service import get_weekly_stats
+
+        stats = get_weekly_stats(session)
 
     return {
         "due_count": sum(item["due_node_count"] for item in due),
         "later_today_count": sum(item["due_node_count"] for item in later),
         "overdue_count": overdue_count,
         "smoothed_count": 0,
-        "stats": get_weekly_stats(session),
+        "stats": stats,
         "chapter": chapter,
-        "reviews": due,
-        "later_today_reviews": later,
+        "reviews": due if include_items else [],
+        "later_today_reviews": later if include_items else [],
     }
+
+
+def get_next_due_palace_id(
+    session: Session,
+    *,
+    chapter_id: int | None = None,
+) -> int | None:
+    """Pick the next due palace without building the full queue payload/stats."""
+    payload = get_fsrs_queue_payload(
+        session,
+        chapter_id,
+        include_stats=False,
+        include_items=True,
+    )
+    reviews = payload.get("reviews") or []
+    if not reviews:
+        return None
+    first = reviews[0]
+    palace_id = first.get("palace_id") or first.get("id")
+    return int(palace_id) if palace_id is not None else None
 
 
 def get_fsrs_load_forecast(session: Session, days: int = 7) -> dict[str, Any]:
@@ -177,7 +213,7 @@ def get_fsrs_load_forecast(session: Session, days: int = 7) -> dict[str, Any]:
     by_date = {today + timedelta(days=i): 0 for i in range(days)}
     overdue = 0
     for palace in _palaces(session):
-        for item in get_palace_memory_projection(session, palace.id)["nodes"]:
+        for item in get_palace_due_rollup(session, palace.id, now=now)["nodes"]:
             at = _dt(item.get("due_at"))
             if at is None:
                 continue
@@ -202,14 +238,29 @@ def _scope(row: StudySession) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
+def ensure_formal_review_session_active(row: StudySession) -> StudySession:
+    """Keep formal review ratable while the user is still on the session page.
+
+    Recovered rows are healed back to active (same spirit as general study sessions).
+    Completed / abandoned sessions stay closed.
+    """
+    if row.status in ACTIVE_REVIEW_STATUSES:
+        if row.status == "recovered":
+            row.status = "active"
+            row.ended_at = None
+            row.updated_at = utc_now_naive()
+        return row
+    raise ValueError(INACTIVE_REVIEW_MESSAGE)
+
+
 def get_formal_review_scope(
     session: Session, study_session_id: str, palace_id: int, *, require_active: bool = True
 ) -> set[str]:
     row = session.get(StudySession, study_session_id)
     if row is None or row.scene != "review" or row.palace_id != palace_id:
         raise ValueError("formal review session not found")
-    if require_active and row.status not in ACTIVE_REVIEW_STATUSES:
-        raise ValueError("formal review session is no longer active")
+    if require_active:
+        ensure_formal_review_session_active(row)
     return set(_scope(row))
 
 
@@ -236,7 +287,7 @@ def start_or_resume_formal_review(
         .first()
     )
     if active is not None:
-        return active
+        return ensure_formal_review_session_active(active)
     projection = get_palace_memory_projection(session, palace_id)
     resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
     if resolved_mode == "none":
@@ -332,8 +383,7 @@ def get_formal_review_progress(row: StudySession) -> dict[str, Any]:
 def save_formal_review_progress(
     session: Session, row: StudySession, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    if row.status not in ACTIVE_REVIEW_STATUSES:
-        raise ValueError("formal review session is no longer active")
+    ensure_formal_review_session_active(row)
     row.progress_json = json.dumps(payload, ensure_ascii=False)
     row.updated_at = utc_now_naive()
     session.commit()
@@ -397,6 +447,75 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
     }
 
 
+def rate_unrated_formal_review_nodes(
+    session: Session,
+    row: StudySession,
+    *,
+    rating: int,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Rate only nodes still missing a score in this formal session's frozen due scope.
+
+    Settlement one-tap scoring must never overwrite nodes the user already rated.
+    The unrated set is always recomputed server-side from session events.
+    """
+    ensure_formal_review_session_active(row)
+    if rating not in VALID_RATINGS:
+        raise ValueError("rating must be between 1 and 4")
+    batch_id = str(operation_id or "").strip()
+    if not batch_id:
+        raise ValueError("operation_id is required")
+    if row.palace_id is None:
+        raise ValueError("palace not found")
+
+    summary = formal_review_completion_summary(session, row)
+    unrated_uids = [str(uid) for uid in (summary.get("unrated_node_uids") or []) if uid]
+    already_rated_count = int(summary.get("rated_node_count") or 0)
+    if not unrated_uids:
+        return {
+            "affected_node_count": 0,
+            "affected_node_uids": [],
+            "skipped_rated_node_count": already_rated_count,
+            "operation_ids": [],
+            "summary": summary,
+        }
+
+    affected: list[str] = []
+    operation_ids: list[str] = []
+    scope = set(_scope(row))
+    for index, node_uid in enumerate(unrated_uids):
+        # Re-check after each write so concurrent direct ratings are not overwritten.
+        current = _effective_ratings(session, row, scope)
+        if node_uid in current:
+            continue
+        # Stable per-node ids keep retries idempotent without clobbering siblings.
+        node_operation_id = f"{batch_id}:{index}"[:64]
+        rate_nodes(
+            session,
+            palace_id=int(row.palace_id),
+            node_uid=node_uid,
+            rating=rating,
+            study_session_id=str(row.id),
+            operation_id=node_operation_id,
+            rating_scope="single",
+            conflict_policy="skip_direct",
+            source_scene="formal_review",
+            recall_round="first",
+            rating_source="manual",
+        )
+        affected.append(node_uid)
+        operation_ids.append(node_operation_id)
+
+    refreshed = formal_review_completion_summary(session, row)
+    return {
+        "affected_node_count": len(affected),
+        "affected_node_uids": affected,
+        "skipped_rated_node_count": already_rated_count,
+        "operation_ids": operation_ids,
+        "summary": refreshed,
+    }
+
+
 def complete_formal_review(
     session: Session,
     row: StudySession,
@@ -409,8 +528,7 @@ def complete_formal_review(
     existing = _json(row.summary_json)
     if row.status == "completed" and existing.get("completion_receipt"):
         return dict(existing["completion_receipt"])
-    if row.status not in ACTIVE_REVIEW_STATUSES:
-        raise ValueError("formal review session is no longer active")
+    ensure_formal_review_session_active(row)
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None:
         raise ValueError("palace not found")
@@ -428,8 +546,7 @@ def complete_formal_review(
     )
     session.add(log)
     session.flush()
-    next_queue = get_fsrs_queue_payload(session, chapter_id)
-    next_id = next_queue["reviews"][0]["palace_id"] if next_queue["reviews"] else None
+    next_id = get_next_due_palace_id(session, chapter_id=chapter_id)
     receipt = {
         "ok": True,
         "completion_mode": completion_mode,

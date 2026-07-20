@@ -10,11 +10,13 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     formal_review_completion_summary,
     get_fsrs_load_forecast,
     get_fsrs_queue_payload,
+    rate_unrated_formal_review_nodes,
     start_or_resume_formal_review,
 )
 from memory_anki.modules.reviews.application.node_memory_service import (
     rate_nodes,
 )
+from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 
 
 def _palace(session):
@@ -79,6 +81,110 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     db_session.commit()
     assert result["unrated_due_node_count"] == 1
     assert result["remaining_due_node_count"] >= 1
+
+
+def test_rate_unrated_only_scores_missing_nodes_not_already_rated(db_session):
+    """Settlement bulk score must fill unrated nodes without overwriting prior ratings."""
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=row.id,
+        operation_id="prior-a",
+        rating_scope="single",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+    bulk = rate_unrated_formal_review_nodes(
+        db_session,
+        row,
+        rating=4,
+        operation_id="settlement-bulk",
+    )
+    assert bulk["affected_node_uids"] == ["b"]
+    assert bulk["affected_node_count"] == 1
+    assert bulk["skipped_rated_node_count"] == 1
+    assert bulk["summary"]["rated_node_count"] == 2
+    assert bulk["summary"]["unrated_due_node_count"] == 0
+    assert bulk["summary"]["ratings"]["a"] == 1
+    assert bulk["summary"]["ratings"]["b"] == 4
+
+    events = (
+        db_session.query(MindMapRecallEvent)
+        .filter(MindMapRecallEvent.study_session_id == row.id)
+        .all()
+    )
+    by_uid = {event.node_uid: event.rating for event in events}
+    assert by_uid["a"] == 1
+    assert by_uid["b"] == 4
+
+    # Idempotent: second call with same batch id must not re-rate.
+    again = rate_unrated_formal_review_nodes(
+        db_session,
+        row,
+        rating=2,
+        operation_id="settlement-bulk-2",
+    )
+    assert again["affected_node_count"] == 0
+    assert again["summary"]["ratings"]["a"] == 1
+    assert again["summary"]["ratings"]["b"] == 4
+
+
+def test_recovered_formal_session_can_still_rate_single_nodes(db_session):
+    """Recovered study-session status must not block formal single ratings."""
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+    row.status = "recovered"
+    db_session.commit()
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id=row.id,
+        operation_id="recovered-rate",
+        rating_scope="single",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+    assert "a" in set(result["affected_node_uids"])
+    db_session.refresh(row)
+    assert row.status == "active"
+
+
+def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+    complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=10,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+
+    try:
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid="a",
+            rating=3,
+            study_session_id=row.id,
+            operation_id="after-complete",
+            rating_scope="single",
+            source_scene="formal_review",
+            recall_round="first",
+        )
+        assert False, "expected completed session to reject rating"
+    except ValueError as exc:
+        assert "已结束" in str(exc)
 
 
 def _set_all_due_at(session, palace_id: int, due_at: datetime) -> None:
