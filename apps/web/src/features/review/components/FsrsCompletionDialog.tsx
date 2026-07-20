@@ -111,12 +111,12 @@ export function FsrsCompletionDialog({
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
                     <span>
-                      本轮还有 {unratedCount} 个节点未评分。直接结束不会推进它们；也可以一键给本轮未评分节点统一打分。
+                      本轮还有 {unratedCount} 个节点未评分。直接结束不会推进它们；也可以一键只给这些未评分节点打分（不会覆盖已评分节点）。
                     </span>
                   </div>
                   {onBulkRateUnrated ? (
                     <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">一键评分本轮未评分节点</div>
+                      <div className="text-xs text-muted-foreground">一键仅评分未评分节点（已评分节点保持原分）</div>
                       <div className="grid grid-cols-4 gap-2">
                         {BULK_RATING_OPTIONS.map((option) => (
                           <Button

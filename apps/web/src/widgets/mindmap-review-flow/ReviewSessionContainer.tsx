@@ -8,7 +8,7 @@ import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
-import { ratePalaceNodesApi } from '@/features/review/api'
+import { rateUnratedReviewSessionNodesApi } from '@/features/review/api'
 import type {
   MindMapEditorState,
   MindMapRecallRating,
@@ -306,47 +306,33 @@ export function ReviewSessionContainer({
     async (rating: MindMapRecallRating) => {
       const target = completion.target
       if (!target || bulkRating) return
-      const palaceId = target.session.palace_id
-      const studySessionId = String(target.session.id)
-      if (!palaceId) return
+      const studySessionId = target.session.id
+      if (studySessionId == null || studySessionId === '') return
 
-      const summaryUnrated = target.summary.unrated_node_uids?.filter(Boolean) ?? []
-      const frozenDue = target.session.frozen_due_node_uids?.filter(Boolean) ?? []
-      const alreadyRated = new Set(Object.keys(target.summary.ratings ?? {}))
-      // Prefer server-provided unrated list; otherwise freeze-scope minus already-rated map.
-      let unratedUids = summaryUnrated
-      if (unratedUids.length === 0 && target.summary.unrated_due_node_count > 0) {
-        unratedUids = frozenDue.filter((uid) => !alreadyRated.has(uid))
-      }
-      if (unratedUids.length === 0) {
+      // Server recomputes the still-unrated set; never re-rate already scored nodes.
+      if ((target.summary.unrated_due_node_count ?? 0) <= 0) {
         toast.info('本轮没有未评分节点')
         return
       }
 
       setBulkRating(true)
       try {
-        // Rate each unrated node as single so formal scope filtering stays exact.
-        // Sequential keeps operation_id uniqueness and avoids server write races.
-        for (const nodeUid of unratedUids) {
-          const operationId =
-            typeof crypto !== 'undefined' && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `bulk-rate-${Date.now()}-${Math.random().toString(36).slice(2)}`
-          await ratePalaceNodesApi(palaceId, {
-            node_uid: nodeUid,
-            rating,
-            study_session_id: studySessionId,
-            operation_id: operationId,
-            rating_scope: 'single',
-            conflict_policy: 'skip_direct',
-            source_scene: 'formal_review',
-            recall_round: 'first',
-            rating_source: 'manual',
-          })
-        }
+        const operationId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `bulk-rate-unrated-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        const response = await rateUnratedReviewSessionNodesApi(studySessionId, {
+          rating,
+          operation_id: operationId,
+        })
+        const affected = response.item.affected_node_count
         const label =
           rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
-        toast.success(`已将 ${unratedUids.length} 个本轮节点记为「${label}」`)
+        if (affected <= 0) {
+          toast.info('本轮没有未评分节点')
+        } else {
+          toast.success(`已将 ${affected} 个未评分节点记为「${label}」`)
+        }
         await completion.retryPreparation()
       } catch (error) {
         toast.error(error instanceof Error && error.message ? error.message : '一键评分失败')

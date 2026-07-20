@@ -30,6 +30,33 @@ export function saveReviewSessionProgressApi(id: string | number, data: SessionP
 export function clearReviewSessionProgressApi(id: string | number) { return request<{ ok: boolean }>(`/review/session/${id}/progress`, { method: 'DELETE' }) }
 export function getReviewSessionCompletionSummaryApi(id: string | number) { return request<{ item: ReviewCompletionSummary }>(`/review/session/${id}/completion-summary`) }
 
+/** Settlement one-tap: rate still-unrated frozen-due nodes only (server recomputes the set). */
+export function rateUnratedReviewSessionNodesApi(
+  id: string | number,
+  data: { rating: 1 | 2 | 3 | 4; operation_id: string },
+) {
+  return request<{
+    item: {
+      affected_node_count: number
+      affected_node_uids: string[]
+      skipped_rated_node_count: number
+      operation_ids: string[]
+      summary: ReviewCompletionSummary
+    }
+  }>(`/review/session/${id}/rate-unrated`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `review-rate-unrated:${data.operation_id}`,
+      description: '一键评分未评分节点',
+      replayMode: 'auto',
+    },
+  }).then((response) => {
+    invalidateReviewQueueCache()
+    invalidatePalaceCatalogCache()
+    return response
+  })
+}
 
 export function submitReviewSessionApi(
   id: string | number,
