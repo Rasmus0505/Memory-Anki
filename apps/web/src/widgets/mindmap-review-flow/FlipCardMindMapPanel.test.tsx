@@ -447,7 +447,7 @@ describe('FlipCardMindMapPanel', () => {
     )
   })
 
-  it('collapses the branch only after 忘记, not after 困难', async () => {
+  it('never collapses or context-hides cards after any rating (score-only mode)', async () => {
     const onRateNode = vi.fn()
     const onNodeContextMenu = vi.fn()
     renderInRouter(
@@ -470,25 +470,14 @@ describe('FlipCardMindMapPanel', () => {
     })
     const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('grandchild') ?? []
 
-    await act(async () => {
-      actions.find((action: { id: string }) => action.id === 'rate-2')?.onClick()
-    })
-    expect(onRateNode).toHaveBeenCalledWith(
-      'grandchild',
-      2,
-      'first',
-      'single',
-      expect.any(Object),
-      'overwrite',
-    )
+    for (const id of ['rate-2', 'rate-1', 'rate-3', 'rate-4'] as const) {
+      await act(async () => {
+        actions.find((action: { id: string }) => action.id === id)?.onClick()
+      })
+    }
+    expect(onRateNode).toHaveBeenCalled()
+    // Ratings must not drive collapse / hide via context menu.
     expect(onNodeContextMenu).not.toHaveBeenCalled()
-
-    await act(async () => {
-      actions.find((action: { id: string }) => action.id === 'rate-1')?.onClick()
-    })
-    expect(onNodeContextMenu).toHaveBeenCalledWith([
-      expect.objectContaining({ uid: 'grandchild' }),
-    ])
   })
 
   it('builds dual status chips for session rating and long-term mastery score', async () => {

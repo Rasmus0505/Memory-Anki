@@ -110,6 +110,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   recallRound?: MindMapRecallRound
   weakNodeUids?: string[]
   directRatedUids?: ReadonlySet<string>
+  /** Any node scored this round (direct or batch_inherited); drives 避开 conflict counts. */
+  sessionRatedUids?: ReadonlySet<string>
   /**
    * Formal due-scope UIDs for this review round. When set in rating mode:
    * only these nodes may *start* a rating; others are muted/translucent.
@@ -175,6 +177,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   recallRound = 'first',
   weakNodeUids = [],
   directRatedUids,
+  sessionRatedUids,
   rateableNodeUids = null,
   onRateNode,
   onUndoRating,
@@ -271,16 +274,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     if (node) onNodeActive?.([toGuidedSelection(node)])
   }, [guidedModel.byUid, onNodeActive])
 
-  // 评分模式下禁止长按/右键收起（避免 PWA 误触）；仅「忘记」评分后显式收起。
-  const handleCollapseAfterForgot = useCallback(
-    (nodeUid: string) => {
-      const node = guidedModel.byUid.get(nodeUid) ?? ratingTreeModel.byUid.get(nodeUid)
-      if (!node) return
-      onNodeContextMenu([toGuidedSelection(node)])
-    },
-    [guidedModel.byUid, onNodeContextMenu, ratingTreeModel.byUid],
-  )
-
   const rateableUidSet = useMemo(() => {
     if (!rateableNodeUids || rateableNodeUids.length === 0) return null
     return new Set(rateableNodeUids.filter(Boolean))
@@ -308,12 +301,12 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     guidedCurrentNode,
     recallRound,
     directRatedUids,
+    sessionRatedUids,
     rateableNodeUids: rateableUidSet,
     onRateNode,
     onUndoRating,
     onNodeActive,
     selectGuidedNode,
-    onCollapseAfterForgot: handleCollapseAfterForgot,
   })
 
   const ratingMasteryByNodeUid = useMemo(() => {

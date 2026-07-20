@@ -22,8 +22,8 @@ export function RatingSubtreeConflictOverlay({
           子节点已有单独评分
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          当前子树中有 {conflictCount} 个节点已在本轮被单独评分。
-          选择「避开」只更新尚未单独评分的节点；选择「覆盖」用父节点分数替换它们。
+          当前子树中有 {conflictCount} 个节点已在本轮被评分（含子节点级联到孙节点的评分）。
+          选择「避开」只更新尚未评分的节点，已有分数的子/孙节点全部保留；选择「覆盖」用父节点分数替换它们。
         </p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onResolve('cancel')}>

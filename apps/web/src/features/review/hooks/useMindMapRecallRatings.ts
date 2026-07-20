@@ -10,7 +10,7 @@ function effectiveEvents(events: MindMapRecallEvent[]) {
 
 /**
  * Latest non-superseded event per node_uid + recall_round.
- * Matches backend `_session_direct_rated_uids` (order by occurred_at desc).
+ * Matches backend `_session_latest_events_by_node` (order by occurred_at desc).
  */
 function latestEventsByNodeRound(events: MindMapRecallEvent[]) {
   const latest = new Map<string, MindMapRecallEvent>()
@@ -120,10 +120,33 @@ export function useMindMapRecallRatings({
       ),
     [currentEvents],
   )
+  /** First-round 忘记 / 困难 nodes (scheduling / chips); does not drive flip state. */
   const weakNodeUids = useMemo(
-    () => [...firstRatings].filter(([, rating]) => rating === 1 || rating === 2).map(([uid]) => uid),
+    () =>
+      [...firstRatings]
+        .filter(([, rating]) => rating === 1 || rating === 2)
+        .map(([uid]) => uid),
     [firstRatings],
   )
+  /** Session chips: prefer weak_retry score when present, else first-round. */
+  const displayRatings = useMemo(() => {
+    const merged = new Map(firstRatings)
+    retryRatings.forEach((rating, uid) => {
+      merged.set(uid, rating)
+    })
+    return merged
+  }, [firstRatings, retryRatings])
+
+  /** Nodes with any latest effective event in the active round (direct or inherited). */
+  const sessionRatedUids = useMemo(() => {
+    const rated = new Set<string>()
+    byKey.forEach((_event, key) => {
+      const [uid, eventRound] = key.split(':')
+      if (eventRound !== round || !uid) return
+      rated.add(uid)
+    })
+    return rated
+  }, [byKey, round])
 
   /** Nodes whose latest effective event in the active round is a direct rating. */
   const directRatedUids = useMemo(() => {
@@ -242,7 +265,9 @@ export function useMindMapRecallRatings({
     currentEvents,
     firstRatings,
     retryRatings,
+    displayRatings,
     weakNodeUids,
+    sessionRatedUids,
     directRatedUids,
     round,
     setRound,

@@ -10,6 +10,7 @@ import {
 } from './flipCardGuidedModel'
 
 const EMPTY_DIRECT_RATED: ReadonlySet<string> = new Set()
+const EMPTY_SESSION_RATED: ReadonlySet<string> = new Set()
 const EMPTY_RATEABLE: ReadonlySet<string> | null = null
 
 type PendingSubtreeRating = {
@@ -37,12 +38,12 @@ export function useFlipCardRatingControls({
   guidedCurrentNode,
   recallRound,
   directRatedUids,
+  sessionRatedUids,
   rateableNodeUids,
   onRateNode,
   onUndoRating,
   onNodeActive,
   selectGuidedNode,
-  onCollapseAfterForgot,
 }: {
   ratingMode: boolean
   isEditMode: boolean
@@ -52,19 +53,20 @@ export function useFlipCardRatingControls({
   guidedCurrentNode: GuidedMindMapNode | null
   recallRound: MindMapRecallRound
   directRatedUids?: ReadonlySet<string>
+  /** Any node with a score this round (direct or batch_inherited). Used for 避开 skip set size. */
+  sessionRatedUids?: ReadonlySet<string>
   /** When set, only these UIDs may be rated (formal due / node-review scope). */
   rateableNodeUids?: ReadonlySet<string> | null
   onRateNode?: FlipCardRateNodeHandler
   onUndoRating?: () => { node_uid: string } | null
   onNodeActive?: (nodes: ReturnType<typeof toGuidedSelection>[]) => void
   selectGuidedNode: (nodeUid: string | null, options?: { syncCanvas?: boolean }) => void
-  /** Only for rating=1 (忘记): collapse/hide the card branch after a successful rate. */
-  onCollapseAfterForgot?: (nodeUid: string) => void
 }) {
   const [inferredNodeUid, setInferredNodeUid] = useState<string | null>(null)
   const [pendingSubtreeRating, setPendingSubtreeRating] = useState<PendingSubtreeRating | null>(null)
   const nodeEnteredAtRef = useRef(0)
   const directRatedSet = directRatedUids ?? EMPTY_DIRECT_RATED
+  const sessionRatedSet = sessionRatedUids ?? EMPTY_SESSION_RATED
   const rateableSet = rateableNodeUids ?? EMPTY_RATEABLE
 
   const isRateableNode = useCallback(
@@ -103,10 +105,20 @@ export function useFlipCardRatingControls({
 
   const countDirectConflicts = useCallback(
     (nodeUid: string) => {
-      const subtree = collectSubtreeUids(guidedNodes, nodeUid, rootUid)
-      return subtree.filter((uid) => uid !== nodeUid && directRatedSet.has(uid)).length
+      // Prompt only when a descendant was explicitly scored (direct). That keeps
+      // silent re-cascade when the user re-rates the same parent after its own
+      // batch_inherited children. Once a direct score exists, count *all*
+      // session-rated descendants (including batch_inherited grandchildren)
+      // so the dialog matches backend skip_direct ("避开") behavior.
+      const subtree = collectSubtreeUids(guidedNodes, nodeUid, rootUid).filter(
+        (uid) => uid !== nodeUid,
+      )
+      const hasDirect = subtree.some((uid) => directRatedSet.has(uid))
+      if (!hasDirect) return 0
+      const ratedSet = sessionRatedSet.size > 0 ? sessionRatedSet : directRatedSet
+      return subtree.filter((uid) => ratedSet.has(uid)).length
     },
-    [directRatedSet, guidedNodes, rootUid],
+    [directRatedSet, guidedNodes, rootUid, sessionRatedSet],
   )
 
   const submitRateNodeUid = useCallback(
@@ -132,11 +144,10 @@ export function useFlipCardRatingControls({
       )
       if (source === 'inferred') setInferredNodeUid(nodeUid)
       else setInferredNodeUid(null)
+      // Rating mode is score-only: never collapse/hide/placeholder-flip the card.
+      // Keep selection so the toolbar stays on the node the user just scored.
       const node = byUid.get(nodeUid)
-      // 忘记：允许收起分支；困难/记得/轻松：保持选中，评分条不消失。
-      if (rating === 1) {
-        onCollapseAfterForgot?.(nodeUid)
-      } else if (node) {
+      if (node) {
         onNodeActive?.([toGuidedSelection(node)])
         selectGuidedNode(nodeUid, { syncCanvas: false })
       }
@@ -145,7 +156,6 @@ export function useFlipCardRatingControls({
       byUid,
       getRatingScopeForNode,
       isRateableNode,
-      onCollapseAfterForgot,
       onNodeActive,
       onRateNode,
       ratingMode,
