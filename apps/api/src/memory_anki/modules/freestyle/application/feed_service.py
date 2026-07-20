@@ -13,7 +13,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
 from memory_anki.modules.palaces.api import resolve_palace_title
-from memory_anki.modules.reviews.api import get_palace_memory_projection
+from memory_anki.modules.reviews.api import get_palace_due_rollup
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
@@ -171,7 +171,7 @@ def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int
         query = query.filter(Palace.id.in_(candidate_ids))
     for palace in query.all():
         try:
-            projection = get_palace_memory_projection(session, palace.id)
+            projection = get_palace_due_rollup(session, palace.id)
         except ValueError:
             continue
         if projection.get("has_due_review") or projection.get("due_node_count"):
@@ -198,7 +198,7 @@ def _build_review_cards(
     cards: list[dict[str, Any]] = []
     for palace in query.order_by(Palace.id.asc()).all():
         try:
-            projection = get_palace_memory_projection(session, palace.id)
+            projection = get_palace_due_rollup(session, palace.id)
         except ValueError:
             continue
         due_count = int(projection.get("due_node_count") or 0)

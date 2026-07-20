@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -216,7 +216,7 @@ def build_grouped_palace_list(
 
 def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict[str, Any]:
     subject_buckets: dict[int, dict[str, Any]] = {}
-    now = datetime.now()
+    now = datetime.now(UTC)
     for palace in palaces:
         unit_counts = count_palace_review_units(session, palace, now=now)
         for subject in _owned_subjects(palace):

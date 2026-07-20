@@ -29,16 +29,19 @@ class DashboardQueryError(ValueError):
     pass
 
 
-def _dashboard_palace_loader_options():
-    return (
+def _dashboard_palace_loader_options(*, include_pegs: bool = False):
+    options = (
         joinedload(Palace.primary_chapter).joinedload(Chapter.parent),
         joinedload(Palace.primary_chapter).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.parent),
-        selectinload(Palace.segments),
-        selectinload(Palace.mini_palaces),
-        selectinload(Palace.pegs),
     )
+    if include_pegs:
+        return (
+            *options,
+            selectinload(Palace.pegs),
+        )
+    return options
 
 
 def build_dashboard_payload(
@@ -49,12 +52,12 @@ def build_dashboard_payload(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    queue = get_fsrs_queue_payload(session)
+    queue = get_fsrs_queue_payload(session, include_stats=True, include_items=True)
     today_start = datetime.combine(date.today(), time.min)
     today_end = today_start + timedelta(days=1)
     recent = (
         session.query(Palace)
-        .options(*_dashboard_palace_loader_options())
+        .options(*_dashboard_palace_loader_options(include_pegs=True))
         .filter(Palace.deleted_at.is_(None))
         .order_by(Palace.updated_at.desc())
         .limit(5)
@@ -62,7 +65,7 @@ def build_dashboard_payload(
     )
     today_new_palaces = (
         session.query(Palace)
-        .options(*_dashboard_palace_loader_options())
+        .options(*_dashboard_palace_loader_options(include_pegs=False))
         .filter(
             Palace.created_at.is_not(None),
             Palace.created_at >= today_start,

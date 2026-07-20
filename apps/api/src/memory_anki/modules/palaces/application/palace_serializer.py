@@ -21,7 +21,7 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     resolve_palace_subject,
     resolve_palace_title,
 )
-from memory_anki.modules.reviews.api import get_palace_memory_projection
+from memory_anki.modules.reviews.api import get_palace_due_rollup
 
 _EMPTY_MEMORY: dict[str, Any] = {
     "node_count": 0,
@@ -109,7 +109,7 @@ def palace_json(
             else get_palace_explicit_chapter_ids(session, p)
         )
     memory_projection = (
-        get_palace_memory_projection(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
+        get_palace_due_rollup(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
     )
     default_segment = (
         build_palace_default_segment_summary(session, p) if session is not None else None
@@ -238,7 +238,7 @@ def palace_summary_json(
             else get_palace_explicit_chapter_ids(session, p)
         )
     memory_projection = (
-        get_palace_memory_projection(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
+        get_palace_due_rollup(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
     )
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)

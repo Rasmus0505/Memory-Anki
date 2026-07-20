@@ -47,10 +47,10 @@ def _palace_out(p: Palace, session: Session | None = None) -> dict:
     next_due = None
     mastered = bool(getattr(p, "mastered", False))
     if session is not None:
-        from memory_anki.modules.reviews.api import get_palace_memory_projection
+        from memory_anki.modules.reviews.api import get_palace_due_rollup
 
         try:
-            projection = get_palace_memory_projection(session, p.id)
+            projection = get_palace_due_rollup(session, p.id)
             due_node_count = int(projection.get("due_node_count") or 0)
             mastery_percent = int(projection.get("mastery_percent") or 0)
             next_due = projection.get("next_review_at")

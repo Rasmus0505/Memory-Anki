@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.reviews.api import get_palace_memory_projection
+from memory_anki.modules.reviews.api import get_palace_due_rollup
 
 
 def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
@@ -25,19 +25,38 @@ def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
     return dt.date() == now.date()
 
 
+def _palace_due_rollup(
+    session: Session,
+    palace: Palace,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    try:
+        return get_palace_due_rollup(session, palace.id, now=now)
+    except ValueError:
+        return None
+
+
 def count_palace_review_units(
     session: Session,
     palace: Palace,
     *,
     now: datetime | None = None,
 ) -> dict[str, int]:
-    current = now or datetime.now()
-    due_now_count = 0
+    current = now or datetime.now(UTC)
+    projection = _palace_due_rollup(session, palace, now=current)
+    if projection is None:
+        return {
+            "due_now_count": 0,
+            "due_later_today_count": 0,
+            "needs_practice_count": 0,
+        }
+    due_now_count = 1 if bool(projection.get("has_due_review") or projection.get("due_node_count")) else 0
     due_later_today_count = 0
-    if palace_has_due_review(session, palace, now=current):
-        due_now_count += 1
-    elif palace_has_due_later_today(session, palace, now=current):
-        due_later_today_count += 1
+    if due_now_count == 0 and _review_datetime_is_later_today(
+        projection.get("next_review_at"), current
+    ):
+        due_later_today_count = 1
     return {
         "due_now_count": due_now_count,
         "due_later_today_count": due_later_today_count,
@@ -51,10 +70,8 @@ def palace_has_due_review(
     *,
     now: datetime | None = None,
 ) -> bool:
-    del now
-    try:
-        projection = get_palace_memory_projection(session, palace.id)
-    except ValueError:
+    projection = _palace_due_rollup(session, palace, now=now)
+    if projection is None:
         return False
     return bool(projection.get("has_due_review") or projection.get("due_node_count"))
 
@@ -65,10 +82,9 @@ def palace_has_due_later_today(
     *,
     now: datetime | None = None,
 ) -> bool:
-    current = now or datetime.now()
-    try:
-        projection = get_palace_memory_projection(session, palace.id)
-    except ValueError:
+    current = now or datetime.now(UTC)
+    projection = _palace_due_rollup(session, palace, now=current)
+    if projection is None:
         return False
     if projection.get("has_due_review") or projection.get("due_node_count"):
         return False

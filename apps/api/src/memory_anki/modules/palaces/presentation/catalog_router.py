@@ -87,30 +87,33 @@ def api_list(
     }
 
 
+def _cached_palace_serializer(serialize_fn, palaces, explicit_map, stage_labels):
+    """Serialize each palace once; chapter + model grouping share the same payload."""
+    cache: dict[int, dict] = {}
+
+    def serialize(palace, session):
+        cached = cache.get(palace.id)
+        if cached is not None:
+            return dict(cached)
+        payload = serialize_fn(
+            palace,
+            session,
+            precomputed_explicit_chapter_ids=explicit_map.get(palace.id, set()),
+            precomputed_stage_labels=stage_labels,
+        )
+        cache[palace.id] = payload
+        return dict(payload)
+
+    return serialize
+
+
 @router.get("/palaces/grouped")
 def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
-    chapter_grouped = build_chapter_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_card_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
-    model_grouped = build_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_card_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
+    serialize = _cached_palace_serializer(palace_card_json, palaces, explicit_map, stage_labels)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
+    model_grouped = build_grouped_palace_list(s, palaces, serialize)
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
@@ -122,26 +125,9 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
 def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
-    chapter_grouped = build_chapter_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_summary_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
-    model_grouped = build_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_summary_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
+    serialize = _cached_palace_serializer(palace_summary_json, palaces, explicit_map, stage_labels)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
+    model_grouped = build_grouped_palace_list(s, palaces, serialize)
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
