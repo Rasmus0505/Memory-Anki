@@ -63,7 +63,7 @@ interface ReviewSessionContainerProps {
   eyebrow: string | ((session: ReviewSessionContainerSession) => string)
   buildTitle: (session: ReviewSessionContainerSession) => string
   buildReviewEditorState: (session: ReviewSessionContainerSession) => MindMapEditorState
-  /** Optional full-tree rating source when flip-card view is clipped (node review). */
+  /** Optional full-tree rating source for subtree cascade (defaults to flip-card editor state). */
   buildRatingTreeEditorState?: (session: ReviewSessionContainerSession) => MindMapEditorState
   loadSession: (sessionId: string | number) => Promise<ReviewSessionContainerSession>
   loadProgress: (sessionId: string | number) => Promise<{ progress: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean } | null }>

@@ -32,8 +32,8 @@ export interface MindMapReviewFlowProps {
   reviewEditorState: MindMapEditorState;
   editEditorState?: MindMapEditorState | null;
   /**
-   * Full document for subtree rating cascade. Prefer this over the flip-card
-   * view when node-mode review has clipped the visible tree to one branch.
+   * Full document for subtree rating cascade. Prefer this over any reveal-filtered
+   * visible tree so parent ratings still walk all descendants.
    */
   ratingTreeEditorState?: MindMapEditorState | null;
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>;

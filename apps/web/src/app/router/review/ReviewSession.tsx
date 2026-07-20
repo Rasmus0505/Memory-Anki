@@ -9,7 +9,7 @@ import {
   submitReviewSessionApi,
 } from '@/features/review/api'
 import { ReviewSessionContainer, type ReviewSessionContainerSession } from '@/widgets/mindmap-review-flow'
-import { buildReviewOverviewPath, clipEditorDocToTopLevelBranch } from '@/entities/review'
+import { buildReviewOverviewPath } from '@/entities/review'
 
 export function toContainerSession(session: ReviewScheduleSummary): ReviewSessionContainerSession {
   return {
@@ -51,22 +51,22 @@ function asEditorDoc(value: unknown): string | Record<string, unknown> | null {
   return null
 }
 
+/**
+ * Flip-card view always uses the full palace map.
+ * Node mode only changes entry labeling / frozen due scope: non-due cards auto-reveal via
+ * focusNodeIds; due cards stay as manual flip targets. Do not clip to primary_branch_uid —
+ * other branches must remain visible context.
+ */
 export function buildReviewEditorState(session: ReviewSessionContainerSession) {
-  const fullDoc = session.palace?.editor_doc ?? null
-  // Node mode only flips/reviews the due top-level branch; palace mode keeps the full map.
-  const editorDoc =
-    session.review_entry_mode === 'node'
-      ? clipEditorDocToTopLevelBranch(fullDoc, session.primary_branch_uid)
-      : fullDoc
   return {
-    editor_doc: asEditorDoc(editorDoc),
+    editor_doc: asEditorDoc(session.palace?.editor_doc ?? null),
     editor_config: {},
     editor_local_config: {},
     lang: 'zh',
   }
 }
 
-/** Full palace tree for rating cascade; may differ from the clipped flip-card view. */
+/** Full palace tree for subtree rating cascade (same document as flip-card view). */
 export function buildRatingTreeEditorState(session: ReviewSessionContainerSession) {
   return {
     editor_doc: asEditorDoc(session.palace?.editor_doc ?? null),

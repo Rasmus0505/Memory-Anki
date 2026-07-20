@@ -90,12 +90,13 @@ describe('ReviewSession FSRS normalization', () => {
     expect(result.frozen_due_node_uids).toEqual(['branch-a', 'a1'])
   })
 
-  it('clips the flip-card document to the primary branch in node mode', () => {
+  it('keeps the full palace document in node mode (only due cards need manual flip)', () => {
     const session = toContainerSession(baseSession())
     const editorState = buildReviewEditorState(session)
     const doc = editorState.editor_doc as typeof fullDoc
-    expect(doc.root.children.map((child) => child.data.uid)).toEqual(['branch-a'])
-    expect(doc.root.children[0].children[0].data.uid).toBe('a1')
+    // Full tree remains visible context; frozen due scope controls flip targets, not clipping.
+    expect(doc.root.children.map((child) => child.data.uid)).toEqual(['branch-a', 'branch-b'])
+    expect(doc).toEqual(fullDoc)
   })
 
   it('keeps the full document for palace mode', () => {
