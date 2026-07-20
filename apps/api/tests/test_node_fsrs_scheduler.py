@@ -5,6 +5,7 @@ from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState, ReviewRatingOperation
 from memory_anki.modules.reviews.application.node_memory_service import (
+    get_palace_due_rollup,
     get_palace_mastery_trend,
     get_palace_memory_projection,
     rate_nodes,
@@ -95,6 +96,28 @@ def test_projection_excludes_root_and_reports_due_nodes(db_session):
     assert all("status" in row for row in projection["review_branch_summaries"])
 
 
+def test_due_rollup_skips_ratings_and_is_request_cached(db_session):
+    palace = _palace(db_session)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=1,
+        study_session_id="s-rollup",
+        operation_id="op-rollup",
+        rating_scope="single",
+    )
+    full = get_palace_memory_projection(db_session, palace.id, include_ratings=True)
+    rollup = get_palace_due_rollup(db_session, palace.id)
+    assert rollup["due_node_count"] == full["due_node_count"]
+    assert rollup["node_count"] == full["node_count"]
+    assert all(item.get("rating") is None for item in rollup["nodes"])
+    # Same request/session should reuse rollup without recomputing rating queries.
+    again = get_palace_due_rollup(db_session, palace.id)
+    assert again["palace_id"] == rollup["palace_id"]
+    assert again["due_node_count"] == rollup["due_node_count"]
+
+
 def test_mastery_trend_uses_only_completed_formal_review_receipts(db_session):
     palace = _palace(db_session)
     assert get_palace_mastery_trend(db_session, palace.id)["points"] == []
@@ -157,6 +180,42 @@ def test_mastery_trend_uses_only_completed_formal_review_receipts(db_session):
         {"at": "2026-07-15T09:20:00", "mastery_progress": 0.4, "mastery_percent": 40},
         {"at": "2026-07-16T10:30:00", "mastery_progress": 0.6, "mastery_percent": 60},
     ]
+
+
+def test_mastery_trend_ignores_timer_ghost_review_rows(db_session):
+    """Leave/autosave timer rows used to be scene=review without receipts."""
+    palace = _palace(db_session)
+    db_session.add_all(
+        [
+            StudySession(
+                id="ghost-saved",
+                status="completed",
+                scene="review",
+                target_type="palace",
+                palace_id=palace.id,
+                title="ghost saved",
+                started_at=datetime(2026, 7, 19, 20, 0),
+                ended_at=datetime(2026, 7, 19, 20, 10),
+                completion_method="saved",
+                summary_json=json.dumps({"scene_segments": [], "duration_edited": False}),
+            ),
+            StudySession(
+                id="ghost-left",
+                status="completed",
+                scene="review",
+                target_type="palace",
+                palace_id=palace.id,
+                title="ghost left",
+                started_at=datetime(2026, 7, 19, 21, 0),
+                ended_at=datetime(2026, 7, 19, 21, 5),
+                completion_method="left_page",
+                summary_json=json.dumps({"client_source": "desktop"}),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert get_palace_mastery_trend(db_session, palace.id)["points"] == []
 
 
 def test_subtree_skip_direct_preserves_child_direct_rating(db_session):

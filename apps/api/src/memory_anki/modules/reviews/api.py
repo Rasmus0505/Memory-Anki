@@ -14,6 +14,7 @@ from .application.fsrs_runtime import (
 from .application.node_memory_service import (
     due_node_uids_for_entry,
     get_completion_summary,
+    get_palace_due_rollup,
     get_palace_mastery_trend,
     get_palace_memory_projection,
     list_due_nodes,
@@ -29,6 +30,7 @@ __all__ = [
     "due_node_uids_for_entry",
     "get_completion_summary",
     "get_fsrs_queue_payload",
+    "get_palace_due_rollup",
     "get_palace_mastery_trend",
     "get_palace_memory_projection",
     "get_weekly_stats",

@@ -44,6 +44,7 @@ __all__ = [
     "RATING_LABELS",
     "VALID_RATINGS",
     "get_completion_summary",
+    "get_palace_due_rollup",
     "get_palace_mastery_trend",
     "get_palace_memory_projection",
     "list_due_nodes",
@@ -242,25 +243,50 @@ def _event_id(operation_id: str, node_uid: str) -> str:
     return hashlib.sha256(f"{operation_id}:{node_uid}".encode()).hexdigest()[:64]
 
 
-def _latest_rating(session: Session, palace_id: int, node_uid: str) -> int | None:
+def _undone_operation_ids(session: Session, *, palace_id: int | None = None) -> set[str]:
+    query = session.query(ReviewRatingOperation.id).filter(
+        ReviewRatingOperation.undone_at.is_not(None)
+    )
+    if palace_id is not None:
+        query = query.filter(ReviewRatingOperation.palace_id == palace_id)
+    return {str(item[0]) for item in query.all()}
+
+
+def _latest_ratings_for_palace(
+    session: Session, palace_id: int, node_uids: list[str] | set[str]
+) -> dict[str, int | None]:
+    """Batch latest non-undone rating per node for one palace (avoids per-node N+1)."""
+    wanted = set(node_uids)
+    if not wanted:
+        return {}
+    undone_ids = _undone_operation_ids(session, palace_id=palace_id)
     rows = (
         session.query(MindMapRecallEvent)
-        .filter_by(palace_id=palace_id, node_uid=node_uid)
-        .order_by(MindMapRecallEvent.occurred_at.desc(), MindMapRecallEvent.created_at.desc())
-        .limit(20)
+        .filter(
+            MindMapRecallEvent.palace_id == palace_id,
+            MindMapRecallEvent.node_uid.in_(wanted),
+        )
+        .order_by(
+            MindMapRecallEvent.node_uid.asc(),
+            MindMapRecallEvent.occurred_at.desc(),
+            MindMapRecallEvent.created_at.desc(),
+        )
         .all()
     )
-    undone_ids = {
-        item.id
-        for item in session.query(ReviewRatingOperation)
-        .filter(ReviewRatingOperation.undone_at.is_not(None))
-        .all()
-    }
+    latest: dict[str, int | None] = {uid: None for uid in wanted}
     for row in rows:
+        if row.node_uid not in wanted:
+            continue
+        if latest[row.node_uid] is not None:
+            continue
         if row.operation_id and row.operation_id in undone_ids:
             continue
-        return 3 if row.rating == 5 else row.rating
-    return None
+        latest[row.node_uid] = 3 if row.rating == 5 else int(row.rating)
+    return latest
+
+
+def _latest_rating(session: Session, palace_id: int, node_uid: str) -> int | None:
+    return _latest_ratings_for_palace(session, palace_id, [node_uid]).get(node_uid)
 
 
 def _session_direct_rated_uids(
@@ -306,8 +332,15 @@ def _session_direct_rated_uids(
     }
 
 
-def _projection(session: Session, palace: Palace, *, now: datetime | None = None) -> dict[str, Any]:
-    now = now or _utc_now()
+def _projection(
+    session: Session,
+    palace: Palace,
+    *,
+    now: datetime | None = None,
+    include_ratings: bool = True,
+) -> dict[str, Any]:
+    # FSRS subtracts current_datetime - card.last_review; both must be tz-aware UTC.
+    now = _aware(now) or _utc_now()
     root_uid, nodes = _tree(palace)
     valid_uids = [uid for uid in nodes if uid != root_uid]
     states = {
@@ -315,6 +348,9 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
         for row in session.query(ReviewNodeState).filter_by(palace_id=palace.id).all()
     }
     scheduler = _scheduler(session)
+    ratings = (
+        _latest_ratings_for_palace(session, palace.id, valid_uids) if include_ratings else {}
+    )
     details: list[dict[str, Any]] = []
     for uid in valid_uids:
         row = states.get(uid)
@@ -345,7 +381,7 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
                 "due_at": due_at.isoformat() if due_at else None,
                 "due": bool(due_at and due_at <= now),
                 "state_source": state_source,
-                "rating": _latest_rating(session, palace.id, uid),
+                "rating": ratings.get(uid) if include_ratings else None,
             }
         )
     total = len(details)
@@ -357,7 +393,7 @@ def _projection(session: Session, palace: Palace, *, now: datetime | None = None
     )
     memory_health = (sum(item["retrievability"] for item in details) / total) if total else 0.0
     due_items = [item for item in details if item["due"]]
-    severe = sum(1 for item in details if item["rating"] == 1)
+    severe = sum(1 for item in details if item["rating"] == 1) if include_ratings else 0
     mastered_count = sum(1 for item in details if item["stability_days"] >= mastery_horizon_days)
     next_due = min((item["due_at"] for item in details if item["due_at"]), default=None)
     entry = _entry_mode_payload(root_uid=root_uid, nodes=nodes, due_items=due_items)
@@ -411,11 +447,73 @@ def due_node_uids_for_entry(
     return list(projection["due_node_uids"])
 
 
-def get_palace_memory_projection(session: Session, palace_id: int) -> dict[str, Any]:
+def get_palace_memory_projection(
+    session: Session,
+    palace_id: int,
+    *,
+    include_ratings: bool = True,
+    now: datetime | None = None,
+) -> dict[str, Any]:
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None:
         raise ValueError("palace not found")
-    return _projection(session, palace)
+    return _projection(
+        session,
+        palace,
+        now=now,
+        include_ratings=include_ratings,
+    )
+
+
+def _clear_due_rollup_cache(session: Session) -> None:
+    session.info.pop("_palace_due_rollup_cache", None)
+
+
+def get_palace_due_rollup(
+    session: Session,
+    palace_id: int,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Lightweight due/mastery rollup for catalog/queue list paths (no per-node ratings)."""
+    cache = session.info.setdefault("_palace_due_rollup_cache", {})
+    # Only cache the default "now" path so list endpoints can share work in one request.
+    if now is None and palace_id in cache:
+        return dict(cache[palace_id])
+
+    projection = get_palace_memory_projection(
+        session,
+        palace_id,
+        include_ratings=False,
+        now=now,
+    )
+    payload = {
+        "palace_id": projection["palace_id"],
+        "node_count": projection["node_count"],
+        "mastery_progress": projection["mastery_progress"],
+        "mastery_percent": projection["mastery_percent"],
+        "memory_health": projection["memory_health"],
+        "memory_health_percent": projection["memory_health_percent"],
+        "mastered_node_count": projection["mastered_node_count"],
+        "mastery_horizon_days": projection["mastery_horizon_days"],
+        "due_node_count": projection["due_node_count"],
+        "overdue_node_count": projection["overdue_node_count"],
+        "next_review_at": projection["next_review_at"],
+        "mastered": projection["mastered"],
+        "severe_weak_node_count": projection["severe_weak_node_count"],
+        "has_due_review": projection["has_due_review"],
+        "review_entry_mode": projection.get("review_entry_mode") or "none",
+        "review_entry_label": projection.get("review_entry_label"),
+        "primary_branch_uid": projection.get("primary_branch_uid"),
+        "primary_branch_title": projection.get("primary_branch_title"),
+        "due_branch_count": projection.get("due_branch_count") or 0,
+        "due_node_uids": list(projection.get("due_node_uids") or []),
+        "review_branch_summaries": list(projection.get("review_branch_summaries") or []),
+        "nodes": projection["nodes"],
+    }
+    if now is None:
+        cache[palace_id] = payload
+    return dict(payload)
 
 
 def get_palace_mastery_trend(session: Session, palace_id: int) -> dict[str, Any]:
@@ -558,12 +656,13 @@ def rate_nodes(
         affected_node_count=len(selected),
     )
     session.add(operation)
-    before_projection = _projection(session, palace)
+    before_projection = _projection(session, palace, include_ratings=False)
+    before_ratings = _latest_ratings_for_palace(session, palace_id, selected)
     scheduler = _scheduler(session)
     for uid in selected:
         row = session.query(ReviewNodeState).filter_by(palace_id=palace_id, node_uid=uid).first()
         before = _state_dict(row)
-        before_rating = _latest_rating(session, palace_id, uid)
+        before_rating = before_ratings.get(uid)
         fingerprint = nodes[uid]["content_fingerprint"]
         # Content edit invalidates prior schedule, but the unique key is still
         # (palace_id, node_uid). Keep the existing row and start a fresh card
@@ -609,7 +708,8 @@ def rate_nodes(
             )
         )
     session.flush()
-    after_projection = _projection(session, palace)
+    _clear_due_rollup_cache(session)
+    after_projection = _projection(session, palace, include_ratings=True)
     session.commit()
     return {
         "operation_id": operation_id,
@@ -650,14 +750,15 @@ def undo_rating_operation(
     palace = session.get(Palace, operation.palace_id)
     if palace is None:
         raise ValueError("palace not found")
-    before = _projection(session, palace)
+    before = _projection(session, palace, include_ratings=False)
     items = session.query(ReviewRatingOperationItem).filter_by(operation_id=operation_id).all()
     for item in items:
         snapshot = json.loads(item.before_state_json) if item.before_state_json else None
         _restore_state(session, operation.palace_id, item.node_uid, snapshot)
     operation.undone_at = utc_now_naive()
     session.flush()
-    after = _projection(session, palace)
+    _clear_due_rollup_cache(session)
+    after = _projection(session, palace, include_ratings=True)
     session.commit()
     return {
         "operation_id": operation_id,
