@@ -30,6 +30,7 @@ import {
   deleteChapterApi,
   DeleteChapterImpactError,
   deleteSubjectApi,
+  DeleteSubjectImpactError,
   getChapterApi,
   getSubjectEditorApi,
   getSubjectsApi,
@@ -274,10 +275,18 @@ export default function Knowledge() {
 
   const handleDeleteSubject = async () => {
     if (!activeSubject) return
-    await deleteSubjectApi(activeSubject.id)
-    setSelectedNodes([])
-    setChapterDetail(null)
-    await refreshSubjects(null)
+    try {
+      await deleteSubjectApi(activeSubject.id)
+      setSelectedNodes([])
+      setChapterDetail(null)
+      await refreshSubjects(null)
+    } catch (error) {
+      if (error instanceof DeleteSubjectImpactError) {
+        toast.warning(`该学科仍包含 ${error.impact.chapter_count} 个章节并归属 ${error.impact.palace_count} 个宫殿，请先调整宫殿归属并清理章节。`)
+        return
+      }
+      throw error
+    }
   }
 
   const handleDeleteChapter = async () => {
@@ -622,6 +631,7 @@ export default function Knowledge() {
                   ref={mindMapFrameRef}
                   key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                   editorState={editorState}
+                  sceneChrome={mindMapExperience.task === 'learn' ? 'default' : 'edit'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   readonly={mindMapExperience.task === 'learn'}
                   highlightedNodeUids={mindMapExperience.highlightedNodeUids}

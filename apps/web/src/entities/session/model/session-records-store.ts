@@ -27,7 +27,11 @@ export async function listStudySessionRecords(options: {
   sortBy: 'started_at' | 'effective_seconds' | 'title'
   sortOrder: 'asc' | 'desc'
 }) {
-  const result = await listStudySessionsApi({ ...options, status: 'completed' })
+  const result = await listStudySessionsApi({
+    ...options,
+    kind: options.kind === 'custom' ? 'custom' : options.kind,
+    status: 'completed',
+  })
   return {
     items: result.items.map(studySessionToTimeRecord),
     total: result.total ?? result.items.length,
@@ -47,7 +51,13 @@ export async function getStudySessionRecordAnalytics(options: {
       label: item.label,
       seconds: item.seconds,
     })),
-    breakdown: result.breakdown,
+    breakdown: result.breakdown.map((item) => ({
+      kind: item.kind,
+      label: item.label,
+      seconds: item.seconds,
+      sessions: item.sessions,
+      isBuiltin: item.is_builtin ?? ['review', 'practice', 'quiz', 'palace_edit'].includes(item.kind),
+    })),
   }
 }
 
@@ -81,6 +91,8 @@ export async function bulkDeleteStudySessionRecords(ids: string[]) {
 function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
   const summary = item.summary || {}
   const sceneSegments = readSceneSegments(summary)
+  const activityTag = readOptionalString(summary.activity_tag)
+  const activityTagLabel = readOptionalString(summary.activity_tag_label)
   return {
     id: item.id,
     kind: studySceneToSessionKind(item.scene),
@@ -96,11 +108,19 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
     completionMethod: (item.completion_method || 'manual_complete') as TimeSessionRecord['completionMethod'],
     durationEdited: Boolean(summary.duration_edited),
     clientSource: normalizeClientSource(summary.client_source),
+    activityTag,
+    activityTagLabel,
     deletedAt: item.deleted_at,
     deletedReason: item.deleted_reason === 'manual' ? 'manual' : null,
     events: item.events as TimeSessionRecord['events'],
     sceneSegments,
   }
+}
+
+function readOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
 }
 
 function normalizeClientSource(value: unknown): TimeSessionRecord['clientSource'] {
@@ -118,6 +138,7 @@ function studySceneToSessionKind(scene: string): SessionKind {
   if (scene === 'palace_edit') return 'palace_edit'
   if (scene === 'quiz') return 'quiz'
   if (scene === 'review' || scene === 'segment_review' || scene === 'mini_review') return 'review'
+  if (scene === 'custom') return 'custom'
   return 'practice'
 }
 
@@ -161,11 +182,23 @@ function timeRecordPatchToStudySessionPatch(
   if ('pauseCount' in updater) patch.pause_count = updater.pauseCount ?? 0
   if ('completionMethod' in updater) patch.completion_method = updater.completionMethod ?? 'manual_complete'
   if ('events' in updater) patch.events = updater.events ?? []
-  if ('sceneSegments' in updater || 'durationEdited' in updater || 'clientSource' in updater) {
+  const touchSummary =
+    'sceneSegments' in updater ||
+    'durationEdited' in updater ||
+    'clientSource' in updater ||
+    'activityTag' in updater ||
+    'activityTagLabel' in updater
+  if (touchSummary) {
     patch.summary = {
       ...(updater.sceneSegments ? { scene_segments: updater.sceneSegments } : {}),
       ...(typeof updater.durationEdited === 'boolean' ? { duration_edited: updater.durationEdited } : {}),
       ...(updater.clientSource ? { client_source: updater.clientSource } : {}),
+      ...('activityTag' in updater
+        ? { activity_tag: updater.activityTag ?? null }
+        : {}),
+      ...('activityTagLabel' in updater
+        ? { activity_tag_label: updater.activityTagLabel ?? null }
+        : {}),
     }
   }
   return patch
@@ -180,6 +213,7 @@ function sessionKindToStudyScene(
   if (kind === 'palace_edit') return 'palace_edit'
   if (kind === 'quiz') return 'quiz'
   if (kind === 'review') return 'review'
+  if (kind === 'custom') return 'custom'
   return 'practice'
 }
 
@@ -342,28 +376,65 @@ export function getSessionKindBreakdown(
   range: TimeRecordChartRange = 'all',
   reference = new Date(),
 ): SessionKindBreakdownItem[] {
-  const accumulator = new Map<SessionKind, SessionKindBreakdownItem>()
+  const accumulator = new Map<string, SessionKindBreakdownItem>()
+  const builtinKinds: SessionKind[] = ['review', 'practice', 'quiz', 'palace_edit']
 
   getTimeRecordsInRange(records, range, reference).forEach((record) => {
-    const current = accumulator.get(record.kind) ?? {
-      kind: record.kind,
-      label: formatSessionKind(record.kind),
+    const key = resolveBreakdownKey(record)
+    const current = accumulator.get(key) ?? {
+      kind: key,
+      label: formatTimeRecordTagLabel(record),
       seconds: 0,
       sessions: 0,
+      isBuiltin: builtinKinds.includes(key as SessionKind),
     }
     current.seconds += record.effectiveSeconds
     current.sessions += 1
-    accumulator.set(record.kind, current)
+    accumulator.set(key, current)
   })
 
-  return ['review', 'practice', 'quiz', 'palace_edit'].map((kind) =>
-    accumulator.get(kind as SessionKind) ?? {
-      kind: kind as SessionKind,
-      label: formatSessionKind(kind as SessionKind),
-      seconds: 0,
-      sessions: 0,
-    },
+  const builtinItems = builtinKinds.map(
+    (kind) =>
+      accumulator.get(kind) ?? {
+        kind,
+        label: formatSessionKind(kind),
+        seconds: 0,
+        sessions: 0,
+        isBuiltin: true,
+      },
   )
+  const customItems = Array.from(accumulator.values())
+    .filter((item) => !builtinKinds.includes(item.kind as SessionKind))
+    .sort((left, right) => right.seconds - left.seconds || left.label.localeCompare(right.label, 'zh-CN'))
+  return [...builtinItems, ...customItems]
+}
+
+function resolveBreakdownKey(record: TimeSessionRecord) {
+  const tag = record.activityTag?.trim()
+  if (tag && !['review', 'practice', 'quiz', 'palace_edit'].includes(tag)) {
+    return tag
+  }
+  if (record.kind === 'custom') {
+    return tag || 'custom'
+  }
+  if (tag && ['review', 'practice', 'quiz', 'palace_edit'].includes(tag)) {
+    return tag
+  }
+  return record.kind
+}
+
+export function formatTimeRecordTagLabel(
+  record: Pick<TimeSessionRecord, 'kind' | 'activityTag' | 'activityTagLabel'>,
+) {
+  if (record.activityTagLabel?.trim()) return record.activityTagLabel.trim()
+  if (record.activityTag?.trim()) {
+    const tag = record.activityTag.trim()
+    if (tag === 'review' || tag === 'practice' || tag === 'quiz' || tag === 'palace_edit') {
+      return formatSessionKind(tag)
+    }
+    return tag
+  }
+  return formatSessionKind(record.kind)
 }
 
 export function getWeeklyLocalSessionStats(records: TimeSessionRecord[], reference = new Date()) {
@@ -411,11 +482,13 @@ export function formatDuration(totalSeconds: number) {
   return `${remainSeconds}秒`
 }
 
-export function formatSessionKind(kind: SessionKind) {
+export function formatSessionKind(kind: SessionKind | string) {
   if (kind === 'palace_edit') return '宫殿编辑'
   if (kind === 'practice') return '练习'
   if (kind === 'quiz') return '做题'
-  return '正式复习'
+  if (kind === 'custom') return '其他'
+  if (kind === 'review') return '正式复习'
+  return String(kind || '其他')
 }
 
 export function formatSessionSource(record: Pick<TimeSessionRecord, 'sourceKind' | 'englishCourseId' | 'palaceId'>) {

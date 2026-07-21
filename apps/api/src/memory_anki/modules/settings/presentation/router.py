@@ -18,7 +18,6 @@ from memory_anki.infrastructure.llm.external_ai_call_logs import (
     list_external_ai_call_logs,
     resolve_external_ai_call_log_artifact,
 )
-from memory_anki.modules.reviews.api import rebuild_all_pending_review_schedules
 from memory_anki.modules.settings.application.ai_model_registry import (
     AiModelRegistryError,
     delete_ai_model_catalog_item,
@@ -67,10 +66,13 @@ from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 
 router = APIRouter(tags=["settings"])
 
-SCHEDULE_IMPACTING_KEYS = {
-    "ebbinghaus_intervals",
-    "sleep_review_time",
-    "early_review_anchor",
+FSRS_SETTINGS_KEYS = {
+    "desired_retention",
+    "mastery_horizon_days",
+    "maximum_interval",
+    "learning_steps",
+    "relearning_steps",
+    "daily_max_reviews",
 }
 
 CLIENT_PREFERENCE_GROUPS = {
@@ -84,6 +86,8 @@ CLIENT_PREFERENCE_GROUPS = {
     "study_goals",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
+    "review_queue_view_settings",
+    "time_record_tags",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."
@@ -125,15 +129,8 @@ def write_settings(
             else:
                 session.add(Config(key=key, value=str(nextValue)))
     next_settings = read_settings(session)
-    if data.get("apply_to_pending") == "all":
-        changed_keys = {
-            key
-            for key in SCHEDULE_IMPACTING_KEYS
-            if str(before_settings.get(key, "")) != str(next_settings.get(key, ""))
-        }
-        if changed_keys:
-            rebuild_all_pending_review_schedules(session)
-            next_settings = read_settings(session)
+    # FSRS settings apply to future ratings immediately; no legacy stage rebuild.
+    del before_settings
 
     uow.commit()
     return next_settings

@@ -8,11 +8,16 @@ import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
+import { rateUnratedReviewSessionNodesApi } from '@/features/review/api'
 import type {
   MindMapEditorState,
+  MindMapRecallRating,
+  ReviewCompletionSummary,
+  ReviewMemorySummary,
   ReviewPalaceSummary,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
+import { toast } from '@/shared/feedback/toast'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
@@ -23,7 +28,7 @@ import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from './MindMapReviewFlow'
-import { StageSelectDialog } from '@/features/review/components/StageSelectDialog'
+import { FsrsCompletionDialog } from '@/features/review/components/FsrsCompletionDialog'
 import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
 import {
   consumePrefetchedStudySession,
@@ -36,67 +41,41 @@ import { ErrorState } from '@/shared/components/state-placeholders'
 type ReviewDisplayMode = 'review' | 'edit'
 
 export interface ReviewSessionContainerSession {
-  id: number
+  id: string | number
   palace_id: number | null
   algorithm_used: string
   review_type: string
   review_number: number
   palace: ReviewPalaceSummary | null
-  stageLabels: string[] | null
+  frozen_due_node_uids?: string[]
+  due_node_count?: number
+  memory_summary?: ReviewMemorySummary
+  review_entry_mode?: 'none' | 'node' | 'palace' | null
+  review_entry_label?: string | null
+  primary_branch_uid?: string | null
+  primary_branch_title?: string | null
   revealMode?: RevealFlowMode
   checkpointNodeUids?: string[]
   editor_doc?: Record<string, unknown> | string | null
-  reviewStages: Array<{
-    review_number: number
-    label: string
-    completed: boolean
-    completed_at: string | null
-    scheduled_at: string | null
-  }> | null
 }
 
 interface ReviewSessionContainerProps {
-  eyebrow: string
+  eyebrow: string | ((session: ReviewSessionContainerSession) => string)
   buildTitle: (session: ReviewSessionContainerSession) => string
   buildReviewEditorState: (session: ReviewSessionContainerSession) => MindMapEditorState
-  loadSession: (sessionId: number) => Promise<ReviewSessionContainerSession>
-  loadProgress: (sessionId: number) => Promise<{ progress: {
-    reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-    red_node_ids: string[]
-    completed: boolean
-  } | null }>
-  saveProgress: (
-    sessionId: number,
-    data: {
-      reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-      red_node_ids: string[]
-      completed: boolean
-    },
-  ) => Promise<unknown>
-  submitSession: (
-    sessionId: number,
-    data: {
-      chapter_id?: number
-      duration_seconds?: number
-      completion_mode?: 'manual_complete' | 'auto_complete'
-      revealed_remaining?: boolean
-      red_marked_count?: number
-      target_review_number?: number
-      needs_practice?: boolean
-      note?: string
-    },
-    options?: { mutationId?: string },
-  ) => Promise<ReviewSessionSubmitResponse>
+  /** Optional full-tree rating source for subtree cascade (defaults to flip-card editor state). */
+  buildRatingTreeEditorState?: (session: ReviewSessionContainerSession) => MindMapEditorState
+  loadSession: (sessionId: string | number) => Promise<ReviewSessionContainerSession>
+  loadProgress: (sessionId: string | number) => Promise<{ progress: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean } | null }>
+  saveProgress: (sessionId: string | number, data: { reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>; red_node_ids: string[]; completed: boolean }) => Promise<unknown>
+  loadCompletionSummary: (sessionId: string | number) => Promise<{ item: ReviewCompletionSummary }>
+  submitSession: (sessionId: string | number, data: { chapter_id?: number; duration_seconds?: number; completion_mode?: 'manual_complete' | 'auto_complete'; revealed_remaining?: boolean; red_marked_count?: number; note?: string }, options?: { mutationId?: string }) => Promise<ReviewSessionSubmitResponse>
   onSubmitted?: (result: ReviewSessionSubmitResponse) => void
   backHref: (chapterId: number | null) => string
   warmupKind?: StudyWarmupKind
   refreshReviewStateOnExitEdit?: boolean
-  renderBelowFlow?: (args: {
-    session: ReviewSessionContainerSession
-    mindMapFullscreen: boolean
-  }) => React.ReactNode
+  renderBelowFlow?: (args: { session: ReviewSessionContainerSession; mindMapFullscreen: boolean }) => React.ReactNode
 }
-
 const inflightReviewSessionLoads = new Map<
   string,
   Promise<{
@@ -111,12 +90,12 @@ const inflightReviewSessionLoads = new Map<
   }>
 >()
 
-function formatReviewStage(reviewType: string, reviewNumber: number) {
-  if (reviewType === '1h') return '首日 1 小时'
-  if (reviewType === 'sleep') return '首日睡前'
-  return `第 ${reviewNumber + 1} 次`
-}
 
+export function normalizeReviewSessionContainerSession(
+  session: ReviewSessionContainerSession,
+): ReviewSessionContainerSession {
+  return session
+}
 function toSnapshot(progress: {
   reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   red_node_ids: string[]
@@ -160,9 +139,11 @@ export function ReviewSessionContainer({
   eyebrow,
   buildTitle,
   buildReviewEditorState,
+  buildRatingTreeEditorState,
   loadSession,
   loadProgress,
   saveProgress,
+  loadCompletionSummary,
   submitSession,
   onSubmitted,
   backHref,
@@ -181,16 +162,21 @@ export function ReviewSessionContainer({
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [bulkRating, setBulkRating] = useState(false)
   const modeTransitioningRef = useRef(false)
   const editorReloadRef = useRef<() => Promise<void>>(async () => {})
   const activePalaceId = session?.palace_id ?? null
 
-  const reloadSession = useCallback(async (sessionId: number) => {
-    const nextSession = await loadSession(sessionId)
+  const fetchAuthoritativeSession = useCallback(async (sessionId: string | number) => (
+    normalizeReviewSessionContainerSession(await loadSession(sessionId))
+  ), [loadSession])
+
+  const reloadSession = useCallback(async (sessionId: string | number) => {
+    const nextSession = await fetchAuthoritativeSession(sessionId)
     setSession(nextSession)
     setReviewEditorState(buildReviewEditorState(nextSession))
     return nextSession
-  }, [buildReviewEditorState, loadSession])
+  }, [buildReviewEditorState, fetchAuthoritativeSession])
 
   const {
     meta: editorPalace,
@@ -231,50 +217,37 @@ export function ReviewSessionContainer({
   }, [reloadEditor])
 
   const completion = useReviewCompletionCoordinator<
-    ReviewSessionContainerSession,
-    { targetReviewNumber: number; needsPractice: boolean; note: string },
+    { session: ReviewSessionContainerSession; summary: ReviewCompletionSummary },
+    { note: string },
     ReviewSessionSubmitResponse
   >({
     prepare: async () => {
-      if (!session) throw new Error('复习会话尚未加载完成。')
-      const labels = session.stageLabels ?? []
-      const stages = session.reviewStages ?? []
-      if (
-        labels.length === 0 ||
-        stages.length !== labels.length ||
-        stages.some((stage, index) => stage.review_number !== index || stage.label !== labels[index])
-      ) {
-        throw new Error('复习阶段信息不完整或不一致，请重新加载结算信息。')
-      }
-      if (!Number.isInteger(session.id) || session.id <= 0 || session.review_number < 0 || session.review_number >= stages.length) {
-        throw new Error('当前复习节点与阶段信息不一致，请返回复习队列刷新后重试。')
-      }
-      return session
+      if (!id) throw new Error('复习会话编号无效，请返回复习队列后重试。')
+      const latestSession = await fetchAuthoritativeSession(id)
+      const summary = await loadCompletionSummary(latestSession.id)
+      return { session: latestSession, summary: summary.item }
     },
     submit: async ({ target, input, payload, operationId }) => {
       await flushSave()
-      const result = await submitSession(target.id, {
+      const result = await submitSession(target.session.id, {
         chapter_id: chapterId ?? undefined,
         duration_seconds: payload.durationSeconds,
         completion_mode: payload.completionMode,
         revealed_remaining: payload.revealedRemaining,
         red_marked_count: payload.redNodeIds.length,
-        target_review_number: input.targetReviewNumber,
-        needs_practice: input.needsPractice,
         ...(input.note ? { note: input.note } : {}),
       }, { mutationId: operationId })
       return { result, persistTimeRecord: false }
     },
     onCompleted: onSubmitted,
   })
-
   useEffect(() => {
     if (!id) return
     let active = true
-    const sessionId = Number(id)
+    const sessionId = id
     const load = async () => {
       setLoadError(null)
-      const inflightKey = `${eyebrow}:${sessionId}`
+      const inflightKey = `${typeof eyebrow === 'function' ? 'review-session' : eyebrow}:${sessionId}`
       const loadSessionAndProgress = () => {
         let pending = inflightReviewSessionLoads.get(inflightKey)
         if (!pending) {
@@ -292,11 +265,12 @@ export function ReviewSessionContainer({
         }
         return pending
       }
-      const pending = warmupKind
+      const pending = warmupKind && typeof sessionId === 'number'
         ? consumePrefetchedStudySession(warmupKind, sessionId, loadSessionAndProgress)
         : loadSessionAndProgress()
-      const { session: nextSession, progress: progressResponse } = await pending
+      const { session: prefetchedSession, progress: progressResponse } = await pending
       if (!active) return
+      const nextSession = normalizeReviewSessionContainerSession(prefetchedSession)
       setSession(nextSession)
       setReviewEditorState(buildReviewEditorState(nextSession))
       setInitialSnapshot(toSnapshot(progressResponse.progress))
@@ -315,7 +289,7 @@ export function ReviewSessionContainer({
   const handleModeToggle = useCallback(async () => {
     if (!id || modeTransitioningRef.current) return
     modeTransitioningRef.current = true
-    const sessionId = Number(id)
+    const sessionId = id
     try {
       if (displayMode === 'edit') {
         await flushSave()
@@ -327,6 +301,47 @@ export function ReviewSessionContainer({
       modeTransitioningRef.current = false
     }
   }, [displayMode, flushSave, id, reloadSession])
+
+  const handleBulkRateUnrated = useCallback(
+    async (rating: MindMapRecallRating) => {
+      const target = completion.target
+      if (!target || bulkRating) return
+      const studySessionId = target.session.id
+      if (studySessionId == null || studySessionId === '') return
+
+      // Server recomputes the still-unrated set; never re-rate already scored nodes.
+      if ((target.summary.unrated_due_node_count ?? 0) <= 0) {
+        toast.info('本轮没有未评分节点')
+        return
+      }
+
+      setBulkRating(true)
+      try {
+        const operationId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `bulk-rate-unrated-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        const response = await rateUnratedReviewSessionNodesApi(studySessionId, {
+          rating,
+          operation_id: operationId,
+        })
+        const affected = response.item.affected_node_count
+        const label =
+          rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
+        if (affected <= 0) {
+          toast.info('本轮没有未评分节点')
+        } else {
+          toast.success(`已将 ${affected} 个未评分节点记为「${label}」`)
+        }
+        await completion.retryPreparation()
+      } catch (error) {
+        toast.error(error instanceof Error && error.message ? error.message : '一键评分失败')
+      } finally {
+        setBulkRating(false)
+      }
+    },
+    [bulkRating, completion],
+  )
 
 
   const palace = session?.palace ?? editorPalace ?? null
@@ -374,13 +389,16 @@ export function ReviewSessionContainer({
   }
 
   const title = buildTitle(session)
-  const resolvedViewMemoryScope = `review-session:${session.id}:${displayMode}`
+  const resolvedEyebrow = typeof eyebrow === 'function' ? eyebrow(session) : eyebrow
+  // One scope across review/edit so the previous center card can re-anchor after mode switches.
+  const resolvedViewMemoryScope = `review-session:${session.id}`
+  const frozenDueNodeUids = session.frozen_due_node_uids ?? []
 
   return (
     <div className="space-y-5">
       {!mindMapFullscreen ? (
         <PageIntro
-          eyebrow={eyebrow}
+          eyebrow={resolvedEyebrow}
           title={title}
           compact
           actions={
@@ -394,8 +412,11 @@ export function ReviewSessionContainer({
               <Badge variant={displayMode === 'edit' ? 'secondary' : 'outline'}>
                 {displayMode === 'edit' ? '内联编辑中' : '翻卡复习中'}
               </Badge>
-              <Badge variant="secondary">{session.algorithm_used}</Badge>
-              <Badge variant="outline">{formatReviewStage(session.review_type, session.review_number)}</Badge>
+              <Badge variant="secondary">FSRS</Badge>
+              {session.review_entry_mode === 'node' && session.primary_branch_title ? (
+                <Badge variant="outline">分支 · {session.primary_branch_title}</Badge>
+              ) : null}
+              <Badge variant="outline">本次 {session.due_node_count ?? frozenDueNodeUids.length} 个到期节点</Badge>
             </>
           }
         />
@@ -409,12 +430,16 @@ export function ReviewSessionContainer({
           studySessionId={String(session.id)}
           revealMode={session.revealMode ?? 'standard'}
           checkpointNodeUids={session.checkpointNodeUids ?? []}
+          reviewScopeNodeUids={frozenDueNodeUids}
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={resolvedViewMemoryScope}
           persistKey={`review:${session.id}`}
           reviewEditorState={reviewEditorState}
           editEditorState={resolvedEditEditorState}
+          ratingTreeEditorState={
+            buildRatingTreeEditorState ? buildRatingTreeEditorState(session) : null
+          }
           onModeToggle={handleModeToggle}
           onEditEditorStateChange={setEditEditorState}
           submitting={completion.submitting}
@@ -438,23 +463,25 @@ export function ReviewSessionContainer({
         {renderBelowFlow?.({ session, mindMapFullscreen })}
       </div>
 
-      <StageSelectDialog
+      <FsrsCompletionDialog
         open={completion.open}
-        stageLabels={completion.target?.stageLabels ?? []}
-        stages={completion.target?.reviewStages ?? []}
-        currentReviewNumber={completion.target?.review_number ?? session.review_number}
+        summary={completion.target?.summary ?? null}
         durationSeconds={completion.durationSeconds}
         submitting={completion.submitting}
         preparing={completion.preparing}
-        preparationFailed={completion.preparationFailed}
         submissionFailed={completion.submissionFailed}
-        requiresStages
+        bulkRating={bulkRating}
         error={completion.error}
         onRetry={() => void completion.retryPreparation()}
         onRetrySubmission={() => void completion.retrySubmission()}
-        onConfirm={(targetReviewNumber, needsPractice, note) => {
-          void completion.confirmCompletion({ targetReviewNumber, needsPractice, note })
-        }}
+        onBulkRateUnrated={
+          (completion.target?.summary.unrated_due_node_count ?? 0) > 0
+            ? (rating) => {
+                void handleBulkRateUnrated(rating)
+              }
+            : undefined
+        }
+        onConfirm={(note) => { void completion.confirmCompletion({ note }) }}
         onCancel={completion.cancelCompletion}
       />
     </div>

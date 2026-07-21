@@ -17,6 +17,7 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS = {
   quiz_text_generation: 'ai_prompt_palace_quiz_generate',
   quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
   quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
+  quiz_node_binding: 'ai_prompt_palace_quiz_node_binding',
 } as const satisfies Record<string, AiPromptTemplate['key']>
 
 type ScenarioPromptTemplateKey = keyof typeof SCENARIO_PROMPT_TEMPLATE_KEYS
@@ -73,6 +74,10 @@ export function readRecentAiConfig(
                 typeof parsed.prompt_options.run_instruction === 'string'
                   ? parsed.prompt_options.run_instruction
                   : undefined,
+              emphasis_mark_description:
+                typeof parsed.prompt_options.emphasis_mark_description === 'string'
+                  ? parsed.prompt_options.emphasis_mark_description
+                  : undefined,
             }
           : undefined,
     }
@@ -93,7 +98,10 @@ export function writeRecentAiConfig(
       JSON.stringify({
         model: value.model,
         thinking_enabled: value.thinking_enabled,
-        prompt_options: { run_instruction: value.prompt_options?.run_instruction },
+        prompt_options: {
+          run_instruction: value.prompt_options?.run_instruction,
+          emphasis_mark_description: value.prompt_options?.emphasis_mark_description,
+        },
       }),
     )
   } catch {
@@ -106,19 +114,28 @@ export function buildDefaultAiConfig(
   promptTemplate?: PromptTemplateSnapshot | null,
   promptScene?: AiPromptSceneDefault | null,
 ): AiRuntimeOptions {
+  const defaultBlockKeys = promptScene
+    ? (
+        promptScene.block_keys?.length
+          ? promptScene.block_keys
+          : (promptScene.recommended_block_keys ?? [])
+      )
+    : undefined
   return {
     model: scenario.default_model,
     thinking_enabled: scenario.default_thinking_enabled,
     prompt_override: undefined,
     prompt_options: promptScene
       ? {
-          block_keys: promptScene.block_keys,
+          block_keys: defaultBlockKeys,
           scene_instruction: promptScene.scene_instruction,
           run_instruction: '',
+          emphasis_mark_description: '',
         }
       : {
           scene_instruction: promptTemplate?.template || promptTemplate?.defaultTemplate || '',
           run_instruction: '',
+          emphasis_mark_description: '',
         },
   }
 }
@@ -144,6 +161,7 @@ export function normalizeScenarioAiConfig(
       block_keys: fallback.prompt_options?.block_keys,
       scene_instruction: fallback.prompt_options?.scene_instruction,
       run_instruction: value?.prompt_options?.run_instruction ?? '',
+      emphasis_mark_description: value?.prompt_options?.emphasis_mark_description ?? '',
     },
   }
 }

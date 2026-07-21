@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { ProfileSkeleton } from './ProfileSkeleton'
 import {
   Download,
@@ -8,11 +8,10 @@ import {
   RefreshCw,
   Settings,
   Upload,
-  Wrench,
 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/features/profile/ProfileLayout'
-import type { ReviewSettings, ReviewStageProgressRepairResponse } from '@/shared/api/contracts'
+import type { ReviewSettings } from '@/shared/api/contracts'
 import {
   getReviewSettingsApi,
   updateReviewSettingsApi,
@@ -31,12 +30,10 @@ import { resetPwaRuntime } from '@/pwa/resetPwa'
 import { ThemeSettingsCard } from '@/features/profile/ThemeSettingsCard'
 
 interface ProfileSettingsPageProps {
-  repairReviewStageProgress: () => Promise<ReviewStageProgressRepairResponse>
   shortcutsSettings: ReactNode
 }
 
 export default function ProfileSettingsPage({
-  repairReviewStageProgress,
   shortcutsSettings,
 }: ProfileSettingsPageProps) {
   const [tab, setTab] = useState<'config' | 'io' | 'shortcuts'>('config')
@@ -44,11 +41,6 @@ export default function ProfileSettingsPage({
   const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
   const [pwaResetting, setPwaResetting] = useState(false)
-  const [repairProgressLoading, setRepairProgressLoading] = useState(false)
-  const [repairProgressMessage, setRepairProgressMessage] = useState<{
-    tone: 'success' | 'error'
-    text: string
-  } | null>(null)
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -116,37 +108,6 @@ export default function ProfileSettingsPage({
     }
   }
 
-  const handleRepairReviewStageProgress = async () => {
-    setRepairProgressLoading(true)
-    setRepairProgressMessage(null)
-    try {
-      const result = await repairReviewStageProgress()
-      const recoveredCount = result.practice_recovery_count ?? 0
-      const migratedCount = (result.orphan_progress_count ?? 0) + (result.orphan_study_session_count ?? 0)
-      const syncedCount = result.study_session_count ?? 0
-      const details = [
-        `重建 ${result.palace_count} 个宫殿`,
-        recoveredCount > 0 ? `恢复 ${recoveredCount} 条节点进度` : null,
-        migratedCount > 0 ? `迁回 ${migratedCount} 条历史进度` : null,
-        syncedCount > 0 ? `同步 ${syncedCount} 条前端复习会话` : null,
-      ].filter(Boolean)
-      const message = `修复完成：${details.join('，')}。`
-      setRepairProgressMessage({
-        tone: 'success',
-        text: message,
-      })
-      toast.success(message)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '修复失败，请稍后重试'
-      setRepairProgressMessage({
-        tone: 'error',
-        text: message,
-      })
-      toast.error(message)
-    } finally {
-      setRepairProgressLoading(false)
-    }
-  }
 
   if (!config) {
     return (
@@ -157,7 +118,7 @@ export default function ProfileSettingsPage({
   return (
     <ProfileLayout
       title="个人中心"
-      description="这里继续管理复习排程、导入导出，以及新的 AI 知识点拆分接入配置。"
+      description="这里管理 FSRS 参数、导入导出和本地运行偏好；旧阶段记录仅保留用于迁移审计。"
     >
       {clientPreferencesReady ? (
         <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
@@ -193,19 +154,33 @@ export default function ProfileSettingsPage({
           <form onSubmit={handleSaveConfig} className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">高级排程策略</CardTitle>
+                <CardTitle className="text-base">记忆调度</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="ebbinghaus-intervals">
-                    增强艾宾浩斯顺序：1小时，睡前，1天，x天
-                  </Label>
-                  <Input
-                    id="ebbinghaus-intervals"
-                    name="ebbinghaus_intervals"
-                    defaultValue={config.ebbinghaus_intervals}
-                    placeholder="1h,sleep,1,2,4,7,15,30,60"
-                  />
+                <p className="text-xs text-muted-foreground">FSRS 会根据每个节点的实际评分计算下一次复习时间；旧艾宾浩斯记录保留在数据库中用于迁移审计。</p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="desired-retention">目标记忆率</Label>
+                    <Input id="desired-retention" name="desired_retention" type="number" min="0.7" max="0.99" step="0.01" defaultValue={config.desired_retention || '0.90'} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mastery-horizon-days">掌握跨度（天）</Label>
+                    <Input id="mastery-horizon-days" name="mastery_horizon_days" type="number" min="7" max="365" defaultValue={config.mastery_horizon_days || '60'} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maximum-interval">最长间隔（天）</Label>
+                    <Input id="maximum-interval" name="maximum_interval" type="number" min="1" max="365" defaultValue={config.maximum_interval || '180'} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="learning-steps">首次学习短期步骤</Label>
+                    <Input id="learning-steps" name="learning_steps" defaultValue={config.learning_steps || '10m,1h'} placeholder="10m,1h" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="relearning-steps">遗忘后短期步骤</Label>
+                    <Input id="relearning-steps" name="relearning_steps" defaultValue={config.relearning_steps || '10m,1h'} placeholder="10m,1h" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -298,40 +273,6 @@ export default function ProfileSettingsPage({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Wrench className="size-4" />
-                  维护工具
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-sm text-muted-foreground">
-                  当旧版本宫殿的复习阶段、列表进度或下一轮排程显示不一致时，可以重新计算历史宫殿复习进度。
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void handleRepairReviewStageProgress()}
-                  loading={repairProgressLoading}
-                  loadingText="正在修复复习进度"
-                >
-                  <Wrench className="size-4" />
-                  一键修复历史宫殿复习进度
-                </Button>
-                {repairProgressMessage ? (
-                  <div
-                    className={`rounded-lg border px-4 py-3 text-sm ${
-                      repairProgressMessage.tone === 'success'
-                        ? 'border-success/30 bg-success/5 text-success'
-                        : 'border-destructive/50 bg-destructive/10 text-destructive'
-                    }`}
-                  >
-                    {repairProgressMessage.text}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
 
             <Button type="submit">保存复习配置</Button>
           </form>

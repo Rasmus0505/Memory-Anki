@@ -3,7 +3,7 @@
   "architecture": {
     "backend": "modular-monolith",
     "frontend": "app-pages-widgets-features-entities-shared",
-    "databaseSchemaChanges": false
+    "databaseSchemaChanges": true
   },
   "backend": {
     "targetLayers": [
@@ -98,6 +98,7 @@
         "sessions"
       ],
       "english": [
+        "reviews",
         "sessions",
         "settings"
       ],
@@ -116,7 +117,8 @@
       "knowledge": [
         "backups",
         "mindmap_document",
-        "palaces"
+        "palaces",
+        "reviews"
       ],
       "palace_quiz": [
         "backups",
@@ -135,6 +137,7 @@
       "pdf_library": [],
       "reviews": [
         "mindmap_document",
+        "mindmap_learning",
         "palaces",
         "sessions"
       ],
@@ -154,12 +157,11 @@
       "modules/palaces/application/attachment_service.py",
       "modules/palaces/application/editor_state_service.py",
       "modules/palaces/application/import_export_service.py",
+      "modules/palaces/application/knowledge_binding_service.py",
       "modules/palaces/application/palace_service.py",
       "modules/palaces/application/palace_template_service.py",
       "modules/palaces/application/segment_management_service.py",
       "modules/palace_quiz/application/question_mutation_commands.py",
-      "modules/reviews/application/review_commands.py",
-      "modules/reviews/application/review_repair_service.py",
       "modules/sessions/application/study_session_commands.py"
     ]
   },
@@ -173,8 +175,15 @@
       "shared"
     ],
     "allowedFeatureDependencies": {
-      "english": [],
-      "english-reading": [],
+      "english": [
+        "english-reading",
+        "english-shell"
+      ],
+      "english-reading": [
+        "english",
+        "english-shell"
+      ],
+      "english-shell": [],
       "freestyle": [],
       "knowledge": [],
       "mindmap-import": [],

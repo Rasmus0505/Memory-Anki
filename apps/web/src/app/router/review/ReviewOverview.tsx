@@ -1,442 +1,214 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, BookOpen, Brain, CalendarClock, RotateCcw } from 'lucide-react'
-import { toast } from '@/shared/feedback/toast'
-import type {
-  ReviewQueueResponse,
-  ReviewStageProgressHealthResponse,
-  SpreadOverdueResponse,
-} from '@/shared/api/contracts'
+import { ArrowDownUp, ArrowRight, Brain, CalendarClock } from 'lucide-react'
+import type { ReviewQueueResponse } from '@/shared/api/contracts'
+import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi } from '@/features/review/api'
+import {
+  DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
+  isReviewQueueSortMode,
+  isReviewQueueViewSettings,
+  REVIEW_QUEUE_SORT_OPTIONS,
+  REVIEW_QUEUE_VIEW_SETTINGS_KEY,
+  sortReviewQueueItems,
+  type ReviewQueueSortMode,
+  type ReviewQueueViewSettings,
+} from '@/features/review/model/reviewQueueSort'
+import { buildReviewSessionPath } from '@/entities/review'
+import { formatDuration } from '@/entities/session/model'
+import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
-import { EmptyState, ErrorState } from '@/shared/components/state-placeholders'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Skeleton } from '@/shared/components/ui/skeleton'
+import { EmptyState, ErrorState, LoadingState } from '@/shared/components/state-placeholders'
 import {
-  getChapterReviewQueueApi,
-  getReviewQueueApi,
-  getReviewSessionApi,
-  getReviewSessionProgressApi,
-  getReviewStageProgressHealthApi,
-  invalidateReviewQueueCache,
-  previewSpreadOverdueApi,
-  repairReviewStageProgressApi,
-  spreadOverdueApi,
-  undoSpreadOverdueApi,
-} from '@/features/review/api'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
 import { ReviewLoadForecastCard } from '@/features/review/components/ReviewLoadForecastCard'
-import { buildReviewSessionPath } from '@/entities/review'
-import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
+import { ReviewEntryTooltip } from '@/entities/review'
+import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { cn } from '@/shared/lib/utils'
 
-function formatReviewStage(reviewType: string, reviewNumber: number) {
-  if (reviewType === '1h') return '首日 1 小时'
-  if (reviewType === 'sleep') return '首日睡前'
-  return `第 ${reviewNumber + 1} 次`
-}
-
-const reviewTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
-
-function formatReviewTime(value: string | null) {
-  if (!value) return '时间待定'
+function formatReviewTime(value?: string | null) {
+  if (!value) return '现在'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '时间待定' : reviewTimeFormatter.format(date)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function ReviewQueueSkeleton() {
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-7 w-48" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-        <Skeleton className="h-9 w-24 rounded-md" />
-      </div>
+function entryButtonClass(mode?: string | null) {
+  if (mode === 'node') {
+    return 'border-warning bg-warning text-white hover:bg-warning/80'
+  }
+  return undefined
+}
 
-      <Card className="memory-anki-warm-panel border-border/60 bg-card/90">
-        <CardHeader>
-          <Skeleton className="h-5 w-24" />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-background/80 px-4 py-4"
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <Skeleton className="h-4 w-2/5" />
-                <Skeleton className="h-3 w-3/5" />
-              </div>
-              <Skeleton className="h-8 w-20 rounded-md" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  )
+function entryButtonLabel(mode?: string | null, fallback = '开始复习') {
+  if (mode === 'node') return '节点复习'
+  if (mode === 'palace') return '开始复习'
+  return fallback
 }
 
 export default function ReviewOverview() {
   const [searchParams] = useSearchParams()
-  const chapterIdParam = searchParams.get('chapterId')
-  const chapterId = chapterIdParam ? Number(chapterIdParam) : null
+  const rawChapterId = searchParams.get('chapterId')
+  const chapterId = rawChapterId ? Number(rawChapterId) : null
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [spreadPreview, setSpreadPreview] = useState<SpreadOverdueResponse | null>(null)
-  const [lastSpreadCount, setLastSpreadCount] = useState(0)
-  const [spreadAction, setSpreadAction] = useState<'preview' | 'confirm' | 'undo' | null>(null)
-  const [health, setHealth] = useState<ReviewStageProgressHealthResponse | null>(null)
-  const [repairing, setRepairing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [viewSettings, setViewSettings] = useLocalStorageState<ReviewQueueViewSettings>(
+    REVIEW_QUEUE_VIEW_SETTINGS_KEY,
+    DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
+    isReviewQueueViewSettings,
+    'review_queue_view_settings',
+  )
+  const sortMode = viewSettings.sortMode
 
-  const loadQueue = useCallback(async ({ preserveContent = false, invalidateCache = false } = {}) => {
-    if (!preserveContent) {
-      setLoadError(null)
-      setQueue(null)
-    }
-    if (invalidateCache && !chapterId) {
-      invalidateReviewQueueCache()
-    }
-    try {
-      const nextQueue = chapterId ? await getChapterReviewQueueApi(chapterId) : await getReviewQueueApi()
-      setQueue(nextQueue)
-    } catch (error) {
-      if (!preserveContent) {
-        setLoadError(error instanceof Error ? error.message : '加载复习队列失败。')
-      }
-      throw error
-    }
+  useEffect(() => {
+    let active = true
+    const request = chapterId ? getChapterReviewQueueApi(chapterId) : getReviewQueueApi()
+    void request.then((result) => { if (active) setQueue(result) }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : '加载复习队列失败') })
+    return () => { active = false }
   }, [chapterId])
 
-  useEffect(() => {
-    void loadQueue().catch(() => undefined)
-  }, [loadQueue])
+  const sortedReviews = useMemo(
+    () => (queue ? sortReviewQueueItems(queue.reviews, sortMode) : []),
+    [queue, sortMode],
+  )
+  const sortedLaterToday = useMemo(
+    () => (queue ? sortReviewQueueItems(queue.later_today_reviews, sortMode) : []),
+    [queue, sortMode],
+  )
 
-  useEffect(() => {
-    if (!queue || queue.later_today_reviews.length === 0) return
+  if (error) return <ErrorState title="复习队列加载失败" description={error} />
+  if (!queue) return <LoadingState text="正在读取 FSRS 到期节点…" />
+  const warm = (id: string | number) => prefetchStudySession('review-session', Number(id), () => Promise.all([getReviewSessionApi(id), getReviewSessionProgressApi(id)]).then(([session, progress]) => ({ session, progress })))
 
-    let earliestDueAt = Number.POSITIVE_INFINITY
-    for (const review of queue.later_today_reviews) {
-      if (!review.due_at) continue
-      const dueAt = new Date(review.due_at).getTime()
-      if (!Number.isNaN(dueAt) && dueAt < earliestDueAt) {
-        earliestDueAt = dueAt
-      }
-    }
-    if (!Number.isFinite(earliestDueAt)) return
-
-    const timeoutId = window.setTimeout(() => {
-      void loadQueue({ preserveContent: true, invalidateCache: true }).catch(() => undefined)
-    }, Math.max(0, earliestDueAt - Date.now() + 250))
-
-    return () => window.clearTimeout(timeoutId)
-  }, [loadQueue, queue])
-
-  useEffect(() => {
-    if (chapterId) {
-      setHealth(null)
-      return
-    }
-    getReviewStageProgressHealthApi()
-      .then(setHealth)
-      .catch(() => setHealth(null))
-  }, [chapterId])
-
-  const chapterLabel = useMemo(() => {
-    if (!queue?.chapter) return null
-    if (queue.chapter.subject?.name) return `${queue.chapter.subject.name} / ${queue.chapter.name}`
-    return queue.chapter.name
-  }, [queue?.chapter])
-
-  const handlePreviewSpread = useCallback(async () => {
-    setSpreadAction('preview')
-    try {
-      setSpreadPreview(await previewSpreadOverdueApi())
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '逾期平滑预览失败')
-    } finally {
-      setSpreadAction(null)
-    }
-  }, [])
-
-  const handleConfirmSpread = useCallback(async () => {
-    setSpreadAction('confirm')
-    try {
-      const result = await spreadOverdueApi()
-      setLastSpreadCount(result.spread)
-      setSpreadPreview(null)
-      void loadQueue().catch(() => undefined)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '逾期平滑失败')
-    } finally {
-      setSpreadAction(null)
-    }
-  }, [loadQueue])
-
-  const handleUndoSpread = useCallback(async () => {
-    setSpreadAction('undo')
-    try {
-      const result = await undoSpreadOverdueApi()
-      setLastSpreadCount(0)
-      setSpreadPreview(null)
-      toast.success(`已恢复 ${result.restored} 项`)
-      void loadQueue().catch(() => undefined)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '撤销逾期平滑失败')
-    } finally {
-      setSpreadAction(null)
-    }
-  }, [loadQueue])
-
-  const handleRepairStageProgress = useCallback(async () => {
-    setRepairing(true)
-    try {
-      const result = await repairReviewStageProgressApi()
-      toast.success(`修复完成：重建 ${result.palace_count} 个宫殿`)
-      setHealth(await getReviewStageProgressHealthApi())
-      await loadQueue()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '修复失败，请稍后重试')
-    } finally {
-      setRepairing(false)
-    }
-  }, [loadQueue])
-
-  if (loadError) {
-    return (
-      <ErrorState
-        title="复习队列加载失败"
-        description={loadError}
-        action={
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue().catch(() => undefined)}>
-            重新加载
-          </Button>
-        }
-      />
-    )
+  const handleSortChange = (value: string) => {
+    if (!isReviewQueueSortMode(value)) return
+    setViewSettings({ sortMode: value as ReviewQueueSortMode })
   }
-
-  if (!queue) {
-    return <ReviewQueueSkeleton />
-  }
-
-  const title = chapterLabel ? `章节复习：${chapterLabel}` : `今日复习队列：${queue.due_count}`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageIntro
-        title={title}
-        actions={
-          <>
-            {chapterId ? (
-              <Link to="/review">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 size-4" />
-                  返回总览
-                </Button>
-              </Link>
-            ) : null}
-            {!chapterId && queue.overdue_count > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={spreadAction !== null}
-                onClick={() => void handlePreviewSpread()}
-              >
-                <CalendarClock className="mr-2 size-4" />
-                平滑逾期（{queue.overdue_count}）
-              </Button>
-            ) : null}
-          </>
-        }
+        eyebrow="FSRS"
+        title={chapterId ? '章节复习' : '今日复习'}
+        description="默认按最早到期排列（拖最久的优先）；可在队列标题旁切换节点数、逾期数或名称排序。"
+        compact
       />
-
-      {spreadPreview ? (
-        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
-          <CardHeader>
-            <CardTitle className="text-base">确认平滑逾期</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>将把 {spreadPreview.spread} 项逾期复习分摊到未来 7 天，最早的排在最前。</p>
-            {spreadPreview.moves.length > 0 ? (
-              <ul className="space-y-2">
-                {spreadPreview.moves.slice(0, 5).map((move) => (
-                  <li key={move.schedule_id} className="rounded-md border border-border/60 bg-background/70 px-3 py-2">
-                    <span className="font-medium text-foreground">{move.palace_title || `宫殿 ${move.palace_id}`}</span>
-                    <span className="ml-2">{move.old_date} → {move.new_date}</span>
-                  </li>
-                ))}
-                {spreadPreview.moves.length > 5 ? (
-                  <li className="px-3 text-xs">...等 {spreadPreview.moves.length} 项</li>
-                ) : null}
-              </ul>
-            ) : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={spreadAction !== null}
-                onClick={() => setSpreadPreview(null)}
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={spreadAction !== null || spreadPreview.spread <= 0}
-                onClick={() => void handleConfirmSpread()}
-              >
-                <CalendarClock className="mr-2 size-4" />
-                确认平滑
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {health?.needs_repair ? (
-        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-warning/45 bg-warning/10">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm font-medium text-amber-800 dark:text-amber-200">
-            <span className="min-w-0 flex-1">
-              检测到 {health.total_issues} 处复习进度异常（孤儿进度 {health.orphan_progress_count}、
-              孤儿会话 {health.orphan_study_session_count}、阶段断档 {health.stage_gap_palace_count}），建议立即修复。
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">当前到期节点</div><b className="text-2xl">{queue.due_count}</b></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">逾期节点</div><b className="text-2xl">{queue.overdue_count}</b></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">本周复习时长</div><b className="text-2xl">{formatDuration(queue.stats.review_duration_seconds)}</b></CardContent></Card>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-2">
+              <Brain className="size-5 text-primary" />
+              现在到期（{queue.due_count} 个节点）
             </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-warning/40 bg-background/80 text-amber-800 hover:bg-warning/15 dark:text-amber-200"
-              disabled={repairing}
-              onClick={() => void handleRepairStageProgress()}
-            >
-              {repairing ? '修复中...' : '一键修复'}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {queue.smoothed_count > 0 || lastSpreadCount > 0 ? (
-        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/60 bg-card/90">
-          <CardContent className="flex items-center justify-between gap-3 p-4 text-sm text-muted-foreground">
-            <span>系统已将 {lastSpreadCount || queue.smoothed_count} 项逾期任务平滑到后续日期。</span>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">已平滑</Badge>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={spreadAction !== null}
-                onClick={() => void handleUndoSpread()}
-              >
-                <RotateCcw className="mr-2 size-4" />
-                撤销
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/70 bg-card/90">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg tracking-tight">待处理任务</CardTitle>
+            <label className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
+              <ArrowDownUp className="size-4 shrink-0" aria-hidden />
+              <span className="sr-only sm:not-sr-only sm:inline">排列</span>
+              <Select value={sortMode} onValueChange={handleSortChange}>
+                <SelectTrigger
+                  className="h-8 w-[11.5rem] bg-background"
+                  aria-label="复习队列排序"
+                  data-testid="review-queue-sort"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {REVIEW_QUEUE_SORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} title={option.description}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {queue.reviews.length > 0 ? (
-            queue.reviews.map((review) => (
+          {sortedReviews.length ? sortedReviews.map((review) => {
+            const mode = review.review_entry_mode
+            const label = entryButtonLabel(mode, review.review_entry_label ?? '开始复习')
+            return (
               <Link
-                key={review.id}
-                to={buildReviewSessionPath(review.id, chapterId)}
-                onFocus={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
-                onMouseEnter={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
+                key={review.palace_id}
+                to={buildReviewSessionPath(review.palace_id, chapterId)}
+                onFocus={() => warm(review.palace_id)}
+                onMouseEnter={() => warm(review.palace_id)}
               >
-                <div className="memory-anki-soft-card flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-background/80 px-4 py-4 transition-all hover:-translate-y-[1px] hover:border-primary/35 hover:bg-secondary/75">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Brain className="size-4 shrink-0 text-primary" />
-                      <span className="truncate font-semibold text-foreground">{review.palace?.title || '未命名宫殿'}</span>
+                <div className="flex items-center justify-between gap-4 rounded-2xl border bg-background/80 px-4 py-4 transition hover:border-primary/35">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-semibold">{review.palace?.title || '未命名宫殿'}</div>
+                      <span className="rounded-full border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        今日第 {(review.today_review_count ?? 0) + 1} 次
+                      </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
-                      <span>间隔 {review.interval_days} 天</span>
-                      {review.schedule_count > 1 ? <span>累计 {review.schedule_count} 次待复习</span> : <span>1 个宫殿复习对象</span>}
-                      {review.overdue_schedule_count > 0 ? <span>{review.overdue_schedule_count} 次已逾期</span> : null}
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      到期 {review.due_node_count} · 逾期 {review.overdue_node_count} · 最早 {formatReviewTime(review.next_due_at ?? review.due_at)}
                     </div>
                   </div>
-                  <Button size="sm" className="shrink-0 shadow-sm">
-                    开始复习
-                    <ArrowRight className="ml-2 size-4" />
-                  </Button>
+                  <ReviewEntryTooltip
+                    branches={review.review_branch_summaries}
+                    nextReviewAt={review.next_due_at ?? review.due_at}
+                    dueNodeCount={review.due_node_count}
+                    entryMode={mode === 'none' ? null : mode}
+                  >
+                    <Button size="sm" className={cn(entryButtonClass(mode))}>
+                      {label}
+                      <ArrowRight className="ml-2 size-4" />
+                    </Button>
+                  </ReviewEntryTooltip>
                 </div>
               </Link>
-            ))
-          ) : (
-            <EmptyState
-              variant="review"
-              title={chapterId ? '这个章节今天不用正式复习' : '今天没有到期的正式复习'}
-              description={
-                chapterId
-                  ? '可以回到知识树继续学习，或稍后再来查看新的复习计划。'
-                  : '可以继续学习新内容；有知识点到期时，复习任务会自动出现在这里。'
-              }
-              action={
-                !chapterId ? (
-                  <Link to="/knowledge">
-                    <Button variant="outline" size="sm">
-                      <BookOpen className="mr-2 size-4" />
-                      前往知识树查看章节
-                    </Button>
-                  </Link>
-                ) : null
-              }
-            />
-          )}
+            )
+          }) : <EmptyState variant="review" title="今天没有到期的正式复习" description="有节点到期时，FSRS 会自动将宫殿加入这里。" />}
         </CardContent>
       </Card>
-
-      {queue.later_today_reviews.length > 0 ? (
-        <Card className="memory-anki-warm-panel memory-anki-surface-glow border-border/70 bg-card/90">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg tracking-tight">
+      {sortedLaterToday.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <CalendarClock className="size-5 text-warning" />
-              今日稍后到期（{queue.later_today_count}）
+              今日稍后到期（{queue.later_today_count} 个节点）
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {queue.later_today_reviews.map((review) => (
-              <Link
-                key={review.id}
-                to={buildReviewSessionPath(review.id, chapterId)}
-                onFocus={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
-                onMouseEnter={() => prefetchStudySession('review-session', review.id, () => Promise.all([getReviewSessionApi(review.id), getReviewSessionProgressApi(review.id)]).then(([session, progress]) => ({ session, progress })))}
-              >
-                <div className="memory-anki-soft-card flex items-center justify-between gap-4 rounded-2xl border border-warning/25 bg-warning/5 px-4 py-4 transition-all hover:-translate-y-[1px] hover:border-warning/45 hover:bg-warning/10">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Brain className="size-4 shrink-0 text-warning" />
-                      <span className="truncate font-semibold text-foreground">{review.palace?.title || '未命名宫殿'}</span>
+            {sortedLaterToday.map((review) => (
+              <Link key={review.palace_id} to={buildReviewSessionPath(review.palace_id, chapterId)}>
+                <div className="flex items-center justify-between rounded-2xl border border-warning/25 bg-warning/5 px-4 py-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <b>{review.palace?.title || '未命名宫殿'}</b>
+                      <span className="rounded-full border bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        今日第 {(review.today_review_count ?? 0) + 1} 次
+                      </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>{formatReviewStage(review.review_type, review.review_number)}</span>
-                      <span>今日 {formatReviewTime(review.due_at)} 到期</span>
+                    <div className="text-xs text-muted-foreground">
+                      {formatReviewTime(review.next_due_at ?? review.due_at)} · {review.due_node_count} 个节点
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" className="shrink-0 border-warning/35 bg-background/80">
-                    提前复习
-                    <ArrowRight className="ml-2 size-4" />
-                  </Button>
+                  <ReviewEntryTooltip
+                    branches={review.review_branch_summaries}
+                    nextReviewAt={review.next_due_at ?? review.due_at}
+                    dueNodeCount={0}
+                    entryMode={review.review_entry_mode === 'none' ? null : review.review_entry_mode}
+                  >
+                    <Button size="sm" variant="outline">提前复习</Button>
+                  </ReviewEntryTooltip>
                 </div>
               </Link>
             ))}
           </CardContent>
         </Card>
       ) : null}
-
       {!chapterId ? <ReviewLoadForecastCard /> : null}
     </div>
   )

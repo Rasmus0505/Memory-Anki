@@ -2,15 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { PalaceStageProgress } from '@/features/palace-catalog/components/palace-list/PalaceStageProgress'
+import { PalaceMemoryProgress } from '@/features/palace-catalog/components/palace-list/PalaceMemoryProgress'
 import type { PalaceListViewSettings } from '@/entities/preferences/model/palaceViewSettings'
 import { formatDuration } from '@/entities/session/model'
-import type {
-  PalaceGroupedItem,
-  PalaceSegmentSummary,
-  ReviewStageSummary,
-} from '@/shared/api/contracts'
-import { Badge } from '@/shared/components/ui/badge'
+import type { PalaceGroupedItem, PalaceSegmentSummary } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
@@ -25,19 +20,18 @@ import {
   getSegmentCardClass,
   getSegmentDisplayName,
   getSegmentListClass,
-  isSleepReviewSegment,
 } from '@/features/palace-catalog/components/palace-list/utils'
+import { ReviewEntryTooltip } from '@/entities/review'
 
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
   viewSettings: PalaceListViewSettings
   searchQuery?: string
   defaultExpanded?: boolean
-  onPalacePractice: (palace: PalaceGroupedItem) => void
-  onWarmPalacePractice?: (palace: PalaceGroupedItem) => void
-  onSegmentPractice: (segment: PalaceSegmentSummary) => void
-  onWarmSegmentPractice?: (segment: PalaceSegmentSummary) => void
-  onStageClick?: (palace: PalaceGroupedItem, stage: ReviewStageSummary) => void
+  onPalaceReview: (palace: PalaceGroupedItem) => void
+  onWarmPalaceReview?: (palace: PalaceGroupedItem) => void
+  onSegmentReview: (segment: PalaceSegmentSummary) => void
+  onWarmSegmentReview?: (segment: PalaceSegmentSummary) => void
   onDelete: (id: number, title: string) => void
 }
 
@@ -102,6 +96,7 @@ function ReviewActionButton({
   progress,
   onClick,
   onWarm,
+  tooltip,
 }: {
   label: string
   className: string
@@ -109,6 +104,12 @@ function ReviewActionButton({
   progress?: number | null
   onClick: () => void
   onWarm?: () => void
+  tooltip?: {
+    branches?: PalaceGroupedItem['review_branch_summaries']
+    nextReviewAt?: string | null
+    dueNodeCount?: number
+    entryMode?: 'none' | 'node' | 'palace' | null
+  } | null
 }) {
   const normalizedProgress = normalizeReviewProgress(progress)
   const showProgressFill =
@@ -117,7 +118,7 @@ function ReviewActionButton({
     normalizedProgress > 0 &&
     normalizedProgress < 1
 
-  return (
+  const button = (
     <button
       type="button"
       className={cn('relative isolate min-h-11 overflow-hidden sm:min-h-8', className)}
@@ -142,6 +143,18 @@ function ReviewActionButton({
       ) : null}
     </button>
   )
+
+  if (!tooltip?.branches?.length) return button
+  return (
+    <ReviewEntryTooltip
+      branches={tooltip.branches}
+      nextReviewAt={tooltip.nextReviewAt}
+      dueNodeCount={tooltip.dueNodeCount}
+      entryMode={tooltip.entryMode}
+    >
+      {button}
+    </ReviewEntryTooltip>
+  )
 }
 
 export function PalaceListCard({
@@ -149,39 +162,62 @@ export function PalaceListCard({
   viewSettings,
   searchQuery,
   defaultExpanded = false,
-  onPalacePractice,
-  onWarmPalacePractice = () => {},
-  onSegmentPractice,
-  onWarmSegmentPractice = () => {},
-  onStageClick,
+  onPalaceReview,
+  onWarmPalaceReview = () => {},
+  onSegmentReview,
+  onWarmSegmentReview = () => {},
   onDelete,
 }: PalaceListCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const segmentCount = Array.isArray(palace.segments) ? palace.segments.length : 0
+  const segments = Array.isArray(palace.segments) ? palace.segments : []
+  const segmentCount = segments.length
   const isMultiSegment = segmentCount > 1
   const hasSingleSegment = segmentCount === 1
-  const singleSegment = hasSingleSegment ? palace.segments[0] : null
-  const singleSegmentReviewState = singleSegment ? getReviewButtonState(singleSegment.next_review_at) : 'unscheduled'
-  const showSingleSegmentReviewButton = Boolean(
-    singleSegment &&
-      !palace.needs_practice &&
+  const singleSegment = hasSingleSegment ? segments[0] : null
+  // Catalog uses palace_card_json (often without segments). Primary CTA must use palace FSRS fields.
+  const hasFsrsProjection =
+    typeof palace.memory_node_count === 'number' ||
+    typeof palace.due_node_count === 'number' ||
+    'memory_next_review_at' in palace ||
+    palace.review_entry_mode != null
+  const memoryNextReviewAt = hasFsrsProjection
+    ? palace.memory_next_review_at ?? palace.next_review_at ?? null
+    : singleSegment?.next_review_at ?? null
+  const dueNodeCount = Number(palace.due_node_count ?? 0)
+  const memoryNodeCount = Number(
+    palace.memory_node_count ?? singleSegment?.node_count ?? 0,
+  )
+  const entryMode = palace.review_entry_mode ?? 'none'
+  const hasDueEntry =
+    dueNodeCount > 0 || entryMode === 'node' || entryMode === 'palace' || Boolean(palace.has_due_review)
+  const timestampState = getReviewButtonState(memoryNextReviewAt)
+  const primaryReviewState = hasDueEntry
+    ? 'due_now'
+    : timestampState
+  const showFsrsReviewButton = Boolean(
+    hasFsrsProjection &&
+      memoryNodeCount > 0 &&
+      (hasDueEntry || Boolean(memoryNextReviewAt)),
+  )
+  const showLegacySegmentReviewButton = Boolean(
+    !hasFsrsProjection &&
+      singleSegment &&
       !singleSegment.is_empty &&
       (singleSegment.has_due_review ||
-        (singleSegmentReviewState !== 'due_now' &&
+        (timestampState !== 'due_now' &&
           singleSegment.current_review_schedule_id &&
           singleSegment.next_review_at)),
   )
+  const showPrimaryReviewButton = showFsrsReviewButton || showLegacySegmentReviewButton
   const showExpandButton = isMultiSegment
   const shouldShowSegmentListWhenExpanded = isMultiSegment
-  const shouldShowStageProgress = Array.isArray(palace.stage_labels) && palace.stage_labels.length > 0
-  const showPalacePracticeButton = Boolean(palace.needs_practice) && !showSingleSegmentReviewButton
   const primaryEstimatedSeconds = singleSegment?.estimated_review_seconds ?? 0
   const palaceTitle = palace.resolved_title || palace.title || '未命名宫殿'
   const singleSegmentActiveProgress = normalizeReviewProgress(singleSegment?.active_review_progress)
   const showSingleSegmentActiveProgress =
-    showSingleSegmentReviewButton &&
+    showPrimaryReviewButton &&
     singleSegmentActiveProgress !== null &&
     singleSegmentActiveProgress > 0 &&
     singleSegmentActiveProgress < 1
@@ -219,37 +255,47 @@ export function PalaceListCard({
                 >
                   {renderHighlightedText(palaceTitle, searchQuery)}
                 </Link>
-                {showPalacePracticeButton ? (
-                  <>
-                    <ReviewActionButton
-                      label="练习"
-                      className={cn(
-                        'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
-                        getReviewActionButtonClass({ state: 'practice' }),
-                      )}
-                      disabled={false}
-                      onWarm={() => onWarmPalacePractice(palace)}
-                      onClick={() => onPalacePractice(palace)}
-                    />
-                  </>
-                ) : null}
-                {singleSegment && showSingleSegmentReviewButton ? (
+                {showPrimaryReviewButton ? (
                   <ReviewActionButton
-                    label={getReviewActionLabel(singleSegment.next_review_at, {
-                      state: singleSegmentReviewState,
-                      isSleepReview: isSleepReviewSegment(singleSegment),
+                    label={getReviewActionLabel(memoryNextReviewAt, {
+                      state: primaryReviewState,
+                      entryLabel: palace.review_entry_label,
+                      entryMode: entryMode === 'none' ? null : entryMode,
                     })}
                     className={cn(
-                      'h-8 min-w-[84px] max-w-[112px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
+                      'h-8 min-w-[84px] max-w-[156px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
                       getReviewActionButtonClass({
-                        state: singleSegmentReviewState,
-                        isSleepReview: isSleepReviewSegment(singleSegment),
+                        state: primaryReviewState,
+                        entryMode: entryMode === 'none' ? null : entryMode,
                       }),
                     )}
-                    disabled={singleSegmentReviewState === 'unscheduled'}
-                    progress={singleSegment.active_review_progress}
-                    onWarm={() => onWarmSegmentPractice(singleSegment)}
-                    onClick={() => onSegmentPractice(singleSegment)}
+                    disabled={primaryReviewState === 'unscheduled'}
+                    progress={singleSegment?.active_review_progress}
+                    tooltip={
+                      showFsrsReviewButton
+                        ? {
+                            branches: palace.review_branch_summaries,
+                            nextReviewAt: memoryNextReviewAt,
+                            dueNodeCount: dueNodeCount,
+                            entryMode: entryMode === 'none' ? null : entryMode,
+                          }
+                        : null
+                    }
+                    onWarm={() => {
+                      if (showFsrsReviewButton) {
+                        onWarmPalaceReview(palace)
+                        return
+                      }
+                      if (singleSegment) onWarmSegmentReview(singleSegment)
+                    }}
+                    onClick={() => {
+                      // FSRS formal review is palace-scoped (session id = palace id).
+                      if (showFsrsReviewButton) {
+                        onPalaceReview(palace)
+                        return
+                      }
+                      if (singleSegment) onSegmentReview(singleSegment)
+                    }}
                   />
                 ) : null}
               </div>
@@ -285,19 +331,11 @@ export function PalaceListCard({
             ) : null}
           </div>
 
-          {shouldShowStageProgress ? (
-            <PalaceStageProgress
-              stageLabels={palace.stage_labels}
-              completed={palace.review_stage_completed}
-              stages={palace.review_stages}
-              nextReviewAt={palace.next_review_at}
-              onStageClick={onStageClick ? (stage) => onStageClick(palace, stage) : undefined}
-            />
-          ) : null}
+          <PalaceMemoryProgress palace={palace} />
 
           {expanded && shouldShowSegmentListWhenExpanded ? (
             <div className={getSegmentListClass(viewSettings.densityMode)}>
-              {palace.segments.map((segment, index) => {
+              {segments.map((segment, index) => {
                 return (
                   <div
                     key={segment.id}
@@ -306,36 +344,19 @@ export function PalaceListCard({
                       getSegmentCardClass(viewSettings.densityMode),
                     )}
                   >
-                    <div className="flex flex-wrap items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block size-2.5 rounded-full"
-                            style={{ backgroundColor: segment.color }}
-                          />
-                          <span className="truncate text-sm font-medium">
-                            {getSegmentDisplayName(segment, index)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                          <span>{segment.node_count} 个知识点</span>
-                          <span>预计 {formatDuration(segment.estimated_review_seconds || 0)}</span>
-                        </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block size-2.5 rounded-full"
+                          style={{ backgroundColor: segment.color }}
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {getSegmentDisplayName(segment, index)}
+                        </span>
                       </div>
-
-                      <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[132px]">
-                        {isMultiSegment ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="min-h-11 w-full text-xs sm:h-8 sm:min-h-8"
-                            onFocus={() => onWarmSegmentPractice(segment)}
-                            onMouseEnter={() => onWarmSegmentPractice(segment)}
-                            onClick={() => onSegmentPractice(segment)}
-                          >
-                            练习
-                          </Button>
-                        ) : null}
+                      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                        <span>{segment.node_count} 个知识点</span>
+                        <span>预计 {formatDuration(segment.estimated_review_seconds || 0)}</span>
                       </div>
                     </div>
                   </div>
@@ -353,11 +374,6 @@ export function PalaceListCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          {palace.mastered ? (
-            <Badge variant="secondary" className="text-[10px]">
-              已掌握
-            </Badge>
-          ) : null}
           <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
               variant="ghost"

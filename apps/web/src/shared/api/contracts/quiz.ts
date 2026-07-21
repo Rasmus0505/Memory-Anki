@@ -178,6 +178,42 @@ export interface PalaceQuizGenerationPreview {
   recovered_from_log?: boolean
 }
 
+export type QuizNodeBindingMergeMode = 'replace_all' | 'fill_unbound'
+
+export interface QuizNodeBindingEdge {
+  id?: number
+  palace_id?: number
+  question_id: number
+  node_uid: string
+  confidence?: number | null
+  reason?: string
+  source?: string
+  run_id?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface QuizNodeBindingPreview {
+  palace_id: number
+  operation_id: string
+  merge_mode: QuizNodeBindingMergeMode
+  mindmap_node_count: number
+  question_count: number
+  batch_count: number
+  batches: Array<Record<string, unknown>>
+  bindings: QuizNodeBindingEdge[]
+  ai_bindings?: Array<{
+    question_id: number
+    node_uids: string[]
+    reason?: string
+    confidence?: number | null
+  }>
+  unbound_question_ids: number[]
+  warnings: string[]
+  existing_edge_count: number
+  preview_edge_count: number
+}
+
 export type QuizSourceRole = 'question' | 'answer'
 export type QuizSourceType = 'image' | 'text' | 'pdf' | 'review_mindmap'
 export type QuizGenerationJobStatus =

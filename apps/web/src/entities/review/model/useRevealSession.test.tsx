@@ -95,4 +95,203 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.a).toBe('hidden')
     expect(result.current.revealMap.b).toBe('hidden')
   })
+
+  it('auto-reveals question-card children when the session starts with a revealed root', () => {
+    const withQuestionCards: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            { data: { text: '知识点 A', uid: 'a' }, children: [] },
+            {
+              data: { text: '题目 B', uid: 'b', memoryAnkiQuestionCard: true },
+              children: [],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: withQuestionCards }),
+    )
+
+    expect(result.current.revealMap.a).toBe('hidden')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
+
+  it('auto-reveals non-due cards when focusNodeIds are provided for formal review', () => {
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState,
+        focusNodeIds: ['b'],
+      }),
+    )
+
+    expect(result.current.revealMap.root).toBe('revealed')
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('placeholder')
+  })
+
+  it('bulk-reveals descendants from hover with selection fallback', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [
+                { data: { text: 'A1', uid: 'a1' }, children: [] },
+                { data: { text: 'A2', uid: 'a2' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('placeholder')
+
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('placeholder')
+    expect(result.current.revealMap.a2).toBe('placeholder')
+
+    act(() => {
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+    expect(result.current.revealMap.a2).toBe('revealed')
+
+    // Selection fallback when hover cleared.
+    act(() => {
+      result.current.handleNodeHover([])
+      result.current.handleBulkRevealDirectChildren('a')
+    })
+    // Both children already revealed — no-op.
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+  })
+
+  it('keeps sticky bulk target after mouseleave so phase-2 A/S still flips', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [
+                { data: { text: 'A1', uid: 'a1' }, children: [] },
+                { data: { text: 'A2', uid: 'a2' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+    })
+    flushRevealFrame()
+
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('placeholder')
+    expect(result.current.revealMap.a2).toBe('placeholder')
+
+    // Simulate reveal re-render mouseleave (live hover cleared, no selection passed).
+    act(() => {
+      result.current.handleNodeHover([])
+    })
+    expect(result.current.hoveredNodeId).toBeNull()
+
+    act(() => {
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+    expect(result.current.revealMap.a2).toBe('revealed')
+  })
+
+  it('prefers selection fallback over sticky last-hover when both exist', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [{ data: { text: 'A1', uid: 'a1' }, children: [] }],
+            },
+            {
+              data: { text: '知识点 B', uid: 'b' },
+              children: [{ data: { text: 'B1', uid: 'b1' }, children: [] }],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+      result.current.handleNodeClick([selection('b', '知识点 B')])
+    })
+    flushRevealFrame()
+
+    // Hover A then leave — sticky becomes A.
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      result.current.handleNodeHover([])
+    })
+
+    // Selection fallback B must win over sticky A.
+    act(() => {
+      result.current.handleBulkRevealDirectChildren('b')
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.b1).toBe('placeholder')
+    expect(result.current.revealMap.a1).not.toBe('placeholder')
+    expect(result.current.revealMap.a1).not.toBe('revealed')
+  })
 })

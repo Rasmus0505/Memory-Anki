@@ -42,6 +42,25 @@ export interface ChapterDetailResponse {
   }>
 }
 
+
+export interface DeleteSubjectImpact {
+  ok: false
+  requires_reassignment: true
+  subject_id: number
+  subject_name: string
+  palace_count: number
+  chapter_count: number
+}
+
+export class DeleteSubjectImpactError extends Error {
+  impact: DeleteSubjectImpact
+  constructor(impact: DeleteSubjectImpact) {
+    super(`学科仍关联 ${impact.palace_count} 个宫殿和 ${impact.chapter_count} 个章节`)
+    this.name = 'DeleteSubjectImpactError'
+    this.impact = impact
+  }
+}
+
 export interface DeleteChapterImpact {
   ok: false
   requires_force: true
@@ -93,15 +112,23 @@ export function updateSubjectApi(id: number, data: unknown) {
   })
 }
 
-export function deleteSubjectApi(id: number) {
-  return request<{ ok: boolean }>(`/subjects/${id}`, {
+export async function deleteSubjectApi(id: number) {
+  const apiToken = getApiToken()
+  const response = await fetch(`${API_BASE}/subjects/${id}`, {
     method: 'DELETE',
-    persistence: {
-      resourceKey: `subject:${id}:delete`,
-      description: '删除学科',
-      replayMode: 'manual',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiToken ? { 'X-Memory-Anki-Token': apiToken } : {}),
     },
   })
+  const body = await response.text().catch(() => '')
+  let payload: unknown
+  try { payload = body ? JSON.parse(body) : null } catch { payload = null }
+  if (response.status === 409 && payload && typeof payload === 'object' && 'requires_reassignment' in payload) {
+    throw new DeleteSubjectImpactError(payload as DeleteSubjectImpact)
+  }
+  if (!response.ok) throw new Error(extractResponseMessage(response.status, body))
+  return payload as { ok: boolean }
 }
 
 export function getSubjectTreeApi(id: number) {

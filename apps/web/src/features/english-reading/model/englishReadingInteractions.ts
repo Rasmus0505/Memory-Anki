@@ -16,8 +16,9 @@ const SENTENCE_TRANSLATION_PANEL_MAX_WIDTH = 540;
 const SENTENCE_TRANSLATION_PANEL_MIN_HEIGHT = 170;
 const SENTENCE_TRANSLATION_PANEL_SAFE_MARGIN = 16;
 const SENTENCE_TRANSLATION_PANEL_GAP = 12;
-export const SENTENCE_TRANSLATION_TRIGGER_WIDTH = 132;
-export const SENTENCE_TRANSLATION_TRIGGER_HEIGHT = 40;
+/** Floating multi-action bar after sentence selection (translate / pattern / copy). */
+export const SENTENCE_TRANSLATION_TRIGGER_WIDTH = 280;
+export const SENTENCE_TRANSLATION_TRIGGER_HEIGHT = 44;
 
 export type DictionaryPanelState = {
   left: number;

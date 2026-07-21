@@ -31,6 +31,12 @@ from memory_anki.modules.palace_quiz.application.learning_loop import (
     review_and_store_question_quality,
     transition_question,
 )
+from memory_anki.modules.palace_quiz.application.node_binding import (
+    apply_quiz_node_binding_preview,
+    list_palace_node_bindings,
+    mutate_quiz_node_bindings,
+    preview_quiz_node_binding,
+)
 from memory_anki.modules.palace_quiz.application.question_mutation_commands import (
     batch_create_chapter_questions_command,
     batch_create_palace_questions_command,
@@ -574,5 +580,96 @@ def api_classify_existing_quiz_questions_to_mini_palaces(
                     (data or {}).get("ai_options")
                 ),
             )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.get("/palaces/{palace_id}/quiz-node-bindings")
+def api_list_palace_quiz_node_bindings(
+    palace_id: int,
+    s: Session = Depends(session_dep),
+):
+    try:
+        items = list_palace_node_bindings(s, palace_id)
+        return {"items": items, "item_count": len(items)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-node-bindings/preview")
+def api_preview_palace_quiz_node_bindings(
+    palace_id: int,
+    data: dict | None = None,
+    s: Session = Depends(session_dep),
+):
+    payload = data or {}
+    merge_mode = str(payload.get("merge_mode") or "replace_all").strip()
+    if merge_mode not in {"replace_all", "fill_unbound"}:
+        raise HTTPException(status_code=400, detail="merge_mode 仅支持 replace_all 或 fill_unbound。")
+    try:
+        with concurrency_slot("ai_generation", rate_limited=True):
+            return preview_quiz_node_binding(
+                s,
+                ai_dependencies=_ai_dependencies(s),
+                palace_id=palace_id,
+                merge_mode=merge_mode,  # type: ignore[arg-type]
+                batch_size=int(payload.get("batch_size") or 30),
+                ai_options=_ai_dependencies(s).runtime.normalize_options(payload.get("ai_options")),
+                operation_id=str(payload.get("operation_id") or "") or None,
+            )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-node-bindings/apply")
+def api_apply_palace_quiz_node_bindings(
+    palace_id: int,
+    data: dict | None = None,
+    s: Session = Depends(session_dep),
+):
+    payload = data or {}
+    merge_mode = str(payload.get("merge_mode") or "replace_all").strip()
+    if merge_mode not in {"replace_all", "fill_unbound"}:
+        raise HTTPException(status_code=400, detail="merge_mode 仅支持 replace_all 或 fill_unbound。")
+    bindings = payload.get("bindings")
+    if not isinstance(bindings, list):
+        raise HTTPException(status_code=400, detail="bindings 必须是列表。")
+    accepted = payload.get("accepted_edges")
+    if accepted is not None and not isinstance(accepted, list):
+        raise HTTPException(status_code=400, detail="accepted_edges 必须是列表。")
+    try:
+        return apply_quiz_node_binding_preview(
+            s,
+            palace_id=palace_id,
+            merge_mode=merge_mode,  # type: ignore[arg-type]
+            bindings=bindings,
+            operation_id=str(payload.get("operation_id") or "") or None,
+            accepted_edges=accepted if isinstance(accepted, list) else None,
+        )
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-node-bindings/mutate")
+def api_mutate_palace_quiz_node_bindings(
+    palace_id: int,
+    data: dict | None = None,
+    s: Session = Depends(session_dep),
+):
+    """Manually add/remove question↔node bindings without AI."""
+    payload = data or {}
+    add = payload.get("add") or []
+    remove = payload.get("remove") or []
+    if not isinstance(add, list) or not isinstance(remove, list):
+        raise HTTPException(status_code=400, detail="add / remove 必须是列表。")
+    if not add and not remove:
+        raise HTTPException(status_code=400, detail="至少需要一条 add 或 remove。")
+    try:
+        return mutate_quiz_node_bindings(
+            s,
+            palace_id=palace_id,
+            add=add,
+            remove=remove,
+        )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

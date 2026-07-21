@@ -1,30 +1,19 @@
 import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
-import type {
-  PalaceGroupedItem,
-  PalaceSegmentSummary,
-  ReviewStageSummary,
-} from '@/shared/api/contracts'
+import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import type {
   PalaceListDensityMode,
   PalaceListLayoutMode,
 } from '@/entities/preferences/model/palaceViewSettings'
 
-export interface StageEditState {
-  palace: PalaceGroupedItem
-  stage: ReviewStageSummary
-  targetCompletedCount: number
-}
 
-export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled' | 'practice'
+export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
 
 export function resolveReviewButtonState(
   hasDueReview: boolean,
   value: string | null,
-  needsPractice = false,
 ): ReviewButtonState {
   if (hasDueReview) return 'due_now'
-  if (needsPractice) return 'practice'
   if (!value) return 'unscheduled'
   const target = parseApiDateTime(value)
   if (Number.isNaN(target.getTime())) return 'unscheduled'
@@ -108,19 +97,24 @@ export function getSegmentCardClass(densityMode: PalaceListDensityMode) {
 
 export function getReviewActionButtonClass(options: {
   state: ReviewButtonState
+  /** Palace-level vs single-branch due entry; only affects due_now solid CTAs. */
+  entryMode?: 'none' | 'node' | 'palace' | null
   disabled?: boolean
   isSleepReview?: boolean
   className?: string
 }) {
-  const { state, disabled = false, isSleepReview = false, className } = options
+  const { state, entryMode = null, disabled = false, isSleepReview = false, className } = options
+  const dueNowClass =
+    entryMode === 'node'
+      ? 'border-warning bg-warning text-white hover:bg-warning/80'
+      : 'border-success bg-success text-white hover:bg-success/80'
   return cn(
     'h-8 w-full rounded-md border text-xs font-medium transition-colors',
-    state === 'due_now' &&
-      'border-success bg-success text-white hover:bg-success/80',
-    state === 'practice' &&
-      'border-success bg-success text-white hover:bg-success/80',
+    state === 'due_now' && dueNowClass,
     state === 'due_later_today' &&
       'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
+    state === 'future' &&
+      'border-info/40 bg-info/10 text-info hover:bg-info/20',
     isSleepReview && 'border-info bg-info text-white hover:bg-info/80',
     disabled && 'border-border bg-muted/30 text-muted-foreground',
     className,
@@ -140,24 +134,24 @@ export function formatRelativeReviewTime(value: string | null): string {
   const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (totalMinutes < 60) {
-    return `${Math.max(1, totalMinutes)}分钟`
+    return `${Math.max(1, totalMinutes)}分钟后`
   }
 
   if (totalHours < 24) {
     const hours = totalHours
     const minutes = totalMinutes % 60
-    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+    return minutes > 0 ? `${hours}小时${minutes}分钟后` : `${hours}小时后`
   }
 
   if (totalDays < 30) {
     const days = totalDays
     const hours = totalHours % 24
-    return hours > 0 ? `${days}天${hours}小时` : `${days}天`
+    return hours > 0 ? `${days}天${hours}小时后` : `${days}天后`
   }
 
   const months = Math.floor(totalDays / 30)
   const days = totalDays % 30
-  return days > 0 ? `${months}月${days}天` : `${months}天`
+  return days > 0 ? `${months}月${days}天后` : `${months}天后`
 }
 
 export function getReviewButtonState(value: string | null): ReviewButtonState {
@@ -180,6 +174,9 @@ export function getReviewActionLabel(
     loading?: boolean
     isSleepReview?: boolean
     unscheduledLabel?: string
+    /** Backend FSRS entry label, e.g. "节点复习 · 3" or "开始复习 · 5". */
+    entryLabel?: string | null
+    entryMode?: 'none' | 'node' | 'palace' | null
   } = {},
 ): string {
   const {
@@ -187,12 +184,22 @@ export function getReviewActionLabel(
     loading = false,
     isSleepReview = false,
     unscheduledLabel = '未排入复习',
+    entryLabel = null,
+    entryMode = null,
   } = options
 
   if (loading) return '加载中...'
   if (isSleepReview) return '睡前复习'
-  if (state === 'practice') return '练习'
-  if (state === 'due_now') return '开始复习'
+  if (state === 'due_now') {
+    // Prefer short labels without legacy "· N" node counts.
+    if (entryMode === 'node') return '节点复习'
+    if (entryMode === 'palace') return '开始复习'
+    if (entryLabel && entryLabel.trim()) {
+      const cleaned = entryLabel.trim().replace(/\s*·\s*\d+\s*$/, '')
+      return cleaned || '开始复习'
+    }
+    return '开始复习'
+  }
   if (state === 'unscheduled') return unscheduledLabel
   if (state === 'due_later_today') {
     const target = value ? parseApiDateTime(value) : null
@@ -200,15 +207,11 @@ export function getReviewActionLabel(
       return '今日稍后'
     }
   }
-  return formatRelativeReviewTime(value)
+  return state === 'due_later_today' || state === 'future'
+    ? `提前复习 · ${formatRelativeReviewTime(value)}`
+    : formatRelativeReviewTime(value)
 }
 
-export function isSleepReviewSegment(
-  segment: Pick<PalaceSegmentSummary, 'current_review_type' | 'review_stage_completed' | 'stage_labels'>,
-): boolean {
-  if (segment.current_review_type === 'sleep') return true
-  return segment.stage_labels?.[segment.review_stage_completed] === '睡前'
-}
 
 export function formatCreatedAt(value: string | null): string {
   if (!value) return '未知'

@@ -86,7 +86,9 @@ export async function saveClientPreference<T>(key: PreferenceKey, value: T) {
   }
   const requestVersion = (latestSaveVersion[key] ?? 0) + 1
   latestSaveVersion[key] = requestVersion
-  cache[key] = value as ClientPreferences[PreferenceKey]
+  // Indexed assignment through keyof needs a cast: TS wants intersection of all value types.
+  ;(cache as Record<PreferenceKey, ClientPreferences[PreferenceKey]>)[key] =
+    value as ClientPreferences[PreferenceKey]
   emitUpdate()
   try {
     const response = await updateClientPreferencesApi({ [key]: value })

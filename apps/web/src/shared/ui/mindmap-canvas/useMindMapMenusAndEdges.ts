@@ -7,6 +7,8 @@ export interface MindMapNodeMenuState {
   x: number
   y: number
   nodeId: string
+  /** Multi-capable actions apply to this set (frozen when the menu opens). */
+  targetNodeIds: string[]
 }
 
 export interface MindMapEdgeMenuState {
@@ -18,7 +20,7 @@ export interface MindMapEdgeMenuState {
 }
 
 interface UseMindMapMenusAndEdgesInput {
-  onNodeSelect: (nodeId: string | null) => void
+  onNodeSelect: (nodeId: string | null, options?: { additive?: boolean }) => void
   onNodeActivate?: (nodeId: string) => void
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
@@ -28,6 +30,9 @@ interface UseMindMapMenusAndEdgesInput {
   contextActionOnly: boolean
   nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
+  readonly?: boolean
+  /** Current multi-select set; used to preserve selection on right-click. */
+  selectedNodeIds?: readonly string[]
 }
 
 export function useMindMapMenusAndEdges({
@@ -41,6 +46,8 @@ export function useMindMapMenusAndEdges({
   contextActionOnly,
   nodeClickViewportPolicy,
   centerNodeInCanvas,
+  readonly = false,
+  selectedNodeIds = [],
 }: UseMindMapMenusAndEdgesInput) {
   const [ctxMenu, setCtxMenu] = useState<MindMapNodeMenuState | null>(null)
   const [edgeMenu, setEdgeMenu] = useState<MindMapEdgeMenuState | null>(null)
@@ -64,19 +71,32 @@ export function useMindMapMenusAndEdges({
       event.preventDefault()
       setEdgeMenu(null)
       setSelectedEdgeId(null)
-      onNodeSelect(node.id)
+      // Same rule as multi-drag: right-clicking an already-selected node keeps the multi-set.
+      const alreadySelected = selectedNodeIds.includes(node.id)
+      const targetNodeIds =
+        alreadySelected && selectedNodeIds.length > 1
+          ? [...selectedNodeIds]
+          : [node.id]
+      if (!alreadySelected) {
+        onNodeSelect(node.id)
+      }
       if (contextActionOnly && onNodeContextAction) {
         setCtxMenu(null)
         onNodeContextAction(node.id)
       } else {
-        setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
+        setCtxMenu({
+          x: event.clientX,
+          y: event.clientY,
+          nodeId: node.id,
+          targetNodeIds,
+        })
       }
       dispatchGlobalFeedback('context_menu', {
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
     },
-    [contextActionOnly, onNodeContextAction, onNodeSelect],
+    [contextActionOnly, onNodeContextAction, onNodeSelect, selectedNodeIds],
   )
 
   const handlePaneClick = useCallback(() => {
@@ -88,11 +108,19 @@ export function useMindMapMenusAndEdges({
 
   const handleNodeClick = useCallback(
     (event: MouseEvent, node: Node) => {
+      // Edit mode only: ignore 2nd+ click of a double-click so yellow-emphasis
+      // re-select does not re-serialize HTML and swallow dblclick-to-edit.
+      // Readonly flip-card / review intentionally multi-clicks the same node
+      // (browser detail increments within the OS double-click window ~300–500ms).
+      if (!readonly && event.detail > 1) return
       setSelectedEdgeId(null)
       setEdgeMenu(null)
-      onNodeSelect(node.id)
-      onNodeActivate?.(node.id)
-      if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center') {
+      const additive = !readonly && (event.ctrlKey || event.metaKey)
+      onNodeSelect(node.id, additive ? { additive: true } : undefined)
+      if (!additive) {
+        onNodeActivate?.(node.id)
+      }
+      if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center' && !additive) {
         centerNodeInCanvas(node.id)
       }
       dispatchGlobalFeedback('node_select', {
@@ -100,7 +128,14 @@ export function useMindMapMenusAndEdges({
         origin: 'node',
       })
     },
-    [centerNodeInCanvas, mobileGuidedActive, nodeClickViewportPolicy, onNodeActivate, onNodeSelect],
+    [
+      centerNodeInCanvas,
+      mobileGuidedActive,
+      nodeClickViewportPolicy,
+      onNodeActivate,
+      onNodeSelect,
+      readonly,
+    ],
   )
 
   const handleNodeMouseEnter = useCallback(

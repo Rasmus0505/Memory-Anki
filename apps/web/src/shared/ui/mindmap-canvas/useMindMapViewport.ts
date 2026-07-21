@@ -14,11 +14,19 @@ import {
   type Viewport,
 } from '@xyflow/react'
 import type { GraphData } from './adapter'
-import { getEventFeedbackPoint, hasMeaningfulSizeChange } from './mindMapCanvasGeometry'
+import {
+  findNearestNodeIdToViewportCenter,
+  getEventFeedbackPoint,
+  hasMeaningfulSizeChange,
+} from './mindMapCanvasGeometry'
 import {
   DROP_HIT_PADDING_X,
   DROP_HIT_PADDING_Y,
+  DROP_LEAVE_EXTRA_PX,
+  DROP_NEAR_THRESHOLD_PX,
   getResolvedNodeSize,
+  isWithinStructureDropLeaveZone,
+  resolveStructureDropMode,
   type DropMode,
   type NodeSize,
   type PreviewState,
@@ -29,8 +37,6 @@ import type {
   MindMapMobileViewPolicy,
 } from './MindMapCanvas'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
-
-const COLUMN_PROBE_PX = 240
 
 interface UseMindMapViewportInput {
   canvasRef: RefObject<HTMLDivElement | null>
@@ -44,6 +50,8 @@ interface UseMindMapViewportInput {
   readonly: boolean
   mobileViewPolicy: MindMapMobileViewPolicy
   contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
+  /** When this identity changes (edit/review/practice/rating), re-center the previous center card. */
+  sceneTransitionKey?: string | null
   viewCommand: MindMapCanvasViewCommand | null
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
@@ -60,19 +68,30 @@ export function useMindMapViewport({
   readonly,
   mobileViewPolicy,
   contentChangeViewportPolicy,
+  sceneTransitionKey = null,
   viewCommand,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
-  const { fitView, getViewport, setViewport, zoomIn, zoomOut, setCenter } = useReactFlow()
+  const { fitView, getViewport, setViewport, zoomIn, zoomOut, setCenter, screenToFlowPosition } =
+    useReactFlow()
   const pendingMeasuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const measureFrameRef = useRef<number | null>(null)
   const handledViewCommandNonceRef = useRef<number | null>(null)
   const lastPreviewFeedbackRef = useRef('')
+  const lastPreviewStateRef = useRef<PreviewState | null>(null)
   const preservedViewportRef = useRef<Viewport>(controlledViewport)
   const restoreViewportFrameRef = useRef<number | null>(null)
   const explicitViewportChangeRef = useRef(false)
   const manualViewportGestureRef = useRef(false)
   const explicitViewportTimeoutRef = useRef<number | null>(null)
+  /** Card nearest the viewport center while the scene is stable. */
+  const lastStableCenterNodeIdRef = useRef<string | null>(null)
+  /** After a scene switch, re-center this node once layout is ready. */
+  const pendingSceneRecenterNodeIdRef = useRef<string | null>(null)
+  /** Blocks preserve-camera restores while a scene re-center is in flight. */
+  const sceneRecenterLockRef = useRef(false)
+  const sceneRecenterLockTimeoutRef = useRef<number | null>(null)
+  const previousSceneTransitionKeyRef = useRef<string | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -85,11 +104,16 @@ export function useMindMapViewport({
   const graphContentSignature = useMemo(() => JSON.stringify(graphNodes), [graphNodes])
 
   useLayoutEffect(() => {
+    // Never let a mid-restore / programmatic camera write overwrite the lock.
+    if (explicitViewportChangeRef.current) return
     preservedViewportRef.current = controlledViewport
   }, [controlledViewport])
 
   const restorePreservedViewport = useCallback((currentViewport?: Viewport) => {
     if (!preserveViewport || explicitViewportChangeRef.current) return
+    if (manualViewportGestureRef.current) return
+    // Scene re-center intentionally moves the camera to the previous center card.
+    if (sceneRecenterLockRef.current || pendingSceneRecenterNodeIdRef.current) return
     const current = currentViewport ?? getViewport()
     const preserved = preservedViewportRef.current
     if (
@@ -102,28 +126,59 @@ export function useMindMapViewport({
     if (restoreViewportFrameRef.current !== null) {
       cancelAnimationFrame(restoreViewportFrameRef.current)
     }
+    // Mark explicit so RF move callbacks do not treat the correction as a new
+    // "drift" and thrash between intermediate layout viewports.
     restoreViewportFrameRef.current = requestAnimationFrame(() => {
       restoreViewportFrameRef.current = null
-      void setViewport(preservedViewportRef.current, { duration: 0 })
+      if (manualViewportGestureRef.current) return
+      const locked = preservedViewportRef.current
+      explicitViewportChangeRef.current = true
+      void setViewport(locked, { duration: 0 })
+      // Re-assert controlled source of truth on the next frame after RF applies.
+      requestAnimationFrame(() => {
+        const still = getViewport()
+        if (
+          Math.abs(still.x - locked.x) >= 0.01 ||
+          Math.abs(still.y - locked.y) >= 0.01 ||
+          Math.abs(still.zoom - locked.zoom) >= 0.0001
+        ) {
+          void setViewport(locked, { duration: 0 })
+        }
+        onControlledViewportChange(locked)
+        preservedViewportRef.current = locked
+        explicitViewportChangeRef.current = false
+      })
     })
-  }, [getViewport, preserveViewport, setViewport])
+  }, [getViewport, onControlledViewportChange, preserveViewport, setViewport])
 
   const handleMoveStart = useCallback<OnMove>((event) => {
-    if (!preserveViewport || !event) return
-    // 只要存在浏览器交互事件，就视为用户主动平移或缩放；程序化相机变化的 event 为 null。
-    manualViewportGestureRef.current = true
+    if (!preserveViewport) return
+    // RF passes a DOM event for pointer/wheel pans; programmatic moves use null/undefined.
+    // Also accept WheelEvent-like objects so panOnScroll does not get yanked by restore.
+    if (event) {
+      manualViewportGestureRef.current = true
+    }
   }, [preserveViewport])
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
-    if (!preserveViewport || manualViewportGestureRef.current || explicitViewportChangeRef.current) {
+    // Programmatic restore / fit / center: ignore intermediate RF reports so they
+    // cannot corrupt the locked camera that we are trying to re-assert.
+    if (explicitViewportChangeRef.current) return
+    if (!preserveViewport || manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
       onControlledViewportChange(viewport)
     }
+    // In preserve mode without a user gesture, drop RF-driven drift entirely.
   }, [onControlledViewportChange, preserveViewport])
 
-  const handleMove = useCallback<OnMove>((_event, viewport) => {
+  const handleMove = useCallback<OnMove>((event, viewport) => {
     if (!preserveViewport) return
-    if (manualViewportGestureRef.current || explicitViewportChangeRef.current) {
+    if (explicitViewportChangeRef.current) return
+    // Wheel pan sometimes skips a solid moveStart; treat any event-backed move as manual.
+    if (event) {
+      manualViewportGestureRef.current = true
+    }
+    if (manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
       onControlledViewportChange(viewport)
       return
@@ -131,9 +186,16 @@ export function useMindMapViewport({
     restorePreservedViewport(viewport)
   }, [onControlledViewportChange, preserveViewport, restorePreservedViewport])
 
-  const handleMoveEnd = useCallback<OnMove>((_event, viewport) => {
+  const handleMoveEnd = useCallback<OnMove>((event, viewport) => {
     if (!preserveViewport) return
-    if (manualViewportGestureRef.current || explicitViewportChangeRef.current) {
+    if (explicitViewportChangeRef.current) {
+      manualViewportGestureRef.current = false
+      return
+    }
+    if (event) {
+      manualViewportGestureRef.current = true
+    }
+    if (manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
       onControlledViewportChange(viewport)
     } else {
@@ -167,16 +229,6 @@ export function useMindMapViewport({
     return next
   }, [graphNodes])
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
-  const nodesByColumn = useMemo(() => {
-    const next = new Map<number, Node[]>()
-    for (const node of nodes) {
-      const column = Math.round(node.position.x)
-      const columnNodes = next.get(column) ?? []
-      columnNodes.push(node)
-      next.set(column, columnNodes)
-    }
-    return next
-  }, [nodes])
 
   const runFitView = useCallback(
     (duration = 300) => {
@@ -205,6 +257,7 @@ export function useMindMapViewport({
         target.position.y + size.height / 2,
         {
           duration,
+          // Keep the user's zoom across scene switches; only mobile guided overrides it.
           zoom: mobileGuidedActive ? 1.02 : undefined,
         },
       ), duration)
@@ -212,14 +265,98 @@ export function useMindMapViewport({
     [isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, setCenter],
   )
 
+  const resolveViewportCenterNodeId = useCallback(() => {
+    if (!isCanvasReady) return null
+    return findNearestNodeIdToViewportCenter(
+      nodes,
+      getViewport(),
+      canvasSize,
+      measuredNodeSizesRef.current,
+    )
+  }, [canvasSize, getViewport, isCanvasReady, measuredNodeSizesRef, nodes])
+
+  // Measure-driven re-layout rewrites node positions without changing graph
+  // payload identity. Also used as a settle signal for scene re-centering.
+  const layoutFingerprint = useMemo(
+    () =>
+      nodes
+        .map((node) => `${node.id}:${Math.round(node.position.x)}:${Math.round(node.position.y)}`)
+        .join('|'),
+    [nodes],
+  )
+
+  // Scene switch (edit ↔ review ↔ practice ↔ rating): keep the previous center card
+  // roughly centered after the graph re-layouts. Declared before the stable tracker so
+  // the pending flag is set before tracking can overwrite the old anchor.
+  useLayoutEffect(() => {
+    const nextKey = sceneTransitionKey ?? ''
+    const previousKey = previousSceneTransitionKeyRef.current
+    if (previousKey === null) {
+      previousSceneTransitionKeyRef.current = nextKey
+      return
+    }
+    if (previousKey === nextKey) return
+    previousSceneTransitionKeyRef.current = nextKey
+    // Prefer the last tracked center card; fall back to a live read of the old camera.
+    pendingSceneRecenterNodeIdRef.current =
+      lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId()
+    // Lock immediately so same-frame preserve restores cannot yank the camera.
+    if (pendingSceneRecenterNodeIdRef.current) {
+      sceneRecenterLockRef.current = true
+    }
+  }, [resolveViewportCenterNodeId, sceneTransitionKey])
+
+  // Track which card sits at the viewport center while the scene is stable.
+  useLayoutEffect(() => {
+    if (!isCanvasReady || pendingSceneRecenterNodeIdRef.current) return
+    if (manualViewportGestureRef.current || explicitViewportChangeRef.current) return
+    const centerId = resolveViewportCenterNodeId()
+    if (centerId) lastStableCenterNodeIdRef.current = centerId
+  }, [controlledViewport, isCanvasReady, layoutFingerprint, resolveViewportCenterNodeId])
+
+  // Apply deferred re-center once the post-switch layout has nodes.
+  useLayoutEffect(() => {
+    const anchorId = pendingSceneRecenterNodeIdRef.current
+    if (!anchorId || !isCanvasReady) return
+    if (isDraggingNodeRef.current) return
+    const exists = nodes.some((node) => node.id === anchorId)
+    if (!exists) {
+      // Center card may be hidden in the reveal tree — keep camera as-is.
+      pendingSceneRecenterNodeIdRef.current = null
+      sceneRecenterLockRef.current = false
+      return
+    }
+    pendingSceneRecenterNodeIdRef.current = null
+    sceneRecenterLockRef.current = true
+    if (sceneRecenterLockTimeoutRef.current !== null) {
+      window.clearTimeout(sceneRecenterLockTimeoutRef.current)
+    }
+    centerNodeInCanvas(anchorId, 180)
+    // Hold the lock until setCenter finishes updating the controlled viewport.
+    sceneRecenterLockTimeoutRef.current = window.setTimeout(() => {
+      sceneRecenterLockRef.current = false
+      sceneRecenterLockTimeoutRef.current = null
+      lastStableCenterNodeIdRef.current = anchorId
+    }, 230)
+  }, [centerNodeInCanvas, isCanvasReady, isDraggingNodeRef, layoutFingerprint, nodes])
+
   useLayoutEffect(() => {
     if (!preserveViewport || !isCanvasReady) return
     restorePreservedViewport()
   }, [isCanvasReady, preserveViewport, restorePreservedViewport])
 
   useLayoutEffect(() => {
+    // Structure / graph payload changes re-layout nodes; keep the user's camera.
     restorePreservedViewport()
   }, [graphContentSignature, restorePreservedViewport])
+
+  useLayoutEffect(() => {
+    if (!preserveViewport || !isCanvasReady) return
+    if (isDraggingNodeRef.current) return
+    // Never fight the user mid pan/zoom/wheel — that causes a one-frame camera flash.
+    if (manualViewportGestureRef.current) return
+    restorePreservedViewport()
+  }, [isCanvasReady, isDraggingNodeRef, layoutFingerprint, preserveViewport, restorePreservedViewport])
 
   useLayoutEffect(() => {
     const element = canvasRef.current
@@ -243,75 +380,147 @@ export function useMindMapViewport({
   }, [canvasRef])
 
   const checkOverlap = useCallback(
-    (dragId: string, draggedNode?: Node, event?: unknown): PreviewState | null | undefined => {
+    (
+      dragId: string,
+      draggedNode?: Node,
+      event?: unknown,
+      dragSourceIds: readonly string[] = [dragId],
+    ): PreviewState | null | undefined => {
       const dragNode = nodesById.get(dragId)
       const activeNode = draggedNode ?? dragNode
       if (!activeNode) return undefined
 
       const measuredSizes = measuredNodeSizesRef.current
       const activeSize = getResolvedNodeSize(activeNode, undefined, measuredSizes)
-      const cx = activeNode.position.x + activeSize.width / 2
-      const cy = activeNode.position.y + activeSize.height / 2
-      let closest: { id: string; dist: number; mode: DropMode } | null = null
-      const blockedIds = new Set<string>()
-      const stack = [...(childrenByParent.get(dragId) ?? [])]
-      while (stack.length > 0) {
-        const currentId = stack.pop()!
-        if (blockedIds.has(currentId)) continue
-        blockedIds.add(currentId)
-        stack.push(...(childrenByParent.get(currentId) ?? []))
-      }
-      const candidates = new Map<string, Node>()
-      for (const [column, columnNodes] of nodesByColumn) {
-        if (Math.abs(column - activeNode.position.x) <= COLUMN_PROBE_PX) {
-          for (const node of columnNodes) {
-            candidates.set(node.id, node)
-          }
+      // Prefer pointer position (matches where the user is aiming). Fall back to card center.
+      const pointer = getEventFeedbackPoint(event)
+      let probeX = activeNode.position.x + activeSize.width / 2
+      let probeY = activeNode.position.y + activeSize.height / 2
+      if (pointer) {
+        try {
+          const flowPoint = screenToFlowPosition({ x: pointer.x, y: pointer.y })
+          probeX = flowPoint.x
+          probeY = flowPoint.y
+        } catch {
+          // Keep card-center fallback if RF transform is unavailable mid-unmount.
         }
       }
 
-      for (const node of candidates.values()) {
-        if (node.id === dragId) continue
-        if (blockedIds.has(node.id)) continue
+      const sourceIds = dragSourceIds.length > 0 ? [...dragSourceIds] : [dragId]
+      const sourceIdSet = new Set(sourceIds)
+
+      // Block targets that are any dragged source or descendants of any source.
+      const blockedIds = new Set<string>(sourceIds)
+      for (const sourceId of sourceIds) {
+        const stack = [...(childrenByParent.get(sourceId) ?? [])]
+        while (stack.length > 0) {
+          const currentId = stack.pop()!
+          if (blockedIds.has(currentId)) continue
+          blockedIds.add(currentId)
+          stack.push(...(childrenByParent.get(currentId) ?? []))
+        }
+      }
+
+      let closest: { id: string; dist: number; mode: DropMode; bodyHit: boolean } | null = null
+
+      for (const node of nodes) {
+        if (sourceIdSet.has(node.id) || blockedIds.has(node.id)) continue
         const { width, height } = getResolvedNodeSize(node, undefined, measuredSizes)
-        const nx = node.position.x + width / 2
-        const ny = node.position.y + height / 2
-        const distSquared = (cx - nx) ** 2 + (cy - ny) ** 2
-        const withinX =
-          cx >= node.position.x - DROP_HIT_PADDING_X &&
-          cx <= node.position.x + width + DROP_HIT_PADDING_X
-        const withinY =
-          cy >= node.position.y - DROP_HIT_PADDING_Y &&
-          cy <= node.position.y + height + DROP_HIT_PADDING_Y
-        const hitRadius = Math.max(width, 96)
-        if ((withinX && withinY) || distSquared < hitRadius ** 2) {
-          const relativeY = cy - node.position.y
-          const mode =
-            relativeY < height * 0.28
-              ? 'before'
-              : relativeY > height * 0.72
-                ? 'after'
-                : 'inside'
-          if (!closest || distSquared < closest.dist) {
-            closest = { id: node.id, dist: distSquared, mode }
+        const rect = {
+          x: node.position.x,
+          y: node.position.y,
+          width,
+          height,
+        }
+        const graphParentId = graphNodes.find((item) => item.id === node.id)?.parentId
+        const isRoot = graphParentId == null
+        const mode = resolveStructureDropMode(probeX, probeY, rect, {
+          isRoot,
+          nearThresholdPx: DROP_NEAR_THRESHOLD_PX,
+        })
+        if (!mode) continue
+
+        const bodyHit =
+          probeX >= rect.x &&
+          probeX <= rect.x + width &&
+          probeY >= rect.y &&
+          probeY <= rect.y + height
+
+        // Prefer body hits; score near-gap candidates by distance to unpadded card.
+        const left = rect.x - DROP_HIT_PADDING_X
+        const right = rect.x + width + DROP_HIT_PADDING_X
+        const top = rect.y - DROP_HIT_PADDING_Y
+        const bottom = rect.y + height + DROP_HIT_PADDING_Y
+        const dx =
+          probeX < left ? left - probeX : probeX > right ? probeX - right : 0
+        const dy =
+          probeY < top ? top - probeY : probeY > bottom ? probeY - bottom : 0
+        const edgeDist = Math.hypot(dx, dy)
+        const score = bodyHit ? edgeDist * 0.25 : edgeDist + 8
+        if (
+          !closest ||
+          (bodyHit && !closest.bodyHit) ||
+          (bodyHit === closest.bodyHit && score < closest.dist)
+        ) {
+          closest = { id: node.id, dist: score, mode, bodyHit }
+        }
+      }
+
+      const nextPreview: PreviewState | null = closest
+        ? {
+            sourceId: dragId,
+            sourceIds,
+            targetId: closest.id,
+            mode: closest.mode,
+          }
+        : null
+
+      // Leave hysteresis: one-frame misses should not wipe the active placeholder.
+      if (!nextPreview && lastPreviewStateRef.current) {
+        const previous = lastPreviewStateRef.current
+        if (!blockedIds.has(previous.targetId) && !sourceIdSet.has(previous.targetId)) {
+          const previousNode = nodesById.get(previous.targetId)
+          if (previousNode) {
+            const { width, height } = getResolvedNodeSize(previousNode, undefined, measuredSizes)
+            const isRoot =
+              graphNodes.find((item) => item.id === previous.targetId)?.parentId == null
+            if (
+              isWithinStructureDropLeaveZone(
+                probeX,
+                probeY,
+                {
+                  x: previousNode.position.x,
+                  y: previousNode.position.y,
+                  width,
+                  height,
+                },
+                previous.mode,
+                {
+                  isRoot,
+                  nearThresholdPx: DROP_NEAR_THRESHOLD_PX,
+                  leaveExtraPx: DROP_LEAVE_EXTRA_PX,
+                },
+              )
+            ) {
+              return undefined
+            }
           }
         }
       }
 
-      const nextSignature = closest ? `${dragId}:${closest.id}:${closest.mode}` : ''
+      const sourceKey = sourceIds.slice().sort().join(',')
+      const nextSignature = nextPreview
+        ? `${sourceKey}:${nextPreview.targetId}:${nextPreview.mode}`
+        : ''
       if (nextSignature === lastPreviewFeedbackRef.current) {
         return undefined
       }
-      if (nextSignature) {
-        dispatchGlobalFeedback('node_move', {
-          point: getEventFeedbackPoint(event),
-          origin: 'node',
-        })
-      }
+      // No hover audio here — node_move on every target change spams during drag.
       lastPreviewFeedbackRef.current = nextSignature
-      return closest ? { sourceId: dragId, targetId: closest.id, mode: closest.mode } : null
+      lastPreviewStateRef.current = nextPreview
+      return nextPreview
     },
-    [childrenByParent, measuredNodeSizesRef, nodesByColumn, nodesById],
+    [childrenByParent, graphNodes, measuredNodeSizesRef, nodes, nodesById, screenToFlowPosition],
   )
 
   const flushPendingMeasuredNodeSizes = useCallback(() => {
@@ -362,6 +571,7 @@ export function useMindMapViewport({
 
   const resetPreviewFeedback = useCallback(() => {
     lastPreviewFeedbackRef.current = ''
+    lastPreviewStateRef.current = null
   }, [])
 
   const zoomInCanvas = useCallback(() => {
@@ -401,6 +611,9 @@ export function useMindMapViewport({
       }
       if (explicitViewportTimeoutRef.current !== null) {
         window.clearTimeout(explicitViewportTimeoutRef.current)
+      }
+      if (sceneRecenterLockTimeoutRef.current !== null) {
+        window.clearTimeout(sceneRecenterLockTimeoutRef.current)
       }
     }
   }, [])

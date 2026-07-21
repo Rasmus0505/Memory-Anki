@@ -1,6 +1,5 @@
 import json
 import unittest
-from datetime import date, timedelta
 from unittest.mock import patch
 
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
@@ -15,7 +14,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceMiniPalace,
     PalaceQuizQuestion,
     PalaceSegment,
-    ReviewSchedule,
 )
 from memory_anki.modules.freestyle.application import feed_service
 from memory_anki.modules.freestyle.presentation import router as freestyle_router
@@ -50,12 +48,23 @@ class FreestyleRouteTests(RouterTestCase):
         session.add(chapter)
         session.flush()
 
-        palace = Palace(title="细胞宫殿", archived=False, mastered=False)
+        palace = Palace(
+            title="细胞宫殿",
+            archived=False,
+            mastered=False,
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"text": "细胞宫殿", "uid": "root"},
+                        "children": [{"data": {"text": "A", "uid": "a"}, "children": []}],
+                    }
+                }
+            ),
+        )
         practice_palace = Palace(
             title="练习宫殿",
             archived=False,
             mastered=False,
-            needs_practice=True,
         )
         archived_palace = Palace(title="归档宫殿", archived=True, mastered=False)
         session.add_all([palace, practice_palace, archived_palace])
@@ -72,7 +81,6 @@ class FreestyleRouteTests(RouterTestCase):
             palace_id=palace.id,
             name="细胞核迷你宫殿训练",
             node_uids_json=json.dumps(["a"], ensure_ascii=False),
-            needs_practice=True,
             sort_order=0,
         )
         session.add_all([segment, mini_palace])
@@ -84,15 +92,6 @@ class FreestyleRouteTests(RouterTestCase):
                 quiz_question(palace_id=practice_palace.id, stem="练习宫殿题"),
                 quiz_question(palace_id=archived_palace.id, stem="归档宫殿题"),
                 quiz_question(source_chapter_id=chapter.id, stem="章节聚合题"),
-                ReviewSchedule(
-                    palace_id=palace.id,
-                    scheduled_date=date.today() - timedelta(days=1),
-                    interval_days=1,
-                    algorithm_used="ebbinghaus",
-                    completed=False,
-                    review_number=0,
-                    review_type="standard",
-                ),
             ]
         )
 

@@ -7,6 +7,6 @@ export function buildReviewOverviewPath(chapterId: number | null = null) {
   return withChapterId('/review', chapterId)
 }
 
-export function buildReviewSessionPath(reviewId: number, chapterId: number | null = null) {
+export function buildReviewSessionPath(reviewId: string | number, chapterId: number | null = null) {
   return withChapterId(`/review/session/${reviewId}`, chapterId)
 }

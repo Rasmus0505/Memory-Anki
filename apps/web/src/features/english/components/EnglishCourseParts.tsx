@@ -1,4 +1,4 @@
-﻿import { CheckCircle2, Sparkles, XCircle } from 'lucide-react'
+import { CheckCircle2, Sparkles, XCircle } from 'lucide-react'
 import type { EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -8,6 +8,7 @@ import {
   type EnglishPracticeSettings,
 } from '@/entities/preferences/model/englishPracticeSettings'
 import { buildLetterSlots } from '@/features/english/englishTypingHelpers'
+import { cn } from '@/shared/lib/utils'
 
 export interface StatusNotice {
   kind: 'info' | 'success' | 'error'
@@ -27,7 +28,7 @@ export function StatusBanner({ notice }: { notice: StatusNotice | null }) {
         : 'border-info/20 bg-info/5 text-info'
 
   return (
-    <div className={`rounded-lg border px-4 py-3 text-sm ${palette}`}>
+    <div className={cn('rounded-2xl border px-4 py-3 text-sm', palette)}>
       <div className="flex items-center gap-2 font-medium">
         {notice.kind === 'success' ? (
           <CheckCircle2 className="size-4" />
@@ -57,7 +58,7 @@ export function WordRail({
 }) {
   if (!expectedTokens.length) {
     return (
-      <div className="rounded-lg border border-dashed border-border/70 px-4 py-6 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-center text-sm text-muted-foreground">
         当前句没有可练习的 token。
       </div>
     )
@@ -66,49 +67,60 @@ export function WordRail({
   const densityClassName =
     density === 'dense'
       ? {
-          rail: 'gap-x-2 gap-y-1',
+          rail: 'gap-x-2.5 gap-y-2',
           token: 'px-1 py-0.5 text-lg tracking-[0.08em]',
         }
       : density === 'compact'
         ? {
-            rail: 'gap-x-3 gap-y-1.5',
-            token: 'px-1 py-0.5 text-xl tracking-[0.11em]',
+            rail: 'gap-x-3.5 gap-y-2.5',
+            token: 'px-1.5 py-1 text-xl tracking-[0.1em]',
           }
         : {
-            rail: 'gap-x-5 gap-y-2',
-            token: 'px-1.5 py-1 text-2xl tracking-[0.15em]',
+            rail: 'gap-x-5 gap-y-3',
+            token: 'px-1.5 py-1 text-2xl tracking-[0.14em] sm:text-[1.7rem]',
           }
 
   return (
     <div
-      className={`flex flex-wrap items-center ${densityClassName.rail}`}
+      className={cn('flex flex-wrap items-center content-start', densityClassName.rail)}
       data-testid="english-word-rail"
       data-density={density}
     >
       {expectedTokens.map((token, index) => {
         const status = wordStatuses[index] || 'pending'
-        const slots = buildLetterSlots(token, wordInputs[index] || '', wordRevealComparableIndices[index] || [])
+        const slots = buildLetterSlots(
+          token,
+          wordInputs[index] || '',
+          wordRevealComparableIndices[index] || [],
+        )
 
         const containerStyle =
           status === 'active'
-            ? 'ring-1 ring-info/30 bg-info/5'
+            ? 'ring-2 ring-info/40 bg-info/10 shadow-soft'
             : status === 'wrong'
-              ? 'ring-1 ring-destructive/30 bg-destructive/5'
-              : ''
+              ? 'ring-2 ring-destructive/35 bg-destructive/5'
+              : status === 'correct'
+                ? 'bg-success/5'
+                : 'bg-muted/30'
 
-        const wordOpacity = status === 'pending' ? 'opacity-40' : status === 'correct' ? 'opacity-75' : ''
+        const wordOpacity = status === 'pending' ? 'opacity-45' : ''
 
         return (
           <span
             key={`${token}-${index}`}
             data-testid={`english-word-${index}`}
             data-status={status}
-            className={`inline-flex items-center gap-0.5 rounded-xl font-mono transition-colors ${densityClassName.token} ${containerStyle} ${wordOpacity}`}
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded-xl font-mono transition-colors',
+              densityClassName.token,
+              containerStyle,
+              wordOpacity,
+            )}
           >
             {slots.map((slot) => {
               const slotColor =
                 slot.state === 'empty'
-                  ? 'text-gray-300'
+                  ? 'text-muted-foreground/45'
                   : slot.state === 'correct'
                     ? 'text-success'
                     : slot.state === 'revealed'
@@ -118,8 +130,8 @@ export function WordRail({
                         : slot.state === 'wrong'
                           ? 'text-destructive'
                           : slot.state === 'fixed'
-                            ? 'font-semibold text-gray-700'
-                            : 'text-gray-300'
+                            ? 'font-semibold text-foreground'
+                            : 'text-muted-foreground/45'
 
               return (
                 <span key={slot.key} data-slot-state={slot.state} className={slotColor}>
@@ -142,15 +154,16 @@ export function FinalCheckRail({
   if (!feedback || feedback.passed || feedback.tokenResults.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-4">
+    <div className="flex flex-wrap gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-4">
       {feedback.tokenResults.map((item, index) => (
         <span
           key={`check-${index}`}
-          className={`inline-flex min-h-10 min-w-[58px] items-center justify-center rounded-xl border-b-2 px-3 text-sm font-medium ${
+          className={cn(
+            'inline-flex min-h-10 min-w-[58px] items-center justify-center rounded-xl border-b-2 px-3 text-sm font-medium',
             item.correct
               ? 'border-success bg-success/10 text-success'
-              : 'border-destructive/70 bg-background text-destructive'
-          }`}
+              : 'border-destructive/70 bg-background text-destructive',
+          )}
         >
           {item.input || '____'}
         </span>

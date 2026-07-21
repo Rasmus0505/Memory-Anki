@@ -7,14 +7,11 @@ from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceSegment,
     PalaceTemplate,
-    ReviewSchedule,
-)
-from memory_anki.modules.palaces.presentation import (
-    catalog_router,
-    core_router,
-    segment_router,
 )
 from memory_anki.modules.palaces.presentation import router as palaces_router
+from memory_anki.modules.palaces.presentation import (
+    segment_router,
+)
 from memory_anki.modules.sessions.presentation import router as sessions_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
@@ -91,27 +88,13 @@ def test_create_palace_replay_returns_cached_response_without_duplicate_row(
         assert session.query(Palace).count() == 1
 
 
+@pytest.mark.skip(reason="trigger_review_for_palace removed with legacy schedules")
 def test_create_palace_rolls_back_when_initial_review_creation_fails(
     make_client,
     session_factory,
     monkeypatch,
 ):
-    monkeypatch.setattr(
-        core_router,
-        "trigger_review_for_palace",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("review failed")),
-    )
-    client = make_client(palaces_router)
-
-    with pytest.raises(RuntimeError, match="review failed"):
-        client.post(
-            "/api/v1/palaces",
-            json={"title": "Must Roll Back", "description": "", "pegs": []},
-            headers={MUTATION_ID_HEADER: "palace-create-rollback"},
-        )
-
-    with session_factory() as session:
-        assert session.query(Palace).count() == 0
+    del make_client, session_factory, monkeypatch
 
 
 def test_create_segment_rolls_back_when_idempotency_record_fails(
@@ -155,32 +138,16 @@ def _seed_palace_template(session_factory, name: str = "Atomic Template") -> int
         return template.id
 
 
+@pytest.mark.skip(reason="trigger_review_for_palace removed with legacy schedules")
 def test_template_instantiation_rolls_back_when_review_creation_fails(
     make_client,
     session_factory,
     monkeypatch,
 ):
-    template_id = _seed_palace_template(session_factory)
-    monkeypatch.setattr(
-        catalog_router,
-        "trigger_review_for_palace",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("review failed")),
-    )
-    client = make_client(palaces_router)
-
-    with pytest.raises(RuntimeError, match="review failed"):
-        client.post(
-            f"/api/v1/palace-templates/{template_id}/instantiate",
-            json={"title": "Must Roll Back"},
-            headers={MUTATION_ID_HEADER: "template-instantiate-rollback"},
-        )
-
-    with session_factory() as session:
-        assert session.query(Palace).count() == 0
-        assert session.query(ReviewSchedule).count() == 0
+    del make_client, session_factory, monkeypatch
 
 
-def test_template_instantiation_replay_does_not_duplicate_palace_or_reviews(
+def test_template_instantiation_replay_does_not_duplicate_palace(
     make_client,
     session_factory,
 ):
@@ -203,4 +170,3 @@ def test_template_instantiation_replay_does_not_duplicate_palace_or_reviews(
     assert second.json() == first.json()
     with session_factory() as session:
         assert session.query(Palace).count() == 1
-        assert session.query(ReviewSchedule).count() > 0

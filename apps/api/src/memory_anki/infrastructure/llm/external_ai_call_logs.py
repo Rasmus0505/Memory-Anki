@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
+import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -15,9 +18,63 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables._base import engine
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 
+logger = logging.getLogger(__name__)
+
+# SQLite 内只保留短预览，完整 payload 写在 ai_call_logs/<id>/ 磁盘文件。
+_DB_JSON_MAX_CHARS = 32_768
+_AI_CALL_LOG_FILE_RETENTION_DAYS = 14
+
 
 def _json_dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _json_for_db(value: Any) -> str:
+    """Serialize for SQLite columns; truncate large payloads to protect DB size."""
+    raw = _json_dump(value)
+    if len(raw) <= _DB_JSON_MAX_CHARS:
+        return raw
+    preview = raw[: max(0, _DB_JSON_MAX_CHARS - 200)]
+    return _json_dump(
+        {
+            "_truncated": True,
+            "bytes": len(raw.encode("utf-8")),
+            "chars": len(raw),
+            "preview": preview,
+            "file_hint": "see ai_call_logs/<log_id>/ for full JSON",
+        }
+    )
+
+
+def prune_old_ai_call_log_files(
+    *,
+    retention_days: int = _AI_CALL_LOG_FILE_RETENTION_DAYS,
+    now_ts: float | None = None,
+) -> int:
+    """Delete ai_call_logs subdirs older than retention_days. Returns removed count."""
+    if retention_days <= 0 or not AI_CALL_LOGS_DIR.exists():
+        return 0
+    cutoff = (now_ts if now_ts is not None else time.time()) - retention_days * 86400
+    removed = 0
+    try:
+        children = list(AI_CALL_LOGS_DIR.iterdir())
+    except OSError:
+        return 0
+    for child in children:
+        if not child.is_dir():
+            continue
+        try:
+            mtime = child.stat().st_mtime
+        except OSError:
+            continue
+        if mtime >= cutoff:
+            continue
+        try:
+            shutil.rmtree(child)
+            removed += 1
+        except OSError:
+            logger.warning("failed to prune ai_call_log dir: %s", child, exc_info=True)
+    return removed
 
 
 def _json_load(value: str | None, default: Any) -> Any:
@@ -152,7 +209,7 @@ def begin_external_ai_call_log(
                     prompt_version_id=prompt_version_id,
                     structured_output_mode=str(structured_output_mode or ""),
                     repaired_from_log_id=repaired_from_log_id,
-                    request_json=_json_dump(request_payload_with_artifacts),
+                    request_json=_json_for_db(request_payload_with_artifacts),
                     response_json="{}",
                     error_json="{}",
                 )
@@ -187,7 +244,7 @@ def complete_external_ai_call_log(
             if not row:
                 return
             row.status = "success"
-            row.response_json = _json_dump(response_payload)
+            row.response_json = _json_for_db(response_payload)
             row.error_json = "{}"
             row.request_id = str(request_id or row.request_id or "")
             row.finish_reason = str(finish_reason or "")
@@ -221,7 +278,7 @@ def fail_external_ai_call_log(
             if not row:
                 return
             row.status = "error"
-            row.error_json = _json_dump(error_payload)
+            row.error_json = _json_for_db(error_payload)
             row.error_kind = str(error_kind or error_payload.get("kind") or "")
             row.duration_ms = duration_ms
             row.attempt_count = max(1, int(attempt_count or 1))

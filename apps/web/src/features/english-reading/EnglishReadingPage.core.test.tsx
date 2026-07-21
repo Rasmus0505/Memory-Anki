@@ -55,7 +55,7 @@ describe("EnglishReadingPage core flows", () => {
   });
 
   it("shows simplified hover metadata with CEFR, lemma, and source label", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const acquisition = await screen.findByText("acquisition");
     fireEvent.mouseEnter(acquisition);

@@ -113,6 +113,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
                 split_mode=str(data.get("split_mode") or "legacy_children"),
                 owner_id=str(data.get("owner_id") or "") or None,
                 operation_id=str(data.get("operation_id") or "") or None,
+                target_card_count=data.get("target_card_count"),
             )
     except MindMapAiSplitError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -127,6 +128,7 @@ def api_ai_split_editor_node(palace_id: int, data: dict, s: Session = Depends(se
         "review_preview": getattr(result, "review_preview", None),
         "split_mode": getattr(result, "split_mode", "legacy_children"),
         "replacement_node_count": getattr(result, "replacement_node_count", 0),
+        "replacement_nodes": getattr(result, "replacement_nodes", None),
         "owner_id": getattr(result, "owner_id", None),
         "operation_id": getattr(result, "operation_id", None),
     }

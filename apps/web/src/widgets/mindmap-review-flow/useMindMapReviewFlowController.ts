@@ -8,6 +8,7 @@ import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
+import { toast } from "@/shared/feedback/toast";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
 import { useMindMapRecallRatings } from '@/features/review/hooks/useMindMapRecallRatings';
 
@@ -20,6 +21,7 @@ export function useMindMapReviewFlowController({
   studySessionId = null,
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
+  reviewScopeNodeUids,
   displayMode = "review",
   persistKey = null,
   reviewEditorState,
@@ -35,6 +37,7 @@ export function useMindMapReviewFlowController({
 }: MindMapReviewFlowProps) {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([]);
+  const [ratingMode, setRatingMode] = React.useState(false);
   const [comboBurst, setComboBurst] = React.useState<{
     milestoneStep: number;
     comboCount: number;
@@ -43,18 +46,25 @@ export function useMindMapReviewFlowController({
   } | null>(null);
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
-  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: sessionKind === 'review' && Boolean(studySessionId) });
+  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: Boolean(studySessionId), sourceScene: sessionKind === 'review' ? 'formal_review' : 'practice' });
+  const reviewScopeKey = React.useMemo(
+    () => JSON.stringify(reviewScopeNodeUids ?? null),
+    [reviewScopeNodeUids],
+  );
   const reviewNodeUids = React.useMemo(() => {
+    const scoped = (JSON.parse(reviewScopeKey) as string[] | null)?.filter(Boolean) ?? [];
+    if (scoped.length > 0) return scoped;
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
     const result: string[] = [];
     const walk = (node: NonNullable<typeof doc.root>, isRoot = false) => {
+      // Same identity order as canvas / guided rating model.
       const uid = String(node.data?.uid ?? node.data?.memoryAnkiId ?? '');
       if (!isRoot && uid) result.push(uid);
       (node.children ?? []).forEach((child) => walk(child, false));
     };
     if (doc.root) walk(doc.root, true);
     return result;
-  }, [reviewEditorState.editor_doc]);
+  }, [reviewEditorState.editor_doc, reviewScopeKey]);
 
 
   const flow = useReviewFlowSession({
@@ -63,6 +73,8 @@ export function useMindMapReviewFlowController({
     sessionKind,
     revealMode,
     checkpointNodeUids,
+    // Frozen due set: auto-reveal non-due cards so formal/node review only flips due ones.
+    focusNodeUids: reviewScopeNodeUids,
     persistKey,
     editorState: reviewEditorState,
     onComplete,
@@ -77,17 +89,8 @@ export function useMindMapReviewFlowController({
     flow.timer.registerActivity("practice_interaction", { source: "review_node_navigation" });
     setActiveNodes(nodes);
   }, [flow.timer]);
-  const { startWeakRetryRound } = flow;
-  const { firstRatings, round: recallRound, setRound: setRecallRound, weakNodeUids } = recallRatings;
-
-  React.useEffect(() => {
-    if (recallRound !== 'first' || reviewNodeUids.length === 0) return;
-    if (!reviewNodeUids.every((uid) => firstRatings.has(uid))) return;
-    if (weakNodeUids.length > 0) {
-      startWeakRetryRound(weakNodeUids);
-      setRecallRound('weak_retry');
-    }
-  }, [firstRatings, recallRound, reviewNodeUids, setRecallRound, startWeakRetryRound, weakNodeUids]);
+  // weakNodeUids / firstRatings stay on recallRatings for chips & AI; no auto
+  // weak-retry re-hide — rating mode never mutates flip/placeholder state.
   const inlineEditEnabled =
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
@@ -159,24 +162,66 @@ React.useEffect(() => {
 
 
   const handleShortcutHideChildCards = React.useCallback(() => {
-    if (isInlineEditMode) return;
+    if (isInlineEditMode || ratingMode) return;
     const node = activeNodes[0];
     if (!node?.uid) return;
     flow.handleNodeContextMenu([node]);
-  }, [activeNodes, flow, isInlineEditMode]);
+  }, [activeNodes, flow, isInlineEditMode, ratingMode]);
 
-  const shortcutHandlers = React.useMemo(
-    () => ({
-      hide_child_cards_review: handleShortcutHideChildCards,
-    }),
-    [handleShortcutHideChildCards],
-  );
+  // Refs keep A/S handlers current without rebinding window listeners every render.
+  // Do not gate on React hover state: it lags behind hoveredNodeIdRef and is cleared
+  // by mouseleave when reveal re-renders nodes between the two bulk-flip phases.
+  const selectedNodeUidRef = React.useRef(selectedNodeUid);
+  selectedNodeUidRef.current = selectedNodeUid;
+  const isInlineEditModeRef = React.useRef(isInlineEditMode);
+  isInlineEditModeRef.current = isInlineEditMode;
+  const ratingModeRef = React.useRef(ratingMode);
+  ratingModeRef.current = ratingMode;
+  const flowCompletedRef = React.useRef(flow.completed);
+  flowCompletedRef.current = flow.completed;
+  const handleBulkRevealSubtreeRef = React.useRef(flow.handleBulkRevealSubtree);
+  handleBulkRevealSubtreeRef.current = flow.handleBulkRevealSubtree;
+  const handleBulkRevealDirectChildrenRef = React.useRef(flow.handleBulkRevealDirectChildren);
+  handleBulkRevealDirectChildrenRef.current = flow.handleBulkRevealDirectChildren;
 
-  useMemoryAnkiShortcuts(
-    isInlineEditMode ? "edit" : "review",
-    shortcutHandlers,
-    true,
-  );
+  const handleShortcutFlipSubtree = React.useCallback(() => {
+    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) return;
+    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
+    // Live hover / sticky / selection resolved inside handleBulkReveal*.
+    handleBulkRevealSubtreeRef.current(selectedNodeUidRef.current);
+  }, []);
+
+  const handleShortcutFlipDirectChildren = React.useCallback(() => {
+    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) return;
+    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
+    handleBulkRevealDirectChildrenRef.current(selectedNodeUidRef.current);
+  }, []);
+
+  const shortcutScene =
+    isInlineEditMode ? "edit" : sessionKind === "review" ? "review" : "practice";
+
+  const shortcutHandlers = React.useMemo(() => {
+    if (shortcutScene === "edit") return {};
+    if (shortcutScene === "review") {
+      return {
+        hide_child_cards_review: handleShortcutHideChildCards,
+        flip_subtree_cards_review: handleShortcutFlipSubtree,
+        flip_direct_child_cards_review: handleShortcutFlipDirectChildren,
+      };
+    }
+    return {
+      hide_child_cards_practice: handleShortcutHideChildCards,
+      flip_subtree_cards_practice: handleShortcutFlipSubtree,
+      flip_direct_child_cards_practice: handleShortcutFlipDirectChildren,
+    };
+  }, [
+    handleShortcutFlipDirectChildren,
+    handleShortcutFlipSubtree,
+    handleShortcutHideChildCards,
+    shortcutScene,
+  ]);
+
+  useMemoryAnkiShortcuts(shortcutScene, shortcutHandlers, true);
 
   const handleShortcutAdvanceReview = React.useCallback(() => {
     if (
@@ -195,37 +240,63 @@ React.useEffect(() => {
     isInlineEditMode,
   ]);
 
-  const handleSpacePourRef = React.useRef(flow.handleSpacePour);
-  handleSpacePourRef.current = flow.handleSpacePour;
+  const handleSpacePourRef = React.useRef(flow.handleSpacePour)
+  handleSpacePourRef.current = flow.handleSpacePour
+
+  const canUseRatingMode = Boolean(palaceId && studySessionId && !isInlineEditMode && !flow.completed)
+  React.useEffect(() => {
+    if (canUseRatingMode || isInlineEditMode || !isCheckpointMode) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key !== ' ' && event.code !== 'Space')) return
+      if (isEditableKeyboardTarget(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleSpacePourRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, isCheckpointMode, isInlineEditMode])
 
   React.useEffect(() => {
-    if (!isCheckpointMode) return;
+    if (canUseRatingMode || isInlineEditMode || isCheckpointMode) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.key === " " || event.code === "Space") {
-        if (isEditableKeyboardTarget(event.target)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        handleSpacePourRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [flow.handleSpacePour, isCheckpointMode]);
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== ' ' && event.code !== 'Space') return
+      if (isEditableKeyboardTarget(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleShortcutAdvanceReview()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode])
 
   React.useEffect(() => {
-    if (isInlineEditMode || isCheckpointMode) return;
+    if (!canUseRatingMode && ratingMode) setRatingMode(false)
+  }, [canUseRatingMode, ratingMode])
+
+  const handleToggleRatingMode = React.useCallback(() => {
+    if (!canUseRatingMode) return
+    setRatingMode((current) => {
+      const next = !current
+      toast.success(next ? '已进入评分模式，点击节点即可评分' : '已退出评分模式')
+      return next
+    })
+  }, [canUseRatingMode])
+
+  React.useEffect(() => {
+    if (!canUseRatingMode) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key !== " " && event.code !== "Space") return;
-      if (isEditableKeyboardTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      handleShortcutAdvanceReview();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode]);
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== ' ' && event.code !== 'Space') return
+      if (isEditableKeyboardTarget(event.target) || document.querySelector('[role="dialog"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      handleToggleRatingMode()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [canUseRatingMode, handleToggleRatingMode])
 
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
@@ -349,6 +420,9 @@ React.useEffect(() => {
     handleCycleFeedbackGlobalIntensity,
     handleShortcutAdvanceReview,
     recallRatings,
+    ratingMode,
+    canUseRatingMode,
+    handleToggleRatingMode,
   };
 }
 

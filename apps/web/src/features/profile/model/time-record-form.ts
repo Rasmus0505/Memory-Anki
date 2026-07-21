@@ -8,12 +8,20 @@ import {
   formatLocalDateTimeInputValue,
   parseApiDateTime,
 } from '@/shared/lib/dateTime'
+import {
+  formatDefaultQuickAddTitle,
+  isBuiltinTimeRecordTagId,
+  resolveTagName,
+  tagIdToSessionKind,
+  type CustomTimeRecordTag,
+} from '@/features/profile/model/time-record-tags'
 
 export const sessionKindOptions: SessionKind[] = [
   'review',
   'practice',
   'quiz',
   'palace_edit',
+  'custom',
 ]
 
 export const completionMethodOptions: SessionCompletionMethod[] = [
@@ -28,6 +36,7 @@ export interface TimeRecordFormState {
   id?: string
   title: string
   kind: SessionKind
+  tagId: string
   palaceId: string
   startedAt: string
   endedAt: string
@@ -47,6 +56,19 @@ export interface TimeRecordMutationPayload {
   pauseCount: number
   completionMethod: SessionCompletionMethod
   durationEdited: boolean
+  activityTag: string | null
+  activityTagLabel: string | null
+}
+
+export interface TimeRecordQuickAddFormState {
+  tagId: string
+  minutes: string
+  date: string
+  title: string
+  titleEdited: boolean
+  showAdvanced: boolean
+  startedAt: string
+  endedAt: string
 }
 
 export function isTimeRecordAboveThreshold(
@@ -117,11 +139,15 @@ export function buildTimeRecordFormState(
 ): TimeRecordFormState {
   const defaultDate = new Date()
   const defaultDateTime = formatLocalApiDateTime(defaultDate)
+  const tagId =
+    record?.activityTag?.trim() ||
+    (record?.kind && record.kind !== 'custom' ? record.kind : 'review')
 
   return {
     id: record?.id,
     title: record?.title ?? formatDefaultTimeRecordTitle(defaultDate),
     kind: record?.kind ?? 'review',
+    tagId,
     palaceId: record?.palaceId == null ? '' : String(record.palaceId),
     startedAt: record
       ? toLocalDateTimeInputValue(record.startedAt)
@@ -135,6 +161,144 @@ export function buildTimeRecordFormState(
     pauseCount: record ? String(record.pauseCount) : '0',
     completionMethod: record?.completionMethod ?? 'manual_complete',
     durationEdited: record?.durationEdited ?? false,
+  }
+}
+
+function formatLocalDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function buildTimeRecordQuickAddFormState(
+  now = new Date(),
+): TimeRecordQuickAddFormState {
+  const dateTime = formatLocalDateTimeInputValue(formatLocalApiDateTime(now))
+  return {
+    tagId: 'review',
+    minutes: '30',
+    date: formatLocalDateInputValue(now),
+    title: '',
+    titleEdited: false,
+    showAdvanced: false,
+    startedAt: dateTime,
+    endedAt: dateTime,
+  }
+}
+
+export function applyTimeRecordQuickAddPatch(
+  current: TimeRecordQuickAddFormState,
+  patch: Partial<TimeRecordQuickAddFormState>,
+  customTags: CustomTimeRecordTag[] = [],
+  now = new Date(),
+): TimeRecordQuickAddFormState {
+  const next = { ...current, ...patch }
+  const tagChanged = patch.tagId !== undefined
+  const minutesChanged = patch.minutes !== undefined
+  const dateChanged = patch.date !== undefined
+  const titleChanged = patch.title !== undefined
+
+  if (titleChanged && patch.title !== undefined) {
+    next.titleEdited = true
+  }
+
+  if (tagChanged || minutesChanged || dateChanged || !next.titleEdited) {
+    const bounds = calculateQuickAddBounds(next.date, next.minutes, now)
+    if (bounds) {
+      next.startedAt = bounds.startedAt
+      next.endedAt = bounds.endedAt
+    }
+    if (!next.titleEdited) {
+      const tagName = resolveTagName(next.tagId, customTags)
+      const endDate = bounds ? new Date(bounds.endedAt) : now
+      next.title = formatDefaultQuickAddTitle(tagName, endDate)
+    }
+  }
+
+  return next
+}
+
+export function calculateQuickAddBounds(
+  dateValue: string,
+  minutesValue: string,
+  now = new Date(),
+): { startedAt: string; endedAt: string; effectiveSeconds: number } | null {
+  const minutes = Number(minutesValue)
+  if (!Number.isFinite(minutes) || minutes < 1 || !Number.isInteger(minutes)) {
+    return null
+  }
+  const effectiveSeconds = minutes * 60
+  const todayKey = formatLocalDateInputValue(now)
+  let endedAtDate: Date
+  if (!dateValue) {
+    endedAtDate = now
+  } else if (dateValue === todayKey) {
+    endedAtDate = now
+  } else {
+    const [year, month, day] = dateValue.split('-').map(Number)
+    if (!year || !month || !day) return null
+    endedAtDate = new Date(year, month - 1, day, 12, 0, 0, 0)
+  }
+  if (Number.isNaN(endedAtDate.getTime())) return null
+  const startedAtDate = new Date(endedAtDate.getTime() - effectiveSeconds * 1000)
+  return {
+    startedAt: formatLocalDateTimeInputValue(formatLocalApiDateTime(startedAtDate)),
+    endedAt: formatLocalDateTimeInputValue(formatLocalApiDateTime(endedAtDate)),
+    effectiveSeconds,
+  }
+}
+
+export function parseTimeRecordQuickAddFormState(
+  form: TimeRecordQuickAddFormState,
+  customTags: CustomTimeRecordTag[] = [],
+  now = new Date(),
+): { error: string } | { value: TimeRecordMutationPayload } {
+  if (!form.tagId.trim()) return { error: '请选择标签。' }
+
+  const minutes = Number(form.minutes)
+  if (!Number.isFinite(minutes) || minutes < 1 || !Number.isInteger(minutes)) {
+    return { error: '时长必须是大于等于 1 的整数分钟。' }
+  }
+
+  let startedAt: Date
+  let endedAt: Date
+  let effectiveSeconds: number
+
+  if (form.showAdvanced && form.startedAt && form.endedAt) {
+    startedAt = new Date(form.startedAt)
+    endedAt = new Date(form.endedAt)
+    if (Number.isNaN(startedAt.getTime())) return { error: '开始时间不能为空。' }
+    if (Number.isNaN(endedAt.getTime())) return { error: '结束时间不能为空。' }
+    if (endedAt < startedAt) return { error: '结束时间不能早于开始时间。' }
+    effectiveSeconds = minutes * 60
+  } else {
+    const bounds = calculateQuickAddBounds(form.date, form.minutes, now)
+    if (!bounds) return { error: '时长必须是大于等于 1 的整数分钟。' }
+    startedAt = new Date(bounds.startedAt)
+    endedAt = new Date(bounds.endedAt)
+    effectiveSeconds = bounds.effectiveSeconds
+  }
+
+  const tagName = resolveTagName(form.tagId, customTags)
+  const title =
+    form.title.trim() || formatDefaultQuickAddTitle(tagName, endedAt)
+  const kind = tagIdToSessionKind(form.tagId)
+
+  return {
+    value: {
+      title,
+      kind,
+      palaceId: null,
+      startedAt: formatLocalApiDateTime(startedAt),
+      endedAt: formatLocalApiDateTime(endedAt),
+      effectiveSeconds,
+      pauseCount: 0,
+      completionMethod: 'manual_complete',
+      durationEdited: true,
+      activityTag: form.tagId,
+      activityTagLabel: tagName,
+    },
   }
 }
 
@@ -175,6 +339,12 @@ export function applyTimeRecordFormPatch(
   const durationChanged = patch.effectiveMinutes !== undefined
   const startedAtChanged = patch.startedAt !== undefined
   const endedAtChanged = patch.endedAt !== undefined
+
+  if (patch.tagId !== undefined) {
+    next.kind = tagIdToSessionKind(patch.tagId)
+  } else if (patch.kind !== undefined && isBuiltinTimeRecordTagId(patch.kind)) {
+    next.tagId = patch.kind
+  }
 
   if (durationChanged) {
     next.durationEdited = true
@@ -231,6 +401,7 @@ export function applyTimeRecordFormPatch(
 export function parseTimeRecordFormState(
   form: TimeRecordFormState,
   sourceRecord?: TimeSessionRecord | null,
+  customTags: CustomTimeRecordTag[] = [],
 ): { error: string } | { value: TimeRecordMutationPayload } {
   const title = form.title.trim()
   const startedAt = form.startedAt ? new Date(form.startedAt) : null
@@ -240,6 +411,12 @@ export function parseTimeRecordFormState(
   )
   const pauseCount = Number(form.pauseCount)
   const palaceId = form.palaceId.trim() === '' ? null : Number(form.palaceId)
+  const tagId = form.tagId.trim() || form.kind
+  const kind = tagIdToSessionKind(tagId)
+  const activityTag = tagId || null
+  const activityTagLabel = activityTag
+    ? resolveTagName(activityTag, customTags)
+    : null
 
   if (!title) return { error: '标题不能为空。' }
   if (!startedAt || Number.isNaN(startedAt.getTime())) {
@@ -266,7 +443,7 @@ export function parseTimeRecordFormState(
   return {
     value: {
       title,
-      kind: form.kind,
+      kind,
       palaceId,
       startedAt: formatLocalApiDateTime(startedAt),
       endedAt: formatLocalApiDateTime(endedAt),
@@ -274,6 +451,8 @@ export function parseTimeRecordFormState(
       pauseCount,
       completionMethod: form.completionMethod,
       durationEdited: form.durationEdited || durationChanged,
+      activityTag,
+      activityTagLabel,
     },
   }
 }

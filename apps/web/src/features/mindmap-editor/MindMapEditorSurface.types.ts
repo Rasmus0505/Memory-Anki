@@ -17,7 +17,7 @@ import type { MindMapCapability } from './capabilities'
 import type { MindMapPresentationStrategy } from './useMindMapFullscreen'
 
 export const HOST_FRAME_RUNTIME_VERSION = '2026-07-10-editor-interactions-v2'
-const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame'
+const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame relative'
 
 export function buildMindMapEditorSurfaceClassName(className?: string) {
   return `${MIND_MAP_FRAME_BASE_CLASS} ${className ?? 'h-full w-full border-0'}`
@@ -53,17 +53,46 @@ export interface MindMapEditorSurfaceProps {
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   className?: string
+  /** Generic frame chrome key; hosts map product modes (edit/review/practice/rating). */
+  sceneChrome?: 'default' | 'edit' | 'review' | 'practice' | 'rating'
+  /**
+   * Optional explicit scene identity for viewport re-anchor.
+   * Defaults to sceneChrome + practice/edit flags when omitted.
+   */
+  sceneTransitionKey?: string | null
   toolbarContent?: ReactNode
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
   highlightedNodeUids?: string[]
-  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null }>
+  mutedNodeUids?: string[]
+  masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
+  statusChipsByNodeUid?: Record<
+    string,
+    Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
+  >
+  countBadgeByNodeUid?: Record<
+    string,
+    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
+  >
+  onCountBadgeClick?: (nodeUid: string) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
   feedbackFxSignal?: MindMapFeedbackFxPayload | null
+  buildSelectionToolbarActions?: (
+    nodeId: string,
+  ) => Array<{
+    id: string
+    label: string
+    variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost'
+    disabled?: boolean
+    onClick: () => void
+  }>
+  selectionToolbarPreferPosition?: 'top' | 'bottom' | 'auto'
+  /** Rendered inside the fullscreen frame root so overlays remain visible under native fullscreen. */
+  frameOverlay?: ReactNode
   onEditorStateChange: (nextState: MindMapEditorState) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void

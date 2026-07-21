@@ -62,9 +62,7 @@ function statusBadge(item: PalaceSubjectShelfItem) {
   if ((item.due_later_today_count ?? 0) > 0) {
     return <span className="inline-block h-3 w-3 rounded-full bg-warning" title="今天稍后可复习" />
   }
-  if ((item.needs_practice_count ?? 0) > 0) {
-    return <span className="inline-block h-3 w-3 rounded-full bg-success" title="需要练习" />
-  }
+
   return null
 }
 
@@ -102,7 +100,6 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   const entries = [
     { label: '立即复习', count: item.due_now_count ?? 0, color: 'text-destructive' },
     { label: '今日稍后', count: item.due_later_today_count ?? 0, color: 'text-warning' },
-    { label: '要练习', count: item.needs_practice_count ?? 0, color: 'text-success' },
   ]
   const hasAny = entries.some((entry) => entry.count > 0)
 
@@ -215,11 +212,10 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
         palace={palace}
         viewSettings={expandedViewSettings}
         defaultExpanded
-        onPalacePractice={cardActions.onPalacePractice}
-        onWarmPalacePractice={cardActions.onWarmPalacePractice}
-        onSegmentPractice={cardActions.onSegmentPractice}
-        onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
-        onStageClick={cardActions.onStageClick}
+        onPalaceReview={cardActions.onPalaceReview}
+        onWarmPalaceReview={cardActions.onWarmPalaceReview}
+        onSegmentReview={cardActions.onSegmentReview}
+        onWarmSegmentReview={cardActions.onWarmSegmentReview}
         onDelete={cardActions.onDelete}
       />
     ),
@@ -479,7 +475,6 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
           </CardContent>
         </Card>
       )}
-      {cardActions.dialogs}
     </div>
   )
 }

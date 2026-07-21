@@ -1,4 +1,4 @@
-export interface BackupSummary {
+﻿export interface BackupSummary {
   kind: "full" | "rescue"
   /** full = 完整备份(含附件等大目录)，rolling = 轻量备份(仅数据库+迁移状态) */
   scope?: "full" | "rolling"
@@ -20,6 +20,11 @@ export interface ReviewSettings {
   sleep_review_time: string
   early_review_anchor: string
   ebbinghaus_intervals: string
+  desired_retention?: string
+  mastery_horizon_days?: string
+  maximum_interval?: string
+  learning_steps?: string
+  relearning_steps?: string
   daily_max_reviews: string
   mastered_interval: string
   auto_smooth_overdue: string
@@ -85,6 +90,8 @@ export interface AiPromptRunSelection {
   block_keys?: string[]
   scene_instruction?: string
   run_instruction?: string
+  /** User-filled visual cues for textbook knowledge emphasis, e.g. 带有下划线的文字 */
+  emphasis_mark_description?: string
 }
 
 export interface CompiledPromptSnapshot {
@@ -95,6 +102,7 @@ export interface CompiledPromptSnapshot {
   block_versions: Record<string, string | null>
   scene_instruction: string
   run_instruction: string
+  emphasis_mark_description?: string
   scene_version_id?: string | null
   warnings: string[]
   estimated_tokens: number
@@ -105,6 +113,9 @@ export interface AiPromptSceneDefault {
   prompt_key: string
   label: string
   description: string
+  category?: string
+  /** Compatibility aliases kept for old entrypoints; hide from default settings lists. */
+  is_compatibility?: boolean
   block_keys: string[]
   blocks: AiPromptBlock[]
   scene_instruction: string
@@ -392,6 +403,8 @@ export interface ClientPreferences {
   study_goals: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
+  review_queue_view_settings: Record<string, unknown> | null
+  time_record_tags: Array<Record<string, unknown>> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

@@ -11,6 +11,8 @@ export interface ReviewMindMapNode {
   text: string
   note: string
   parentId: string | null
+  /** Parent reveal auto-shows this node's body (skip placeholder). */
+  isQuestionCard: boolean
   children: ReviewMindMapNode[]
 }
 
@@ -25,6 +27,11 @@ export type RevealFlowMode = 'standard' | 'segment-checkpoint'
 export interface RevealFlowOptions {
   mode?: RevealFlowMode
   checkpointIds?: Iterable<string>
+  /**
+   * Formal-review due scope: auto-reveal every non-focus node; only focus
+   * (frozen due) nodes stay as flip targets. Ignored in segment-checkpoint mode.
+   */
+  focusNodeIds?: Iterable<string>
 }
 
 export function parseEditorDoc(raw: unknown): MindMapDoc | null {
@@ -70,6 +77,7 @@ function normalizeNode(
     text: plainText(data.text),
     note: plainText(data.note),
     parentId,
+    isQuestionCard: data.memoryAnkiQuestionCard === true,
     children: children.map((child, index) =>
       normalizeNode(child, `${fallbackId}-${index}`, id),
     ),
@@ -86,6 +94,7 @@ export function buildReviewTree(
       text: fallbackTitle || '未命名导图',
       note: '',
       parentId: null,
+      isQuestionCard: false,
       children: [],
     }
   }
@@ -151,13 +160,52 @@ function buildCheckpointRevealState(
   return next
 }
 
+/**
+ * When a parent is revealed, any direct child marked as a question card
+ * becomes revealed immediately (skipping "待回忆"). Cascades while stable.
+ */
+export function applyQuestionCardAutoReveal(
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+): Record<string, RevealState> {
+  let next = revealMap
+  let changed = true
+  while (changed) {
+    changed = false
+    let working = next
+    for (const node of nodeMap.values()) {
+      if ((working[node.id] ?? 'hidden') !== 'revealed') continue
+      for (const child of node.children) {
+        if (!child.isQuestionCard) continue
+        if ((working[child.id] ?? 'hidden') === 'revealed') continue
+        if (working === next) working = { ...next }
+        working[child.id] = 'revealed'
+        changed = true
+      }
+    }
+    next = working
+  }
+  return next
+}
+
 export function buildInitialRevealState(
   root: ReviewMindMapNode,
   previous: Record<string, RevealState> | null = null,
   options: RevealFlowOptions = {},
 ) {
   if (options.mode === 'segment-checkpoint') {
-    return buildCheckpointRevealState(root, options.checkpointIds ?? [], previous)
+    const checkpointState = buildCheckpointRevealState(
+      root,
+      options.checkpointIds ?? [],
+      previous,
+    )
+    return applyQuestionCardAutoReveal(flattenNodes(root), checkpointState)
+  }
+  // Formal due-scope: skip flipping nodes that are not in the frozen due set.
+  const focusIds = sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
+  if (focusIds.length > 0) {
+    const focusState = buildCheckpointRevealState(root, focusIds, previous)
+    return applyQuestionCardAutoReveal(flattenNodes(root), focusState)
   }
   const next: Record<string, RevealState> = {}
   const walk = (node: ReviewMindMapNode) => {
@@ -167,7 +215,7 @@ export function buildInitialRevealState(
   }
   walk(root)
   next[root.id] = 'revealed'
-  return next
+  return applyQuestionCardAutoReveal(flattenNodes(root), next)
 }
 
 export function buildAllRevealedState(root: ReviewMindMapNode) {
@@ -229,21 +277,105 @@ export function findNextHiddenChild(
   )
 }
 
+/** Bulk flip target set: full descendant tree or only direct children. */
+export type BulkRevealScope = 'subtree' | 'direct-children'
+
+/**
+ * Collect target cards under `nodeId` (never includes the anchor card itself).
+ * - subtree: every descendant
+ * - direct-children: only immediate children
+ */
+export function collectBulkRevealTargets(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  scope: BulkRevealScope,
+): ReviewMindMapNode[] {
+  const node = nodeMap.get(nodeId)
+  if (!node) return []
+  if (scope === 'direct-children') {
+    return [...node.children]
+  }
+  const targets: ReviewMindMapNode[] = []
+  const walk = (current: ReviewMindMapNode) => {
+    for (const child of current.children) {
+      targets.push(child)
+      walk(child)
+    }
+  }
+  walk(node)
+  return targets
+}
+
+/**
+ * Two-phase bulk flip under a hover/selection anchor:
+ * 1) If any target is still hidden → turn those into placeholders
+ *    (question cards skip placeholder and open as revealed).
+ * 2) Else if any target is still placeholder → turn those into revealed content.
+ * Already-revealed cards are never forced back to placeholder.
+ */
+export function advanceBulkRevealState(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+  scope: BulkRevealScope,
+): Record<string, RevealState> {
+  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
+  if (targets.length === 0) return revealMap
+
+  const hasHidden = targets.some((target) => (revealMap[target.id] ?? 'hidden') === 'hidden')
+  if (hasHidden) {
+    const next = { ...revealMap }
+    for (const target of targets) {
+      if ((next[target.id] ?? 'hidden') !== 'hidden') continue
+      next[target.id] = target.isQuestionCard ? 'revealed' : 'placeholder'
+    }
+    return applyQuestionCardAutoReveal(nodeMap, next)
+  }
+
+  const hasPlaceholder = targets.some(
+    (target) => (revealMap[target.id] ?? 'hidden') === 'placeholder',
+  )
+  if (hasPlaceholder) {
+    const next = { ...revealMap }
+    for (const target of targets) {
+      if ((next[target.id] ?? 'hidden') !== 'placeholder') continue
+      next[target.id] = 'revealed'
+    }
+    return applyQuestionCardAutoReveal(nodeMap, next)
+  }
+
+  return revealMap
+}
+
 export function advanceRevealStateForNodeClick(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
+  options: RevealFlowOptions = {},
+  root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
   const node = nodeMap.get(nodeId)
   if (!node) return revealMap
   const state = revealMap[nodeId] ?? 'hidden'
+  void options
+  void root
+
+  // Formal due-scope only changes the *initial* map (non-due auto-shown).
+  // Click advance always matches normal review: one step per click —
+  // placeholder → revealed content, or revealed parent → next child placeholder.
   if (state === 'placeholder') {
-    return { ...revealMap, [nodeId]: 'revealed' }
+    return applyQuestionCardAutoReveal(nodeMap, {
+      ...revealMap,
+      [nodeId]: 'revealed',
+    })
   }
   if (state !== 'revealed') return revealMap
+
   const nextChild = findNextHiddenChild(node, revealMap)
   if (!nextChild) return revealMap
-  return { ...revealMap, [nextChild.id]: 'placeholder' }
+  // Question cards never land on placeholder; auto-reveal cascade handles them.
+  const childState: RevealState = nextChild.isQuestionCard ? 'revealed' : 'placeholder'
+  return applyQuestionCardAutoReveal(nodeMap, { ...revealMap, [nextChild.id]: childState })
 }
 
 export function hideRevealStateBranch(
@@ -291,7 +423,7 @@ export function pourCheckpointRevealState(
     frontier = nextFrontier
   }
 
-  return next
+  return applyQuestionCardAutoReveal(nodeMap, next)
 }
 
 export function buildSelectionNodeId(node: MindMapSelection | null): string | null {
@@ -420,12 +552,41 @@ const PLACEHOLDER_CONTENT_KEYS = [
   'customTextWidth',
 ]
 
+/** Layout / hide flags to drop when a card is revealed — keep text + richText (yellow emphasis). */
+const REVEALED_STRIP_KEYS = [
+  'textWidth',
+  'textHeight',
+  'noteWidth',
+  'noteHeight',
+  'hyperlink',
+  'hyperlinkTitle',
+  'hideText',
+  'hideNote',
+  'customTextWidth',
+]
+
 function clearPlaceholderContentFields(data: Record<string, unknown>) {
   const nextData = { ...data }
   PLACEHOLDER_CONTENT_KEYS.forEach((key) => {
     delete nextData[key]
   })
   return nextData
+}
+
+function stripRevealedLayoutFields(data: Record<string, unknown>) {
+  const nextData = { ...data }
+  REVEALED_STRIP_KEYS.forEach((key) => {
+    delete nextData[key]
+  })
+  return nextData
+}
+
+function hasYellowEmphasisMarkup(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  return (
+    value.includes('data-emphasis="highlight"')
+    || value.includes("data-emphasis='highlight'")
+  )
 }
 
 export function buildVisibleEditorDoc(
@@ -465,12 +626,17 @@ export function buildVisibleEditorDoc(
     let nextData = { ...(nextNode.data ?? {}) }
 
     if (forceVisible || revealState === 'revealed') {
-      nextData = clearPlaceholderContentFields(nextData)
+      // Keep stored text (including yellow emphasis HTML) so highlights show in
+      // review / practice / any reveal-based mind-map mode — not only in the editor.
+      nextData = stripRevealedLayoutFields(nextData)
       if (!plainText(nextData.text)) {
         nextData.text =
           fallbackId === 'root'
             ? fallbackTitle || '未命名导图'
             : nodeMap.get(id)?.text || ''
+      }
+      if (hasYellowEmphasisMarkup(nextData.text)) {
+        nextData.richText = true
       }
     } else {
       nextData = clearPlaceholderContentFields(nextData)
@@ -581,45 +747,16 @@ export function buildVisibleEditorState(
   }
 }
 
-function collectAncestorIds(
-  focusIds: Set<string>,
-  nodeMap: Map<string, ReviewMindMapNode>,
-): Set<string> {
-  const visibleIds = new Set<string>()
-  focusIds.forEach((id) => {
-    let current = nodeMap.get(id) ?? null
-    while (current) {
-      visibleIds.add(current.id)
-      current = current.parentId ? (nodeMap.get(current.parentId) ?? null) : null
-    }
-  })
-  return visibleIds
-}
-
+/**
+ * Formal due-scope initial map: non-due nodes open, due nodes are flip targets,
+ * and subtrees under unrevealed due nodes stay hidden until that due card is flipped.
+ */
 export function buildFocusRevealState(
   root: ReviewMindMapNode,
   focusNodeIds: Iterable<string>,
   nodeMap: Map<string, ReviewMindMapNode>,
   previous: Record<string, RevealState> | null = null,
 ) {
-  const focusIds = sanitizeRedNodeIds(root, focusNodeIds)
-  const visibleIds = collectAncestorIds(focusIds, nodeMap)
-  const next = buildInitialRevealState(root)
-  collectNodeIds(root).forEach((id) => {
-    if (id === root.id) {
-      next[id] = 'revealed'
-      return
-    }
-    if (!visibleIds.has(id)) {
-      next[id] = 'hidden'
-      return
-    }
-    if (!focusIds.has(id)) {
-      next[id] = 'revealed'
-      return
-    }
-    const previousState = previous?.[id]
-    next[id] = previousState === 'revealed' ? 'revealed' : 'placeholder'
-  })
-  return next
+  const focusState = buildCheckpointRevealState(root, focusNodeIds, previous)
+  return applyQuestionCardAutoReveal(nodeMap, focusState)
 }

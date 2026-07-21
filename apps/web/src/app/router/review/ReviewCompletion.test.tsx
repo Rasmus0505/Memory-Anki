@@ -1,42 +1,59 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewCompletion from '@/app/router/review/ReviewCompletion'
 
 vi.mock('@/features/review/api', () => ({
-  getReviewCompletionApi: vi.fn(async () => ({
+  getReviewCompletionApi: vi.fn().mockResolvedValue({
     ok: true,
     completion_mode: 'manual_complete',
-    score: 5,
-    next_id: 310,
-    mastered: false,
-    review_log_id: 801,
-    palace_id: 1,
-    chapter_id: 42,
-    duration_seconds: 75,
-    completed_stage_count: 4,
-    total_stage_count: 9,
-    completed_stage_label: '2天',
-    next_stage_label: '4天',
-    next_review_at: '2026-07-15T10:00:00',
-    needs_practice: false,
-  })),
+    score: 3,
+    next_id: null,
+    review_log_id: 1,
+    palace_id: 2,
+    chapter_id: null,
+    duration_seconds: 30,
+    scope_node_count: 3,
+    rated_node_count: 2,
+    unrated_due_node_count: 1,
+    rating_counts: { 忘记: 0, 困难: 1, 记得: 1, 轻松: 0 },
+    mastery_progress: 0.5,
+    mastery_percent: 50,
+    memory_health: 0.8,
+    memory_health_percent: 80,
+    remaining_due_node_count: 1,
+    next_review_node_count: 1,
+    next_review_entry_mode: 'node',
+    next_review_entry_label: '节点复习',
+    today_review_count: 1,
+    due_node_count: 1,
+    overdue_node_count: 0,
+    next_review_at: '2026-07-16T10:00:00Z',
+  }),
 }))
 
-describe('ReviewCompletion', () => {
-  it('reloads and renders the persisted completion receipt', async () => {
+describe('ReviewCompletion FSRS receipt', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-07-15T10:00:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows ratings, absolute next review, node count, and unrated nodes', async () => {
     render(
-      <MemoryRouter initialEntries={['/review/completed/801']}>
+      <MemoryRouter initialEntries={['/review/completed/1']}>
         <Routes>
           <Route path="/review/completed/:reviewLogId" element={<ReviewCompletion />} />
         </Routes>
       </MemoryRouter>,
     )
-
-    expect(await screen.findByText('本次复习已完成')).toBeTruthy()
-    expect(screen.getByText('1分 15秒')).toBeTruthy()
-    expect(screen.getByText('4/9')).toBeTruthy()
-    expect(screen.getByRole('link', { name: /下一条复习/ }).getAttribute('href')).toBe('/review/session/310')
-    expect(screen.getByRole('link', { name: /返回复习队列/ }).getAttribute('href')).toBe('/review')
+    expect(await screen.findByText('本次 FSRS 复习已完成')).toBeTruthy()
+    expect(screen.getByText('2/3')).toBeTruthy()
+    expect(screen.getByText(/间隔 · 1天后 · 1 个节点 · 节点复习/)).toBeTruthy()
+    expect(screen.getByText(/本次未评分 1 个节点保持到期/)).toBeTruthy()
+    expect(screen.getByText(/该宫殿今日第 1 次复习/)).toBeTruthy()
   })
 })

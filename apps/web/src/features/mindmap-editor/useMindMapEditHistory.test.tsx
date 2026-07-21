@@ -29,9 +29,9 @@ describe('mind map edit history', () => {
     expect((redone?.editorDoc as MindMapDoc).root?.data?.text).toBe('D')
   })
 
-  it('records local commits, applies undo/redo, and resets on external replacement', () => {
+  it('records local commits and applies undo/redo', () => {
     const onApply = vi.fn()
-    const { result, rerender } = renderHook(
+    const { result } = renderHook(
       ({ doc }) => useMindMapEditHistory(doc, onApply),
       { initialProps: { doc: makeDoc('A') } },
     )
@@ -52,9 +52,45 @@ describe('mind map edit history', () => {
       result.current.redo()
     })
     expect(onApply).toHaveBeenLastCalledWith(makeDoc('B'))
+  })
 
+  it('records external session writes into undo stack so AI apply / import can be undone', () => {
+    const onApply = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ doc }) => useMindMapEditHistory(doc, onApply),
+      { initialProps: { doc: makeDoc('A') } },
+    )
+
+    act(() => {
+      result.current.commit(makeDoc('B'))
+    })
+    expect(result.current.canUndo).toBe(true)
+
+    // Parent applied a doc outside commit() (e.g. AI 分卡「替换原卡片」).
     rerender({ doc: makeDoc('EXTERNAL') })
-    expect(result.current.canUndo).toBe(false)
+    expect(result.current.canUndo).toBe(true)
+    // New branch: previous future from any redo path is cleared by pushMindMapHistory.
     expect(result.current.canRedo).toBe(false)
+
+    act(() => {
+      result.current.undo()
+    })
+    // Undoes external write back to last local state.
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('B'))
+    expect(result.current.canRedo).toBe(true)
+
+    act(() => {
+      result.current.undo()
+    })
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('A'))
+
+    act(() => {
+      result.current.redo()
+    })
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('B'))
+    act(() => {
+      result.current.redo()
+    })
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('EXTERNAL'))
   })
 })

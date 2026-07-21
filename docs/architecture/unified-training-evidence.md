@@ -32,3 +32,9 @@ The projection does not replace the existing review scheduler. AI may evaluate o
 - `widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx` owns shared flip-card rendering, keyboard/touch capture, node progression, and viewport preservation for Palace learning and formal Review.
 - Global rating shortcuts are disabled for editable targets and open dialogs.
 - `1/2/3` and `J/K/L` submit manual ratings; moving forward without rating submits a low-confidence fuzzy inference; `Backspace` returns to the latest rated node for correction.
+
+## FSRS rating evidence
+
+The current evidence contract uses four direct ratings: `1=忘记`, `2=困难`, `3=记得`, `4=轻松`. Subtree operations append one event per affected non-root node; the selected node is `direct`, descendants are `batch_inherited`, and every event carries a stable operation identity and scope. A later single-node event supersedes the effective rating for that node without rewriting history.
+
+Reviews consumes this public evidence capability and owns FSRS state, scheduling, due queues, and palace-level projections. Legacy Ebbinghaus schedules were dropped by migration `0039`; formal review and vocabulary scheduling are FSRS-only.

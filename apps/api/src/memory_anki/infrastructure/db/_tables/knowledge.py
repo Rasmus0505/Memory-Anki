@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ._base import Base
-from .palaces import Palace, chapter_palace_table
+from .palaces import Palace, chapter_palace_table, palace_subject_table
 
 
 class Subject(Base):
@@ -20,6 +20,11 @@ class Subject(Base):
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")
 
+    palaces: Mapped[list[Palace]] = relationship(
+        "Palace",
+        secondary=palace_subject_table,
+        back_populates="subjects",
+    )
     chapters: Mapped[list[Chapter]] = relationship(
         "Chapter",
         back_populates="subject",

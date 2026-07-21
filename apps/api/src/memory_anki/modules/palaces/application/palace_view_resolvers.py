@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceGroup
-from memory_anki.modules.palaces.application.palace_chapter_binding import _chapter_outline_path
+from memory_anki.modules.palaces.application.palace_chapter_binding import (
+    _chapter_outline_path,
+    get_palace_explicit_chapter_ids,
+)
 from memory_anki.modules.palaces.application.palace_review_rollups import (
     count_palace_review_units,
 )
@@ -51,6 +54,9 @@ def resolve_palace_subject(palace: Palace) -> Any | None:
     chapter = getattr(palace, "primary_chapter", None)
     if chapter and getattr(chapter, "subject", None):
         return chapter.subject
+    subjects = list(getattr(palace, "subjects", []) or [])
+    if subjects:
+        return min(subjects, key=lambda item: (item.sort_order or 0, item.name or "", item.id))
     chapters = list(getattr(palace, "chapters", []) or [])
     for linked_chapter in chapters:
         if getattr(linked_chapter, "subject", None):
@@ -93,6 +99,33 @@ def subject_summary(subject: Any | None) -> dict[str, Any] | None:
     }
 
 
+def _owned_subjects(palace: Palace) -> list[Any]:
+    subjects = list(getattr(palace, "subjects", []) or [])
+    if subjects:
+        return sorted(subjects, key=lambda item: (item.sort_order or 0, item.name or "", item.id))
+    fallback = resolve_palace_subject(palace)
+    return [fallback] if fallback is not None else [None]
+
+
+def _group_chapter_for_subject(
+    palace: Palace,
+    subject_id: int,
+    explicit_ids: set[int],
+) -> Chapter | None:
+    primary = getattr(palace, "primary_chapter", None)
+    if primary is not None and primary.subject_id == subject_id and primary.id in explicit_ids:
+        return primary.parent or primary
+    candidates = [
+        chapter
+        for chapter in (getattr(palace, "chapters", []) or [])
+        if chapter.subject_id == subject_id and chapter.id in explicit_ids
+    ]
+    if not candidates:
+        return None
+    selected = min(candidates, key=lambda chapter: (-len(_chapter_outline_path(chapter)), _chapter_outline_path(chapter)))
+    return selected.parent or selected
+
+
 def build_chapter_grouped_palace_list(
     session: Session,
     palaces: list[Palace],
@@ -100,33 +133,33 @@ def build_chapter_grouped_palace_list(
 ) -> dict[str, Any]:
     subject_buckets: dict[int, dict[str, Any]] = {}
     for palace in palaces:
-        palace_data = palace_json_fn(palace, session)
-        palace_data["_primary_chapter"] = getattr(palace, "primary_chapter", None)
-        subject = resolve_palace_subject(palace)
-        subject_key = subject.id if subject is not None else 0
-        subject_bucket = subject_buckets.setdefault(
-            subject_key,
-            {
-                "_subject": subject,
-                "subject": subject_summary(subject),
-                "chapter_groups": {},
-                "ungrouped_palaces": [],
-            },
-        )
-        group_chapter = resolve_palace_group_source_chapter(session, palace)
-        if group_chapter is None:
-            subject_bucket["ungrouped_palaces"].append(palace_data)
-            continue
-        chapter_groups = subject_bucket["chapter_groups"]
-        group_bucket = chapter_groups.setdefault(
-            group_chapter.id,
-            {
-                "_source_chapter": group_chapter,
-                "source_chapter": chapter_summary(group_chapter),
-                "palaces": [],
-            },
-        )
-        group_bucket["palaces"].append(palace_data)
+        explicit_ids = get_palace_explicit_chapter_ids(session, palace)
+        for subject in _owned_subjects(palace):
+            palace_data = palace_json_fn(palace, session)
+            palace_data["_primary_chapter"] = getattr(palace, "primary_chapter", None)
+            subject_key = subject.id if subject is not None else 0
+            subject_bucket = subject_buckets.setdefault(
+                subject_key,
+                {
+                    "_subject": subject,
+                    "subject": subject_summary(subject),
+                    "chapter_groups": {},
+                    "ungrouped_palaces": [],
+                },
+            )
+            group_chapter = _group_chapter_for_subject(palace, subject.id, explicit_ids) if subject is not None else None
+            if group_chapter is None:
+                subject_bucket["ungrouped_palaces"].append(palace_data)
+                continue
+            group_bucket = subject_bucket["chapter_groups"].setdefault(
+                group_chapter.id,
+                {
+                    "_source_chapter": group_chapter,
+                    "source_chapter": chapter_summary(group_chapter),
+                    "palaces": [],
+                },
+            )
+            group_bucket["palaces"].append(palace_data)
 
     subjects = []
     for bucket in subject_buckets.values():
@@ -140,19 +173,13 @@ def build_chapter_grouped_palace_list(
         ungrouped_palaces = sorted(bucket["ungrouped_palaces"], key=_palace_outline_sort_key)
         for palace in ungrouped_palaces:
             palace.pop("_primary_chapter", None)
-        subjects.append(
-            {
-                "subject": bucket["subject"],
-                "chapter_groups": chapter_groups,
-                "ungrouped_palaces": ungrouped_palaces,
-            }
-        )
-
-    subjects.sort(
-        key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"])
-    )
+        subjects.append({
+            "subject": bucket["subject"],
+            "chapter_groups": chapter_groups,
+            "ungrouped_palaces": ungrouped_palaces,
+        })
+    subjects.sort(key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"]))
     return {"subjects": subjects}
-
 
 def build_grouped_palace_list(
     session: Session,
@@ -189,62 +216,54 @@ def build_grouped_palace_list(
 
 def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict[str, Any]:
     subject_buckets: dict[int, dict[str, Any]] = {}
-    now = datetime.now()
-
+    now = datetime.now(UTC)
     for palace in palaces:
-        subject = resolve_palace_subject(palace)
-        subject_key = subject.id if subject is not None else 0
-        bucket = subject_buckets.setdefault(
-            subject_key,
-            {
-                "_subject": subject,
-                "subject": subject_summary(subject),
-                "palace_ids": set(),
-                "chapter_ids": set(),
-                "has_due_review": False,
-                "has_due_later_today": False,
-                "due_now_count": 0,
-                "due_later_today_count": 0,
-                "needs_practice_count": 0,
-            },
-        )
-        bucket["palace_ids"].add(palace.id)
-        for chapter in list(getattr(palace, "chapters", []) or []):
-            bucket["chapter_ids"].add(chapter.id)
         unit_counts = count_palace_review_units(session, palace, now=now)
-        if unit_counts["due_now_count"] > 0:
-            bucket["has_due_review"] = True
-            bucket["due_now_count"] += unit_counts["due_now_count"]
-        if unit_counts["due_later_today_count"] > 0:
-            bucket["has_due_later_today"] = True
-            bucket["due_later_today_count"] += unit_counts["due_later_today_count"]
-        bucket["needs_practice_count"] += unit_counts["needs_practice_count"]
+        for subject in _owned_subjects(palace):
+            subject_key = subject.id if subject is not None else 0
+            bucket = subject_buckets.setdefault(
+                subject_key,
+                {
+                    "_subject": subject,
+                    "subject": subject_summary(subject),
+                    "palace_ids": set(),
+                    "chapter_ids": set(),
+                    "has_due_review": False,
+                    "has_due_later_today": False,
+                    "due_now_count": 0,
+                    "due_later_today_count": 0,
+                    "needs_practice_count": 0,
+                },
+            )
+            bucket["palace_ids"].add(palace.id)
+            for chapter in (getattr(palace, "chapters", []) or []):
+                if subject is None or chapter.subject_id == subject.id:
+                    bucket["chapter_ids"].add(chapter.id)
+            if unit_counts["due_now_count"] > 0:
+                bucket["has_due_review"] = True
+                bucket["due_now_count"] += unit_counts["due_now_count"]
+            if unit_counts["due_later_today_count"] > 0:
+                bucket["has_due_later_today"] = True
+                bucket["due_later_today_count"] += unit_counts["due_later_today_count"]
+            bucket["needs_practice_count"] += unit_counts["needs_practice_count"]
 
-    items: list[dict[str, Any]] = []
+    items = []
     for bucket in subject_buckets.values():
         has_due_review = bool(bucket["has_due_review"])
         has_due_later_today = bool(bucket["has_due_later_today"]) and not has_due_review
-        items.append(
-            {
-                "subject": bucket["subject"],
-                "palace_count": len(bucket["palace_ids"]),
-                "chapter_count": len(bucket["chapter_ids"]),
-                "review_status": (
-                    "due_now" if has_due_review else "due_later_today" if has_due_later_today else "idle"
-                ),
-                "has_due_review": has_due_review,
-                "has_due_later_today": has_due_later_today,
-                "due_now_count": bucket["due_now_count"],
-                "due_later_today_count": bucket["due_later_today_count"],
-                "needs_practice_count": bucket["needs_practice_count"],
-            }
-        )
-
-    items.sort(
-        key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"])
-    )
+        items.append({
+            "subject": bucket["subject"],
+            "palace_count": len(bucket["palace_ids"]),
+            "chapter_count": len(bucket["chapter_ids"]),
+            "review_status": "due_now" if has_due_review else "due_later_today" if has_due_later_today else "idle",
+            "has_due_review": has_due_review,
+            "has_due_later_today": has_due_later_today,
+            "due_now_count": bucket["due_now_count"],
+            "due_later_today_count": bucket["due_later_today_count"],
+            "needs_practice_count": bucket["needs_practice_count"],
+        })
+    items.sort(key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"]))
     return {"items": items}
-
 
 def build_today_new_palace_outline(session: Session, palaces: list[Palace]) -> list[dict[str, Any]]:
     chapter_cache: dict[int, Chapter | None] = {}

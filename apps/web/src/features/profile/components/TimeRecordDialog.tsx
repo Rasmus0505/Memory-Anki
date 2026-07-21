@@ -1,15 +1,16 @@
 import type { FormEvent } from 'react'
 import {
   formatCompletionMethod,
-  formatSessionKind,
   type SessionCompletionMethod,
-  type SessionKind,
 } from '@/entities/session/model'
 import {
   completionMethodOptions,
-  sessionKindOptions,
   type TimeRecordFormState,
 } from '@/features/profile/model/time-record-form'
+import {
+  listTimeRecordTagOptions,
+  type CustomTimeRecordTag,
+} from '@/features/profile/model/time-record-tags'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -25,6 +26,7 @@ interface TimeRecordDialogProps {
   open: boolean
   mode: 'create' | 'edit'
   form: TimeRecordFormState
+  customTags?: CustomTimeRecordTag[]
   error: string | null
   isSubmitting: boolean
   onOpenChange: (open: boolean) => void
@@ -36,6 +38,7 @@ export function TimeRecordDialog({
   open,
   mode,
   form,
+  customTags = [],
   error,
   isSubmitting,
   onOpenChange,
@@ -49,6 +52,7 @@ export function TimeRecordDialog({
     : mode === 'create'
       ? '新增记录'
       : '保存修改'
+  const tagOptions = listTimeRecordTagOptions(customTags)
 
   return (
     <Dialog
@@ -88,20 +92,24 @@ export function TimeRecordDialog({
             </label>
 
             <label className="space-y-2">
-              <Label>类型</Label>
+              <Label>标签</Label>
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.kind}
+                value={form.tagId}
                 disabled={isSubmitting}
-                onChange={(event) =>
-                  onChange({ kind: event.target.value as SessionKind })
-                }
+                onChange={(event) => onChange({ tagId: event.target.value })}
               >
-                {sessionKindOptions.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {formatSessionKind(kind)}
+                {tagOptions.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
                   </option>
                 ))}
+                {form.tagId &&
+                !tagOptions.some((tag) => tag.id === form.tagId) ? (
+                  <option value={form.tagId}>
+                    {form.tagId}
+                  </option>
+                ) : null}
               </select>
             </label>
 

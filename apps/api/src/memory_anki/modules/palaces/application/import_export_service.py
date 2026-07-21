@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
+from memory_anki.modules.palaces.application.knowledge_binding_service import assign_palace_subjects
 from memory_anki.platform.application import UnitOfWork
 
 
@@ -105,6 +106,7 @@ def import_json(
         )
         session.add(palace)
         session.flush()
+        assign_palace_subjects(session, palace, [])
         _import_pegs(session, palace.id, item.get("pegs", []))
         palaces.append(palace)
     if before_commit is not None:
@@ -176,6 +178,7 @@ def import_markdown(
         )
         session.add(palace)
         session.flush()
+        assign_palace_subjects(session, palace, [])
         _import_pegs(session, palace.id, pegs_data)
         palaces.append(palace)
     if before_commit is not None:

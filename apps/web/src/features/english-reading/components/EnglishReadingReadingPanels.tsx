@@ -132,33 +132,22 @@ export function EnglishReadingReadingPanels({
       {material && version ? (
         <Card className="overflow-hidden border-border/70 bg-card/95">
           <div ref={readingPanelRef} />
-          <CardHeader className="space-y-4 border-b border-border/70 bg-card/90">
+          <CardHeader className="space-y-3 border-b border-border/60 bg-card/90 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">{material.sourceType.toUpperCase()}</Badge>
                   <Badge variant="secondary">目标 {version.targetCefr}</Badge>
                   <Badge variant="outline">{material.wordCount} 词</Badge>
-                  {version.summary._resolvedAi?.reading_sentence_rewrite?.model_label ? (
-                    <Badge variant="outline">
-                      改写：
-                      {version.summary._resolvedAi.reading_sentence_rewrite.model_label}
-                    </Badge>
-                  ) : null}
-                  {version.summary._resolvedAi?.reading_lexical_resolution?.model_label ? (
-                    <Badge variant="outline">
-                      分级：
-                      {version.summary._resolvedAi.reading_lexical_resolution.model_label}
-                    </Badge>
-                  ) : null}
                 </div>
-                <CardTitle className="text-2xl">{material.title}</CardTitle>
+                <CardTitle className="text-xl sm:text-2xl">{material.title}</CardTitle>
                 <div className="text-sm text-muted-foreground">
                   黑色是舒适区，绿色是原文 i+1，黄色是升级表达，红色是降阶救援。
                 </div>
               </div>
               <Button
                 variant="outline"
+                className="rounded-xl"
                 onClick={onOpenRegenerateDialog}
                 disabled={generating}
               >
@@ -168,10 +157,10 @@ export function EnglishReadingReadingPanels({
             </div>
           </CardHeader>
           <CardContent className="space-y-6 p-4 sm:p-6">
-            <div className="rounded-lg border border-border/70 bg-card/90 px-5 py-6 shadow-floating sm:px-8 sm:py-9">
+            <div className="rounded-3xl border border-border/60 bg-card/95 px-4 py-6 shadow-card sm:px-8 sm:py-10">
               <div
                 ref={readingContentRef}
-                className="mx-auto max-w-4xl space-y-6 text-[1.05rem] leading-9 text-foreground selection:bg-info/10 selection:text-primary sm:text-[1.1rem]"
+                className="mx-auto max-w-[42rem] space-y-7 text-[1.12rem] leading-[1.9] text-foreground selection:bg-info/10 selection:text-primary sm:text-[1.18rem]"
                 onPointerDown={onReadingContentPointerDown}
               >
                 {version.renderBlocks.map((block) => (
@@ -196,22 +185,22 @@ export function EnglishReadingReadingPanels({
                 ))}
               </div>
 
-              <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-4 border-t border-border/80 pt-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  <span className="rounded-full bg-white/90 px-3 py-1 shadow-sm">
+              <div className="mx-auto mt-8 flex max-w-[42rem] flex-col gap-4 border-t border-border/70 pt-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                  <span className="rounded-full border border-success/20 bg-success/5 px-3 py-1 text-success">
                     绿色 {version.summary.greenCount}
                   </span>
-                  <span className="rounded-full bg-white/90 px-3 py-1 shadow-sm">
+                  <span className="rounded-full border border-warning/20 bg-warning/5 px-3 py-1 text-warning">
                     黄色 {version.summary.yellowCount}
                   </span>
-                  <span className="rounded-full bg-white/90 px-3 py-1 shadow-sm">
+                  <span className="rounded-full border border-destructive/20 bg-destructive/5 px-3 py-1 text-destructive">
                     红色 {version.summary.redCount}
                   </span>
-                  <span className="rounded-full bg-white/90 px-3 py-1 shadow-sm">
-                    句法重构 {version.summary.sentenceSimplifiedCount}
+                  <span className="rounded-full border border-border/70 bg-muted/50 px-3 py-1">
+                    句法 {version.summary.sentenceSimplifiedCount}
                   </span>
                 </div>
-                <Button size="lg" className="rounded-lg px-7" onClick={onToggleCompletionPanel}>
+                <Button size="lg" className="min-h-11 rounded-xl px-7" onClick={onToggleCompletionPanel}>
                   我读完了
                 </Button>
               </div>

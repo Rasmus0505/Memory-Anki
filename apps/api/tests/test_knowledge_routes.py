@@ -219,21 +219,81 @@ def test_subject_editor_roundtrip(client, subject_id):
     assert body["editor_doc"]["root"]["children"] == []
 
 
-def test_link_chapters_binding(make_client):
+def test_palace_knowledge_binding_is_explicit_and_revisioned(make_client):
     client = make_client(knowledge_router, palace_router)
     subject = client.post("/api/v1/subjects", json={"name": "数学"}).json()
     chapter = client.post(
         f"/api/v1/subjects/{subject['id']}/chapters",
         json={"name": "第一章"},
     ).json()
-    palace = client.post("/api/v1/palaces", json={"title": "记忆宫殿"}).json()
+    palace = client.post(
+        "/api/v1/palaces",
+        json={"title": "记忆宫殿", "subject_ids": [subject["id"]]},
+    ).json()
 
     response = client.put(
-        f"/api/v1/palaces/{palace['id']}/chapters",
-        json={"chapter_ids": [chapter["id"]]},
+        f"/api/v1/palaces/{palace['id']}/knowledge-binding",
+        json={
+            "subject_ids": [subject["id"]],
+            "chapter_ids": [chapter["id"]],
+            "primary_chapter_id": chapter["id"],
+            "base_revision": 0,
+            "operation_id": "bind-math-chapter",
+        },
     )
 
     assert response.status_code == 200
-    assert response.json()["ok"] is True
-    chapters = client.get(f"/api/v1/palaces/{palace['id']}/chapters").json()
-    assert [item["id"] for item in chapters] == [chapter["id"]]
+    body = response.json()
+    assert body["explicit_chapter_ids"] == [chapter["id"]]
+    assert body["primary_chapter_id"] == chapter["id"]
+    assert body["binding_revision"] == 1
+    assert body["subjects"][0]["id"] == subject["id"]
+
+    stale = client.put(
+        f"/api/v1/palaces/{palace['id']}/knowledge-binding",
+        json={
+            "subject_ids": [subject["id"]],
+            "chapter_ids": [],
+            "primary_chapter_id": None,
+            "base_revision": 0,
+            "operation_id": "stale-binding",
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "knowledge_binding_conflict"
+
+
+def test_removing_last_subject_moves_palace_to_uncategorized(make_client):
+    client = make_client(knowledge_router, palace_router)
+    subject = client.post("/api/v1/subjects", json={"name": "物理"}).json()
+    palace = client.post(
+        "/api/v1/palaces",
+        json={"title": "力学", "subject_ids": [subject["id"]]},
+    ).json()
+
+    response = client.put(
+        f"/api/v1/palaces/{palace['id']}/knowledge-binding",
+        json={
+            "subject_ids": [],
+            "chapter_ids": [],
+            "primary_chapter_id": None,
+            "base_revision": 0,
+            "operation_id": "remove-last-subject",
+        },
+    )
+    assert response.status_code == 200
+    assert [item["name"] for item in response.json()["subjects"]] == ["未分类"]
+
+
+def test_subject_delete_is_blocked_when_used_by_palace(make_client):
+    client = make_client(knowledge_router, palace_router)
+    subject = client.post("/api/v1/subjects", json={"name": "化学"}).json()
+    client.post(
+        "/api/v1/palaces",
+        json={"title": "元素", "subject_ids": [subject["id"]]},
+    )
+
+    response = client.delete(f"/api/v1/subjects/{subject['id']}")
+    assert response.status_code == 409
+    assert response.json()["requires_reassignment"] is True
+    assert response.json()["palace_count"] == 1

@@ -16,6 +16,8 @@ interface UseReviewFlowSessionOptions {
   sessionKind: 'practice' | 'review'
   revealMode?: RevealFlowMode
   checkpointNodeUids?: Iterable<string>
+  /** Formal review frozen due UIDs — auto-reveal non-due cards on entry. */
+  focusNodeUids?: Iterable<string>
   persistKey?: string | null
   editorState: MindMapEditorState
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>
@@ -27,6 +29,7 @@ interface UseReviewFlowSessionOptions {
 }
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
+const EMPTY_FOCUS_NODE_UIDS: string[] = []
 const IMMERSIVE_REVIEW_AUTO_PAUSE_MS = 24 * 60 * 60 * 1000
 
 export function useReviewFlowSession({
@@ -35,6 +38,7 @@ export function useReviewFlowSession({
   sessionKind,
   revealMode = 'standard',
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
+  focusNodeUids = EMPTY_FOCUS_NODE_UIDS,
   persistKey = null,
   editorState,
   onComplete,
@@ -71,6 +75,7 @@ export function useReviewFlowSession({
     resetCompletedOnDocChange: sessionKind === 'review',
     mode: revealMode,
     checkpointIds: checkpointNodeUids,
+    focusNodeIds: sessionKind === 'review' ? focusNodeUids : EMPTY_FOCUS_NODE_UIDS,
   })
   const feedback = useReviewFeedback({
     root: reveal.root,
@@ -168,6 +173,8 @@ export function useReviewFlowSession({
     async (modeName: 'manual_complete' | 'auto_complete') => {
       if (reveal.completed || completionPendingRef.current) return
 
+      // Opening the settlement dialog is not completion. Only finalize() after the
+      // user confirms in the dialog marks the session completed / reveals remaining.
       completionPendingRef.current = true
       timer.pause({ source: 'completion_pending' })
       const finishState = revealRemainingNodes(reveal.root, reveal.revealMap, reveal.redNodeIds)
@@ -176,11 +183,13 @@ export function useReviewFlowSession({
         if (settled) return
         settled = true
         completionPendingRef.current = false
+        // Do not change reveal_map / completed — user cancelled settlement.
         timer.resume({ source: 'completion_cancelled' })
       }
       const finalize = async (options?: { persistTimeRecord?: boolean }) => {
         if (settled) return
         settled = true
+        // Confirmed end only: apply remaining reveals + mark completed.
         reveal.setRevealMap(finishState.revealMap)
         reveal.setRedNodeIds(finishState.redNodeIds)
         reveal.setCompleted(true)
@@ -221,13 +230,15 @@ export function useReviewFlowSession({
     [feedback, onComplete, reveal, timer],
   )
 
+  // Depend on stable action identities, not the whole timer/reveal shells — timer
+  // effectiveSeconds updates every second and used to recreate these handlers.
   const handleNodeClick = React.useCallback(
     (nodes: MindMapSelection[]) => {
       if (reveal.completed) return
       timer.registerActivity('practice_interaction', { source: 'left_click' })
       reveal.handleNodeClick(nodes)
     },
-    [reveal, timer],
+    [reveal.completed, reveal.handleNodeClick, timer.registerActivity],
   )
 
   const handleNodeContextMenu = React.useCallback(
@@ -236,7 +247,7 @@ export function useReviewFlowSession({
       timer.registerActivity('practice_interaction', { source: 'right_click' })
       reveal.handleNodeContextMenu(nodes)
     },
-    [reveal, timer],
+    [reveal.completed, reveal.handleNodeContextMenu, timer.registerActivity],
   )
 
   const handleNodeHover = React.useCallback(
@@ -244,19 +255,37 @@ export function useReviewFlowSession({
       if (reveal.completed) return
       reveal.handleNodeHover(nodes)
     },
-    [reveal],
+    [reveal.completed, reveal.handleNodeHover],
+  )
+
+  const handleBulkRevealSubtree = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      if (reveal.completed) return
+      timer.registerActivity('practice_interaction', { source: 'bulk_flip_subtree' })
+      reveal.handleBulkRevealSubtree(fallbackNodeId)
+    },
+    [reveal.completed, reveal.handleBulkRevealSubtree, timer.registerActivity],
+  )
+
+  const handleBulkRevealDirectChildren = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      if (reveal.completed) return
+      timer.registerActivity('practice_interaction', { source: 'bulk_flip_direct_children' })
+      reveal.handleBulkRevealDirectChildren(fallbackNodeId)
+    },
+    [reveal.completed, reveal.handleBulkRevealDirectChildren, timer.registerActivity],
   )
 
   const handleSpacePour = React.useCallback(() => {
     if (reveal.completed || revealMode !== 'segment-checkpoint') return
     timer.registerActivity('practice_interaction', { source: 'segment_checkpoint_space_pour' })
     reveal.handleSpacePour()
-  }, [reveal, revealMode, timer])
+  }, [reveal.completed, reveal.handleSpacePour, revealMode, timer.registerActivity])
 
-  const startWeakRetryRound = React.useCallback((nodeUids: string[]) => {
-    const weakSet = new Set(nodeUids)
-    reveal.setRevealMap((current) => Object.fromEntries(Object.entries(current).map(([uid, state]) => [uid, weakSet.has(uid) ? 'placeholder' : state])))
-  }, [reveal])
+  /** @deprecated No-op: rating mode must not change flip/placeholder reveal state. */
+  const startWeakRetryRound = React.useCallback((_nodeUids: string[]) => {
+    // Intentionally empty — weak scores only affect FSRS scheduling, not the map face.
+  }, [])
   const handleRestart = React.useCallback(async () => {
     const shouldRestart = await onRestart?.()
     if (shouldRestart === false) return
@@ -290,6 +319,9 @@ export function useReviewFlowSession({
     handleNodeClick,
     handleNodeContextMenu,
     handleNodeHover,
+    handleBulkRevealSubtree,
+    handleBulkRevealDirectChildren,
+    hoveredNodeId: reveal.hoveredNodeId,
     handleRestart,
     handleSpacePour,
     startWeakRetryRound,

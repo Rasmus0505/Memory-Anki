@@ -9,6 +9,8 @@ from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 from ..application import (
     PdfLibraryError,
     delete_pdf_document,
+    get_pdf_document,
+    get_pdf_ocr_coverage,
     list_pdf_documents,
     resolve_pdf_download,
     save_pdf_document,
@@ -37,6 +39,13 @@ async def api_upload_pdf_document(file: UploadFile = File(...), session: Session
     except PdfLibraryError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return serialize_pdf_document(document)
+
+
+@router.get("/{document_id}/ocr-coverage")
+def api_pdf_ocr_coverage(document_id: str, session: Session = Depends(session_dep)):
+    if get_pdf_document(session, document_id) is None:
+        raise HTTPException(status_code=404, detail="PDF 资料不存在。")
+    return get_pdf_ocr_coverage(document_id)
 
 
 @router.get("/{document_id}")

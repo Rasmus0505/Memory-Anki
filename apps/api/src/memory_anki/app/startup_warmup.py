@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import date
 
 from sqlalchemy import text
 
@@ -16,7 +15,6 @@ _warmup_lock = threading.Lock()
 
 def run_startup_warmup() -> None:
     """Warm the common SQLite and study-query paths without changing data."""
-    today = date.today().isoformat()
     session = get_session()
     try:
         connection = session.connection()
@@ -25,7 +23,7 @@ def run_startup_warmup() -> None:
         connection.execute(text("PRAGMA journal_mode")).scalar()
         for table_name in (
             "palaces",
-            "review_schedules",
+            "review_node_states",
             "session_progress",
         ):
             connection.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
@@ -33,25 +31,13 @@ def run_startup_warmup() -> None:
             text(
                 """
                 SELECT id
-                FROM review_schedules
-                WHERE completed = 0 AND scheduled_date <= :today
-                ORDER BY scheduled_date, COALESCE(scheduled_at, scheduled_date), id
+                FROM review_node_states
+                WHERE due_at <= CURRENT_TIMESTAMP
+                ORDER BY due_at, palace_id, id
                 LIMIT 8
                 """
-            ),
-            {"today": today},
-        ).fetchall()
-        from memory_anki.modules.reviews.application.review_execution_service import (
-            detect_review_stage_progress_issues,
-        )
-
-        health = detect_review_stage_progress_issues(session)
-        if health["needs_repair"]:
-            logger.warning(
-                "review stage progress self-check found %s issue(s); "
-                "user can repair via POST /api/v1/review/repair-stage-progress",
-                health["total_issues"],
             )
+        ).fetchall()
         logger.info("startup warmup completed")
     finally:
         session.close()

@@ -43,7 +43,6 @@ def create_palace_segment(
         color=str(payload.get("color") or "").strip()
         or SEGMENT_COLOR_PALETTE[len(palace.segments) % len(SEGMENT_COLOR_PALETTE)],
         node_uids_json=serialize_segment_node_uids(normalized_uids),
-        needs_practice=bool(payload.get("needs_practice", False)),
         created_at=_parse_segment_datetime(payload.get("created_at"))
         or _default_segment_created_at(palace),
         sort_order=max([item.sort_order for item in palace.segments], default=-1) + 1,
@@ -74,8 +73,7 @@ def update_palace_segment(
             segment.created_at = parsed_created_at
     if "sort_order" in payload:
         segment.sort_order = max(0, int(payload.get("sort_order") or 0))
-    if "needs_practice" in payload:
-        segment.needs_practice = bool(payload.get("needs_practice", False))
+    # needs_practice is retired; ignore client payload keys for compatibility.
     if "node_uids" in payload:
         segment.node_uids_json = serialize_segment_node_uids(
             normalize_segment_node_uids(

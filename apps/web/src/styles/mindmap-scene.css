@@ -1,0 +1,222 @@
+/* Mind-map frame scene chrome: border + soft glow + top accent by product mode. */
+
+/*
+ * Yellow knowledge emphasis — must remain visible in every mind-map surface
+ * (edit / review / practice / lookup / import / rating), not only the editor chrome.
+ * Markup may include inline styles; these rules are a mode-independent fallback
+ * so highlights never disappear when a host omits Tailwind utilities.
+ */
+[data-emphasis='highlight'],
+.mindmap-node-text [data-emphasis='highlight'],
+.mindmap-rich-text [data-emphasis='highlight'],
+.mindmap-import-richtext [data-emphasis='highlight'] {
+  background-color: #fef08c !important;
+  color: inherit;
+  border-radius: 0.125rem;
+}
+
+.memory-anki-mindmap-scene {
+  position: relative;
+  /* Keep glow visible outside the rounded frame. */
+  overflow: visible;
+  isolation: isolate;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+/* Scene badge sits clear of the in-canvas toolbar (top bar). */
+.memory-anki-mindmap-scene > .memory-anki-mindmap-scene-label {
+  top: 0.45rem;
+  right: 0.5rem;
+}
+
+.memory-anki-mindmap-scene::before {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.memory-anki-mindmap-scene-label {
+  position: absolute;
+  z-index: 6;
+  top: 0.55rem;
+  right: 0.55rem;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.memory-anki-mindmap-scene-label::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+/* —— 编辑：冷静蓝，施工感 —— */
+.memory-anki-mindmap-scene-edit {
+  border-color: color-mix(in oklab, var(--color-info) 48%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-info) 22%, transparent),
+    0 0 28px color-mix(in oklab, var(--color-info) 14%, transparent),
+    var(--shadow-soft);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-info) 6%, transparent),
+    transparent 42%
+  );
+}
+
+.memory-anki-mindmap-scene-edit::before {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-info) 80%, white),
+    color-mix(in oklab, var(--color-primary) 70%, var(--color-info))
+  );
+}
+
+.memory-anki-mindmap-scene-edit .memory-anki-mindmap-scene-label {
+  color: var(--color-info);
+  border-color: color-mix(in oklab, var(--color-info) 35%, transparent);
+  background: color-mix(in oklab, var(--color-background) 88%, var(--color-info));
+}
+
+/* —— 正式复习：靛紫，略庄重 —— */
+.memory-anki-mindmap-scene-review {
+  border-color: color-mix(in oklab, hsl(252 52% 58%) 42%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, hsl(252 52% 58%) 18%, transparent),
+    0 0 30px color-mix(in oklab, hsl(252 52% 58%) 12%, transparent),
+    var(--shadow-soft);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, hsl(252 52% 58%) 7%, transparent),
+    transparent 44%
+  );
+}
+
+.memory-anki-mindmap-scene-review::before {
+  background: linear-gradient(90deg, hsl(252 58% 62%), hsl(222 62% 56%));
+}
+
+.memory-anki-mindmap-scene-review .memory-anki-mindmap-scene-label {
+  color: hsl(252 42% 42%);
+  border-color: color-mix(in oklab, hsl(252 52% 58%) 32%, transparent);
+  background: color-mix(in oklab, var(--color-background) 90%, hsl(252 52% 58%));
+}
+
+.dark .memory-anki-mindmap-scene-review .memory-anki-mindmap-scene-label {
+  color: hsl(252 70% 78%);
+}
+
+/* —— 练习：青绿，轻量训练感 —— */
+.memory-anki-mindmap-scene-practice {
+  border-color: color-mix(in oklab, var(--color-success) 42%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-success) 18%, transparent),
+    0 0 28px color-mix(in oklab, var(--color-success) 12%, transparent),
+    var(--shadow-soft);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-success) 7%, transparent),
+    transparent 44%
+  );
+}
+
+.memory-anki-mindmap-scene-practice::before {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-success) 85%, white),
+    color-mix(in oklab, hsl(180 48% 42%) 80%, var(--color-success))
+  );
+}
+
+.memory-anki-mindmap-scene-practice .memory-anki-mindmap-scene-label {
+  color: var(--color-success);
+  border-color: color-mix(in oklab, var(--color-success) 32%, transparent);
+  background: color-mix(in oklab, var(--color-background) 90%, var(--color-success));
+}
+
+/* —— 评分：琥珀脉冲，当前最醒目 —— */
+.memory-anki-mindmap-scene-rating {
+  border-color: color-mix(in oklab, var(--color-warning) 55%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-warning) 28%, transparent),
+    0 0 0 4px color-mix(in oklab, var(--color-warning) 10%, transparent),
+    0 0 34px color-mix(in oklab, var(--color-warning) 22%, transparent),
+    var(--shadow-soft);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-warning) 10%, transparent),
+    transparent 48%
+  );
+  animation: memory-anki-mindmap-scene-rating-glow 2.4s ease-in-out infinite;
+}
+
+.memory-anki-mindmap-scene-rating::before {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-warning) 90%, white),
+    color-mix(in oklab, hsl(18 90% 56%) 80%, var(--color-warning))
+  );
+}
+
+.memory-anki-mindmap-scene-rating .memory-anki-mindmap-scene-label {
+  color: hsl(28 80% 34%);
+  border-color: color-mix(in oklab, var(--color-warning) 40%, transparent);
+  background: color-mix(in oklab, var(--color-background) 86%, var(--color-warning));
+}
+
+.dark .memory-anki-mindmap-scene-rating .memory-anki-mindmap-scene-label {
+  color: hsl(38 95% 72%);
+}
+
+.memory-anki-mindmap-scene-default {
+  /* keep host borders; only mild transition base */
+}
+
+@keyframes memory-anki-mindmap-scene-rating-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-warning) 24%, transparent),
+      0 0 0 3px color-mix(in oklab, var(--color-warning) 8%, transparent),
+      0 0 26px color-mix(in oklab, var(--color-warning) 16%, transparent),
+      var(--shadow-soft);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-warning) 36%, transparent),
+      0 0 0 5px color-mix(in oklab, var(--color-warning) 14%, transparent),
+      0 0 40px color-mix(in oklab, var(--color-warning) 26%, transparent),
+      var(--shadow-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-anki-mindmap-scene-rating {
+    animation: none;
+  }
+}

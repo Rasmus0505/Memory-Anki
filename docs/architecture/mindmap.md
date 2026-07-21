@@ -83,6 +83,12 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 可最小化的业务入口浮层应使用稳定 `floatingId`；需要每次显式打开完整窗口时使用 `expandOnOpen`，避免持久化胶囊状态让入口看似失效。
 - 需要持续与背景内容交互的非模态工作台应设置 `dismissOnInteractOutside={false}`，只通过显式关闭按钮或 Escape 退出；焦点归还和背景点击不得改变业务 open 状态。
 
+## 知识重点黄底标记
+
+- AI 转脑图可在节点上返回可选 `emphasis_marks: [{ kind: "highlight", text: "原文子串" }]`；用户在 AI 运行配置中填写“重点标记线索”（如带有下划线的文字），未填写时不强制识别。
+- 服务端将 marks / `rich_text_html` 归一为带 `data-emphasis="highlight"` 的黄底 HTML，写入 `data.text` 并置 `data.richText`。
+- 画布展示安全 HTML；编辑态选中文字可 toggle 黄色底色（再点取消）。产品语义是知识重点，不复刻教材下划线样式。
+
 ## 图片与 PDF 导入边界
 
 - 新图片任务统一使用 `image-batch`；一张和多张图片都先进入可排序、可删除的图片队列，再由用户显式开始识别。`image-single` 只用于兼容读取旧历史。
@@ -97,13 +103,30 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 用户显式指定结构图时使用独立场景 `vision_structure_mindmap` 和 `ai_prompt_import_batch_mindmap`，结构补全提示词不得进入普通正文流程。
 - 视觉模型目录公开 `vision_processing_role`：通用 VL 为 `direct_generation`，`qwen3.5-ocr` 与 `qwen-vl-ocr` 为 `ocr_extraction`。
 - 通用 VL 仅在流完整、JSON 可解析、根标题非空、节点 Schema 合法且至少有一个内容节点时直接进入预览；协议错误、网络中断、`finish_reason=length`、JSON 或 Schema 错误触发逐页 OCR 与文本模型整理。
-- OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可恢复复用；同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
+- OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可在同一任务内恢复复用；跨任务时按 `pdf_document_id + page` 写入 `%MEMORY_ANKI_HOME%/pdf_ocr_cache`，后续任务命中后复制进工件并跳过模型调用。覆盖查询：`GET /pdf-library/{id}/ocr-coverage`。
+- 同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
 - 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿视觉、OCR、整理和预览阶段。
 - 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；OCR 重整与视觉重试均创建新的 operation，不覆盖历史任务。
-## AI 分卡替换边界
+## AI 分卡 / AI 添卡边界
 
-- 脑图编辑页通过 capability 显式提供“并列分卡”和“层级分卡”；根节点、只读模式和练习模式不开放替换式分卡。
-- 替换式分卡只处理无子节点的长内容卡片。旧请求仍保留原有“新增一级分类并重挂旧子节点”兼容流程，不自动迁移复杂子树。
-- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份与模式完全匹配的响应。
-- 服务端在父级 `children` 的原索引执行一次切片替换，目标前后的兄弟顺序保持不变；新 UID 由 operation 和树路径确定生成。
-- `ai_split_parallel` 与 `ai_split_hierarchy` 使用公共保真、原位边界和 `replacement_nodes` JSON 块；并列模式禁止子节点，层级模式最多三层且节点总量受服务端限制。
+- 脑图编辑页通过 capability 提供统一的“AI 分卡”入口；工作台配置里选择任务类型：
+  - **分卡**（`split_mode=auto|parallel|hierarchy`）：原位替换无子节点的长内容卡。
+  - **添卡**（`split_mode=add_children`，兼容别名 `legacy_children`）：在父卡与一级子卡之间插入更少数量的中间分类，并把已有一级子节点整棵子树重挂（uid 不变）。
+- 根节点、只读模式和练习模式不开放右键入口；替换式分卡只处理无子节点的长内容卡片；添卡要求至少 2 个一级子节点，中间分类数必须严格少于子节点数。
+- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
+- 分卡：服务端在父级 `children` 的原索引执行一次切片替换；新 UID 由 operation 和树路径确定生成。统一场景 `ai_split` 输出 `replacement_nodes`。
+- 添卡：服务端使用专用系统提示词（`add_children_prompt.py`，含骑士学院样例），**不得**经 `ai_split` composition/`render(ai_prompt_mindmap_ai_split_system)`（后者强制 `replacement_nodes`）。协议为 `new_children` + `child_assignments`；若模型误返回 `replacement_nodes`，服务端可尝试恢复分组。结果同样以 `replacement_nodes` 字段返回预览树；前端确认后「写入源父卡下」或「追加到选中卡之后」。
+- 用户「指定约 N 张」与字数启发式推断均为**软偏好**（只进 prompt 的 `max_children` / 数量说明），不因略多顶层而 400；用户在预览中自行删并后再应用。服务端替换式分卡仅在顶层超过安全上限（`AI_SPLIT_VALIDATION_MAX_TOP_LEVEL`，默认 12）或 depth/总数越界时拒绝。添卡中间层仍须严格少于一级子节点数。
+- 两种任务都先预览、后确认，后台不得直接修改正式导图；叶子/已有子节点尽量保留原句与原 uid，禁止总结删减。
+
+
+## 统一文档工作区与宫殿学科标签
+
+- 全站思维导图继续使用同一套 `MindMapEditorSurface`、`MindMapPageToolbar` 和 `useMindMapDocumentSession`。宫殿文档与学科文档是独立持久化文档，不得合并数据库内容。
+- 宫殿编辑页通过单工作区标签在宫殿文档和显式归属的学科文档之间切换，同一时刻只挂载一个可编辑画布。切换文档前必须提交当前文档待保存状态。
+- 学科文档在宫殿宿主中仍由 Knowledge API 读写；Palace 只注入章节关联 capability，并拥有宫殿—学科、宫殿—章节的一致性命令。
+- `PalaceKnowledgeOutlinePanel`、`PalaceChapterPanel` 和页面自行推导“第一个学科”的实现已经退役，不得重建。
+
+## Node identity and memory state
+
+A palace document has one stable node UID per node. Reviews indexes memory state by `palace_id + node_uid`; all non-root nodes are independent FSRS cards. Text or note changes invalidate the content fingerprint and reset only that node, while movement, style, and layout changes preserve the card. New nodes immediately join the progress denominator; deleted nodes stop scheduling while historical evidence remains.

@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db._tables.misc import PdfDocument
 from memory_anki.platform.application import UnitOfWork
 
+from .ocr_cache import list_document_ocr_coverage
+
 
 class PdfLibraryError(ValueError):
     pass
@@ -97,6 +99,16 @@ def resolve_pdf_download(session: Session, document_id: str, library_dir: Path) 
     if not path.exists():
         raise FileNotFoundError(path)
     return PdfDownload(path=path, original_name=document.original_name)
+
+
+def get_pdf_ocr_coverage(document_id: str) -> dict[str, object]:
+    pages = list_document_ocr_coverage(document_id)
+    return {
+        "document_id": document_id,
+        "pages": pages,
+        "page_numbers": [int(item["page_number"]) for item in pages],
+        "cached_page_count": len(pages),
+    }
 
 
 def delete_pdf_document(

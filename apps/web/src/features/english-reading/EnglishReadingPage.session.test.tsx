@@ -15,7 +15,7 @@ describe("EnglishReadingPage session flows", () => {
     mocks.timer.startedAt = "2026-06-12T10:00:00";
     mocks.timer.status = "running";
 
-    const view = renderPage(["/english-reading?material=42"]);
+    const view = renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 
@@ -48,20 +48,23 @@ describe("EnglishReadingPage session flows", () => {
       },
     );
 
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /打开/i })[1]);
+    fireEvent.click(screen.getByRole("button", { name: /材料/i }));
+    const openButtons = await screen.findAllByRole("button", { name: /打开/i });
+    fireEvent.click(openButtons[openButtons.length - 1]!);
 
     await waitFor(() => {
-      expect(screen.getByText("Napoleon reading material")).toBeTruthy();
+      expect(screen.getByText("为这篇材料生成阅读稿")).toBeTruthy();
     });
+    expect(screen.getAllByText("Napoleon reading material").length).toBeGreaterThan(0);
     expect(mocks.timer.leaveScene).not.toHaveBeenCalled();
   });
 
   it("resets the reading timer only once when a version is loaded", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 

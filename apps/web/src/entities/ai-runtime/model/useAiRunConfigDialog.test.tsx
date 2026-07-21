@@ -230,9 +230,27 @@ describe('useAiRunConfigDialog', () => {
     expect((await screen.findByLabelText('场景特殊提示词') as HTMLTextAreaElement).value).toBe('服务器 OCR 默认要求')
     expect((screen.getByLabelText('完整覆盖提示词') as HTMLTextAreaElement).value).toBe('')
     expect((screen.getByLabelText('本次模型') as HTMLSelectElement).value).toBe('qwen3-vl-flash')
+    const ocrCheckbox = screen.getByRole('checkbox', { name: /逐字识别/ }) as HTMLInputElement
+    expect(ocrCheckbox.checked).toBe(true)
+    expect(screen.queryByRole('checkbox', { name: /脑图 JSON/ })).toBeNull()
     fireEvent.click(screen.getByText('开始生成'))
     await waitFor(() => expect(screen.getByTestId('result').textContent).toContain('服务器 OCR 默认要求'))
     expect(window.localStorage.getItem('memory-anki.ai-runtime-recent.import-image-text.vision_image_text')).not.toContain('prompt_override')
+  })
+
+  it('checks PDF mindmap default blocks and hides unrelated prompt blocks', async () => {
+    render(
+      <TestHarness
+        scenarioKey={'vision_batch_mindmap'}
+        entrypointKey={'import-pdf-mindmap'}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('open'))
+    const mindmapCheckbox = await screen.findByRole('checkbox', { name: /脑图 JSON/ }) as HTMLInputElement
+    expect(mindmapCheckbox.checked).toBe(true)
+    expect(screen.queryByRole('checkbox', { name: /逐字识别/ })).toBeNull()
+    expect(screen.getByText(/已选 1\/1/)).toBeTruthy()
   })
 
   it('keeps optional context unchecked until selected and snapshots it into the prompt', async () => {

@@ -3,6 +3,7 @@ import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
 import { DashboardSkeleton } from '@/features/dashboard/DashboardSkeleton'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
+import { TimeRecordQuickAddDialog } from '@/features/profile/components/TimeRecordQuickAddDialog'
 import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
 import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
 import { TimeRecordsTrendChart } from '@/features/profile/components/TimeRecordsTrendChart'
@@ -207,7 +208,7 @@ export default function Dashboard() {
             />
           </TimeRecordChartCard>
           <TimeRecordChartCard
-            title="会话类型分布"
+            title="标签时长分布"
             selectedRange={breakdownRangeDays}
             onRangeChange={(range) =>
               updateDurationFilter({ breakdownRangeDays: range })
@@ -272,10 +273,23 @@ export default function Dashboard() {
         />
       </div>
 
+      <TimeRecordQuickAddDialog
+        open={timeRecordsDashboard.quickAddOpen}
+        form={timeRecordsDashboard.quickAddForm}
+        customTags={timeRecordsDashboard.customTags}
+        error={timeRecordsDashboard.quickAddError}
+        isSubmitting={timeRecordsDashboard.isSubmittingQuickAdd}
+        onOpenChange={timeRecordsDashboard.onQuickAddOpenChange}
+        onChange={timeRecordsDashboard.onQuickAddFormChange}
+        onCustomTagsChange={timeRecordsDashboard.onCustomTagsChange}
+        onSubmit={(event) => void timeRecordsDashboard.handleSubmitQuickAdd(event)}
+      />
+
       <TimeRecordDialog
         open={timeRecordsDashboard.dialogOpen}
         mode={timeRecordsDashboard.dialogMode}
         form={timeRecordsDashboard.formState}
+        customTags={timeRecordsDashboard.customTags}
         error={timeRecordsDashboard.formError}
         isSubmitting={timeRecordsDashboard.isSubmittingRecord}
         onOpenChange={timeRecordsDashboard.onDialogOpenChange}

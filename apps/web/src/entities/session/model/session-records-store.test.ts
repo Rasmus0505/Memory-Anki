@@ -82,17 +82,17 @@ describe('session-record chart helpers', () => {
     ]
 
     expect(getSessionKindBreakdown(records, 7, reference)).toEqual([
-      { kind: 'review', label: '正式复习', seconds: 600, sessions: 1 },
-      { kind: 'practice', label: '练习', seconds: 0, sessions: 0 },
-      { kind: 'quiz', label: '做题', seconds: 300, sessions: 1 },
-      { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0 },
+      { kind: 'review', label: '正式复习', seconds: 600, sessions: 1, isBuiltin: true },
+      { kind: 'practice', label: '练习', seconds: 0, sessions: 0, isBuiltin: true },
+      { kind: 'quiz', label: '做题', seconds: 300, sessions: 1, isBuiltin: true },
+      { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0, isBuiltin: true },
     ])
 
     expect(getSessionKindBreakdown(records, 'all', reference)).toEqual([
-      { kind: 'review', label: '正式复习', seconds: 600, sessions: 1 },
-      { kind: 'practice', label: '练习', seconds: 900, sessions: 1 },
-      { kind: 'quiz', label: '做题', seconds: 300, sessions: 1 },
-      { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0 },
+      { kind: 'review', label: '正式复习', seconds: 600, sessions: 1, isBuiltin: true },
+      { kind: 'practice', label: '练习', seconds: 900, sessions: 1, isBuiltin: true },
+      { kind: 'quiz', label: '做题', seconds: 300, sessions: 1, isBuiltin: true },
+      { kind: 'palace_edit', label: '宫殿编辑', seconds: 0, sessions: 0, isBuiltin: true },
     ])
   })
 

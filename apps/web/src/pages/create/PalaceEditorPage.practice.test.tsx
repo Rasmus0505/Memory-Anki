@@ -55,33 +55,38 @@ describe('usePalaceEditPage inline practice mode', () => {
       expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledWith(101)
     })
 
-    expect(screen.getByText('outline')).toBeTruthy()
+    expect(screen.getByText('学科与思维导图')).toBeTruthy()
     expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-    expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
     expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
 
+    expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
+
     fireEvent.click(screen.getByRole('button', { name: '学习' }))
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
       expect(
         screen.getByText((content) =>
-          content.startsWith('sync-soft-soft--{"docFingerprint":'),
+          content.startsWith('sync-soft-soft-edit:0:0:0-{"docFingerprint":'),
         ),
       ).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByText('flip-policies-auto-preserve')).toBeTruthy()
       expect(screen.getByRole('button', { name: '构建' })).toBeTruthy()
+      // Same host instance — fullscreen/presentation state can survive mode switches.
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
-      expect(screen.getByText('outline')).toBeTruthy()
+      expect(screen.getByText('学科与思维导图')).toBeTruthy()
       expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-      expect(screen.getByText('sync-soft-replace-edit:0:0-0-')).toBeTruthy()
+      expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
+      expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
 
     expect(palaceApi.getPracticeSessionProgressApi).toHaveBeenCalledTimes(1)
@@ -127,7 +132,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-soft-soft--{"docFingerprint":'),
+        content.startsWith('sync-soft-soft-edit:0:0:0-{"docFingerprint":'),
       ),
     ).toBeTruthy()
     expect(getMindMapTexts()).toEqual({
@@ -274,7 +279,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
     expect(
       screen.getByText((content) =>
-        content.startsWith('sync-soft-soft--{"docFingerprint":'),
+        content.startsWith('sync-soft-soft-edit:0:0:0-{"docFingerprint":'),
       ),
     ).toBeTruthy()
 

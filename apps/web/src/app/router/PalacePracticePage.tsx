@@ -8,14 +8,12 @@ import {
   savePracticeSessionProgressApi,
   updatePalacePracticeFlagApi,
 } from '@/entities/palace/api'
-import { submitReviewSessionApi } from '@/features/review/api'
 import {
   PracticeSessionRoute,
   type PracticeProgressSnapshot,
-  type PracticeStageTarget,
 } from '@/app/router/practiceRouteSupport'
 
-type PalacePracticeMeta = PalaceEditorMeta & PracticeStageTarget
+type PalacePracticeMeta = PalaceEditorMeta
 
 export default function PalacePracticePage() {
   return (
@@ -51,44 +49,9 @@ export default function PalacePracticePage() {
           ),
         getFlowKey: (palace, resetVersion) => `${palace.id}-${resetVersion}`,
         getPersistKey: (palace) => `practice:palace:${palace.id}`,
-        getStageTarget: (palace) => palace,
-        refreshStageTarget: async (palace) => {
-          const refreshed = await getPalaceEditorApi(palace.id)
-          return {
-            data: refreshed.palace as PalacePracticeMeta,
-            title: refreshed.palace.title,
-            palaceId: refreshed.palace.id,
-            reviewEditorState: {
-              editor_doc: refreshed.editor_doc,
-              editor_config: refreshed.editor_config,
-              editor_local_config: refreshed.editor_local_config,
-              lang: refreshed.lang,
-            },
-          }
-        },
-        completeWithoutStage: async (palace) => {
+        completePractice: async (palace) => {
           await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
           invalidatePalaceCatalogCache()
-        },
-        submitStage: async (palace, payload, targetReviewNumber, needsPractice, note, options) => {
-          const scheduleId = palace.current_review_schedule_id
-          if (!scheduleId) {
-            throw new Error('当前复习节点已变化，请返回书架刷新后重试。')
-          }
-          await submitReviewSessionApi(
-            scheduleId,
-            {
-              duration_seconds: payload.durationSeconds,
-              completion_mode: payload.completionMode,
-              revealed_remaining: payload.revealedRemaining,
-              red_marked_count: payload.redNodeIds.length,
-              target_review_number: targetReviewNumber,
-              needs_practice: needsPractice,
-              ...(note ? { note } : {}),
-            },
-            { mutationId: options.mutationId },
-          )
-          return { persistTimeRecord: false }
         },
       }}
     />

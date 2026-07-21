@@ -72,6 +72,27 @@ export const timeRecordsDashboardMock = {
   onDialogOpenChange: vi.fn(),
   onFormChange: vi.fn(),
   handleSubmitRecord: vi.fn(),
+  customTags: [],
+  quickAddOpen: false,
+  quickAddForm: {
+    tagId: 'review',
+    minutes: '30',
+    date: '2026-07-21',
+    title: '',
+    titleEdited: false,
+    showAdvanced: false,
+    startedAt: '',
+    endedAt: '',
+  },
+  quickAddError: null,
+  isSubmittingQuickAdd: false,
+  onQuickAddOpenChange: vi.fn(),
+  onQuickAddFormChange: vi.fn(),
+  onCustomTagsChange: vi.fn(),
+  handleSubmitQuickAdd: vi.fn(),
+  handleReplayPendingRecovery: vi.fn(),
+  handleDismissPendingRecovery: vi.fn(),
+  pendingRecoveryRecords: [],
 };
 
 vi.mock("@/features/dashboard/api", () => ({
@@ -133,6 +154,10 @@ vi.mock("@/features/profile/components/TimeRecordsTable", () => ({
 
 vi.mock("@/features/profile/components/TimeRecordDialog", () => ({
   TimeRecordDialog: () => null,
+}));
+
+vi.mock("@/features/profile/components/TimeRecordQuickAddDialog", () => ({
+  TimeRecordQuickAddDialog: () => null,
 }));
 
 export function setupDashboardPageTest() {

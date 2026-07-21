@@ -1,5 +1,14 @@
 export type MindMapNodeType = 'chapter' | 'peg'
 
+export type MindMapVisualTone = 'danger' | 'success' | 'warning' | 'info' | 'neutral'
+
+export interface MindMapNodeStatusChip {
+  text: string
+  tone: MindMapVisualTone
+  /** filled = emphasis (e.g. session); outline = secondary (e.g. long-term score) */
+  style: 'filled' | 'outline'
+}
+
 export interface MindMapNodeVisual {
   concealText?: boolean
   placeholder?: boolean
@@ -10,6 +19,14 @@ export interface MindMapNodeVisual {
   badge?: {
     tone: 'danger' | 'success' | 'warning' | 'neutral'
     title: string
+  } | null
+  /** Compact labels above the card; host-owned content, generic rendering only. */
+  statusChips?: MindMapNodeStatusChip[] | null
+  /** Numeric corner badge (e.g. bottom-right count). Host-owned; canvas only renders. */
+  countBadge?: {
+    text: string
+    tone: 'success' | 'danger' | 'warning' | 'neutral'
+    title?: string
   } | null
 }
 

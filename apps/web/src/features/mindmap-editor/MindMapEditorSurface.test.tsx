@@ -26,6 +26,23 @@ describe('MindMapEditorSurface native host', () => {
     document.documentElement.style.removeProperty('--memory-anki-mindmap-fullscreen-width')
     document.documentElement.style.removeProperty('--memory-anki-mindmap-fullscreen-height')
     delete (window as Window & { visualViewport?: VisualViewport }).visualViewport
+    for (const key of [
+      'webkitFullscreenElement',
+      'webkitCurrentFullScreenElement',
+      'webkitExitFullscreen',
+      'webkitCancelFullScreen',
+    ] as const) {
+      try {
+        delete (document as Document & Record<string, unknown>)[key]
+      } catch {
+        Object.defineProperty(document, key, { configurable: true, value: undefined })
+      }
+    }
+    try {
+      delete (HTMLElement.prototype as HTMLElement & { requestFullscreen?: unknown }).requestFullscreen
+    } catch {
+      // jsdom may not expose a deletable requestFullscreen; ignore.
+    }
   })
 
   it('renders a native host instead of an iframe', () => {
@@ -33,6 +50,31 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(screen.getByTestId('mindmap-frame-native')).toBeTruthy()
     expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('applies scene chrome class, data attribute, and label', () => {
+    const { rerender } = render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        sceneChrome="rating"
+      />,
+    )
+
+    const frame = screen.getByTestId('mindmap-frame-native')
+    expect(frame.dataset.sceneChrome).toBe('rating')
+    expect(frame.className).toContain('memory-anki-mindmap-scene-rating')
+    expect(screen.getByTestId('mindmap-scene-label').textContent).toBe('评分')
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        sceneChrome="default"
+      />,
+    )
+    expect(screen.getByTestId('mindmap-frame-native').dataset.sceneChrome).toBe('default')
+    expect(screen.queryByTestId('mindmap-scene-label')).toBeNull()
   })
 
   it('requests the browser Fullscreen API when the platform supports it', async () => {
@@ -108,11 +150,17 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(webkitCancelFullScreen).toHaveBeenCalledTimes(1)
   })
-  it('toggles fullscreen from the canvas toolbar control', async () => {
+  it('toggles system fullscreen from the canvas toolbar control', async () => {
     const onFullscreenChange = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
     render(
       <MindMapEditorSurface
         editorState={editorState}
+        presentationStrategy="native-preferred"
         onEditorStateChange={vi.fn()}
         onFullscreenChange={onFullscreenChange}
       />,
@@ -123,7 +171,9 @@ describe('MindMapEditorSurface native host', () => {
     await act(async () => {
       fireEvent.click(screen.getByTitle('进入系统全屏'))
     })
+    expect(requestFullscreen).toHaveBeenCalledTimes(1)
     expect(frame.className).toContain('memory-anki-mindmap-native-fullscreen')
+    expect(frame.dataset.presentationMode).toBe('native')
     expect(frame.firstElementChild).toBe(canvasRoot)
     expect(onFullscreenChange).toHaveBeenLastCalledWith(true)
 
@@ -135,24 +185,71 @@ describe('MindMapEditorSurface native host', () => {
     expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
   })
 
-  it('delegates the primary fullscreen control to the web fullscreen host', async () => {
-    const onFullscreenToggle = vi.fn()
+  it('toggles webpage fullscreen without requesting the native Fullscreen API', async () => {
+    const onFullscreenChange = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
     render(
       <MindMapEditorSurface
         editorState={editorState}
+        presentationStrategy="native-preferred"
+        onEditorStateChange={vi.fn()}
+        onFullscreenChange={onFullscreenChange}
+      />,
+    )
+
+    const frame = screen.getByTestId('mindmap-frame-native')
+    expect(screen.getByTitle('进入系统全屏')).toBeTruthy()
+    expect(screen.getByTitle('进入网页全屏')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入网页全屏'))
+    })
+
+    expect(requestFullscreen).not.toHaveBeenCalled()
+    expect(frame.className).toContain('memory-anki-mindmap-native-fullscreen')
+    expect(frame.dataset.presentationMode).toBe('viewport')
+    expect(onFullscreenChange).toHaveBeenLastCalledWith(true)
+    expect(screen.getByTitle('退出网页全屏')).toBeTruthy()
+    expect(screen.getByTitle('进入系统全屏')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('退出网页全屏'))
+    })
+    expect(frame.dataset.presentationMode).toBe('embedded')
+    expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('uses surface presentation for the canvas fullscreen control even when a host immersive toggle is provided', async () => {
+    const onFullscreenToggle = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        presentationStrategy="native-preferred"
         onEditorStateChange={vi.fn()}
         onFullscreenToggle={onFullscreenToggle}
       />,
     )
 
     await act(async () => {
-      fireEvent.click(screen.getByTitle('进入网页内全屏'))
+      fireEvent.click(screen.getByTitle('进入系统全屏'))
     })
 
-    expect(onFullscreenToggle).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('mindmap-frame-native').className).not.toContain(
+    expect(onFullscreenToggle).not.toHaveBeenCalled()
+    expect(requestFullscreen).toHaveBeenCalledTimes(1)
+    expect(requestFullscreen.mock.instances[0]).toBe(screen.getByTestId('mindmap-frame-native'))
+    expect(screen.getByTestId('mindmap-frame-native').className).toContain(
       'memory-anki-mindmap-native-fullscreen',
     )
+    expect(screen.getByTitle('退出系统全屏')).toBeTruthy()
   })
 
   it('does not close a parent immersive flow when entering canvas fullscreen', async () => {
@@ -325,5 +422,53 @@ describe('MindMapEditorSurface native host', () => {
 
     expect(frame.className).not.toContain('memory-anki-mindmap-native-fullscreen')
     expect(onFullscreenChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('handles each mode-switch focus request once even when onNodeActive identity changes', () => {
+    // Reproduces React #185: unstable onNodeActive + focusRequestNonce re-entry.
+    const onNodeActive = vi.fn()
+    const { rerender } = render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        onNodeActive={onNodeActive}
+        focusRequestNodeUid="child"
+        focusRequestNonce={1}
+        practiceModeActive={false}
+      />,
+    )
+
+    expect(onNodeActive).toHaveBeenCalledTimes(1)
+    expect(onNodeActive.mock.calls[0]?.[0]?.[0]?.uid).toBe('child')
+
+    // Parent re-renders with a new callback identity (common with inline lambdas)
+    // while the same focus nonce is still present after a build/learn toggle.
+    for (let i = 0; i < 12; i += 1) {
+      rerender(
+        <MindMapEditorSurface
+          editorState={editorState}
+          onEditorStateChange={vi.fn()}
+          onNodeActive={(nodes) => onNodeActive(nodes)}
+          focusRequestNodeUid="child"
+          focusRequestNonce={1}
+          practiceModeActive={i % 2 === 0}
+        />,
+      )
+    }
+
+    // Same nonce must not re-focus / re-setState in a loop.
+    expect(onNodeActive).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        onNodeActive={(nodes) => onNodeActive(nodes)}
+        focusRequestNodeUid="child"
+        focusRequestNonce={2}
+        practiceModeActive
+      />,
+    )
+    expect(onNodeActive).toHaveBeenCalledTimes(2)
   })
 })

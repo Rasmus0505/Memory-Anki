@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from memory_anki.core.file_sync import pull_on_start, push_on_stop
+from memory_anki.core.file_sync import SyncLock, pull_on_start, push_on_stop
 from memory_anki.core.local_config import LocalRuntimeConfig
 
 
@@ -37,6 +37,27 @@ def read_database(app_home: Path) -> str:
 
 
 class FileSyncTests(unittest.TestCase):
+    def test_sync_lock_steals_dead_local_pid(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = make_config(root, "device-a", "LaptopA")
+            lock_dir = root / "sync-root" / "locks" / "sync.lock"
+            lock_dir.mkdir(parents=True)
+            (lock_dir / "lock.json").write_text(
+                json.dumps(
+                    {
+                        "device_id": "device-a",
+                        "device_name": "LaptopA",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                        "pid": 999_999_991,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with SyncLock(lock_dir, config) as lock:
+                self.assertTrue(lock.acquired)
+                self.assertTrue((lock_dir / "lock.json").exists())
+
     def test_two_devices_can_take_turns_pushing_and_pulling(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

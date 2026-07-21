@@ -1,4 +1,4 @@
-import type { PalaceSegmentSummary } from '@/shared/api/contracts'
+import type { PalaceSegmentSummary, SubjectSummary } from '@/shared/api/contracts'
 
 export interface PalaceMeta {
   id: number
@@ -14,17 +14,11 @@ export interface PalaceMeta {
     subject?: { id: number; name: string } | null
   }>
   primary_chapter_id?: number | null
+  subjects?: SubjectSummary[]
+  explicit_chapter_ids?: number[]
+  inherited_chapter_ids?: number[]
+  binding_revision?: number
   segments?: PalaceSegmentSummary[]
-}
-
-export interface ChapterOption {
-  id: number
-  name: string
-  depth: number
-  subjectId: number | null
-  subjectName: string
-  parentId: number | null
-  children: ChapterOption[]
 }
 
 export type StatusBadgeState = {

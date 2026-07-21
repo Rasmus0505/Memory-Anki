@@ -6,7 +6,12 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from memory_anki.core.config import DB_PATH, FULL_BACKUPS_DIR, RESCUE_BACKUPS_DIR
+from memory_anki.core.config import (
+    DB_PATH,
+    FULL_BACKUPS_DIR,
+    RESCUE_BACKUPS_DIR,
+    ROLLING_BACKUPS_DIR,
+)
 from memory_anki.core.runtime_activity import (
     assert_exclusive_runtime_operation,
     current_runtime_instance_id,
@@ -20,12 +25,14 @@ from memory_anki.modules.backups.application.storage_backup import (
 
 logger = logging.getLogger(__name__)
 
-AUTO_FULL_BACKUP_INTERVAL = timedelta(hours=4)
+# 周期/关机/编辑均走轻量 rolling；全量仅每日启动与手动创建。
+AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
 ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
 
 # 保留策略：每次新建备份后自动清理超出上限的旧备份，避免磁盘无限增长。
-MAX_FULL_BACKUPS = 8
-MAX_RESCUE_BACKUPS = 5
+MAX_FULL_BACKUPS = 3
+MAX_ROLLING_BACKUPS = 6
+MAX_RESCUE_BACKUPS = 3
 
 _BACKUP_LOCK = threading.Lock()
 _BACKUP_LOOP_THREAD: threading.Thread | None = None
@@ -38,15 +45,16 @@ def timestamp_slug(now: datetime | None = None) -> str:
 
 
 def create_rescue_snapshot(reason: str) -> Path:
+    """救援快照只拷数据库 + 迁移状态，不复制 PDF/视频等大媒体。"""
     with _BACKUP_LOCK:
         folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-        write_storage_backup(folder, reason=reason, full=True)
+        write_storage_backup(folder, reason=reason, full=False)
         prune_old_backups(RESCUE_BACKUPS_DIR, MAX_RESCUE_BACKUPS)
         return folder
 
 
 def ensure_daily_backup() -> Path | None:
-    if _daily_backup_exists():
+    if _daily_full_backup_exists():
         return None
     return create_full_backup("startup")
 
@@ -63,15 +71,19 @@ def create_full_backup(reason: str) -> Path:
 def create_rolling_backup(reason: str) -> Path:
     """轻量备份：只复制数据库 + 迁移状态，不含大媒体目录。"""
     with _BACKUP_LOCK:
-        folder = FULL_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
+        folder = ROLLING_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
         write_storage_backup(folder, reason=reason, full=False)
-        prune_old_backups(FULL_BACKUPS_DIR, MAX_FULL_BACKUPS)
+        prune_old_backups(ROLLING_BACKUPS_DIR, MAX_ROLLING_BACKUPS)
         return folder
 
 
 def list_backups() -> list[dict]:
     results: list[dict] = []
-    for kind, root in (("full", FULL_BACKUPS_DIR), ("rescue", RESCUE_BACKUPS_DIR)):
+    for kind, root in (
+        ("full", FULL_BACKUPS_DIR),
+        ("rolling", ROLLING_BACKUPS_DIR),
+        ("rescue", RESCUE_BACKUPS_DIR),
+    ):
         if not root.exists():
             continue
         for folder in sorted(root.iterdir(), reverse=True):
@@ -86,9 +98,9 @@ def list_backups() -> list[dict]:
                 if isinstance(item, dict) and item.get("included")
             }
             is_full = manifest.get("full")
-            # 旧版 manifest 没有 full 字段，默认按全量处理（向后兼容）。
+            # 旧版 manifest 没有 full 字段：full 目录默认全量，rolling/rescue 默认轻量。
             if is_full is None:
-                is_full = True
+                is_full = kind == "full"
             scope = manifest.get("scope") or ("full" if is_full else "rolling")
             results.append(
                 {
@@ -128,7 +140,8 @@ def restore_database_backup(backup_folder: str) -> Path:
 
 
 def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Path | None:
-    latest = _latest_full_backup()
+    """兼容旧调用：按全量目录最近一份的年龄决定是否再打全量。"""
+    latest = _latest_backup_in(FULL_BACKUPS_DIR)
     if latest and _backup_age(latest) < minimum_interval:
         return None
     return create_full_backup(reason)
@@ -136,18 +149,22 @@ def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Pa
 
 def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
     """编辑触发的滚动备份，走轻量分支（仅 DB + migration-state）。"""
-    latest = _latest_full_backup()
+    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
     if latest and _backup_age(latest) < ROLLING_EDIT_BACKUP_INTERVAL:
         return None
     return create_rolling_backup(reason)
 
 
 def maybe_create_periodic_backup() -> Path | None:
-    return maybe_create_interval_backup("periodic", AUTO_FULL_BACKUP_INTERVAL)
+    """后台周期备份：轻量 rolling，避免把 PDF/视频反复整盘复制。"""
+    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
+    if latest and _backup_age(latest) < AUTO_ROLLING_BACKUP_INTERVAL:
+        return None
+    return create_rolling_backup("periodic")
 
 
 def create_shutdown_backup() -> Path | None:
-    return create_full_backup("shutdown")
+    return create_rolling_backup("shutdown")
 
 
 def start_periodic_backup_loop() -> None:
@@ -231,23 +248,40 @@ def _backup_database_candidates(folder: Path, manifest: dict) -> list[Path]:
     return list(dict.fromkeys(candidates))
 
 
-def _daily_backup_exists() -> bool:
+def _daily_full_backup_exists() -> bool:
+    """仅当 full 目录下存在当日全量备份时返回 True（忽略 rolling）。"""
     prefix = datetime.now().strftime("%Y%m%d")
     if not FULL_BACKUPS_DIR.exists():
         return False
-    return any(
-        child.is_dir() and child.name.startswith(prefix)
-        for child in FULL_BACKUPS_DIR.iterdir()
-    )
+    for child in FULL_BACKUPS_DIR.iterdir():
+        if not child.is_dir() or not child.name.startswith(prefix):
+            continue
+        manifest = read_storage_backup_manifest(child)
+        is_full = manifest.get("full")
+        if is_full is None:
+            # full 目录内无 manifest 字段时按全量计
+            is_full = True
+        if bool(is_full):
+            return True
+    return False
 
 
-def _latest_full_backup() -> Path | None:
-    if not FULL_BACKUPS_DIR.exists():
+# 兼容旧测试/调用方名称
+def _daily_backup_exists() -> bool:
+    return _daily_full_backup_exists()
+
+
+def _latest_backup_in(root: Path) -> Path | None:
+    if not root.exists():
         return None
-    folders = [child for child in FULL_BACKUPS_DIR.iterdir() if child.is_dir()]
+    folders = [child for child in root.iterdir() if child.is_dir()]
     if not folders:
         return None
     return max(folders, key=lambda item: item.stat().st_mtime)
+
+
+def _latest_full_backup() -> Path | None:
+    return _latest_backup_in(FULL_BACKUPS_DIR)
 
 
 def _backup_age(folder: Path) -> timedelta:

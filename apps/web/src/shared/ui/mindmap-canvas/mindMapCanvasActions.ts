@@ -2,6 +2,8 @@ import {
   ArrowDown,
   ArrowUp,
   BetweenHorizontalStart,
+  CircleHelp,
+  Highlighter,
   Pencil,
   Plus,
   Trash2,
@@ -14,6 +16,8 @@ interface NodeMenuState {
   x: number
   y: number
   nodeId: string
+  /** Nodes the multi-capable actions should apply to (resolved at menu open). */
+  targetNodeIds?: string[]
 }
 
 interface EdgeMenuState {
@@ -31,7 +35,12 @@ interface BuildNodeActionsInput {
   onAddChild: (parentId: string) => void
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
+  onDeleteNodes?: (nodeIds: string[]) => void
   onDeleteNodeOnly?: (nodeId: string) => void
+  onHighlightNodes?: (nodeIds: string[]) => void
+  /** Toggle question-card flag (auto-reveal under parent in review). */
+  onToggleQuestionCards?: (nodeIds: string[], enabled: boolean) => void
+  isQuestionCard?: (nodeId: string) => boolean
   onStartEdit: (nodeId: string) => void
   isRootNode: (nodeId: string) => boolean
   getSubtreeSize: (nodeId: string) => number
@@ -47,6 +56,13 @@ interface BuildEdgeActionsInput {
   onEdgeInsert: (edgeId: string, sourceId: string, targetId: string) => void
 }
 
+export function resolveContextMenuTargetIds(ctxMenu: NodeMenuState | null): string[] {
+  if (!ctxMenu) return []
+  const fromMenu = (ctxMenu.targetNodeIds ?? []).filter(Boolean)
+  if (fromMenu.length > 0) return [...new Set(fromMenu)]
+  return ctxMenu.nodeId ? [ctxMenu.nodeId] : []
+}
+
 export function buildNodeActions({
   ctxMenu,
   buildCustomNodeActions,
@@ -54,7 +70,11 @@ export function buildNodeActions({
   onAddChild,
   onAddSibling,
   onDelete,
+  onDeleteNodes,
   onDeleteNodeOnly,
+  onHighlightNodes,
+  onToggleQuestionCards,
+  isQuestionCard,
   onStartEdit,
   isRootNode,
   getSubtreeSize,
@@ -65,24 +85,34 @@ export function buildNodeActions({
 }: BuildNodeActionsInput): ContextMenuAction[] {
   if (!ctxMenu) return []
   const nodeId = ctxMenu.nodeId
+  const targetNodeIds = resolveContextMenuTargetIds(ctxMenu)
+  const multiTarget = targetNodeIds.length > 1
   const customActions = buildCustomNodeActions?.(nodeId) ?? []
   if (readonly) return customActions
   const isRoot = isRootNode(nodeId)
   const subtreeSize = getSubtreeSize(nodeId)
+  const deletableTargets = targetNodeIds.filter((id) => !isRootNode(id))
+  const questionCardTargets = targetNodeIds.filter((id) => !isRootNode(id))
+  const allQuestionCards =
+    questionCardTargets.length > 0 &&
+    questionCardTargets.every((id) => Boolean(isQuestionCard?.(id)))
+  const enableQuestionCards = !allQuestionCards
   const structuralActions: ContextMenuAction[] = [
-    {
-      label: '添加子知识点 (Tab)',
-      icon: Plus,
-      onClick: () => {
-        if (readonly) return
-        dispatchGlobalFeedback('node_create', {
-          point: { x: ctxMenu.x, y: ctxMenu.y },
-          origin: 'node',
-        })
-        onAddChild(nodeId)
-      },
-    },
-    ...(!isRoot ? [{
+    ...(multiTarget
+      ? []
+      : [{
+          label: '添加子知识点 (Tab)',
+          icon: Plus,
+          onClick: () => {
+            if (readonly) return
+            dispatchGlobalFeedback('node_create', {
+              point: { x: ctxMenu.x, y: ctxMenu.y },
+              origin: 'node',
+            })
+            onAddChild(nodeId)
+          },
+        } satisfies ContextMenuAction]),
+    ...(!multiTarget && !isRoot ? [{
       label: '添加同级知识点 (Shift+Enter)',
       icon: Plus,
       onClick: () => {
@@ -93,7 +123,7 @@ export function buildNodeActions({
         onAddSibling(nodeId)
       },
     } satisfies ContextMenuAction] : []),
-    ...(!isRoot ? [{
+    ...(!multiTarget && !isRoot ? [{
       label: '上移',
       icon: ArrowUp,
       onClick: () => {
@@ -118,7 +148,7 @@ export function buildNodeActions({
       },
       disabled: canMoveDown ? !canMoveDown(nodeId) : true,
     } satisfies ContextMenuAction] : []),
-    {
+    ...(!multiTarget ? [{
       label: '编辑文字 (Enter / F2)',
       icon: Pencil,
       onClick: () => {
@@ -128,8 +158,40 @@ export function buildNodeActions({
         })
         onStartEdit(nodeId)
       },
-    },
-    ...(!isRoot && onDeleteNodeOnly ? [{
+    } satisfies ContextMenuAction] : []),
+    ...(onHighlightNodes ? [{
+      label: multiTarget ? `标记重点（${targetNodeIds.length} 张）` : '标记重点',
+      icon: Highlighter,
+      onClick: () => {
+        dispatchGlobalFeedback('toolbar_action', {
+          point: { x: ctxMenu.x, y: ctxMenu.y },
+          origin: 'node',
+          label: 'HIGHLIGHT',
+        })
+        onHighlightNodes(targetNodeIds)
+      },
+      separatorBefore: true,
+    } satisfies ContextMenuAction] : []),
+    ...(onToggleQuestionCards && questionCardTargets.length > 0 ? [{
+      label: enableQuestionCards
+        ? multiTarget
+          ? `设置为题目卡（${questionCardTargets.length} 张）`
+          : '设置为题目卡'
+        : multiTarget
+          ? `取消题目卡（${questionCardTargets.length} 张）`
+          : '取消题目卡',
+      icon: CircleHelp,
+      onClick: () => {
+        dispatchGlobalFeedback('toolbar_action', {
+          point: { x: ctxMenu.x, y: ctxMenu.y },
+          origin: 'node',
+          label: enableQuestionCards ? 'QUESTION_CARD_ON' : 'QUESTION_CARD_OFF',
+        })
+        onToggleQuestionCards(questionCardTargets, enableQuestionCards)
+      },
+      separatorBefore: !onHighlightNodes,
+    } satisfies ContextMenuAction] : []),
+    ...(!multiTarget && !isRoot && onDeleteNodeOnly ? [{
       label: '单独删除（保留子级）',
       icon: Trash2,
       onClick: () => {
@@ -143,17 +205,27 @@ export function buildNodeActions({
       variant: 'danger' as const,
       separatorBefore: true,
     } satisfies ContextMenuAction] : []),
-    ...(!isRoot ? [{
-      label: subtreeSize > 1 ? `删除整条分支（${subtreeSize} 张卡片）` : '删除整条分支 (Delete)',
+    ...(deletableTargets.length > 0 ? [{
+      label: multiTarget
+        ? `删除选中（${deletableTargets.length} 处）`
+        : subtreeSize > 1
+          ? `删除整条分支（${subtreeSize} 张卡片）`
+          : '删除整条分支 (Delete)',
       icon: Trash2,
       onClick: () => {
         dispatchGlobalFeedback('node_delete', {
           point: { x: ctxMenu.x, y: ctxMenu.y },
           origin: 'node',
         })
-        onDelete(nodeId)
+        if (deletableTargets.length > 1 && onDeleteNodes) {
+          onDeleteNodes(deletableTargets)
+          return
+        }
+        const onlyId = deletableTargets[0] ?? nodeId
+        onDelete(onlyId)
       },
       variant: 'danger' as const,
+      separatorBefore: (!onHighlightNodes && !onToggleQuestionCards) || multiTarget || isRoot,
     } satisfies ContextMenuAction] : []),
   ]
   if (customActions.length === 0) return structuralActions

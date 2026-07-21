@@ -43,3 +43,5 @@ Legacy customized full prompts are migrated into scene-local `legacy.<prompt_key
 
 - Palace AI split, mind-map import, palace quiz, English Reading, peg association, AI learning, and batch generation are migrated.
 - English course batch and single-sentence translation are migrated through `PromptCatalog`.
+- Scene defaults expose user-facing `label` / `category` for selection; AI 分卡 uses unified scene key `ai_split` (with `ai_split_parallel` / `ai_split_hierarchy` compatibility aliases).
+- AI generation UX should register progress via the frontend `backgroundTaskRegistry` so users see stage progress while models run.

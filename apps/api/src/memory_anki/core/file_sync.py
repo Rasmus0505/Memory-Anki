@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from memory_anki.core.file_sync_lock import SyncError, SyncLock
 from memory_anki.core.files import safe_filename_part
 from memory_anki.core.local_config import LocalRuntimeConfig
 from memory_anki.core.runtime import detect_git_commit
@@ -24,17 +25,11 @@ from memory_anki.core.time import iso_utc_now
 SYNC_STATE_NAME = "state.json"
 LOCAL_SYNC_STATE_NAME = "sync-state.json"
 SYNC_MANIFEST_NAME = "sync-manifest.json"
-LOCK_STALE_SECONDS = 15 * 60
 SYNC_STATE_VERSION = 1
 SNAPSHOT_PROGRESS_INTERVAL_SECONDS = 5
 SNAPSHOT_CHUNK_SIZE = 1024 * 1024
 
 logger = logging.getLogger(__name__)
-
-
-class SyncError(RuntimeError):
-    pass
-
 
 @dataclass(frozen=True, slots=True)
 class SyncResult:
@@ -383,39 +378,6 @@ def restore_snapshot_zip(zip_path: Path, app_home: Path) -> dict[str, Any]:
         return manifest
 
 
-class SyncLock:
-    def __init__(self, lock_dir: Path, config: LocalRuntimeConfig):
-        self.lock_dir = lock_dir
-        self.config = config
-        self.acquired = False
-
-    def __enter__(self) -> SyncLock:
-        self.lock_dir.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            self.lock_dir.mkdir()
-        except FileExistsError:
-            age = time.time() - self.lock_dir.stat().st_mtime
-            if age <= LOCK_STALE_SECONDS:
-                raise SyncError(f"同步锁仍在使用中，请稍后再试: {self.lock_dir}") from None
-            shutil.rmtree(self.lock_dir, ignore_errors=True)
-            self.lock_dir.mkdir()
-        _write_json(
-            self.lock_dir / "lock.json",
-            {
-                "device_id": self.config.device_id,
-                "device_name": self.config.device_name,
-                "created_at": iso_now(),
-                "pid": os.getpid(),
-            },
-        )
-        self.acquired = True
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        if self.acquired:
-            shutil.rmtree(self.lock_dir, ignore_errors=True)
-
-
 def _remote_snapshot_path(remote_state: dict[str, Any], paths: dict[str, Path]) -> Path:
     snapshot_name = str(remote_state.get("snapshot_name") or "").strip()
     if not snapshot_name:
@@ -477,6 +439,52 @@ def _write_conflict_snapshot(
         snapshot_hash=snapshot_hash,
     )
     return conflict_path
+
+
+def peek_pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
+    """Revision-only startup sync check (百度网盘数据，不是 GitHub).
+
+    Does not restore snapshots or stop services. Status meanings for launchers:
+    - disabled / no-remote / up-to-date: safe to keep a healthy shared service running
+    - needs-pull: remote has a newer revision; caller must stop the service before pull_on_start
+    - other ok=False: surface the error and do not start
+    """
+    if not config.sync_enabled or not config.sync_on_start:
+        return SyncResult(True, "disabled", "同步未启用或启动同步已关闭。")
+    if config.sync_root is None:
+        return SyncResult(False, "misconfigured", "同步已启用，但 sync_root 未配置。")
+
+    paths = _sync_paths(config)
+    app_home = config.local_app_home
+    try:
+        with SyncLock(paths["locks"] / "sync.lock", config):
+            remote_state = _read_json(paths["state"])
+            if not remote_state:
+                return SyncResult(True, "no-remote", "远端同步目录尚未初始化，本次启动跳过拉取。")
+            _assert_remote_generation_compatible(remote_state)
+            local_state = _read_json(_local_state_path(app_home))
+            remote_revision = int(remote_state.get("revision") or 0)
+            local_revision = int(local_state.get("remote_revision") or 0)
+            logger.info(
+                "sync peek revision check: local revision %s, remote revision %s",
+                local_revision,
+                remote_revision,
+            )
+            if remote_revision < local_revision:
+                return SyncResult(
+                    False,
+                    "remote-stale",
+                    "云盘中的同步版本比本机记录更旧，请等待云盘同步完成后再启动。",
+                )
+            if remote_revision == local_revision:
+                return SyncResult(True, "up-to-date", "本机数据已是最新，无需拉取。")
+            return SyncResult(
+                True,
+                "needs-pull",
+                f"远端 revision {remote_revision} 新于本机 {local_revision}，需要停服务后拉取。",
+            )
+    except SyncError as exc:
+        return SyncResult(False, "error", str(exc))
 
 
 def pull_on_start(config: LocalRuntimeConfig) -> SyncResult:
@@ -658,10 +666,13 @@ def push_on_stop(config: LocalRuntimeConfig) -> SyncResult:
 
 
 __all__ = [
+    "SyncError",
+    "SyncLock",
     "SyncResult",
     "compute_snapshot_hash",
     "create_snapshot_zip",
     "has_local_payload",
+    "peek_pull_on_start",
     "pull_on_start",
     "push_on_stop",
     "restore_snapshot_zip",

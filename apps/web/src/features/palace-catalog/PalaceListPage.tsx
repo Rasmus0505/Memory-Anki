@@ -123,11 +123,10 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         viewSettings={viewSettings}
         searchQuery={search}
         defaultExpanded
-        onPalacePractice={cardActions.onPalacePractice}
-        onWarmPalacePractice={cardActions.onWarmPalacePractice}
-        onSegmentPractice={cardActions.onSegmentPractice}
-        onWarmSegmentPractice={cardActions.onWarmSegmentPractice}
-        onStageClick={cardActions.onStageClick}
+        onPalaceReview={cardActions.onPalaceReview}
+        onWarmPalaceReview={cardActions.onWarmPalaceReview}
+        onSegmentReview={cardActions.onSegmentReview}
+        onWarmSegmentReview={cardActions.onWarmSegmentReview}
         onDelete={cardActions.onDelete}
       />
     ),
@@ -230,7 +229,6 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         />
       )}
 
-      {cardActions.dialogs}
     </div>
   )
 }

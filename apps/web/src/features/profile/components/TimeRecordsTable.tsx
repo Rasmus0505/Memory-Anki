@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatSessionKind,
   formatSessionSource,
+  formatTimeRecordTagLabel,
   type SessionKind,
   type TimeRecordSortBy,
   type TimeRecordSortOrder,
@@ -118,7 +119,7 @@ export function TimeRecordsTable({
               disabled={actionInProgress}
             >
               <Plus className="mr-2 size-4" />
-              手动新增记录
+              快速记一笔
             </Button>
             <Button
               variant="outline"
@@ -146,7 +147,7 @@ export function TimeRecordsTable({
               onKindFilterChange(event.target.value as 'all' | SessionKind)
             }
           >
-            <option value="all">全部类型</option>
+            <option value="all">全部标签</option>
             {sessionKindOptions.map((kind) => (
               <option key={kind} value={kind}>
                 {formatSessionKind(kind)}
@@ -198,7 +199,7 @@ export function TimeRecordsTable({
               keyword || kindFilter !== 'all' ? null : (
                 <Button variant="outline" size="sm" onClick={onCreateRecord}>
                   <Plus className="mr-2 size-4" />
-                  手动新增记录
+                  快速记一笔
                 </Button>
               )
             }
@@ -225,7 +226,7 @@ export function TimeRecordsTable({
                     />
                   </th>
                   <th className="px-4 py-3">标题</th>
-                  <th className="px-4 py-3">类型</th>
+                  <th className="px-4 py-3">标签</th>
                   <th className="px-4 py-3">端来源</th>
                   <th className="px-4 py-3">开始时间</th>
                   <th className="px-4 py-3">有效时长</th>
@@ -268,7 +269,7 @@ export function TimeRecordsTable({
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        {formatSessionKind(record.kind)}
+                        {formatTimeRecordTagLabel(record)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className="rounded-md border border-border/70 bg-secondary/70 px-2 py-1 text-xs text-foreground">

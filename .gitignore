@@ -21,6 +21,8 @@ __pycache__/
 /apps/api/htmlcov/
 /.coverage
 /htmlcov/
+# Accidental root package leftover (real API lives under apps/api/)
+/api/
 
 # Python tool caches (root + apps/api)
 /.mypy_cache/
@@ -44,6 +46,7 @@ __pycache__/
 
 # ===== Logs & temp scratch files =====
 /logs/
+/tmp/
 *.log
 *.out.log
 *.err.log
@@ -74,6 +77,9 @@ _DEBUG_FALLBACK.json
 /.codegraph/
 /.playwright-mcp/
 /skills-lock.json
+
+# ===== Local study source PDFs (synced via Baidu disk, not part of app code) =====
+/原版/
 
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.

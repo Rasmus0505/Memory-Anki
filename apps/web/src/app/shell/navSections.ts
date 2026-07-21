@@ -2,6 +2,7 @@ import {
   BookOpen,
   Brain,
   FolderTree,
+  Languages,
   LayoutDashboard,
   Shuffle,
 } from 'lucide-react'
@@ -10,7 +11,10 @@ import {
   prefetchPalaceSubjectShelfApi,
 } from '@/entities/palace/api'
 import {
+  preloadEnglishHubPage,
   preloadEnglishReadingPage,
+  preloadEnglishPatternsPage,
+  preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
   preloadFreestyleSessionPage,
@@ -25,6 +29,7 @@ import { prefetchReviewQueueApi } from '@/features/review/api'
 export type NavSectionKey =
   | 'freestyle'
   | 'palaces'
+  | 'english'
   | 'knowledge'
   | 'review'
 
@@ -52,11 +57,7 @@ const isLibraryRoute = (pathname: string) =>
   pathname === '/palaces/list' ||
   /^\/palaces\/\d+$/.test(pathname) ||
   pathname === '/knowledge' ||
-  pathname.startsWith('/knowledge/') ||
-  pathname === '/english' ||
-  pathname.startsWith('/english/') ||
-  pathname === '/english-reading' ||
-  pathname.startsWith('/english-reading/')
+  pathname.startsWith('/knowledge/')
 
 export const navSections: NavSectionDefinition[] = [
   {
@@ -88,8 +89,25 @@ export const navSections: NavSectionDefinition[] = [
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
       void preloadKnowledgePage()
+    },
+  },
+  {
+    key: 'english',
+    to: '/english',
+    label: '英语',
+    icon: Languages,
+    rememberLastVisited: true,
+    matches: (pathname) =>
+      pathname === '/english' ||
+      pathname.startsWith('/english/') ||
+      pathname === '/english-reading' ||
+      pathname.startsWith('/english-reading/'),
+    warmup: () => {
+      void preloadEnglishHubPage()
       void preloadEnglishWorkspacePage()
       void preloadEnglishReadingPage()
+      void preloadEnglishPatternsPage()
+      void preloadEnglishVocabPage()
     },
   },
   {
@@ -97,7 +115,9 @@ export const navSections: NavSectionDefinition[] = [
     to: '/palaces/new',
     label: '创建',
     icon: FolderTree,
-    rememberLastVisited: true,
+    // Always open a fresh create route. Remembering the last /palaces/:id/edit
+    // made "创建" reopen the previous palace and blocked starting a new one.
+    rememberLastVisited: false,
     matches: isCreationRoute,
     warmup: () => {
       void preloadPalaceEditPage()

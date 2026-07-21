@@ -4,7 +4,10 @@ import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
+import { usePalaceQuizNodeBindings } from "@/features/palace-quiz/hooks/usePalaceQuizNodeBindings";
+import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
+import { FlipCardShortcutsDialog } from "@/features/shortcuts/FlipCardShortcutsDialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -15,8 +18,11 @@ import {
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
 import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedbackSettings";
+import { toast } from "@/shared/feedback/toast";
 import { cn } from "@/shared/lib/utils";
 import * as React from "react";
+import type { MindMapRecallRating, MindMapRecallRound } from "@/shared/api/contracts";
+import type { RatingConflictPolicy } from "@/features/review/api";
 
 export type { ReviewFlowSnapshot } from "@/entities/review/model/review-flow-tree";
 export type {
@@ -42,6 +48,33 @@ export function MindMapReviewFlow({
   });
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
+  const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
+  const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
+  const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
+  const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
+  const flipShortcutScene =
+    props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
+  const editorDocForBindings =
+    (review.mapEditorState ?? review.flow.visibleEditorState ?? props.reviewEditorState)?.editor_doc;
+  const quizNodeBindings = usePalaceQuizNodeBindings({
+    palaceId: props.palaceId,
+    editorDoc: editorDocForBindings,
+    enabled: Boolean(props.palaceId),
+  });
+  const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds;
+  const handleOpenNodeQuiz = React.useCallback(
+    (nodeUid: string) => {
+      const ids = getOpenQuestionIds(nodeUid);
+      if (!ids.length) {
+        toast.message("该卡片没有未完成的关联题目。");
+        return;
+      }
+      setNodeQuizNodeUid(nodeUid);
+      setNodeQuizQuestionIds(ids);
+      setNodeQuizOpen(true);
+    },
+    [getOpenQuestionIds],
+  );
 
   return (
     <div className={cn("space-y-5", review.flow.screenGlowClass)}>
@@ -242,6 +275,7 @@ export function MindMapReviewFlow({
                   <FlipCardMindMapPanel
                     fullscreen={review.flow.fullscreen}
                     displayMode={review.mapDisplayMode}
+                    sessionKind={props.sessionKind === 'review' ? 'review' : 'practice'}
                     modeSyncVersion={modeSyncVersion}
                     viewMemoryScope={viewMemoryScope}
                     onToggleFullscreen={review.handleFullscreenToggle}
@@ -254,6 +288,10 @@ export function MindMapReviewFlow({
                     }
                     visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
                     editableEditorState={props.editEditorState}
+                    ratingTreeEditorState={
+                      // Prefer the explicit full rating tree over reveal-filtered visible state.
+                      props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
+                    }
                     visibleEditorSyncKey={review.mapVisibleSyncKey}
                     currentPalaceId={props.palaceId}
                     reviewFxSignal={review.flow.feedback.reviewFxSignal}
@@ -261,14 +299,61 @@ export function MindMapReviewFlow({
                     onNodeActive={review.handleActiveNodes}
                     onNodeClick={review.flow.handleNodeClick}
                     onNodeContextMenu={review.flow.handleNodeContextMenu}
-                    onNodeHover={review.isCheckpointMode ? review.flow.handleNodeHover : undefined}
+                    onNodeHover={review.flow.handleNodeHover}
+                    toolbarExtensions={{
+                      moreActions: [
+                        {
+                          label: "翻卡快捷键",
+                          onClick: () => setFlipShortcutsOpen(true),
+                          opensOverlay: true,
+                        },
+                      ],
+                    }}
                     onQuizBreakOpen={review.handleQuizBreakOpen}
-                    recallRatings={review.recallRatings.round === 'first' ? review.recallRatings.firstRatings : review.recallRatings.retryRatings}
+                    countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
+                    onCountBadgeClick={handleOpenNodeQuiz}
+                    // Always merge first + weak_retry so entering the retry round
+                    // never blanks already-scored chips (记得/困难/轻松).
+                    recallRatings={review.recallRatings.displayRatings}
                     recallRound={review.recallRatings.round}
                     weakNodeUids={review.recallRatings.weakNodeUids}
-                    onRateNode={props.studySessionId ? (nodeUid, rating, round, evidence) => { void review.recallRatings.rateNode(nodeUid, rating, round, evidence) } : undefined}
+                    directRatedUids={review.recallRatings.directRatedUids}
+                    sessionRatedUids={review.recallRatings.sessionRatedUids}
+                    rateableNodeUids={
+                      props.sessionKind === 'review' && review.reviewNodeUids.length > 0
+                        ? review.reviewNodeUids
+                        : null
+                    }
+                    onRateNode={
+                      props.studySessionId
+                        ? (
+                            nodeUid: string,
+                            rating: MindMapRecallRating,
+                            round: MindMapRecallRound,
+                            scope?: 'single' | 'subtree',
+                            evidence?: {
+                              source?: 'manual' | 'inferred'
+                              confidence?: number | null
+                              responseMs?: number | null
+                            },
+                            conflictPolicy?: RatingConflictPolicy,
+                          ) => {
+                            void review.recallRatings
+                              .rateNode(nodeUid, rating, round, scope, evidence, conflictPolicy)
+                              .catch((error: unknown) => {
+                                toast.error(
+                                  error instanceof Error && error.message
+                                    ? error.message
+                                    : '节点评分保存失败',
+                                )
+                              })
+                          }
+                        : undefined
+                    }
                     onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
                     onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
+                    ratingMode={review.ratingMode}
+                    onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
                   />
                 </div>
                 <AiLearningWorkbench
@@ -285,12 +370,36 @@ export function MindMapReviewFlow({
                   ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
                   fullscreen={review.flow.fullscreen}
                 />
-              </div>            </CardContent>
+              </div>
+            </CardContent>
           </Card>
       </div>
 
+      <MindMapRatingHistoryDrawer
+        open={review.recallRatings.historyOpen}
+        onOpenChange={review.recallRatings.setHistoryOpen}
+        events={review.recallRatings.currentEvents}
+        onCorrect={(nodeUid, rating, round) => {
+          void review.recallRatings.rateNode(nodeUid, rating, round).catch((error: unknown) => {
+            toast.error(error instanceof Error && error.message ? error.message : '节点评分保存失败')
+          })
+        }}
+      />
 
-      <MindMapRatingHistoryDrawer open={review.recallRatings.historyOpen} onOpenChange={review.recallRatings.setHistoryOpen} events={review.recallRatings.currentEvents} onCorrect={(nodeUid, rating, round) => { void review.recallRatings.rateNode(nodeUid, rating, round) }} />
+      <NodeBoundQuizDialog
+        open={nodeQuizOpen}
+        onOpenChange={setNodeQuizOpen}
+        palaceId={props.palaceId}
+        nodeUid={nodeQuizNodeUid}
+        questionIds={nodeQuizQuestionIds}
+        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
+      />
+
+      <FlipCardShortcutsDialog
+        open={flipShortcutsOpen}
+        onOpenChange={setFlipShortcutsOpen}
+        scene={flipShortcutScene}
+      />
 
     </div>
   );

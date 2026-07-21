@@ -143,7 +143,8 @@ export function buildImportJobActions({
         : 'vision_batch_mindmap'
       const configs = await options.promptForScenarioAiOptions({
         title: '图片转脑图配置',
-        description: '通用 VL 会先尝试直接生成；OCR 模型会逐页识别。DeepSeek 仅在回退或主动重整时调用。',
+        description:
+          '主路径：通用 VL 直接出脑图。回退路径：OCR 模型逐页识别后，再用格式整理模型组树。下方两套提示词互不串台，默认勾选的是各场景自己的推荐块。',
         entries: [
           {
             scenarioKey: visionScenarioKey,
@@ -151,13 +152,17 @@ export function buildImportJobActions({
               ? 'import-image-structure-mindmap'
               : 'import-image-batch-mindmap',
             label: '视觉模型',
+            description: '主路径：几乎总会调用。请选通用 VL；若选 OCR 角色模型会跳过直出。',
+            pathRole: 'primary',
             contextOptions: options.contextOptions,
           },
           {
             scenarioKey: 'mindmap_ocr_formatter',
             entrypointKey: 'import-image-mindmap-formatter',
             label: '格式整理模型',
-            description: '仅在 OCR 回退或用户主动重整时调用。',
+            description: '回退路径：仅在 OCR 回退或用户主动重整时调用。',
+            pathRole: 'fallback',
+            collapsedByDefault: true,
           },
         ],
       })
@@ -261,19 +266,24 @@ export function buildImportJobActions({
     if (options.mode === 'mindmap') {
       const configs = await options.promptForScenarioAiOptions({
         title: 'PDF 转脑图配置',
-        description: '通用 VL 可能直接完成；OCR 模型一定需要格式整理模型。DeepSeek 仅在回退或主动重整时调用。',
+        description:
+          '主路径：通用 VL 直接读页生成脑图。回退路径：逐页 OCR 后再用格式整理模型组树。两套场景各自只显示本场景提示词块；默认全勾 = 该场景推荐组合，不是全库混选。',
         entries: [
           {
             scenarioKey: 'vision_batch_mindmap',
             entrypointKey: 'import-pdf-mindmap',
             label: '视觉模型',
+            description: '主路径：几乎总会调用。请优先通用 VL（如 qwen3-vl-flash），不要默认用 OCR 模型。',
+            pathRole: 'primary',
             contextOptions: options.contextOptions,
           },
           {
             scenarioKey: 'mindmap_ocr_formatter',
             entrypointKey: 'import-pdf-mindmap-formatter',
             label: '格式整理模型',
-            description: '仅在 OCR 回退或用户主动重整时调用。',
+            description: '回退路径：仅在 OCR 回退或用户主动重整时调用。',
+            pathRole: 'fallback',
+            collapsedByDefault: true,
           },
         ],
       })

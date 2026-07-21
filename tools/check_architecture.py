@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import ast
 import json
@@ -86,6 +86,9 @@ FORBIDDEN_REMOVED_FEATURE_FILES = {
     "features/palace-edit/PalaceEditPage.tsx": "route-level Palace editor composition belongs in pages/create/PalaceEditorPage.tsx.",
     "features/palace-edit/PalaceEditSkeleton.tsx": "Palace editor page loading UI belongs beside the page in pages/create.",
     "features/palace-edit/components/PalaceKnowledgeOutlinePanel.tsx": "route-level Knowledge outline and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
+    "features/palace-edit/components/PalaceChapterPanel.tsx": "palace chapter selection is owned by the unified Palace knowledge workspace.",
+    "features/palace-edit/components/PalaceBindingPanel.tsx": "palace knowledge binding is owned by the unified Palace knowledge workspace.",
+    "pages/create/PalaceKnowledgeOutlinePanel.tsx": "the separate Palace knowledge outline is retired; use the single tabbed mind-map workspace.",
     "features/palace-edit/components/PalaceVersionDialog.tsx": "route-level Palace version preview and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
     "features/knowledge/KnowledgePage.tsx": "route-level Knowledge composition belongs in pages/library/KnowledgeLibraryPage.tsx.",
     "features/knowledge/components/KnowledgeMindMapImportDrawer.tsx": "Knowledge import and editor composition belongs beside the Knowledge library page.",
@@ -223,6 +226,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     ),
     "0028_remove_focus_practice.py": (
         "Explicitly retires the removed focus-practice field after deleting its obsolete progress rows."
+    ),
+    "0039_unify_fsrs_drop_legacy_schedules.py": (
+        "Retires ReviewSchedule/stage tables and Ebbinghaus history; formal review and vocabulary are FSRS-only."
     ),
 }
 REQUIRED_STORAGE_KEYS = {
@@ -1505,20 +1511,48 @@ def check_mindmap_architecture(errors: list[str]) -> None:
     ai_split_contracts = {
         API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py": (
             "AI_SPLIT_REPLACEMENT_MODES",
+            "AI_SPLIT_ADD_CHILDREN",
+            "add_children",
             "find_target_location",
             "operation_id",
+            "replacement_nodes",
+            "coerce_add_children_from_replacement_nodes",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "contracts.py": (
+            "AI_SPLIT_ADD_CHILDREN_MODE",
+            "add_children",
+            "legacy_children",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
+            "new_children",
+            "child_assignments",
+            "骑士学院",
+        ),
+        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "gateway.py": (
+            "ADD_CHILDREN_SYSTEM_PROMPT",
+            "add_children",
         ),
         API_SRC / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py": (
             "content.split_source_fidelity",
             "boundary.split_in_place",
             "output.mindmap_split_json",
-            "ai_split_parallel",
-            "ai_split_hierarchy",
+            "task.split_structure_judgment",
+            "task.split_examples",
+            "ai_split",
         ),
         WEB_SRC / "features" / "mindmap-editor" / "capabilities.ts": (
-            "AI 并列分卡",
-            "AI 层级分卡",
+            "AI 分卡",
             "split_mode",
+            "auto",
+        ),
+        WEB_SRC / "features" / "palace-edit" / "hooks" / "useAiSplitWorkbench.ts": (
+            "add_children",
+            "taskMode",
+            "replaceChildrenUnderUid",
+        ),
+        WEB_SRC / "features" / "palace-edit" / "model" / "aiSplitPreview.ts": (
+            "replaceChildrenUnderUid",
+            "shouldPreservePreviewUid",
         ),
     }
     for path, required_tokens in ai_split_contracts.items():
@@ -1572,7 +1606,7 @@ def check_prompt_catalog_boundaries(errors: list[str]) -> None:
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_content = nav_path.read_text(encoding="utf-8")
-    expected_labels = ("今日", "知识", "创建", "洞察")
+    expected_labels = ("今日", "知识", "英语", "创建", "洞察")
     labels = re.findall(r"label: '([^']+)'", nav_content)
     if labels != list(expected_labels):
         errors.append(
@@ -1731,8 +1765,71 @@ def check_ai_run_workspace(errors: list[str]) -> None:
                 "do not call autoGenerateAndSavePalaceQuiz from UI code."
             )
 
+
+def check_retired_palace_knowledge_binding(errors: list[str]) -> None:
+    retired_route = '/palaces/{palace_id}/chapters'
+    for relative in (
+        'apps/api/src/memory_anki/modules/knowledge/presentation/router.py',
+        'apps/web/src/entities/palace/api/practiceApi.ts',
+    ):
+        path = REPO_ROOT / relative
+        if path.exists() and retired_route in path.read_text(encoding='utf-8'):
+            errors.append(f'{relative}: retired palace chapter write route must not return; use /knowledge-binding.')
+
+
+
+def check_fsrs_review_frontend(errors: list[str]) -> None:
+    guarded = {
+        "widgets/mindmap-review-flow/ReviewSessionContainer.tsx": ("StageSelectDialog", "target_review_number", "needs_practice"),
+        "app/router/review/ReviewOverview.tsx": ("spreadOverdue", "formatReviewStage", "interval_days"),
+        "app/router/review/ReviewCompletion.tsx": ("completed_stage", "next_stage", "needs_practice"),
+        "features/palace-catalog/components/palace-list/PalaceListCard.tsx": ("PalaceStageProgress", "review_stages", "stage_labels"),
+        "features/profile/ProfileSettingsPage.tsx": ("repairReviewStageProgress", "复习阶段"),
+        "features/review/api/reviewApi.ts": ("spread-overdue", "repair-stage-progress", "stage-progress-health"),
+    }
+    for relative, forbidden in guarded.items():
+        path = WEB_SRC / relative
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        for marker in forbidden:
+            if marker in source:
+                errors.append(f"FSRS review runtime must not contain {marker!r}: {path.relative_to(REPO_ROOT)}")
+
+    retired_components = (
+        "features/review/components/StageSelectDialog.tsx",
+        "features/palace-catalog/components/palace-list/PalaceStageEditDialog.tsx",
+        "features/palace-catalog/components/palace-list/PalaceStageProgress.tsx",
+        "entities/review/api/stageAdjustmentApi.ts",
+    )
+    for relative in retired_components:
+        path = WEB_SRC / relative
+        if path.exists():
+            errors.append(f"retired stage UI/API module must not return: {path.relative_to(REPO_ROOT)}")
+
+    router_path = API_SRC / "modules/reviews/presentation/router.py"
+    router_source = router_path.read_text(encoding="utf-8")
+    for marker in ("/review/spread-overdue", "/review/stage-progress-health", "/review/repair-stage-progress", "stage-adjustment"):
+        if marker in router_source:
+            errors.append(f"retired review runtime route must not return: {marker}")
+
+    service_path = API_SRC / "modules/reviews/application/formal_review_service.py"
+    service_source = service_path.read_text(encoding="utf-8")
+    for function_name in ("get_fsrs_queue_payload", "get_fsrs_load_forecast", "complete_formal_review"):
+        function_start = service_source.index(f"def {function_name}")
+        next_function = service_source.find("\ndef ", function_start + 1)
+        function_source = service_source[function_start: next_function if next_function >= 0 else None]
+        if "ReviewSchedule" in function_source:
+            errors.append(f"{function_name} must not read or write legacy ReviewSchedule")
+
+    warmup_path = API_SRC / "app/startup_warmup.py"
+    if warmup_path.exists() and "review_schedules" in warmup_path.read_text(encoding="utf-8"):
+        errors.append("startup warmup must use review_node_states, not legacy review_schedules")
+
+
 def main() -> int:
     errors: list[str] = []
+    check_retired_palace_knowledge_binding(errors)
     check_context_dependency_map(errors)
     check_forbidden_imports(errors)
     check_mindmap_architecture(errors)
@@ -1759,6 +1856,7 @@ def main() -> int:
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
+    check_fsrs_review_frontend(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)
     check_dashboard_public_facades(errors)

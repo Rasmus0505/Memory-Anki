@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceTemplate
+from memory_anki.modules.palaces.application.knowledge_binding_service import assign_palace_subjects
 from memory_anki.platform.application import UnitOfWork
 
 
@@ -108,6 +109,7 @@ def instantiate_template(
     )
     session.add(palace)
     session.flush()
+    assign_palace_subjects(session, palace, [])
     if before_commit is not None:
         before_commit(palace)
     uow.commit()

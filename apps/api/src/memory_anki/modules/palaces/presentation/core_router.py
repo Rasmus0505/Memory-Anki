@@ -1,10 +1,17 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.palaces.application.knowledge_binding_service import (
+    KnowledgeBindingConflictError,
+    KnowledgeBindingValidationError,
+    knowledge_binding_json,
+    update_palace_knowledge_binding,
+)
 from memory_anki.modules.palaces.application.palace_serializer import palace_json
 from memory_anki.modules.palaces.application.palace_service import (
     create_palace,
@@ -21,15 +28,16 @@ from memory_anki.modules.palaces.application.peg_association_service import (
 from memory_anki.modules.palaces.application.review_plan_service import (
     build_palace_review_plan,
 )
-from memory_anki.modules.palaces.domain.schemas import PalaceCreate, PalaceUpdate
+from memory_anki.modules.palaces.domain.schemas import (
+    PalaceCreate,
+    PalaceKnowledgeBindingUpdate,
+    PalaceUpdate,
+)
 from memory_anki.modules.palaces.presentation.errors import raise_not_found
 from memory_anki.modules.palaces.presentation.response_models import (
     DeleteOkResponse,
     PalaceDetailResponse,
     PalaceSummaryResponse,
-)
-from memory_anki.modules.reviews.api import (
-    trigger_review_for_palace,
 )
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import mutation_identity_from_headers
@@ -98,7 +106,6 @@ def api_create(
     if existing_response is not None:
         return existing_response
     def prepare_atomic_side_effects(palace) -> None:
-        trigger_review_for_palace(s, palace.id, commit=False)
         mutation_store.save(mutation_identity, palace_json(palace, s))
 
     palace = create_palace(
@@ -109,6 +116,45 @@ def api_create(
     )
     _maybe_create_rolling_backup("rolling-create-palace")
     return palace_json(palace, s)
+
+
+@router.put("/palaces/{palace_id}/knowledge-binding")
+def api_update_knowledge_binding(
+    palace_id: int,
+    data: PalaceKnowledgeBindingUpdate,
+    s: Session = Depends(session_dep),
+):
+    palace = get_palace(s, palace_id)
+    if not palace:
+        raise_not_found()
+    try:
+        return update_palace_knowledge_binding(
+            s,
+            palace,
+            subject_ids=data.subject_ids,
+            chapter_ids=data.chapter_ids,
+            preferred_primary_chapter_id=data.primary_chapter_id,
+            base_revision=data.base_revision,
+            uow=SqlAlchemyUnitOfWork(s),
+        )
+    except KnowledgeBindingConflictError as exc:
+        s.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "knowledge_binding_conflict",
+                    "message": str(exc),
+                    "current": knowledge_binding_json(s, get_palace(s, palace_id) or palace),
+                }
+            },
+        )
+    except KnowledgeBindingValidationError as exc:
+        s.rollback()
+        return JSONResponse(
+            status_code=422,
+            content={"detail": {"code": "invalid_knowledge_binding", "message": str(exc)}},
+        )
 
 
 @router.put("/palaces/{palace_id}", response_model=PalaceDetailResponse)

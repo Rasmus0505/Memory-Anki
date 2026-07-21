@@ -61,7 +61,11 @@ export function useMindMapExperience({ entityType, entityId, editorState, defaul
     highlightedNodeUids: selectedResult ? [selectedResult.nodeUid] : [],
     structureIssues,
     masteryItems,
-    masteryByNodeUid: Object.fromEntries(masteryItems.map((item) => [item.node_uid, { status: item.status, manualLabel: item.manual_label }])),
+    masteryByNodeUid: Object.fromEntries(masteryItems.map((item) => [item.node_uid, {
+      status: item.status,
+      manualLabel: item.manual_label,
+      masteryScore: item.mastery_score,
+    }])),
     weakItems: masteryItems.filter((item) => (item.status === 'weak' || item.status === 'reinforce') && !item.hidden_by_mastered),
     setNodeManualLabel,
   }

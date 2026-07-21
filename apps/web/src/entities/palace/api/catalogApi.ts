@@ -22,6 +22,7 @@ export { PALACE_CATALOG_INVALIDATED_EVENT } from './catalogQuery'
 export type PalaceMutationPayload = Partial<
   Pick<PalaceEditorMeta, 'title' | 'description' | 'created_at' | 'primary_chapter_id'>
 > & {
+  subject_ids?: number[]
   pegs?: Array<{ name?: string; content?: string; children?: unknown[] }>
 }
 

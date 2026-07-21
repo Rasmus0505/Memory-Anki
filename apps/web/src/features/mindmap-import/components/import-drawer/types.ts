@@ -1,5 +1,5 @@
 import type { ChangeEvent, ClipboardEvent, ReactNode, RefObject } from 'react'
-import type { PdfDocument } from '@/entities/knowledge-import/model'
+import type { PdfDocument, PdfOcrCoverage } from '@/entities/knowledge-import/model'
 import type {
   BatchImportImageItem,
   BatchImportMeta,
@@ -78,6 +78,7 @@ export interface MindMapImportDrawerProps {
   pdfPageSelection?: string
   onPdfPageSelectionChange?: (value: string) => void
   pdfLibraryLoading?: boolean
+  pdfOcrCoverage?: PdfOcrCoverage | null
   onPdfUpload?: (event: ChangeEvent<HTMLInputElement>) => void
   onPdfDelete?: (documentId: string) => void
   onPdfStart?: () => void
@@ -177,6 +178,7 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'pdfPageSelection'
   | 'onPdfPageSelectionChange'
   | 'pdfLibraryLoading'
+  | 'pdfOcrCoverage'
   | 'onPdfUpload'
   | 'onPdfDelete'
   | 'onPdfStart'

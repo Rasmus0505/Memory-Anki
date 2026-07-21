@@ -33,7 +33,9 @@ PWA_URL = f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/freestyle
 PWA_PROCESS_MARKER = "MEMORY_ANKI_PWA_SERVER"
 PWA_PID_FILE = LOGS_DIR / "pwa-server.pid"
 PWA_LOCK_FILE = LOGS_DIR / "pwa-service.lock"
-UPDATE_STATE_VERSION = 1
+UPDATE_STATE_VERSION = 2
+PWA_STOP_REASON_FILE = LOGS_DIR / "pwa-stop-reason.txt"
+_STOP_REASON_REQUESTED = "requested"
 
 
 def _update_state_path() -> Path:
@@ -58,17 +60,25 @@ def _iter_files(paths: list[Path]):
 
 
 def _fingerprint(paths: list[Path]) -> str:
+    """Metadata fingerprint (path + mtime_ns + size). Fast on synced drives; good enough for hot prepare skips."""
     digest = hashlib.sha256()
     for path in _iter_files(paths):
         try:
             relative = path.relative_to(REPO_ROOT).as_posix()
         except ValueError:
             relative = str(path)
+        try:
+            stat = path.stat()
+            mtime_ns = int(getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000)))
+            size = int(stat.st_size)
+        except OSError:
+            mtime_ns = 0
+            size = -1
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        with path.open("rb") as source:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
+        digest.update(str(mtime_ns).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -192,6 +202,23 @@ def _is_memory_anki_service_process(pid: int) -> bool:
     )
 
 
+def _mark_service_stop_reason(reason: str) -> None:
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        PWA_STOP_REASON_FILE.write_text(reason, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _consume_service_stop_reason() -> str | None:
+    try:
+        reason = PWA_STOP_REASON_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    PWA_STOP_REASON_FILE.unlink(missing_ok=True)
+    return reason or None
+
+
 @contextmanager
 def service_lock(timeout_seconds: float = 180.0):
     """Serialize PWA start/stop/sync so desktop and tray startup cannot race."""
@@ -204,6 +231,7 @@ def service_lock(timeout_seconds: float = 180.0):
 
     deadline = time.monotonic() + timeout_seconds
     acquired = False
+    wait_started: float | None = None
     try:
         while not acquired:
             try:
@@ -217,7 +245,13 @@ def service_lock(timeout_seconds: float = 180.0):
 
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 acquired = True
+                if wait_started is not None:
+                    waited = time.monotonic() - wait_started
+                    print(f"[i] Acquired Memory Anki service lock after {waited:.1f}s wait")
             except OSError:
+                if wait_started is None:
+                    wait_started = time.monotonic()
+                    print("[i] Waiting for another Memory Anki launcher to finish…")
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Timed out waiting for the Memory Anki service lock")
                 time.sleep(0.1)
@@ -236,6 +270,15 @@ def service_lock(timeout_seconds: float = 180.0):
         lock_file.close()
 
 
+def _shared_service_healthy() -> bool:
+    pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
+    if not pids:
+        return False
+    if any(not _is_memory_anki_service_process(pid) for pid in pids):
+        return False
+    return _pwa_is_ready() and _database_at_alembic_head()
+
+
 def _stop_service_unlocked() -> bool:
     pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
     if not pids:
@@ -249,6 +292,7 @@ def _stop_service_unlocked() -> bool:
         )
         return False
     print(f"[i] Stopping existing Memory Anki service: {pids}")
+    _mark_service_stop_reason(_STOP_REASON_REQUESTED)
     for pid in pids:
         dev_server.kill_process_tree(pid)
     PWA_PID_FILE.unlink(missing_ok=True)
@@ -314,11 +358,21 @@ def _ensure_desktop_runtime() -> bool:
         return False
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "electron-install.log"
+    electron_package = WEB_DIR / "node_modules" / "electron" / "package.json"
+    if electron_package.is_file():
+        command = [npm, "rebuild", "electron", "--foreground-scripts"]
+        action = "rebuilding Electron"
+    else:
+        # `npm rebuild electron` exits successfully when the package is absent.
+        # Restore the exact lockfile dependency tree so a missing/empty
+        # node_modules directory is repaired rather than silently accepted.
+        command = [npm, "ci", "--include=dev", "--foreground-scripts"]
+        action = "restoring frontend dependencies"
     _append_log_separator(log_path, "Electron runtime repair")
-    print(f"[i] Electron runtime is incomplete; repairing it, log: {log_path}")
+    print(f"[i] Electron runtime is incomplete; {action}, log: {log_path}")
     with log_path.open("ab") as log_file:
         result = subprocess.run(
-            [npm, "rebuild", "electron", "--foreground-scripts"],
+            command,
             cwd=str(WEB_DIR),
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -531,13 +585,21 @@ def _supervise(process: subprocess.Popen) -> int:
     def stop_child(*args) -> None:
         nonlocal stopping
         stopping = True
+        _mark_service_stop_reason(_STOP_REASON_REQUESTED)
         if process.poll() is None:
             dev_server.kill_process_tree(process.pid)
 
     signal.signal(signal.SIGTERM, stop_child)
     signal.signal(signal.SIGINT, stop_child)
     while process.poll() is None and not stopping:
-        time.sleep(5)
+        time.sleep(0.5)
+    if stopping:
+        _consume_service_stop_reason()
+        return 0
+    reason = _consume_service_stop_reason()
+    if reason == _STOP_REASON_REQUESTED:
+        print("[ok] Shared service was stopped by another Memory Anki launcher (desktop/stop).")
+        return 0
     return int(process.returncode or 0)
 
 
@@ -616,8 +678,26 @@ def stop() -> int:
 
 
 def restart_for_desktop() -> int:
-    """Restart the shared service around desktop startup sync, then leave it running."""
+    """Ensure shared service is ready for desktop.
+
+    Baidu-disk data sync (not GitHub): when the service is already healthy and
+    remote revision is up-to-date, keep the process running and only launch Electron.
+    When remote has a newer revision, stop → pull → migrate → start as before.
+    """
     with service_lock():
+        can_reuse = _shared_service_healthy()
+        if can_reuse:
+            peek = dev_server.peek_sync_before_start()
+            if not peek.ok:
+                return 1
+            if peek.status in {"disabled", "no-remote", "up-to-date"}:
+                if not _pwa_dist_ready() and not _run_frontend_build():
+                    return 1
+                print("[ok] Reusing running Memory Anki service for desktop (sync up-to-date)")
+                return 0
+            # needs-pull or any other ok status that still requires restore under a stopped service
+            print(f"[i] Desktop will restart shared service for sync: {peek.status}")
+
         if not _stop_service_unlocked():
             return 1
         if not dev_server.sync_before_start():

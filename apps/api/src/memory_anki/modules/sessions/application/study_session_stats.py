@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -10,10 +11,12 @@ from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
 from .study_session_constants import (
+    BUILTIN_TIME_RECORD_KINDS,
     ENGLISH_READING_SCENES,
     ENGLISH_SCENES,
     FORMAL_REVIEW_SCENES,
     STUDY_DASHBOARD_SCENES,
+    TIME_RECORD_KIND_LABELS,
 )
 from .time_bounds import current_week_bounds, today_bounds
 
@@ -25,14 +28,20 @@ def get_study_session_duration_seconds(
     start: datetime,
     end: datetime,
 ) -> int:
+    """Sum completed session seconds whose completion day falls in [start, end).
+
+    Attribution uses ``ended_at`` (with ``started_at`` fallback) so multi-day
+    recovered formal reviews count on the day they actually finished.
+    """
+    attributed_at = _session_attribution_at()
     total = (
         session.query(_positive_effective_seconds_sum())
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
             StudySession.scene.in_(scenes),
-            StudySession.started_at >= start,
-            StudySession.started_at < end,
+            attributed_at >= start,
+            attributed_at < end,
         )
         .scalar()
     )
@@ -56,6 +65,11 @@ def get_all_time_study_session_duration_seconds(
     return int(total or 0)
 
 
+def _session_attribution_at():
+    """When a completed session counts toward daily/weekly stats."""
+    return func.coalesce(StudySession.ended_at, StudySession.started_at)
+
+
 def _positive_effective_seconds_sum():
     return func.coalesce(
         func.sum(
@@ -70,6 +84,7 @@ def _positive_effective_seconds_sum():
 
 def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]]:
     start, end = today_bounds()
+    attributed_at = _session_attribution_at()
     rows = (
         session.query(StudySession)
         .filter(
@@ -77,10 +92,10 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
             StudySession.status == "completed",
             StudySession.scene.in_(STUDY_DASHBOARD_SCENES),
             StudySession.palace_id.is_not(None),
-            StudySession.started_at >= start,
-            StudySession.started_at < end,
+            attributed_at >= start,
+            attributed_at < end,
         )
-        .order_by(StudySession.started_at.asc(), StudySession.id.asc())
+        .order_by(attributed_at.asc(), StudySession.id.asc())
         .all()
     )
     palace_ids = {int(row.palace_id) for row in rows if row.palace_id is not None}
@@ -168,8 +183,9 @@ def _range_start(
 ) -> date:
     if range_value != "all":
         return today - timedelta(days=max(1, int(range_value)) - 1)
+    attributed_at = _session_attribution_at()
     earliest = (
-        session.query(func.min(StudySession.started_at))
+        session.query(func.min(attributed_at))
         .filter(StudySession.deleted_at.is_(None))
         .scalar()
     )
@@ -185,17 +201,18 @@ def _build_time_record_trend(
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
     start = datetime.combine(start_date, time.min)
+    attributed_at = _session_attribution_at()
     rows = (
         session.query(
-            func.date(StudySession.started_at),
+            func.date(attributed_at),
             func.coalesce(func.sum(StudySession.effective_seconds), 0),
         )
         .filter(
             StudySession.deleted_at.is_(None),
-            StudySession.started_at >= start,
-            StudySession.started_at < tomorrow,
+            attributed_at >= start,
+            attributed_at < tomorrow,
         )
-        .group_by(func.date(StudySession.started_at))
+        .group_by(func.date(attributed_at))
         .all()
     )
     totals = {str(date_key): int(seconds or 0) for date_key, seconds in rows}
@@ -222,43 +239,93 @@ def _build_time_record_breakdown(
     tomorrow: datetime,
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
+    attributed_at = _session_attribution_at()
     rows = (
-        session.query(
-            StudySession.scene,
-            func.coalesce(func.sum(StudySession.effective_seconds), 0),
-            func.count(StudySession.id),
-        )
+        session.query(StudySession)
         .filter(
             StudySession.deleted_at.is_(None),
-            StudySession.started_at >= datetime.combine(start_date, time.min),
-            StudySession.started_at < tomorrow,
+            attributed_at >= datetime.combine(start_date, time.min),
+            attributed_at < tomorrow,
         )
-        .group_by(StudySession.scene)
         .all()
     )
-    totals = {
-        kind: {"seconds": 0, "sessions": 0}
-        for kind in ("review", "practice", "quiz", "palace_edit")
+    totals: dict[str, dict[str, Any]] = {
+        kind: {
+            "kind": kind,
+            "label": TIME_RECORD_KIND_LABELS[kind],
+            "seconds": 0,
+            "sessions": 0,
+            "is_builtin": True,
+        }
+        for kind in BUILTIN_TIME_RECORD_KINDS
     }
-    for scene, seconds, sessions in rows:
-        kind = _time_record_kind(str(scene or ""))
-        totals[kind]["seconds"] += int(seconds or 0)
-        totals[kind]["sessions"] += int(sessions or 0)
-    labels = {
-        "review": "正式复习",
-        "practice": "练习",
-        "quiz": "做题",
-        "palace_edit": "宫殿编辑",
-    }
+    for row in rows:
+        seconds = max(0, int(row.effective_seconds or 0))
+        key, label, is_builtin = _breakdown_key_for_session(row)
+        current = totals.get(key)
+        if current is None:
+            current = {
+                "kind": key,
+                "label": label,
+                "seconds": 0,
+                "sessions": 0,
+                "is_builtin": is_builtin,
+            }
+            totals[key] = current
+        current["seconds"] += seconds
+        current["sessions"] += 1
+        if label and current["label"] != label and not current["is_builtin"]:
+            current["label"] = label
+
+    builtin_items = [totals[kind] for kind in BUILTIN_TIME_RECORD_KINDS]
+    custom_items = sorted(
+        (
+            item
+            for key, item in totals.items()
+            if key not in BUILTIN_TIME_RECORD_KINDS
+        ),
+        key=lambda item: (-int(item["seconds"]), str(item["label"])),
+    )
     return [
         {
-            "kind": kind,
-            "label": labels[kind],
-            "seconds": totals[kind]["seconds"],
-            "sessions": totals[kind]["sessions"],
+            "kind": item["kind"],
+            "label": item["label"],
+            "seconds": int(item["seconds"]),
+            "sessions": int(item["sessions"]),
+            "is_builtin": bool(item["is_builtin"]),
         }
-        for kind in ("review", "practice", "quiz", "palace_edit")
+        for item in [*builtin_items, *custom_items]
     ]
+
+
+def _breakdown_key_for_session(row: StudySession) -> tuple[str, str, bool]:
+    summary = _load_summary(row.summary_json)
+    activity_tag = str(summary.get("activity_tag") or "").strip()
+    activity_label = str(summary.get("activity_tag_label") or "").strip()
+    scene = str(row.scene or "")
+    kind = _time_record_kind(scene)
+
+    if activity_tag and activity_tag not in BUILTIN_TIME_RECORD_KINDS:
+        return activity_tag, activity_label or activity_tag, False
+    if scene == "custom":
+        return (
+            activity_tag or "custom",
+            activity_label or TIME_RECORD_KIND_LABELS["custom"],
+            False,
+        )
+    if activity_tag in BUILTIN_TIME_RECORD_KINDS:
+        return activity_tag, TIME_RECORD_KIND_LABELS[activity_tag], True
+    return kind, TIME_RECORD_KIND_LABELS[kind], True
+
+
+def _load_summary(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _time_record_kind(scene: str) -> str:
@@ -268,6 +335,8 @@ def _time_record_kind(scene: str) -> str:
         return "quiz"
     if scene in FORMAL_REVIEW_SCENES:
         return "review"
+    if scene == "custom":
+        return "custom"
     return "practice"
 
 

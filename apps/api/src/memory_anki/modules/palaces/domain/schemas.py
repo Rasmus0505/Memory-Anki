@@ -17,6 +17,7 @@ class PegIn(BaseModel):
 class PalaceCreate(BaseModel):
     title: str = ""
     description: str = ""
+    subject_ids: list[int] = Field(default_factory=list)
     pegs: list[PegIn] = Field(default_factory=list)
 
 
@@ -70,3 +71,11 @@ class ReviewScheduleOut(BaseModel):
     completed: bool
     review_number: int
     palace: PalaceOut | None = None
+
+
+class PalaceKnowledgeBindingUpdate(BaseModel):
+    subject_ids: list[int] = Field(default_factory=list)
+    chapter_ids: list[int] = Field(default_factory=list)
+    primary_chapter_id: int | None = None
+    base_revision: int = Field(ge=0)
+    operation_id: str = Field(min_length=1, max_length=120)

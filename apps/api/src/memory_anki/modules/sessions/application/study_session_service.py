@@ -369,9 +369,13 @@ def _filtered_study_sessions_query(
         query = query.filter(StudySession.scene == "quiz")
     elif kind == "review":
         query = query.filter(StudySession.scene.in_(FORMAL_REVIEW_SCENES))
+    elif kind == "custom":
+        query = query.filter(StudySession.scene == "custom")
     elif kind == "practice":
         query = query.filter(
-            StudySession.scene.notin_(("palace_edit", "quiz", *FORMAL_REVIEW_SCENES))
+            StudySession.scene.notin_(
+                ("palace_edit", "quiz", "custom", *FORMAL_REVIEW_SCENES)
+            )
         )
     return query
 
@@ -384,4 +388,7 @@ from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
 )
 from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
     ensure_review_log_study_sessions as ensure_review_log_study_sessions,
+)
+from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
+    reclassify_ghost_formal_review_time_sessions as reclassify_ghost_formal_review_time_sessions,
 )

@@ -86,7 +86,8 @@ class ReadingVocabularyNoteCreateRequest(BaseModel):
 
 
 class ReadingVocabularyReviewRequest(BaseModel):
-    result: str = "good"
+    result: str | None = None
+    rating: int | str | None = None
 
 
 @router.get("/english-reading/profile")
@@ -301,7 +302,12 @@ def api_review_english_reading_vocabulary_note(
     session: Session = Depends(session_dep),
 ):
     try:
-        return review_vocabulary_note(session, note_id=note_id, result=data.result)
+        return review_vocabulary_note(
+            session,
+            note_id=note_id,
+            result=data.result,
+            rating=data.rating,
+        )
     except EnglishReadingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

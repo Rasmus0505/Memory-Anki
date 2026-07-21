@@ -114,6 +114,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=1),
+                        ended_at=today_start + timedelta(hours=1, minutes=2),
                         effective_seconds=120,
                     ),
                     StudySession(
@@ -123,6 +124,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=2),
+                        ended_at=today_start + timedelta(hours=2, minutes=3),
                         effective_seconds=180,
                     ),
                     StudySession(
@@ -132,6 +134,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=3),
+                        ended_at=today_start + timedelta(hours=3, minutes=1),
                         effective_seconds=-90,
                     ),
                     StudySession(
@@ -150,6 +153,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=5),
+                        ended_at=today_start + timedelta(hours=5, minutes=5),
                         effective_seconds=300,
                         deleted_at=today_start + timedelta(hours=6),
                     ),
@@ -159,6 +163,7 @@ class StudySessionRouteTests(RouterTestCase):
                         scene="english",
                         target_type="none",
                         started_at=today_start + timedelta(hours=7),
+                        ended_at=today_start + timedelta(hours=7, minutes=6),
                         effective_seconds=360,
                     ),
                 ]
@@ -177,6 +182,69 @@ class StudySessionRouteTests(RouterTestCase):
                 "weekly_review_seconds": 120,
             },
         )
+
+    def test_study_session_stats_attribute_completed_duration_to_ended_at_day(self):
+        """Recovered multi-day reviews must count on the day they finished."""
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="stats-recovered-review",
+                        status="completed",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        title="Recovered formal review",
+                        started_at=today_start - timedelta(days=4),
+                        ended_at=today_start + timedelta(hours=6),
+                        effective_seconds=510,
+                    ),
+                    StudySession(
+                        id="stats-same-day-review",
+                        status="completed",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        title="Same-day formal review",
+                        started_at=today_start + timedelta(hours=1),
+                        ended_at=today_start + timedelta(hours=1, minutes=2),
+                        effective_seconds=85,
+                    ),
+                    StudySession(
+                        id="stats-still-active-old",
+                        status="active",
+                        scene="review",
+                        target_type="palace",
+                        palace_id=self.palace_id,
+                        title="Still active",
+                        started_at=today_start - timedelta(days=2),
+                        effective_seconds=0,
+                    ),
+                ]
+            )
+            session.commit()
+
+        stats = self.client.get("/api/v1/study-sessions/stats")
+        self.assertEqual(stats.status_code, 200)
+        self.assertEqual(
+            stats.json(),
+            {
+                "today_total_seconds": 595,
+                "weekly_total_seconds": 595,
+                "today_review_seconds": 595,
+                "weekly_review_seconds": 595,
+            },
+        )
+
+        dashboard = self.client.get("/api/v1/dashboard")
+        self.assertEqual(dashboard.status_code, 200)
+        payload = dashboard.json()
+        self.assertEqual(payload["today_review_duration_seconds"], 595)
+        self.assertEqual(payload["today_total_review_duration_seconds"], 595)
+        learning = {item["palace_id"]: item for item in payload["today_learning_palaces"]}
+        self.assertEqual(learning[self.palace_id]["review_seconds"], 595)
+        self.assertEqual(learning[self.palace_id]["total_seconds"], 595)
 
     def test_list_study_sessions_keeps_default_shape_and_supports_pagination(self):
         base = datetime(2026, 7, 2, 8, 0, 0)
@@ -376,6 +444,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="none",
                         title="Practice",
                         started_at=today_start,
+                        ended_at=today_start + timedelta(minutes=2),
                         effective_seconds=120,
                     ),
                     StudySession(
@@ -384,8 +453,20 @@ class StudySessionRouteTests(RouterTestCase):
                         scene="segment_review",
                         target_type="none",
                         title="Review",
-                        started_at=today_start - timedelta(days=2),
+                        # Started earlier, finished two days ago → count on end day.
+                        started_at=today_start - timedelta(days=5),
+                        ended_at=today_start - timedelta(days=2),
                         effective_seconds=300,
+                    ),
+                    StudySession(
+                        id="analytics-recovered-today",
+                        status="completed",
+                        scene="review",
+                        target_type="none",
+                        title="Recovered today",
+                        started_at=today_start - timedelta(days=3),
+                        ended_at=today_start + timedelta(hours=3),
+                        effective_seconds=180,
                     ),
                     StudySession(
                         id="analytics-deleted",
@@ -394,6 +475,7 @@ class StudySessionRouteTests(RouterTestCase):
                         target_type="none",
                         title="Deleted",
                         started_at=today_start,
+                        ended_at=today_start + timedelta(minutes=1),
                         effective_seconds=999,
                         deleted_at=today_start,
                     ),
@@ -408,12 +490,66 @@ class StudySessionRouteTests(RouterTestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(len(payload["trend"]), 7)
-        self.assertEqual(payload["trend"][-1]["seconds"], 120)
+        self.assertEqual(payload["trend"][-1]["seconds"], 300)  # practice 120 + recovered 180
         self.assertEqual(payload["trend"][-3]["seconds"], 300)
         breakdown = {item["kind"]: item for item in payload["breakdown"]}
         self.assertEqual(breakdown["practice"]["seconds"], 120)
-        self.assertEqual(breakdown["review"]["seconds"], 300)
+        self.assertEqual(breakdown["review"]["seconds"], 480)
         self.assertEqual(breakdown["quiz"]["sessions"], 0)
+        self.assertTrue(breakdown["practice"]["is_builtin"])
+
+    def test_time_record_analytics_breakdown_includes_custom_activity_tags(self):
+        today = date.today()
+        today_start = datetime.combine(today, datetime.min.time())
+        with self.SessionLocal() as session:
+            session.add(
+                StudySession(
+                    id="analytics-custom-paper",
+                    status="completed",
+                    scene="custom",
+                    target_type="none",
+                    title="论文 · 07-21 12:00",
+                    started_at=today_start,
+                    ended_at=today_start + timedelta(minutes=45),
+                    effective_seconds=2700,
+                    summary_json='{"activity_tag":"tag_paper","activity_tag_label":"论文","duration_edited":true}',
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/study-sessions/time-record-analytics"
+            "?trend_range=7&breakdown_range=all"
+        )
+        self.assertEqual(response.status_code, 200)
+        breakdown = {item["kind"]: item for item in response.json()["breakdown"]}
+        self.assertEqual(breakdown["tag_paper"]["label"], "论文")
+        self.assertEqual(breakdown["tag_paper"]["seconds"], 2700)
+        self.assertFalse(breakdown["tag_paper"]["is_builtin"])
+
+    def test_from_time_record_persists_custom_activity_tag(self):
+        response = self.client.post(
+            "/api/v1/study-sessions/from-time-record",
+            json={
+                "id": "manual-custom-tag",
+                "kind": "custom",
+                "title": "论文 · 07-21 15:30",
+                "startedAt": "2026-07-21T14:45:00",
+                "endedAt": "2026-07-21T15:30:00",
+                "effectiveSeconds": 2700,
+                "pauseCount": 0,
+                "completionMethod": "manual_complete",
+                "durationEdited": True,
+                "activityTag": "tag_paper",
+                "activityTagLabel": "论文",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["scene"], "custom")
+        self.assertEqual(item["effective_seconds"], 2700)
+        self.assertEqual(item["summary"]["activity_tag"], "tag_paper")
+        self.assertEqual(item["summary"]["activity_tag_label"], "论文")
 
 
 if __name__ == "__main__":

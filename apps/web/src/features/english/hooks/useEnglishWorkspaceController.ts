@@ -96,7 +96,7 @@ export function useEnglishWorkspaceController() {
         id: `english-asr-${activeTaskId}`,
         section: 'english',
         title: '英语听力 · ASR 生成中',
-        navigateTarget: '/english',
+        navigateTarget: '/english/listening',
       })
     }
     const unsubscribe = subscribeEnglishTaskStream(activeTaskId, {
@@ -172,7 +172,7 @@ export function useEnglishWorkspaceController() {
       return
     }
     toast.success('英语课程已生成，正在进入课程。')
-    navigate(`/english/courses/${pendingNavigationCourseId}`)
+    navigate(`/english/listening/courses/${pendingNavigationCourseId}`)
     setPendingNavigationCourseId(null)
   }, [isActive, navigate, pendingNavigationCourseId])
 
@@ -282,7 +282,7 @@ export function useEnglishWorkspaceController() {
   const navigateToCourse = useCallback(
     (courseId: number | undefined) => {
       if (!courseId) return
-      navigate(`/english/courses/${courseId}`)
+      navigate(`/english/listening/courses/${courseId}`)
     },
     [navigate],
   )

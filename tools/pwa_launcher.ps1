@@ -50,6 +50,8 @@ function Resolve-PythonRuntime {
   }
 }
 
+$script:PwaServerExitCode = 1
+
 function Invoke-PwaServer {
   param([string[]]$ServerArgs)
 
@@ -78,7 +80,7 @@ function Invoke-PwaServer {
   }
 
   Write-StartupLog "PWA action $Action exited with code $exitCode"
-  return $exitCode
+  $script:PwaServerExitCode = $exitCode
 }
 
 function Install-AutostartShortcut {
@@ -117,17 +119,21 @@ try {
         $serverArgs += "--configure-serve"
       }
       $serverArgs += $RemainingArgs
-      exit (Invoke-PwaServer -ServerArgs $serverArgs)
+      Invoke-PwaServer -ServerArgs $serverArgs
+      exit $script:PwaServerExitCode
     }
     "Stop" {
-      exit (Invoke-PwaServer -ServerArgs @("--stop"))
+      Invoke-PwaServer -ServerArgs @("--stop")
+      exit $script:PwaServerExitCode
     }
     "Update" {
-      exit (Invoke-PwaServer -ServerArgs @("--prepare"))
+      Invoke-PwaServer -ServerArgs @("--prepare")
+      exit $script:PwaServerExitCode
     }
     "ConfigureServe" {
       $serverArgs = @("--configure-serve", "--no-supervise") + $RemainingArgs
-      exit (Invoke-PwaServer -ServerArgs $serverArgs)
+      Invoke-PwaServer -ServerArgs $serverArgs
+      exit $script:PwaServerExitCode
     }
     "InstallAutostart" {
       Install-AutostartShortcut

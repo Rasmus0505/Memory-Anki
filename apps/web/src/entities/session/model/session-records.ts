@@ -1,6 +1,6 @@
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
-export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review'
+export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review' | 'custom'
 export type SessionScene = SessionKind | 'english' | 'english_reading' | 'freestyle'
 export type TimeRecordClientSource = 'desktop' | 'pwa'
 export type TimeRecordSortBy = 'started_at' | 'effective_seconds' | 'title'
@@ -65,6 +65,10 @@ export interface TimeSessionRecord {
   completionMethod: SessionCompletionMethod
   durationEdited: boolean
   clientSource?: TimeRecordClientSource | null
+  /** Stable tag id: builtin kind or custom tag id. */
+  activityTag?: string | null
+  /** Display label snapshot for custom tags. */
+  activityTagLabel?: string | null
   deletedAt?: string | null
   deletedReason?: 'manual' | null
   events: SessionEventRecord[]
@@ -89,8 +93,10 @@ export interface DailyTrendPoint {
 export type TimeRecordChartRange = 7 | 30 | 90 | 'all'
 
 export interface SessionKindBreakdownItem {
-  kind: SessionKind
+  /** Builtin kind or custom tag id. */
+  kind: string
   label: string
   seconds: number
   sessions: number
+  isBuiltin?: boolean
 }

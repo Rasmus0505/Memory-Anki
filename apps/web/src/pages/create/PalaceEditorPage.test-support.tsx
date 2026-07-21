@@ -57,12 +57,75 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
     shouldAutoStartOnPageEnterMock(config, scene),
 }))
 
-vi.mock('@/entities/ai-runtime', () => ({
-  useAiRunConfigDialog: () => ({
-    promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
-    aiRunConfigDialog: null,
-  }),
-}))
+vi.mock('@/entities/ai-runtime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/entities/ai-runtime')>()
+  return {
+    ...actual,
+    useAiRunConfigDialog: () => ({
+      promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
+      aiRunConfigDialog: null,
+    }),
+  }
+})
+
+vi.mock('@/entities/preferences/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/entities/preferences/api')>()
+  return {
+    ...actual,
+    getAiModelScenariosApi: vi.fn(async () => ({
+      scenes: [
+        {
+          key: 'ai_split',
+          label: 'AI 分卡',
+          description: '分卡',
+          default_model: 'qwen3.6-flash',
+          default_thinking_enabled: false,
+          available_models: [
+            {
+              key: 'qwen3.6-flash',
+              label: 'Qwen Flash',
+              provider: 'dashscope',
+              supports_thinking: false,
+            },
+          ],
+        },
+      ],
+      scenarios: [],
+    })),
+    getAiPromptBlocksApi: vi.fn(async () => ({
+      items: [
+        {
+          key: 'role.strict_json',
+          label: '严格 JSON',
+          description: 'test',
+          layer: 'role',
+          sort_order: 10,
+          template: 'json only',
+          is_active: true,
+          applicable_scene_keys: ['ai_split'],
+        },
+      ],
+    })),
+    getAiPromptScenesApi: vi.fn(async () => ({
+      items: [
+        {
+          scene_key: 'ai_split',
+          prompt_key: 'ai_prompt_mindmap_ai_split_system',
+          label: 'AI 分卡',
+          description: '分卡',
+          category: '脑图分卡',
+          block_keys: ['role.strict_json'],
+          recommended_block_keys: ['role.strict_json'],
+          scene_instruction: 'split',
+        },
+      ],
+    })),
+    previewAiPromptCompositionApi: vi.fn(async () => ({
+      text: 'compiled split prompt',
+      warnings: [],
+    })),
+  }
+})
 
 vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({
@@ -135,7 +198,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
       target_node_note: string
       target_node_type: string | null
       is_root: boolean
-      split_mode: 'parallel' | 'hierarchy'
+      split_mode: 'auto' | 'parallel' | 'hierarchy'
     }) => void
     onNodeActive?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeClick?: (nodes: Array<{ uid: string | null; text: string }>) => void
@@ -250,7 +313,7 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
                 target_node_note: '原备注',
                 target_node_type: 'peg',
                 is_root: false,
-                split_mode: 'parallel',
+                split_mode: 'auto',
               })
             }
           >
@@ -444,10 +507,6 @@ vi.mock('@/shared/components/session/SessionTimerBar', () => ({
   SessionTimerBar: () => <div>timer</div>,
 }))
 
-vi.mock('./PalaceKnowledgeOutlinePanel', () => ({
-  PalaceKnowledgeOutlinePanel: () => <div>outline</div>,
-}))
-
 export function getMindMapTexts() {
   return {
     root: testingLibraryScreen.getByText(/^root-/).textContent,
@@ -500,7 +559,7 @@ export function setupPalaceEditPageTestDefaults() {
   promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
-  vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([])
+  vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
@@ -534,6 +593,9 @@ export function setupPalaceEditPageTestDefaults() {
     },
     generated_children_count: 1,
     replacement_node_count: 1,
+    replacement_nodes: [
+      { data: { text: 'AI分类', uid: 'split-1' }, children: [] },
+    ],
     reassigned_existing_children_count: 0,
     split_mode: request.split_mode,
     owner_id: request.owner_id,

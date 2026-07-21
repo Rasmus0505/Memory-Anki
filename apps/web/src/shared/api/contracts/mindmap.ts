@@ -54,7 +54,7 @@ export interface MindMapHostSegmentRangeDraft {
   overriddenConflictNodeUids: string[]
 }
 export type MindMapTask = 'build' | 'learn'
-export type MindMapRecallRating = 1 | 2 | 3
+export type MindMapRecallRating = 1 | 2 | 3 | 4
 export type MindMapLegacyRecallRating = MindMapRecallRating | 5
 export type MindMapRecallRatingSource = 'manual' | 'inferred'
 export type MindMapRecallRound = 'first' | 'weak_retry'
@@ -70,6 +70,8 @@ export interface MindMapRecallEvent {
   recall_round: MindMapRecallRound
   rating: MindMapLegacyRecallRating
   rating_source: MindMapRecallRatingSource
+  rating_scope?: 'single' | 'subtree'
+  evidence_origin?: 'direct' | 'batch_inherited'
   inference_confidence: number | null
   response_ms: number | null
   hint_count: number

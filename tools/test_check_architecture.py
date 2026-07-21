@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import importlib.util
 import json
@@ -1292,10 +1292,10 @@ def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, m
     capabilities.parent.mkdir(parents=True)
     split_service.write_text("AI_SPLIT_REPLACEMENT_MODES\nfind_target_location\n", encoding="utf-8")
     prompt_composition.write_text(
-        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\nai_split_parallel\n",
+        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\n",
         encoding="utf-8",
     )
-    capabilities.write_text("AI 并列分卡\nsplit_mode\n", encoding="utf-8")
+    capabilities.write_text("AI 分卡\nsplit_mode\n", encoding="utf-8")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -1304,5 +1304,33 @@ def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, m
     check_architecture.check_mindmap_architecture(errors)
 
     assert any("operation_id" in error for error in errors)
-    assert any("ai_split_hierarchy" in error for error in errors)
-    assert any("AI 层级分卡" in error for error in errors)
+    assert any("task.split_structure_judgment" in error for error in errors)
+    assert any("auto" in error for error in errors)
+
+
+def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    router = api_src / "modules/reviews/presentation/router.py"
+    service = api_src / "modules/reviews/application/formal_review_service.py"
+    warmup = api_src / "app/startup_warmup.py"
+    write_file(router, '@router.post("/review/spread-overdue")\ndef retired(): pass\n')
+    write_file(
+        service,
+        "def get_fsrs_queue_payload():\n    return ReviewSchedule\n\n"
+        "def get_fsrs_load_forecast():\n    return None\n\n"
+        "def complete_formal_review():\n    return None\n",
+    )
+    write_file(warmup, "SELECT * FROM review_schedules")
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_fsrs_review_frontend(errors)
+
+    assert any("retired review runtime route" in error for error in errors)
+    assert any("get_fsrs_queue_payload" in error for error in errors)
+    assert any("startup warmup" in error for error in errors)

@@ -20,7 +20,6 @@ def _catalog_loader_options():
         joinedload(Palace.primary_chapter).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.parent),
-        selectinload(Palace.review_schedules),
         selectinload(Palace.review_logs),
         selectinload(Palace.segments),
     )

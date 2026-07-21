@@ -9,6 +9,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import { AiLearningRunResult } from './AiLearningRunResult'
+import { runTrackedAiTask } from '@/shared/background-tasks/runTrackedAiTask'
 
 const TASKS: Array<{ key: AiLearningTaskKey; label: string; prompt: string }> = [
   { key: 'ask', label: '自由提问', prompt: '' }, { key: 'explain', label: '讲解', prompt: '请解释这部分内容，并给出一个直观例子。' }, { key: 'quiz', label: '即时出题', prompt: '请围绕这部分内容生成 3 道练习题草稿。' }, { key: 'correct', label: '纠错补全', prompt: '请检查错误、缺口和不清晰表述，给出待确认建议。' },
@@ -28,7 +29,45 @@ export function AiLearningWorkbench(props: Props) {
   const draft = (context: AiContextEnvelope, userPrompt: string): AiRunDraft => ({ task_key: task, context, user_prompt: userPrompt, scenario_key: 'review_ai_learning', entrypoint_key: 'review.ai-learning-workbench', context_selections: [{ kind: 'mindmap', enabled: includeMindmap, source_entity_id: context.source_entity_id, source_revision: context.source_revision, label: '当前思维导图', content: includeMindmap ? context.summary : '' }], output_type: task === 'quiz' ? 'quiz_draft' : task === 'correct' ? 'change_suggestions' : 'text', owner_id: `review:${props.reviewSessionId ?? props.palaceId ?? 'local'}`, operation_id: uuid(), thread_id: threadId, parent_run_id: runs.at(-1)?.id, review_session_id: props.reviewSessionId ?? undefined, palace_id: props.palaceId ?? undefined })
   const refreshContext = () => { const next = buildContext(); setFrozen(next); setPreview(null) }
   const handlePreview = async () => { if(!frozen) return; setLoading(true); try { setPreview((await previewAiLearningRunApi(draft(frozen, prompt))).preview) } finally { setLoading(false) } }
-  const handleRun = async () => { if(!frozen) return; const aiOptions = await promptForAiOptions({ scenarioKey: 'review_ai_learning', entrypointKey: 'review.ai-learning-workbench', title: '确认 AI 学习运行', description: '选择模型并可修改本次系统提示词。上下文已在工作台中冻结并预览。' }); if(!aiOptions) return; setLoading(true); try { const payload = draft(frozen, prompt); payload.ai_options = aiOptions; const result = await executeAiLearningRunApi(payload); setRuns(current => [...current, result.item]); setThreadId(result.item.thread_id); setPreview(null) } finally { setLoading(false) } }
+  const handleRun = async () => {
+    if (!frozen) return
+    const aiOptions = await promptForAiOptions({
+      scenarioKey: 'review_ai_learning',
+      entrypointKey: 'review.ai-learning-workbench',
+      title: '确认 AI 学习运行',
+      description: '选择模型并可修改本次系统提示词。上下文已在工作台中冻结并预览。',
+    })
+    if (!aiOptions) return
+    setLoading(true)
+    try {
+      const payload = draft(frozen, prompt)
+      payload.ai_options = aiOptions
+      const result = await runTrackedAiTask({
+        id: `review-ai-learning-${payload.operation_id}`,
+        section: 'review',
+        title: '复习 AI 学习 · 进行中',
+        navigateTarget: '/review',
+        initialDetail: '准备运行…',
+        steps: [
+          { id: 'prepare', label: '准备请求' },
+          { id: 'generate', label: '模型生成' },
+          { id: 'apply', label: '写入记录' },
+        ],
+        run: async (controller) => {
+          controller.setStep('prepare', '正在提交学习请求…')
+          controller.setStep('generate', '模型正在生成…')
+          const response = await executeAiLearningRunApi(payload)
+          controller.setStep('apply', '正在写入学习记录…')
+          return response
+        },
+      })
+      setRuns((current) => [...current, result.item])
+      setThreadId(result.item.thread_id)
+      setPreview(null)
+    } finally {
+      setLoading(false)
+    }
+  }
   const setFeedback = async (run: AiLearningRun, feedback: AiLearningRun['feedback']) => { const result = await setAiLearningRunFeedbackApi(run.id, feedback); setRuns(current => current.map(item => item.id === run.id ? result.item : item)) }
   const acceptRun = async (run: AiLearningRun) => { const result = await setAiLearningRunApplicationApi(run.id, 'accepted'); setRuns(current => current.map(item => item.id === run.id ? result.item : item)) }
   const deleteRun = async (run: AiLearningRun) => { await deleteAiLearningRunApi(run.id); setRuns(current => current.filter(item => item.id !== run.id)) }

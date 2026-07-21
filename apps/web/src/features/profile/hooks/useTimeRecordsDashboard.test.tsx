@@ -24,6 +24,19 @@ vi.mock('@/shared/components/ui/native-dialog', () => ({
   appConfirm: vi.fn(),
 }))
 
+vi.mock('@/shared/preferences/clientPreferences', () => ({
+  CLIENT_PREFERENCES_UPDATED_EVENT: 'client-preferences-updated',
+  getCachedClientPreference: vi.fn(() => []),
+  saveClientPreference: vi.fn(async (_key: string, value: unknown) => ({
+    value,
+    persisted: true,
+  })),
+}))
+
+vi.mock('@/shared/events/appEvents', () => ({
+  onAppEvent: vi.fn(() => () => undefined),
+}))
+
 describe('useTimeRecordsDashboard', () => {
   beforeEach(() => {
     mocks.listRecords.mockReset().mockResolvedValue({

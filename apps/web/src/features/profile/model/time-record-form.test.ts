@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TimeSessionRecord } from '@/entities/session/model'
 import {
   applyTimeRecordFormPatch,
+  applyTimeRecordQuickAddPatch,
   buildTimeRecordFormState,
+  buildTimeRecordQuickAddFormState,
   calculateEndedAtFromEffectiveMinutes,
   formatEffectiveSecondsAsMinutes,
   parseEffectiveMinutesToSeconds,
   parseTimeRecordFormState,
+  parseTimeRecordQuickAddFormState,
   sessionKindOptions,
 } from '@/features/profile/model/time-record-form'
 
@@ -96,5 +99,39 @@ describe('time-record-form', () => {
 
   it('offers quiz as a manual time record kind', () => {
     expect(sessionKindOptions).toContain('quiz')
+  })
+
+  it('builds quick-add form with tag and integer minutes defaults', () => {
+    vi.setSystemTime(new Date('2026-07-21T15:30:00'))
+    const form = applyTimeRecordQuickAddPatch(
+      buildTimeRecordQuickAddFormState(),
+      {},
+      [{ id: 'tag_paper', name: '论文', createdAt: '2026-07-21T00:00:00.000Z' }],
+    )
+
+    expect(form.tagId).toBe('review')
+    expect(form.minutes).toBe('30')
+    expect(form.date).toBe('2026-07-21')
+    expect(form.title).toContain('正式复习')
+  })
+
+  it('parses quick-add form into custom tag payload', () => {
+    vi.setSystemTime(new Date('2026-07-21T15:30:00'))
+    const form = applyTimeRecordQuickAddPatch(
+      buildTimeRecordQuickAddFormState(),
+      { tagId: 'tag_paper', minutes: '45' },
+      [{ id: 'tag_paper', name: '论文', createdAt: '2026-07-21T00:00:00.000Z' }],
+    )
+    const parsed = parseTimeRecordQuickAddFormState(form, [
+      { id: 'tag_paper', name: '论文', createdAt: '2026-07-21T00:00:00.000Z' },
+    ])
+
+    expect('value' in parsed).toBe(true)
+    if (!('value' in parsed)) return
+    expect(parsed.value.kind).toBe('custom')
+    expect(parsed.value.effectiveSeconds).toBe(2700)
+    expect(parsed.value.activityTag).toBe('tag_paper')
+    expect(parsed.value.activityTagLabel).toBe('论文')
+    expect(parsed.value.durationEdited).toBe(true)
   })
 })

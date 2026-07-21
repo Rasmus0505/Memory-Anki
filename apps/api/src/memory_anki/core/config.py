@@ -100,6 +100,7 @@ ATTACHMENTS_DIR = DATA_DIR / "attachments"
 SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
 IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
 PDF_LIBRARY_DIR = APP_HOME / "pdf_library"
+PDF_OCR_CACHE_DIR = APP_HOME / "pdf_ocr_cache"
 AI_CALL_LOGS_DIR = APP_HOME / "ai_call_logs"
 ENGLISH_DIR = APP_HOME / "english"
 ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
@@ -113,6 +114,7 @@ ENGLISH_READING_DEFAULT_CEFR_SOURCE = Path(
 )
 BACKUPS_DIR = DATA_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
+ROLLING_BACKUPS_DIR = BACKUPS_DIR / "rolling"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
 DB_PATH = DATA_DIR / "memory_palace.db"
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
@@ -131,6 +133,11 @@ DEFAULTS = {
     "ebbinghaus_intervals": "1h,sleep,1,2,4,7,15,30,60",
     "daily_max_reviews": "0",
     "mastered_interval": "180",
+    "desired_retention": "0.90",
+    "mastery_horizon_days": "60",
+    "maximum_interval": "180",
+    "learning_steps": "10m,1h",
+    "relearning_steps": "10m,1h",
     "auto_smooth_overdue": "true",
     "overdue_smoothing_days": "7",
     "overdue_smoothing_threshold": "5",
@@ -164,6 +171,8 @@ DEFAULTS = {
     "scene_model_quiz_short_answer_thinking_enabled": "false",
     "scene_model_quiz_mini_palace": "qwen-turbo",
     "scene_model_quiz_mini_palace_thinking_enabled": "false",
+    "scene_model_quiz_node_binding": DASHSCOPE_TEXT_MODEL,
+    "scene_model_quiz_node_binding_thinking_enabled": "false",
     "scene_model_quiz_text_generation": DASHSCOPE_TEXT_MODEL,
     "scene_model_quiz_text_generation_thinking_enabled": "false",
     "scene_model_vision_image_mindmap": DASHSCOPE_OCR_MODEL,
@@ -196,6 +205,7 @@ def ensure_runtime_dirs() -> None:
         SUBJECT_DOCUMENTS_DIR,
         IMPORT_JOBS_DIR,
         PDF_LIBRARY_DIR,
+        PDF_OCR_CACHE_DIR,
         AI_CALL_LOGS_DIR,
         ENGLISH_DIR,
         ENGLISH_MEDIA_DIR,
@@ -203,6 +213,7 @@ def ensure_runtime_dirs() -> None:
         ENGLISH_READING_DIR,
         ENGLISH_READING_LEXICON_DIR,
         FULL_BACKUPS_DIR,
+        ROLLING_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
     }
     for item in get_managed_storage_items():

@@ -253,49 +253,83 @@ def _run_page_ocr(
     import_jobs_dir: Path,
     stream_call_dashscope_text,
 ) -> tuple[str, list[dict[str, Any]]]:
+    from memory_anki.modules.pdf_library.api import read_cached_page, write_cached_page
+
     ocr_dir = artifact_dir / "ocr"
     ocr_dir.mkdir(parents=True, exist_ok=True)
     selected_pages = [int(value) for value in source_meta.get("page_selection") or []]
+    pdf_document_id = str(source_meta.get("pdf_document_id") or "").strip()
+    ocr_model = None
+    vision_runtime = source_meta.get("vision_ai_runtime") or source_meta.get("ai_runtime") or {}
+    if isinstance(vision_runtime, dict):
+        ocr_model = str(vision_runtime.get("model") or "").strip() or None
     page_results: list[dict[str, Any]] = []
     combined_parts: list[str] = []
     for index, image_item in enumerate(image_items):
         page_number = selected_pages[index] if index < len(selected_pages) else index + 1
         page_path = ocr_dir / f"page-{page_number}.txt"
         metadata: dict[str, Any] = {}
+        reuse_source: str | None = None
         if page_path.exists() and page_path.read_text(encoding="utf-8").strip():
             page_text = read_text(page_path)
             reused = True
+            reuse_source = "job_artifact"
         else:
-            page_text = consume_stream_result(
-                session,
-                job_id=job.id,
-                artifact_dir=artifact_dir,
-                generator=stream_call_dashscope_text(
-                    image_items=[image_item],
-                    page_numbers=[page_number],
-                    range_prompt="",
-                    channel="ocr",
-                    force_default_prompt=True,
-                    external_log_context={
-                        "feature": "PDF 转脑图" if job.source_kind == "pdf-document" else "图片转脑图",
-                        "operation": "page_ocr",
-                        "job_id": job.id,
-                        "artifact_refs": [artifact_refs[index]] if index < len(artifact_refs) else [],
-                        "stream_metadata": metadata,
-                    },
-                ),
-                allow_preview_text=True,
-                import_jobs_dir=import_jobs_dir,
+            cached = (
+                read_cached_page(pdf_document_id, page_number)
+                if pdf_document_id
+                else None
             )
-            write_text(page_path, page_text)
-            update_job_usage(session, job.id, stage_key="ocr", increment=1)
-            reused = False
+            if cached is not None:
+                page_text, cache_meta = cached
+                write_text(page_path, page_text)
+                reused = True
+                reuse_source = "document_cache"
+                if cache_meta.get("model"):
+                    metadata["cached_model"] = cache_meta.get("model")
+            else:
+                page_text = consume_stream_result(
+                    session,
+                    job_id=job.id,
+                    artifact_dir=artifact_dir,
+                    generator=stream_call_dashscope_text(
+                        image_items=[image_item],
+                        page_numbers=[page_number],
+                        range_prompt="",
+                        channel="ocr",
+                        force_default_prompt=True,
+                        external_log_context={
+                            "feature": "PDF 转脑图" if job.source_kind == "pdf-document" else "图片转脑图",
+                            "operation": "page_ocr",
+                            "job_id": job.id,
+                            "artifact_refs": [artifact_refs[index]] if index < len(artifact_refs) else [],
+                            "stream_metadata": metadata,
+                        },
+                    ),
+                    allow_preview_text=True,
+                    import_jobs_dir=import_jobs_dir,
+                )
+                write_text(page_path, page_text)
+                update_job_usage(session, job.id, stage_key="ocr", increment=1)
+                reused = False
+                if pdf_document_id and str(page_text or "").strip():
+                    try:
+                        write_cached_page(
+                            pdf_document_id,
+                            page_number,
+                            page_text,
+                            model=ocr_model,
+                            source_job_id=job.id,
+                        )
+                    except ValueError:
+                        pass
         combined_parts.append(f"===== PDF 第 {page_number} 页 =====\n{page_text.strip()}")
         page_results.append(
             {
                 "page_number": page_number,
                 "text": page_text,
                 "reused": reused,
+                "reuse_source": reuse_source,
                 "usage": metadata.get("usage"),
                 "finish_reason": metadata.get("finish_reason"),
             }

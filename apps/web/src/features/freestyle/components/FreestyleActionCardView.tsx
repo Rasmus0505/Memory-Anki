@@ -11,18 +11,49 @@ export function FreestyleActionCardView({
   card: FreestyleActionCard
   onOpenPalace?: () => void
 }) {
+  const isEnglish =
+    card.content_type === 'english' || card.content_type === 'english_reading'
+  const accentLabel = isEnglish
+    ? card.content_type === 'english'
+      ? '英语听力'
+      : '英语阅读'
+    : CONTENT_TYPE_LABELS[card.content_type]
+  const ctaLabel = isEnglish
+    ? card.content_type === 'english'
+      ? '进入听写'
+      : '进入阅读'
+    : '继续'
+
   return (
     <div className="mx-auto flex min-h-[min(720px,calc(100vh-150px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-3xl sm:px-4">
-      <div className="rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7">
+      <div
+        className={
+          isEnglish
+            ? 'rounded-3xl border border-sky-300/20 bg-gradient-to-br from-zinc-950 via-zinc-900 to-sky-950/80 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7'
+            : 'rounded-lg border border-white/12 bg-zinc-900/88 p-5 text-zinc-50 shadow-2xl backdrop-blur sm:p-7'
+        }
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">
-              {CONTENT_TYPE_LABELS[card.content_type]}
+            <div
+              className={
+                isEnglish
+                  ? 'text-xs font-semibold uppercase tracking-[0.14em] text-sky-300'
+                  : 'text-xs font-semibold uppercase tracking-[0.14em] text-amber-300'
+              }
+            >
+              {accentLabel}
             </div>
             <h2 className="mt-3 text-2xl font-semibold leading-tight sm:text-3xl">{card.title}</h2>
             <div className="mt-3 text-sm text-zinc-300">{card.subtitle}</div>
           </div>
-          <Badge className="shrink-0 border-amber-300/30 bg-amber-300/10 text-amber-100">
+          <Badge
+            className={
+              isEnglish
+                ? 'shrink-0 border-sky-300/30 bg-sky-300/10 text-sky-100'
+                : 'shrink-0 border-amber-300/30 bg-amber-300/10 text-amber-100'
+            }
+          >
             {card.reason}
           </Badge>
         </div>
@@ -32,15 +63,15 @@ export function FreestyleActionCardView({
           </div>
         ) : null}
         {card.palace_context && onOpenPalace ? (
-          <Button type="button" className="mt-6 w-full sm:w-auto" onClick={onOpenPalace}>
+          <Button type="button" className="mt-6 min-h-11 w-full rounded-xl sm:w-auto" onClick={onOpenPalace}>
             <ExternalLink className="size-4" />
             查看宫殿
           </Button>
         ) : (
-          <Button asChild className="mt-6 w-full sm:w-auto">
+          <Button asChild className="mt-6 min-h-11 w-full rounded-xl sm:w-auto">
             <a href={card.href}>
               <ExternalLink className="size-4" />
-              继续
+              {ctaLabel}
             </a>
           </Button>
         )}

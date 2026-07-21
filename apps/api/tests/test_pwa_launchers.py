@@ -113,6 +113,7 @@ def test_desktop_restart_syncs_and_leaves_shared_service_running():
     process = SimpleNamespace(pid=1234)
     with (
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=False),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
         patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
@@ -128,6 +129,77 @@ def test_desktop_restart_syncs_and_leaves_shared_service_running():
     prepare_runtime.assert_called_once_with()
     start_backend.assert_called_once_with()
     kill_process.assert_not_called()
+
+
+def test_desktop_reuses_healthy_service_when_baidu_sync_up_to_date():
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
+        patch.object(
+            pwa_server.dev_server,
+            "peek_sync_before_start",
+            return_value=SimpleNamespace(ok=True, status="up-to-date", message="ok"),
+        ) as peek,
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
+        patch.object(pwa_server.dev_server, "sync_before_start") as sync,
+        patch.object(pwa_server, "_start_backend") as start_backend,
+    ):
+        assert pwa_server.restart_for_desktop() == 0
+
+    peek.assert_called_once_with()
+    stop_service.assert_not_called()
+    sync.assert_not_called()
+    start_backend.assert_not_called()
+
+
+def test_desktop_restarts_when_baidu_sync_needs_pull():
+    process = SimpleNamespace(pid=1234)
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
+        patch.object(
+            pwa_server.dev_server,
+            "peek_sync_before_start",
+            return_value=SimpleNamespace(ok=True, status="needs-pull", message="remote newer"),
+        ),
+        patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
+        patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_prepare_runtime", return_value=True),
+        patch.object(pwa_server, "_start_backend", return_value=process) as start_backend,
+        patch.object(pwa_server, "_wait_for_pwa", return_value=True),
+    ):
+        assert pwa_server.restart_for_desktop() == 0
+
+    stop_service.assert_called_once_with()
+    sync.assert_called_once_with()
+    start_backend.assert_called_once_with()
+
+
+def test_fingerprint_uses_metadata_not_file_contents(tmp_path):
+    source = tmp_path / "a.txt"
+    source.write_text("hello", encoding="utf-8")
+    first = pwa_server._fingerprint([source])
+    source.write_text("hello-changed", encoding="utf-8")
+    # Force mtime change even if filesystem timestamp granularity is coarse.
+    os_utime = __import__("os").utime
+    os_utime(source, (source.stat().st_mtime + 2, source.stat().st_mtime + 2))
+    second = pwa_server._fingerprint([source])
+    assert first != second
+    assert len(first) == 64
+
+
+def test_supervise_exits_zero_when_service_taken_over(tmp_path):
+    process = SimpleNamespace(returncode=1, poll=lambda: 1)
+    reason_file = tmp_path / "pwa-stop-reason.txt"
+    reason_file.write_text("requested", encoding="utf-8")
+    with (
+        patch.object(pwa_server, "PWA_STOP_REASON_FILE", reason_file),
+        patch.object(pwa_server.signal, "signal"),
+    ):
+        assert pwa_server._supervise(process) == 0
+    assert not reason_file.exists()
 
 
 def test_desktop_stop_holds_service_lock_through_sync_push():
@@ -164,6 +236,7 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
         patch.object(pwa_server, "_current_update_fingerprints", return_value=fingerprints),
         patch.object(pwa_server, "_read_update_state", return_value=fingerprints),
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_desktop_runtime_ready", return_value=True),
         patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
         patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
         patch.object(pwa_server, "_run_frontend_build") as build,
@@ -175,6 +248,54 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
     build.assert_not_called()
     sync.assert_not_called()
 
+
+
+def test_desktop_runtime_installs_lockfile_dependencies_when_electron_package_is_missing(tmp_path):
+    web_dir = tmp_path / "web"
+    logs_dir = tmp_path / "logs"
+    web_dir.mkdir()
+    completed = SimpleNamespace(returncode=0)
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server, "LOGS_DIR", logs_dir),
+        patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
+        patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
+        patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert pwa_server._ensure_desktop_runtime() is True
+
+    assert run.call_args.args[0] == [
+        "npm.cmd",
+        "ci",
+        "--include=dev",
+        "--foreground-scripts",
+    ]
+
+
+def test_desktop_runtime_rebuilds_installed_electron_package(tmp_path):
+    web_dir = tmp_path / "web"
+    logs_dir = tmp_path / "logs"
+    electron_dir = web_dir / "node_modules" / "electron"
+    electron_dir.mkdir(parents=True)
+    (electron_dir / "package.json").write_text("{}", encoding="utf-8")
+    completed = SimpleNamespace(returncode=0)
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server, "LOGS_DIR", logs_dir),
+        patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
+        patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
+        patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
+    ):
+        assert pwa_server._ensure_desktop_runtime() is True
+
+    assert run.call_args.args[0] == [
+        "npm.cmd",
+        "rebuild",
+        "electron",
+        "--foreground-scripts",
+    ]
 
 
 def test_prepare_repairs_missing_desktop_runtime():
@@ -263,6 +384,22 @@ def test_pwa_launcher_uses_lightweight_python_probe():
     assert "pydantic_settings" not in launcher
 
 
+def test_pwa_launcher_preserves_native_python_exit_code():
+    launcher = (TOOLS_DIR / "pwa_launcher.ps1").read_text(encoding="utf-8")
+
+    assert "$script:PwaServerExitCode = $exitCode" in launcher
+    assert "exit $script:PwaServerExitCode" in launcher
+    assert "return $exitCode" not in launcher
+    assert "exit (Invoke-PwaServer" not in launcher
+
+
+def test_desktop_launch_rechecks_and_repairs_electron_runtime():
+    desktop_timer = (TOOLS_DIR / "desktop_timer.py").read_text(encoding="utf-8")
+
+    assert "pwa_server._ensure_desktop_runtime()" in desktop_timer
+    assert "Electron runtime repair failed" in desktop_timer
+
+
 def test_all_batch_entrypoints_use_diagnostic_runner():
     batch_paths = [
         ROOT / "start-desktop.bat",
@@ -297,6 +434,7 @@ def test_diagnostic_runner_writes_fixed_ai_debug_artifacts():
     assert 'State "running"' in runner
     assert "exit_code" in runner
     assert "git_commit" in runner
+    assert "git status --porcelain" not in runner
 
 
 def test_diagnostic_runner_does_not_promote_child_stderr_to_wrapper_failure():
@@ -342,11 +480,14 @@ def test_desktop_launcher_detaches_after_electron_ready_signal():
     assert 'env["MEMORY_ANKI_DESKTOP_READY_FILE"]' in desktop_timer
     assert "process = subprocess.Popen(" in desktop_timer
     assert "ready_path.is_file()" in desktop_timer
+    assert "ready signal after process exit" in desktop_timer
     assert 'log_file = log_path.open("a", encoding="utf-8")' in desktop_timer
     assert "log_file.close()" in desktop_timer
     assert "subprocess.run(" not in desktop_timer
     assert "MEMORY_ANKI_DESKTOP_READY_FILE" in electron_main
     assert "writeDesktopReady()" in electron_main
+    assert "reusedExistingInstance" in electron_main
+    assert "hasSingleInstanceLock" in electron_main
 
 
 def test_shared_backend_never_inherits_launcher_diagnostic_pipe():

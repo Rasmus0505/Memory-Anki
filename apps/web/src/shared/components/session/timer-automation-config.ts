@@ -37,6 +37,7 @@ export interface TimerAutomationConfig {
   freestyle: TimerAutomationRule
   english: TimerAutomationRule
   english_reading: TimerAutomationRule
+  custom: TimerAutomationRule
 }
 
 export type TimerAutomationActivityKind =
@@ -105,6 +106,12 @@ const LEGACY_DEFAULT_TIMER_AUTOMATION_CONFIG = {
     hiddenAutoPauseSeconds: 20,
     autoPauseRollbackSeconds: 90,
   },
+  custom: {
+    autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    hiddenAutoPauseSeconds: 15,
+    autoPauseRollbackSeconds: 60,
+  },
 } satisfies Omit<TimerAutomationConfig, 'schemaVersion'>
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
@@ -166,6 +173,13 @@ export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
     autoPauseRollbackSeconds: 0,
   },
   english_reading: {
+    autoStartOnPageEnter: false,
+    inactiveAutoPauseSeconds: 120,
+    inactivePauseGraceSeconds: 0,
+    hiddenAutoPauseSeconds: 0,
+    autoPauseRollbackSeconds: 0,
+  },
+  custom: {
     autoStartOnPageEnter: false,
     inactiveAutoPauseSeconds: 120,
     inactivePauseGraceSeconds: 0,
@@ -297,6 +311,7 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     freestyle: { ...shared },
     english: { ...shared },
     english_reading: { ...shared },
+    custom: { ...shared },
   }
 }
 export function readTimerAutomationConfig(): TimerAutomationConfig {
@@ -396,4 +411,5 @@ export const TIMER_AUTOMATION_SCENE_LABELS: Record<TimerAutomationScene, string>
   freestyle: '随心模式',
   english: '英语听力',
   english_reading: '英语阅读',
+  custom: '其他',
 }

@@ -71,14 +71,30 @@ function buildPalace(overrides: Partial<PalaceGroupedItem> = {}): PalaceGroupedI
     stage_labels: ['1小时', '1天', '2天'],
     review_stages: [buildStage(0, '1小时', true), buildStage(1, '1天'), buildStage(2, '2天')],
     active_review_progress: 0.2,
+    mastery_percent: 42,
+    memory_health_percent: 76,
+    memory_node_count: 22,
+    mastered_node_count: 5,
+    mastery_horizon_days: 60,
+    due_node_count: 3,
+    overdue_node_count: 1,
+    memory_next_review_at: '2026-06-13T10:00:00+08:00',
+    severe_weak_node_count: 0,
     segments: [buildSegment()],
     chapters: [{ id: 2, name: '第二节法国教育的发展' }],
     ...overrides,
   }
 }
 
+const defaultCardProps = {
+  viewSettings: { layoutMode: 'chapter-double' as const, densityMode: 'comfortable' as const },
+  onPalaceReview: vi.fn(),
+  onSegmentReview: vi.fn(),
+  onDelete: vi.fn(),
+}
+
 describe('PalaceListCard', () => {
-  it('does not render start review when due flag is false even if the timestamp is stale', () => {
+  it('uses palace FSRS due_node_count rather than segment-only flags for the primary CTA', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-12T10:00:00+08:00'))
 
@@ -86,6 +102,12 @@ describe('PalaceListCard', () => {
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
+            due_node_count: 0,
+            has_due_review: false,
+            review_entry_mode: 'none',
+            review_entry_label: null,
+            memory_next_review_at: '2026-06-13T10:00:00+08:00',
+            next_review_at: '2026-06-13T10:00:00+08:00',
             segments: [
               buildSegment({
                 next_review_at: '2026-06-12T09:00:00+08:00',
@@ -93,48 +115,69 @@ describe('PalaceListCard', () => {
               }),
             ],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
         />
       </MemoryRouter>,
     )
 
+    // Not due now → early-review label, not forced "开始复习" / practice.
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
     expect(screen.queryByRole('button', { name: '开始复习' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '今日稍后' })).toBeNull()
+    expect(screen.getByRole('button', { name: /提前复习/ })).toBeTruthy()
     vi.useRealTimers()
   })
 
-  it('uses the shared primary button for palace practice and keeps quiz as a plain entry', () => {
-    const onPalacePractice = vi.fn()
+  it('shows FSRS entry labels from palace card payloads even when segments are omitted', () => {
+    const onPalaceReview = vi.fn()
+    render(
+      <MemoryRouter>
+        <PalaceListCard
+          palace={buildPalace({
+            segments: undefined,
+            due_node_count: 4,
+            has_due_review: true,
+            review_entry_mode: 'palace',
+            review_entry_label: '开始复习',
+            memory_next_review_at: '2026-06-12T09:00:00+08:00',
+          })}
+          {...defaultCardProps}
+          onPalaceReview={onPalaceReview}
+        />
+      </MemoryRouter>,
+    )
 
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '开始复习' }))
+    expect(onPalaceReview).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides practice entry and keeps quiz as a plain side action when no review is scheduled', () => {
     render(
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
             needs_practice: true,
+            memory_node_count: 0,
+            memory_next_review_at: null,
+            due_node_count: 0,
+            has_due_review: false,
+            review_entry_mode: 'none',
             segments: [
               buildSegment({
                 has_due_review: false,
                 current_review_schedule_id: null,
+                next_review_at: null,
               }),
             ],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={onPalacePractice}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
         />
       </MemoryRouter>,
     )
 
-    const sharedPracticeButton = screen.getByRole('button', { name: '练习' })
-    expect(sharedPracticeButton.className).toContain('bg-success')
-    expect(screen.getByRole('button', { name: '做题' }).className).not.toContain('bg-success')
-
-    fireEvent.click(sharedPracticeButton)
-    expect(onPalacePractice).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
+    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /编辑宫殿/ })).toBeTruthy()
   })
 
   it('shows active review progress for a resumed single-segment review', () => {
@@ -147,10 +190,7 @@ describe('PalaceListCard', () => {
           palace={buildPalace({
             segments: [buildSegment({ active_review_progress: 0.4 })],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
         />
       </MemoryRouter>,
     )
@@ -160,7 +200,7 @@ describe('PalaceListCard', () => {
     vi.useRealTimers()
   })
 
-  it('always shows stage nodes for a single-segment palace without rendering the default segment card', () => {
+  it('shows FSRS memory progress for a single-segment palace without rendering the default segment card', () => {
     render(
       <MemoryRouter>
         <PalaceListCard
@@ -173,22 +213,20 @@ describe('PalaceListCard', () => {
               }),
             ],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByTestId('stage-track')).toBeTruthy()
-    expect(screen.getByTestId('stage-node-0')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: '掌握度 42%' })).toBeTruthy()
+    expect(screen.getByText('掌握 42%')).toBeTruthy()
+    expect(screen.queryByText('到期 3')).toBeNull()
     expect(screen.getByText('22 个知识点')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '展开详情' })).toBeNull()
     expect(screen.queryByText('第 1 部分')).toBeNull()
   })
 
-  it('keeps multi-segment details expandable while showing stage nodes before expansion', () => {
+  it('keeps multi-segment details expandable while showing FSRS progress before expansion', () => {
     render(
       <MemoryRouter>
         <PalaceListCard
@@ -198,45 +236,45 @@ describe('PalaceListCard', () => {
               buildSegment({ id: 102, display_name: '19世纪', sort_order: 1 }),
             ],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByTestId('stage-track')).toBeTruthy()
+    expect(screen.getByRole('progressbar', { name: '掌握度 42%' })).toBeTruthy()
     expect(screen.queryByText('17—18世纪')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '展开详情' }))
 
     expect(screen.getByText('17—18世纪')).toBeTruthy()
     expect(screen.getByText('19世纪')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '练习' })).toBeNull()
   })
 
-  it('passes virtual default review segments through with their schedule progress', () => {
+  it('opens formal FSRS review via the palace action and keeps resume progress fill', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-13T11:00:00+08:00'))
-    const onSegmentPractice = vi.fn()
+    const onPalaceReview = vi.fn()
 
     render(
       <MemoryRouter>
         <PalaceListCard
           palace={buildPalace({
+            due_node_count: 3,
+            has_due_review: true,
+            review_entry_mode: 'palace',
+            review_entry_label: '开始复习',
             segments: [
               buildSegment({
                 id: 0,
                 is_virtual_default: true,
-                current_review_schedule_id: 1001,
+                current_review_schedule_id: null,
                 active_review_progress: 0.4,
               }),
             ],
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={onSegmentPractice}
-          onDelete={vi.fn()}
+          {...defaultCardProps}
+          onPalaceReview={onPalaceReview}
         />
       </MemoryRouter>,
     )
@@ -244,12 +282,7 @@ describe('PalaceListCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /开始复习/ }))
     expect(screen.getByRole('progressbar', { name: '复习进度 40%' })).toBeTruthy()
     expect(screen.getByTestId('review-action-progress-fill').style.width).toBe('40%')
-    expect(onSegmentPractice).toHaveBeenCalledWith(
-      expect.objectContaining({
-        is_virtual_default: true,
-        current_review_schedule_id: 1001,
-      }),
-    )
+    expect(onPalaceReview).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 
@@ -262,12 +295,9 @@ describe('PalaceListCard', () => {
             resolved_title: 'A.B 教育线索',
             description: '描述里也有 A.B 这个关键词',
           })}
-          viewSettings={{ layoutMode: 'chapter-double', densityMode: 'comfortable' }}
+          {...defaultCardProps}
           searchQuery="A.B"
           defaultExpanded
-          onPalacePractice={vi.fn()}
-          onSegmentPractice={vi.fn()}
-          onDelete={vi.fn()}
         />
       </MemoryRouter>,
     )

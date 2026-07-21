@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type PropsWithChildren } from 'react'
+import { resetPwaRuntime } from '@/pwa/resetPwa'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import { isChunkLoadError } from '@/shared/lib/lazyWithRetry'
@@ -6,6 +7,7 @@ import { logAppError } from '@/shared/logs/model/appLogs'
 
 interface RouteErrorBoundaryState {
   error: Error | null
+  repairing: boolean
 }
 
 interface RouteErrorBoundaryProps {
@@ -17,10 +19,10 @@ export class RouteErrorBoundary extends Component<
   PropsWithChildren<RouteErrorBoundaryProps>,
   RouteErrorBoundaryState
 > {
-  state: RouteErrorBoundaryState = { error: null }
+  state: RouteErrorBoundaryState = { error: null, repairing: false }
 
   static getDerivedStateFromError(error: Error): RouteErrorBoundaryState {
-    return { error }
+    return { error, repairing: false }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -40,11 +42,20 @@ export class RouteErrorBoundary extends Component<
   }
 
   handleRetry = () => {
-    this.setState({ error: null })
+    this.setState({ error: null, repairing: false })
+  }
+
+  handleChunkRecovery = async () => {
+    this.setState({ repairing: true })
+    try {
+      await resetPwaRuntime()
+    } finally {
+      window.location.reload()
+    }
   }
 
   render() {
-    const { error } = this.state
+    const { error, repairing } = this.state
     if (!error) return this.props.children
 
     const chunkError = isChunkLoadError(error)
@@ -68,9 +79,14 @@ export class RouteErrorBoundary extends Component<
           action={
             <div className="flex flex-wrap justify-center gap-2">
               {chunkError ? (
-                <Button type="button" onClick={() => window.location.reload()}>
-                  刷新页面
-                </Button>
+                <>
+                  <Button type="button" disabled={repairing} onClick={() => void this.handleChunkRecovery()}>
+                    {repairing ? '正在修复…' : '修复并刷新'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                    直接刷新
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button type="button" onClick={this.handleRetry}>

@@ -8,8 +8,14 @@ export function resolvePageHistorySection(pathname: string): PageHistorySectionK
     pathname.startsWith('/palaces/') ||
     pathname.startsWith('/segments/')
   ) return 'palaces'
-  if (pathname === '/english' || pathname.startsWith('/english/')) return 'english'
-  if (pathname === '/english-reading' || pathname.startsWith('/english-reading/')) return 'englishReading'
+  if (
+    pathname === '/english' ||
+    pathname.startsWith('/english/') ||
+    pathname === '/english-reading' ||
+    pathname.startsWith('/english-reading/')
+  ) {
+    return 'english'
+  }
   if (pathname === '/knowledge' || pathname.startsWith('/knowledge/')) return 'knowledge'
   if (pathname === '/review' || pathname.startsWith('/review/')) return 'review'
   if (pathname === '/profile' || pathname.startsWith('/profile/')) return 'profile'
@@ -23,8 +29,12 @@ export function resolvePageHistoryKey(pathname: string) {
     '/palaces': 'palace:shelf',
     '/palaces/list': 'palace:list',
     '/palaces/new': 'palace:new',
-    '/english': 'english:workspace',
-    '/english-reading': 'english-reading:workspace',
+    '/english': 'english:hub',
+    '/english/listening': 'english:listening',
+    '/english/reading': 'english:reading',
+    '/english/patterns': 'english:patterns',
+    '/english/vocab': 'english:vocab',
+    '/english-reading': 'english:reading',
     '/knowledge': 'knowledge:workspace',
     '/review': 'review:overview',
     '/profile': 'profile:overview',
@@ -37,7 +47,9 @@ export function resolvePageHistoryKey(pathname: string) {
     [/^\/palaces\/(\d+)\/quiz$/, (match) => `palace:quiz:${match[1]}`],
     [/^\/palaces\/(\d+)\/practice$/, (match) => `palace:practice:${match[1]}`],
     [/^\/segments\/(\d+)\/practice$/, (match) => `segment:practice:${match[1]}`],
+    [/^\/english\/listening\/courses\/(\d+)$/, (match) => `english:course:${match[1]}`],
     [/^\/english\/courses\/(\d+)$/, (match) => `english:course:${match[1]}`],
+    [/^\/english\/reading\/materials\/(\d+)$/, (match) => `english:material:${match[1]}`],
     [/^\/review\/session\/(\d+)$/, (match) => `review:session:${match[1]}`],
     [/^\/profile\/(.+)$/, (match) => `profile:${match[1]}`],
   ]

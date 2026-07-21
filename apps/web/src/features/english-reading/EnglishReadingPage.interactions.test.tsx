@@ -12,7 +12,7 @@ describe("EnglishReadingPage interactions", () => {
   beforeEach(setupEnglishReadingPageTest);
 
   it("looks up a clicked word, opens the dictionary card, and auto-plays pronunciation", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const acquisition = await screen.findByRole("button", {
       name: "acquisition",
@@ -37,7 +37,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("keeps the dictionary popup open while scrolling inside it", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const acquisition = await screen.findByRole("button", {
       name: "acquisition",
@@ -80,7 +80,7 @@ describe("EnglishReadingPage interactions", () => {
       },
     );
 
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const acquisition = await screen.findByRole("button", {
       name: "acquisition",
@@ -136,7 +136,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("shows a translate trigger after long-press selection and keeps original words clickable", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const crucial = await screen.findByRole("button", { name: "Crucial" });
     mockSentenceSelection({ node: crucial });
@@ -176,7 +176,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("shows the translate trigger after drag-selecting a sentence", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const crucial = await screen.findByRole("button", { name: "Crucial" });
     mockSentenceSelection({ node: crucial });
@@ -203,7 +203,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("does not show the translate trigger for invalid or cancelled selections", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const crucial = await screen.findByRole("button", { name: "Crucial" });
 
@@ -223,7 +223,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("reuses the cached sentence translation for the same selection", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const crucial = await screen.findByRole("button", { name: "Crucial" });
     mockSentenceSelection({ node: crucial });
@@ -253,7 +253,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("allows dragging the popup after pinning it", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     const acquisition = await screen.findByRole("button", {
       name: "acquisition",
@@ -299,7 +299,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("opens regenerate dialog and regenerates at the same difficulty by default", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 
@@ -329,7 +329,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("regenerates with easier direction and selected delta", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 
@@ -363,7 +363,7 @@ describe("EnglishReadingPage interactions", () => {
   });
 
   it("regenerates with harder direction", async () => {
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 
@@ -395,7 +395,7 @@ describe("EnglishReadingPage interactions", () => {
       new Error("生成失败"),
     );
 
-    renderPage(["/english-reading?material=42"]);
+    renderPage(["/english/reading/materials/42"]);
 
     expect(await screen.findByText("Crucial")).toBeTruthy();
 

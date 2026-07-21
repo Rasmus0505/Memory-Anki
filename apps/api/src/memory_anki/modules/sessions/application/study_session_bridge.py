@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import uuid4
@@ -12,6 +13,11 @@ from memory_anki.infrastructure.db._tables.palaces import ReviewLog
 
 from .serialization import _int_or_none, _parse_datetime
 
+# Timed-session leave/autosave used to write scene=review rows while formal
+# review kept persistCompletionRecord=false. Those ghosts show up as "正式复习"
+# time records but never carry completion_receipt mastery points.
+GHOST_FORMAL_REVIEW_COMPLETION_METHODS = frozenset({"saved", "left_page"})
+
 
 def _normalize_client_source(value: Any) -> str | None:
     normalized = str(value or "").strip()
@@ -20,6 +26,16 @@ def _normalize_client_source(value: Any) -> str | None:
     if normalized in {"pwa", "mobile"}:
         return "pwa"
     return None
+
+
+def _is_ghost_formal_review_time_payload(payload: dict[str, Any]) -> bool:
+    kind = str(payload.get("kind") or "practice")
+    if kind != "review":
+        return False
+    method = str(
+        payload.get("completionMethod") or payload.get("completion_method") or ""
+    )
+    return method in GHOST_FORMAL_REVIEW_COMPLETION_METHODS
 
 
 def create_completed_study_session_from_time_payload(
@@ -37,6 +53,12 @@ def create_completed_study_session_from_time_payload(
         raise ValueError("开始时间和结束时间不能为空。")
     source_kind = payload.get("sourceKind") or payload.get("source_kind")
     kind = str(payload.get("kind") or "practice")
+    reclassified_from_review_timer = False
+    if _is_ghost_formal_review_time_payload(payload):
+        # Keep the duration in practice stats; never mint a formal-review row
+        # without a /review/session submit receipt.
+        kind = "practice"
+        reclassified_from_review_timer = True
     scene = _scene_from_legacy_kind(kind, source_kind)
     target_type = "none"
     target_id = None
@@ -56,6 +78,34 @@ def create_completed_study_session_from_time_payload(
         "scene_segments": payload.get("sceneSegments") or payload.get("scene_segments") or [],
         "duration_edited": bool(payload.get("durationEdited", payload.get("duration_edited", False))),
     }
+    activity_tag = _normalize_activity_tag(
+        payload.get("activityTag")
+        if "activityTag" in payload
+        else payload.get("activity_tag")
+        if "activity_tag" in payload
+        else summary_payload.get("activity_tag")
+    )
+    activity_tag_label = _normalize_activity_tag_label(
+        payload.get("activityTagLabel")
+        if "activityTagLabel" in payload
+        else payload.get("activity_tag_label")
+        if "activity_tag_label" in payload
+        else summary_payload.get("activity_tag_label")
+    )
+    if activity_tag:
+        summary_payload["activity_tag"] = activity_tag
+        if activity_tag_label:
+            summary_payload["activity_tag_label"] = activity_tag_label
+        elif activity_tag in {"review", "practice", "quiz", "palace_edit"}:
+            summary_payload["activity_tag_label"] = {
+                "review": "正式复习",
+                "practice": "练习",
+                "quiz": "做题",
+                "palace_edit": "宫殿编辑",
+            }.get(activity_tag, activity_tag)
+    if reclassified_from_review_timer:
+        summary_payload["reclassified_from"] = "review_timer_ghost"
+        summary_payload["original_kind"] = "review"
     client_source = _normalize_client_source(payload.get("clientSource") or payload.get("client_source"))
     if client_source is not None:
         summary_payload["client_source"] = client_source
@@ -84,6 +134,20 @@ def create_completed_study_session_from_time_payload(
     return item
 
 
+def _normalize_activity_tag(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return text[:64]
+
+
+def _normalize_activity_tag_label(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return text[:40]
+
+
 def _scene_from_legacy_kind(kind: str, source_kind: Any) -> str:
     if source_kind == "english":
         return "english"
@@ -97,6 +161,8 @@ def _scene_from_legacy_kind(kind: str, source_kind: Any) -> str:
         return "review"
     if kind == "practice":
         return "practice"
+    if kind == "custom":
+        return "custom"
     return kind
 
 
@@ -183,3 +249,46 @@ def ensure_review_log_study_sessions(session: Session) -> int:
         if created is not None:
             created_count += 1
     return created_count
+
+
+def reclassify_ghost_formal_review_time_sessions(session: Session) -> int:
+    """Rewrite leave/autosave ghost formal-review rows to practice.
+
+    Real formal completions use completion_method manual_complete/auto_complete
+    and store completion_receipt. Ghost timer rows used saved/left_page only.
+    """
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.completion_method.in_(tuple(GHOST_FORMAL_REVIEW_COMPLETION_METHODS)),
+        )
+        .all()
+    )
+    fixed = 0
+    for row in rows:
+        try:
+            summary = json.loads(row.summary_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            summary = {}
+        if not isinstance(summary, dict):
+            summary = {}
+        if isinstance(summary.get("completion_receipt"), dict):
+            continue
+        row.scene = "practice"
+        if row.target_type in {"", "none"} and row.palace_id is not None:
+            row.target_type = "palace"
+            row.target_id = row.palace_id
+        summary = {
+            **summary,
+            "reclassified_from": "review_timer_ghost",
+            "original_kind": "review",
+        }
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        fixed += 1
+    if fixed:
+        session.flush()
+    return fixed

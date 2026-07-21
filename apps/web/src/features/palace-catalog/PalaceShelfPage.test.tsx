@@ -25,25 +25,16 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@/features/palace-catalog/components/palace-list/PalaceStageProgress', () => ({
-  PalaceStageProgress: () => <div data-testid="stage-progress" />,
-  formatStageDateTime: () => '',
-  toDateTimeLocalValue: () => '',
-}))
 
 vi.mock('@/entities/palace/api', () => ({
   getPalaceSubjectShelfApi: (...args: unknown[]) => getPalaceSubjectShelfApi(...args),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
-  PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
-}))
-
-vi.mock('@/entities/palace/api', () => ({
-  getPalaceSubjectShelfApi: (...args: unknown[]) => getPalaceSubjectShelfApi(...args),
-  getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApi(...args),
+  getPalaceEditorApi: vi.fn(),
+  getPracticeSessionProgressApi: vi.fn(),
+  getSegmentPracticeSessionProgressApi: vi.fn(),
   PALACE_CATALOG_INVALIDATED_EVENT: 'palace-catalog:invalidated',
   deletePalaceApi: vi.fn(),
 }))
-
 vi.mock('@/entities/palace-segment/api', () => ({
   updateDefaultSegmentReviewProgressApi: vi.fn(),
   updatePalaceSegmentReviewProgressApi: vi.fn(),
@@ -285,12 +276,12 @@ describe('PalaceShelfPage', () => {
 
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-    expect(screen.getAllByRole('button', { name: '练习' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: '练习' })[0])
-    expect(navigate).toHaveBeenCalledWith('/palaces/101/practice')
+    fireEvent.click(screen.getAllByRole('button', { name: '开始复习' })[0])
+    expect(navigate).toHaveBeenCalledWith('/review/session/501')
     fireEvent.click(screen.getByRole('button', { name: '知识点流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
@@ -332,5 +323,3 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
   })
 })
-
-

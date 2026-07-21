@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from memory_anki.core.time import utc_now_naive
@@ -123,3 +123,146 @@ class EnglishGenerationTask(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class EnglishTopicPattern(Base):
+    """Topic-level sentence pattern pond (句模)."""
+
+    __tablename__ = "english_topic_patterns"
+    __table_args__ = (
+        Index("ix_english_topic_patterns_status_updated", "status", "updated_at"),
+        Index("ix_english_topic_patterns_updated", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # draft | learning | speakable | mature | archived
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    prompts: Mapped[list[EnglishPatternPrompt]] = relationship(
+        "EnglishPatternPrompt",
+        back_populates="pattern",
+        cascade="all, delete-orphan",
+        order_by="EnglishPatternPrompt.prompt_index",
+    )
+    sentences: Mapped[list[EnglishPatternSentence]] = relationship(
+        "EnglishPatternSentence",
+        back_populates="pattern",
+        cascade="all, delete-orphan",
+        order_by="EnglishPatternSentence.sentence_index",
+    )
+
+
+class EnglishPatternPrompt(Base):
+    """High-frequency question under a topic pattern."""
+
+    __tablename__ = "english_pattern_prompts"
+    __table_args__ = (
+        Index("ix_english_pattern_prompts_pattern_index", "pattern_id", "prompt_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pattern_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("english_topic_patterns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    prompt_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    text_en: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    text_zh: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    pattern: Mapped[EnglishTopicPattern] = relationship(
+        "EnglishTopicPattern",
+        back_populates="prompts",
+    )
+    sentences: Mapped[list[EnglishPatternSentence]] = relationship(
+        "EnglishPatternSentence",
+        back_populates="prompt",
+        cascade="all, delete-orphan",
+        order_by="EnglishPatternSentence.sentence_index",
+    )
+
+
+class EnglishPatternSentence(Base):
+    """Viewpoint long sentence — primary FSRS review unit."""
+
+    __tablename__ = "english_pattern_sentences"
+    __table_args__ = (
+        Index("ix_english_pattern_sentences_due", "status", "due_at", "next_due_at"),
+        Index("ix_english_pattern_sentences_pattern", "pattern_id", "status"),
+        Index("ix_english_pattern_sentences_prompt", "prompt_id", "sentence_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pattern_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("english_topic_patterns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    prompt_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("english_pattern_prompts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sentence_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    text_en: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    text_zh: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    slots_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    collocations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # manual | from_listening | from_reading | ai
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    source_course_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_sentence_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_material_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    review_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_type: Mapped[str] = mapped_column(String(20), nullable=False, default="fsrs")
+    algorithm_used: Mapped[str] = mapped_column(String(30), nullable=False, default="FSRS")
+    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fsrs_state: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    fsrs_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    difficulty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_review_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    desired_retention: Mapped[float] = mapped_column(Float, nullable=False, default=0.9)
+    maximum_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
+    scheduler_version: Mapped[str] = mapped_column(String(32), nullable=False, default="fsrs-6.3.1")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+    pattern: Mapped[EnglishTopicPattern] = relationship(
+        "EnglishTopicPattern",
+        back_populates="sentences",
+    )
+    prompt: Mapped[EnglishPatternPrompt] = relationship(
+        "EnglishPatternPrompt",
+        back_populates="sentences",
+    )

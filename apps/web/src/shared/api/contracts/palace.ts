@@ -58,7 +58,32 @@ export interface PalaceListItem {
   stage_labels: string[]
   review_stages?: ReviewStageSummary[]
   active_review_progress?: number | null
-  segments: PalaceSegmentSummary[]
+  memory_node_count?: number
+  mastery_progress?: number
+  mastery_percent?: number
+  memory_health?: number
+  memory_health_percent?: number
+  mastered_node_count?: number
+  mastery_horizon_days?: number
+  due_node_count?: number
+  overdue_node_count?: number
+  memory_next_review_at?: string | null
+  memory_mastered?: boolean
+  severe_weak_node_count?: number
+  review_entry_mode?: 'none' | 'node' | 'palace'
+  review_entry_label?: string | null
+  primary_branch_uid?: string | null
+  primary_branch_title?: string | null
+  due_branch_count?: number
+  review_branch_summaries?: Array<{
+    branch_uid: string
+    title: string
+    due_node_count: number
+    next_review_at: string | null
+    status: 'due_now' | 'later_today' | 'future' | 'none'
+  }>
+  /** Catalog card payloads may omit segments; FSRS CTAs use palace-level fields. */
+  segments?: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }
 export interface ChapterSummary {
@@ -98,6 +123,10 @@ export interface PalaceEditorMeta {
   updated_at?: string | null
   primary_chapter_id?: number | null
   primary_chapter?: ChapterSummary | null
+  subjects?: SubjectSummary[]
+  explicit_chapter_ids?: number[]
+  inherited_chapter_ids?: number[]
+  binding_revision?: number
   chapters?: Array<ChapterSummary & {
     subject?: { id: number; name: string } | null
   }>
@@ -109,6 +138,18 @@ export interface PalaceEditorMeta {
   review_stage_total?: number
   review_stage_completed?: number
   review_stage_progress?: number
+  memory_node_count?: number
+  mastery_progress?: number
+  mastery_percent?: number
+  memory_health?: number
+  memory_health_percent?: number
+  mastered_node_count?: number
+  mastery_horizon_days?: number
+  due_node_count?: number
+  overdue_node_count?: number
+  memory_next_review_at?: string | null
+  memory_mastered?: boolean
+  severe_weak_node_count?: number
   segments?: PalaceSegmentSummary[]
   editor_doc?: MindMapDoc | string | null
 }

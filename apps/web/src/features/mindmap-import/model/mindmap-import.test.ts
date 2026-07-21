@@ -70,6 +70,24 @@ describe('mindmap import helpers', () => {
     expect(doc.root?.children?.[0]?.children?.[0]?.data?.text).toBe('知识点')
   })
 
+  it('builds yellow highlight markup from emphasis_marks', () => {
+    const doc = buildEditorDocFromSourceTree({
+      title: '章节',
+      children: [
+        {
+          text: '细胞膜由磷脂双分子层构成',
+          emphasis_marks: [{ kind: 'highlight', text: '磷脂双分子层' }],
+          children: [],
+        },
+      ],
+    })
+    const text = String(doc.root?.children?.[0]?.data?.text || '')
+    expect(doc.root?.children?.[0]?.data?.richText).toBe(true)
+    expect(text).toContain('data-emphasis="highlight"')
+    expect(text).toContain('background-color:#fef08c')
+    expect(text).toContain('磷脂双分子层')
+  })
+
   it('applies replace and creates undo snapshot', () => {
     const editorState = buildEditorState()
     const result = applyImportedEditorState({

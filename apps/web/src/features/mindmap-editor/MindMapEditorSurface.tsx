@@ -9,59 +9,59 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import { MindMapCanvas } from '@/shared/ui/mindmap-canvas'
+import {
+  MindMapCanvas,
+  mindMapSceneChromeClassName,
+  mindMapSceneChromeLabel,
+} from '@/shared/ui/mindmap-canvas'
 import type { MindMapCanvasViewCommand } from '@/shared/ui/mindmap-canvas'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import {
-  addEditorDocChildWithResult,
-  addEditorDocSiblingWithResult,
   buildSelectionFromDoc,
-  canMoveEditorDocNode,
-  countEditorDocSubtree,
-  deleteEditorDocNode,
-  deleteEditorDocNodeOnly,
   editEditorDocNode,
   editorDocToGraph,
-  moveEditorDocNode,
+  getEditorDocStoredText,
   normalizeEditorDocTree,
-  reparentEditorDocNode,
-  reorderEditorDocNode,
 } from './documentGraphProjection'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
-import { toast } from '@/shared/feedback/toast'
 import {
   buildMindMapEditorSurfaceClassName,
   type MindMapEditorSurfaceHandle,
   type MindMapEditorSurfaceProps,
 } from './MindMapEditorSurface.types'
 import { useMindMapEditHistory } from './useMindMapEditHistory'
+import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
 import { createMindMapCapabilities, mergeMindMapGraphOptions } from './capabilities'
 import { detectClientSource } from '@/shared/lib/clientSource'
+import {
+  collectRevealMap,
+  focusMindMapNodeText,
+} from './mindMapEditorSurfaceDom'
+import {
+  createMindMapCanvasKeyDownHandler,
+  selectedInteraction,
+  type MindMapInteractionState,
+} from './mindMapEditorSurfaceKeyboard'
 
-type MindMapInteractionState =
-  | { mode: 'idle' }
-  | { mode: 'selected'; nodeId: string }
-  | {
-      mode: 'editing'
-      nodeId: string
-      originalText: string
-      draftText: string
-      selectAllOnStart?: boolean
-      createdFromDoc?: MindMapEditorState['editor_doc']
-      returnNodeId?: string
-    }
+const EMPTY_SEGMENTS: NonNullable<MindMapEditorSurfaceProps['segments']> = []
+const EMPTY_UIDS: string[] = []
+const EMPTY_MASTERY_BY_UID: NonNullable<MindMapEditorSurfaceProps['masteryByNodeUid']> = {}
+const EMPTY_SEGMENT_RANGE_DRAFT: NonNullable<MindMapEditorSurfaceProps['segmentRangeDraft']> = {
+  active: false,
+  targetSegmentId: null,
+  selectedNodeUids: [],
+  overriddenConflictNodeUids: [],
+}
 
 export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps>(function MindMapEditorSurface({
   editorState,
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
-  immersiveModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
-  syncReason = null,
   externalSyncKey = null,
   forceSyncKey = null,
   preserveViewOnSync = false,
@@ -69,22 +69,26 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   nodeClickViewportPolicy,
   contentChangeViewportPolicy,
   className,
+  sceneChrome = 'default',
+  sceneTransitionKey = null,
   toolbarContent,
-  segments = [],
+  segments = EMPTY_SEGMENTS,
   activeSegmentId = null,
   segmentColorMode = 'all',
-  segmentRangeDraft = {
-    active: false,
-    targetSegmentId: null,
-    selectedNodeUids: [],
-    overriddenConflictNodeUids: [],
-  },
-  highlightedNodeUids = [],
-  masteryByNodeUid = {},
+  segmentRangeDraft = EMPTY_SEGMENT_RANGE_DRAFT,
+  highlightedNodeUids = EMPTY_UIDS,
+  mutedNodeUids = EMPTY_UIDS,
+  masteryByNodeUid = EMPTY_MASTERY_BY_UID,
+  statusChipsByNodeUid,
+  countBadgeByNodeUid,
+  onCountBadgeClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
   reviewFxSignal = null,
   feedbackFxSignal = null,
+  buildSelectionToolbarActions,
+  selectionToolbarPreferPosition = 'auto',
+  frameOverlay = null,
   onEditorStateChange,
   onNodeActive,
   onNodeClick,
@@ -94,14 +98,48 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
-  onFullscreenToggle,
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [interaction, setInteraction] = useState<MindMapInteractionState>({ mode: 'idle' })
   const interactionRef = useRef<MindMapInteractionState>(interaction)
-  const selectedNodeId = interaction.mode === 'idle' ? null : interaction.nodeId
+  // Hosts often pass inline lambdas; keep latest callbacks in refs so effects do not
+  // re-fire (and nest setState) solely because the prop identity changed.
+  const onNodeActiveRef = useRef(onNodeActive)
+  const onReadyRef = useRef(onReady)
+  const onUiClearedChangeRef = useRef(onUiClearedChange)
+  // Action callbacks must not rebuild capabilities/graphData on timer ticks or parent re-renders.
+  // Review hosts recreate these handlers every second when effectiveSeconds updates.
+  const onNodeClickRef = useRef(onNodeClick)
+  const onNodeContextMenuRef = useRef(onNodeContextMenu)
+  const onAiSplitRequestRef = useRef(onAiSplitRequest)
+  const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
+  const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
+  const handledFocusRequestNonceRef = useRef(0)
+  onNodeActiveRef.current = onNodeActive
+  onReadyRef.current = onReady
+  onUiClearedChangeRef.current = onUiClearedChange
+  onNodeClickRef.current = onNodeClick
+  onNodeContextMenuRef.current = onNodeContextMenu
+  onAiSplitRequestRef.current = onAiSplitRequest
+  onCreateSegmentFromSelectionRef.current = onCreateSegmentFromSelection
+  onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
+  const selectedNodeId =
+    interaction.mode === 'selected'
+      ? interaction.primaryId
+      : interaction.mode === 'editing'
+        ? interaction.nodeId
+        : null
+  const selectedNodeIds = useMemo(
+    () =>
+      interaction.mode === 'selected'
+        ? interaction.nodeIds
+        : interaction.mode === 'editing'
+          ? [interaction.nodeId]
+          : [],
+    [interaction],
+  )
   const editingNodeId = interaction.mode === 'editing' ? interaction.nodeId : null
   const editingDraft = interaction.mode === 'editing' ? interaction.draftText : null
   const [uiCleared, setUiCleared] = useState(false)
@@ -109,15 +147,23 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const viewCommandNonceRef = useRef(0)
   const pendingKeyboardFocusNodeIdRef = useRef<string | null>(null)
   const editorDoc = editorState.editor_doc
+  const editorConfig = editorState.editor_config
+  const editorLocalConfig = editorState.editor_local_config
+  const editorLang = editorState.lang
+  // Depend on document/config pieces, not the whole editorState object — hosts often
+  // pass a fresh shell every render while editor_doc stays referentially stable.
+  const normalizedEditorDoc = useMemo(
+    () => normalizeEditorDocTree(editorDoc),
+    [editorDoc],
+  )
   const normalizedEditorState = useMemo<MindMapEditorState>(
     () => ({
-      ...editorState,
-      editor_doc: normalizeEditorDocTree(editorDoc),
-      editor_config: editorState.editor_config ?? {},
-      editor_local_config: editorState.editor_local_config ?? {},
-      lang: editorState.lang || 'zh',
+      editor_doc: normalizedEditorDoc,
+      editor_config: editorConfig ?? {},
+      editor_local_config: editorLocalConfig ?? {},
+      lang: editorLang || 'zh',
     }),
-    [editorDoc, editorState],
+    [editorConfig, editorLang, editorLocalConfig, normalizedEditorDoc],
   )
   const revealMap = useMemo(() => collectRevealMap(normalizedEditorState), [normalizedEditorState])
   const capabilities = useMemo(
@@ -127,54 +173,50 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       segmentColorMode,
       segmentRangeDraft,
       highlightedNodeUids,
+      mutedNodeUids,
       masteryByNodeUid,
+      statusChipsByNodeUid,
+      countBadgeByNodeUid,
       practiceModeActive,
       revealMap: practiceModeActive ? revealMap : undefined,
       aiSplitBusy,
-      onAiSplitRequest,
-      onCreateSegmentFromSelection,
-      onSegmentRangeDraftChange,
-      onNodeClick,
-      onNodeContextMenu,
+      onAiSplitRequest: (payload) => onAiSplitRequestRef.current?.(payload),
+      onCreateSegmentFromSelection: () => onCreateSegmentFromSelectionRef.current?.(),
+      onSegmentRangeDraftChange: (payload) => onSegmentRangeDraftChangeRef.current?.(payload),
+      onNodeClick: (nodes) => onNodeClickRef.current?.(nodes),
+      onNodeContextMenu: (nodes) => onNodeContextMenuRef.current?.(nodes),
         }),
     [
-      activeSegmentId, aiSplitBusy,  highlightedNodeUids, masteryByNodeUid,
-      onAiSplitRequest, onCreateSegmentFromSelection,
-      onNodeClick, onNodeContextMenu, onSegmentRangeDraftChange, practiceModeActive,
-      providedCapabilities, revealMap, segmentColorMode, segmentRangeDraft, segments,
+      activeSegmentId, aiSplitBusy, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
+      mutedNodeUids, practiceModeActive, providedCapabilities, revealMap, segmentColorMode,
+      segmentRangeDraft, segments, statusChipsByNodeUid,
     ],
   )
   const graphOptions = useMemo(() => mergeMindMapGraphOptions(capabilities), [capabilities])
+  // Content signature absorbs shallow-new decoration objects with identical payload
+  // (e.g. empty mastery maps recreated each render in review).
+  const graphOptionsSignature = useMemo(() => JSON.stringify(graphOptions), [graphOptions])
   const graphData = useMemo(
     () =>
       editorDocToGraph(normalizedEditorState.editor_doc, {
         ...graphOptions,
         readonly,
       }),
-    [graphOptions, normalizedEditorState.editor_doc, readonly],
+    // graphOptions is read from the latest closure when signature changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature tracks decoration content
+    [graphOptionsSignature, normalizedEditorState.editor_doc, readonly],
   )
-  const canvasRecoveryKey = useMemo(
-    () =>
-      [
-        syncReason ?? '',
-        preserveViewOnSync ? '' : (externalSyncKey ?? ''),
-        forceSyncKey ?? '',
-        preserveViewOnSync ? '' : graphData.nodes.length,
-        preserveViewOnSync ? '' : graphData.edges.length,
-      ].join(':'),
-    [
-      externalSyncKey,
-      forceSyncKey,
-      graphData.edges.length,
-      graphData.nodes.length,
-      preserveViewOnSync,
-      syncReason,
-    ],
-  )
+  // Host remounts only on intentional document-identity changes.
+  // Mode switches (build/learn, flip syncReason, preserveView flag) must not rebuild ReactFlow.
+  const canvasRecoveryKey = useMemo(() => {
+    if (forceSyncKey != null && String(forceSyncKey) !== '') return String(forceSyncKey)
+    if (preserveViewOnSync) return ''
+    return String(externalSyncKey ?? '')
+  }, [externalSyncKey, forceSyncKey, preserveViewOnSync])
 
   useEffect(() => {
-    onReady?.()
-  }, [onReady])
+    onReadyRef.current?.()
+  }, [])
 
   useEffect(() => {
     if (!reviewFxSignal) return
@@ -193,8 +235,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   }, [feedbackFxSignal])
 
   useEffect(() => {
-    onUiClearedChange?.(uiCleared)
-  }, [onUiClearedChange, uiCleared])
+    onUiClearedChangeRef.current?.(uiCleared)
+  }, [uiCleared])
 
   const publishEditorDoc = useCallback(
     (nextEditorDoc: MindMapEditorState['editor_doc']) => {
@@ -227,11 +269,30 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   }, [])
 
   useEffect(() => {
-    if (!selectedNodeId) return
-    if (graphData.nodes.some((node) => node.id === selectedNodeId)) return
-    replaceInteraction({ mode: 'idle' })
-    onNodeActive?.([])
-  }, [graphData.nodes, onNodeActive, replaceInteraction, selectedNodeId])
+    if (selectedNodeIds.length === 0) return
+    const validIds = new Set(graphData.nodes.map((node) => node.id))
+    const nextIds = selectedNodeIds.filter((id) => validIds.has(id))
+    if (nextIds.length === selectedNodeIds.length && selectedNodeId && validIds.has(selectedNodeId)) {
+      return
+    }
+    if (nextIds.length === 0) {
+      replaceInteraction({ mode: 'idle' })
+      onNodeActiveRef.current?.([])
+      return
+    }
+    const primaryId =
+      selectedNodeId && nextIds.includes(selectedNodeId)
+        ? selectedNodeId
+        : nextIds[nextIds.length - 1]!
+    replaceInteraction(selectedInteraction(primaryId, nextIds))
+    onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), primaryId))
+  }, [
+    getCurrentEditorDoc,
+    graphData.nodes,
+    replaceInteraction,
+    selectedNodeId,
+    selectedNodeIds,
+  ])
 
   useEffect(() => {
     const nodeId = pendingKeyboardFocusNodeIdRef.current
@@ -256,7 +317,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     } else if (current.createdFromDoc) {
       commitEditorDocFrom(current.createdFromDoc, getCurrentEditorDoc())
     }
-    replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
+    replaceInteraction(selectedInteraction(current.nodeId))
   }, [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction])
 
   const cancelEditing = useCallback(() => {
@@ -265,20 +326,28 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     if (current.createdFromDoc) {
       stageEditorDoc(current.createdFromDoc)
       const returnNodeId = current.returnNodeId ?? null
-      replaceInteraction(returnNodeId ? { mode: 'selected', nodeId: returnNodeId } : { mode: 'idle' })
+      replaceInteraction(returnNodeId ? selectedInteraction(returnNodeId) : { mode: 'idle' })
       onNodeActive?.(buildSelectionFromDoc(current.createdFromDoc, returnNodeId))
       return
     }
-    replaceInteraction({ mode: 'selected', nodeId: current.nodeId })
+    replaceInteraction(selectedInteraction(current.nodeId))
   }, [onNodeActive, replaceInteraction, stageEditorDoc])
 
   const beginEditingNode = useCallback(
     (nodeId: string) => {
       const current = interactionRef.current
-      if (current.mode === 'editing' && current.nodeId === nodeId) return
+      if (current.mode === 'editing' && current.nodeId === nodeId) {
+        // Re-assert editing so a desynced card (e.g. after yellow-emphasis double-click
+        // races) remounts the editor instead of silently no-oping.
+        replaceInteraction({ ...current })
+        return
+      }
       if (current.mode === 'editing' && current.nodeId !== nodeId) commitEditingDraft()
-      const selection = buildSelectionFromDoc(getCurrentEditorDoc(), nodeId)
-      const text = selection[0]?.text || '未命名知识点'
+      const editorDoc = getCurrentEditorDoc()
+      const selection = buildSelectionFromDoc(editorDoc, nodeId)
+      // Prefer stored markup (yellow emphasis HTML) so double-click edit keeps highlights.
+      const stored = getEditorDocStoredText(editorDoc, nodeId).trim()
+      const text = stored || selection[0]?.text || '未命名知识点'
       replaceInteraction({
         mode: 'editing',
         nodeId,
@@ -301,11 +370,56 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   )
 
   const selectNode = useCallback(
-    (nodeId: string | null) => {
+    (nodeId: string | null, options?: { additive?: boolean }) => {
       const current = interactionRef.current
-      if (current.mode === 'editing' && current.nodeId === nodeId) return
+      if (current.mode === 'editing' && current.nodeId === nodeId && !options?.additive) return
       if (current.mode === 'editing') commitEditingDraft()
-      replaceInteraction(nodeId ? { mode: 'selected', nodeId } : { mode: 'idle' })
+      if (!nodeId) {
+        replaceInteraction({ mode: 'idle' })
+        onNodeActive?.([])
+        return
+      }
+      // Skip redundant select→re-render on the second click of a double-click;
+      // remounting yellow-emphasis markup mid-gesture can drop the dblclick event.
+      if (
+        !options?.additive &&
+        current.mode === 'selected' &&
+        current.primaryId === nodeId &&
+        current.nodeIds.length === 1 &&
+        current.nodeIds[0] === nodeId
+      ) {
+        return
+      }
+      if (options?.additive) {
+        const existing =
+          current.mode === 'selected'
+            ? current.nodeIds
+            : current.mode === 'editing'
+              ? [current.nodeId]
+              : []
+        const set = new Set(existing)
+        if (set.has(nodeId)) {
+          set.delete(nodeId)
+          if (set.size === 0) {
+            replaceInteraction({ mode: 'idle' })
+            onNodeActive?.([])
+            return
+          }
+          const nodeIds = [...set]
+          const primaryId =
+            current.mode === 'selected' && set.has(current.primaryId)
+              ? current.primaryId
+              : nodeIds[nodeIds.length - 1]!
+          replaceInteraction(selectedInteraction(primaryId, nodeIds))
+          onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), primaryId))
+          return
+        }
+        set.add(nodeId)
+        replaceInteraction(selectedInteraction(nodeId, [...set]))
+        onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeId))
+        return
+      }
+      replaceInteraction(selectedInteraction(nodeId))
       onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeId))
     },
     [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
@@ -315,8 +429,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     (nodeUid: string | null) => {
       const current = interactionRef.current
       if (current.mode === 'editing') commitEditingDraft()
-      replaceInteraction(nodeUid ? { mode: 'selected', nodeId: nodeUid } : { mode: 'idle' })
-      onNodeActive?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
+      replaceInteraction(nodeUid ? selectedInteraction(nodeUid) : { mode: 'idle' })
+      onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
       if (!nodeUid) return
       viewCommandNonceRef.current += 1
       setViewCommand({
@@ -325,7 +439,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         nonce: viewCommandNonceRef.current,
       })
     },
-    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+    [commitEditingDraft, getCurrentEditorDoc, replaceInteraction],
   )
 
   const requestFitView = useCallback(() => {
@@ -344,10 +458,18 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const nativeFullscreenActive = fullscreen.active
   const enterNativeFullscreen = fullscreen.enter
   const exitNativeFullscreen = fullscreen.exit
+  const toggleNativeFullscreen = fullscreen.toggleNative
+  const toggleViewportFullscreen = fullscreen.toggleViewport
   const toggleCanvasFullscreen = fullscreen.toggle
+  const showSystemFullscreenControl = presentationStrategy !== 'viewport-only'
 
+  // Each focusRequestNonce must run at most once. Including requestFocusNode in deps is
+  // unsafe: hosts pass unstable onNodeActive, which used to recreate requestFocusNode and
+  // re-enter this effect, nesting setViewCommand until React #185 (max update depth).
   useEffect(() => {
     if (!focusRequestNodeUid || focusRequestNonce <= 0) return
+    if (handledFocusRequestNonceRef.current === focusRequestNonce) return
+    handledFocusRequestNonceRef.current = focusRequestNonce
     requestFocusNode(focusRequestNodeUid)
   }, [focusRequestNodeUid, focusRequestNonce, requestFocusNode])
 
@@ -411,192 +533,66 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     nodeClickViewportPolicy ?? 'preserve'
   const resolvedContentChangeViewportPolicy =
     contentChangeViewportPolicy ?? 'preserve'
-  const frameClassName = `${buildMindMapEditorSurfaceClassName(className)}${
-    nativeFullscreenActive ? ' memory-anki-mindmap-native-fullscreen' : ''
-  }`
-  const handleAddChild = useCallback(
-    (nodeId: string) => {
-      const baseEditorDoc = getCurrentEditorDoc()
-      const result = addEditorDocChildWithResult(baseEditorDoc, nodeId)
-      if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
-      const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
-      const text = selection[0]?.text || '新知识点'
-      replaceInteraction({
-        mode: 'editing',
-        nodeId: result.nodeUid,
-        originalText: text,
-        draftText: text,
-        selectAllOnStart: true,
-        createdFromDoc: baseEditorDoc,
-        returnNodeId: nodeId,
-      })
-      onNodeActive?.(selection)
-    },
-    [getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
-  )
-  const handleAddChildWithoutFocus = useCallback(
-    (nodeId: string) => {
-      const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
-      if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
-      replaceInteraction({ mode: 'selected', nodeId })
-      onNodeActive?.(buildSelectionFromDoc(result.editorDoc, nodeId))
-    },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
-  )
-  const handleAddSibling = useCallback(
-    (nodeId: string) => {
-      const baseEditorDoc = getCurrentEditorDoc()
-      const result = addEditorDocSiblingWithResult(baseEditorDoc, nodeId)
-      if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
-      const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
-      const text = selection[0]?.text || '新知识点'
-      replaceInteraction({
-        mode: 'editing',
-        nodeId: result.nodeUid,
-        originalText: text,
-        draftText: text,
-        selectAllOnStart: true,
-        createdFromDoc: baseEditorDoc,
-        returnNodeId: nodeId,
-      })
-      onNodeActive?.(selection)
-    },
-    [getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
-  )
-  const handleDeleteNode = useCallback(
-    (nodeId: string) => {
-      const currentEditorDoc = getCurrentEditorDoc()
-      const removedCount = countEditorDocSubtree(currentEditorDoc, nodeId)
-      if (removedCount === 0) return
-      const nextEditorDoc = deleteEditorDocNode(currentEditorDoc, nodeId)
-      if (!commitEditorDoc(nextEditorDoc)) return
-      replaceInteraction({ mode: 'idle' })
-      onNodeActive?.([])
-      toast.success(
-        removedCount > 1 ? `已删除整条分支（${removedCount} 张卡片）` : '已删除卡片',
-        { action: { label: '撤销', onClick: undoEditorDoc } },
-      )
-    },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
-  )
-  const handleDeleteNodeOnly = useCallback(
-    (nodeId: string) => {
-      const currentEditorDoc = getCurrentEditorDoc()
-      const nextEditorDoc = deleteEditorDocNodeOnly(currentEditorDoc, nodeId)
-      if (!commitEditorDoc(nextEditorDoc)) return
-      replaceInteraction({ mode: 'idle' })
-      onNodeActive?.([])
-      toast.success('已单独删除卡片，子级已提升', {
-        action: { label: '撤销', onClick: undoEditorDoc },
-      })
-    },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
-  )
+  // Scene identity for center-card re-anchor across edit/review/practice/rating.
+  const resolvedSceneTransitionKey =
+    sceneTransitionKey
+    ?? `${sceneChrome}:${readonly ? 'ro' : 'rw'}:${practiceModeActive ? 'practice' : 'plain'}`
+  const sceneLabel = mindMapSceneChromeLabel(sceneChrome)
+  const frameClassName = [
+    buildMindMapEditorSurfaceClassName(className),
+    mindMapSceneChromeClassName(sceneChrome),
+    nativeFullscreenActive ? 'memory-anki-mindmap-native-fullscreen' : '',
+  ].filter(Boolean).join(' ')
+  const {
+    handleAddChild,
+    handleAddChildWithoutFocus,
+    handleAddSibling,
+    handleDeleteNode,
+    handleDeleteNodes,
+    handleDeleteNodeOnly,
+    handleHighlightNodes,
+    handleToggleQuestionCards,
+    handleEditNode: commitEditedNodeText,
+    handleRelocateNodes,
+    handleExtractSelection,
+    handleReorderSibling,
+    handleMoveUp,
+    handleMoveDown,
+    canMoveNodeUp,
+    canMoveNodeDown,
+  } = useMindMapEditorDocActions({
+    canEdit,
+    getCurrentEditorDoc,
+    commitEditorDoc,
+    commitEditorDocFrom,
+    stageEditorDoc,
+    replaceInteraction,
+    onNodeActive,
+    undoEditorDoc,
+  })
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
-      const trimmed = text.trim()
-      const current = interactionRef.current
-      if (trimmed) {
-        const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed)
-        if (current.mode === 'editing' && current.nodeId === nodeId && current.createdFromDoc) {
-          commitEditorDocFrom(current.createdFromDoc, nextEditorDoc)
-        } else {
-          commitEditorDoc(nextEditorDoc)
-        }
-      }
-      replaceInteraction({ mode: 'selected', nodeId })
+      commitEditedNodeText(nodeId, text, interactionRef.current)
     },
-    [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction],
-  )
-  const handleReparentNode = useCallback(
-    (sourceId: string, targetId: string) =>
-      commitEditorDoc(reparentEditorDocNode(getCurrentEditorDoc(), sourceId, targetId)),
-    [commitEditorDoc, getCurrentEditorDoc],
-  )
-  const handleReorderSibling = useCallback(
-    (sourceId: string, targetId: string, position: 'before' | 'after') =>
-      commitEditorDoc(reorderEditorDocNode(getCurrentEditorDoc(), sourceId, targetId, position)),
-    [commitEditorDoc, getCurrentEditorDoc],
-  )
-  const handleMoveUp = useCallback(
-    (nodeId: string) =>
-      commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up')),
-    [commitEditorDoc, getCurrentEditorDoc],
-  )
-  const handleMoveDown = useCallback(
-    (nodeId: string) =>
-      commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down')),
-    [commitEditorDoc, getCurrentEditorDoc],
-  )
-  const canMoveNodeUp = useCallback(
-    (nodeId: string) => canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up'),
-    [getCurrentEditorDoc],
-  )
-  const canMoveNodeDown = useCallback(
-    (nodeId: string) => canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down'),
-    [getCurrentEditorDoc],
+    [commitEditedNodeText],
   )
 
   const handleCanvasKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (!canEdit) return
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (isEditableKeyboardTarget(target)) return
-
-      const primaryModifier = event.ctrlKey || event.metaKey
-      const lowerKey = event.key.toLowerCase()
-      if (primaryModifier && lowerKey === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) redoEditorDoc()
-        else undoEditorDoc()
-        return
-      }
-      if (primaryModifier && lowerKey === 'y') {
-        event.preventDefault()
-        redoEditorDoc()
-        return
-      }
-      if (isNonNodeInteractiveTarget(target)) return
-      if (!selectedNodeId || editingNodeId || event.repeat) return
-      const selectedNode = graphData.nodes.find((node) => node.id === selectedNodeId)
-      if (!selectedNode) return
-
-      if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault()
-        pendingKeyboardFocusNodeIdRef.current = selectedNodeId
-        handleAddChildWithoutFocus(selectedNodeId)
-        return
-      }
-      if (
-        event.key === 'Enter' &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        selectedNode.parentId != null
-      ) {
-        event.preventDefault()
-        handleAddSibling(selectedNodeId)
-        return
-      }
-      if (
-        (event.key === 'Enter' || event.key === 'F2') &&
-        !event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        event.preventDefault()
-        beginEditingNode(selectedNodeId)
-        return
-      }
-      if (
-        (event.key === 'Delete' || event.key === 'Backspace') &&
-        selectedNode.parentId != null
-      ) {
-        event.preventDefault()
-        handleDeleteNode(selectedNodeId)
-      }
+      createMindMapCanvasKeyDownHandler({
+        canEdit,
+        selectedNodeId,
+        selectedNodeIds,
+        editingNodeId,
+        graphNodes: graphData.nodes,
+        undoEditorDoc,
+        redoEditorDoc,
+        handleAddChildWithoutFocus,
+        handleAddSibling,
+        beginEditingNode,
+        handleDeleteNodes,
+        pendingKeyboardFocusNodeIdRef,
+      })(event)
     },
     [
       beginEditingNode,
@@ -605,9 +601,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       graphData.nodes,
       handleAddChildWithoutFocus,
       handleAddSibling,
-      handleDeleteNode,
+      handleDeleteNodes,
       redoEditorDoc,
       selectedNodeId,
+      selectedNodeIds,
       undoEditorDoc,
     ],
   )
@@ -619,32 +616,44 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     [beginEditingNode, cancelEditing],
   )
 
-  const handleFocusToggle = useCallback(() => {
+  const handleSystemFullscreenToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
     if (handled) return
-    if (onFullscreenToggle && presentationStrategy === 'native-preferred') onFullscreenToggle()
-    else toggleCanvasFullscreen()
-  }, [capabilities, onFullscreenToggle, presentationStrategy, toggleCanvasFullscreen])
+    // Desktop: Fullscreen API (system fullscreen). Host immersive layout stays separate.
+    toggleNativeFullscreen()
+  }, [capabilities, toggleNativeFullscreen])
 
-  const usesSurfaceFullscreen = presentationStrategy === 'viewport-only' || !onFullscreenToggle
+  const handleWebpageFullscreenToggle = useCallback(() => {
+    const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
+    if (handled) return
+    // Viewport CSS lock inside the browser window so the OS window can still be dragged.
+    if (presentationStrategy === 'viewport-only') {
+      toggleCanvasFullscreen()
+      return
+    }
+    toggleViewportFullscreen()
+  }, [capabilities, presentationStrategy, toggleCanvasFullscreen, toggleViewportFullscreen])
 
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
       <MindMapCanvas
         graphData={graphData}
         selectedNodeId={selectedNodeId}
+        selectedNodeIds={selectedNodeIds}
         editingNodeId={editingNodeId}
         editingDraft={editingDraft}
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
-        focusMode={usesSurfaceFullscreen ? nativeFullscreenActive : immersiveModeActive}
-        focusModeLabel={presentationStrategy === 'viewport-only' ? '全屏' : onFullscreenToggle ? '网页内全屏' : '系统全屏'}
+        focusMode={nativeFullscreenActive}
+        presentationMode={fullscreen.mode}
+        showSystemFullscreenControl={showSystemFullscreenControl}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
+        sceneTransitionKey={resolvedSceneTransitionKey}
         viewCommand={viewCommand}
         recoveryKey={canvasRecoveryKey}
         onNodeSelect={selectNode}
@@ -654,23 +663,31 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onNodeActivate={activateNode}
         onNodeContextAction={contextNode}
         onNodeHover={hoverNode}
+        onCountBadgeClick={onCountBadgeClick}
         buildNodeActions={buildNodeActions}
+        buildSelectionToolbarActions={buildSelectionToolbarActions}
+        selectionToolbarPreferPosition={selectionToolbarPreferPosition}
         onAddChild={handleAddChild}
         onAddSibling={handleAddSibling}
         onDelete={handleDeleteNode}
+        onDeleteNodes={handleDeleteNodes}
         onDeleteNodeOnly={handleDeleteNodeOnly}
+        onHighlightNodes={handleHighlightNodes}
+        onToggleQuestionCards={handleToggleQuestionCards}
         onEdit={handleEditNode}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={undoEditorDoc}
         onRedo={redoEditorDoc}
-        onReparent={handleReparentNode}
+        onRelocate={handleRelocateNodes}
+        onExtractSelection={handleExtractSelection}
         onReorderSibling={handleReorderSibling}
         onMoveUp={handleMoveUp}
         onMoveDown={handleMoveDown}
         canMoveUp={canMoveNodeUp}
         canMoveDown={canMoveNodeDown}
-        onToggleFocusMode={handleFocusToggle}
+        onToggleSystemFullscreen={handleSystemFullscreenToggle}
+        onToggleWebpageFullscreen={handleWebpageFullscreenToggle}
         className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
       />
     </WidgetErrorBoundary>
@@ -681,53 +698,19 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       className={frameClassName}
       data-fullscreen={nativeFullscreenActive ? 'true' : 'false'}
       data-presentation-mode={fullscreen.mode}
+      data-scene-chrome={sceneChrome}
       data-testid="mindmap-frame-native"
     >
+      {sceneLabel ? (
+        <span className="memory-anki-mindmap-scene-label" data-testid="mindmap-scene-label">
+          {sceneLabel}
+        </span>
+      ) : null}
       {canvas}
+      {frameOverlay}
     </div>
   )
 })
 
 MindMapEditorSurface.displayName = 'MindMapEditorSurface'
-
 export type { MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps } from './MindMapEditorSurface.types'
-
-function isEditableKeyboardTarget(target: HTMLElement | null) {
-  if (!target) return false
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
-}
-
-function focusMindMapNodeText(container: HTMLElement, nodeId: string) {
-  const shell = Array.from(
-    container.querySelectorAll<HTMLElement>('[data-mindmap-node-id]'),
-  ).find((element) => element.dataset.mindmapNodeId === nodeId)
-  shell?.querySelector<HTMLButtonElement>('.mindmap-node-text')?.focus()
-}
-
-function isNonNodeInteractiveTarget(target: HTMLElement | null) {
-  if (!target) return false
-  return Boolean(
-    target.closest('button, a, [role="menuitem"]') &&
-      !target.closest('.mindmap-node-text'),
-  )
-}
-
-function collectRevealMap(editorState: MindMapEditorState) {
-  const result: Record<string, 'hidden' | 'placeholder' | 'revealed'> = {}
-  const doc = normalizeEditorDocTree(editorState.editor_doc)
-  const walk = (node: { data?: Record<string, unknown>; children?: unknown[] }) => {
-    const uid = typeof node.data?.uid === 'string' ? node.data.uid : ''
-    const text = typeof node.data?.text === 'string' ? node.data.text : ''
-    if (uid) {
-      result[uid] = text === '待回忆' ? 'hidden' : 'revealed'
-    }
-    ;(Array.isArray(node.children) ? node.children : []).forEach((child) => {
-      if (child && typeof child === 'object') {
-        walk(child as { data?: Record<string, unknown>; children?: unknown[] })
-      }
-    })
-  }
-  if (doc.root) walk(doc.root)
-  return result
-}
-

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from memory_anki.core.time import utc_now_naive
@@ -178,10 +178,20 @@ class EnglishReadingVocabularyNote(Base):
     next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     next_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    review_type: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
-    algorithm_used: Mapped[str] = mapped_column(String(30), nullable=False, default="ebbinghaus")
+    review_type: Mapped[str] = mapped_column(String(20), nullable=False, default="fsrs")
+    algorithm_used: Mapped[str] = mapped_column(String(30), nullable=False, default="FSRS")
     anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # FSRS card fields (aligned with ReviewNodeState)
+    fsrs_state: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    fsrs_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    difficulty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_review_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    desired_retention: Mapped[float] = mapped_column(Float, nullable=False, default=0.9)
+    maximum_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
+    scheduler_version: Mapped[str] = mapped_column(String(32), nullable=False, default="fsrs-6.3.1")
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,

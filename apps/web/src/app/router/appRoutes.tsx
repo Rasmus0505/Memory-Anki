@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Navigate, Route, Routes, type Location } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams, useSearchParams, type Location } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
@@ -13,9 +13,12 @@ export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
 export const preloadFreestylePage = () => import('@/pages/today/TodayLearningPage')
 export const preloadFreestyleSessionPage = () => import('@/pages/today/FreestyleSessionPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
+export const preloadEnglishHubPage = () => import('@/pages/library/EnglishHubPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
 export const preloadEnglishReadingPage = () => import('@/pages/library/EnglishReadingPage')
+export const preloadEnglishPatternsPage = () => import('@/pages/library/EnglishPatternsPage')
+export const preloadEnglishVocabPage = () => import('@/pages/library/EnglishVocabPage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
 export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
@@ -40,9 +43,37 @@ export function preloadPracticeRoutes() {
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSessionPage = lazyWithRetry(preloadFreestyleSessionPage)
+const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
+const EnglishPatternsPage = lazyWithRetry(preloadEnglishPatternsPage)
+const EnglishVocabPage = lazyWithRetry(preloadEnglishVocabPage)
+
+function EnglishLegacyTabRedirect() {
+  const [searchParams] = useSearchParams()
+  const tab = searchParams.get('tab')
+  if (tab === 'reading') return <Navigate to="/english/reading" replace />
+  if (tab === 'patterns') return <Navigate to="/english/patterns" replace />
+  if (tab === 'vocab') return <Navigate to="/english/vocab" replace />
+  if (tab === 'listening') return <Navigate to="/english/listening" replace />
+  return <EnglishHubPage />
+}
+
+function EnglishReadingLegacyRedirect() {
+  const [searchParams] = useSearchParams()
+  const material = searchParams.get('material')
+  if (material && /^\d+$/.test(material)) {
+    return <Navigate to={`/english/reading/materials/${material}`} replace />
+  }
+  return <Navigate to="/english/reading" replace />
+}
+
+function EnglishCourseLegacyRedirect() {
+  const { id } = useParams()
+  if (!id) return <Navigate to="/english/listening" replace />
+  return <Navigate to={`/english/listening/courses/${id}`} replace />
+}
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
@@ -80,6 +111,10 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/freestyle/session',
   '/knowledge',
   '/english',
+  '/english/listening',
+  '/english/reading',
+  '/english/patterns',
+  '/english/vocab',
   '/english-reading',
   '/palaces',
   '/palaces/list',
@@ -98,6 +133,8 @@ const REGISTERED_DYNAMIC_PATTERNS = [
   /^\/palaces\/\d+(?:\/(edit|practice|quiz))?$/,
   /^\/segments\/\d+\/practice$/,
   /^\/english\/courses\/\d+$/,
+  /^\/english\/listening\/courses\/\d+$/,
+  /^\/english\/reading\/materials\/\d+$/,
   /^\/review\/session\/\d+$/,
   /^\/review\/completed\/\d+$/,
 ]
@@ -106,7 +143,15 @@ const REGISTERED_DYNAMIC_PATTERNS = [
 // 例：/palaces/42/unknown → /palaces/42；/review/session/9/x → /review/session/9。
 const DYNAMIC_PREFIX_FALLBACKS = [
   { match: /^\/palaces\/(\d+)(?:\/.*)?$/, build: (id: string) => `/palaces/${id}` },
+  {
+    match: /^\/english\/listening\/courses\/(\d+)(?:\/.*)?$/,
+    build: (id: string) => `/english/listening/courses/${id}`,
+  },
   { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id: string) => `/english/courses/${id}` },
+  {
+    match: /^\/english\/reading\/materials\/(\d+)(?:\/.*)?$/,
+    build: (id: string) => `/english/reading/materials/${id}`,
+  },
   { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/review/session/${id}` },
   { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/segments/${id}/practice` },
 ]
@@ -117,7 +162,7 @@ const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
   '/freestyle/': '/freestyle',
   '/profile/': '/profile',
   '/review/': '/review',
-  '/english-reading/': '/english-reading',
+  '/english-reading/': '/english/reading',
   '/english/': '/english',
   '/palaces/': '/palaces',
   '/timer-overlay/': '/timer-overlay',
@@ -163,9 +208,18 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle/session" element={<FreestyleSessionPage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
-          <Route path="/english" element={<EnglishWorkspacePage />} />
-          <Route path="/english-reading" element={<EnglishReadingPage />} />
-          <Route path="/english/courses/:id" element={<EnglishCoursePage />} />
+          <Route path="/english" element={<EnglishLegacyTabRedirect />} />
+          <Route path="/english/listening" element={<EnglishWorkspacePage />} />
+          <Route path="/english/listening/courses/:id" element={<EnglishCoursePage />} />
+          <Route path="/english/reading" element={<EnglishReadingPage />} />
+          <Route path="/english/reading/materials/:materialId" element={<EnglishReadingPage />} />
+          <Route path="/english/patterns" element={<EnglishPatternsPage />} />
+          <Route path="/english/vocab" element={<EnglishVocabPage />} />
+          <Route path="/english-reading" element={<EnglishReadingLegacyRedirect />} />
+          <Route
+            path="/english/courses/:id"
+            element={<EnglishCourseLegacyRedirect />}
+          />
           <Route path="/palaces/list" element={<PalaceListPage />} />
           <Route path="/palaces/new" element={<PalaceEditPage />} />
           <Route path="/batch-generation" element={<BatchGenerationPage />} />

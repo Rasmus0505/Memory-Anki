@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveGlobalBackPolicy } from './globalBackPolicy'
 
 describe('resolveGlobalBackPolicy', () => {
-  it.each(['/', '/dashboard', '/freestyle', '/palaces', '/palaces/new', '/knowledge', '/english', '/english-reading', '/review', '/profile'])(
+  it.each(['/', '/dashboard', '/freestyle', '/palaces', '/palaces/new', '/knowledge', '/english', '/english/listening', '/english/reading', '/english-reading', '/review', '/profile'])(
     'hides on main route %s',
     (pathname) => expect(resolveGlobalBackPolicy(pathname)).toBeNull(),
   )
@@ -11,7 +11,9 @@ describe('resolveGlobalBackPolicy', () => {
     ['/freestyle/session', '/freestyle'],
     ['/palaces/list', '/palaces'],
     ['/batch-generation', '/palaces/new'],
-    ['/english/courses/12', '/english'],
+    ['/english/courses/12', '/english/listening'],
+    ['/english/listening/courses/12', '/english/listening'],
+    ['/english/reading/materials/9', '/english/reading'],
     ['/review/session/4', '/review'],
     ['/review/feedback-preview', '/review'],
     ['/profile/timer', '/profile'],

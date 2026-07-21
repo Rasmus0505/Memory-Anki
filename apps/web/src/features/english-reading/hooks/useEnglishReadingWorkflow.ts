@@ -5,7 +5,6 @@ import type {
   KeyboardEvent,
   RefObject,
 } from "react";
-import type { SetURLSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
 import { appConfirm, appPrompt } from "@/shared/components/ui/native-dialog";
 import {
@@ -108,14 +107,14 @@ export function useEnglishReadingWorkflow({
   becameActiveAt,
   routePath,
   resolvedMaterialId,
-  setSearchParams,
+  navigateToMaterial,
   promptForAiOptions,
 }: {
   isActive: boolean;
   becameActiveAt: number;
   routePath: string;
   resolvedMaterialId: number | null;
-  setSearchParams: SetURLSearchParams;
+  navigateToMaterial: (materialId: number | null) => void;
   promptForAiOptions: PromptForAiOptions;
 }) {
   const [profile, setProfile] = useState<ReadingProfile | null>(null);
@@ -423,7 +422,7 @@ export function useEnglishReadingWorkflow({
         section: "englishReading",
         title: "英语阅读 · 生成中",
         detail: "正在准备生成阅读稿……",
-        navigateTarget: "/english-reading",
+        navigateTarget: "/english/reading",
       });
       setGenerationStatus({
         stage: "queued",
@@ -458,11 +457,7 @@ export function useEnglishReadingWorkflow({
             file: useFileInput ? selectedFile : null,
           });
           setMaterial(activeMaterial);
-          setSearchParams((current) => {
-            const next = new URLSearchParams(current);
-            next.set("material", String(activeMaterial.id));
-            return next;
-          });
+          navigateToMaterial(activeMaterial.id);
         }
         if (!activeMaterial) {
           throw new Error("当前没有可生成的阅读材料。");
@@ -534,9 +529,9 @@ export function useEnglishReadingWorkflow({
     [
       loadWorkspace,
       material,
+      navigateToMaterial,
       promptForAiOptions,
       selectedFile,
-      setSearchParams,
       sourceMode,
       textInput,
     ],
@@ -571,11 +566,7 @@ export function useEnglishReadingWorkflow({
       if (openingMaterialId === item.id) return;
       setOpeningMaterialId(item.id);
       try {
-        setSearchParams((current) => {
-          const next = new URLSearchParams(current);
-          next.set("material", String(item.id));
-          return next;
-        });
+        navigateToMaterial(item.id);
         await loadMaterialAndVersion(item.id);
         scrollToReadingPanel();
         if (!item.latestVersionId) {
@@ -591,9 +582,9 @@ export function useEnglishReadingWorkflow({
     },
     [
       loadMaterialAndVersion,
+      navigateToMaterial,
       openingMaterialId,
       scrollToReadingPanel,
-      setSearchParams,
     ],
   );
 
@@ -659,11 +650,7 @@ export function useEnglishReadingWorkflow({
           setVersion(null);
           setCompletionResponse(null);
           setCompletionPanelOpen(false);
-          setSearchParams((current) => {
-            const next = new URLSearchParams(current);
-            next.delete("material");
-            return next;
-          });
+          navigateToMaterial(null);
         }
         toast.success("阅读历史已删除。");
       } catch (error) {
@@ -674,7 +661,7 @@ export function useEnglishReadingWorkflow({
         setDeletingMaterialId(null);
       }
     },
-    [deletingMaterialId, material?.id, renamingMaterialId, setSearchParams],
+    [deletingMaterialId, material?.id, navigateToMaterial, renamingMaterialId],
   );
 
   return {

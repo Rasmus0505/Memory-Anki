@@ -82,6 +82,21 @@ def update_subject(
     return subject_json(sub)
 
 
+
+def get_subject_delete_impact(session: Session, subject_id: int) -> dict | None:
+    subject = session.query(Subject).filter_by(id=subject_id).first()
+    if subject is None:
+        return None
+    palace_count = len({palace.id for palace in (getattr(subject, "palaces", []) or [])})
+    chapter_count = len(getattr(subject, "chapters", []) or [])
+    return {
+        "subject_id": subject.id,
+        "subject_name": subject.name,
+        "palace_count": palace_count,
+        "chapter_count": chapter_count,
+        "blocked": palace_count > 0 or chapter_count > 0,
+    }
+
 def delete_subject(
     session: Session,
     subject_id: int,

@@ -3,12 +3,11 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from datetime import date, datetime
 
 import pytest
 from sqlalchemy import text
 
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewSchedule
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.backups.application import full_transfer_service
 from memory_anki.modules.palaces.presentation import import_router
 
@@ -34,14 +33,6 @@ def test_build_full_archive_contains_manifest_data_and_attachments(db_session, t
     _create_alembic_revision(db_session)
     palace = Palace(title="Alpha")
     db_session.add(palace)
-    db_session.flush()
-    db_session.add(
-        ReviewSchedule(
-            palace_id=palace.id,
-            scheduled_date=date(2026, 6, 5),
-            scheduled_at=datetime(2026, 6, 5, 8, 30),
-        )
-    )
     (transfer_env / "image.txt").write_text("attachment", encoding="utf-8")
     db_session.commit()
 
@@ -55,23 +46,13 @@ def test_build_full_archive_contains_manifest_data_and_attachments(db_session, t
     assert "data.json" in names
     assert "attachments/image.txt" in names
     assert manifest["table_counts"]["palaces"] == 1
-    assert data["review_schedules"][0]["scheduled_date"] == "2026-06-05"
-    assert data["review_schedules"][0]["scheduled_at"].startswith("2026-06-05T08:30")
+    assert data["palaces"][0]["title"] == "Alpha"
 
 
 def test_import_full_archive_replaces_tables_and_attachments(db_session, transfer_env):
     _create_alembic_revision(db_session)
     source_palace = Palace(title="Source")
     db_session.add(source_palace)
-    db_session.flush()
-    db_session.add(
-        ReviewSchedule(
-            palace_id=source_palace.id,
-            scheduled_date=date(2026, 6, 5),
-            anchor_date=date(2026, 6, 6),
-            scheduled_at=datetime(2026, 6, 5, 8, 30),
-        )
-    )
     (transfer_env / "keep.txt").write_text("new", encoding="utf-8")
     db_session.commit()
     archive_bytes, _ = full_transfer_service.build_full_archive(db_session)
@@ -79,7 +60,6 @@ def test_import_full_archive_replaces_tables_and_attachments(db_session, transfe
     bind = db_session.get_bind()
     db_session.close()
     dirty_session = db_session.__class__(bind=bind)
-    dirty_session.query(ReviewSchedule).delete()
     dirty_session.query(Palace).delete()
     dirty_session.add(Palace(title="Old"))
     (transfer_env / "stale.txt").write_text("old", encoding="utf-8")
@@ -92,9 +72,6 @@ def test_import_full_archive_replaces_tables_and_attachments(db_session, transfe
     replacement_session = db_session.__class__(bind=bind)
     try:
         assert replacement_session.query(Palace).one().title == "Source"
-        schedule = replacement_session.query(ReviewSchedule).one()
-        assert schedule.scheduled_date == date(2026, 6, 5)
-        assert schedule.scheduled_at == datetime(2026, 6, 5, 8, 30)
     finally:
         replacement_session.close()
     assert (transfer_env / "keep.txt").read_text(encoding="utf-8") == "new"

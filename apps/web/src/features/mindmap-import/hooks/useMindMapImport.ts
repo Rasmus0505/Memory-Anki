@@ -8,10 +8,11 @@ import { useImportJobController } from '@/features/mindmap-import/hooks/useImpor
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import {
   deletePdfDocumentApi,
+  getPdfOcrCoverageApi,
   listPdfDocumentsApi,
   uploadPdfDocumentApi,
 } from '@/entities/knowledge-import/api'
-import type { PdfDocument } from '@/entities/knowledge-import/model'
+import type { PdfDocument, PdfOcrCoverage } from '@/entities/knowledge-import/model'
 import type {
   BatchImportMeta,
   ImportMode,
@@ -49,6 +50,7 @@ export function useMindMapImport({
   const [selectedPdfDocumentId, setSelectedPdfDocumentId] = useState('')
   const [pdfPageSelection, setPdfPageSelection] = useState('1')
   const [pdfLibraryLoading, setPdfLibraryLoading] = useState(false)
+  const [pdfOcrCoverage, setPdfOcrCoverage] = useState<PdfOcrCoverage | null>(null)
 
   const batch = useImportBatchState(setControllerError)
   const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -109,6 +111,24 @@ export function useMindMapImport({
   useEffect(() => {
     if (jobs.importOpen) void refreshPdfDocuments()
   }, [jobs.importOpen, refreshPdfDocuments])
+
+  useEffect(() => {
+    if (!jobs.importOpen || !selectedPdfDocumentId) {
+      setPdfOcrCoverage(null)
+      return
+    }
+    let cancelled = false
+    void getPdfOcrCoverageApi(selectedPdfDocumentId)
+      .then((coverage) => {
+        if (!cancelled) setPdfOcrCoverage(coverage)
+      })
+      .catch(() => {
+        if (!cancelled) setPdfOcrCoverage(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [jobs.importOpen, selectedPdfDocumentId, jobs.currentJobStatus])
 
   const setImportMode = (nextMode: ImportMode) => {
     setModeState(nextMode)
@@ -191,6 +211,7 @@ export function useMindMapImport({
     pdfPageSelection,
     setPdfPageSelection,
     pdfLibraryLoading,
+    pdfOcrCoverage,
     importCanAppend: Boolean(selectedNodeUid),
     importCanUndoLastImport: apply.canUndoLastImport,
     importExternalSyncKey: apply.externalSyncKey,

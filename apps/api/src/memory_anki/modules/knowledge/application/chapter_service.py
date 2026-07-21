@@ -15,10 +15,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.knowledge.domain.schemas import ChapterCreate
-from memory_anki.modules.palaces.api import (
-    get_palace_explicit_chapter_ids,
-    update_palace_chapter_binding,
-)
 from memory_anki.platform.application import UnitOfWork
 
 
@@ -45,21 +41,33 @@ def _subject_json(s) -> dict:
     }
 
 
-def _palace_out(p: Palace) -> dict:
-    schedules = list(p.review_schedules or [])
-    completed = sum(1 for item in schedules if item.completed)
-    pending_dates = sorted(
-        item.scheduled_date for item in schedules if not item.completed
-    )
+def _palace_out(p: Palace, session: Session | None = None) -> dict:
+    due_node_count = 0
+    mastery_percent = 0
+    next_due = None
+    mastered = bool(getattr(p, "mastered", False))
+    if session is not None:
+        from memory_anki.modules.reviews.api import get_palace_due_rollup
+
+        try:
+            projection = get_palace_due_rollup(session, p.id)
+            due_node_count = int(projection.get("due_node_count") or 0)
+            mastery_percent = int(projection.get("mastery_percent") or 0)
+            next_due = projection.get("next_review_at")
+            mastered = bool(projection.get("mastered"))
+        except ValueError:
+            pass
     return {
         "id": p.id,
         "title": p.title,
         "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
-        "mastered": bool(p.mastered),
+        "mastered": mastered,
         "archived": bool(p.archived),
-        "review_stage_completed": completed,
-        "review_stage_total": len(schedules),
-        "next_due_date": pending_dates[0].isoformat() if pending_dates else None,
+        "review_stage_completed": mastery_percent,
+        "review_stage_total": 100,
+        "due_node_count": due_node_count,
+        "mastery_percent": mastery_percent,
+        "next_due_date": next_due[:10] if isinstance(next_due, str) and next_due else None,
     }
 
 
@@ -71,7 +79,7 @@ def get_chapter_detail(session: Session, chapter_id: int) -> dict | None:
             selectinload(Chapter.children).selectinload(Chapter.children),
             selectinload(Chapter.children).selectinload(Chapter.palaces),
             selectinload(Chapter.palaces).selectinload(Palace.pegs),
-            selectinload(Chapter.palaces).selectinload(Palace.review_schedules),
+            selectinload(Chapter.palaces),
         )
         .filter_by(id=chapter_id)
         .first()
@@ -103,7 +111,7 @@ def get_chapter_detail(session: Session, chapter_id: int) -> dict | None:
             "children": [chapter_json(ch) for ch in (c.children or [])],
             "breadcrumbs": breadcrumbs,
         },
-        "palaces": [_palace_out(p) for p in c.palaces],
+        "palaces": [_palace_out(p, session) for p in c.palaces],
     }
 
 
@@ -214,48 +222,3 @@ def delete_chapter(
     uow.commit()
     maybe_create_rolling_backup("rolling-delete-chapter")
     return {"ok": True}
-
-
-def get_palace_chapters(session: Session, palace_id: int) -> list[dict] | None:
-    p = session.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return None
-    explicit_ids = get_palace_explicit_chapter_ids(session, p)
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "subject_id": c.subject_id,
-            "parent_id": c.parent_id,
-            "is_explicit": c.id in explicit_ids,
-            "subject": {"id": c.subject.id, "name": c.subject.name}
-            if c.subject
-            else None,
-        }
-        for c in p.chapters
-    ]
-
-
-def link_palace_chapters(
-    session: Session,
-    palace_id: int,
-    data: dict,
-    *,
-    uow: UnitOfWork,
-) -> dict | None:
-    p = session.query(Palace).filter_by(id=palace_id).first()
-    if not p:
-        return None
-    ids = [int(chapter_id) for chapter_id in data.get("chapter_ids", [])]
-    primary_chapter_id = data.get("primary_chapter_id")
-    next_primary = int(primary_chapter_id) if primary_chapter_id is not None else None
-    expanded_ids = update_palace_chapter_binding(
-        session,
-        p,
-        chapter_ids=ids,
-        preferred_primary_chapter_id=next_primary,
-    )
-    uow.commit()
-    uow.refresh(p)
-    maybe_create_rolling_backup("rolling-link-chapters")
-    return {"ok": True, "count": len(expanded_ids), "primary_chapter_id": p.primary_chapter_id}

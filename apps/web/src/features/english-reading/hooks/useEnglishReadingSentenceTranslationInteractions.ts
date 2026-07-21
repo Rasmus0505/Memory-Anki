@@ -66,7 +66,7 @@ export function useEnglishReadingSentenceTranslationInteractions({
     useState<SentenceTranslationPanelState | null>(null);
 
   const readingContentRef = useRef<HTMLDivElement | null>(null);
-  const sentenceTranslationTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const sentenceTranslationTriggerRef = useRef<HTMLDivElement | null>(null);
   const sentenceTranslationPanelRef = useRef<HTMLDivElement | null>(null);
   const sentenceTranslationCacheRef = useRef<
     Map<string, ReadingSentenceTranslationResponse>

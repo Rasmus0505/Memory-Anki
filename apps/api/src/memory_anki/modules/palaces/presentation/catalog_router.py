@@ -28,10 +28,6 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     get_explicit_chapter_ids_by_palace,
 )
 from memory_anki.modules.palaces.presentation.response_models import PalaceListResponse
-from memory_anki.modules.reviews.api import (
-    get_algorithm_stage_labels,
-    trigger_review_for_palace,
-)
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -44,8 +40,7 @@ router = APIRouter()
 def _precomputed_palace_serialization_context(s: Session, palaces) -> tuple[dict[int, set[int]], list[str]]:
     palace_ids = [p.id for p in palaces]
     explicit_map = get_explicit_chapter_ids_by_palace(s, palace_ids)
-    stage_labels = get_algorithm_stage_labels(s) if palace_ids else []
-    return explicit_map, stage_labels
+    return explicit_map, []
 
 
 @router.get("/palaces", response_model=PalaceListResponse)
@@ -92,30 +87,33 @@ def api_list(
     }
 
 
+def _cached_palace_serializer(serialize_fn, palaces, explicit_map, stage_labels):
+    """Serialize each palace once; chapter + model grouping share the same payload."""
+    cache: dict[int, dict] = {}
+
+    def serialize(palace, session):
+        cached = cache.get(palace.id)
+        if cached is not None:
+            return dict(cached)
+        payload = serialize_fn(
+            palace,
+            session,
+            precomputed_explicit_chapter_ids=explicit_map.get(palace.id, set()),
+            precomputed_stage_labels=stage_labels,
+        )
+        cache[palace.id] = payload
+        return dict(payload)
+
+    return serialize
+
+
 @router.get("/palaces/grouped")
 def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
-    chapter_grouped = build_chapter_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_card_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
-    model_grouped = build_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_card_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
+    serialize = _cached_palace_serializer(palace_card_json, palaces, explicit_map, stage_labels)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
+    model_grouped = build_grouped_palace_list(s, palaces, serialize)
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
@@ -127,26 +125,9 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
 def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
-    chapter_grouped = build_chapter_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_summary_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
-    model_grouped = build_grouped_palace_list(
-        s,
-        palaces,
-        lambda p, sess: palace_summary_json(
-            p,
-            sess,
-            precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
-        ),
-    )
+    serialize = _cached_palace_serializer(palace_summary_json, palaces, explicit_map, stage_labels)
+    chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
+    model_grouped = build_grouped_palace_list(s, palaces, serialize)
     return {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
@@ -202,7 +183,6 @@ def api_instantiate_palace_template(
     response: dict = {}
 
     def prepare_atomic_side_effects(palace) -> None:
-        trigger_review_for_palace(s, palace.id, commit=False)
         response.update(palace_json(palace, s))
         mutation_store.save(mutation_identity, response)
 

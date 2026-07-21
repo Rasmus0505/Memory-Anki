@@ -7,6 +7,8 @@ describe('pageHistoryRoute', () => {
     expect(resolvePageHistoryKey('/palaces/42/practice')).toBe('palace:practice:42')
     expect(resolvePageHistoryKey('/segments/8/practice')).toBe('segment:practice:8')
     expect(resolvePageHistoryKey('/english/courses/7')).toBe('english:course:7')
+    expect(resolvePageHistoryKey('/english/listening/courses/7')).toBe('english:course:7')
+    expect(resolvePageHistoryKey('/english/reading/materials/3')).toBe('english:material:3')
     expect(resolvePageHistoryKey('/review/session/9')).toBe('review:session:9')
   })
 

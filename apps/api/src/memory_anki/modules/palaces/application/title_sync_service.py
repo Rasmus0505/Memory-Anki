@@ -39,9 +39,6 @@ from .palace_chapter_binding import (
     sync_palace_titles_from_chapter as sync_palace_titles_from_chapter,
 )
 from .palace_review_rollups import (
-    _next_pending_palace_schedule as _next_pending_palace_schedule,
-)
-from .palace_review_rollups import (
     _review_datetime_is_later_today as _review_datetime_is_later_today,
 )
 from .palace_review_rollups import (
@@ -96,7 +93,6 @@ from .palace_view_resolvers import (
 __all__ = [
     "_chapter_depth",
     "_chapter_outline_path",
-    "_next_pending_palace_schedule",
     "_palace_outline_sort_key",
     "_review_datetime_is_later_today",
     "_subject_sort_key",

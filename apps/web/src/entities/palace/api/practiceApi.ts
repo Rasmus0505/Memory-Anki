@@ -6,7 +6,6 @@ import {
   type SessionProgressPayload,
 } from '@/entities/session/api'
 import type {
-  ChapterSummary,
   PalaceEditorMeta,
   PalaceVersionDetail,
   PalaceVersionListResponse,
@@ -56,20 +55,35 @@ export function restorePalaceVersionApi(id: number, versionId: number) {
   })
 }
 
-export function getPalaceChaptersApi(id: number) {
-  return request<Array<ChapterSummary & { subject?: { id: number; name: string } | null }>>(
-    `/palaces/${id}/chapters`,
-  )
+
+export interface PalaceKnowledgeBinding {
+  palace_id: number
+  subjects: Array<{ id: number; name: string; color: string; sort_order?: number }>
+  explicit_chapter_ids: number[]
+  inherited_chapter_ids: number[]
+  primary_chapter_id: number | null
+  binding_revision: number
+  chapter_count?: number
 }
 
-export function linkPalaceChaptersApi(
+export function updatePalaceKnowledgeBindingApi(
   palaceId: number,
-  data: { chapter_ids: number[]; primary_chapter_id?: number | null },
+  data: {
+    subject_ids: number[]
+    chapter_ids: number[]
+    primary_chapter_id: number | null
+    base_revision: number
+    operation_id: string
+  },
 ) {
-  return request<{
-    chapters: Array<ChapterSummary & { subject?: { id: number; name: string } | null }>
-  }>(`/palaces/${palaceId}/chapters`, {
+  return request<PalaceKnowledgeBinding>(`/palaces/${palaceId}/knowledge-binding`, {
     method: 'PUT',
     body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `palace:${palaceId}:knowledge-binding`,
+      coalesceKey: `palace:${palaceId}:knowledge-binding`,
+      description: '保存宫殿学科与章节关联',
+      replayMode: 'auto',
+    },
   })
 }

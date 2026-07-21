@@ -24,10 +24,25 @@ import {
   saveAiPromptSceneDefaultApi,
   updateAiPromptTemplatesApi,
 } from '@/features/profile/api'
+import {
+  filterBlocksForScene,
+  groupBlocksByLayer,
+} from '@/entities/ai-runtime'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Textarea } from '@/shared/components/ui/textarea'
+
+const SCENE_CATEGORY_ORDER = [
+  '脑图导入',
+  'OCR 与整理',
+  '脑图分卡',
+  '记忆与复习',
+  '做题',
+  '英语',
+  '批量生成',
+  '其他',
+]
 
 function buildDraftMap(items: AiPromptTemplate[]) {
   return Object.fromEntries(items.map((item) => [item.key, item.template]))
@@ -48,6 +63,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
   const [resettingAll, setResettingAll] = useState(false)
   const [evaluatingKeys, setEvaluatingKeys] = useState<Record<string, boolean>>({})
   const [publishingKeys, setPublishingKeys] = useState<Record<string, boolean>>({})
+  const [showCompatibilityScenes, setShowCompatibilityScenes] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -224,10 +240,46 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
       </div>
 
       {activeTab === 'scenes' ? (
-        <div className="space-y-4">
-          {scenes.map((scene) => {
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              按场景分类展示；每个场景只列出相关提示词块，避免把分卡/OCR/做题块混在一起。
+            </p>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={showCompatibilityScenes}
+                onChange={(event) => setShowCompatibilityScenes(event.target.checked)}
+              />
+              显示兼容入口场景
+            </label>
+          </div>
+          {SCENE_CATEGORY_ORDER
+            .map((category) => {
+              const categoryScenes = scenes.filter((scene) => {
+                const sceneCategory = scene.category || '其他'
+                if (sceneCategory !== category) return false
+                if (!showCompatibilityScenes && scene.is_compatibility) return false
+                return true
+              })
+              return { category, categoryScenes }
+            })
+            .filter((group) => group.categoryScenes.length > 0)
+            .map(({ category, categoryScenes }) => (
+            <div key={category} className="space-y-4">
+              <h2 className="text-sm font-semibold tracking-wide text-muted-foreground">{category}</h2>
+              {categoryScenes.map((scene) => {
             const draft = sceneDrafts[scene.scene_key] ?? scene
             const versions = sceneVersions[scene.scene_key] ?? []
+            const recommended = new Set(scene.recommended_block_keys ?? [])
+            const sceneBlocks = filterBlocksForScene(
+              blocks,
+              scene.scene_key,
+              draft,
+              draft.block_keys,
+            )
+            const blockGroups = groupBlocksByLayer(sceneBlocks)
             return (
               <Card key={scene.scene_key}>
                 <CardHeader className="space-y-2">
@@ -240,38 +292,59 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                     <Badge variant="outline">{scene.scene_key}</Badge>
                     <Badge variant="secondary">{draft.block_keys.length} 个提示词块</Badge>
                     <Badge variant="outline">约 {scene.estimated_tokens} Token</Badge>
+                    {scene.is_compatibility ? <Badge variant="outline">兼容入口</Badge> : null}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {blocks.filter((block) => block.is_active).map((block) => (
-                      <label key={block.key} className="flex items-start gap-2 rounded-lg border p-3 text-sm">
-                        <input
-                          type="checkbox"
-                          className="mt-1 size-4"
-                          checked={draft.block_keys.includes(block.key)}
-                          onChange={(event) => {
-                            setSceneDrafts((current) => {
-                              const currentDraft = current[scene.scene_key] ?? scene
-                              return {
-                                ...current,
-                                [scene.scene_key]: {
-                                  ...currentDraft,
-                                  block_keys: event.target.checked
-                                    ? [...currentDraft.block_keys, block.key]
-                                    : currentDraft.block_keys.filter((key) => key !== block.key),
-                                },
-                              }
-                            })
-                          }}
-                        />
-                        <span>
-                          <span className="block font-medium">{block.label}</span>
-                          <span className="text-xs text-muted-foreground">{block.description}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  {sceneBlocks.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                      本场景使用完整场景提示词，无可勾选模块块。
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {blockGroups.map((group) => (
+                        <div key={group.layer} className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {group.label}
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {group.blocks.map((block) => (
+                              <label key={block.key} className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 size-4"
+                                  checked={draft.block_keys.includes(block.key)}
+                                  onChange={(event) => {
+                                    setSceneDrafts((current) => {
+                                      const currentDraft = current[scene.scene_key] ?? scene
+                                      return {
+                                        ...current,
+                                        [scene.scene_key]: {
+                                          ...currentDraft,
+                                          block_keys: event.target.checked
+                                            ? [...currentDraft.block_keys, block.key]
+                                            : currentDraft.block_keys.filter((key) => key !== block.key),
+                                        },
+                                      }
+                                    })
+                                  }}
+                                />
+                                <span>
+                                  <span className="block font-medium">
+                                    {block.label}
+                                    {recommended.has(block.key) ? (
+                                      <Badge variant="secondary" className="ml-2 align-middle text-[10px]">推荐</Badge>
+                                    ) : null}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{block.description}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <label className="grid gap-2 text-sm">
                     <span className="font-medium">场景特殊提示词</span>
                     <Textarea
@@ -316,7 +389,9 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
                 </CardContent>
               </Card>
             )
-          })}
+              })}
+            </div>
+          ))}
         </div>
       ) : null}
 

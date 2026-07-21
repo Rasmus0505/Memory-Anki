@@ -1,6 +1,7 @@
 """backups lifecycle tests isolated to tmp_path."""
 import json
 import os
+from datetime import timedelta
 
 import pytest
 
@@ -13,9 +14,10 @@ def backup_env(tmp_path, monkeypatch):
     app_home = tmp_path / "home"
     backups = app_home / "data" / "backups"
     full_dir = backups / "full"
+    rolling_dir = backups / "rolling"
     rescue_dir = backups / "rescue"
     db_path = app_home / "data" / "memory_palace.db"
-    for folder in (full_dir, rescue_dir, db_path.parent):
+    for folder in (full_dir, rolling_dir, rescue_dir, db_path.parent):
         folder.mkdir(parents=True, exist_ok=True)
     db_path.write_bytes(b"fake-sqlite-content")
 
@@ -24,6 +26,7 @@ def backup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(storage_backup, "DB_PATH", db_path)
     monkeypatch.setattr(backup_lifecycle, "DB_PATH", db_path)
     monkeypatch.setattr(backup_lifecycle, "FULL_BACKUPS_DIR", full_dir)
+    monkeypatch.setattr(backup_lifecycle, "ROLLING_BACKUPS_DIR", rolling_dir)
     monkeypatch.setattr(backup_lifecycle, "RESCUE_BACKUPS_DIR", rescue_dir)
     monkeypatch.setattr(backups_router, "list_backups", backup_lifecycle.list_backups)
     monkeypatch.setattr(
@@ -39,7 +42,13 @@ def backup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(storage_backup, "ensure_runtime_dirs", lambda: None)
     monkeypatch.setattr(storage_backup, "checkpoint_sqlite_wal", lambda **kwargs: None)
     monkeypatch.setattr(backup_lifecycle, "analyze_database", lambda: None)
-    return {"app_home": app_home, "full": full_dir, "rescue": rescue_dir, "db": db_path}
+    return {
+        "app_home": app_home,
+        "full": full_dir,
+        "rolling": rolling_dir,
+        "rescue": rescue_dir,
+        "db": db_path,
+    }
 
 
 def test_create_full_backup_writes_manifest_and_db(backup_env):
@@ -48,6 +57,27 @@ def test_create_full_backup_writes_manifest_and_db(backup_env):
     assert folder.parent == backup_env["full"]
     assert (folder / "manifest.json").exists()
     assert (folder / "data" / "memory_palace.db").read_bytes() == b"fake-sqlite-content"
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest.get("full") is True
+    assert manifest.get("scope") == "full"
+
+
+def test_create_rolling_backup_uses_rolling_dir_and_light_scope(backup_env):
+    folder = backup_lifecycle.create_rolling_backup("rolling-unit")
+
+    assert folder.parent == backup_env["rolling"]
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest.get("full") is False
+    assert manifest.get("scope") == "rolling"
+    assert (folder / "data" / "memory_palace.db").exists()
+
+
+def test_create_rescue_snapshot_is_light(backup_env):
+    folder = backup_lifecycle.create_rescue_snapshot("before-test")
+
+    assert folder.parent == backup_env["rescue"]
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest.get("full") is False
 
 
 def test_list_backups_reads_created_folder(backup_env):
@@ -60,6 +90,12 @@ def test_list_backups_reads_created_folder(backup_env):
     assert items[0]["reason"] == "unit-test"
     assert items[0]["has_database"] is True
     assert "database" in items[0]["included_items"]
+
+
+def test_list_backups_includes_rolling_kind(backup_env):
+    backup_lifecycle.create_rolling_backup("rolling-unit")
+    items = backup_lifecycle.list_backups()
+    assert any(item["kind"] == "rolling" for item in items)
 
 
 def test_list_backups_uses_manifest_database_relative_path(backup_env):
@@ -127,6 +163,45 @@ def test_prune_old_backups_keeps_newest_directories(tmp_path):
 
     assert removed == 2
     assert {child.name for child in root.iterdir()} == {"backup-2", "backup-3"}
+
+
+def test_rolling_and_full_pruned_separately(backup_env, monkeypatch):
+    monkeypatch.setattr(backup_lifecycle, "MAX_FULL_BACKUPS", 2)
+    monkeypatch.setattr(backup_lifecycle, "MAX_ROLLING_BACKUPS", 2)
+    counter = {"n": 0}
+
+    def unique_slug(now=None):
+        counter["n"] += 1
+        return f"20260721-10000{counter['n']}"
+
+    monkeypatch.setattr(backup_lifecycle, "timestamp_slug", unique_slug)
+
+    for _ in range(3):
+        backup_lifecycle.create_full_backup("full")
+        backup_lifecycle.create_rolling_backup("rolling")
+
+    assert len(list(backup_env["full"].iterdir())) == 2
+    assert len(list(backup_env["rolling"].iterdir())) == 2
+
+
+def test_daily_full_backup_exists_ignores_rolling_only(backup_env):
+    backup_lifecycle.create_rolling_backup("rolling-only")
+    assert backup_lifecycle._daily_full_backup_exists() is False
+
+    backup_lifecycle.create_full_backup("startup")
+    assert backup_lifecycle._daily_full_backup_exists() is True
+
+
+def test_periodic_and_shutdown_use_rolling(backup_env, monkeypatch):
+    monkeypatch.setattr(backup_lifecycle, "AUTO_ROLLING_BACKUP_INTERVAL", timedelta(seconds=0))
+    periodic = backup_lifecycle.maybe_create_periodic_backup()
+    shutdown = backup_lifecycle.create_shutdown_backup()
+
+    assert periodic is not None
+    assert periodic.parent == backup_env["rolling"]
+    assert shutdown is not None
+    assert shutdown.parent == backup_env["rolling"]
+    assert not any(backup_env["full"].iterdir())
 
 
 def test_backups_route_lists_tmp_backups(backup_env, make_client):

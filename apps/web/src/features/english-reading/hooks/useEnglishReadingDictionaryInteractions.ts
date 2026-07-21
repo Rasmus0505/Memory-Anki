@@ -199,7 +199,7 @@ export function useEnglishReadingDictionaryInteractions({
           loading: false,
         });
         void playDictionaryPronunciation(cachedEntry, {
-          allowTtsFallback: false,
+          allowTtsFallback: true,
         });
         return;
       }
@@ -241,7 +241,7 @@ export function useEnglishReadingDictionaryInteractions({
           };
         });
         void playDictionaryPronunciation(entry, {
-          allowTtsFallback: false,
+          allowTtsFallback: true,
         });
       } catch (error) {
         if (dictionaryRequestTokenRef.current !== requestToken) return;

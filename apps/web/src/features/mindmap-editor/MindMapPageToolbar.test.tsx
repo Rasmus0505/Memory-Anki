@@ -36,6 +36,21 @@ describe('MindMapPageToolbar', () => {
     expect(screen.queryByRole('button', { name: '复习' })).toBeNull()
   })
 
+  it('places rating mode action first in the toolbar', () => {
+    render(
+      <MindMapPageToolbar
+        ratingAction={{ label: '评分', onClick: vi.fn() }}
+        modeToggle={{ label: '编辑', onClick: vi.fn() }}
+        moreActions={[{ label: '本轮评分记录', onClick: vi.fn() }]}
+      />,
+    )
+
+    const buttons = screen.getAllByRole('button')
+    expect(buttons[0]?.textContent).toContain('评分')
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '更多脑图操作' })).toBeTruthy()
+  })
+
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
     const onImport = vi.fn()
     render(

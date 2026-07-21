@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { vi } from "vitest";
 import type {
   ReadingDictionaryEntry,
@@ -420,10 +420,17 @@ export function setupEnglishReadingPageTest() {
   });
 }
 
-export function renderPage(initialEntries = ["/english-reading"]) {
+export function renderPage(initialEntries = ["/english/reading"]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <EnglishReadingPage />
+      <Routes>
+        <Route path="/english/reading" element={<EnglishReadingPage />} />
+        <Route
+          path="/english/reading/materials/:materialId"
+          element={<EnglishReadingPage />}
+        />
+        <Route path="/english-reading" element={<EnglishReadingPage />} />
+      </Routes>
     </MemoryRouter>,
   );
 }

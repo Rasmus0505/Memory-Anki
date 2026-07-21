@@ -3,6 +3,7 @@ import type { RevealState } from '@/entities/session/model'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/entities/mindmap-document'
 import {
+  advanceBulkRevealState,
   advanceRevealStateForNodeClick,
   checkpointNodesRevealed,
   buildInitialRevealState,
@@ -15,6 +16,7 @@ import {
   hideRevealStateBranch,
   parseEditorDoc,
   pourCheckpointRevealState,
+  type BulkRevealScope,
   type RevealFlowMode,
   type RevealFlowOptions,
   sanitizeRedNodeIds,
@@ -28,13 +30,17 @@ interface UseRevealSessionOptions {
   resetCompletedOnDocChange?: boolean
   mode?: RevealFlowMode
   checkpointIds?: Iterable<string>
+  /** Frozen due node UIDs for formal review — auto-reveal everything else. */
+  focusNodeIds?: Iterable<string>
 }
 
 const EMPTY_CHECKPOINT_IDS: string[] = []
+const EMPTY_FOCUS_NODE_IDS: string[] = []
 
 type RevealAction =
   | { type: 'advance'; nodeId: string }
   | { type: 'hide'; nodeId: string }
+  | { type: 'bulk'; nodeId: string; scope: BulkRevealScope }
 
 export function useRevealSession({
   title,
@@ -43,6 +49,7 @@ export function useRevealSession({
   resetCompletedOnDocChange = false,
   mode = 'standard',
   checkpointIds = EMPTY_CHECKPOINT_IDS,
+  focusNodeIds = EMPTY_FOCUS_NODE_IDS,
 }: UseRevealSessionOptions) {
   const parsedDoc = React.useMemo(
     () => parseEditorDoc(editorState?.editor_doc ?? null),
@@ -59,9 +66,21 @@ export function useRevealSession({
     () => JSON.parse(checkpointIdsKey) as string[],
     [checkpointIdsKey],
   )
+  const focusNodeIdsKey = React.useMemo(
+    () => JSON.stringify(Array.from(focusNodeIds, (value) => String(value || '').trim())),
+    [focusNodeIds],
+  )
+  const normalizedFocusNodeIds = React.useMemo(
+    () => JSON.parse(focusNodeIdsKey) as string[],
+    [focusNodeIdsKey],
+  )
   const revealOptions = React.useMemo<RevealFlowOptions>(
-    () => ({ mode, checkpointIds: normalizedCheckpointIds }),
-    [mode, normalizedCheckpointIds],
+    () => ({
+      mode,
+      checkpointIds: normalizedCheckpointIds,
+      focusNodeIds: normalizedFocusNodeIds,
+    }),
+    [mode, normalizedCheckpointIds, normalizedFocusNodeIds],
   )
   const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(
     () => buildInitialRevealState(root, initialSnapshot?.revealMap ?? null, revealOptions),
@@ -73,7 +92,14 @@ export function useRevealSession({
   const [docVersion, setDocVersion] = React.useState(0)
   const [hoveredNodeId, setHoveredNodeId] = React.useState<string | null>(null)
   const revealMapRef = React.useRef(revealMap)
+  /** Live hover (cleared on mouseleave). */
   const hoveredNodeIdRef = React.useRef<string | null>(null)
+  /**
+   * Last non-null hover for A/S bulk flip. Survives mouseleave caused by
+   * reveal re-renders so the second phase press still has an anchor.
+   * Cleared only on session reset (not on transient leave).
+   */
+  const stickyBulkTargetNodeIdRef = React.useRef<string | null>(null)
   const revealActionQueueRef = React.useRef<RevealAction[]>([])
   const revealActionFrameRef = React.useRef<number | null>(null)
 
@@ -136,17 +162,31 @@ export function useRevealSession({
     revealActionQueueRef.current = []
     if (actions.length === 0) return
 
-    React.startTransition(() => {
-      setRevealMap((current) =>
-        actions.reduce((nextRevealMap, action) => {
-          if (action.type === 'advance') {
-            return advanceRevealStateForNodeClick(action.nodeId, nodeMap, nextRevealMap)
-          }
-          return hideRevealStateBranch(action.nodeId, nodeMap, nextRevealMap)
-        }, current),
-      )
-    })
-  }, [nodeMap])
+    // Urgent update: flip-card multi-click must paint on the next frame.
+    // Do not wrap in startTransition — that deprioritizes reveal under load.
+    setRevealMap((current) =>
+      actions.reduce((nextRevealMap, action) => {
+        if (action.type === 'advance') {
+          return advanceRevealStateForNodeClick(
+            action.nodeId,
+            nodeMap,
+            nextRevealMap,
+            revealOptions,
+            root,
+          )
+        }
+        if (action.type === 'bulk') {
+          return advanceBulkRevealState(
+            action.nodeId,
+            nodeMap,
+            nextRevealMap,
+            action.scope,
+          )
+        }
+        return hideRevealStateBranch(action.nodeId, nodeMap, nextRevealMap)
+      }, current),
+    )
+  }, [nodeMap, revealOptions, root])
 
   const enqueueRevealAction = React.useCallback(
     (action: RevealAction) => {
@@ -187,8 +227,40 @@ export function useRevealSession({
   const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     hoveredNodeIdRef.current = nodeId
+    // Only advance sticky on enter; mouseleave must not wipe the bulk-flip anchor.
+    if (nodeId) stickyBulkTargetNodeIdRef.current = nodeId
     setHoveredNodeId(nodeId)
   }, [])
+
+  /**
+   * Bulk two-phase flip under hover, with selection then sticky-hover fallbacks.
+   * Priority: live hover → explicit selection fallback → last hovered card.
+   * Sticky survives mouseleave from reveal re-renders so A/S phase-2 still works.
+   */
+  const handleBulkReveal = React.useCallback(
+    (scope: BulkRevealScope, fallbackNodeId: string | null = null) => {
+      const targetId =
+        hoveredNodeIdRef.current ?? fallbackNodeId ?? stickyBulkTargetNodeIdRef.current
+      if (!targetId) return
+      stickyBulkTargetNodeIdRef.current = targetId
+      enqueueRevealAction({ type: 'bulk', nodeId: targetId, scope })
+    },
+    [enqueueRevealAction],
+  )
+
+  const handleBulkRevealSubtree = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      handleBulkReveal('subtree', fallbackNodeId)
+    },
+    [handleBulkReveal],
+  )
+
+  const handleBulkRevealDirectChildren = React.useCallback(
+    (fallbackNodeId: string | null = null) => {
+      handleBulkReveal('direct-children', fallbackNodeId)
+    },
+    [handleBulkReveal],
+  )
 
   const handleSpacePour = React.useCallback(() => {
     if (mode !== 'segment-checkpoint') return
@@ -209,6 +281,8 @@ export function useRevealSession({
     setRevealMap(buildInitialRevealState(root, null, revealOptions))
     setRedNodeIds(new Set<string>())
     setCompleted(false)
+    hoveredNodeIdRef.current = null
+    stickyBulkTargetNodeIdRef.current = null
     setHoveredNodeId(null)
   }, [revealOptions, root])
 
@@ -257,6 +331,9 @@ export function useRevealSession({
     handleNodeClick,
     handleNodeContextMenu,
     handleNodeHover,
+    handleBulkReveal,
+    handleBulkRevealSubtree,
+    handleBulkRevealDirectChildren,
     handleSpacePour,
   }
 }

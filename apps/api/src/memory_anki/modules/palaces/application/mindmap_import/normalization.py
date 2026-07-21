@@ -199,18 +199,25 @@ def build_editor_doc(
 
 
 def source_node_to_editor_node(source_node: dict[str, Any], *, preserve_line_breaks: bool) -> dict[str, Any]:
-    rich_text_html = source_node.get("rich_text_html")
-    has_rich_text = isinstance(rich_text_html, str) and rich_text_html != ""
+    plain = str(source_node.get("text") or "")
+    rich_text_html = normalize_rich_text_html(
+        source_node.get("rich_text_html"),
+        text=plain,
+        emphasis_marks=source_node.get("emphasis_marks"),
+        preserve_line_breaks=preserve_line_breaks,
+    )
     data: dict[str, Any] = {
         "uid": uuid.uuid4().hex,
-        "text": rich_text_html if has_rich_text else source_node["text"],
+        "text": plain,
     }
-    if has_rich_text:
+    if rich_text_html:
+        data["text"] = rich_text_html
         data["richText"] = True
     return {
         "data": data,
         "children": [
             source_node_to_editor_node(child, preserve_line_breaks=preserve_line_breaks)
-            for child in source_node["children"]
+            for child in (source_node.get("children") or [])
+            if isinstance(child, dict)
         ],
     }

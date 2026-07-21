@@ -35,6 +35,8 @@ export function EnglishReadingDialogs({
   sentenceTranslationTrigger,
   sentenceTranslationTriggerRef,
   onConfirmSentenceTranslation,
+  onCopySentenceSelection,
+  onSaveSelectionToPattern,
   dictionaryPanel,
   dictionaryPanelRef,
   onCloseDictionaryPanel,
@@ -43,6 +45,10 @@ export function EnglishReadingDialogs({
   onToggleDictionaryPin,
   playDictionaryPronunciation,
   supportsSpeechSynthesis,
+  onSaveVocabulary,
+  savingVocabulary = false,
+  onSaveToPattern,
+  savingPattern = false,
   sentenceTranslationPanel,
   sentenceTranslationPanelRef,
   onCloseSentenceTranslationPanel,
@@ -62,8 +68,10 @@ export function EnglishReadingDialogs({
   formatDifficultyDelta,
 }: {
   sentenceTranslationTrigger: SentenceTranslationTriggerState | null;
-  sentenceTranslationTriggerRef: RefObject<HTMLButtonElement | null>;
+  sentenceTranslationTriggerRef: RefObject<HTMLDivElement | null>;
   onConfirmSentenceTranslation: () => void;
+  onCopySentenceSelection?: () => void;
+  onSaveSelectionToPattern?: () => void;
   dictionaryPanel: DictionaryPanelState | null;
   dictionaryPanelRef: RefObject<HTMLDivElement | null>;
   onCloseDictionaryPanel: () => void;
@@ -79,6 +87,10 @@ export function EnglishReadingDialogs({
     options: { allowTtsFallback: boolean },
   ) => Promise<void>;
   supportsSpeechSynthesis: boolean;
+  onSaveVocabulary?: () => void;
+  savingVocabulary?: boolean;
+  onSaveToPattern?: () => void;
+  savingPattern?: boolean;
   sentenceTranslationPanel: SentenceTranslationPanelState | null;
   sentenceTranslationPanelRef: RefObject<HTMLDivElement | null>;
   onCloseSentenceTranslationPanel: () => void;
@@ -107,22 +119,50 @@ export function EnglishReadingDialogs({
   return (
     <>
       {sentenceTranslationTrigger ? (
-        <button
+        <div
           ref={sentenceTranslationTriggerRef}
-          type="button"
-          data-testid="sentence-translation-trigger"
-          onClick={onConfirmSentenceTranslation}
+          data-testid="sentence-action-bar"
+          role="toolbar"
+          aria-label="选中句子操作"
           style={{
             position: "fixed",
             top: sentenceTranslationTrigger.top,
             left: sentenceTranslationTrigger.left,
             width: SENTENCE_TRANSLATION_TRIGGER_WIDTH,
-            height: SENTENCE_TRANSLATION_TRIGGER_HEIGHT,
+            minHeight: SENTENCE_TRANSLATION_TRIGGER_HEIGHT,
           }}
-          className="z-[144] inline-flex items-center justify-center rounded-full border border-info/20 bg-white/92 px-4 text-sm font-medium text-info shadow-soft backdrop-blur-sm transition hover:border-info/30 hover:bg-info/5 hover:text-primary"
+          className="z-[144] inline-flex items-center justify-center gap-0.5 rounded-full border border-info/20 bg-white/95 p-1 text-sm font-medium text-info shadow-soft backdrop-blur-sm"
         >
-          翻译这句
-        </button>
+          <button
+            type="button"
+            data-testid="sentence-translation-trigger"
+            onClick={onConfirmSentenceTranslation}
+            className="inline-flex min-h-9 flex-1 items-center justify-center rounded-full px-2.5 text-xs font-medium transition hover:bg-info/10 hover:text-primary sm:text-sm"
+          >
+            翻译
+          </button>
+          {onSaveSelectionToPattern ? (
+            <button
+              type="button"
+              data-testid="sentence-action-pattern"
+              onClick={onSaveSelectionToPattern}
+              disabled={savingPattern}
+              className="inline-flex min-h-9 flex-1 items-center justify-center rounded-full px-2.5 text-xs font-medium transition hover:bg-info/10 hover:text-primary sm:text-sm disabled:opacity-50"
+            >
+              句模
+            </button>
+          ) : null}
+          {onCopySentenceSelection ? (
+            <button
+              type="button"
+              data-testid="sentence-action-copy"
+              onClick={onCopySentenceSelection}
+              className="inline-flex min-h-9 flex-1 items-center justify-center rounded-full px-2.5 text-xs font-medium transition hover:bg-info/10 hover:text-primary sm:text-sm"
+            >
+              复制
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <Dialog open={dictionaryPanel !== null} onOpenChange={(open) => !open && onCloseDictionaryPanel()} modal={false}>
@@ -309,6 +349,22 @@ export function EnglishReadingDialogs({
                         : dictionaryPanel.entry.cachedAt || "刚刚"}
                     </span>
                   </div>
+
+                  {onSaveVocabulary ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-1 w-full rounded-xl"
+                      disabled={savingVocabulary}
+                      onClick={onSaveVocabulary}
+                      data-testid="dictionary-save-vocabulary"
+                    >
+                      {savingVocabulary ? (
+                        <LoaderCircle className="mr-2 size-4 animate-spin" />
+                      ) : null}
+                      加入生词本
+                    </Button>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -421,6 +477,25 @@ export function EnglishReadingDialogs({
                   </div>
                 )}
               </div>
+
+              {onSaveToPattern &&
+              sentenceTranslationPanel.originalText.trim() &&
+              !sentenceTranslationPanel.loading ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  disabled={savingPattern}
+                  onClick={onSaveToPattern}
+                  data-testid="sentence-save-pattern"
+                >
+                  {savingPattern ? (
+                    <LoaderCircle className="mr-2 size-4 animate-spin" />
+                  ) : null}
+                  加入句模
+                </Button>
+              ) : null}
             </div>
           </DialogContent>
         ) : null}

@@ -39,6 +39,36 @@ describe('editorDocToGraph review edge styles', () => {
 
     expect(graph.edges[0].renderStyle).toBeUndefined()
   })
+
+  it('preserves yellow emphasis markup on graph nodes for all modes', () => {
+    const highlighted =
+      '<div><span data-emphasis="highlight" style="background-color:#fef08c;color:inherit">重点</span></div>'
+    const withEmphasis: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: highlighted, uid: 'child-hl' },
+            children: [],
+          },
+        ],
+      },
+    }
+
+    const editGraph = editorDocToGraph(withEmphasis)
+    const reviewGraph = editorDocToGraph(withEmphasis, {
+      revealMap: { root: 'revealed', 'child-hl': 'revealed' },
+    })
+
+    for (const graph of [editGraph, reviewGraph]) {
+      const node = graph.nodes.find((item) => item.id === 'child-hl')
+      expect(String(node?.metadata?.text)).toContain('data-emphasis="highlight"')
+      expect(String(node?.metadata?.text)).toContain('重点')
+      expect(node?.metadata?.richText).toBe(true)
+      // Plain label stays unstyled for measurement / search.
+      expect(node?.label).toBe('重点')
+    }
+  })
 })
 
 describe('editor document structural edits', () => {

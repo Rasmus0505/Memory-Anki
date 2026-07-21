@@ -118,10 +118,10 @@ function CourseRoute() {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/english']}>
+    <MemoryRouter initialEntries={['/english/listening']}>
       <Routes>
-        <Route path="/english" element={<EnglishWorkspacePage />} />
-        <Route path="/english/courses/:id" element={<CourseRoute />} />
+        <Route path="/english/listening" element={<EnglishWorkspacePage />} />
+        <Route path="/english/listening/courses/:id" element={<CourseRoute />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -149,8 +149,8 @@ describe('EnglishWorkspacePage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('当前生成任务')).toBeTruthy()
-    expect(screen.getByText('课程生成完成后会自动进入练习页')).toBeTruthy()
+    expect(await screen.findByText('生成任务')).toBeTruthy()
+    expect(screen.getByText('lesson.mp4')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '上传并生成' })).toBeNull()
   })
 
@@ -163,7 +163,7 @@ describe('EnglishWorkspacePage', () => {
 
     renderPage()
 
-    await screen.findByText('当前生成任务')
+    await screen.findByText('生成任务')
 
     await act(async () => {
       mocks.latestStreamHandlers?.onDone?.({

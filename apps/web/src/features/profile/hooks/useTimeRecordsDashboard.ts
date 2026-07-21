@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useCallback, useRef } from 'react'
 import { toast } from '@/shared/feedback/toast'
@@ -21,11 +21,26 @@ import {
 } from '@/entities/session/model'
 import {
   applyTimeRecordFormPatch,
+  applyTimeRecordQuickAddPatch,
   buildTimeRecordFormState,
+  buildTimeRecordQuickAddFormState,
   isTimeRecordAboveThreshold,
   parseTimeRecordFormState,
+  parseTimeRecordQuickAddFormState,
   type TimeRecordFormState,
+  type TimeRecordQuickAddFormState,
 } from '@/features/profile/model/time-record-form'
+import {
+  normalizeCustomTimeRecordTags,
+  resolveTagName,
+  type CustomTimeRecordTag,
+} from '@/features/profile/model/time-record-tags'
+import {
+  CLIENT_PREFERENCES_UPDATED_EVENT,
+  getCachedClientPreference,
+  saveClientPreference,
+} from '@/shared/preferences/clientPreferences'
+import { onAppEvent } from '@/shared/events/appEvents'
 
 export interface UseTimeRecordsDashboardResult {
   thresholdSeconds: number
@@ -66,6 +81,11 @@ export interface UseTimeRecordsDashboardResult {
   hasSelectableRecords: boolean
   allSelectableChecked: boolean
   hasSelectedRecords: boolean
+  customTags: CustomTimeRecordTag[]
+  quickAddOpen: boolean
+  quickAddForm: TimeRecordQuickAddFormState
+  quickAddError: string | null
+  isSubmittingQuickAdd: boolean
   refreshRecords: () => Promise<void>
   applyThreshold: () => Promise<void>
   openCreateDialog: () => void
@@ -79,6 +99,10 @@ export interface UseTimeRecordsDashboardResult {
   onDialogOpenChange: (open: boolean) => void
   onFormChange: (patch: Partial<TimeRecordFormState>) => void
   handleSubmitRecord: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  onQuickAddOpenChange: (open: boolean) => void
+  onQuickAddFormChange: (patch: Partial<TimeRecordQuickAddFormState>) => void
+  onCustomTagsChange: (tags: CustomTimeRecordTag[]) => void
+  handleSubmitQuickAdd: (event: FormEvent<HTMLFormElement>) => Promise<void>
 }
 
 interface UseTimeRecordsDashboardOptions {
@@ -118,6 +142,17 @@ export function useTimeRecordsDashboard(
   )
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false)
+  const [customTags, setCustomTags] = useState<CustomTimeRecordTag[]>(() =>
+    normalizeCustomTimeRecordTags(
+      getCachedClientPreference('time_record_tags', [], Array.isArray),
+    ),
+  )
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [quickAddForm, setQuickAddForm] = useState<TimeRecordQuickAddFormState>(
+    () => buildTimeRecordQuickAddFormState(),
+  )
+  const [quickAddError, setQuickAddError] = useState<string | null>(null)
+  const [isSubmittingQuickAdd, setIsSubmittingQuickAdd] = useState(false)
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const recordsRequestIdRef = useRef(0)
@@ -187,10 +222,27 @@ export function useTimeRecordsDashboard(
     void refreshAnalytics().catch(() => undefined)
   }, [refreshAnalytics])
 
+  useEffect(() => {
+    const syncTags = () => {
+      setCustomTags(
+        normalizeCustomTimeRecordTags(
+          getCachedClientPreference('time_record_tags', [], Array.isArray),
+        ),
+      )
+    }
+    syncTags()
+    return onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, syncTags)
+  }, [])
+
   const applyThreshold = async () => {
     setThresholdSeconds(0)
     setThresholdInput('0')
   }
+
+  const persistCustomTags = useCallback(async (tags: CustomTimeRecordTag[]) => {
+    setCustomTags(tags)
+    await saveClientPreference('time_record_tags', tags)
+  }, [])
 
   const visibleRecords = records
 
@@ -211,11 +263,15 @@ export function useTimeRecordsDashboard(
     selectedVisibleCount === selectableRecordIds.length
 
   const openCreateDialog = () => {
-    setDialogMode('create')
-    setEditingRecord(null)
-    setFormState(buildTimeRecordFormState())
-    setFormError(null)
-    setDialogOpen(true)
+    setQuickAddError(null)
+    setQuickAddForm(
+      applyTimeRecordQuickAddPatch(
+        buildTimeRecordQuickAddFormState(),
+        {},
+        customTags,
+      ),
+    )
+    setQuickAddOpen(true)
   }
 
   const openEditDialog = (record: TimeSessionRecord) => {
@@ -226,12 +282,73 @@ export function useTimeRecordsDashboard(
     setDialogOpen(true)
   }
 
+  const handleSubmitQuickAdd = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (isSubmittingQuickAdd) return
+
+    setQuickAddError(null)
+    const parsed = parseTimeRecordQuickAddFormState(quickAddForm, customTags)
+    if ('error' in parsed) {
+      setQuickAddError(parsed.error)
+      return
+    }
+    if (
+      !isTimeRecordAboveThreshold(
+        parsed.value.effectiveSeconds,
+        thresholdSeconds,
+      )
+    ) {
+      setQuickAddError(
+        `有效时长必须大于 ${thresholdSeconds} 秒，才会进入时间记录。`,
+      )
+      return
+    }
+
+    setIsSubmittingQuickAdd(true)
+    try {
+      const created = await createStudySessionRecord({
+        ...parsed.value,
+        clientSource: detectClientSource(),
+        deletedAt: null,
+        deletedReason: null,
+        events: [],
+      })
+      if (!created) {
+        setQuickAddError(
+          `有效时长必须大于 ${thresholdSeconds} 秒，才会进入时间记录。`,
+        )
+        return
+      }
+      setRecords((current) => [created, ...current])
+      const minutes = Math.round(parsed.value.effectiveSeconds / 60)
+      const tagLabel =
+        parsed.value.activityTagLabel ||
+        resolveTagName(parsed.value.activityTag || 'review', customTags)
+      toast.success(`已记录「${tagLabel}」${minutes} 分钟`)
+      setQuickAddOpen(false)
+      if (page !== 1) setPage(1)
+      else await loadRecords(1)
+      await Promise.all([
+        refreshAnalytics(),
+        Promise.resolve(options.onRecordsChanged?.()),
+      ])
+    } catch (error) {
+      setQuickAddError(
+        error instanceof Error
+          ? error.message
+          : '保存学习记录失败，请检查标签和时长后重试。',
+      )
+    } finally {
+      setIsSubmittingQuickAdd(false)
+    }
+  }
+
   const handleSubmitRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isSubmittingRecord) return
 
     setFormError(null)
-    const parsed = parseTimeRecordFormState(formState, editingRecord)
+    const parsed = parseTimeRecordFormState(formState, editingRecord, customTags)
     if ('error' in parsed) {
       setFormError(parsed.error)
       return
@@ -466,6 +583,11 @@ export function useTimeRecordsDashboard(
     hasSelectableRecords,
     allSelectableChecked,
     hasSelectedRecords: selectedRecordIds.length > 0,
+    customTags,
+    quickAddOpen,
+    quickAddForm,
+    quickAddError,
+    isSubmittingQuickAdd,
     refreshRecords,
     applyThreshold,
     openCreateDialog,
@@ -483,5 +605,17 @@ export function useTimeRecordsDashboard(
     onFormChange: (patch) =>
       setFormState((current) => applyTimeRecordFormPatch(current, patch)),
     handleSubmitRecord,
+    onQuickAddOpenChange: (open) => {
+      setQuickAddOpen(open)
+      if (!open) setQuickAddError(null)
+    },
+    onQuickAddFormChange: (patch) =>
+      setQuickAddForm((current) =>
+        applyTimeRecordQuickAddPatch(current, patch, customTags),
+      ),
+    onCustomTagsChange: (tags) => {
+      void persistCustomTags(tags)
+    },
+    handleSubmitQuickAdd,
   }
 }

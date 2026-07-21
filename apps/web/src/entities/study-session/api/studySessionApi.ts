@@ -91,6 +91,8 @@ export interface StudySessionRecordPayload {
   completionMethod?: string
   durationEdited?: boolean
   clientSource?: 'desktop' | 'pwa' | 'mobile' | null
+  activityTag?: string | null
+  activityTagLabel?: string | null
   events?: unknown[]
   sceneSegments?: unknown[]
   deletedAt?: string | null
@@ -101,7 +103,7 @@ export interface StudySessionListOptions {
   limit?: number
   offset?: number
   keyword?: string
-  kind?: 'palace_edit' | 'practice' | 'quiz' | 'review'
+  kind?: 'palace_edit' | 'practice' | 'quiz' | 'review' | 'custom'
   status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'recovered'
   sortBy?: 'started_at' | 'effective_seconds' | 'title'
   sortOrder?: 'asc' | 'desc'
@@ -117,10 +119,11 @@ export interface StudySessionListResult {
 export interface StudySessionAnalyticsResult {
   trend: Array<{ date_key: string; label: string; seconds: number }>
   breakdown: Array<{
-    kind: 'palace_edit' | 'practice' | 'quiz' | 'review'
+    kind: string
     label: string
     seconds: number
     sessions: number
+    is_builtin?: boolean
   }>
 }
 

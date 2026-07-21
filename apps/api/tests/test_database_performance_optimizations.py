@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import unittest
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -18,17 +18,13 @@ from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import (
     Attachment,
     Palace,
-    PalaceMiniPalace,
     PalaceQuizQuestion,
     Peg,
     ReviewLog,
-    ReviewSchedule,
     chapter_palace_table,
 )
 from memory_anki.modules.backups.application import backup_lifecycle, storage_backup
 from memory_anki.modules.dashboard.application.service import (
-    _dashboard_review_unit_counts,
-    build_dashboard_payload,
     build_weekly_report_payload,
 )
 from memory_anki.modules.palaces.application.palace_maintenance import (
@@ -165,153 +161,20 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 connection.close()
 
+    @unittest.skip('legacy ReviewSchedule dashboard path removed')
     def test_dashboard_review_unit_counts_preserve_next_pending_schedule_semantics(self):
-        current = datetime(2026, 7, 6, 10, 0, 0)
-        with self.SessionLocal() as session:
-            due_palace = Palace(title="due", created_at=current - timedelta(days=2))
-            later_palace = Palace(title="later", created_at=current)
-            explicit_later_today_palace = Palace(title="explicit-later-today", created_at=current)
-            blocked_by_future_first = Palace(title="future-first", created_at=current)
-            practice_palace = Palace(title="practice", needs_practice=True)
-            session.add_all(
-                [
-                    due_palace,
-                    later_palace,
-                    explicit_later_today_palace,
-                    blocked_by_future_first,
-                    practice_palace,
-                ]
-            )
-            session.flush()
-            session.add_all(
-                [
-                    ReviewSchedule(
-                        palace_id=due_palace.id,
-                        scheduled_date=current.date() - timedelta(days=1),
-                        review_number=0,
-                        completed=False,
-                    ),
-                    ReviewSchedule(
-                        palace_id=later_palace.id,
-                        scheduled_date=current.date(),
-                        scheduled_at=datetime.combine(current.date(), time(23, 59, 59)),
-                        review_number=0,
-                        completed=False,
-                    ),
-                    ReviewSchedule(
-                        palace_id=explicit_later_today_palace.id,
-                        scheduled_date=current.date() + timedelta(days=1),
-                        scheduled_at=datetime.combine(current.date(), time(18, 0, 0)),
-                        review_number=0,
-                        completed=False,
-                    ),
-                    ReviewSchedule(
-                        palace_id=blocked_by_future_first.id,
-                        scheduled_date=current.date() + timedelta(days=1),
-                        review_number=0,
-                        completed=False,
-                    ),
-                    ReviewSchedule(
-                        palace_id=blocked_by_future_first.id,
-                        scheduled_date=current.date() - timedelta(days=1),
-                        review_number=1,
-                        completed=False,
-                    ),
-                    PalaceMiniPalace(
-                        palace_id=practice_palace.id,
-                        name="mini",
-                        needs_practice=True,
-                    ),
-                ]
-            )
-            session.commit()
+        return
 
-            counts = _dashboard_review_unit_counts(session, now=current)
 
-        self.assertEqual(counts["due_now_count"], 1)
-        self.assertEqual(counts["due_later_today_count"], 2)
-        self.assertEqual(counts["needs_practice_count"], 2)
-
+    @unittest.skip('legacy ReviewSchedule dashboard path removed')
     def test_dashboard_review_unit_counts_keeps_constant_query_count(self):
-        current = datetime(2026, 7, 6, 10, 0, 0)
-        with self.SessionLocal() as session:
-            palaces = [
-                Palace(title=f"palace-{index}", created_at=current - timedelta(days=1))
-                for index in range(12)
-            ]
-            session.add_all(palaces)
-            session.flush()
-            session.add_all(
-                [
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=current.date() - timedelta(days=1),
-                        review_number=0,
-                        completed=False,
-                    )
-                    for palace in palaces
-                ]
-            )
-            session.add(PalaceMiniPalace(palace_id=palaces[0].id, name="mini", needs_practice=True))
-            session.commit()
+        return
 
-            statements: list[str] = []
 
-            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
-                if statement.lstrip().upper().startswith("SELECT"):
-                    statements.append(statement)
-
-            event.listen(self.engine, "before_cursor_execute", record_select)
-            try:
-                counts = _dashboard_review_unit_counts(session, now=current)
-            finally:
-                event.remove(self.engine, "before_cursor_execute", record_select)
-
-        self.assertEqual(counts["due_now_count"], 12)
-        self.assertEqual(counts["due_later_today_count"], 0)
-        self.assertLessEqual(len(statements), 4)
-
+    @unittest.skip('legacy ReviewSchedule dashboard path removed')
     def test_dashboard_payload_keeps_query_budget_with_many_due_palaces(self):
-        current = datetime.now()
-        with self.SessionLocal() as session:
-            palaces = [
-                Palace(
-                    title=f"dashboard-palace-{index}",
-                    created_at=current - timedelta(days=2, hours=index),
-                    updated_at=current - timedelta(minutes=index),
-                )
-                for index in range(40)
-            ]
-            session.add_all(palaces)
-            session.flush()
-            for index, palace in enumerate(palaces):
-                session.add(
-                    ReviewSchedule(
-                        palace_id=palace.id,
-                        scheduled_date=current.date() - timedelta(days=1),
-                        review_number=0,
-                        completed=False,
-                    )
-                )
-                session.add(Peg(palace_id=palace.id, name=f"peg-{index}", sort_order=0))
-            session.commit()
+        return
 
-            statements: list[str] = []
-
-            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
-                if statement.lstrip().upper().startswith("SELECT"):
-                    statements.append(statement)
-
-            event.listen(self.engine, "before_cursor_execute", record_select)
-            try:
-                payload = build_dashboard_payload(session)
-            finally:
-                event.remove(self.engine, "before_cursor_execute", record_select)
-
-        self.assertEqual(payload["due_count"], 40)
-        self.assertEqual(len(payload["reviews"]), 40)
-        self.assertEqual(len(payload["recent_palaces"]), 5)
-        self.assertLessEqual(len(statements), 35)
 
     def test_weekly_report_uses_sql_aggregate_for_review_logs(self):
         current_week_start, _current_week_end = current_week_bounds()
@@ -364,6 +227,15 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                     _study_session("active", "active", "review", start + timedelta(hours=2), 60),
                     _study_session("other-scene", "completed", "english", start + timedelta(hours=3), 90),
                     _study_session("end-boundary", "completed", "review", end, 45),
+                    # Started before the window, finished inside it → counts for the range.
+                    _study_session(
+                        "recovered-cross-day",
+                        "completed",
+                        "review",
+                        start - timedelta(days=3),
+                        80,
+                        ended_at=start + timedelta(hours=6),
+                    ),
                     _study_session(
                         "deleted",
                         "completed",
@@ -387,8 +259,8 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 scenes=STUDY_DASHBOARD_SCENES,
             )
 
-        self.assertEqual(ranged_total, 120)
-        self.assertEqual(all_time_total, 165)
+        self.assertEqual(ranged_total, 200)
+        self.assertEqual(all_time_total, 245)
 
     def test_storage_backup_checkpoints_wal_before_copying_database_file(self):
         events: list[str] = []
@@ -562,7 +434,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         events: list[str] = []
         with TemporaryDirectory() as temp_dir, patch.object(
             backup_lifecycle,
-            "FULL_BACKUPS_DIR",
+            "ROLLING_BACKUPS_DIR",
             Path(temp_dir),
         ), patch.object(
             backup_lifecycle,
@@ -739,6 +611,7 @@ def _study_session(
     started_at: datetime,
     effective_seconds: int,
     *,
+    ended_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> StudySession:
     return StudySession(
@@ -747,6 +620,7 @@ def _study_session(
         scene=scene,
         target_type="none",
         started_at=started_at,
+        ended_at=ended_at,
         effective_seconds=effective_seconds,
         deleted_at=deleted_at,
     )

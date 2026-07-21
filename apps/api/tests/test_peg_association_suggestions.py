@@ -95,8 +95,14 @@ def test_peg_association_suggestions_uses_linked_chapter_context(client, monkeyp
         json={"name": "细胞呼吸", "notes": "葡萄糖氧化分解释放能量并合成 ATP。"},
     ).json()
     link_response = client.put(
-        f"/api/v1/palaces/{palace_id}/chapters",
-        json={"chapter_ids": [chapter["id"]]},
+        f"/api/v1/palaces/{palace_id}/knowledge-binding",
+        json={
+            "subject_ids": [subject["id"]],
+            "chapter_ids": [chapter["id"]],
+            "primary_chapter_id": chapter["id"],
+            "base_revision": 0,
+            "operation_id": "peg-association-bind",
+        },
     )
     assert link_response.status_code == 200
 
