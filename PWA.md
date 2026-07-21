@@ -15,7 +15,11 @@
 
 ## 本地运行原则
 
-PWA 必须保持本地运行，使用本机服务和本机数据目录。手机 PWA 与 Electron 桌面端共用 `127.0.0.1:8012` 的同一个后端、前端构建产物和数据库，不再启动两套服务。PWA 默认会跳过百度云盘启动同步；桌面端启动时会短暂停止共享服务，完成拉取和迁移后重启，正常跨设备同步仍由 `start-desktop.bat` / `tools\stop.bat` 负责。
+PWA 必须保持本地运行，使用本机服务和本机数据目录。手机 PWA 与 Electron 桌面端共用 `127.0.0.1:8012` 的同一个后端、前端构建产物和数据库，不再启动两套服务。
+
+当前数据库与运行时数据目录在 U 盘上：在 `local-config/memory-anki.local.json` 把 `local_app_home` 设为 `vol:MemoryAnki/memory anki data`（按卷标解析；U 盘卷标需为 `MemoryAnki`，目录名为 `memory anki data`）。启动前请插入 U 盘；盘符可随电脑变化，不必写死 `E:`。模板见 `local-config/memory-anki.local.example.json`。
+
+PWA 默认会跳过百度云盘启动同步；桌面端启动时会短暂停止共享服务，完成拉取和迁移后重启，正常跨设备同步仍由 `start-desktop.bat` / `tools\stop.bat` 负责。
 
 PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露，不要开启 Funnel。
 

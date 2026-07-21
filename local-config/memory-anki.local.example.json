@@ -1,0 +1,10 @@
+{
+  "device_id": "auto-generated-on-first-run",
+  "device_name": "Laptop",
+  "local_app_home": "vol:MemoryAnki/memory anki data",
+  "sync_root": "D:/BaiduSyncdisk/MemoryAnki-Sync/sync-meta",
+  "sync_enabled": true,
+  "conflict_policy": "block",
+  "sync_on_start": true,
+  "sync_on_stop": true
+}

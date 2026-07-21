@@ -66,7 +66,10 @@ _DEBUG_FALLBACK.json
 /.vscode/
 /.tmp/
 /.tmp_video_frames/
-/local-config/memory-anki.local.json
+# Per-machine only (device_id, device_name, sync_root, paths).
+# Shared template stays tracked: local-config/memory-anki.local.example.json
+/local-config/*.local.json
+!/local-config/*.example.json
 
 # ===== AI / agent tooling artifacts (never commit) =====
 /.audit/

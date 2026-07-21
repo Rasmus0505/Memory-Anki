@@ -62,6 +62,59 @@ class LocalConfigTests(unittest.TestCase):
         self.assertEqual(config.sync_root, root / "sync-folder")
         self.assertTrue(config.sync_enabled)
 
+    def test_sync_root_resolves_nested_sync_meta_layout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            parent = root / "MemoryAnki-Sync"
+            meta = parent / "sync-meta"
+            meta.mkdir(parents=True)
+            (meta / "state.json").write_text(
+                json.dumps({"version": 1, "revision": 1}),
+                encoding="utf-8",
+            )
+            config_path = root / "memory-anki.local.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "device_id": "abc123",
+                        "device_name": "Laptop",
+                        "local_app_home": str(root / "app-home"),
+                        "sync_root": str(parent),
+                        "sync_enabled": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = load_local_runtime_config(
+                config_path=config_path,
+                repo_root=root,
+                write_device_id=False,
+            )
+
+        self.assertEqual(config.sync_root, meta)
+
+    def test_config_accepts_utf8_bom(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "memory-anki.local.json"
+            payload = {
+                "device_id": "abc123",
+                "device_name": "Laptop",
+                "local_app_home": str(root / "app-home"),
+                "sync_enabled": False,
+            }
+            config_path.write_bytes(
+                b"\xef\xbb\xbf" + json.dumps(payload).encode("utf-8")
+            )
+            config = load_local_runtime_config(
+                config_path=config_path,
+                repo_root=root,
+                write_device_id=False,
+            )
+
+        self.assertEqual(config.device_id, "abc123")
+        self.assertFalse(config.sync_enabled)
+
     def test_dev_server_backend_env_uses_configured_app_home(self):
         repo_root = Path(__file__).resolve().parents[3]
         dev_server_path = repo_root / "tools" / "dev_server.py"
@@ -72,15 +125,76 @@ class LocalConfigTests(unittest.TestCase):
         sys.modules[spec.name] = module
         spec.loader.exec_module(module)
 
-        class DummyConfig:
-            local_app_home = Path("D:/MemoryAnkiLocal")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app_home = Path(temp_dir) / "MemoryAnkiLocal"
+            app_home.mkdir()
 
-        with patch.object(module, "_runtime_config", return_value=DummyConfig()):
-            env = module._backend_env()
+            class DummyConfig:
+                local_app_home = app_home
 
-        self.assertEqual(env["MEMORY_ANKI_HOME"], "D:\\MemoryAnkiLocal")
-        self.assertEqual(env["MEMORY_ANKI_STARTUP_MODE"], "serve")
-        self.assertNotIn("MEMORY_ANKI_WEB_DIST", env)
+            with patch.object(module, "_runtime_config", return_value=DummyConfig()):
+                env = module._backend_env()
+
+            self.assertEqual(Path(env["MEMORY_ANKI_HOME"]), app_home.resolve())
+            self.assertEqual(env["MEMORY_ANKI_STARTUP_MODE"], "serve")
+            self.assertNotIn("MEMORY_ANKI_WEB_DIST", env)
+
+    def test_volume_label_path_resolves_to_matching_drive(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            volume_root = root / "E"
+            app_home = volume_root / "memory anki data"
+            app_home.mkdir(parents=True)
+            config_path = root / "memory-anki.local.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "device_id": "abc123",
+                        "device_name": "Laptop",
+                        "local_app_home": "vol:MemoryAnki/memory anki data",
+                        "sync_enabled": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch(
+                "memory_anki.core.local_config._windows_volume_root_by_label",
+                return_value=volume_root,
+            ):
+                config = load_local_runtime_config(
+                    config_path=config_path,
+                    repo_root=root,
+                    write_device_id=False,
+                )
+
+        self.assertEqual(config.local_app_home, app_home)
+
+    def test_volume_label_path_missing_volume_raises(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "memory-anki.local.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "device_id": "abc123",
+                        "device_name": "Laptop",
+                        "local_app_home": "vol:MissingStick/data",
+                        "sync_enabled": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch(
+                "memory_anki.core.local_config._windows_volume_root_by_label",
+                return_value=None,
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    load_local_runtime_config(
+                        config_path=config_path,
+                        repo_root=root,
+                        write_device_id=False,
+                    )
+        self.assertIn("MissingStick", str(ctx.exception))
 
 
 if __name__ == "__main__":

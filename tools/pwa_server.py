@@ -420,6 +420,11 @@ def _run_frontend_build() -> bool:
 def _prepare_runtime() -> bool:
     try:
         local_env = _backend_env()
+        app_home = local_env.get("MEMORY_ANKI_HOME", "")
+        db_path = Path(app_home) / "data" / "memory_palace.db" if app_home else None
+        print(f"[i] MEMORY_ANKI_HOME={app_home}")
+        if db_path is not None:
+            print(f"[i] Database={db_path} ({'exists' if db_path.exists() else 'missing'})")
         dev_server.ensure_backend_runtime_prepared(env=local_env)
         dev_server.ensure_backend_migrations_applied(env=local_env)
     except Exception as exc:
@@ -456,7 +461,41 @@ def _backend_console_is_visible() -> bool:
     }
 
 
-def _start_backend() -> subprocess.Popen:
+class _DetachedProcess:
+    """Minimal process handle for backends started outside the current Job."""
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        if self.returncode is not None:
+            return self.returncode
+        if os.name == "nt":
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    f"if (Get-Process -Id {int(self.pid)} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}",
+                ],
+                capture_output=True,
+                check=False,
+                **dev_server.hidden_process_kwargs(),
+            )
+            if result.returncode != 0:
+                self.returncode = 1
+                return self.returncode
+            return None
+        try:
+            os.kill(self.pid, 0)
+        except OSError:
+            self.returncode = 1
+            return self.returncode
+        return None
+
+
+def _start_backend() -> subprocess.Popen | _DetachedProcess:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-api.log"
     _append_log_separator(log_path, "PWA backend")
@@ -474,22 +513,36 @@ def _start_backend() -> subprocess.Popen:
         str(dev_server.BACKEND_PORT),
     ]
     visible = _backend_console_is_visible()
-    log_file = log_path.open("ab")
     if visible:
         print(f"[i] Backend output is written to {log_path}; startup errors remain in diagnostics.")
-    try:
-        process = subprocess.Popen(
-            cmd,
-            cwd=str(API_DIR),
-            env=_backend_env(),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            close_fds=True,
-            **dev_server.hidden_process_kwargs(),
+
+    env = _backend_env()
+    if os.name == "nt":
+        # Start outside the current Job so the service survives launcher exit.
+        pid = dev_server.spawn_detached_windows_process(
+            command=cmd,
+            cwd=API_DIR,
+            env=env,
+            stdout_path=log_path,
+            stderr_path=log_path,
         )
-    finally:
-        log_file.close()
+        process: subprocess.Popen | _DetachedProcess = _DetachedProcess(pid)
+    else:
+        log_file = log_path.open("ab")
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(API_DIR),
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
+                **dev_server.hidden_process_kwargs(),
+            )
+        finally:
+            log_file.close()
+
     PWA_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PWA_PID_FILE.write_text(str(process.pid), encoding="utf-8")
     return process
@@ -758,8 +811,13 @@ def prepare(*, build: bool = True) -> int:
         dev_server.free_port(dev_server.FRONTEND_PORT, "frontend")
         if not _stop_service_unlocked():
             return 1
-        if not dev_server.sync_after_stop():
-            return 1
+        # Prepare only refreshes code/runtime fingerprints. Data push stays with
+        # desktop start/stop. Blocking prepare on Baidu push breaks PWA when
+        # APP_HOME is on a USB stick and the cloud revision lags behind local.
+        print(
+            "[i] Skipping Baidu stop-sync during PWA prepare "
+            "(desktop start/stop handles data sync; APP_HOME may be on USB)"
+        )
 
         if desktop_runtime_missing and not _ensure_desktop_runtime():
             return 1

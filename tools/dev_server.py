@@ -72,6 +72,114 @@ def hidden_process_kwargs() -> dict:
     return kwargs
 
 
+def spawn_detached_windows_process(
+    *,
+    command: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    stdout_path: Path,
+    stderr_path: Path | None = None,
+) -> int:
+    """Start a process outside the current console Job Object (Windows).
+
+    Agent/diagnostic shells often wrap work in a Job that kills children when the
+    launcher exits. CIM Win32_Process.Create starts a process that is not tied to
+    that Job, so the PWA backend keeps running after start-pwa returns.
+    """
+    if os.name != "nt":
+        raise RuntimeError("spawn_detached_windows_process is only implemented on Windows")
+
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    err_path = stderr_path or stdout_path
+
+    def _cmd_quote(value: str) -> str:
+        return '"' + value.replace('"', '""') + '"'
+
+    # Write a one-shot .cmd so env + log append work without giant command lines.
+    # Only export essential overrides: dumping the full agent environment into a
+    # .cmd breaks on names like PROGRAMFILES(X86) because cmd treats () specially.
+    stamp = time.strftime("%Y%m%d%H%M%S")
+    launcher = stdout_path.parent / f"pwa-backend-launch-{stamp}-{os.getpid()}.cmd"
+    essential_prefixes = (
+        "MEMORY_ANKI_",
+        "PYTHON",
+        "PATH",
+        "SYSTEMROOT",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "USERNAME",
+        "USERDOMAIN",
+        "COMPUTERNAME",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_",
+        "PATHEXT",
+        "COMSPEC",
+        "OS",
+    )
+    lines = ["@echo off", "setlocal EnableExtensions"]
+    for key, value in sorted(env.items()):
+        upper = key.upper()
+        if not any(upper == p or upper.startswith(p) for p in essential_prefixes):
+            continue
+        if any(ch in key for ch in "()&|^<>"):
+            continue
+        safe = str(value).replace('"', "").replace("%", "%%")
+        lines.append(f'set "{key}={safe}"')
+    lines.append(f"cd /d {_cmd_quote(str(cwd))}")
+    quoted_cmd = " ".join(_cmd_quote(part) for part in command)
+    # On Windows, `>>a 2>>a` fails with "file in use"; use a single stream redirect.
+    if Path(stdout_path) == Path(err_path):
+        lines.append(f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>&1")
+    else:
+        lines.append(
+            f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>> {_cmd_quote(str(err_path))}"
+        )
+    # newline="" disables Windows \n -> \r\n translation so we control CRLF once.
+    with launcher.open("w", encoding="ascii", errors="replace", newline="") as handle:
+        handle.write("\r\n".join(lines) + "\r\n")
+
+    # CIM Create is not a child of the current Job Object (unlike subprocess.Popen).
+    ps = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
+        f"-Arguments @{{ CommandLine = 'cmd.exe /c {_cmd_quote(str(launcher))}'; "
+        f"CurrentDirectory = {_cmd_quote(str(cwd))} }}; "
+        "if ($r.ReturnValue -ne 0) { throw \"Win32_Process.Create failed: $($r.ReturnValue)\" }; "
+        "Write-Output $r.ProcessId"
+    )
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            ps,
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "Failed to start detached Windows process: "
+            f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
+        )
+    pid_text = (completed.stdout or "").strip().splitlines()[-1].strip()
+    try:
+        return int(pid_text)
+    except ValueError as exc:
+        raise RuntimeError(f"Detached process PID parse failed: {pid_text!r}") from exc
+
+
 def list_listening_pids(port: int) -> list[int]:
     try:
         out = subprocess.run(
@@ -275,23 +383,55 @@ def _runtime_config():
     return load_local_runtime_config()
 
 
+def _ensure_app_home_available(app_home: Path) -> Path:
+    """Fail fast when the configured runtime home (often a USB volume) is missing."""
+    resolved = app_home.expanduser()
+    try:
+        resolved = resolved.resolve(strict=False)
+    except OSError as exc:
+        raise RuntimeError(
+            f"无法解析运行时数据目录: {app_home}\n"
+            f"若数据库在 U 盘，请先插入 U 盘再启动。原始错误: {exc}"
+        ) from exc
+
+    # Drive/volume must exist; do not silently create a new empty home on C: when
+    # the USB letter is wrong or the stick is unplugged.
+    if resolved.drive and not Path(resolved.drive + os.sep).exists():
+        raise RuntimeError(
+            f"运行时数据盘不可用: {resolved.drive}\\ （当前配置的 APP_HOME={resolved}）。\n"
+            f"请插入卷标为 MemoryAnki 的 U 盘，或修正 local-config/memory-anki.local.json 的 local_app_home。"
+        )
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+        probe = resolved / ".memory-anki-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"运行时数据目录不可写: {resolved}\n"
+            f"请确认 U 盘已插入且未被写保护。原始错误: {exc}"
+        ) from exc
+    return resolved
+
+
 def _apply_local_runtime_env(config=None):
     resolved_config = config or _runtime_config()
-    os.environ["MEMORY_ANKI_HOME"] = str(resolved_config.local_app_home)
+    app_home = _ensure_app_home_available(resolved_config.local_app_home)
+    os.environ["MEMORY_ANKI_HOME"] = str(app_home)
     os.environ.pop("MEMORY_ANKI_WEB_DIST", None)
     os.environ.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
     return resolved_config
 
 
 def _resolve_configured_app_home() -> Path:
-    return _runtime_config().local_app_home
+    return _ensure_app_home_available(_runtime_config().local_app_home)
 
 
 def _backend_env() -> dict:
     """后端环境：从 local-config 解析 MEMORY_ANKI_HOME，不设 WEB_DIST（纯 API）。"""
-    config = _apply_local_runtime_env()
+    _apply_local_runtime_env()
     env = os.environ.copy()
-    env["MEMORY_ANKI_HOME"] = str(config.local_app_home)
+    # MEMORY_ANKI_HOME already set to the verified path by _apply_local_runtime_env.
     env.pop("MEMORY_ANKI_WEB_DIST", None)
     env.pop("MEMORY_ANKI_RUNTIME_SNAPSHOT", None)
     env["MEMORY_ANKI_STARTUP_MODE"] = "serve"
