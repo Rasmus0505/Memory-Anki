@@ -172,7 +172,7 @@ describe('review-flow-tree visible editor state', () => {
     expect(sourceDoc.root?.children?.[0]?.data?.paddingY).toBeUndefined()
   })
 
-  it('progresses review lines from expanding to direct-level visible to subtree revealed', () => {
+  it('progresses each edge from expanding to direct-level visible to subtree revealed independently', () => {
     const sourceDoc: MindMapDoc = {
       root: {
         data: { text: 'Root', uid: 'root' },
@@ -207,8 +207,9 @@ describe('review-flow-tree visible editor state', () => {
       return visibleDoc.root?.children?.map((node) => node.data) ?? []
     }
 
+    // A appeared as placeholder but not fully revealed → blue (per-child, not parent aggregate).
     expect(buildChildData({ root: 'revealed', a: 'placeholder', a1: 'hidden', b: 'hidden' })[0])
-      .toMatchObject({ lineColor: '#d97706', lineWidth: 2 })
+      .toMatchObject({ lineColor: '#2563eb', lineWidth: 4 })
 
     const directLevelVisible = buildChildData({
       root: 'revealed',
@@ -218,6 +219,16 @@ describe('review-flow-tree visible editor state', () => {
     })
     expect(directLevelVisible[0]).toMatchObject({ lineColor: '#2563eb', lineWidth: 4 })
     expect(directLevelVisible[1]).toMatchObject({ lineColor: '#2563eb', lineWidth: 4 })
+
+    // Sibling A fully done while B still incomplete → A green, B blue (independent edges).
+    const mixed = buildChildData({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'revealed',
+      b: 'placeholder',
+    })
+    expect(mixed[0]).toMatchObject({ lineColor: '#059669', lineWidth: 6 })
+    expect(mixed[1]).toMatchObject({ lineColor: '#2563eb', lineWidth: 4 })
 
     const subtreeRevealed = buildChildData({
       root: 'revealed',
@@ -298,7 +309,7 @@ describe('review-flow-tree visible editor state', () => {
       'nested-due': 'hidden',
     })
 
-    // Flipping a due card only reveals that card — children stay hidden (same as normal review).
+    // Flip due parent content only — children stay hidden (user expands one-by-one).
     const afterDueParent = advanceRevealStateForNodeClick(
       'due-parent',
       nodeMap,
@@ -315,40 +326,53 @@ describe('review-flow-tree visible editor state', () => {
       'nested-due': 'hidden',
     })
 
-    // Next click on the revealed parent opens the first child as a placeholder.
-    const afterExpandChild = advanceRevealStateForNodeClick(
+    // Next expand: free child opens fully (skip placeholder); due sibling still hidden.
+    const afterExpandFresh = advanceRevealStateForNodeClick(
       'due-parent',
       nodeMap,
       afterDueParent,
       options,
       root,
     )
-    expect(afterExpandChild).toEqual({
+    expect(afterExpandFresh).toEqual({
       root: 'revealed',
       branch: 'revealed',
       fresh: 'revealed',
       'due-parent': 'revealed',
-      'nested-fresh': 'placeholder',
+      'nested-fresh': 'revealed',
       'nested-due': 'hidden',
     })
 
-    // Flip the first child content, then open the next sibling placeholder.
-    const afterFlipNestedFresh = advanceRevealStateForNodeClick(
-      'nested-fresh',
-      nodeMap,
-      afterExpandChild,
-      options,
-      root,
-    )
-    expect(afterFlipNestedFresh['nested-fresh']).toBe('revealed')
+    // Next expand: due child appears as placeholder and still needs its own flip.
     const afterExpandNestedDue = advanceRevealStateForNodeClick(
       'due-parent',
       nodeMap,
-      afterFlipNestedFresh,
+      afterExpandFresh,
       options,
       root,
     )
     expect(afterExpandNestedDue['nested-due']).toBe('placeholder')
+    const afterFlipNestedDue = advanceRevealStateForNodeClick(
+      'nested-due',
+      nodeMap,
+      afterExpandNestedDue,
+      options,
+      root,
+    )
+    expect(afterFlipNestedDue['nested-due']).toBe('revealed')
+    expect(afterFlipNestedDue['nested-fresh']).toBe('revealed')
+
+    // Hide from a due card must stick (not re-heal free/due children open).
+    const afterHide = hideRevealStateBranch(
+      'due-parent',
+      nodeMap,
+      afterFlipNestedDue,
+      options,
+      root,
+    )
+    expect(afterHide['nested-fresh']).toBe('hidden')
+    expect(afterHide['nested-due']).toBe('hidden')
+    expect(afterHide['due-parent']).toBe('revealed')
 
     // Legacy "all hidden except root" progress heals into due-scope on rebuild.
     const healed = buildInitialRevealState(

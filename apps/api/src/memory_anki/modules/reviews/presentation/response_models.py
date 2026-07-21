@@ -88,9 +88,12 @@ class SubmitReviewResponse(BaseModel):
     rating_counts: dict[str, int] = {}
     mastery_progress: float = 0
     mastery_percent: int = 0
+    previous_mastery_progress: float | None = None
+    previous_mastery_percent: int | None = None
     memory_health: float = 0
     memory_health_percent: int = 0
     remaining_due_node_count: int = 0
+    last_review_at: str | None = None
     next_review_at: str | None = None
     next_review_node_count: int = 0
     next_review_entry_mode: str | None = None

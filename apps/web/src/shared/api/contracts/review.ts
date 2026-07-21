@@ -32,10 +32,15 @@ export interface FsrsRatingCounts {
 export interface ReviewMemorySummary {
   mastery_progress: number
   mastery_percent: number
+  /** Mastery after the previous completed formal review (for delta on completion UI). */
+  previous_mastery_progress?: number | null
+  previous_mastery_percent?: number | null
   memory_health: number
   memory_health_percent: number
   due_node_count: number
   overdue_node_count: number
+  /** Most recent formal review end time (previous session in dialog; this session on receipt). */
+  last_review_at?: string | null
   next_review_at: string | null
 }
 export interface ReviewBranchSummary {

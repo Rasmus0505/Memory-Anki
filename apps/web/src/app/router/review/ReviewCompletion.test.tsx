@@ -19,6 +19,7 @@ vi.mock('@/features/review/api', () => ({
     rating_counts: { 忘记: 0, 困难: 1, 记得: 1, 轻松: 0 },
     mastery_progress: 0.5,
     mastery_percent: 50,
+    previous_mastery_percent: 42,
     memory_health: 0.8,
     memory_health_percent: 80,
     remaining_due_node_count: 1,
@@ -28,6 +29,7 @@ vi.mock('@/features/review/api', () => ({
     today_review_count: 1,
     due_node_count: 1,
     overdue_node_count: 0,
+    last_review_at: '2026-07-15T10:00:00Z',
     next_review_at: '2026-07-16T10:00:00Z',
   }),
 }))
@@ -42,7 +44,7 @@ describe('ReviewCompletion FSRS receipt', () => {
     vi.useRealTimers()
   })
 
-  it('shows ratings, absolute next review, node count, and unrated nodes', async () => {
+  it('shows ratings, last/next review, mastery delta, and unrated nodes', async () => {
     render(
       <MemoryRouter initialEntries={['/review/completed/1']}>
         <Routes>
@@ -52,6 +54,9 @@ describe('ReviewCompletion FSRS receipt', () => {
     )
     expect(await screen.findByText('本次 FSRS 复习已完成')).toBeTruthy()
     expect(screen.getByText('2/3')).toBeTruthy()
+    expect(screen.getByText('上次复习')).toBeTruthy()
+    expect(screen.getByText('下次复习')).toBeTruthy()
+    expect(screen.getByText('+8')).toBeTruthy()
     expect(screen.getByText(/间隔 · 1天后 · 1 个节点 · 节点复习/)).toBeTruthy()
     expect(screen.getByText(/本次未评分 1 个节点保持到期/)).toBeTruthy()
     expect(screen.getByText(/该宫殿今日第 1 次复习/)).toBeTruthy()

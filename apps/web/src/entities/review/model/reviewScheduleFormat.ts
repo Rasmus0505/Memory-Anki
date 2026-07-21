@@ -40,11 +40,52 @@ export function formatReviewIntervalFromNow(value: string | null | undefined): s
   return days > 0 ? `${months}月${days}天后` : `${months}天后`
 }
 
+/**
+ * Relative elapsed time from a past instant to now ("2小时前" / "3天前").
+ * Mirrors formatReviewIntervalFromNow for last-review completion cards.
+ */
+export function formatReviewElapsedFromNow(value: string | null | undefined): string {
+  if (!value) return '—'
+  const target = parseApiDateTime(value)
+  if (Number.isNaN(target.getTime())) return '—'
+
+  const diffMs = Date.now() - target.getTime()
+  if (diffMs < 0) return '刚刚'
+  if (diffMs < 60 * 1000) return '刚刚'
+
+  const totalMinutes = Math.floor(diffMs / (1000 * 60))
+  const totalHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (totalMinutes < 60) {
+    return `${Math.max(1, totalMinutes)}分钟前`
+  }
+  if (totalHours < 24) {
+    const minutes = totalMinutes % 60
+    return minutes > 0 ? `${totalHours}小时${minutes}分钟前` : `${totalHours}小时前`
+  }
+  if (totalDays < 30) {
+    const hours = totalHours % 24
+    return hours > 0 ? `${totalDays}天${hours}小时前` : `${totalDays}天前`
+  }
+  const months = Math.floor(totalDays / 30)
+  const days = totalDays % 30
+  return days > 0 ? `${months}月${days}天前` : `${months}月前`
+}
+
 /** Label line for completion UIs: "间隔 · …" */
 export function formatReviewIntervalLabel(value: string | null | undefined): string {
   const interval = formatReviewIntervalFromNow(value)
   if (interval === '—') return '间隔 · —'
   return `间隔 · ${interval}`
+}
+
+/** Secondary line under last-review absolute time: "距今 · 2小时前" */
+export function formatLastReviewDetailLabel(value: string | null | undefined): string {
+  if (!value) return '本宫首次正式复习'
+  const elapsed = formatReviewElapsedFromNow(value)
+  if (elapsed === '—') return '距今 · —'
+  return `距今 · ${elapsed}`
 }
 
 /**

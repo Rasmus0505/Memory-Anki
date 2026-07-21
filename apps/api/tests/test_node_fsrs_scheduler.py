@@ -122,6 +122,68 @@ def test_again_and_hard_schedule_within_short_window_not_days(db_session):
     assert again_delta <= timedelta(minutes=10, seconds=5)
 
 
+def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
+    """记得/轻松 must not bounce back in 10m/1h learning or relearning steps."""
+    from datetime import timedelta
+
+    from fsrs import State
+
+    palace = _palace(db_session)
+
+    # First Good on a brand-new card would otherwise be ~1h (learning step).
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id="s-first-good",
+        operation_id="op-first-good",
+        rating_scope="single",
+    )
+    first = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    first_delta = first.due_at - (first.last_review_at or first.due_at)
+    assert first_delta >= timedelta(days=1) - timedelta(seconds=5)
+    assert int(first.state) == int(State.Review)
+
+    # Hard puts the card into a short relearning window…
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=2,
+        study_session_id="s-relearn",
+        operation_id="op-relearn-hard",
+        rating_scope="single",
+    )
+    # …then Good must still floor to ≥1 day, not the 1h relearning step.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id="s-relearn",
+        operation_id="op-relearn-good",
+        rating_scope="single",
+    )
+    recovered = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    recovered_delta = recovered.due_at - (recovered.last_review_at or recovered.due_at)
+    assert recovered_delta >= timedelta(days=1) - timedelta(seconds=5)
+    assert int(recovered.state) == int(State.Review)
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=4,
+        study_session_id="s-easy",
+        operation_id="op-easy",
+        rating_scope="single",
+    )
+    easy = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a").one()
+    easy_delta = easy.due_at - (easy.last_review_at or easy.due_at)
+    assert easy_delta >= timedelta(days=3) - timedelta(seconds=5)
+
+
 def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):
     palace = _palace(db_session)
     rate_nodes(db_session, palace_id=palace.id, node_uid="a", rating=4, study_session_id="s1", operation_id="op1")

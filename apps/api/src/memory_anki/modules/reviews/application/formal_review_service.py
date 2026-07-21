@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -562,6 +562,56 @@ def _effective_ratings(session: Session, row: StudySession, scope: set[str]) -> 
     return result
 
 
+def _previous_formal_review_snapshot(
+    session: Session,
+    palace_id: int,
+    *,
+    exclude_session_id: str | None = None,
+) -> dict[str, Any]:
+    """Most recent completed formal review for mastery delta / last-review time.
+
+    Excludes the in-progress session so settlement can compare current mastery
+    against the last finished formal review receipt.
+    """
+    query = (
+        session.query(StudySession)
+        .filter(
+            StudySession.palace_id == palace_id,
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.ended_at.is_not(None),
+        )
+        .order_by(StudySession.ended_at.desc(), StudySession.id.desc())
+    )
+    if exclude_session_id:
+        query = query.filter(StudySession.id != exclude_session_id)
+    prev = query.first()
+    if prev is None or prev.ended_at is None:
+        return {
+            "last_review_at": None,
+            "previous_mastery_progress": None,
+            "previous_mastery_percent": None,
+        }
+    receipt = _json(prev.summary_json).get("completion_receipt")
+    mastery_progress: float | None = None
+    mastery_percent: int | None = None
+    if isinstance(receipt, dict):
+        raw_progress = receipt.get("mastery_progress")
+        raw_percent = receipt.get("mastery_percent")
+        if isinstance(raw_progress, int | float):
+            mastery_progress = round(float(raw_progress), 4)
+        if isinstance(raw_percent, int | float):
+            mastery_percent = round(float(raw_percent))
+        elif mastery_progress is not None:
+            mastery_percent = round(mastery_progress * 100)
+    return {
+        "last_review_at": prev.ended_at.isoformat(),
+        "previous_mastery_progress": mastery_progress,
+        "previous_mastery_percent": mastery_percent,
+    }
+
+
 def formal_review_completion_summary(session: Session, row: StudySession) -> dict[str, Any]:
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None:
@@ -581,6 +631,9 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
         counts[RATING_LABELS[rating]] += 1
     unrated_uids = sorted(scope - set(ratings))
     next_scope = next_review_scope_from_projection(projection)
+    previous = _previous_formal_review_snapshot(
+        session, int(palace.id), exclude_session_id=str(row.id)
+    )
     return {
         "scope_node_count": len(scope),
         "rated_node_count": len(ratings),
@@ -593,6 +646,7 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
         "memory_health_percent": projection["memory_health_percent"],
         "remaining_due_node_count": projection["due_node_count"],
         "next_review_at": projection["next_review_at"],
+        **previous,
         **next_scope,
         "ratings": ratings,
     }
@@ -704,9 +758,13 @@ def complete_formal_review(
     summary["memory_health"] = projection["memory_health"]
     summary["memory_health_percent"] = projection["memory_health_percent"]
     summary.update(next_review_scope_from_projection(projection))
+    # Receipt "上次复习" is this just-finished session; keep previous mastery for delta.
+    summary["last_review_at"] = ended_at.isoformat()
+    # review_date is the learner's local calendar day (matches today_review_counts).
+    # ended_at is UTC-naive; using its .date() near UTC midnight miscounts "今日".
     log = ReviewLog(
         palace_id=palace.id,
-        review_date=ended_at.date(),
+        review_date=date.today(),
         score=score,
         review_mode="fsrs",
         duration_seconds=max(0, int(duration_seconds)),

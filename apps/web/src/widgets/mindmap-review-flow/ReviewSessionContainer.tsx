@@ -481,7 +481,7 @@ export function ReviewSessionContainer({
               }
             : undefined
         }
-        onConfirm={(note) => { void completion.confirmCompletion({ note }) }}
+        onConfirm={() => { void completion.confirmCompletion({ note: '' }) }}
         onCancel={completion.cancelCompletion}
       />
     </div>

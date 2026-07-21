@@ -14,6 +14,7 @@ import {
   countNodes,
   flattenNodes,
   hideRevealStateBranch,
+  isNonFocusRevealTarget,
   parseEditorDoc,
   pourCheckpointRevealState,
   type BulkRevealScope,
@@ -181,9 +182,17 @@ export function useRevealSession({
             nodeMap,
             nextRevealMap,
             action.scope,
+            revealOptions,
+            root,
           )
         }
-        return hideRevealStateBranch(action.nodeId, nodeMap, nextRevealMap)
+        return hideRevealStateBranch(
+          action.nodeId,
+          nodeMap,
+          nextRevealMap,
+          revealOptions,
+          root,
+        )
       }, current),
     )
   }, [nodeMap, revealOptions, root])
@@ -215,14 +224,18 @@ export function useRevealSession({
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
+    // Due and non-due can still advance/expand children one step at a time.
+    // Only hide is restricted for non-due cards (see context menu).
     enqueueRevealAction({ type: 'advance', nodeId })
   }, [enqueueRevealAction])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
+    // Formal due-scope: only block hide on non-due cards. Due cards stay hideable.
+    if (isNonFocusRevealTarget(nodeId, root, revealOptions)) return
     enqueueRevealAction({ type: 'hide', nodeId })
-  }, [enqueueRevealAction])
+  }, [enqueueRevealAction, revealOptions, root])
 
   const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)

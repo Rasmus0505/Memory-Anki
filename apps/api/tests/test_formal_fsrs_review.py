@@ -79,12 +79,79 @@ def test_completion_receipt_exposes_next_wave_node_count(db_session):
     assert result["next_review_node_count"] >= 1
     assert result["next_review_entry_mode"] in {"node", "palace"}
     assert result["today_review_count"] == 1
+    assert result["last_review_at"] is not None
+    assert result["previous_mastery_percent"] is None
 
     payload = get_fsrs_queue_payload(db_session)
     # After Good ratings, palace may leave due queue; if still listed, count is 1.
     for item in payload["reviews"] + payload["later_today_reviews"]:
         if item["palace_id"] == palace.id:
             assert item["today_review_count"] == 1
+
+
+def test_completion_summary_carries_previous_mastery_and_last_review(db_session):
+    palace = _palace(db_session)
+    first = start_or_resume_formal_review(db_session, palace.id)
+    for uid in ("a", "b"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=3,
+            study_session_id=first.id,
+            operation_id=f"prev-mastery-first-{uid}",
+            rating_scope="single",
+            recall_round="first",
+        )
+    first_receipt = complete_formal_review(
+        db_session,
+        first,
+        duration_seconds=20,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+    first_mastery = first_receipt["mastery_percent"]
+    first_ended = first_receipt["last_review_at"]
+    assert first_ended is not None
+
+    # Force another due wave so a second formal session can start.
+    past = utc_now_naive() - timedelta(days=2)
+    for row in db_session.query(ReviewNodeState).filter_by(palace_id=palace.id).all():
+        row.due_at = past
+        row.last_review_at = past - timedelta(days=1)
+    db_session.commit()
+
+    second = start_or_resume_formal_review(db_session, palace.id)
+    assert second.id != first.id
+    summary = formal_review_completion_summary(db_session, second)
+    assert summary["last_review_at"] == first_ended
+    assert summary["previous_mastery_percent"] == first_mastery
+
+    for uid in summary.get("unrated_node_uids") or []:
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=4,
+            study_session_id=second.id,
+            operation_id=f"prev-mastery-second-{uid}",
+            rating_scope="single",
+            recall_round="first",
+        )
+    second_receipt = complete_formal_review(
+        db_session,
+        second,
+        duration_seconds=25,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+    assert second_receipt["previous_mastery_percent"] == first_mastery
+    assert second_receipt["last_review_at"] is not None
+    assert second_receipt["last_review_at"] != first_ended
 
 
 def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):

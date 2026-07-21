@@ -8,6 +8,7 @@ import {
   toGuidedSelection,
   type GuidedMindMapNode,
 } from './flipCardGuidedModel'
+import type { RatingSubtreeDialogChoice } from './RatingSubtreeConflictOverlay'
 
 const EMPTY_DIRECT_RATED: ReadonlySet<string> = new Set()
 const EMPTY_SESSION_RATED: ReadonlySet<string> = new Set()
@@ -124,9 +125,10 @@ export function useFlipCardRatingControls({
       rating: MindMapRecallRating,
       source: 'manual' | 'inferred' = 'manual',
       conflictPolicy: RatingConflictPolicy = 'overwrite',
+      scopeOverride?: 'single' | 'subtree',
     ) => {
       if (!ratingMode || !onRateNode || !isRateableNode(nodeUid)) return
-      const scope = getRatingScopeForNode(nodeUid)
+      const scope = scopeOverride ?? getRatingScopeForNode(nodeUid)
       void onRateNode(
         nodeUid,
         rating,
@@ -137,7 +139,8 @@ export function useFlipCardRatingControls({
           confidence: source === 'inferred' ? 0.35 : null,
           responseMs: Math.max(0, Date.now() - nodeEnteredAtRef.current),
         },
-        conflictPolicy,
+        // Single-node rating has no cascade conflicts to resolve.
+        scope === 'single' ? 'overwrite' : conflictPolicy,
       )
       if (source === 'inferred') setInferredNodeUid(nodeUid)
       else setInferredNodeUid(null)
@@ -165,14 +168,13 @@ export function useFlipCardRatingControls({
     (nodeUid: string, rating: MindMapRecallRating, source: 'manual' | 'inferred' = 'manual') => {
       if (!ratingMode || !onRateNode || !isRateableNode(nodeUid)) return
       const scope = getRatingScopeForNode(nodeUid)
+      // Any parent with children opens the scope dialog (not only when conflicts exist).
       if (scope === 'subtree') {
         const conflictCount = countSubtreeConflicts(nodeUid)
-        if (conflictCount > 0) {
-          setPendingSubtreeRating({ nodeUid, rating, source, conflictCount })
-          return
-        }
+        setPendingSubtreeRating({ nodeUid, rating, source, conflictCount })
+        return
       }
-      submitRateNodeUid(nodeUid, rating, source, 'overwrite')
+      submitRateNodeUid(nodeUid, rating, source, 'overwrite', 'single')
     },
     [countSubtreeConflicts, getRatingScopeForNode, isRateableNode, onRateNode, ratingMode, submitRateNodeUid],
   )
@@ -186,11 +188,15 @@ export function useFlipCardRatingControls({
   )
 
   const resolvePendingSubtreeRating = useCallback(
-    (policy: RatingConflictPolicy | 'cancel') => {
+    (policy: RatingSubtreeDialogChoice) => {
       const pending = pendingSubtreeRating
       setPendingSubtreeRating(null)
       if (!pending || policy === 'cancel') return
-      submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, policy)
+      if (policy === 'single') {
+        submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, 'overwrite', 'single')
+        return
+      }
+      submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, policy, 'subtree')
     },
     [pendingSubtreeRating, submitRateNodeUid],
   )

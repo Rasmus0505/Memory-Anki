@@ -22,12 +22,14 @@ from memory_anki.infrastructure.db._tables.reviews import (
 from memory_anki.modules.reviews.application.fsrs_runtime import (
     DEFAULT_MAXIMUM_INTERVAL,
     DEFAULT_RETENTION,
+    FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD,
     PARAMETER_VERSION,
     RATING_LABELS,
     SCHEDULER_VERSION,
     VALID_RATINGS,
     build_scheduler,
     cap_weak_rating_due,
+    ensure_strong_rating_due,
     load_fsrs_settings,
 )
 from memory_anki.modules.reviews.application.node_entry_projection import (
@@ -451,21 +453,45 @@ def due_node_uids_for_entry(
     entry_mode: str | None = None,
     branch_uid: str | None = None,
 ) -> list[str]:
-    """Resolve frozen due UIDs for formal review entry (palace or single top-level branch)."""
-    projection = get_palace_memory_projection(session, palace_id)
+    """Resolve frozen due UIDs for formal review entry (palace or single top-level branch).
+
+    Includes cards already due and those that become due within
+    ``FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD`` so short relearning/weak windows that
+    expire mid-session still enter the same frozen scope.
+    """
+    now = _utc_now()
+    horizon = now + FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD
+    projection = get_palace_memory_projection(session, palace_id, now=now)
     mode = entry_mode or projection.get("review_entry_mode") or "none"
-    if mode == "none" or not projection.get("due_node_uids"):
+    if mode == "none":
+        return []
+
+    def _in_entry_wave(item: dict[str, Any]) -> bool:
+        if item.get("due"):
+            return True
+        raw = item.get("due_at")
+        if not raw:
+            return False
+        try:
+            due_at = _aware(datetime.fromisoformat(str(raw)))
+        except ValueError:
+            return False
+        return bool(due_at and due_at <= horizon)
+
+    wave = [item for item in projection.get("nodes") or [] if _in_entry_wave(item)]
+    if not wave:
         return []
     if mode == "node":
         target_branch = branch_uid or projection.get("primary_branch_uid")
-        if not target_branch:
-            return list(projection["due_node_uids"])
-        return [
-            item["node_uid"]
-            for item in projection["nodes"]
-            if item.get("due") and item.get("branch_uid") == target_branch
-        ]
-    return list(projection["due_node_uids"])
+        if target_branch:
+            scoped = [
+                item["node_uid"]
+                for item in wave
+                if item.get("branch_uid") == target_branch
+            ]
+            if scoped:
+                return scoped
+    return [item["node_uid"] for item in wave]
 
 
 def get_palace_memory_projection(
@@ -710,8 +736,9 @@ def rate_nodes(
             card = normalize_legacy_card_clock(card)
         reviewed_at = _utc_now()
         card, _log = scheduler.review_card(card, Rating(rating), review_datetime=reviewed_at)
-        # 忘记/困难 → 十几分钟到半小时内再遇到；记得/轻松才允许多天间隔。
+        # 忘记/困难 → 十几分钟到半小时内再遇到；记得/轻松至少多日（学习步不回 1h）。
         card = cap_weak_rating_due(card, rating, now=reviewed_at)
+        card = ensure_strong_rating_due(card, rating, now=reviewed_at)
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
             session.add(row)

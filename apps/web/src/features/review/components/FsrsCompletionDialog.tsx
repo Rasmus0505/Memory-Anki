@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import {
+  formatLastReviewDetailLabel,
   formatNextReviewDetailLabel,
   formatReviewAbsolute,
 } from '@/entities/review/model/reviewScheduleFormat'
@@ -8,7 +8,7 @@ import { formatDuration } from '@/entities/session/model'
 import type { MindMapRecallRating, ReviewCompletionSummary } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
-import { Textarea } from '@/shared/components/ui/textarea'
+import { MasteryDeltaBadge } from '@/features/review/components/MasteryDeltaBadge'
 
 const BULK_RATING_OPTIONS: Array<{ rating: MindMapRecallRating; label: string }> = [
   { rating: 1, label: '忘记' },
@@ -30,7 +30,7 @@ interface Props {
   onRetrySubmission?: () => void
   /** One-tap rate every still-unrated node in this session's frozen due scope. */
   onBulkRateUnrated?: (rating: MindMapRecallRating) => void | Promise<void>
-  onConfirm: (note: string) => void
+  onConfirm: () => void
   onCancel: () => void
 }
 
@@ -49,11 +49,6 @@ export function FsrsCompletionDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  const [note, setNote] = useState('')
-  useEffect(() => {
-    if (open) setNote('')
-  }, [open])
-
   const unratedCount = summary?.unrated_due_node_count ?? 0
   const busy = submitting || bulkRating || preparing
 
@@ -84,8 +79,14 @@ export function FsrsCompletionDialog({
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="text-muted-foreground">掌握 / 记忆</div>
-                  <b>
-                    {summary.mastery_percent}% / {summary.memory_health_percent}%
+                  <b className="inline-flex items-baseline">
+                    <span>{summary.mastery_percent}%</span>
+                    <MasteryDeltaBadge
+                      current={summary.mastery_percent}
+                      previous={summary.previous_mastery_percent}
+                    />
+                    <span className="mx-1 text-muted-foreground">/</span>
+                    <span>{summary.memory_health_percent}%</span>
                   </b>
                 </div>
               </div>
@@ -99,16 +100,29 @@ export function FsrsCompletionDialog({
                   ),
                 )}
               </div>
-              <div className="rounded-lg border p-3 text-sm">
-                <div className="text-muted-foreground">下次复习</div>
-                <b className="mt-0.5 block">{formatReviewAbsolute(summary.next_review_at)}</b>
-                <div className="mt-1 text-muted-foreground">
-                  {formatNextReviewDetailLabel({
-                    nextReviewAt: summary.next_review_at,
-                    nextReviewNodeCount: summary.next_review_node_count ?? summary.remaining_due_node_count,
-                    nextReviewEntryMode: summary.next_review_entry_mode,
-                    nextReviewEntryLabel: summary.next_review_entry_label,
-                  })}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border p-3 text-sm">
+                  <div className="text-muted-foreground">上次复习</div>
+                  <b className="mt-0.5 block">
+                    {summary.last_review_at
+                      ? formatReviewAbsolute(summary.last_review_at)
+                      : '—'}
+                  </b>
+                  <div className="mt-1 text-muted-foreground">
+                    {formatLastReviewDetailLabel(summary.last_review_at)}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 text-sm">
+                  <div className="text-muted-foreground">下次复习</div>
+                  <b className="mt-0.5 block">{formatReviewAbsolute(summary.next_review_at)}</b>
+                  <div className="mt-1 text-muted-foreground">
+                    {formatNextReviewDetailLabel({
+                      nextReviewAt: summary.next_review_at,
+                      nextReviewNodeCount: summary.next_review_node_count ?? summary.remaining_due_node_count,
+                      nextReviewEntryMode: summary.next_review_entry_mode,
+                      nextReviewEntryLabel: summary.next_review_entry_label,
+                    })}
+                  </div>
                 </div>
               </div>
               {unratedCount > 0 ? (
@@ -142,16 +156,6 @@ export function FsrsCompletionDialog({
                   ) : null}
                 </div>
               ) : null}
-              <div>
-                <div className="mb-1 text-xs text-muted-foreground">复盘一句（可选）</div>
-                <Textarea
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  rows={2}
-                  maxLength={500}
-                  placeholder="这次哪里卡了、下次注意什么"
-                />
-              </div>
             </>
           ) : null}
         </div>
@@ -168,7 +172,7 @@ export function FsrsCompletionDialog({
               重新加载
             </Button>
           ) : (
-            <Button disabled={!summary || busy} onClick={() => onConfirm(note.trim())}>
+            <Button disabled={!summary || busy} onClick={onConfirm}>
               {submitting ? '正在提交…' : '确认结束本次复习'}
             </Button>
           )}

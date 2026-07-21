@@ -46,6 +46,8 @@ Reviews now owns an independent FSRS card for every non-root palace node, keyed 
 
 Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Formal completion re-anchors every non-undone session-rated node's schedule clock to session end (interval preserved) so mid-session 忘记/困难 short caps do not expire before “完成”.
 
+**Interval policy after FSRS:** 忘记/困难 are *capped* at 10/30 minutes (same-day restudy). 记得/轻松 are *floored* at 1 day / 3 days so default learning/relearning steps (10m, 1h) cannot bounce a “记得” card back within the hour; Learning/Relearning cards are promoted to Review after Good/Easy. Formal session freeze also includes nodes that become due within a 1-hour look-ahead so near-due relearning cards enter the same frozen scope instead of remaining due after completion.
+
 Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
 
 Legacy stage → node FSRS migration may leave `state_source=legacy_estimate` cards with historical overdue clocks. Rating those cards once as Good can inflate stability into full mastery. Runtime `rate_nodes` normalizes legacy clocks before the first real FSRS write; one-shot data repair lives in `tools/repair_legacy_fsrs_inflation.py` (`legacy_fsrs_repair.repair_legacy_fsrs_inflation`).

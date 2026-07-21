@@ -25,6 +25,13 @@ DEFAULT_RELEARNING_STEPS: tuple[timedelta, ...] = (
 # (py-fsrs Hard on mature Review cards can otherwise jump ~10 days.)
 WEAK_AGAIN_MAX_INTERVAL = timedelta(minutes=10)
 WEAK_HARD_MAX_INTERVAL = timedelta(minutes=30)
+# Learning / relearning steps (default 10m, 1h) would otherwise put 记得 back within
+# an hour — product policy is multi-day only for Good/Easy (see review-boundary.md).
+STRONG_GOOD_MIN_INTERVAL = timedelta(days=1)
+STRONG_EASY_MIN_INTERVAL = timedelta(days=3)
+# When freezing a formal session, also pull in cards that become due during typical
+# short weak-rating windows so they are not left outside the frozen scope.
+FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD = timedelta(hours=1)
 
 RATING_LABELS = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
 VALID_RATINGS = frozenset(RATING_LABELS)
@@ -128,6 +135,23 @@ def build_scheduler(
     )
 
 
+def _review_now_aware(now: Any | None = None) -> Any:
+    from datetime import datetime, timezone
+
+    review_now = now or datetime.now(timezone.utc)
+    if getattr(review_now, "tzinfo", None) is None:
+        review_now = review_now.replace(tzinfo=timezone.utc)
+    return review_now
+
+
+def _due_aware(due: Any) -> Any | None:
+    from datetime import timezone
+
+    if due is None:
+        return None
+    return due if getattr(due, "tzinfo", None) is not None else due.replace(tzinfo=timezone.utc)
+
+
 def cap_weak_rating_due(card: Any, rating: int, *, now: Any | None = None) -> Any:
     """Keep 忘记/困难 inside a short same-day re-study window.
 
@@ -137,19 +161,42 @@ def cap_weak_rating_due(card: Any, rating: int, *, now: Any | None = None) -> An
     """
     if rating not in (1, 2):
         return card
-    from datetime import datetime, timezone
-
-    review_now = now or datetime.now(timezone.utc)
-    if getattr(review_now, "tzinfo", None) is None:
-        review_now = review_now.replace(tzinfo=timezone.utc)
+    review_now = _review_now_aware(now)
     max_interval = WEAK_AGAIN_MAX_INTERVAL if rating == 1 else WEAK_HARD_MAX_INTERVAL
     max_due = review_now + max_interval
-    due = getattr(card, "due", None)
-    if due is None:
+    due_aware = _due_aware(getattr(card, "due", None))
+    if due_aware is None:
         return card
-    due_aware = due if getattr(due, "tzinfo", None) is not None else due.replace(tzinfo=timezone.utc)
     if due_aware > max_due:
         card.due = max_due
+    return card
+
+
+def ensure_strong_rating_due(card: Any, rating: int, *, now: Any | None = None) -> Any:
+    """Floor 记得/轻松 so learning/relearning steps cannot reschedule same-day.
+
+    py-fsrs with default steps (10m, 1h) schedules the first Good on a New or
+    Relearning card for ~1 hour later. Formal palace review treats 记得 as
+    "remembered — multi-day interval", matching the weak-rating policy docs.
+    When FSRS still leaves the card in Learning/Relearning after Good/Easy,
+    promote to Review so the next rating uses the review path, not short steps.
+    """
+    if rating not in (3, 4):
+        return card
+    from fsrs import State
+
+    review_now = _review_now_aware(now)
+    min_interval = STRONG_EASY_MIN_INTERVAL if rating == 4 else STRONG_GOOD_MIN_INTERVAL
+    min_due = review_now + min_interval
+    due_aware = _due_aware(getattr(card, "due", None))
+    if due_aware is None or due_aware < min_due:
+        card.due = min_due
+
+    state = getattr(card, "state", None)
+    state_value = int(state) if state is not None else None
+    if state_value in {int(State.Learning), int(State.Relearning)}:
+        card.state = State.Review
+        card.step = None
     return card
 
 

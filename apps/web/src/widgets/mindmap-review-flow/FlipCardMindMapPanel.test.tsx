@@ -183,7 +183,12 @@ describe('FlipCardMindMapPanel', () => {
       true,
     )
     const remember = inScope.find((action: { id: string }) => action.id === 'rate-3')
-    remember?.onClick()
+    await act(async () => {
+      remember?.onClick()
+    })
+    // Parent with children always opens the scope dialog first.
+    expect(onRateNode).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
     expect(onRateNode).toHaveBeenCalledWith(
       'child',
       3,
@@ -247,7 +252,10 @@ describe('FlipCardMindMapPanel', () => {
     })
     const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
     const remember = actions.find((action: { id: string }) => action.id === 'rate-3')
-    remember?.onClick()
+    await act(async () => {
+      remember?.onClick()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
     expect(onRateNode).toHaveBeenCalledWith(
       'child',
       3,
@@ -338,7 +346,7 @@ describe('FlipCardMindMapPanel', () => {
     )
   })
 
-  it('allows rating the root node with subtree scope when it has children', async () => {
+  it('asks for rating scope when a parent has children even without conflicts', async () => {
     const onRateNode = vi.fn()
     renderInRouter(
       <FlipCardMindMapPanel
@@ -361,12 +369,52 @@ describe('FlipCardMindMapPanel', () => {
     expect(actions.some((action: { id: string }) => action.id === 'rate-3')).toBe(true)
 
     const remember = actions.find((action: { id: string }) => action.id === 'rate-3')
-    remember?.onClick()
+    await act(async () => {
+      remember?.onClick()
+    })
+    expect(onRateNode).not.toHaveBeenCalled()
+    expect(screen.getByTestId('rating-conflict-dialog')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '单独评分选中的父节点' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '级联评分子树' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
     expect(onRateNode).toHaveBeenCalledWith(
       'root',
       3,
       'first',
       'subtree',
+      expect.any(Object),
+      'overwrite',
+    )
+  })
+
+  it('can score only the selected parent from the subtree rating dialog', async () => {
+    const onRateNode = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        onRateNode={onRateNode}
+      />,
+    )
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
+    })
+    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
+    await act(async () => {
+      actions.find((action: { id: string }) => action.id === 'rate-3')?.onClick()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '单独评分选中的父节点' }))
+    expect(onRateNode).toHaveBeenCalledWith(
+      'child',
+      3,
+      'first',
+      'single',
       expect.any(Object),
       'overwrite',
     )
@@ -399,6 +447,7 @@ describe('FlipCardMindMapPanel', () => {
 
     expect(onRateNode).not.toHaveBeenCalled()
     expect(screen.getByTestId('rating-conflict-dialog')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '单独评分选中的父节点' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '避开' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '覆盖' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()

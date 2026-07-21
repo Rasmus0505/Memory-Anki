@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  formatLastReviewDetailLabel,
   formatNextReviewDetailLabel,
   formatReviewAbsolute,
+  formatReviewElapsedFromNow,
   formatReviewIntervalFromNow,
   formatReviewIntervalLabel,
 } from './reviewScheduleFormat'
@@ -31,6 +33,14 @@ describe('reviewScheduleFormat', () => {
   it('labels completion interval lines', () => {
     expect(formatReviewIntervalLabel('2026-07-16T10:00:00Z')).toBe('间隔 · 1天后')
     expect(formatReviewIntervalLabel(null)).toBe('间隔 · —')
+  })
+
+  it('formats relative elapsed time for last review', () => {
+    expect(formatReviewElapsedFromNow('2026-07-15T09:30:00Z')).toBe('30分钟前')
+    expect(formatReviewElapsedFromNow('2026-07-15T08:00:00Z')).toBe('2小时前')
+    expect(formatReviewElapsedFromNow('2026-07-14T10:00:00Z')).toBe('1天前')
+    expect(formatLastReviewDetailLabel('2026-07-15T08:00:00Z')).toBe('距今 · 2小时前')
+    expect(formatLastReviewDetailLabel(null)).toBe('本宫首次正式复习')
   })
 
   it('labels next-review detail with node count and entry mode', () => {

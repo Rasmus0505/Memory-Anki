@@ -134,6 +134,76 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('placeholder')
   })
 
+  it('blocks hide only on non-due cards; due hide sticks and expand stays stepwise', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            { data: { text: 'Fresh', uid: 'fresh' }, children: [] },
+            {
+              data: { text: 'Due', uid: 'due' },
+              children: [
+                { data: { text: 'Nested fresh', uid: 'nested-fresh' }, children: [] },
+                { data: { text: 'Nested due', uid: 'nested-due' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState: nested,
+        focusNodeIds: ['due', 'nested-due'],
+      }),
+    )
+
+    expect(result.current.revealMap.fresh).toBe('revealed')
+    expect(result.current.revealMap.due).toBe('placeholder')
+    expect(result.current.revealMap['nested-fresh']).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeContextMenu([selection('fresh', 'Fresh')])
+    })
+    flushRevealFrame()
+    // Non-due cards cannot be hidden in formal due-scope review.
+    expect(result.current.revealMap.fresh).toBe('revealed')
+
+    act(() => {
+      result.current.handleNodeClick([selection('due', 'Due')])
+    })
+    flushRevealFrame()
+    // Flip due content only — do not dump all children.
+    expect(result.current.revealMap.due).toBe('revealed')
+    expect(result.current.revealMap['nested-fresh']).toBe('hidden')
+    expect(result.current.revealMap['nested-due']).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeClick([selection('due', 'Due')])
+    })
+    flushRevealFrame()
+    // Free child skips placeholder; due sibling stays hidden until next expand.
+    expect(result.current.revealMap['nested-fresh']).toBe('revealed')
+    expect(result.current.revealMap['nested-due']).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeClick([selection('due', 'Due')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap['nested-due']).toBe('placeholder')
+
+    act(() => {
+      result.current.handleNodeContextMenu([selection('due', 'Due')])
+    })
+    flushRevealFrame()
+    // Due card hide must actually hide descendants.
+    expect(result.current.revealMap['nested-fresh']).toBe('hidden')
+    expect(result.current.revealMap['nested-due']).toBe('hidden')
+  })
+
   it('bulk-reveals descendants from hover with selection fallback', () => {
     const nested: MindMapEditorState = {
       ...editorState,

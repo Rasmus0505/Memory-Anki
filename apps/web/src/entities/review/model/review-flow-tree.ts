@@ -306,28 +306,56 @@ export function collectBulkRevealTargets(
   return targets
 }
 
+function resolveFocusNodeIds(
+  root: ReviewMindMapNode | null,
+  options: RevealFlowOptions = {},
+): string[] {
+  if (!root || options.mode === 'segment-checkpoint') return []
+  return sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
+}
+
+/**
+ * First appearance state for a card that is being stepped out of `hidden`.
+ * Formal due-scope: non-due cards skip placeholder and open fully; due cards
+ * still require an explicit flip (placeholder → revealed).
+ */
+function firstAppearStateForChild(
+  child: ReviewMindMapNode,
+  focusIds: string[],
+): RevealState {
+  if (child.isQuestionCard) return 'revealed'
+  if (focusIds.length > 0 && !focusIds.includes(child.id)) return 'revealed'
+  return 'placeholder'
+}
+
 /**
  * Two-phase bulk flip under a hover/selection anchor:
  * 1) If any target is still hidden → turn those into placeholders
- *    (question cards skip placeholder and open as revealed).
+ *    (question cards / non-due free cards skip placeholder and open as revealed).
  * 2) Else if any target is still placeholder → turn those into revealed content.
  * Already-revealed cards are never forced back to placeholder.
+ *
+ * Never cascade-opens an entire free subtree; user still advances one step at a time
+ * (or uses bulk intentionally).
  */
 export function advanceBulkRevealState(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
   scope: BulkRevealScope,
+  options: RevealFlowOptions = {},
+  root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
   const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
   if (targets.length === 0) return revealMap
+  const focusIds = resolveFocusNodeIds(root, options)
 
   const hasHidden = targets.some((target) => (revealMap[target.id] ?? 'hidden') === 'hidden')
   if (hasHidden) {
     const next = { ...revealMap }
     for (const target of targets) {
       if ((next[target.id] ?? 'hidden') !== 'hidden') continue
-      next[target.id] = target.isQuestionCard ? 'revealed' : 'placeholder'
+      next[target.id] = firstAppearStateForChild(target, focusIds)
     }
     return applyQuestionCardAutoReveal(nodeMap, next)
   }
@@ -357,12 +385,9 @@ export function advanceRevealStateForNodeClick(
   const node = nodeMap.get(nodeId)
   if (!node) return revealMap
   const state = revealMap[nodeId] ?? 'hidden'
-  void options
-  void root
+  const focusIds = resolveFocusNodeIds(root, options)
 
-  // Formal due-scope only changes the *initial* map (non-due auto-shown).
-  // Click advance always matches normal review: one step per click —
-  // placeholder → revealed content, or revealed parent → next child placeholder.
+  // Flip only this card. Do not auto-open its whole subtree of free/due children.
   if (state === 'placeholder') {
     return applyQuestionCardAutoReveal(nodeMap, {
       ...revealMap,
@@ -373,8 +398,9 @@ export function advanceRevealStateForNodeClick(
 
   const nextChild = findNextHiddenChild(node, revealMap)
   if (!nextChild) return revealMap
-  // Question cards never land on placeholder; auto-reveal cascade handles them.
-  const childState: RevealState = nextChild.isQuestionCard ? 'revealed' : 'placeholder'
+  // One step per click: next hidden child appears. Free (non-due) cards open fully;
+  // due cards land on placeholder so the user still flips them one by one.
+  const childState = firstAppearStateForChild(nextChild, focusIds)
   return applyQuestionCardAutoReveal(nodeMap, { ...revealMap, [nextChild.id]: childState })
 }
 
@@ -382,8 +408,30 @@ export function hideRevealStateBranch(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
+  _options: RevealFlowOptions = {},
+  _root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
+  // Hide must stick for due cards. Do not re-heal free cards back open here —
+  // non-due hide is blocked at the session handler instead.
+  void _options
+  void _root
   return hideNodeAndDescendants(nodeId, nodeMap, revealMap)
+}
+
+/**
+ * Formal due-scope: true for cards that are not in the frozen due set
+ * (including the palace root). Hide / content-conceal ops must not run on these.
+ * Due cards remain fully operable.
+ */
+export function isNonFocusRevealTarget(
+  nodeId: string,
+  root: ReviewMindMapNode,
+  options: RevealFlowOptions = {},
+): boolean {
+  const focusIds = resolveFocusNodeIds(root, options)
+  if (focusIds.length === 0) return false
+  if (nodeId === root.id) return true
+  return !focusIds.includes(nodeId)
 }
 
 export function pourCheckpointRevealState(
@@ -486,26 +534,38 @@ function cardSlotHasAppeared(state: RevealState | undefined) {
   return state === 'placeholder' || state === 'revealed'
 }
 
+/**
+ * Per-child edge style (keyed by parent id → applied on each child via parentId).
+ *
+ * Each edge reflects THAT child's own subtree progress, not the parent's aggregate
+ * of all siblings. Otherwise finishing every card under one branch still left its
+ * parent→child edges blue while a sibling branch under the same parent was incomplete.
+ */
+function lineStyleForChildSubtree(
+  childAppeared: boolean,
+  childSubtreeFullyRevealed: boolean,
+): Record<string, string | number> {
+  if (childSubtreeFullyRevealed) return SUBTREE_REVEALED_LINE_STYLE
+  if (childAppeared) return DIRECT_LEVEL_VISIBLE_LINE_STYLE
+  return EXPANDING_LINE_STYLE
+}
+
 function buildLineStylesByParentId(
   root: ReviewMindMapNode,
   revealMap: Record<string, RevealState>,
 ) {
-  const styles = new Map<string, Record<string, string | number>>()
+  // Map: childNodeId → edge style for the link from its parent into this child.
+  const stylesByChildId = new Map<string, Record<string, string | number>>()
 
   const walk = (node: ReviewMindMapNode): boolean => {
     const childrenAndDescendantsRevealed = node.children.map(walk)
-    if (node.children.length > 0) {
-      const directLevelVisible = node.children.every(
-        (child) => cardSlotHasAppeared(revealMap[child.id]),
-      )
-      const subtreeRevealed = childrenAndDescendantsRevealed.every(Boolean)
-      styles.set(
-        node.id,
-        subtreeRevealed
-          ? SUBTREE_REVEALED_LINE_STYLE
-          : directLevelVisible
-            ? DIRECT_LEVEL_VISIBLE_LINE_STYLE
-            : EXPANDING_LINE_STYLE,
+    for (let index = 0; index < node.children.length; index += 1) {
+      const child = node.children[index]
+      const childAppeared = cardSlotHasAppeared(revealMap[child.id])
+      const childSubtreeFullyRevealed = childrenAndDescendantsRevealed[index] === true
+      stylesByChildId.set(
+        child.id,
+        lineStyleForChildSubtree(childAppeared, childSubtreeFullyRevealed),
       )
     }
     return (
@@ -515,7 +575,7 @@ function buildLineStylesByParentId(
   }
 
   walk(root)
-  return styles
+  return stylesByChildId
 }
 
 function getNodeVisualStyle(
@@ -608,7 +668,7 @@ export function buildVisibleEditorDoc(
   }
 
   const reviewRoot = nodeMap.get(getNodeId(source.root, 'root'))
-  const lineStylesByParentId = reviewRoot
+  const lineStylesByChildId = reviewRoot
     ? buildLineStylesByParentId(reviewRoot, revealMap)
     : new Map<string, Record<string, string | number>>()
 
@@ -650,7 +710,8 @@ export function buildVisibleEditorDoc(
       getNodeVisualStyle(
         forceVisible ? 'revealed' : revealState,
         fallbackId === 'root',
-        lineStylesByParentId.get(nodeMap.get(id)?.parentId ?? '') ?? EXPANDING_LINE_STYLE,
+        // Edge into this card reflects this card's own subtree completion.
+        lineStylesByChildId.get(id) ?? EXPANDING_LINE_STYLE,
         redNodeIds.has(id) && fallbackId !== 'root',
       ),
     )

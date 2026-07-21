@@ -276,24 +276,6 @@ export function useReviewFlowSession({
     [reveal.completed, reveal.handleBulkRevealDirectChildren, timer.registerActivity],
   )
 
-  const handleBulkRevealSubtree = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'bulk_flip_subtree' })
-      reveal.handleBulkRevealSubtree(fallbackNodeId)
-    },
-    [reveal, timer],
-  )
-
-  const handleBulkRevealDirectChildren = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'bulk_flip_direct_children' })
-      reveal.handleBulkRevealDirectChildren(fallbackNodeId)
-    },
-    [reveal, timer],
-  )
-
   const handleSpacePour = React.useCallback(() => {
     if (reveal.completed || revealMode !== 'segment-checkpoint') return
     timer.registerActivity('practice_interaction', { source: 'segment_checkpoint_space_pour' })
