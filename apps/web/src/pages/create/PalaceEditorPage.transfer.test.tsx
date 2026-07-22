@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from '@/shared/feedback/toast'
-import * as palaceApi from '@/entities/palace/api'
-import { serializeMindMapTransferFile } from '@/entities/mindmap-document'
+import * as palaceApi from '@/modules/content/public'
+import { serializeMindMapTransferFile } from '@/modules/content/public'
 import {
   fireEvent,
   getMindMapTexts,

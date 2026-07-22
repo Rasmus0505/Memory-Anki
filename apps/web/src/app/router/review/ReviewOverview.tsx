@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowDownUp, ArrowRight, Brain, CalendarClock, Zap } from 'lucide-react'
 import type { ReviewQueueResponse } from '@/shared/api/contracts'
-import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi, startReviewWaveSessionApi } from '@/features/review/api'
+import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi, startReviewWaveSessionApi } from '@/modules/practice/public'
 import {
   DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
   isReviewQueueSortMode,
@@ -12,9 +12,9 @@ import {
   sortReviewQueueItems,
   type ReviewQueueSortMode,
   type ReviewQueueViewSettings,
-} from '@/features/review/model/reviewQueueSort'
-import { buildReviewSessionPath } from '@/entities/review'
-import { formatDuration } from '@/entities/session/model'
+} from '@/modules/practice/public'
+import { buildReviewSessionPath } from '@/modules/memory/public'
+import { formatDuration } from '@/modules/session/public'
 import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Button } from '@/shared/components/ui/button'
@@ -27,8 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
-import { ReviewLoadForecastCard } from '@/features/review/components/ReviewLoadForecastCard'
-import { ReviewEntryTooltip } from '@/entities/review'
+import { ReviewLoadForecastCard } from '@/modules/practice/public'
+import { ReviewEntryTooltip } from '@/modules/memory/public'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 

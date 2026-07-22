@@ -2,9 +2,9 @@
 import pytest
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.knowledge.application import chapter_service, subject_service
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
-from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 

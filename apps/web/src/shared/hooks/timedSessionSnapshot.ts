@@ -1,4 +1,4 @@
-import type { SessionKind, SessionSceneSegment, TimeSessionRecord } from '@/entities/session/model'
+import type { SessionKind, SessionSceneSegment, TimeSessionRecord } from '@/modules/session/public'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   createStableRecordId,

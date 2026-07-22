@@ -1,0 +1,16 @@
+{
+  "name": "dashboard",
+  "owns": [
+    "dashboard read models"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/dashboard/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

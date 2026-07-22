@@ -1,0 +1,16 @@
+{
+  "name": "backup",
+  "owns": [
+    "backup UI"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/backup/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

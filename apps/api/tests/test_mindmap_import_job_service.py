@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables import Base, engine
 from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
-from memory_anki.modules.palaces.application import mindmap_import_job_api
-from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
-from memory_anki.modules.palaces.application.mindmap_import import (
+from memory_anki.modules.produce.application import mindmap_import_job_api
+from memory_anki.modules.produce.application import mindmap_import_job_service as job_service
+from memory_anki.modules.produce.application.mindmap_import import (
     MindMapImportError,
     job_repository,
 )
-from memory_anki.modules.palaces.presentation import import_router
+from memory_anki.modules.produce.presentation import import_router
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import AiRuntimeOptions
 

@@ -1,8 +1,8 @@
-﻿"""Session write-ish operations (progress upserts / clear)."""
+"""Session write operations."""
 
 from __future__ import annotations
 
-from memory_anki.modules.sessions.api import (
+from memory_anki.modules.session.api import (
     clear_practice_progress,
     clear_review_progress,
     create_review_study_session,

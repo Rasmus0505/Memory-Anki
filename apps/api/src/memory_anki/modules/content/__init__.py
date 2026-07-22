@@ -1,1 +1,1 @@
-"""content context (vertical slice target)."""
+from __future__ import annotations

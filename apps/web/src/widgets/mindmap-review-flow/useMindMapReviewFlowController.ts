@@ -1,16 +1,16 @@
 import * as React from "react";
 import { useQuizLauncher } from "@/widgets/quiz-launcher";
-import { getReviewSurpriseCopy } from "@/entities/review/model/review-feedback";
-import { useReviewFlowSession } from "@/features/review/hooks/useReviewFlowSession";
-import { useMemoryAnkiShortcuts } from "@/entities/preferences/model/memoryAnkiShortcuts";
-import type { MindMapSelection } from "@/features/mindmap-editor";
+import { getReviewSurpriseCopy } from "@/modules/memory/public";
+import { useReviewFlowSession } from "@/modules/practice/public";
+import { useMemoryAnkiShortcuts } from "@/modules/settings/public";
+import type { MindMapSelection } from "@/modules/content/public";
 import type { MindMapEditorState } from "@/shared/api/contracts";
-import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
+import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/modules/content/public'
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/feedback/toast";
-import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
-import { useMindMapRecallRatings } from '@/features/review/hooks/useMindMapRecallRatings';
+import type { MindMapReviewFlowProps } from "@/modules/practice/public";
+import { useMindMapRecallRatings } from '@/modules/practice/public';
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = [];
 
@@ -37,6 +37,7 @@ export function useMindMapReviewFlowController({
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   reviewScopeNodeUids,
+  autoRevealNonDueCards = true,
   displayMode = "review",
   persistKey = null,
   reviewEditorState,
@@ -88,8 +89,9 @@ export function useMindMapReviewFlowController({
     sessionKind,
     revealMode,
     checkpointNodeUids,
-    // Frozen due set: auto-reveal non-due cards so formal/node review only flips due ones.
-    focusNodeUids: reviewScopeNodeUids,
+    // Formal palace: focus=due so non-due open fully. Freestyle units pass
+    // autoRevealNonDueCards=false for classic placeholder flip on every node.
+    focusNodeUids: autoRevealNonDueCards ? reviewScopeNodeUids : EMPTY_CHECKPOINT_NODE_UIDS,
     persistKey,
     editorState: reviewEditorState,
     onComplete,

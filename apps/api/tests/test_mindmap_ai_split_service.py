@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.palaces.application import mindmap_ai_split_service as service
+from memory_anki.modules.produce.application import mindmap_ai_split_service as service
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 

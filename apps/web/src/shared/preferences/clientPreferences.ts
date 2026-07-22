@@ -2,7 +2,7 @@ import type { ClientPreferences } from '@/shared/api/contracts'
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api'
+} from '@/modules/settings/public'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
 export const CLIENT_PREFERENCES_UPDATED_EVENT = APP_EVENT_NAMES.clientPreferencesUpdated

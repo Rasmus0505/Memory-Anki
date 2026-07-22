@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables import Base, engine
 from memory_anki.infrastructure.db._tables.misc import MindMapImportJob
-from memory_anki.modules.palaces.application import mindmap_import_job_service as job_service
 from memory_anki.modules.pdf_library import ocr_cache
+from memory_anki.modules.produce.application import mindmap_import_job_service as job_service
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.platform.application import AiRuntimeOptions
 

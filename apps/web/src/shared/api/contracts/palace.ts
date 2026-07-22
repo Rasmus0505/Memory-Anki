@@ -67,6 +67,9 @@ export interface PalaceListItem {
   mastery_horizon_days?: number
   due_node_count?: number
   overdue_node_count?: number
+  reinforcement_due_count?: number
+  uninitialized_node_count?: number
+  content_changed_node_count?: number
   memory_next_review_at?: string | null
   memory_mastered?: boolean
   severe_weak_node_count?: number
@@ -147,6 +150,9 @@ export interface PalaceEditorMeta {
   mastery_horizon_days?: number
   due_node_count?: number
   overdue_node_count?: number
+  reinforcement_due_count?: number
+  uninitialized_node_count?: number
+  content_changed_node_count?: number
   memory_next_review_at?: string | null
   memory_mastered?: boolean
   severe_weak_node_count?: number

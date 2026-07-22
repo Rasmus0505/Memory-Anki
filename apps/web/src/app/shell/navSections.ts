@@ -9,7 +9,7 @@ import {
 import {
   prefetchPalacesGroupedSummaryApi,
   prefetchPalaceSubjectShelfApi,
-} from '@/entities/palace/api'
+} from '@/modules/content/public'
 import {
   preloadEnglishHubPage,
   preloadEnglishReadingPage,
@@ -22,8 +22,8 @@ import {
   preloadPracticeRoutes,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
-import { prefetchDashboardApi } from '@/features/dashboard/api'
-import { prefetchReviewQueueApi } from '@/features/review/api'
+import { prefetchDashboardApi } from '@/modules/dashboard/public'
+import { prefetchReviewQueueApi } from '@/modules/practice/public'
 
 export type NavSectionKey =
   | 'freestyle'

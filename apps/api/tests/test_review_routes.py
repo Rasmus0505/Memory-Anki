@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
-from memory_anki.modules.palaces.presentation import router as palace_router
-from memory_anki.modules.reviews.presentation import router as review_router
+from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+from memory_anki.modules.content.presentation import router as palace_router
+from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.settings.presentation import router as settings_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 from support import RouterTestCase
@@ -37,6 +39,24 @@ class ReviewRouteTests(RouterTestCase):
             editor_doc=EDITOR_DOC,
         )
         session.add(palace)
+        session.flush()
+        # Wave formal queue only counts initialized memory nodes.
+        past = utc_now_naive() - timedelta(days=1)
+        for uid in ("branch-a", "branch-b"):
+            session.add(
+                ReviewNodeState(
+                    palace_id=palace.id,
+                    node_uid=uid,
+                    state=2,
+                    stability=3.0,
+                    difficulty=5.0,
+                    due_at=past,
+                    raw_due_at=past,
+                    last_review_at=past - timedelta(days=3),
+                    schedule_source="manual",
+                    content_fingerprint="",
+                )
+            )
         session.commit()
 
     def test_legacy_stage_runtime_routes_are_removed(self):
@@ -95,6 +115,13 @@ class ReviewRouteTests(RouterTestCase):
         session_id = start.json()["session_id"]
         self.assertTrue(str(session_id).startswith("review-"))
 
+        # Wave rule: rate frozen nodes before complete (bulk settlement).
+        rate = self.client.post(
+            f"/api/v1/review/session/{session_id}/rate-unrated",
+            json={"rating": 3, "operation_id": "route-settlement-note"},
+        )
+        self.assertEqual(rate.status_code, 200)
+
         submit = self.client.post(
             f"/api/v1/review/session/{session_id}/submit",
             json={
@@ -115,6 +142,13 @@ class ReviewRouteTests(RouterTestCase):
             palace_id = session.query(Palace).one().id
         start = self.client.post(f"/api/v1/review/palaces/{palace_id}/sessions", json={})
         session_id = start.json()["session_id"]
+        self.assertEqual(
+            self.client.post(
+                f"/api/v1/review/session/{session_id}/rate-unrated",
+                json={"rating": 3, "operation_id": "route-settlement-dup"},
+            ).status_code,
+            200,
+        )
         headers = {MUTATION_ID_HEADER: "review-submit-dup"}
         body = {"duration_seconds": 8, "completion_mode": "manual_complete"}
         first = self.client.post(

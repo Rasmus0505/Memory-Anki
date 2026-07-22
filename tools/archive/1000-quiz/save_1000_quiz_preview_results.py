@@ -41,7 +41,7 @@ def main() -> int:
 
     from memory_anki.infrastructure.db.models import get_session
     from memory_anki.infrastructure.db.models import PalaceQuizQuestion
-    from memory_anki.modules.palace_quiz.application.question_creation_commands import (
+    from memory_anki.modules.quiz.application.question_creation_commands import (
         batch_create_chapter_questions,
     )
 

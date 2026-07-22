@@ -1,1 +1,1 @@
-export { default } from '@/features/profile/ProfileBackupsPage'
+export { ProfileBackupsPage as default } from '@/modules/settings/public'

@@ -1,15 +1,14 @@
 # Module: practice
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+active — owns freestyle immersive feed + formal review composition surfaces (frontend)
 
 ## Owns
-Formal review flow + freestyle immersive queue
+Feed config, queue state, training round guards, immersive persistence, practice/review orchestration UI entry
 
 ## Public entry
-`public.ts` — only cross-module import path.
+public.ts
 
 ## Rules
-- Do not import other modules' internal paths.
-- Domain code is framework-free (no React).
-- Workflows (XState) live under application/workflows.
+- Other modules import only from public.ts
+- Domain is framework-free

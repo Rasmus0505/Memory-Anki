@@ -7,7 +7,7 @@ import {
   invalidatePalaceCatalogCache,
   savePracticeSessionProgressApi,
   updatePalacePracticeFlagApi,
-} from '@/entities/palace/api'
+} from '@/modules/content/public'
 import {
   PracticeSessionRoute,
   type PracticeProgressSnapshot,

@@ -59,7 +59,7 @@ def main() -> int:
 
     # Import DB stack only after MEMORY_ANKI_HOME is set (engine binds at import).
     from memory_anki.infrastructure.db._tables import get_session
-    from memory_anki.modules.reviews.application.legacy_fsrs_repair import (
+    from memory_anki.modules.memory.application.legacy_fsrs_repair import (
         repair_legacy_fsrs_inflation,
     )
 

@@ -615,7 +615,7 @@ def test_context_map_requires_registered_backend_dependency_to_use_public_entry(
     assert errors == [
         "apps/api/src/memory_anki/modules/alpha/application/service.py: registered "
         "cross-context dependency `alpha -> beta` must import public entry "
-        "`memory_anki.modules.beta.api`, not "
+        "`memory_anki.modules.beta.api` (or .api/.public), not "
         "`memory_anki.modules.beta.application.service`."
     ]
 
@@ -659,11 +659,11 @@ def test_backend_boundary_requires_public_settings_facade_for_ai_runtime_adapter
     monkeypatch.setattr(check_architecture, "BOUNDARY_EXCEPTIONS_PATH", exceptions_path)
     write_file(exceptions_path, '{"exceptions": []}\n')
     write_file(
-        api_src / "modules" / "palaces" / "presentation" / "private.py",
+        api_src / "modules" / "content" / "presentation" / "private.py",
         "from memory_anki.modules.settings.infrastructure import SettingsAiRuntimeProvider\n",
     )
     write_file(
-        api_src / "modules" / "palaces" / "presentation" / "public.py",
+        api_src / "modules" / "content" / "presentation" / "public.py",
         "from memory_anki.modules.settings.api import SettingsAiRuntimeProvider\n",
     )
 
@@ -673,7 +673,7 @@ def test_backend_boundary_requires_public_settings_facade_for_ai_runtime_adapter
     assert len(errors) == 1
     normalized_error = errors[0].replace("\\", "/")
     assert normalized_error == (
-        "apps/api/src/memory_anki/modules/palaces/presentation/private.py: cross-module import "
+        "apps/api/src/memory_anki/modules/content/presentation/private.py: cross-module import "
         "`memory_anki.modules.settings.infrastructure` reaches a private layer; use a public "
         "contract/port or register a bounded exception."
     )
@@ -718,12 +718,12 @@ def test_migrated_ai_runtime_use_case_cannot_reimport_settings_registry(
     monkeypatch.setattr(
         check_architecture,
         "AI_RUNTIME_PORT_MANAGED_FILES",
-        {"modules/palaces/application/mindmap_import_job_runtime.py"},
+        {"modules/produce/application/mindmap_import_job_runtime.py"},
     )
     write_file(
         api_src
         / "modules"
-        / "palaces"
+        / "produce"
         / "application"
         / "mindmap_import_job_runtime.py",
         "from memory_anki.modules.settings.application.ai_model_registry import "
@@ -734,7 +734,7 @@ def test_migrated_ai_runtime_use_case_cannot_reimport_settings_registry(
     check_architecture.check_ai_runtime_port_boundaries(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palaces/application/mindmap_import_job_runtime.py: "
+        "apps/api/src/memory_anki/modules/produce/application/mindmap_import_job_runtime.py: "
         "migrated AI use cases must depend on "
         "platform application ports, not settings application internals."
     ]
@@ -749,12 +749,12 @@ def test_migrated_ai_use_case_cannot_import_settings_prompt_registry(
     monkeypatch.setattr(
         check_architecture,
         "AI_RUNTIME_PORT_MANAGED_FILES",
-        {"modules/palaces/application/mindmap_ai_split/gateway.py"},
+        {"modules/produce/application/mindmap_ai_split/gateway.py"},
     )
     write_file(
         api_src
         / "modules"
-        / "palaces"
+        / "produce"
         / "application"
         / "mindmap_ai_split"
         / "gateway.py",
@@ -765,7 +765,7 @@ def test_migrated_ai_use_case_cannot_import_settings_prompt_registry(
     check_architecture.check_ai_runtime_port_boundaries(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split/gateway.py: "
+        "apps/api/src/memory_anki/modules/produce/application/mindmap_ai_split/gateway.py: "
         "migrated AI use cases must depend on platform application ports, not settings "
         "application internals."
     ]
@@ -777,17 +777,17 @@ def test_reviews_application_cannot_reimport_palace_context(
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "reviews" / "application" / "queue.py"
+    path = api_src / "modules" / "memory" / "application" / "queue.py"
     write_file(
         path,
-        "from memory_anki.modules.palaces.api import palace_json\n",
+        "from memory_anki.modules.content.api import palace_json\n",
     )
 
     errors: list[str] = []
     check_architecture.check_review_application_boundary(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/reviews/application/queue.py: reviews "
+        "apps/api/src/memory_anki/modules/memory/application/queue.py: memory "
         "application must depend on pure document contracts or injected ports, not the "
         "palace context."
     ]
@@ -799,10 +799,10 @@ def test_palace_context_must_use_review_public_facade(
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "palaces" / "application" / "projection.py"
+    path = api_src / "modules" / "content" / "application" / "projection.py"
     write_file(
         path,
-        "from memory_anki.modules.reviews.application.schedule_service import "
+        "from memory_anki.modules.memory.application.schedule_service import "
         "is_schedule_due\n",
     )
 
@@ -810,8 +810,8 @@ def test_palace_context_must_use_review_public_facade(
     check_architecture.check_palace_review_public_facade(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palaces/application/projection.py: palace "
-        "context must import review capabilities through memory_anki.modules.reviews.api."
+        "apps/api/src/memory_anki/modules/content/application/projection.py: palace "
+        "context must import review capabilities through memory_anki.modules.memory.api."
     ]
 
 
@@ -821,14 +821,14 @@ def test_palace_read_projection_cannot_repair_binding(
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "palaces" / "application" / "palace_serializer.py"
+    path = api_src / "modules" / "content" / "application" / "palace_serializer.py"
     write_file(path, "reconcile_palace_chapter_binding(session, palace)\n")
 
     errors: list[str] = []
     check_architecture.check_palace_read_side_purity(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palaces/application/palace_serializer.py: "
+        "apps/api/src/memory_anki/modules/content/application/palace_serializer.py: "
         "read projections must not repair palace chapter bindings."
     ]
 
@@ -859,7 +859,7 @@ def test_dashboard_must_use_context_public_facades(tmp_path: Path, monkeypatch) 
     path = api_src / "modules" / "dashboard" / "application" / "service.py"
     write_file(
         path,
-        "from memory_anki.modules.sessions.application.study_session_service "
+        "from memory_anki.modules.session.application.study_session_service "
         "import today_bounds\n",
     )
 
@@ -868,7 +868,7 @@ def test_dashboard_must_use_context_public_facades(tmp_path: Path, monkeypatch) 
 
     assert errors == [
         "apps/api/src/memory_anki/modules/dashboard/application/service.py: dashboard "
-        "must consume sessions capabilities through memory_anki.modules.sessions.api."
+        "must consume session capabilities through memory_anki.modules.session.api."
     ]
 
 
@@ -876,10 +876,10 @@ def test_palace_quiz_must_use_palace_public_facade(tmp_path: Path, monkeypatch) 
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "palace_quiz" / "application" / "grouping.py"
+    path = api_src / "modules" / "quiz" / "application" / "grouping.py"
     write_file(
         path,
-        "from memory_anki.modules.palaces.application.segment_nodes import "
+        "from memory_anki.modules.content.application.segment_nodes import "
         "collect_doc_nodes_with_descendants\n",
     )
 
@@ -887,9 +887,9 @@ def test_palace_quiz_must_use_palace_public_facade(tmp_path: Path, monkeypatch) 
     check_architecture.check_palace_quiz_palace_boundary(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palace_quiz/application/grouping.py: "
-        "palace_quiz application must consume palace capabilities through "
-        "memory_anki.modules.palaces.api."
+        "apps/api/src/memory_anki/modules/quiz/application/grouping.py: "
+        "quiz application must consume palace capabilities through "
+        "memory_anki.modules.content.api."
     ]
 
 
@@ -897,7 +897,7 @@ def test_freestyle_must_use_context_public_facades(tmp_path: Path, monkeypatch) 
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "freestyle" / "application" / "feed.py"
+    path = api_src / "modules" / "practice" / "application" / "feed.py"
     write_file(
         path,
         "from memory_anki.modules.english.application.course_service import "
@@ -908,8 +908,8 @@ def test_freestyle_must_use_context_public_facades(tmp_path: Path, monkeypatch) 
     check_architecture.check_consumer_context_public_facades(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/freestyle/application/feed.py: freestyle "
-        "must consume english through memory_anki.modules.english.api."
+        "apps/api/src/memory_anki/modules/practice/application/feed.py: practice "
+        "must consume english through memory_anki.modules.english.api or .public."
     ]
 
 
@@ -917,7 +917,7 @@ def test_palaces_must_use_backups_public_facade(tmp_path: Path, monkeypatch) -> 
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "palaces" / "application" / "editor.py"
+    path = api_src / "modules" / "content" / "application" / "editor.py"
     write_file(
         path,
         "from memory_anki.modules.backups.application.editor_safety "
@@ -928,8 +928,8 @@ def test_palaces_must_use_backups_public_facade(tmp_path: Path, monkeypatch) -> 
     check_architecture.check_consumer_context_public_facades(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/palaces/application/editor.py: palaces "
-        "must consume backups through memory_anki.modules.backups.api."
+        "apps/api/src/memory_anki/modules/content/application/editor.py: content "
+        "must consume backups through memory_anki.modules.backups.api or .public."
     ]
 
 
@@ -942,7 +942,7 @@ def test_english_reading_must_use_reviews_public_facade(
     path = api_src / "modules" / "english_reading" / "application" / "vocabulary.py"
     write_file(
         path,
-        "from memory_anki.modules.reviews.application.schedule_policy "
+        "from memory_anki.modules.memory.application.schedule_policy "
         "import load_review_schedule_policy\n",
     )
 
@@ -951,8 +951,8 @@ def test_english_reading_must_use_reviews_public_facade(
 
     assert errors == [
         "apps/api/src/memory_anki/modules/english_reading/application/vocabulary.py: "
-        "english_reading must consume reviews through "
-        "memory_anki.modules.reviews.api."
+        "english_reading must consume memory through "
+        "memory_anki.modules.memory.api or .public."
     ]
 
 
@@ -960,10 +960,10 @@ def test_reviews_must_use_sessions_public_facade(tmp_path: Path, monkeypatch) ->
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "reviews" / "application" / "service.py"
+    path = api_src / "modules" / "memory" / "application" / "service.py"
     write_file(
         path,
-        "from memory_anki.modules.sessions.application.study_session_service "
+        "from memory_anki.modules.session.application.study_session_service "
         "import today_bounds\n",
     )
 
@@ -971,8 +971,8 @@ def test_reviews_must_use_sessions_public_facade(tmp_path: Path, monkeypatch) ->
     check_architecture.check_consumer_context_public_facades(errors)
 
     assert errors == [
-        "apps/api/src/memory_anki/modules/reviews/application/service.py: reviews "
-        "must consume sessions through memory_anki.modules.sessions.api."
+        "apps/api/src/memory_anki/modules/memory/application/service.py: memory "
+        "must consume session through memory_anki.modules.session.api or .public."
     ]
 
 
@@ -992,7 +992,7 @@ def test_settings_must_use_backups_public_facade(tmp_path: Path, monkeypatch) ->
 
     assert errors == [
         "apps/api/src/memory_anki/modules/settings/application/metrics.py: settings "
-        "must consume backups through memory_anki.modules.backups.api."
+        "must consume backups through memory_anki.modules.backups.api or .public."
     ]
 
 
@@ -1003,7 +1003,7 @@ def test_knowledge_must_use_palace_public_commands(tmp_path: Path, monkeypatch) 
     path = api_src / "modules" / "knowledge" / "application" / "chapter.py"
     write_file(
         path,
-        "from memory_anki.modules.palaces.application.palace_chapter_binding "
+        "from memory_anki.modules.content.application.palace_chapter_binding "
         "import set_palace_chapter_links\n",
     )
 
@@ -1012,12 +1012,12 @@ def test_knowledge_must_use_palace_public_commands(tmp_path: Path, monkeypatch) 
 
     assert errors == [
         "apps/api/src/memory_anki/modules/knowledge/application/chapter.py: knowledge "
-        "must consume palaces through memory_anki.modules.palaces.api."
+        "must consume content through memory_anki.modules.content.api."
     ]
 
 
 def test_palace_context_does_not_import_persistence_internals():
-    palace_root = check_architecture.API_SRC / "modules/palaces"
+    palace_root = check_architecture.API_SRC / "modules/content"
     offenders = []
     for path in check_architecture.iter_files(palace_root, (".py",)):
         if "memory_anki.modules.persistence" in path.read_text(encoding="utf-8"):
@@ -1035,7 +1035,7 @@ def test_knowledge_context_does_not_import_persistence_internals():
 
 
 def test_palace_quiz_context_does_not_import_persistence_internals():
-    palace_quiz_root = check_architecture.API_SRC / "modules/palace_quiz"
+    palace_quiz_root = check_architecture.API_SRC / "modules/quiz"
     offenders = []
     for path in check_architecture.iter_files(palace_quiz_root, (".py",)):
         if "memory_anki.modules.persistence" in path.read_text(encoding="utf-8"):
@@ -1044,7 +1044,7 @@ def test_palace_quiz_context_does_not_import_persistence_internals():
 
 
 def test_sessions_context_does_not_import_persistence_internals():
-    sessions_root = check_architecture.API_SRC / "modules/sessions"
+    sessions_root = check_architecture.API_SRC / "modules/session"
     offenders = []
     for path in check_architecture.iter_files(sessions_root, (".py",)):
         if "memory_anki.modules.persistence" in path.read_text(encoding="utf-8"):
@@ -1053,7 +1053,7 @@ def test_sessions_context_does_not_import_persistence_internals():
 
 
 def test_reviews_context_does_not_import_persistence_internals():
-    reviews_root = check_architecture.API_SRC / "modules/reviews"
+    reviews_root = check_architecture.API_SRC / "modules/memory"
     offenders = []
     for path in check_architecture.iter_files(reviews_root, (".py",)):
         if "memory_anki.modules.persistence" in path.read_text(encoding="utf-8"):
@@ -1071,7 +1071,7 @@ def test_mypy_typed_boundary_modules_cannot_regress_to_ignore_errors(
         """[tool.mypy]
 [[tool.mypy.overrides]]
 module = [
-  "memory_anki.modules.palaces.application.segment_nodes",
+  "memory_anki.modules.content.application.segment_nodes",
 ]
 ignore_errors = true
 """,
@@ -1082,7 +1082,7 @@ ignore_errors = true
 
     assert errors == [
         "apps/api/pyproject.toml: whole-module mypy ignore_errors is forbidden for "
-        "`memory_anki.modules.palaces.application.segment_nodes`; type the boundary or use a "
+        "`memory_anki.modules.content.application.segment_nodes`; type the boundary or use a "
         "narrowly scoped error-code ignore at the external library import."
     ]
 
@@ -1108,7 +1108,7 @@ def _write_runtime_catalogs(root: Path) -> None:
 
 def test_runtime_module_boundary_rejects_xstate_in_domain_and_private_cross_import(tmp_path, monkeypatch):
     web_src = tmp_path / "apps/web/src"
-    freestyle = web_src / "modules/freestyle"
+    freestyle = web_src / "modules/practice"
     mindmap = web_src / "modules/mindmap"
     (freestyle / "domain").mkdir(parents=True)
     mindmap.mkdir(parents=True)
@@ -1116,7 +1116,7 @@ def test_runtime_module_boundary_rejects_xstate_in_domain_and_private_cross_impo
         "name": "freestyle",
         "owns": [],
         "forbids": [],
-        "publicEntry": "src/modules/freestyle/public.ts",
+        "publicEntry": "src/modules/practice/public.ts",
         "workflows": [],
         "dependencies": [],
         "requiredTests": [],
@@ -1143,7 +1143,7 @@ def test_runtime_module_boundary_rejects_xstate_in_domain_and_private_cross_impo
 
 def test_runtime_module_boundary_accepts_workflow_and_public_import(tmp_path, monkeypatch):
     web_src = tmp_path / "apps/web/src"
-    freestyle = web_src / "modules/freestyle"
+    freestyle = web_src / "modules/practice"
     mindmap = web_src / "modules/mindmap"
     (freestyle / "application/workflows").mkdir(parents=True)
     mindmap.mkdir(parents=True)
@@ -1177,7 +1177,7 @@ def test_retired_placeholder_module_is_rejected(tmp_path, monkeypatch) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
     (api_src / "modules/library").mkdir(parents=True)
-    (web_src / "modules/freestyle").mkdir(parents=True)
+    (web_src / "modules/practice").mkdir(parents=True)
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -1199,15 +1199,15 @@ def test_mindmap_architecture_requires_import_pipeline_contract(
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     write_file(
-        api_src / "modules" / "palaces" / "application" / "mindmap_import_job_runtime.py",
+        api_src / "modules" / "content" / "application" / "mindmap_import_job_runtime.py",
         "vision_ai_runtime\nformatter_ai_runtime\n",
     )
     write_file(
-        api_src / "modules" / "palaces" / "application" / "mindmap_import" / "job_worker.py",
+        api_src / "modules" / "content" / "application" / "mindmap_import" / "job_worker.py",
         "ocr_combined.txt\nformatter_response.txt\nfinal_tree.json\nextract_then_format\n",
     )
     write_file(
-        api_src / "modules" / "palaces" / "application" / "mindmap_import" / "runtime.py",
+        api_src / "modules" / "content" / "application" / "mindmap_import" / "runtime.py",
         "ai_prompt_import_image_text\nai_prompt_import_ocr_mindmap_format\n",
     )
 
@@ -1284,9 +1284,9 @@ def test_prompt_catalog_boundary_rejects_settings_imports_in_application(tmp_pat
 def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     web_src = tmp_path / "apps" / "web" / "src"
-    split_service = api_src / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py"
+    split_service = api_src / "modules" / "produce" / "application" / "mindmap_ai_split_service.py"
     prompt_composition = api_src / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py"
-    capabilities = web_src / "features" / "mindmap-editor" / "capabilities.ts"
+    capabilities = web_src / "modules" / "content" / "ui" / "mindmap-editor" / "capabilities.ts"
     split_service.parent.mkdir(parents=True)
     prompt_composition.parent.mkdir(parents=True)
     capabilities.parent.mkdir(parents=True)
@@ -1313,9 +1313,9 @@ def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
 ) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
-    router = api_src / "modules/reviews/presentation/router.py"
-    service = api_src / "modules/reviews/application/formal_review_service.py"
-    settlement = api_src / "modules/reviews/application/formal_review_settlement.py"
+    router = api_src / "modules/memory/presentation/router.py"
+    service = api_src / "modules/memory/application/formal_review_service.py"
+    settlement = api_src / "modules/memory/application/formal_review_settlement.py"
     warmup = api_src / "app/startup_warmup.py"
     write_file(router, '@router.post("/review/spread-overdue")\ndef retired(): pass\n')
     write_file(
@@ -1342,8 +1342,8 @@ def test_fsrs_review_boundary_keeps_wave_execution_in_session_service(
 ) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
-    application = api_src / "modules/reviews/application"
-    write_file(api_src / "modules/reviews/presentation/router.py", "")
+    application = api_src / "modules/memory/application"
+    write_file(api_src / "modules/memory/presentation/router.py", "")
     write_file(
         application / "formal_review_service.py",
         "def get_fsrs_queue_payload(): pass\ndef get_fsrs_load_forecast(): pass\n",
@@ -1369,7 +1369,7 @@ def test_english_reading_gap_loop_rejects_retired_colored_flow(
 ) -> None:
     web_src = tmp_path / "apps/web/src"
     write_file(
-        web_src / "features/english-reading/EnglishReadingPage.tsx",
+        web_src / "modules/english-reading/ui/english-reading/EnglishReadingPage.tsx",
         "ReadingVersion\ncompleteEnglishReadingMaterialApi\n",
     )
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)

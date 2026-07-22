@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
-import * as palaceApi from '@/entities/palace/api'
-import * as knowledgeApi from '@/entities/knowledge/api'
+import * as palaceApi from '@/modules/content/public'
+import * as knowledgeApi from '@/modules/content/public'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -65,7 +65,7 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
   shouldAutoStartOnPageEnter: () => false,
 }))
 
-vi.mock('@/features/mindmap-import', () => ({
+vi.mock('@/modules/produce/ui/mindmap-import', () => ({
   useMindMapImport: (options: {
     applyEditorState?: (
       nextState: typeof importedEditorState,
@@ -148,8 +148,8 @@ vi.mock('@/features/mindmap-import', () => ({
   ),
 }))
 
-vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/mindmap-editor')>()),
+vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/content/ui/mindmap-editor')>()),
   MindMapEditorSurface: React.forwardRef(({
     editorState,
     onEditorStateChange,
@@ -215,19 +215,19 @@ vi.mock('@/widgets/quiz-launcher', () => ({
   }),
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceAttachmentPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceAttachmentPanel', () => ({
   PalaceAttachmentPanel: () => <div>attachments</div>,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceChapterPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceChapterPanel', () => ({
   PalaceChapterPanel: () => <div>chapters</div>,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceMetaPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceMetaPanel', () => ({
   PalaceMetaPanel: () => <div>meta</div>,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceSegmentsPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceSegmentsPanel', () => ({
   PalaceSegmentsPanel: () => <div>segments</div>,
 }))
 

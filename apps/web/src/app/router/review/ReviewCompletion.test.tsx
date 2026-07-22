@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewCompletion from '@/app/router/review/ReviewCompletion'
 
-vi.mock('@/features/review/api', () => ({
+vi.mock('@/modules/practice/ui/review/api', () => ({
   getReviewCompletionApi: vi.fn().mockResolvedValue({
     ok: true,
     completion_mode: 'manual_complete',

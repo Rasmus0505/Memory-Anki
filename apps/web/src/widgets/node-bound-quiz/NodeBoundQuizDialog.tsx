@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useAiRunConfigDialog } from '@/entities/ai-runtime'
-import { getPalaceQuizQuestionsApi } from '@/entities/quiz/api'
+import { useAiRunConfigDialog } from '@/modules/settings/public'
+import { getPalaceQuizQuestionsApi } from '@/modules/quiz/public'
 import {
   QuizQuestionInteraction,
   useQuizAttemptOrchestration,
   type QuizRuntimeState,
-} from '@/entities/quiz'
+} from '@/modules/quiz/public'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {

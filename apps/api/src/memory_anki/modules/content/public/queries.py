@@ -1,11 +1,8 @@
-"""Read queries for content (palace/knowledge documents).
-
-Transitional re-exports from legacy palaces.api until files move in W2.
-"""
+"""Read queries for content (palace/knowledge documents)."""
 
 from __future__ import annotations
 
-from memory_anki.modules.palaces.api import (
+from memory_anki.modules.content.api import (
     ancestor_path,
     build_today_new_palace_outline,
     build_tree_from_editor_doc,
@@ -13,6 +10,7 @@ from memory_anki.modules.palaces.api import (
     get_palace_tree_structure,
     list_active_palace_tree_structures,
     palace_json,
+    palace_review_stages_json,
     parse_segment_node_uids,
     resolve_palace_subject,
     resolve_palace_title,
@@ -29,6 +27,7 @@ __all__ = [
     "list_active_palace_tree_structures",
     "palace_json",
     "parse_segment_node_uids",
+    "palace_review_stages_json",
     "resolve_palace_subject",
     "resolve_palace_title",
     "stable_tree_order",

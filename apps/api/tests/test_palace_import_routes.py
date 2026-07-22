@@ -5,7 +5,7 @@ import json
 import pytest
 
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
-from memory_anki.modules.palaces.presentation import import_router
+from memory_anki.modules.produce.presentation import import_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 

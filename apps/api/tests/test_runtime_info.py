@@ -207,10 +207,43 @@ class RuntimeInfoTests(unittest.TestCase):
             def __init__(self, session):
                 self.session = session
                 self.key = None
+                self._keys: list[str] | None = None
 
             def filter_by(self, **kwargs):
                 self.key = kwargs.get("key")
                 return self
+
+            def filter(self, *criteria):
+                # Support Config.key.in_(keys) used by read_client_preferences.
+                for criterion in criteria:
+                    right = getattr(criterion, "right", None)
+                    value = getattr(right, "value", None)
+                    if isinstance(value, list | tuple | set):
+                        self._keys = [str(item) for item in value]
+                        break
+                    clauses = getattr(criterion, "clauses", None)
+                    if clauses:
+                        values: list[str] = []
+                        for clause in clauses:
+                            clause_right = getattr(clause, "right", None)
+                            clause_value = getattr(clause_right, "value", None)
+                            if clause_value is not None:
+                                values.append(str(clause_value))
+                        if values:
+                            self._keys = values
+                            break
+                return self
+
+            def all(self):
+                if self._keys is not None:
+                    return [
+                        FakeConfig(key, self.session.values[key])
+                        for key in self._keys
+                        if key in self.session.values
+                    ]
+                if self.key is not None and self.key in self.session.values:
+                    return [FakeConfig(self.key, self.session.values[self.key])]
+                return []
 
             def first(self):
                 if self.key not in self.session.values:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from memory_anki.modules.freestyle.domain.branch_units import (
+from memory_anki.modules.practice.domain.branch_units import (
     order_units_within_palace,
     sort_units_by_node_policy,
     split_branch_units,
 )
-from memory_anki.modules.freestyle.domain.feed_config import sanitize_feed_config
-from memory_anki.modules.freestyle.domain.queue_builder import (
+from memory_anki.modules.practice.domain.feed_config import sanitize_feed_config
+from memory_anki.modules.practice.domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
     interleave_by_weights,
@@ -334,7 +334,7 @@ def test_tree_order_and_deterministic_shuffle():
 
 
 def test_palace_sequential_vs_interleave():
-    from memory_anki.modules.freestyle.domain.branch_units import BranchUnit
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
 
     u1 = BranchUnit(1, "a", (), ("a",), 1, 0)
     u2 = BranchUnit(1, "b", (), ("b",), 1, 0)
@@ -374,7 +374,7 @@ def test_quiz_weak_sort_and_weights():
 
 
 def test_assemble_queue_due_phase_and_seed_stable():
-    from memory_anki.modules.freestyle.domain.branch_units import BranchUnit
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
 
     due_unit = BranchUnit(1, "due", (), ("d1", "d2"), 2, 0)
     fill_unit = BranchUnit(1, "fill", (), ("f1",), 1, 0)
@@ -433,7 +433,7 @@ def test_assemble_queue_due_phase_and_seed_stable():
 
 
 def test_bound_quiz_follows_its_branch_and_sequential_palaces_stay_grouped():
-    from memory_anki.modules.freestyle.domain.branch_units import BranchUnit
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
 
     first = BranchUnit(1, "a", (), ("a", "a1"), 2, 0)
     second = BranchUnit(2, "b", (), ("b", "b1"), 2, 0)
@@ -465,7 +465,7 @@ def test_bound_quiz_follows_its_branch_and_sequential_palaces_stay_grouped():
 
 
 def test_all_weighted_is_not_an_alias_of_due_first():
-    from memory_anki.modules.freestyle.domain.branch_units import BranchUnit
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
 
     due = BranchUnit(1, "due", (), ("due",), 1, 0)
     fill = BranchUnit(1, "fill", (), ("fill",), 1, 0)

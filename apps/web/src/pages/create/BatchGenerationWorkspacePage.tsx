@@ -14,8 +14,8 @@ import {
   type BatchSection,
   type BatchWorkspace,
   type OutputMode,
-} from '@/entities/batch-generation/api'
-import { previewAiPromptCompositionApi } from '@/entities/preferences/api'
+} from '@/modules/produce/public'
+import { previewAiPromptCompositionApi } from '@/modules/settings/public'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'

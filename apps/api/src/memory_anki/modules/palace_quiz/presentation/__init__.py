@@ -1,1 +1,0 @@
-# Palace quiz presentation layer.

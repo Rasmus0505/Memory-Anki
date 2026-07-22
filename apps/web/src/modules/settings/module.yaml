@@ -1,0 +1,18 @@
+{
+  "name": "settings",
+  "owns": [
+    "preferences",
+    "AI runtime",
+    "profile"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/settings/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

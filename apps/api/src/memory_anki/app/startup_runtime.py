@@ -23,7 +23,7 @@ from memory_anki.modules.english.application.startup import (
 from memory_anki.modules.english_reading.application.startup import (
     prepare_english_reading,
 )
-from memory_anki.modules.sessions.api import (
+from memory_anki.modules.session.api import (
     ensure_review_log_study_sessions,
     reclassify_ghost_formal_review_time_sessions,
 )

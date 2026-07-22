@@ -1,11 +1,24 @@
 {
   "name": "mindmap",
-  "owns": ["mind-map presentation workflow", "mind-map domain contracts"],
-  "forbids": ["route ownership", "parent overlay closure", "study completion"],
+  "owns": [
+    "mind-map presentation workflow",
+    "mind-map domain contracts"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
   "publicEntry": "src/modules/mindmap/public.ts",
-  "workflows": ["MindMapPresentationMachine"],
-  "ports": ["PresentationPort"],
-  "events": ["mindmap.presentation.entered", "mindmap.presentation.exited"],
+  "workflows": [
+    "MindMapPresentationMachine"
+  ],
+  "ports": [],
+  "events": [
+    "mindmap.presentation.entered",
+    "mindmap.presentation.exited"
+  ],
   "dependencies": [],
-  "requiredTests": ["mindMapPresentationMachine.test.ts"]
+  "invariants": [],
+  "requiredTests": [
+    "mindMapPresentationMachine.test.ts"
+  ]
 }

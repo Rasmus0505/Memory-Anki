@@ -1,1 +1,1 @@
-"""quiz presentation."""
+# Palace quiz presentation layer.

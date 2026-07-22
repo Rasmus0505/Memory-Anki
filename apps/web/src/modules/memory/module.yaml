@@ -1,0 +1,17 @@
+{
+  "name": "memory",
+  "owns": [
+    "FSRS review entity",
+    "review flow"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/memory/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

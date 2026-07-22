@@ -10,9 +10,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import * as appLogs from '@/shared/logs/model/appLogs'
-import * as knowledgeApi from '@/entities/knowledge/api'
-import * as importApi from '@/entities/knowledge-import/api'
-import * as palaceApi from '@/entities/palace/api'
+import * as knowledgeApi from '@/modules/content/public'
+import * as importApi from '@/modules/produce/public'
+import * as palaceApi from '@/modules/content/public'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -57,8 +57,8 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
     shouldAutoStartOnPageEnterMock(config, scene),
 }))
 
-vi.mock('@/entities/ai-runtime', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/entities/ai-runtime')>()
+vi.mock('@/modules/settings/domain/ai-runtime-entity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/settings/domain/ai-runtime-entity')>()
   return {
     ...actual,
     useAiRunConfigDialog: () => ({
@@ -68,8 +68,8 @@ vi.mock('@/entities/ai-runtime', async (importOriginal) => {
   }
 })
 
-vi.mock('@/entities/preferences/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/entities/preferences/api')>()
+vi.mock('@/modules/settings/domain/preferences-entity/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/settings/domain/preferences-entity/api')>()
   return {
     ...actual,
     getAiModelScenariosApi: vi.fn(async () => ({
@@ -133,8 +133,8 @@ vi.mock('@/widgets/quiz-launcher', () => ({
   }),
 }))
 
-vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/mindmap-editor')>()),
+vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/content/ui/mindmap-editor')>()),
   MindMapEditorSurface: React.forwardRef(({
     syncIntent = 'soft',
     forceSyncKey = null,
@@ -407,15 +407,15 @@ vi.mock('@/features/mindmap-editor', async (importOriginal) => ({
   ),
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceAttachmentPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceAttachmentPanel', () => ({
   PalaceAttachmentPanel: () => <div>attachments</div>,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceChapterPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceChapterPanel', () => ({
   PalaceChapterPanel: () => <div>chapters</div>,
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceMetaPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceMetaPanel', () => ({
   PalaceMetaPanel: ({
     onSave,
     onEstablishCreatedAt,
@@ -435,7 +435,7 @@ vi.mock('@/features/palace-edit/components/PalaceMetaPanel', () => ({
   ),
 }))
 
-vi.mock('@/features/palace-edit/components/PalaceSegmentsPanel', () => ({
+vi.mock('@/modules/content/ui/palace-edit/components/PalaceSegmentsPanel', () => ({
   PalaceSegmentsPanel: ({ selectedNodeCount, segmentDialogOpen, segmentName, setSegmentName, onSave }: {
     selectedNodeCount: number
     segmentDialogOpen: boolean
@@ -472,8 +472,8 @@ vi.mock('./PalaceVersionDialog', () => ({
     ) : null,
 }))
 
-vi.mock('@/features/mindmap-import', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/features/mindmap-import')>()
+vi.mock('@/modules/produce/ui/mindmap-import', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/produce/ui/mindmap-import')>()
   return {
     ...actual,
     MindMapImportDrawer: ({

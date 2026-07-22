@@ -27,20 +27,20 @@ const backgroundTaskRegistryMock = vi.hoisted(() => ({
   useRunningTaskCountBySection: vi.fn<(section: unknown) => number>(() => 0),
 }))
 
-vi.mock('@/entities/runtime/api', () => ({
+vi.mock('@/modules/settings/domain/runtime-entity/api', () => ({
   getRuntimeInfoApi: () => getRuntimeInfoApi(),
 }))
 
-vi.mock('@/entities/palace/api', () => ({
+vi.mock('@/modules/content/domain/palace-entity/api', () => ({
   prefetchPalaceSubjectShelfApi: () => prefetchPalaceSubjectShelfApi(),
   prefetchPalacesGroupedSummaryApi: () => prefetchPalacesGroupedSummaryApi(),
 }))
 
-vi.mock('@/features/dashboard/api', () => ({
+vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   prefetchDashboardApi: () => prefetchDashboardApi(),
 }))
 
-vi.mock('@/features/review/api', () => ({
+vi.mock('@/modules/practice/ui/review/api', () => ({
   prefetchReviewQueueApi: () => prefetchReviewQueueApi(),
 }))
 

@@ -1,1 +1,1 @@
-export { default } from '@/features/english/EnglishVocabPage'
+export { EnglishVocabPage as default } from '@/modules/english/public'

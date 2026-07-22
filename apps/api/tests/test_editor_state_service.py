@@ -4,14 +4,14 @@ from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.knowledge.application.editor_state_service import save_subject_editor_state
-from memory_anki.modules.mindmap_document.api import EditorStateConflictError, normalize_editor_doc
-from memory_anki.modules.palaces.application.editor_state_service import (
+from memory_anki.modules.content.application.editor_state_service import (
     get_palace_editor_state,
     save_palace_editor_state,
 )
-from memory_anki.modules.palaces.application.mindmap_ai_split.primitives import plain_text
-from memory_anki.modules.palaces.application.title_sync_service import set_palace_chapter_links
+from memory_anki.modules.content.application.title_sync_service import set_palace_chapter_links
+from memory_anki.modules.knowledge.application.editor_state_service import save_subject_editor_state
+from memory_anki.modules.mindmap_document.api import EditorStateConflictError, normalize_editor_doc
+from memory_anki.modules.produce.application.mindmap_ai_split.primitives import plain_text
 from support import RouterTestCase
 
 

@@ -9,9 +9,9 @@ import {
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api'
+} from '@/modules/settings/public'
 
-vi.mock('@/entities/preferences/api', () => ({
+vi.mock('@/modules/settings/public', () => ({
   getClientPreferencesApi: vi.fn(),
   updateClientPreferencesApi: vi.fn(),
 }))

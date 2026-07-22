@@ -24,13 +24,13 @@ from memory_anki.infrastructure.db._tables.palaces import (
     chapter_palace_table,
 )
 from memory_anki.modules.backups.application import backup_lifecycle, storage_backup
+from memory_anki.modules.content.application.palace_maintenance import (
+    restore_all_archived_palaces,
+)
 from memory_anki.modules.dashboard.application.service import (
     build_weekly_report_payload,
 )
-from memory_anki.modules.palaces.application.palace_maintenance import (
-    restore_all_archived_palaces,
-)
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.session.application.study_session_service import (
     STUDY_DASHBOARD_SCENES,
     current_week_bounds,
     get_all_time_study_session_duration_seconds,
@@ -520,7 +520,9 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
 
     def test_fsrs_queue_select_count_stays_flat_with_many_palaces(self):
-        from memory_anki.modules.reviews.application.formal_review_service import (
+        from memory_anki.core.time import utc_now_naive
+        from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+        from memory_anki.modules.memory.application.formal_review_service import (
             get_fsrs_queue_payload,
         )
 
@@ -538,13 +540,29 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             },
             ensure_ascii=False,
         )
+        # Wave formal queue only counts initialized memory nodes (not uninitialized).
+        past = utc_now_naive() - timedelta(days=1)
         with self.SessionLocal() as session:
             for index in range(12):
+                palace = Palace(
+                    title=f"queue-palace-{index}",
+                    editor_doc=editor_doc,
+                    archived=False,
+                )
+                session.add(palace)
+                session.flush()
                 session.add(
-                    Palace(
-                        title=f"queue-palace-{index}",
-                        editor_doc=editor_doc,
-                        archived=False,
+                    ReviewNodeState(
+                        palace_id=palace.id,
+                        node_uid="n1",
+                        state=2,
+                        stability=3.0,
+                        difficulty=5.0,
+                        due_at=past,
+                        raw_due_at=past,
+                        last_review_at=past - timedelta(days=3),
+                        schedule_source="manual",
+                        content_fingerprint="",
                     )
                 )
             session.commit()
@@ -570,10 +588,10 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertLessEqual(len(statements), 12)
 
     def test_batch_due_rollup_matches_single_palace_rollup(self):
-        from memory_anki.modules.reviews.application.node_due_rollup_batch import (
+        from memory_anki.modules.memory.application.node_due_rollup_batch import (
             project_due_rollups_batch,
         )
-        from memory_anki.modules.reviews.application.node_memory_projection import (
+        from memory_anki.modules.memory.application.node_memory_projection import (
             _clear_due_rollup_cache,
             get_palace_due_rollup,
         )
@@ -609,7 +627,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertEqual(batch[right.id]["review_entry_mode"], single_right["review_entry_mode"])
 
     def test_list_palaces_loader_does_not_query_pegs_or_attachments(self):
-        from memory_anki.modules.palaces.application.palace_service import list_palaces
+        from memory_anki.modules.content.application.palace_service import list_palaces
 
         with self.SessionLocal() as session:
             session.add(Palace(title="list-light"))

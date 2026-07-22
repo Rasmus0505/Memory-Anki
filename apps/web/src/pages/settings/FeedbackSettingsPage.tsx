@@ -1,1 +1,1 @@
-export { default } from '@/features/profile/ProfileFeedbackPage'
+export { ProfileFeedbackPage as default } from '@/modules/settings/public'

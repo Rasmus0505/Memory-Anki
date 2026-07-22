@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Plus, Search } from 'lucide-react'
-import { createSubjectApi, getSubjectsApi, type SubjectSummary } from '@/entities/knowledge/api'
+import { createSubjectApi, getSubjectsApi, type SubjectSummary } from '@/modules/content/public'
 import { toast } from '@/shared/feedback/toast'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'

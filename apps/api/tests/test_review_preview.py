@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from memory_anki.modules.palaces.application.review_preview import (
+from memory_anki.modules.content.application.review_preview import (
     build_review_preview_payload,
 )
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MindMapRecallRating, MindMapRecallRound } from '@/shared/api/contracts'
-import type { RatingConflictPolicy } from '@/features/review/api'
+import type { RatingConflictPolicy } from '@/modules/practice/public'
 import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
 import type { SelectionToolbarAction } from '@/shared/ui/mindmap-canvas'
 import {

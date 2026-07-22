@@ -3,3 +3,5 @@
  * Other modules may import only from this file.
  */
 export {}
+
+export * from "./domain/search-entity/api"

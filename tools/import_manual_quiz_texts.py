@@ -26,10 +26,10 @@ from memory_anki.core.config import DB_PATH  # noqa: E402
 from memory_anki.infrastructure.db._tables import get_session  # noqa: E402
 from memory_anki.infrastructure.db._tables.knowledge import Chapter  # noqa: E402
 from memory_anki.infrastructure.db._tables.palaces import Palace  # noqa: E402
-from memory_anki.modules.palace_quiz.application.manual_text_quiz_parser import (  # noqa: E402
+from memory_anki.modules.quiz.application.manual_text_quiz_parser import (  # noqa: E402
     parse_manual_text_quiz_pairs,
 )
-from memory_anki.modules.palace_quiz.application.service import (  # noqa: E402
+from memory_anki.modules.quiz.application.service import (  # noqa: E402
     batch_create_chapter_questions,
 )
 

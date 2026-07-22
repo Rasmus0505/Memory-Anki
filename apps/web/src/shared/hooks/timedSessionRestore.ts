@@ -2,7 +2,7 @@ import * as React from 'react'
 import type {
   SessionEventRecord,
   TimeSessionRecord,
-} from '@/entities/session/model'
+} from '@/modules/session/public'
 import {
   createStableRecordId,
   type ActiveSceneSegmentSnapshot,

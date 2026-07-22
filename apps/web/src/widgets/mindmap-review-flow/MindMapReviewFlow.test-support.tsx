@@ -10,9 +10,9 @@ import type { MindMapEditorState } from "@/shared/api/contracts";
 
 export const persistStudySessionRecordMock = vi.fn();
 
-vi.mock("@/entities/session/model", async () => {
-  const actual = await vi.importActual<typeof import("@/entities/session/model")>(
-    "@/entities/session/model",
+vi.mock("@/modules/session/domain/session-entity/model", async () => {
+  const actual = await vi.importActual<typeof import("@/modules/session/domain/session-entity/model")>(
+    "@/modules/session/domain/session-entity/model",
   );
   return {
     ...actual,
@@ -57,7 +57,7 @@ vi.mock("@/widgets/quiz-launcher", () => ({
 
 export const mindMapFrameMock = vi.fn();
 
-vi.mock("@/features/mindmap-editor", () => ({
+vi.mock("@/modules/content/ui/mindmap-editor", () => ({
   MindMapEditorSurface: React.forwardRef((props: Record<string, unknown>, ref) => {
     React.useImperativeHandle(ref, () => ({
       setUiCleared: vi.fn((next: boolean) => {

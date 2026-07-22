@@ -419,7 +419,7 @@ def run_english_json(
     )
     current_prompt = prompt
     last_error = "模型未返回有效 JSON。"
-    for attempt in range(3):
+    for _attempt in range(3):
         response = call_chat_completion_text(
             config=config,
             messages=[

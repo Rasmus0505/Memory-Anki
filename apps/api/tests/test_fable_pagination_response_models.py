@@ -8,10 +8,10 @@ from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
 )
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
-from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
-from memory_anki.modules.palaces.presentation import router as palace_router
-from memory_anki.modules.reviews.presentation import router as review_router
+from memory_anki.modules.memory.presentation import router as review_router
+from memory_anki.modules.quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.settings.presentation import router as settings_router
 from support import RouterTestCase
 
@@ -131,7 +131,7 @@ class FablePaginationResponseModelTests(RouterTestCase):
             "RuntimeInfoResponse",
             "SettingsResponse",
             "ReviewQueueResponse",
-            "ReviewScheduleItem",
+            "GroupedReviewScheduleItem",
             "SubmitReviewResponse",
             "PalaceSummaryResponse",
             "PaginatedPalaceListResponse",

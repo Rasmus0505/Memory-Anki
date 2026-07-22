@@ -7,18 +7,18 @@ import {
   isPalaceShelfViewSettings,
   PALACE_LIST_VIEW_SETTINGS_KEY,
   PALACE_SHELF_VIEW_SETTINGS_KEY,
-} from '@/entities/preferences/model'
+} from '@/modules/settings/public'
 import {
   DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
   isReviewQueueViewSettings,
   REVIEW_QUEUE_VIEW_SETTINGS_KEY,
-} from '@/features/review/model/reviewQueueSort'
+} from '@/modules/practice/public'
 import {
   DEFAULT_ENGLISH_PRACTICE_SETTINGS,
   ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY,
   ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
   sanitizeEnglishPracticeSettings,
-} from '@/entities/preferences/model/englishPracticeSettings'
+} from '@/modules/settings/public'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,
@@ -30,7 +30,7 @@ import {
   MEMORY_ANKI_SHORTCUTS_STORAGE_KEY,
   MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT,
   sanitizeMemoryAnkiShortcutMap,
-} from '@/entities/preferences/model/memoryAnkiShortcuts'
+} from '@/modules/settings/public'
 import {
   DEFAULT_TIMER_AUTOMATION_CONFIG,
   TIMER_AUTOMATION_STORAGE_KEY,

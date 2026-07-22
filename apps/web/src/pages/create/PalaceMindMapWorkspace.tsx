@@ -6,11 +6,11 @@ import {
   getSubjectsApi,
   saveSubjectEditorApi,
   type SubjectSummary,
-} from '@/entities/knowledge/api'
-import { readMindMapEditorState, parseMindMapDocument, type MindMapNode, type MindMapSelection } from '@/entities/mindmap-document'
-import { updatePalaceKnowledgeBindingApi } from '@/entities/palace/api'
-import type { PalaceMeta } from '@/features/palace-edit/hooks/usePalaceEditPage'
-import { MindMapEditorSurface, MindMapPageToolbar, type MindMapEditorSurfaceHandle } from '@/features/mindmap-editor'
+} from '@/modules/content/public'
+import { readMindMapEditorState, parseMindMapDocument, type MindMapNode, type MindMapSelection } from '@/modules/content/public'
+import { updatePalaceKnowledgeBindingApi } from '@/modules/content/public'
+import type { PalaceMeta } from '@/modules/content/public'
+import { MindMapEditorSurface, MindMapPageToolbar, type MindMapEditorSurfaceHandle } from '@/modules/content/public'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { toast } from '@/shared/feedback/toast'
 import { Badge } from '@/shared/components/ui/badge'

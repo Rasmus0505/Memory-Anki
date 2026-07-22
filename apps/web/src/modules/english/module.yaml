@@ -1,0 +1,17 @@
+{
+  "name": "english",
+  "owns": [
+    "english courses",
+    "patterns"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/english/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

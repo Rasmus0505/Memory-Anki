@@ -3,10 +3,10 @@ import json
 import pytest
 
 from memory_anki.infrastructure.db._tables.misc import Config
+from memory_anki.modules.content.application import peg_association_service as service
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.knowledge.application import chapter_service, subject_service
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
-from memory_anki.modules.palaces.application import peg_association_service as service
-from memory_anki.modules.palaces.presentation import router as palace_router
 from memory_anki.modules.settings.application import ai_model_registry_runtime
 
 

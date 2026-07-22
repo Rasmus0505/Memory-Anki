@@ -37,22 +37,22 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
 )
 from memory_anki.modules.backups.presentation import router as backups_router
 from memory_anki.modules.batch_generation.presentation import router as batch_generation_router
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
-from memory_anki.modules.freestyle.presentation import router as freestyle_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
+from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.mindmap_learning.presentation import router as mindmap_router
-from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
-from memory_anki.modules.palace_quiz.presentation import (
+from memory_anki.modules.pdf_library import router as pdf_library_router
+from memory_anki.modules.practice.presentation import router as freestyle_router
+from memory_anki.modules.produce.presentation import import_router
+from memory_anki.modules.quiz.presentation import router as palace_quiz_router
+from memory_anki.modules.quiz.presentation import (
     workspace_router as palace_quiz_workspace_router,
 )
-from memory_anki.modules.palaces.presentation import import_router
-from memory_anki.modules.palaces.presentation import router as palace_router
-from memory_anki.modules.pdf_library import router as pdf_library_router
-from memory_anki.modules.reviews.presentation import router as review_router
 from memory_anki.modules.search.presentation import router as search_router
-from memory_anki.modules.sessions.presentation import router as sessions_router
+from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
 
 get_session = _get_session

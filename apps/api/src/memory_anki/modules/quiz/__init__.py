@@ -1,1 +1,1 @@
-"""quiz context (vertical slice target)."""
+# Palace quiz module.

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import KnowledgePage from '@/pages/library/KnowledgeLibraryPage'
-import * as knowledgeApi from '@/entities/knowledge/api'
+import * as knowledgeApi from '@/modules/content/public'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
@@ -41,7 +41,7 @@ vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({
   }),
 }))
 
-vi.mock('@/features/mindmap-editor', () => ({
+vi.mock('@/modules/content/ui/mindmap-editor', () => ({
   useMindMapDocumentSession: () => ({
     meta: { id: 7, name: '历史', color: '#334155', sort_order: 1 },
     setMeta: vi.fn(),
@@ -150,7 +150,7 @@ vi.mock('@/features/mindmap-editor', () => ({
   ),
 }))
 
-vi.mock('@/features/mindmap-import', () => ({
+vi.mock('@/modules/produce/ui/mindmap-import', () => ({
   useMindMapImport: knowledgeUseMindMapImportMock,
   MindMapImportDrawer: () => null,
 }))

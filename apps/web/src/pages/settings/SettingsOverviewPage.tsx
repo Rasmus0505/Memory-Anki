@@ -1,6 +1,5 @@
-import ProfileSettingsPage from '@/features/profile/ProfileSettingsPage'
-import { MemoryAnkiShortcutsSettings } from '@/features/shortcuts/MemoryAnkiShortcutsSettings'
+import { ProfileSettingsPage as FeaturePage, MemoryAnkiShortcutsSettings } from '@/modules/settings/public'
 
 export default function SettingsOverviewPage() {
-  return <ProfileSettingsPage shortcutsSettings={<MemoryAnkiShortcutsSettings />} />
+  return <FeaturePage shortcutsSettings={<MemoryAnkiShortcutsSettings />} />
 }

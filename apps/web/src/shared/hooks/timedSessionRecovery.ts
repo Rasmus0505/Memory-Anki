@@ -5,8 +5,8 @@ import {
   buildTimeRecordRecoveryMutationId,
   removePendingTimeRecordRecovery,
   upsertPendingTimeRecordRecovery,
-} from '@/entities/session/model'
-import type { TimeSessionRecord } from '@/entities/session/model'
+} from '@/modules/session/public'
+import type { TimeSessionRecord } from '@/modules/session/public'
 
 const JSON_CONTENT_TYPE = 'application/json'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'

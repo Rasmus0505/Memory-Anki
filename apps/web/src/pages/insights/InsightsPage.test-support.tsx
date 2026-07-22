@@ -95,7 +95,7 @@ export const timeRecordsDashboardMock = {
   pendingRecoveryRecords: [],
 };
 
-vi.mock("@/features/dashboard/api", () => ({
+vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   getDashboardApi: async (...args: unknown[]) =>
     buildDashboardResponse(await getDashboardApi(...args)),
   getDashboardHeatmapApi: async (...args: unknown[]) =>
@@ -114,7 +114,7 @@ vi.mock("@/features/dashboard/api", () => ({
   },
 }));
 
-vi.mock("@/features/profile/hooks/useTimeRecordsDashboard", () => ({
+vi.mock("@/modules/settings/ui/profile/hooks/useTimeRecordsDashboard", () => ({
   useTimeRecordsDashboard: (options: {
     trendRange?: 7 | 30 | 90 | "all";
     breakdownRange?: 7 | 30 | 90 | "all";
@@ -134,13 +134,13 @@ vi.mock("@/features/profile/hooks/useTimeRecordsDashboard", () => ({
   }),
 }));
 
-vi.mock("@/features/profile/components/TimeRecordsTrendChart", () => ({
+vi.mock("@/modules/settings/ui/profile/components/TimeRecordsTrendChart", () => ({
   TimeRecordsTrendChart: ({ trend }: { trend: Array<{ label: string }> }) => (
     <div data-testid="trend-chart">{trend[0]?.label ?? ""}</div>
   ),
 }));
 
-vi.mock("@/features/profile/components/TimeRecordsBreakdownChart", () => ({
+vi.mock("@/modules/settings/ui/profile/components/TimeRecordsBreakdownChart", () => ({
   TimeRecordsBreakdownChart: ({
     breakdown,
   }: {
@@ -148,15 +148,15 @@ vi.mock("@/features/profile/components/TimeRecordsBreakdownChart", () => ({
   }) => <div data-testid="breakdown-chart">{breakdown[0]?.label ?? ""}</div>,
 }));
 
-vi.mock("@/features/profile/components/TimeRecordsTable", () => ({
+vi.mock("@/modules/settings/ui/profile/components/TimeRecordsTable", () => ({
   TimeRecordsTable: () => <div data-testid="records-table" />,
 }));
 
-vi.mock("@/features/profile/components/TimeRecordDialog", () => ({
+vi.mock("@/modules/settings/ui/profile/components/TimeRecordDialog", () => ({
   TimeRecordDialog: () => null,
 }));
 
-vi.mock("@/features/profile/components/TimeRecordQuickAddDialog", () => ({
+vi.mock("@/modules/settings/ui/profile/components/TimeRecordQuickAddDialog", () => ({
   TimeRecordQuickAddDialog: () => null,
 }));
 

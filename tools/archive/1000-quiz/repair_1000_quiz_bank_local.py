@@ -1656,7 +1656,7 @@ def import_into_db(db_path: Path, candidates_by_palace: dict[str, list[dict[str,
     os.environ["MEMORY_ANKI_HOME"] = str(db_path.parent.parent)
 
     from memory_anki.infrastructure.db.models import get_session
-    from memory_anki.modules.palace_quiz.application.question_creation_commands import batch_create_chapter_questions
+    from memory_anki.modules.quiz.application.question_creation_commands import batch_create_chapter_questions
 
     result = []
     with get_session() as session:

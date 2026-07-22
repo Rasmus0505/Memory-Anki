@@ -3,7 +3,7 @@ import type { ClientPreferences } from '@/shared/api/contracts'
 import {
   getClientPreferencesApi,
   updateClientPreferencesApi,
-} from '@/entities/preferences/api'
+} from '@/modules/settings/public'
 import { toast } from '@/shared/feedback/toast'
 import {
   BREAK_GUARD_STORAGE_KEY,
@@ -14,7 +14,7 @@ import {
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { bootstrapClientPreferences } from './useClientPreferenceBootstrap'
 
-vi.mock('@/entities/preferences/api', () => ({
+vi.mock('@/modules/settings/public', () => ({
   getClientPreferencesApi: vi.fn(),
   updateClientPreferencesApi: vi.fn(),
 }))

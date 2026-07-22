@@ -1,12 +1,12 @@
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
-from memory_anki.modules.palace_quiz.application.learning_loop import (
+from memory_anki.modules.quiz.application.learning_loop import (
     build_mastery_profile,
     list_review_queue,
     record_attempt_event,
     review_question_quality,
     transition_question,
 )
-from memory_anki.modules.palace_quiz.application.question_contracts import json_dump
+from memory_anki.modules.quiz.application.question_contracts import json_dump
 
 
 def _question(*, evidence=None, status="candidate"):

@@ -7,9 +7,9 @@ import {
   getReviewSessionProgressApi,
   saveReviewSessionProgressApi,
   submitReviewSessionApi,
-} from '@/features/review/api'
+} from '@/modules/practice/public'
 import { ReviewSessionContainer, type ReviewSessionContainerSession } from '@/widgets/mindmap-review-flow'
-import { buildReviewOverviewPath } from '@/entities/review'
+import { buildReviewOverviewPath } from '@/modules/memory/public'
 
 export function toContainerSession(session: ReviewScheduleSummary): ReviewSessionContainerSession {
   return {

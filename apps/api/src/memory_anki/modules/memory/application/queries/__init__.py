@@ -1,1 +1,0 @@
-"""memory application.queries."""

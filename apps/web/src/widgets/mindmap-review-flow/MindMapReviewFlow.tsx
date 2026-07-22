@@ -1,13 +1,13 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
-import { MindMapRatingHistoryDrawer } from "@/features/review/components/MindMapRatingHistoryDrawer";
+import { MindMapRatingHistoryDrawer } from "@/modules/practice/public";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
-import type { MindMapReviewFlowProps } from "@/features/review/model/mind-map-review-flow";
-import { usePalaceQuizNodeBindings } from "@/features/palace-quiz/hooks/usePalaceQuizNodeBindings";
+import type { MindMapReviewFlowProps } from "@/modules/practice/public";
+import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
 import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
-import { FlipCardShortcutsDialog } from "@/features/shortcuts/FlipCardShortcutsDialog";
+import { FlipCardShortcutsDialog } from "@/modules/settings/public";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -22,13 +22,13 @@ import { toast } from "@/shared/feedback/toast";
 import { cn } from "@/shared/lib/utils";
 import * as React from "react";
 import type { MindMapRecallRating, MindMapRecallRound } from "@/shared/api/contracts";
-import type { RatingConflictPolicy } from "@/features/review/api";
+import type { RatingConflictPolicy } from "@/modules/practice/public";
 
-export type { ReviewFlowSnapshot } from "@/entities/review/model/review-flow-tree";
+export type { ReviewFlowSnapshot } from "@/modules/memory/public";
 export type {
   CompleteFlowPayload,
   MindMapReviewFlowProps,
-} from "@/features/review/model/mind-map-review-flow";
+} from "@/modules/practice/public";
 
 export function MindMapReviewFlow({
   modeSyncVersion = 0,

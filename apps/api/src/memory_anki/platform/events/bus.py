@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Any, DefaultDict, List, TypeVar
+from typing import Any, TypeVar
 
 E = TypeVar("E")
 Handler = Callable[[Any], None]
@@ -16,7 +16,7 @@ Handler = Callable[[Any], None]
 
 class EventBus:
     def __init__(self) -> None:
-        self._handlers: DefaultDict[type, List[Handler]] = defaultdict(list)
+        self._handlers: defaultdict[type, list[Handler]] = defaultdict(list)
 
     def subscribe(self, event_type: type[E], handler: Callable[[E], None]) -> None:
         self._handlers[event_type].append(handler)  # type: ignore[arg-type]

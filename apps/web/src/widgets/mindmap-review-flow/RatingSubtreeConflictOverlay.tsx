@@ -1,5 +1,5 @@
 import { Button } from '@/shared/components/ui/button'
-import type { RatingConflictPolicy } from '@/features/review/api'
+import type { RatingConflictPolicy } from '@/modules/practice/public'
 
 export type RatingSubtreeDialogChoice = RatingConflictPolicy | 'single' | 'cancel'
 

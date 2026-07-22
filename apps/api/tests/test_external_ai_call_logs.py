@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 from memory_anki.infrastructure.llm import external_ai_call_logs
-from memory_anki.modules.palaces.application.mindmap_import import runtime
+from memory_anki.modules.produce.application.mindmap_import import runtime
 
 
 class StaticPromptCatalog:

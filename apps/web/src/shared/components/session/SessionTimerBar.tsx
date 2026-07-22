@@ -1,6 +1,6 @@
 import { Pause, Play, Settings2, SquareCheckBig, TimerReset } from 'lucide-react'
 import * as React from 'react'
-import { formatDuration } from '@/entities/session/model'
+import { formatDuration } from '@/modules/session/public'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'

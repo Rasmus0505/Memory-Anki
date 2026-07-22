@@ -12,20 +12,20 @@ from memory_anki.infrastructure.db._tables.reviews import (
     ReviewWave,
     ReviewWaveItem,
 )
-from memory_anki.modules.reviews.application.calibration_service import (
+from memory_anki.modules.memory.application.calibration_service import (
     preview_or_apply_calibration,
     undo_calibration,
 )
-from memory_anki.modules.reviews.application.formal_review_service import (
+from memory_anki.modules.memory.application.formal_review_service import (
     formal_review_session_payload,
     get_formal_review_scope,
     start_or_resume_formal_review,
 )
-from memory_anki.modules.reviews.application.node_memory_service import (
+from memory_anki.modules.memory.application.node_memory_service import (
     rate_nodes,
     undo_rating_operation,
 )
-from memory_anki.modules.reviews.application.wave_service import (
+from memory_anki.modules.memory.application.wave_service import (
     formal_due_node_uids,
     merge_new_due_into_wave,
     pause_formal_wave,
@@ -177,6 +177,37 @@ def test_weak_rating_goes_to_reinforcement_not_formal_due(db_session):
     assert "a" not in formal_due_node_uids(db_session, palace.id)
 
 
+def test_reinforcement_nodes_still_expose_next_review_at(db_session):
+    """Reinforcement-only schedule must still expose catalog next_review_at."""
+    from memory_anki.modules.memory.application.node_memory_projection import (
+        get_palace_due_rollup,
+    )
+
+    palace = _seed_palace(db_session, node_uids=["a", "b"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    for uid in ("a", "b"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=2,
+            study_session_id=session_row.id,
+            operation_id=f"wave-hard-{uid}",
+            rating_scope="single",
+        )
+
+    rollup = get_palace_due_rollup(db_session, palace.id)
+    assert rollup["next_review_at"] is not None
+    assert rollup["mastery_percent"] > 0
+    assert rollup["due_node_count"] == 0
+    assert rollup["has_due_review"] is False
+    # All nodes parked on reinforcement — catalog must still show a schedule.
+    assert all(
+        item.get("schedule_source") == "reinforcement"
+        for item in (rollup.get("nodes") or [])
+    )
+
+
 def test_strong_rating_leaves_future_wave_item_pending(db_session):
     palace = _seed_palace(db_session, node_uids=["a"])
     session_row = start_or_resume_formal_review(db_session, palace.id)
@@ -318,3 +349,28 @@ def test_uninitialized_nodes_not_in_formal_due(db_session):
     db_session.add(palace)
     db_session.commit()
     assert formal_due_node_uids(db_session, palace.id) == []
+
+def test_future_formal_schedule_exposes_next_review_at(db_session):
+    """Not-yet-due formal nodes must still surface next_review_at on catalog."""
+    from memory_anki.modules.memory.application.node_memory_projection import (
+        get_palace_due_rollup,
+    )
+
+    palace = _seed_palace(db_session, node_uids=["a", "b"])
+    future = utc_now_naive() + timedelta(days=5)
+    for uid in ("a", "b"):
+        row = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
+        )
+        row.due_at = future
+        row.raw_due_at = future
+        row.schedule_source = "manual"
+    db_session.commit()
+
+    rollup = get_palace_due_rollup(db_session, palace.id)
+    assert rollup["due_node_count"] == 0
+    assert rollup["has_due_review"] is False
+    assert rollup["next_review_at"] is not None
+

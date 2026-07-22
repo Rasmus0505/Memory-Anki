@@ -1,1 +1,1 @@
-export { default } from '@/features/english/EnglishPatternsPage'
+export { EnglishPatternsPage as default } from '@/modules/english/public'

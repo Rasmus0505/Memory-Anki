@@ -1,0 +1,17 @@
+{
+  "name": "produce",
+  "owns": [
+    "mindmap import",
+    "AI split UI"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/produce/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

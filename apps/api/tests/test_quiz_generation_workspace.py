@@ -5,8 +5,8 @@ import pytest
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.palace_quiz.application.question_contracts import PalaceQuizValidationError
-from memory_anki.modules.palace_quiz.application.workspace_service import (
+from memory_anki.modules.quiz.application.question_contracts import PalaceQuizValidationError
+from memory_anki.modules.quiz.application.workspace_service import (
     add_pdf_source,
     add_text_source,
     create_job,

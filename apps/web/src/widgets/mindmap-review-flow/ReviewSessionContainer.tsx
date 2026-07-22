@@ -1,17 +1,17 @@
 import { FileText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { readMindMapEditorState } from '@/entities/mindmap-document'
+import { readMindMapEditorState } from '@/modules/content/public'
 import {
   buildAttachmentUrl,
   getPalaceEditorApi,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
-} from '@/entities/palace/api'
+} from '@/modules/content/public'
 import {
   rateOutOfScopeDueReviewSessionNodesApi,
   rateUnratedReviewSessionNodesApi,
-} from '@/features/review/api'
+} from '@/modules/practice/public'
 import type {
   MindMapEditorState,
   MindMapRecallRating,
@@ -31,14 +31,14 @@ import {
   MindMapReviewFlow,
   type ReviewFlowSnapshot,
 } from './MindMapReviewFlow'
-import { FsrsCompletionDialog } from '@/features/review/components/FsrsCompletionDialog'
-import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
+import { FsrsCompletionDialog } from '@/modules/practice/public'
+import { useReviewCompletionCoordinator } from '@/modules/practice/public'
 import {
   consumePrefetchedStudySession,
   type StudyWarmupKind,
 } from '@/shared/api/studySessionWarmup'
-import type { RevealFlowMode } from '@/entities/review/model/review-flow-tree'
-import { ReviewSessionSkeleton } from '@/features/review/ReviewSessionSkeleton'
+import type { RevealFlowMode } from '@/modules/memory/public'
+import { ReviewSessionSkeleton } from '@/modules/practice/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 
 type ReviewDisplayMode = 'review' | 'edit'

@@ -8,10 +8,10 @@ import {
   type MindMapEditorSurfaceProps,
   type MindMapPageToolbarProps,
   type MindMapSelection,
-} from '@/features/mindmap-editor'
+} from '@/modules/content/public'
 import type { MindMapEditorState, MindMapRecallRating, MindMapRecallRound } from '@/shared/api/contracts'
-import type { MindMapReviewFxPayload } from '@/features/mindmap-editor'
-import { listMindMapNodeMasteryApi } from '@/entities/mindmap-learning'
+import type { MindMapReviewFxPayload } from '@/modules/content/public'
+import { listMindMapNodeMasteryApi } from '@/modules/content/public'
 import { cn } from '@/shared/lib/utils'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'

@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.backups.application import full_transfer_service
-from memory_anki.modules.palaces.presentation import import_router
+from memory_anki.modules.produce.presentation import import_router
 
 
 def _create_alembic_revision(session, revision: str = "test_revision") -> None:

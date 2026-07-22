@@ -5,8 +5,8 @@ import {
   getSegmentPracticeSessionProgressApi,
   invalidatePalaceCatalogCache,
   saveSegmentPracticeSessionProgressApi,
-} from '@/entities/palace/api'
-import { getPalaceSegmentApi, updatePalaceSegmentApi } from '@/entities/palace-segment/api'
+} from '@/modules/content/public'
+import { getPalaceSegmentApi, updatePalaceSegmentApi } from '@/modules/content/public'
 import {
   PracticeSessionRoute,
   type PracticeProgressSnapshot,

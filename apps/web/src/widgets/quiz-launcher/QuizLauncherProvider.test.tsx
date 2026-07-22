@@ -13,22 +13,22 @@ const generatePalaceQuizPreviewMock = vi.fn()
 const savePalaceQuizGenerationPreviewMock = vi.fn()
 const dispatchGlobalFeedbackMock = vi.fn()
 
-vi.mock('@/entities/palace/api', () => ({
+vi.mock('@/modules/content/domain/palace-entity/api', () => ({
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
 }))
 
-vi.mock('@/entities/knowledge/api', () => ({
+vi.mock('@/modules/content/domain/knowledge-entity/api', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
 }))
 
-vi.mock('@/entities/ai-runtime', () => ({
+vi.mock('@/modules/settings/domain/ai-runtime-entity', () => ({
   useAiRunConfigDialog: () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     aiRunConfigDialog: null,
   }),
 }))
 
-vi.mock('@/features/palace-quiz/quizGenerationController', () => ({
+vi.mock('@/modules/quiz/ui/palace-quiz/quizGenerationController', () => ({
   generatePalaceQuizPreview: (...args: unknown[]) => generatePalaceQuizPreviewMock(...args),
   savePalaceQuizGenerationPreview: (...args: unknown[]) => savePalaceQuizGenerationPreviewMock(...args),
 }))

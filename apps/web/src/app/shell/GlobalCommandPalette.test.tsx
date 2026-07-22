@@ -2,22 +2,22 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
-import { globalSearchApi } from '@/entities/search/api'
+import { globalSearchApi } from '@/modules/search/public'
 
-vi.mock('@/entities/palace/api', () => ({
+vi.mock('@/modules/content/domain/palace-entity/api', () => ({
   prefetchPalaceSubjectShelfApi: vi.fn(),
   prefetchPalacesGroupedSummaryApi: vi.fn(),
 }))
 
-vi.mock('@/features/dashboard/api', () => ({
+vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   prefetchDashboardApi: vi.fn(),
 }))
 
-vi.mock('@/features/review/api', () => ({
+vi.mock('@/modules/practice/ui/review/api', () => ({
   prefetchReviewQueueApi: vi.fn(),
 }))
 
-vi.mock('@/entities/search/api', () => ({
+vi.mock('@/modules/search/public', () => ({
   globalSearchApi: vi.fn(),
 }))
 

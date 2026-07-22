@@ -1,11 +1,8 @@
-"""Write commands for memory (ratings / wave lifecycle).
-
-Transitional re-exports from legacy reviews.api until files move in W2.
-"""
+"""Write commands for memory (ratings / wave lifecycle)."""
 
 from __future__ import annotations
 
-from memory_anki.modules.reviews.api import (
+from memory_anki.modules.memory.api import (
     diagnose_palace,
     merge_new_due_into_wave,
     pause_formal_wave,

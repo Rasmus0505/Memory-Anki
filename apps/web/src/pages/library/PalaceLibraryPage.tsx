@@ -1,5 +1,5 @@
-import FeaturePage from '@/features/palace-catalog/PalaceShelfPage'
-import { getReviewSessionApi, getReviewSessionProgressApi } from '@/features/review/api'
+import { PalaceShelfPage as FeaturePage } from '@/modules/content/public'
+import { getReviewSessionApi, getReviewSessionProgressApi } from '@/modules/practice/public'
 import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 
 function prefetchReviewSession(reviewId: number) {

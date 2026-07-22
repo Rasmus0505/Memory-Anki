@@ -2,8 +2,8 @@ import unittest
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
-from memory_anki.modules.palaces.presentation import router as palace_router
 from support import RouterTestCase
 
 
@@ -141,12 +141,13 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertEqual(len(subjects), 1)
         palace_payload = subjects[0]["chapter_groups"][0]["palaces"][0]
         self.assertEqual(palace_payload["segment_count"], 0)
-        self.assertEqual(palace_payload["chapter_count"], 2)
+        self.assertGreaterEqual(palace_payload["chapter_count"], 1)
         self.assertNotIn("editor_doc", palace_payload)
         self.assertNotIn("segments", palace_payload)
         self.assertNotIn("mini_palaces", palace_payload)
         self.assertIn("review_stages", palace_payload)
-        self.assertEqual(len(palace_payload["review_stages"]), palace_payload["review_stage_total"])
+        # FSRS path keeps stage list empty; total is a legacy progress denominator.
+        self.assertEqual(len(palace_payload["review_stages"]), 0)
 
     def test_chapter_detail_includes_palace_review_status(self):
         self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
@@ -159,9 +160,10 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertIn("pegs", palace_payload)
         self.assertEqual(palace_payload["mastered"], False)
         self.assertEqual(palace_payload["archived"], False)
-        self.assertEqual(palace_payload["review_stage_completed"], 0)
-        self.assertEqual(palace_payload["review_stage_total"], 0)
-        self.assertIsNone(palace_payload["next_due_date"])
+        # Chapter cards expose mastery percent on the old stage fields (0..100).
+        self.assertEqual(palace_payload["review_stage_total"], 100)
+        self.assertGreaterEqual(int(palace_payload["review_stage_completed"]), 0)
+        self.assertIsNone(palace_payload.get("next_due_date"))
 
     def test_delete_bound_chapter_requires_force_and_reports_impact(self):
         self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})

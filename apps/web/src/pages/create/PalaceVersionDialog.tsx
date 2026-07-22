@@ -3,7 +3,7 @@ import type {
   PalaceVersionDetail,
   PalaceVersionSummary,
 } from '@/shared/api/contracts'
-import { MindMapEditorSurface } from '@/features/mindmap-editor'
+import { MindMapEditorSurface } from '@/modules/content/public'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { formatVersionSavedAt } from '@/features/palace-edit/model/palace-edit-format'
+import { formatVersionSavedAt } from '@/modules/content/public'
 import {
   normalizePreviewConfig,
   normalizePreviewEditorDoc,

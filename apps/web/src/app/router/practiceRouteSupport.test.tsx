@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { PracticeCompletionDialog } from '@/features/review/components/PracticeCompletionDialog'
+import { PracticeCompletionDialog } from '@/modules/practice/public'
 
 describe('practice completion', () => {
   it('states that practice never advances legacy stages', () => {

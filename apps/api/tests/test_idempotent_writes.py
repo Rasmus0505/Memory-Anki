@@ -8,11 +8,11 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceSegment,
     PalaceTemplate,
 )
-from memory_anki.modules.palaces.presentation import router as palaces_router
-from memory_anki.modules.palaces.presentation import (
+from memory_anki.modules.content.presentation import router as palaces_router
+from memory_anki.modules.content.presentation import (
     segment_router,
 )
-from memory_anki.modules.sessions.presentation import router as sessions_router
+from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 

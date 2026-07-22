@@ -5,7 +5,7 @@ import TodayLearningPage from '@/pages/today/TodayLearningPage'
 
 const getDashboardApi = vi.fn()
 
-vi.mock('@/features/dashboard/api', () => ({
+vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   getDashboardApi: (...args: unknown[]) => getDashboardApi(...args),
 }))
 

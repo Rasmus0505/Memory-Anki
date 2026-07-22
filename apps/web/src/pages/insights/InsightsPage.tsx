@@ -1,26 +1,26 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DashboardQuery, DashboardResponse } from '@/shared/api/contracts'
-import { DashboardSkeleton } from '@/features/dashboard/DashboardSkeleton'
+import { DashboardSkeleton } from '@/modules/dashboard/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
-import { TimeRecordDialog } from '@/features/profile/components/TimeRecordDialog'
-import { TimeRecordQuickAddDialog } from '@/features/profile/components/TimeRecordQuickAddDialog'
-import { TimeRecordsBreakdownChart } from '@/features/profile/components/TimeRecordsBreakdownChart'
-import { TimeRecordsTable } from '@/features/profile/components/TimeRecordsTable'
-import { TimeRecordsTrendChart } from '@/features/profile/components/TimeRecordsTrendChart'
-import { useTimeRecordsDashboard } from '@/features/profile/hooks/useTimeRecordsDashboard'
-import { getDashboardApi } from '@/features/dashboard/api'
-import { DashboardNewPalacesCard } from '@/features/dashboard/components/DashboardNewPalacesCard'
-import { DashboardQuickActions } from '@/features/dashboard/components/DashboardQuickActions'
+import { TimeRecordDialog } from '@/modules/settings/public'
+import { TimeRecordQuickAddDialog } from '@/modules/settings/public'
+import { TimeRecordsBreakdownChart } from '@/modules/settings/public'
+import { TimeRecordsTable } from '@/modules/settings/public'
+import { TimeRecordsTrendChart } from '@/modules/settings/public'
+import { useTimeRecordsDashboard } from '@/modules/settings/public'
+import { getDashboardApi } from '@/modules/dashboard/public'
+import { DashboardNewPalacesCard } from '@/modules/dashboard/public'
+import { DashboardQuickActions } from '@/modules/dashboard/public'
 import {
   DashboardStatCards,
   getTodayTodoTotal,
-} from '@/features/dashboard/components/DashboardStatCards'
-import { DashboardTodayLearningCard } from '@/features/dashboard/components/DashboardTodayLearningCard'
-import { ReviewNotesCard } from '@/features/dashboard/components/ReviewNotesCard'
-import { StudyHeatmap } from '@/features/dashboard/components/StudyHeatmap'
-import { TimeRecordChartCard } from '@/features/dashboard/components/TimeRecordChartCard'
-import { WeeklyGoalsCard } from '@/features/dashboard/components/WeeklyGoalsCard'
-import { WeeklyReportCard } from '@/features/dashboard/components/WeeklyReportCard'
+} from '@/modules/dashboard/public'
+import { DashboardTodayLearningCard } from '@/modules/dashboard/public'
+import { ReviewNotesCard } from '@/modules/dashboard/public'
+import { StudyHeatmap } from '@/modules/dashboard/public'
+import { TimeRecordChartCard } from '@/modules/dashboard/public'
+import { WeeklyGoalsCard } from '@/modules/dashboard/public'
+import { WeeklyReportCard } from '@/modules/dashboard/public'
 import {
   DASHBOARD_TOTAL_DURATION_FILTER_STORAGE_KEY,
   createDefaultDurationFilterState,
@@ -31,7 +31,7 @@ import {
   normalizeDashboardDurationFilterState,
   type DashboardDurationFilterState,
   type NormalizedDashboardDurationFilterState,
-} from '@/features/dashboard/model/dashboard-duration-filter'
+} from '@/modules/dashboard/public'
 import { Button } from '@/shared/components/ui/button'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 

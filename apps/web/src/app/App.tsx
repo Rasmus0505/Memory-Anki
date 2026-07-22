@@ -3,7 +3,7 @@ import { AppProviders } from '@/app/providers/AppProviders'
 
 const DesktopApp = lazy(() => import('@/app/DesktopApp'))
 const TimerOverlayApp = lazy(() =>
-  import('@/features/timer-overlay/TimerOverlayApp').then((module) => ({
+  import('@/modules/session/ui/timer-overlay/TimerOverlayApp').then((module) => ({
     default: module.TimerOverlayApp,
   })),
 )

@@ -34,7 +34,7 @@ Branch units are complete single-rooted subtrees. Split from root children using
 
 Frontend ownership:
 
-- Domain/config/skip/refresh: `apps/web/src/modules/freestyle` via `public.ts`
+- Domain/config/skip/refresh: `apps/web/src/modules/practice` via `public.ts`
 - Immersive page/widgets: `features/freestyle` + thin `pages/today/ImmersiveFreestylePage`
 - Primary nav first item is **随心** (`/freestyle`); legacy `/freestyle/session` redirects there
 - Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to FSRS

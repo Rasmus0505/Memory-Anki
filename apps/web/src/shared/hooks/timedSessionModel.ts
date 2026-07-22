@@ -5,7 +5,7 @@ import type {
   SessionScene,
   SessionSceneSegment,
   TimeSessionRecord,
-} from '@/entities/session/model'
+} from '@/modules/session/public'
 import type {
   TimerAutomationActivityKind,
   TimerAutomationScene,

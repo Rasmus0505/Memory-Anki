@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from memory_anki.modules.reviews.application.wave_policy import (
+from memory_anki.modules.memory.application.wave_policy import (
     WaveCandidate,
     interval_days,
     is_formal_queue_eligible,

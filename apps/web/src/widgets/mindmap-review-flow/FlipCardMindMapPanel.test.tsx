@@ -8,7 +8,7 @@ import {
 } from '@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 
-vi.mock('@/entities/mindmap-learning', () => ({
+vi.mock('@/modules/content/domain/mindmap-learning-entity', () => ({
   listMindMapNodeMasteryApi: vi.fn(async () => ({
     items: [
       {

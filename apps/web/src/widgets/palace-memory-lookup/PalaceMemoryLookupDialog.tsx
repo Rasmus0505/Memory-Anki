@@ -17,11 +17,11 @@ import {
   Shrink,
   X,
 } from 'lucide-react'
-import { getPalaceEditorApi, getPalacesGroupedApi } from '@/entities/palace/api'
-import { useMemoryAnkiShortcuts } from '@/entities/preferences/model/memoryAnkiShortcuts'
-import { useRevealSession } from '@/entities/review/model/useRevealSession'
-import { buildAllRevealedState } from '@/entities/review/model/review-flow-tree'
-import { useReviewFeedback } from '@/entities/review/model/useReviewFeedback'
+import { getPalaceEditorApi, getPalacesGroupedApi } from '@/modules/content/public'
+import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
+import { useRevealSession } from '@/modules/memory/public'
+import { buildAllRevealedState } from '@/modules/memory/public'
+import { useReviewFeedback } from '@/modules/memory/public'
 import type {
   MindMapEditorState,
   PalaceGroupedListResponse,
@@ -37,7 +37,7 @@ import {
   type MemoryLookupResizeDirection,
   type MemoryLookupResizeState,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupLayout'
-import { MindMapEditorSurface } from '@/features/mindmap-editor'
+import { MindMapEditorSurface } from '@/modules/content/public'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,

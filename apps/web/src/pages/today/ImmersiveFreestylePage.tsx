@@ -1,1 +1,1 @@
-export { default } from '@/features/freestyle/ImmersiveFreestylePage'
+export { ImmersiveFreestylePage as default } from '@/modules/practice/public'

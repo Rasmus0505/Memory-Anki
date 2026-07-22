@@ -1,0 +1,27 @@
+{
+  "name": "practice",
+  "owns": [
+    "training round",
+    "immersive feed config",
+    "queue skip and refresh rules"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/practice/public.ts",
+  "workflows": [
+    "FreestyleTrainingMachine"
+  ],
+  "ports": [],
+  "events": [
+    "freestyle.round.completed"
+  ],
+  "dependencies": [
+    "session"
+  ],
+  "invariants": [],
+  "requiredTests": [
+    "trainingRound.test.ts",
+    "feedConfig.test.ts"
+  ]
+}

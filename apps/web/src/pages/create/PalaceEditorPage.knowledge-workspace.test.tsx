@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as knowledgeApi from '@/entities/knowledge/api'
-import * as palaceApi from '@/entities/palace/api'
+import * as knowledgeApi from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/public'
 import {
   fireEvent, renderPalaceEditPage, screen, setupPalaceEditPageTestDefaults, waitFor,
 } from './PalaceEditorPage.test-support'

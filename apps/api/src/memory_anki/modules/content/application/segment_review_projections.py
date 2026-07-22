@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
+from memory_anki.modules.content.application.segment_nodes import (
+    build_segments_editor_doc,
+    cleanup_segment_node_uids,
+    collect_doc_nodes_with_descendants,
+    parse_segment_node_uids,
+    remaining_unclaimed_node_uids,
+)
+from memory_anki.modules.memory.api import get_palace_memory_projection
+
+from .segment_review_support import (
+    palace_stage_progress,
+    review_stages_json,
+)
+
+
+def segment_review_stages_json(
+    session: Session,
+    segment: PalaceSegment,
+    stage_labels: list[str],
+) -> list[dict[str, Any]]:
+    return review_stages_json(
+        stage_labels=stage_labels,
+        schedules={},
+        completed_count=0,
+        scheduled_at_for=lambda schedule: None,
+    )
+
+
+def palace_review_stages_json(
+    session: Session,
+    palace: Palace,
+    stage_labels: list[str],
+) -> list[dict[str, Any]]:
+    del session, palace, stage_labels
+    return []
+
+
+def estimate_segment_review_seconds(segment: PalaceSegment) -> int:
+    node_count = len(parse_segment_node_uids(segment.node_uids_json))
+    if node_count > 0:
+        return max(60, node_count * 45)
+    return 0
+
+
+def estimate_palace_review_seconds(palace: Palace) -> int:
+    logs = [
+        log
+        for log in (palace.review_logs or [])
+        if getattr(log, "review_mode", "") == "review"
+    ]
+    total_duration = sum(max(0, int(log.duration_seconds or 0)) for log in logs)
+    if total_duration > 0 and logs:
+        return max(60, round(total_duration / len(logs)))
+    descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
+    node_count = len(descendants)
+    if node_count > 0:
+        return max(60, node_count * 45)
+    return 0
+
+
+def palace_has_virtual_default_segment(palace: Palace) -> bool:
+    return bool(remaining_unclaimed_node_uids(palace))
+
+
+def get_segment_display_name(palace: Palace, segment: PalaceSegment) -> str:
+    raw_name = str(segment.name or "").strip()
+    if raw_name != "第 1 部分":
+        return raw_name or f"第 {segment.sort_order + 1} 部分"
+    index_offset = 1 if palace_has_virtual_default_segment(palace) else 0
+    return f"第 {segment.sort_order + 1 + index_offset} 部分"
+
+
+def segment_summary_json(session: Session, segment: PalaceSegment) -> dict[str, Any]:
+    cleanup_segment_node_uids(session, segment.palace)
+    display_name = get_segment_display_name(segment.palace, segment)
+    node_uids = parse_segment_node_uids(segment.node_uids_json)
+    return {
+        "id": segment.id,
+        "palace_id": segment.palace_id,
+        "name": segment.name,
+        "display_name": display_name,
+        "color": segment.color,
+        "created_at": segment.created_at.isoformat() if segment.created_at else None,
+        "sort_order": segment.sort_order,
+        "node_uids": node_uids,
+        "node_count": len(node_uids),
+        "estimated_review_seconds": estimate_segment_review_seconds(segment),
+        "review_stage_total": 0,
+        "review_stage_completed": 0,
+        "review_stage_progress": 0,
+        "stage_labels": [],
+        "review_stages": [],
+        "next_review_at": None,
+        "has_due_review": False,
+        "current_review_schedule_id": None,
+        "current_review_type": None,
+        "active_review_progress": None,
+        "is_empty": len(node_uids) == 0,
+    }
+
+
+def build_virtual_default_segment_summary(
+    palace: Palace,
+    *,
+    session: Session,
+    estimated_review_seconds: int,
+    review_stage_total: int,
+    review_stage_completed: int,
+    review_stage_progress: float,
+    stage_labels: list[str],
+    remaining_uids: list[str] | None = None,
+    active_review_progress: float | None = None,
+    next_review_at: str | None = None,
+    has_due_review: bool = False,
+    current_review_schedule_id: int | None = None,
+    current_review_type: str | None = None,
+) -> dict[str, Any] | None:
+    remaining_uids = remaining_uids if remaining_uids is not None else remaining_unclaimed_node_uids(palace)
+    if not remaining_uids:
+        return None
+
+    return {
+        "id": 0,
+        "palace_id": palace.id,
+        "name": "第 1 部分",
+        "display_name": "第 1 部分",
+        "color": "#94a3b8",
+        "created_at": palace.created_at.isoformat() if palace.created_at else None,
+        "sort_order": -1,
+        "node_uids": remaining_uids,
+        "node_count": len(remaining_uids),
+        "estimated_review_seconds": estimated_review_seconds,
+        "review_stage_total": review_stage_total,
+        "review_stage_completed": review_stage_completed,
+        "review_stage_progress": review_stage_progress,
+        "stage_labels": stage_labels,
+        "review_stages": palace_review_stages_json(session, palace, stage_labels),
+        "next_review_at": next_review_at,
+        "has_due_review": has_due_review,
+        "current_review_schedule_id": current_review_schedule_id,
+        "current_review_type": current_review_type,
+        "active_review_progress": active_review_progress,
+        "is_empty": len(remaining_uids) == 0,
+        "is_virtual_default": True,
+    }
+
+
+def build_palace_default_segment_summary(
+    session: Session,
+    palace: Palace,
+) -> dict[str, Any] | None:
+    total, completed, progress = palace_stage_progress(session, palace)
+    remaining_uids = remaining_unclaimed_node_uids(palace)
+    if not remaining_uids:
+        return None
+    next_review_at = None
+    has_due_review = False
+    try:
+        projection = get_palace_memory_projection(session, palace.id)
+        next_review_at = projection.get("next_review_at")
+        has_due_review = bool(projection.get("has_due_review"))
+    except ValueError:
+        pass
+    return build_virtual_default_segment_summary(
+        palace,
+        session=session,
+        estimated_review_seconds=estimate_palace_review_seconds(palace),
+        review_stage_total=total,
+        review_stage_completed=completed,
+        review_stage_progress=progress,
+        stage_labels=[],
+        remaining_uids=remaining_uids,
+        active_review_progress=None,
+        next_review_at=next_review_at,
+        has_due_review=has_due_review,
+        current_review_schedule_id=None,
+        current_review_type="fsrs",
+    )
+
+
+def list_palace_segments(
+    session: Session,
+    palace: Palace,
+    *,
+    default_segment_payload: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    cleanup_segment_node_uids(session, palace)
+    items: list[dict[str, Any]] = []
+    if default_segment_payload and default_segment_payload.get("node_uids"):
+        items.append(default_segment_payload)
+    items.extend(segment_summary_json(session, segment) for segment in palace.segments)
+    return items
+
+
+def build_segment_editor_doc(palace: Palace, segment: PalaceSegment) -> dict[str, Any]:
+    return build_segments_editor_doc(
+        palace,
+        [parse_segment_node_uids(segment.node_uids_json)],
+    )
+
+
+__all__ = [
+    "build_palace_default_segment_summary",
+    "build_segment_editor_doc",
+    "build_virtual_default_segment_summary",
+    "estimate_palace_review_seconds",
+    "estimate_segment_review_seconds",
+    "get_segment_display_name",
+    "list_palace_segments",
+    "palace_has_virtual_default_segment",
+    "palace_review_stages_json",
+    "palace_stage_progress",
+    "segment_review_stages_json",
+    "segment_summary_json",
+]

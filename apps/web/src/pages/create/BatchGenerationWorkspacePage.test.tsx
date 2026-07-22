@@ -15,7 +15,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => navigate }
 })
 
-vi.mock('@/entities/batch-generation/api', () => ({
+vi.mock('@/modules/produce/domain/batch-generation-entity/api', () => ({
   getBatchWorkspace: (...args: unknown[]) => getBatchWorkspace(...args),
   deleteBatchWorkspace: (...args: unknown[]) => deleteBatchWorkspace(...args),
   createBatchWorkspace: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('@/entities/batch-generation/api', () => ({
   buildBatchPublishPlan: vi.fn(),
 }))
 
-vi.mock('@/entities/preferences/api', () => ({
+vi.mock('@/modules/settings/domain/preferences-entity/api', () => ({
   previewAiPromptCompositionApi: (...args: unknown[]) => previewAiPromptCompositionApi(...args),
 }))
 

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "architecture": {
     "backend": "modular-monolith",
-    "frontend": "app-pages-widgets-features-entities-shared",
+    "frontend": "app-pages-widgets-modules-shared",
     "databaseSchemaChanges": true
   },
   "backend": {
@@ -25,6 +25,10 @@
         "status": "migrated",
         "publicEntry": "memory_anki.modules.backups.api"
       },
+      "content": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.content.api"
+      },
       "dashboard": {
         "status": "migrated"
       },
@@ -36,11 +40,12 @@
         "status": "migrated",
         "publicEntry": "memory_anki.modules.english_reading.api"
       },
-      "freestyle": {
-        "status": "migrated"
-      },
       "knowledge": {
         "status": "migrated"
+      },
+      "memory": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.memory.api"
       },
       "mindmap": {
         "status": "retired",
@@ -56,32 +61,62 @@
       "mindmap_learning": {
         "status": "migrated"
       },
-      "palace_quiz": {
-        "status": "migrated",
-        "publicEntry": "memory_anki.modules.palace_quiz.api"
-      },
-      "palaces": {
-        "status": "migrated",
-        "publicEntry": "memory_anki.modules.palaces.api"
-      },
       "pdf_library": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.pdf_library.api"
       },
-      "reviews": {
+      "practice": {
         "status": "migrated",
-        "publicEntry": "memory_anki.modules.reviews.api"
+        "publicEntry": "memory_anki.modules.practice.api"
+      },
+      "produce": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.produce.api"
+      },
+      "quiz": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.quiz.api"
       },
       "search": {
         "status": "migrated"
       },
-      "sessions": {
+      "session": {
         "status": "migrated",
-        "publicEntry": "memory_anki.modules.sessions.api"
+        "publicEntry": "memory_anki.modules.session.api"
       },
       "settings": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.settings.api"
+      },
+      "freestyle": {
+        "status": "retired",
+        "replacedBy": [
+          "practice"
+        ]
+      },
+      "palaces": {
+        "status": "retired",
+        "replacedBy": [
+          "content"
+        ]
+      },
+      "palace_quiz": {
+        "status": "retired",
+        "replacedBy": [
+          "quiz"
+        ]
+      },
+      "reviews": {
+        "status": "retired",
+        "replacedBy": [
+          "memory"
+        ]
+      },
+      "sessions": {
+        "status": "retired",
+        "replacedBy": [
+          "session"
+        ]
       }
     },
     "allowedCrossContextDependencies": {
@@ -92,77 +127,88 @@
       "backups": [
         "mindmap_document"
       ],
+      "content": [
+        "backups",
+        "memory",
+        "mindmap_document",
+        "produce",
+        "session",
+        "settings",
+        "pdf_library"
+      ],
       "dashboard": [
-        "palaces",
-        "reviews",
-        "sessions"
+        "content",
+        "memory",
+        "session"
       ],
       "english": [
-        "reviews",
-        "sessions",
+        "memory",
+        "session",
         "settings"
       ],
       "english_reading": [
-        "reviews",
-        "sessions",
+        "memory",
+        "session",
         "settings"
-      ],
-      "freestyle": [
-        "english",
-        "english_reading",
-        "palace_quiz",
-        "palaces",
-        "reviews"
       ],
       "knowledge": [
         "backups",
-        "mindmap_document",
-        "palaces",
-        "reviews"
+        "content",
+        "memory",
+        "mindmap_document"
       ],
-      "palace_quiz": [
-        "backups",
-        "mindmap_document",
-        "palaces",
-        "settings"
-      ],
-      "palaces": [
-        "backups",
-        "mindmap_document",
-        "pdf_library",
-        "reviews",
-        "sessions",
-        "settings"
-      ],
-      "pdf_library": [],
-      "reviews": [
+      "memory": [
+        "content",
         "mindmap_document",
         "mindmap_learning",
-        "palaces",
-        "sessions"
+        "session"
+      ],
+      "pdf_library": [],
+      "practice": [
+        "content",
+        "english",
+        "english_reading",
+        "memory",
+        "quiz",
+        "session"
+      ],
+      "produce": [
+        "backups",
+        "content",
+        "mindmap_document",
+        "pdf_library",
+        "settings"
+      ],
+      "quiz": [
+        "backups",
+        "content",
+        "mindmap_document",
+        "settings"
       ],
       "search": [
-        "palaces"
+        "content"
       ],
-      "sessions": [],
+      "session": [],
       "settings": [
         "backups",
-        "reviews"
-      ]
+        "memory"
+      ],
+      "mindmap_document": [],
+      "mindmap_learning": []
     },
     "unitOfWorkManagedUseCases": [
       "modules/knowledge/application/chapter_service.py",
       "modules/knowledge/application/editor_state_service.py",
       "modules/knowledge/application/subject_service.py",
-      "modules/palaces/application/attachment_service.py",
-      "modules/palaces/application/editor_state_service.py",
-      "modules/palaces/application/import_export_service.py",
-      "modules/palaces/application/knowledge_binding_service.py",
-      "modules/palaces/application/palace_service.py",
-      "modules/palaces/application/palace_template_service.py",
-      "modules/palaces/application/segment_management_service.py",
-      "modules/palace_quiz/application/question_mutation_commands.py",
-      "modules/sessions/application/study_session_commands.py"
+      "modules/content/application/attachment_service.py",
+      "modules/content/application/editor_state_service.py",
+      "modules/content/application/import_export_service.py",
+      "modules/content/application/knowledge_binding_service.py",
+      "modules/content/application/palace_service.py",
+      "modules/content/application/palace_template_service.py",
+      "modules/content/application/segment_management_service.py",
+      "modules/quiz/application/question_mutation_commands.py",
+      "modules/session/application/study_session_commands.py"
     ]
   },
   "frontend": {
@@ -170,30 +216,11 @@
       "app",
       "pages",
       "widgets",
-      "features",
-      "entities",
-      "shared"
+      "modules",
+      "shared",
+      "platform"
     ],
-    "allowedFeatureDependencies": {
-      "english": [
-        "english-reading",
-        "english-shell"
-      ],
-      "english-reading": [
-        "english",
-        "english-shell"
-      ],
-      "english-shell": [],
-      "freestyle": [],
-      "knowledge": [],
-      "mindmap-import": [],
-      "mini-palace": [],
-      "palace-catalog": [],
-      "palace-edit": [],
-      "palace-quiz": [],
-      "profile": [],
-      "review": []
-    }
+    "allowedFeatureDependencies": {}
   },
   "runtime": {
     "ports": {
@@ -226,8 +253,8 @@
         ]
       },
       "SessionPort": {
-        "owner": "modules/sessions/application",
-        "adapter": "modules/sessions/infrastructure",
+        "owner": "modules/session/application",
+        "adapter": "modules/session/infrastructure",
         "capabilities": [
           "identity",
           "timing",
@@ -278,8 +305,8 @@
       "navigator.serviceWorker"
     ],
     "useCases": {
-      "freestyle.completeRound": {
-        "owner": "freestyle",
+      "practice.completeRound": {
+        "owner": "practice",
         "workflow": "FreestyleTrainingMachine",
         "guard": "canCompleteRound",
         "tests": [
@@ -287,12 +314,12 @@
           "freestyleTrainingMachine.test.ts"
         ]
       },
-      "freestyle.buildImmersiveQueue": {
-        "owner": "freestyle",
+      "practice.buildImmersiveQueue": {
+        "owner": "practice",
         "facades": [
-          "palaces.api",
-          "reviews.api",
-          "palace_quiz.api"
+          "content.api",
+          "memory.api",
+          "quiz.api"
         ],
         "endpoint": "POST /api/v1/freestyle/queue/build",
         "tests": [
@@ -321,10 +348,10 @@
     },
     "events": {
       "freestyle.round.completed": {
-        "owner": "freestyle",
+        "owner": "practice",
         "producer": "FreestyleTrainingMachine",
         "consumers": [
-          "sessions"
+          "session"
         ],
         "precondition": "canCompleteRound"
       },
@@ -344,8 +371,8 @@
       }
     },
     "frontendModules": {
-      "freestyle": {
-        "publicEntry": "src/modules/freestyle/public.ts",
+      "practice": {
+        "publicEntry": "src/modules/practice/public.ts",
         "workflow": "FreestyleTrainingMachine"
       },
       "mindmap": {

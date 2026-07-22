@@ -1,13 +1,13 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Brain, FolderTree, History, Keyboard, ListChecks, MapPin, Plus, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { globalSearchApi } from '@/entities/search/api'
+import { globalSearchApi } from '@/modules/search/public'
 import {
   getShortcutLabel,
   MEMORY_ANKI_SHORTCUT_ACTIONS,
   readMemoryAnkiShortcuts,
   type MemoryAnkiShortcutMap,
-} from '@/entities/preferences/model/memoryAnkiShortcuts'
+} from '@/modules/settings/public'
 import type { GlobalSearchResponse } from '@/shared/api/contracts'
 import {
   CommandDialog,

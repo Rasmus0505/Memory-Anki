@@ -7,7 +7,7 @@ from memory_anki.core.time import (
     parse_api_datetime,
     to_api_datetime,
 )
-from memory_anki.modules.sessions.application.serialization import (
+from memory_anki.modules.session.application.serialization import (
     _parse_datetime,
     _serialize_datetime,
 )

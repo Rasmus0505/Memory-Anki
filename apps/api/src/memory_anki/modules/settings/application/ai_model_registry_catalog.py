@@ -217,7 +217,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model=DASHSCOPE_TEXT_MODEL,
         legacy_config_keys=("mindmap_ai_split_model",),
         legacy_thinking_config_keys=("mindmap_ai_split_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_ai_split_service.py",
+        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_ai_split_service.py",
     ),
     AiSceneDefinition(
         key="peg_association_suggestions",
@@ -229,7 +229,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model=DASHSCOPE_TEXT_MODEL,
         legacy_config_keys=("mindmap_ai_split_model",),
         legacy_thinking_config_keys=("mindmap_ai_split_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palaces/application/peg_association_service.py",
+        source_location="apps/api/src/memory_anki/modules/content/application/peg_association_service.py",
     ),
     AiSceneDefinition(
         key="reading_lexical_resolution",
@@ -285,7 +285,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model=DASHSCOPE_TEXT_MODEL,
         legacy_config_keys=("ai_model_quiz_text",),
         legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/ai_service.py",
     ),
     AiSceneDefinition(
         key="review_ai_learning",
@@ -308,7 +308,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model=DASHSCOPE_TEXT_MODEL,
         legacy_config_keys=("ai_model_quiz_text",),
         legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/quiz_generation_service.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/quiz_generation_service.py",
     ),
     AiSceneDefinition(
         key="quiz_mini_palace_grouping",
@@ -320,7 +320,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model="qwen-turbo",
         legacy_config_keys=("ai_model_quiz_mini_palace",),
         legacy_thinking_config_keys=("ai_model_quiz_mini_palace_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/ai_service.py",
     ),
     AiSceneDefinition(
         key="quiz_node_binding",
@@ -332,7 +332,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model="qwen-plus",
         legacy_config_keys=("ai_model_quiz_text",),
         legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/node_binding.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/node_binding.py",
     ),
     AiSceneDefinition(
         key="quiz_text_generation",
@@ -344,7 +344,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         default_model="qwen-plus",
         legacy_config_keys=("ai_model_quiz_text",),
         legacy_thinking_config_keys=("ai_model_quiz_text_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/ai_service.py",
     ),
     AiSceneDefinition(
         key="vision_image_mindmap",
@@ -357,7 +357,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         allow_visual_llm=True,
         legacy_config_keys=("ai_model_vision",),
         legacy_thinking_config_keys=("ai_model_vision_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import_job_service.py",
+        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import_job_service.py",
     ),
     AiSceneDefinition(
         key="vision_image_text",
@@ -370,7 +370,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         allow_visual_llm=True,
         legacy_config_keys=("ai_model_vision",),
         legacy_thinking_config_keys=("ai_model_vision_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import_job_service.py",
+        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import_job_service.py",
     ),
     AiSceneDefinition(
         key="vision_batch_mindmap",
@@ -386,7 +386,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
             "ai_model_vision_thinking_enabled",
             "scene_model_vision_structure_mindmap_thinking_enabled",
         ),
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import_job_service.py",
+        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import_job_service.py",
     ),
     AiSceneDefinition(
         key="mindmap_ocr_formatter",
@@ -396,7 +396,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         config_key="scene_model_mindmap_ocr_formatter",
         thinking_config_key="scene_model_mindmap_ocr_formatter_thinking_enabled",
         default_model="deepseek-v4-flash",
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import_job_service.py",
+        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import_job_service.py",
     ),
     AiSceneDefinition(
         key="quiz_image_generation",
@@ -409,7 +409,7 @@ SCENES: tuple[AiSceneDefinition, ...] = (
         allow_visual_llm=True,
         legacy_config_keys=("ai_model_vision",),
         legacy_thinking_config_keys=("ai_model_vision_thinking_enabled",),
-        source_location="apps/api/src/memory_anki/modules/palace_quiz/application/ai_service.py",
+        source_location="apps/api/src/memory_anki/modules/quiz/application/ai_service.py",
     ),
     AiSceneDefinition(
         key="translation_course_batch",

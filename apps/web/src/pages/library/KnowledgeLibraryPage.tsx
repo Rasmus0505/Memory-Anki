@@ -11,7 +11,7 @@ import {
   MindMapPageToolbar,
   type MindMapEditorSurfaceHandle,
   type MindMapSelection,
-} from '@/features/mindmap-editor'
+} from '@/modules/content/public'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -19,12 +19,12 @@ import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
-import { useMindMapExperience } from '@/features/mindmap-experience'
+import { useMindMapExperience } from '@/modules/content/public'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
 import { cn } from '@/shared/lib/utils'
-import { KnowledgeChapterQuizDialog } from '@/features/knowledge/components/KnowledgeChapterQuizDialog'
+import { KnowledgeChapterQuizDialog } from '@/modules/content/public'
 import { KnowledgeMindMapImportDrawer } from '@/pages/library/KnowledgeMindMapImportDrawer'
-import { useMindMapImport } from '@/features/mindmap-import'
+import { useMindMapImport } from '@/modules/produce/public'
 import {
   createSubjectApi,
   deleteChapterApi,
@@ -38,17 +38,17 @@ import {
   type ChapterDetailResponse,
   type SubjectSummary,
   updateSubjectApi,
-} from '@/entities/knowledge/api'
+} from '@/modules/content/public'
 import {
   batchCreateChapterQuizQuestionsApi,
   previewChapterQuizGenerationFromOutlineApi,
-} from '@/entities/quiz/api'
+} from '@/modules/quiz/public'
 import type {
   PalaceQuizGenerationPreview,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
 } from '@/shared/api/contracts'
-import { readMindMapEditorState } from '@/entities/mindmap-document'
+import { readMindMapEditorState } from '@/modules/content/public'
 import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
 

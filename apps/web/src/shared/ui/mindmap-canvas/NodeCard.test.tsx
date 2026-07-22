@@ -2,7 +2,6 @@ import { act, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { getNodeSize } from '@/shared/ui/mindmap-canvas/layout'
 import {
-  createRect,
   getNodeShell,
   renderNodeCard,
   selectEditorText,

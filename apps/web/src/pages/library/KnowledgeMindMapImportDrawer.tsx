@@ -1,5 +1,5 @@
-import { MindMapImportDrawer, useMindMapImport } from '@/features/mindmap-import'
-import { MindMapEditorSurface } from '@/features/mindmap-editor'
+import { MindMapImportDrawer, useMindMapImport } from '@/modules/produce/public'
+import { MindMapEditorSurface } from '@/modules/content/public'
 
 interface KnowledgeMindMapImportDrawerProps {
   mindMapImport: ReturnType<typeof useMindMapImport>

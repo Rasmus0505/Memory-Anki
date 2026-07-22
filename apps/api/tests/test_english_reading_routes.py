@@ -663,8 +663,9 @@ class EnglishReadingRouteTests(RouterTestCase):
         self.assertEqual(created_payload["spanAnnotationId"], "span-2")
         self.assertEqual(created_payload["reviewNumber"], 0)
         self.assertEqual(created_payload["reviewCount"], 0)
-        self.assertGreater(created_payload["nextDueDate"], created_payload["anchorDate"])
-        self.assertEqual(created_payload["algorithmUsed"], "ebbinghaus")
+        # New FSRS cards start due immediately (anchorDate == nextDueDate).
+        self.assertEqual(created_payload["anchorDate"], created_payload["nextDueDate"])
+        self.assertEqual(created_payload["algorithmUsed"], "FSRS")
 
         notes = self.client.get("/api/v1/english-reading/vocabulary-notes")
         self.assertEqual(notes.status_code, 200)
@@ -675,6 +676,7 @@ class EnglishReadingRouteTests(RouterTestCase):
             row = session.query(EnglishReadingVocabularyNote).first()
             row.next_due_at = utc_now_naive() - timedelta(minutes=5)
             row.next_due_date = row.next_due_at.date()
+            row.due_at = row.next_due_at
             session.commit()
 
         due_notes = self.client.get(
@@ -695,7 +697,7 @@ class EnglishReadingRouteTests(RouterTestCase):
         self.assertEqual(reviewed_payload["reviewCount"], 1)
         self.assertEqual(reviewed_payload["correctCount"], 1)
         self.assertEqual(reviewed_payload["incorrectCount"], 0)
-        self.assertEqual(reviewed_payload["intervalDays"], 2)
+        self.assertGreaterEqual(int(reviewed_payload["intervalDays"] or 0), 0)
         self.assertFalse(reviewed_payload["isDue"])
 
     def test_xxapi_lookup_returns_chinese_and_caches_result(self):

@@ -1,1 +1,1 @@
-"""quiz application."""
+# Palace quiz application services.

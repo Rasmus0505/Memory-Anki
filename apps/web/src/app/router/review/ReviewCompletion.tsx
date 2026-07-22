@@ -5,11 +5,11 @@ import {
   formatLastReviewDetailLabel,
   formatNextReviewDetailLabel,
   formatReviewAbsolute,
-} from '@/entities/review/model/reviewScheduleFormat'
-import { MasteryDeltaBadge } from '@/features/review/components/MasteryDeltaBadge'
-import { getReviewCompletionApi } from '@/features/review/api'
+} from '@/modules/memory/public'
+import { MasteryDeltaBadge } from '@/modules/practice/public'
+import { getReviewCompletionApi } from '@/modules/practice/public'
 import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
-import { formatDuration } from '@/entities/session/model'
+import { formatDuration } from '@/modules/session/public'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { ErrorState, LoadingState } from '@/shared/components/state-placeholders'

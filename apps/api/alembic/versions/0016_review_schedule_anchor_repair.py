@@ -53,7 +53,7 @@ def _ensure_soft_delete_columns_for_current_models() -> None:
 
 def upgrade() -> None:
     from memory_anki.core.migration import is_app_migration_completed
-    from memory_anki.modules.reviews.application.review_execution_service import (
+    from memory_anki.modules.memory.application.review_execution_service import (
         repair_review_stage_progress,
     )
 

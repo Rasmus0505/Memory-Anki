@@ -12,11 +12,11 @@ from memory_anki.infrastructure.db._tables.reviews import (
     ReviewRatingOperation,
     ReviewRatingOperationItem,
 )
-from memory_anki.modules.reviews.application.legacy_fsrs_repair import (
+from memory_anki.modules.memory.application.legacy_fsrs_repair import (
     is_inflated_legacy_jump,
     repair_legacy_fsrs_inflation,
 )
-from memory_anki.modules.reviews.application.node_memory_service import (
+from memory_anki.modules.memory.application.node_memory_service import (
     get_palace_memory_projection,
     rate_nodes,
 )

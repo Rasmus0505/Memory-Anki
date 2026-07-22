@@ -1,4 +1,4 @@
-import type { SessionKind } from '@/entities/session/model'
+import type { SessionKind } from '@/modules/session/public'
 
 import {
   getClientPreferenceCacheStatus,

@@ -14,12 +14,12 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     PalaceSegment,
 )
-from memory_anki.modules.palace_quiz.application import ai_service as palace_quiz_ai_service
-from memory_anki.modules.palace_quiz.presentation import router as palace_quiz_router
-from memory_anki.modules.palaces.application.title_sync_service import (
+from memory_anki.modules.content.application.title_sync_service import (
     reconcile_palace_chapter_binding,
     set_palace_chapter_links,
 )
+from memory_anki.modules.quiz.application import ai_service as palace_quiz_ai_service
+from memory_anki.modules.quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.settings.application.ai_prompt_templates import (
     PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
 )
@@ -2201,7 +2201,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         with (
             patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
             patch(
-                "memory_anki.modules.palace_quiz.application.quiz_generation_service.get_external_ai_call_log",
+                "memory_anki.modules.quiz.application.quiz_generation_service.get_external_ai_call_log",
                 return_value={"request_payload": request_payload, "response_payload": {"response_text": "{}"}},
             ),
             patch.object(
@@ -2370,7 +2370,7 @@ class PalaceQuizRouteTests(RouterTestCase):
 
         with (
             patch(
-                "memory_anki.modules.palace_quiz.application.quiz_generation_service.get_external_ai_call_log",
+                "memory_anki.modules.quiz.application.quiz_generation_service.get_external_ai_call_log",
                 return_value={"request_payload": request_payload, "response_payload": {"response_text": "{}"}},
             ),
             patch.object(
@@ -2525,7 +2525,7 @@ class PalaceQuizRouteTests(RouterTestCase):
             session.commit()
 
         with patch(
-            "memory_anki.modules.palace_quiz.application.quiz_generation_service.get_external_ai_call_log",
+            "memory_anki.modules.quiz.application.quiz_generation_service.get_external_ai_call_log",
             return_value={"request_payload": request_payload, "response_payload": {"response_text": "{}"}},
         ), patch.object(
             palace_quiz_ai_service,
@@ -2670,7 +2670,7 @@ class PalaceQuizRouteTests(RouterTestCase):
 
         with (
             patch(
-                "memory_anki.modules.palace_quiz.application.quiz_generation_service.get_external_ai_call_log",
+                "memory_anki.modules.quiz.application.quiz_generation_service.get_external_ai_call_log",
                 return_value={"request_payload": request_payload, "response_payload": {"response_text": "{}"}},
             ),
             patch.object(

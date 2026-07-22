@@ -21,8 +21,8 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Mind-map document rules | `entities/mindmap-document` | `modules/mindmap_document` |
 | Generic mind-map rendering | `shared/ui/mindmap-canvas` | — |
 | Mind-map editing runtime | `features/mindmap-editor` | aggregate-specific editor services |
-| Palace aggregate | `entities/palace`, palace features | `modules/palaces` |
-| Review scheduling/execution | review features/entities | `modules/reviews` |
+| Palace aggregate | `entities/palace`, palace features | `modules/content` |
+| Review scheduling/execution | review features/entities | `modules/memory` |
 | AI runtime selection/calls | AI configuration features | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
 | Background jobs | feature adapters | target shared job lease/handler infrastructure |
 | Client preferences | `entities/preferences` | settings/profile preference endpoint |
@@ -111,7 +111,7 @@ Frontend AI scenario/model selection and per-run overrides are entity-owned unde
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/freestyle`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed).
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed).
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.

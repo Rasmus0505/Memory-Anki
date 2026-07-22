@@ -1,1 +1,2 @@
-"""practice context (vertical slice target)."""
+"""Freestyle study feed module."""
+

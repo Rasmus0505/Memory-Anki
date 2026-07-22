@@ -1,4 +1,7 @@
-"""Write commands (intents) for produce.
+"""Produce write commands (import/AI split job launch surface)."""
 
-Populated as legacy code is moved in W2.
-"""
+from __future__ import annotations
+
+# Job services are imported by presentation routers; keep public package stable.
+
+__all__: list[str] = []

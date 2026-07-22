@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from memory_anki.modules.palace_quiz.application._question_utils import PalaceQuizAiError
-from memory_anki.modules.palace_quiz.application.node_binding import (
+from memory_anki.modules.quiz.application._question_utils import PalaceQuizAiError
+from memory_anki.modules.quiz.application.node_binding import (
     _merge_preview_bindings,
     _parse_binding_response,
     compact_mindmap_with_uids,
@@ -99,6 +99,6 @@ def test_parse_binding_response_rejects_invalid_json() -> None:
 
 
 def test_mutate_exports_present() -> None:
-    from memory_anki.modules.palace_quiz.application import node_binding as module
+    from memory_anki.modules.quiz.application import node_binding as module
 
     assert callable(module.mutate_quiz_node_bindings)

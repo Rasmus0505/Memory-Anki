@@ -1,5 +1,5 @@
 export { MindMapReviewFlow } from './MindMapReviewFlow'
-export { startReviewSessionApi, submitReviewSessionApi } from '@/features/review/api'
+export { startReviewSessionApi, submitReviewSessionApi } from '@/modules/practice/public'
 export type { CompleteFlowPayload, MindMapReviewFlowProps, ReviewFlowSnapshot } from './MindMapReviewFlow'
 export { FlipCardMindMapPanel } from './FlipCardMindMapPanel'
 export type { FlipCardMindMapPanelProps } from './FlipCardMindMapPanel'

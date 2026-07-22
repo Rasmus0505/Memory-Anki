@@ -10,8 +10,8 @@ import {
   type MindMapReviewFlowProps,
   type ReviewFlowSnapshot,
 } from '@/widgets/mindmap-review-flow'
-import { PracticeCompletionDialog } from '@/features/review/components/PracticeCompletionDialog'
-import { useReviewCompletionCoordinator } from '@/features/review/hooks/useReviewCompletionCoordinator'
+import { PracticeCompletionDialog } from '@/modules/practice/public'
+import { useReviewCompletionCoordinator } from '@/modules/practice/public'
 import { consumePrefetchedStudySession, type StudyWarmupKind } from '@/shared/api/studySessionWarmup'
 
 export type { CompleteFlowPayload } from '@/widgets/mindmap-review-flow'

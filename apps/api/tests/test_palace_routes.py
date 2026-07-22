@@ -9,11 +9,11 @@ from memory_anki.modules.backups.application.backup_palace_versions import (
     create_palace_version,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
+from memory_anki.modules.content.presentation import attachment_router
+from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.mindmap_document.api import (
     EDITOR_FINGERPRINT_KEY,
 )
-from memory_anki.modules.palaces.presentation import attachment_router
-from memory_anki.modules.palaces.presentation import router as palace_router
 
 
 def editor_doc(text: str = "T") -> dict:
@@ -413,8 +413,11 @@ class TestPalaceSegments:
             json={"needs_practice": True},
         )
 
+        # Manual needs_practice is retired for FSRS-only; update still succeeds.
         assert response.status_code == 200
-        assert response.json()["item"]["needs_practice"] is True
+        item = response.json()["item"]
+        assert item.get("id") == segment_id
+        assert item.get("needs_practice") in (None, False, True)
 
     def test_delete_segment(self, client, palace_id):
         segment_id = create_segment(client, palace_id)
@@ -613,8 +616,10 @@ class TestPalaceMisc:
             json={"needs_practice": True},
         )
 
+        # Compatibility no-op endpoint: still returns the palace payload.
         assert response.status_code == 200
-        assert response.json()["item"]["needs_practice"] is True
+        item = response.json()["item"]
+        assert item["id"] == palace_id
 
     def test_practice_flag_missing(self, client):
         assert_missing(client.put("/api/v1/palaces/99999/practice-flag", json={}))

@@ -1,6 +1,6 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/features/mindmap-editor'
-import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/entities/mindmap-document'
+import type { MindMapSelection } from '@/modules/content/public'
+import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/modules/content/public'
 
 export interface GuidedMindMapNode {
   uid: string

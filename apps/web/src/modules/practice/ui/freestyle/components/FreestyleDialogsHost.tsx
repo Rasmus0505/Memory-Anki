@@ -1,0 +1,107 @@
+import type { ReactNode } from 'react'
+import { FreestyleAiExplainSheet } from '@/modules/practice/ui/freestyle/components/FreestyleAiExplainSheet'
+import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
+import { FreestyleSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleSettingsDialog'
+import { TodayTrainingSettingsDialog } from '@/modules/practice/ui/freestyle/components/TodayTrainingSettingsDialog'
+import { WrongQuestionsDialog } from '@/modules/practice/ui/freestyle/components/WrongQuestionsDialog'
+import type { FreestyleConfig } from '@/modules/practice/ui/freestyle/model/freestyle'
+import { isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import type { FreestyleMode, TodayTrainingConfig } from '@/modules/practice/ui/freestyle/model/today-training'
+import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
+import type { FreestyleCard, FreestylePalaceContext } from '@/shared/api/contracts'
+
+export function FreestyleDialogsHost({
+  aiRunConfigDialog,
+  settingsOpen,
+  todaySettingsOpen,
+  memoryLookupOpen,
+  explainSheetOpen,
+  historyOpen,
+  wrongQuestionsOpen,
+  config,
+  todayConfig,
+  palaceOptions,
+  currentCard,
+  currentPalaceId,
+  mode,
+  onSettingsOpenChange,
+  onTodaySettingsOpenChange,
+  onMemoryLookupOpenChange,
+  onExplainSheetOpenChange,
+  onHistoryOpenChange,
+  onWrongQuestionsOpenChange,
+  onStartWrongRetrain,
+  onConfigChange,
+  onTodayConfigChange,
+  onClearProgress,
+}: {
+  aiRunConfigDialog: ReactNode
+  settingsOpen: boolean
+  todaySettingsOpen: boolean
+  memoryLookupOpen: boolean
+  explainSheetOpen: boolean
+  historyOpen: boolean
+  wrongQuestionsOpen: boolean
+  config: FreestyleConfig
+  todayConfig: TodayTrainingConfig
+  palaceOptions: FreestylePalaceContext[]
+  currentCard: FreestyleCard | null
+  currentPalaceId: number | null
+  mode: FreestyleMode
+  onSettingsOpenChange: (open: boolean) => void
+  onTodaySettingsOpenChange: (open: boolean) => void
+  onMemoryLookupOpenChange: (open: boolean) => void
+  onExplainSheetOpenChange: (open: boolean) => void
+  onHistoryOpenChange: (open: boolean) => void
+  onWrongQuestionsOpenChange: (open: boolean) => void
+  onStartWrongRetrain: () => void
+  onConfigChange: (updater: (current: FreestyleConfig) => FreestyleConfig) => void
+  onTodayConfigChange: (updater: (current: TodayTrainingConfig) => TodayTrainingConfig) => void
+  onClearProgress: () => void
+}) {
+  return (
+    <>
+      {aiRunConfigDialog}
+      <FreestyleSettingsDialog
+        open={settingsOpen}
+        config={config}
+        palaceOptions={palaceOptions}
+        onOpenChange={onSettingsOpenChange}
+        onConfigChange={onConfigChange}
+        onClearProgress={onClearProgress}
+      />
+      <TodayTrainingSettingsDialog
+        open={todaySettingsOpen}
+        config={todayConfig}
+        onOpenChange={onTodaySettingsOpenChange}
+        onConfigChange={onTodayConfigChange}
+        onClearProgress={onClearProgress}
+      />
+      {currentPalaceId ? (
+        <PalaceMemoryLookupDialog
+          open={memoryLookupOpen}
+          onOpenChange={onMemoryLookupOpenChange}
+          currentPalaceId={currentPalaceId}
+          followCurrentPalace
+        />
+      ) : null}
+      <FreestyleAiExplainSheet
+        open={explainSheetOpen}
+        card={isQuizCard(currentCard) ? currentCard : null}
+        onClose={() => onExplainSheetOpenChange(false)}
+      />
+      <FreestyleHistoryDialog
+        open={historyOpen}
+        currentCard={currentCard}
+        currentPalaceId={currentPalaceId}
+        mode={mode}
+        onOpenChange={onHistoryOpenChange}
+      />
+      <WrongQuestionsDialog
+        open={wrongQuestionsOpen}
+        onOpenChange={onWrongQuestionsOpenChange}
+        onStartRetrain={onStartWrongRetrain}
+      />
+    </>
+  )
+}

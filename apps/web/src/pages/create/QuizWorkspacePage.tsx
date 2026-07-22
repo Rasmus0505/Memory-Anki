@@ -1,1 +1,1 @@
-export { default } from '@/features/palace-quiz/PalaceQuizPage'
+export { PalaceQuizPage as default } from '@/modules/quiz/public'

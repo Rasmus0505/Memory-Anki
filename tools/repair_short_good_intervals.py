@@ -60,7 +60,7 @@ def main() -> int:
     from memory_anki.infrastructure.db._tables import get_session
     from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
     from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
-    from memory_anki.modules.reviews.application.fsrs_runtime import (
+    from memory_anki.modules.memory.application.fsrs_runtime import (
         STRONG_EASY_MIN_INTERVAL,
         STRONG_GOOD_MIN_INTERVAL,
     )

@@ -1,7 +1,9 @@
 import json
 import unittest
+from datetime import timedelta
 from unittest.mock import patch
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
 from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingMaterial,
@@ -15,8 +17,9 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     PalaceSegment,
 )
-from memory_anki.modules.freestyle.application import feed_service
-from memory_anki.modules.freestyle.presentation import router as freestyle_router
+from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+from memory_anki.modules.practice.application import feed_service
+from memory_anki.modules.practice.presentation import router as freestyle_router
 from support import RouterTestCase
 
 
@@ -84,6 +87,24 @@ class FreestyleRouteTests(RouterTestCase):
             sort_order=0,
         )
         session.add_all([segment, mini_palace])
+        session.flush()
+
+        # Seed a formal-due FSRS node so freestyle review cards appear.
+        past = utc_now_naive() - timedelta(days=1)
+        session.add(
+            ReviewNodeState(
+                palace_id=palace.id,
+                node_uid="a",
+                state=2,
+                stability=3.0,
+                difficulty=5.0,
+                due_at=past,
+                raw_due_at=past,
+                last_review_at=past - timedelta(days=3),
+                schedule_source="manual",
+                content_fingerprint="",
+            )
+        )
         session.flush()
 
         session.add_all(

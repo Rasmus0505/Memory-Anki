@@ -1,8 +1,8 @@
-﻿"""Public surface for session — transitional re-export of sessions.api."""
+"""Session read queries."""
 
 from __future__ import annotations
 
-from memory_anki.modules.sessions.api import (
+from memory_anki.modules.session.api import (
     ACTIVE_STATUSES,
     ENGLISH_READING_SCENES,
     FORMAL_REVIEW_SCENES,

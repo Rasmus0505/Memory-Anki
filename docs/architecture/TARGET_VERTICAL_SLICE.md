@@ -1,40 +1,29 @@
-# Target Vertical Slice Architecture (7.22-refactor-optimize)
+﻿# Target Vertical Slice Architecture (7.22-refactor-optimize)
 
-This is the **target** map for the concentrated refactor. Runtime ownership still
-largely lives in legacy module names until W2/W3 file moves complete.
+## Status
+Backend package ownership moved: content / memory / quiz / practice / produce / session.
+Frontend FSD features/entities absorbed into apps/web/src/modules/*.
 
-## Backend target modules
+## Backend modules
+| Module | Owns |
+|---|---|
+| content | Palace documents, knowledge bindings, editor state |
+| memory | FSRS, waves, ratings, due rollups |
+| quiz | Questions, generation, bindings |
+| practice | Freestyle feed/queue + formal review composition surfaces |
+| produce | Mind-map import jobs, AI split, import router |
+| session | Study sessions, progress, timing |
+| english / english_reading | English tracks |
+| settings / dashboard / search / backups / ai_learning | Support contexts |
 
-| Target | Legacy source | Status |
-|---|---|---|
-| content | palaces (doc) + knowledge + mindmap_document | scaffolding |
-| memory | reviews + wave + FSRS | scaffolding |
-| quiz | palace_quiz | scaffolding |
-| practice | freestyle + formal review orchestration | scaffolding |
-| produce | mindmap_import + ai_split + pdf_library + batch_generation | scaffolding |
-| session | sessions | scaffolding |
-| english / english_reading | same | migrated names kept |
-| settings / dashboard / search / backups / ai_learning | same | keep, narrow deps |
+## Public import rule
+Cross-context code must import only public entries (`modules.<id>.public` or `modules.<id>.api`).
+Do not import another context application/infrastructure/presentation.
 
-## Frontend target modules
-
-`apps/web/src/modules/<id>/` with `public.ts` only cross-import.
-
-FSD `features/` + `entities/` are removed after W3 content move.
+## Frontend
+`apps/web/src/modules/<id>/public.ts` is the cross-module entry. UI lives under `modules/<id>/ui`.
 
 ## Platform
-
-- `platform.events` — in-process bus (scaffold)
-- `platform.jobs` — unified job registry (scaffold)
-- existing `platform.application` UoW / AiRuntime / mutations
-
-## Import rule
-
-```text
-other modules -> modules.<id>.public only
-```
-
-## Wave ownership
-
-Wave/FSRS logic already in baseline stays the semantic source of truth and moves
-into `memory` without algorithm rewrite.
+- platform.events event bus
+- platform.jobs job registry scaffold
+- existing UoW / AiRuntime / mutations

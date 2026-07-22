@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from memory_anki.modules.palaces.application.palace_view_resolvers import (
+from memory_anki.modules.content.application.palace_view_resolvers import (
     _palace_outline_sort_key,
 )
 

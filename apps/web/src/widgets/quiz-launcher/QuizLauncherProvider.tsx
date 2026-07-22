@@ -10,15 +10,15 @@ import {
 import { ImagePlus, LoaderCircle, Play, Save, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
-import { useAiRunConfigDialog } from '@/entities/ai-runtime'
+import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   generatePalaceQuizPreview,
   savePalaceQuizGenerationPreview,
   type QuizGenerationRequestConfig,
   type QuizLauncherGenerationSourceKind,
-} from '@/features/palace-quiz/quizGenerationController'
+} from '@/modules/quiz/public'
 import type { MindMapEditorState, PalaceQuizGenerationPreview, PalaceQuizQuestionType } from '@/shared/api/contracts'
-import { getPalaceApi } from '@/entities/palace/api'
+import { getPalaceApi } from '@/modules/content/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { Button } from '@/shared/components/ui/button'
 import {

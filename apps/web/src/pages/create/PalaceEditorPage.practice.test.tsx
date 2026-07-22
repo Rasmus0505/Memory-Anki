@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as palaceApi from '@/entities/palace/api'
+import * as palaceApi from '@/modules/content/public'
 import {
   fireEvent,
   getMindMapTexts,

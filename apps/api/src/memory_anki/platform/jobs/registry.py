@@ -6,8 +6,9 @@ workers onto this registry with shared lease + ownerId/operationId.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Protocol
+from typing import Any, Protocol
 
 
 class JobHandler(Protocol):
@@ -25,7 +26,7 @@ class RegisteredHandler:
 
 class JobRegistry:
     def __init__(self) -> None:
-        self._handlers: Dict[str, RegisteredHandler] = {}
+        self._handlers: dict[str, RegisteredHandler] = {}
 
     def register(
         self, kind: str, handler: Callable[[dict[str, Any]], dict[str, Any]]
@@ -34,7 +35,7 @@ class JobRegistry:
             raise ValueError(f"job kind already registered: {kind}")
         self._handlers[kind] = RegisteredHandler(kind=kind, handler=handler)
 
-    def get(self, kind: str) -> Optional[RegisteredHandler]:
+    def get(self, kind: str) -> RegisteredHandler | None:
         return self._handlers.get(kind)
 
     def kinds(self) -> list[str]:

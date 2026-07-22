@@ -1,1 +1,1 @@
-export { default } from '@/features/english/EnglishCoursePage'
+export { EnglishCoursePage as default } from '@/modules/english/public'

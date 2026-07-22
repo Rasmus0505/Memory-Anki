@@ -466,8 +466,8 @@ npm run openapi:types
 
 AI 相关功能分布较广：
 
-- 思维导图导入：`modules/palaces/application/mindmap_import`
-- 题目生成：`modules/palace_quiz/application/quiz_generation_*`
+- 思维导图导入：`modules/produce/application/mindmap_import`
+- 题目生成：`modules/quiz/application/quiz_generation_*`
 - AI 模型注册表：`modules/settings/application/ai_model_registry_*`
 - 前端模型配置：`features/profile`、`features/ai-config`
 - AI 调用日志：`infrastructure/llm/external_ai_call_logs.py`

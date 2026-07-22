@@ -1,0 +1,17 @@
+{
+  "name": "quiz",
+  "owns": [
+    "palace quiz UI",
+    "question interaction"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/quiz/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

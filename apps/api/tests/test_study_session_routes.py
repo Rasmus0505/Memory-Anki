@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
-from memory_anki.modules.sessions.presentation import router as sessions_router
+from memory_anki.modules.session.presentation import router as sessions_router
 from support import RouterTestCase
 
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from memory_anki.modules.palaces.application.mindmap_import.normalization import (
+from memory_anki.modules.produce.application.mindmap_import.normalization import (
     build_editor_doc,
     source_node_to_editor_node,
 )
-from memory_anki.modules.palaces.application.mindmap_import.rich_text import (
+from memory_anki.modules.produce.application.mindmap_import.rich_text import (
     apply_emphasis_marks_to_html,
     normalize_emphasis_marks,
     normalize_rich_text_html,

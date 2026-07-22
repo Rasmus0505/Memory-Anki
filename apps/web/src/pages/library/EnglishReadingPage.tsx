@@ -1,1 +1,1 @@
-export { default } from '@/features/english-reading/EnglishReadingPage'
+export { EnglishReadingPage as default } from '@/modules/english-reading/public'

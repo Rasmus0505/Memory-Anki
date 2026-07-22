@@ -73,10 +73,10 @@ def _normalize_ai_options(raw: dict[str, Any]) -> dict[str, Any]:
 
 def run_task(task: dict[str, Any], *, save: bool) -> dict[str, Any]:
     from memory_anki.infrastructure.db.models import get_session
-    from memory_anki.modules.palace_quiz.application.quiz_generation_service import (
+    from memory_anki.modules.quiz.application.quiz_generation_service import (
         generate_quiz_preview_from_pdf,
     )
-    from memory_anki.modules.palace_quiz.application.question_creation_commands import (
+    from memory_anki.modules.quiz.application.question_creation_commands import (
         batch_create_chapter_questions,
     )
 

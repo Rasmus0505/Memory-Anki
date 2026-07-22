@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from memory_anki.modules.palace_quiz.application.manual_text_quiz_parser import (
+from memory_anki.modules.quiz.application.manual_text_quiz_parser import (
     parse_manual_text_quiz_pairs,
 )
 

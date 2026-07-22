@@ -4,7 +4,7 @@ from datetime import datetime
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState, ReviewRatingOperation
-from memory_anki.modules.reviews.application.node_memory_service import (
+from memory_anki.modules.memory.application.node_memory_service import (
     get_palace_due_rollup,
     get_palace_mastery_trend,
     get_palace_memory_projection,

@@ -1,1 +1,1 @@
-export { default } from '@/features/profile/ProfileTimerPage'
+export { ProfileTimerPage as default } from '@/modules/settings/public'

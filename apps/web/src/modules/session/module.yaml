@@ -1,0 +1,17 @@
+{
+  "name": "session",
+  "owns": [
+    "study sessions",
+    "timer"
+  ],
+  "forbids": [
+    "private cross-module imports"
+  ],
+  "publicEntry": "src/modules/session/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [],
+  "requiredTests": []
+}

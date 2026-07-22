@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getPalaceEditorApi } from '@/entities/palace/api'
+import { getPalaceEditorApi } from '@/modules/content/public'
 import type {
   MindMapEditorState,
   PalaceGroupedItem,

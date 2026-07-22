@@ -103,19 +103,19 @@ def main() -> int:
     from memory_anki.core.config import APP_HOME, DB_PATH
     from memory_anki.infrastructure.db._tables._base import engine, get_session
     from memory_anki.modules.dashboard.application.service import build_dashboard_payload
-    from memory_anki.modules.freestyle.application.feed_service import build_freestyle_feed
-    from memory_anki.modules.palaces.application.palace_serializer import (
+    from memory_anki.modules.practice.application.feed_service import build_freestyle_feed
+    from memory_anki.modules.content.application.palace_serializer import (
         batch_palace_due_rollups,
         palace_json,
     )
-    from memory_anki.modules.palaces.application.palace_service import (
+    from memory_anki.modules.content.application.palace_service import (
         count_palaces,
         list_palaces,
     )
-    from memory_anki.modules.palaces.application.title_sync_service import (
+    from memory_anki.modules.content.application.title_sync_service import (
         get_explicit_chapter_ids_by_palace,
     )
-    from memory_anki.modules.reviews.application.formal_review_service import (
+    from memory_anki.modules.memory.application.formal_review_service import (
         get_fsrs_queue_payload,
     )
 

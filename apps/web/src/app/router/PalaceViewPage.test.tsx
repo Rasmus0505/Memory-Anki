@@ -79,7 +79,7 @@ vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({ openQuizLauncher: vi.fn() }),
 }))
 
-vi.mock('@/features/mindmap-editor', () => ({
+vi.mock('@/modules/content/ui/mindmap-editor', () => ({
   MindMapEditorSurface: React.forwardRef(function MindMapEditorSurfaceMock(
     _props: unknown,
     ref: React.ForwardedRef<unknown>,

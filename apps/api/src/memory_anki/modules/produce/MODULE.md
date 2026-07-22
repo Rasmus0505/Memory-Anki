@@ -1,25 +1,13 @@
 # Module: produce
 
 ## Status
-scaffolding — public surface path for concentrated refactor (branch 7.22-refactor-optimize).
+active — owns mind-map import jobs, AI split, import HTTP router
 
 ## Owns
-Import jobs, OCR, AI split, batch generation, PDF library
+PDF/text mindmap import pipeline, OCR-adjacent job lifecycle, AI structure split
 
-## Migrates from
-- palaces mindmap_import*
-- mindmap_ai_split*
-- pdf_library
-- batch_generation
+## Public entry
+public/ and presentation/import_router.py
 
-## Forbids
-Writes content only via content commands; no memory mutations
-
-## Public surface
-- `public/commands.py` — write intents
-- `public/queries.py` — read intents
-- `public/events.py` — domain events this module emits
-- `public/projections.py` — stable read DTOs for other modules
-
-## Cross-module rule
-Import only `memory_anki.modules.produce.public`. Never import another module's application/infrastructure/presentation.
+## Depends on
+content (document apply), platform AI runtime, pdf_library

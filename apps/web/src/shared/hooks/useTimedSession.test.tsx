@@ -3,14 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import { setApiToken } from '@/shared/api/apiToken'
-import * as sessionRecordModel from '@/entities/session/model'
+import * as sessionRecordModel from '@/modules/session/public'
 import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
 import { readQueuedMutations, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
   clearPendingTimeRecordRecoveriesForTest,
   listPendingTimeRecordRecoveries,
-} from '@/entities/session/model'
+} from '@/modules/session/public'
 import {
   flushMicrotasks,
   readPersistedTimedSessionTestSnapshot,

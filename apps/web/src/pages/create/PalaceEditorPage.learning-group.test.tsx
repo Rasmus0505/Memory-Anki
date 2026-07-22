@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as segmentApi from '@/entities/palace-segment/api'
+import * as segmentApi from '@/modules/content/public'
 import { fireEvent, mockPalaceEditorResponse, renderPalaceEditPage, screen, setupPalaceEditPageTestDefaults, waitFor } from '@/pages/create/PalaceEditorPage.test-support'
 
 describe('PalaceEditorPage learning group selection', () => {

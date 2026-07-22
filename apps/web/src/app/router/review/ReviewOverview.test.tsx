@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewOverview from '@/app/router/review/ReviewOverview'
 
 const queue = vi.fn()
-vi.mock('@/features/review/api', () => ({
+vi.mock('@/modules/practice/ui/review/api', () => ({
   getReviewQueueApi: () => queue(), getChapterReviewQueueApi: () => queue(),
   getReviewSessionApi: vi.fn(), getReviewSessionProgressApi: vi.fn(),
 }))
 vi.mock('@/shared/api/studySessionWarmup', () => ({ prefetchStudySession: vi.fn() }))
-vi.mock('@/features/review/components/ReviewLoadForecastCard', () => ({ ReviewLoadForecastCard: () => <div>负荷预测</div> }))
+vi.mock('@/modules/practice/ui/review/components/ReviewLoadForecastCard', () => ({ ReviewLoadForecastCard: () => <div>负荷预测</div> }))
 
 function palaceRow(
   id: number,

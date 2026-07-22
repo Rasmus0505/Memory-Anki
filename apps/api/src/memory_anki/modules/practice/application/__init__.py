@@ -1,1 +1,2 @@
-"""practice application."""
+"""Application services for freestyle study feeds."""
+

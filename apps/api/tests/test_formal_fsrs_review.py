@@ -1,11 +1,13 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
-from memory_anki.modules.reviews.application.formal_review_service import (
+from memory_anki.modules.memory.application.formal_review_service import (
     complete_formal_review,
     formal_review_completion_summary,
     get_fsrs_load_forecast,
@@ -14,11 +16,9 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     resolve_formal_review_session,
     start_or_resume_formal_review,
 )
-from memory_anki.modules.reviews.application.node_memory_service import (
+from memory_anki.modules.memory.application.node_memory_service import (
     rate_nodes,
 )
-from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
-from memory_anki.core.time import utc_now_naive
 
 
 def _seed_due_nodes(session, palace_id: int, node_uids: list[str], *, due_at=None) -> None:
@@ -530,7 +530,7 @@ def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
             source_scene="formal_review",
             recall_round="first",
         )
-        assert False, "expected completed session to reject rating"
+        raise AssertionError("expected completed session to reject rating")
     except ValueError as exc:
         assert "已结束" in str(exc)
 
@@ -849,10 +849,10 @@ def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):
 
 def test_resume_merges_newly_due_nodes_into_frozen_scope(db_session):
     """Newly due cards are mergeable hints only; freeze expands on explicit merge."""
-    from memory_anki.modules.reviews.application.formal_review_service import (
+    from memory_anki.modules.memory.application.formal_review_service import (
         formal_review_session_payload,
     )
-    from memory_anki.modules.reviews.application.wave_service import (
+    from memory_anki.modules.memory.application.wave_service import (
         frozen_node_uids,
         merge_new_due_into_wave,
     )
@@ -914,7 +914,7 @@ def test_resume_merges_newly_due_nodes_into_frozen_scope(db_session):
 
 def test_resume_upgrades_node_mode_when_second_branch_becomes_due(db_session):
     """Wave model: second branch becoming due is mergeable, freeze stays until merge."""
-    from memory_anki.modules.reviews.application.formal_review_service import (
+    from memory_anki.modules.memory.application.formal_review_service import (
         formal_review_session_payload,
     )
 

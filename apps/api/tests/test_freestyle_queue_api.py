@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.freestyle.presentation import router as freestyle_router
+from memory_anki.modules.practice.presentation import router as freestyle_router
 
 
 def test_queue_build_requires_operation_id(make_client):

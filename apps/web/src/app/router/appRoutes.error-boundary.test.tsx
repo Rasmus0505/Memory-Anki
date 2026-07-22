@@ -8,8 +8,8 @@ vi.mock('@/pages/insights/InsightsPage', () => ({
     throw new Error('dashboard boom')
   },
 }))
-vi.mock('@/features/palace-catalog/PalaceListPage', () => ({ default: () => <div /> }))
-vi.mock('@/features/palace-catalog/PalaceShelfPage', () => ({ default: () => <div /> }))
+vi.mock('@/modules/content/ui/palace-catalog/PalaceListPage', () => ({ default: () => <div /> }))
+vi.mock('@/modules/content/ui/palace-catalog/PalaceShelfPage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/PalacePracticePage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/PalaceFocusPracticePage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/SegmentPracticePage', () => ({ default: () => <div /> }))

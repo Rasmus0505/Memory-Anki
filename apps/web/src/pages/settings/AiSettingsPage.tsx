@@ -1,1 +1,1 @@
-export { default } from '@/features/profile/ProfileAiPage'
+export { ProfileAiPage as default } from '@/modules/settings/public'

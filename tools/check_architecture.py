@@ -20,29 +20,29 @@ BOUNDARY_EXCEPTIONS_PATH = (
     REPO_ROOT / "docs" / "architecture" / "boundary-exceptions.json"
 )
 CONTEXT_MAP_PATH = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
-PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "palace_quiz" / "application"
+PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "quiz" / "application"
 BATCH_GENERATION_APPLICATION = API_SRC / "modules" / "batch_generation" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
-WEB_LAYER_DIRS = ("app", "pages", "widgets", "features", "entities", "shared")
+WEB_LAYER_DIRS = ("app", "pages", "widgets", "modules", "shared", "platform", "pwa", "styles", "test")
 WEB_API_PORT = "8012"
 WEB_API_BASE_URL = f"http://127.0.0.1:{WEB_API_PORT}"
 
 AI_RUNTIME_PORT_MANAGED_FILES = {
-    "modules/palaces/application/peg_association_service.py",
-    "modules/palaces/application/mindmap_ai_split/config_loader.py",
-    "modules/palaces/application/mindmap_ai_split/contracts.py",
-    "modules/palaces/application/mindmap_ai_split/gateway.py",
-    "modules/palaces/application/mindmap_ai_split_service.py",
-    "modules/palaces/application/mindmap_import/runtime.py",
-    "modules/palaces/application/mindmap_import_job_api.py",
-    "modules/palaces/application/mindmap_import_job_execution.py",
-    "modules/palaces/application/mindmap_import_job_runtime.py",
-    "modules/palaces/application/mindmap_import_job_service.py",
+    "modules/content/application/peg_association_service.py",
+    "modules/produce/application/mindmap_ai_split/config_loader.py",
+    "modules/produce/application/mindmap_ai_split/contracts.py",
+    "modules/produce/application/mindmap_ai_split/gateway.py",
+    "modules/produce/application/mindmap_ai_split_service.py",
+    "modules/produce/application/mindmap_import/runtime.py",
+    "modules/produce/application/mindmap_import_job_api.py",
+    "modules/produce/application/mindmap_import_job_execution.py",
+    "modules/produce/application/mindmap_import_job_runtime.py",
+    "modules/produce/application/mindmap_import_job_service.py",
 }
 
 FORBIDDEN_WEB_IMPORTS = {
     "@/shared/api/client": "Pages and features must import scoped API wrappers or contracts instead of the legacy shared/api/client aggregator.",
-    "@/shared/api/modules/palaces": "palace API wrappers belong in entities/palace/api; import preview/job wrappers belong in entities/knowledge-import/api.",
+    "@/shared/api/modules/content": "palace API wrappers belong in entities/palace/api; import preview/job wrappers belong in entities/knowledge-import/api.",
     "@/entities/ai-runtime/model/": "AI generation consumers must import the shared workbench through the entities/ai-runtime public facade.",
     "@/app/": "features, entities, and shared modules must not import app-layer code; move shared routing/state helpers out of app/router.",
 }
@@ -53,16 +53,16 @@ FORBIDDEN_DASHBOARD_IMPORTS = {
     "@/shared/api/modules/dashboard": "dashboard API wrappers belong in features/dashboard/api; import the feature-scoped API instead.",
 }
 FORBIDDEN_REVIEW_API_IMPORTS = {
-    "@/shared/api/modules/reviews": "review API wrappers belong in features/review/api; import the feature-scoped API instead.",
+    "@/shared/api/modules/memory": "review API wrappers belong in modules/practice/ui/review/api; import the feature-scoped API instead.",
 }
 FORBIDDEN_REMOVED_SHARED_API_MODULES = {
     "aiLogs.ts": "AI log API wrappers belong in entities/ai-log/api.",
     "dashboard.ts": "dashboard API wrappers belong in features/dashboard/api.",
     "knowledge.ts": "knowledge API wrappers belong in entities/knowledge/api.",
     "palaces.ts": "palace API wrappers belong in entities/palace/api; import preview/job wrappers belong in entities/knowledge-import/api.",
-    "profile.ts": "profile API wrappers belong in features/profile/api or entity-owned preference/settings APIs.",
+    "profile.ts": "profile API wrappers belong in modules/settings/ui/profile/api or entity-owned preference/settings APIs.",
     "quizzes.ts": "quiz question and generation API wrappers belong in entities/quiz/api.",
-    "reviews.ts": "review API wrappers belong in features/review/api.",
+    "reviews.ts": "review API wrappers belong in modules/practice/ui/review/api.",
     "runtime.ts": "runtime API wrappers belong in entities/runtime/api.",
 }
 FORBIDDEN_REMOVED_SHARED_API_DIRS = {
@@ -79,10 +79,10 @@ FORBIDDEN_REMOVED_FEATURE_FILES = {
     "entities/mini-palace": "mini palace APIs and types are retired; use entities/palace-segment.",
     "features/ai-config": "reusable AI runtime selection and run configuration belong in entities/ai-runtime.",
     "features/ai-learning": "AI learning run contracts and API access belong in entities/ai-learning; review-specific composition belongs in widgets.",
-    "features/review/hooks/useReviewFeedback.ts": "cross-scene review feedback orchestration belongs in entities/review/model.",
-    "features/review/model/review-feedback.ts": "review reward and feedback state belongs in entities/review/model.",
-    "features/review/reviewSessionRoutes.ts": "review route builders belong in entities/review/model/routes.",
-    "features/review/studyWarmup.ts": "study-session promise warmup is shared infrastructure; business loaders stay with their composing page or feature.",
+    "modules/practice/ui/review/hooks/useReviewFeedback.ts": "cross-scene review feedback orchestration belongs in entities/review/model.",
+    "modules/practice/ui/review/model/review-feedback.ts": "review reward and feedback state belongs in entities/review/model.",
+    "modules/practice/ui/review/reviewSessionRoutes.ts": "review route builders belong in entities/review/model/routes.",
+    "modules/practice/ui/review/studyWarmup.ts": "study-session promise warmup is shared infrastructure; business loaders stay with their composing page or feature.",
     "features/palace-edit/PalaceEditPage.tsx": "route-level Palace editor composition belongs in pages/create/PalaceEditorPage.tsx.",
     "features/palace-edit/PalaceEditSkeleton.tsx": "Palace editor page loading UI belongs beside the page in pages/create.",
     "features/palace-edit/components/PalaceKnowledgeOutlinePanel.tsx": "route-level Knowledge outline and mind-map editor composition belongs beside pages/create/PalaceEditorPage.tsx.",
@@ -99,11 +99,11 @@ FORBIDDEN_REMOVED_FEATURE_FILES = {
     "features/palace-quiz/components/PalaceQuizMemoryLookupDialog.tsx": "cross-feature palace memory lookup composition belongs in widgets/palace-memory-lookup.",
     "features/palace-quiz/model/memoryLookupDialogSupport.ts": "palace memory lookup composition belongs in widgets/palace-memory-lookup.",
     "features/palace-quiz/model/memoryLookupLayout.ts": "palace memory lookup layout belongs in widgets/palace-memory-lookup.",
-    "features/review/components/MindMapReviewFlow.tsx": "cross-feature review, quiz, and mind-map composition belongs in widgets/mindmap-review-flow.",
-    "features/review/hooks/useMindMapReviewFlowController.ts": "cross-feature review-flow orchestration belongs in widgets/mindmap-review-flow.",
-    "features/review/ReviewSessionContainer.tsx": "route-level review session composition belongs in widgets/mindmap-review-flow.",
-    "features/review/components/ReviewFlowMapPanel.tsx": "mind-map editor composition for review sessions belongs in widgets/mindmap-review-flow.",
-    "features/review/ReviewFeedbackPreviewPage.tsx": "the obsolete standalone feedback preview page was replaced by the profile feedback route and must not be recreated.",
+    "modules/practice/ui/review/components/MindMapReviewFlow.tsx": "cross-feature review, quiz, and mind-map composition belongs in widgets/mindmap-review-flow.",
+    "modules/practice/ui/review/hooks/useMindMapReviewFlowController.ts": "cross-feature review-flow orchestration belongs in widgets/mindmap-review-flow.",
+    "modules/practice/ui/review/ReviewSessionContainer.tsx": "route-level review session composition belongs in widgets/mindmap-review-flow.",
+    "modules/practice/ui/review/components/ReviewFlowMapPanel.tsx": "mind-map editor composition for review sessions belongs in widgets/mindmap-review-flow.",
+    "modules/practice/ui/review/ReviewFeedbackPreviewPage.tsx": "the obsolete standalone feedback preview page was replaced by the profile feedback route and must not be recreated.",
     "features/mindmap-editor/useMindMapDocumentSession.ts": "persisted document session ownership belongs in entities/mindmap-document/model.",
     "features/palace-edit/components/PalaceMindMapImportDrawer.tsx": "shared mind-map import UI belongs in features/mindmap-import, not palace-edit.",
     "features/palace-edit/components/palace-import-drawer": "shared mind-map import drawer internals belong in features/mindmap-import, not palace-edit.",
@@ -164,14 +164,15 @@ BASELINE_PRESENTATION_SESSION_FILES = {
     "apps/api/src/memory_anki/modules/dashboard/presentation/router.py",
     "apps/api/src/memory_anki/modules/english/presentation/router.py",
     "apps/api/src/memory_anki/modules/english_reading/presentation/router.py",
-    "apps/api/src/memory_anki/modules/freestyle/presentation/router.py",
+    "apps/api/src/memory_anki/modules/practice/presentation/router.py",
     "apps/api/src/memory_anki/modules/knowledge/presentation/bilink_router.py",
     "apps/api/src/memory_anki/modules/knowledge/presentation/router.py",
-    "apps/api/src/memory_anki/modules/palace_quiz/presentation/router.py",
-    "apps/api/src/memory_anki/modules/palaces/presentation/import_router.py",
-    "apps/api/src/memory_anki/modules/palaces/presentation/router.py",
-    "apps/api/src/memory_anki/modules/reviews/presentation/router.py",
-    "apps/api/src/memory_anki/modules/sessions/presentation/router.py",
+    "apps/api/src/memory_anki/modules/quiz/presentation/router.py",
+    "apps/api/src/memory_anki/modules/content/presentation/import_router.py",
+    "apps/api/src/memory_anki/modules/content/presentation/router.py",
+    "apps/api/src/memory_anki/modules/produce/presentation/import_router.py",
+    "apps/api/src/memory_anki/modules/memory/presentation/router.py",
+    "apps/api/src/memory_anki/modules/session/presentation/router.py",
     "apps/api/src/memory_anki/modules/settings/presentation/router.py",
     "apps/api/src/memory_anki/modules/time_records/presentation/router.py",
 }
@@ -188,13 +189,16 @@ BASELINE_PERSONAL_PATH_TOOLS = {
     "tools/import_manual_quiz_texts.py",
 }
 BASELINE_OVERSIZED_FILES = {
-    "apps/web/src/features/freestyle/FreestylePage.tsx",
-    "apps/web/src/features/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
+    "apps/web/src/modules/practice/ui/freestyle/FreestylePage.tsx",
+    "apps/web/src/modules/quiz/ui/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
     "apps/web/src/shared/components/session/TimerAutomationDialog.tsx",
     "apps/web/src/shared/hooks/useTimedSession.test.tsx",
     "apps/web/src/shared/hooks/useTimedSession.ts",
+    "apps/web/src/widgets/palace-memory-lookup/PalaceMemoryLookupDialog.tsx",
+    "apps/web/src/modules/session/domain/session-entity/model/timed-session/timedSessionStateMachine.ts",
+    "apps/web/src/modules/memory/domain/review-entity/model/review-flow-tree.ts",
 }
 
 MAX_WEB_FILE_LINES = 750
@@ -387,14 +391,23 @@ def check_context_dependency_map(errors: list[str]) -> None:
                 )
                 continue
             public_entry = str(contexts.get(target_owner, {}).get("publicEntry") or "")
-            if public_entry and imported_module != public_entry:
-                errors.append(
-                    f"{relative}: registered cross-context dependency `{source_owner} -> "
-                    f"{target_owner}` must import public entry `{public_entry}`, not "
-                    f"`{imported_module}`."
+            if public_entry:
+                allowed_prefixes = (
+                    public_entry,
+                    f"memory_anki.modules.{target_owner}.api",
+                    f"memory_anki.modules.{target_owner}.public",
                 )
+                if not any(
+                    imported_module == p or imported_module.startswith(p + ".")
+                    for p in allowed_prefixes
+                ):
+                    errors.append(
+                        f"{relative}: registered cross-context dependency `{source_owner} -> "
+                        f"{target_owner}` must import public entry `{public_entry}` "
+                        f"(or .api/.public), not `{imported_module}`."
+                    )
 
-    for path in iter_files(API_SRC / "modules/reviews", (".py",)):
+    for path in iter_files(API_SRC / "modules/memory", (".py",)):
         content = path.read_text(encoding="utf-8")
         if "memory_anki.modules.persistence" in content:
             errors.append(
@@ -402,7 +415,7 @@ def check_context_dependency_map(errors: list[str]) -> None:
                 "MutationIdentity/MutationResponseStore instead of Persistence internals."
             )
 
-    for path in iter_files(API_SRC / "modules/sessions", (".py",)):
+    for path in iter_files(API_SRC / "modules/session", (".py",)):
         content = path.read_text(encoding="utf-8")
         if "memory_anki.modules.persistence" in content:
             errors.append(
@@ -418,7 +431,7 @@ def check_context_dependency_map(errors: list[str]) -> None:
                 "MutationIdentity/MutationResponseStore instead of Persistence internals."
             )
 
-    for path in iter_files(API_SRC / "modules/palaces", (".py",)):
+    for path in iter_files(API_SRC / "modules/content", (".py",)):
         content = path.read_text(encoding="utf-8")
         if "memory_anki.modules.persistence" in content:
             errors.append(
@@ -447,10 +460,10 @@ def check_context_dependency_map(errors: list[str]) -> None:
             )
 
     retired_mini_palace_paths = (
-        API_SRC / "modules/palaces/presentation/mini_palace_router.py",
-        API_SRC / "modules/palaces/application/mini_palace_service.py",
-        API_SRC / "modules/palaces/application/mini_palace_nodes.py",
-        API_SRC / "modules/palaces/application/mini_palace_records.py",
+        API_SRC / "modules/content/presentation/mini_palace_router.py",
+        API_SRC / "modules/content/application/mini_palace_service.py",
+        API_SRC / "modules/content/application/mini_palace_nodes.py",
+        API_SRC / "modules/content/application/mini_palace_records.py",
         WEB_SRC / "features/mini-palace",
         WEB_SRC / "entities/mini-palace",
         WEB_SRC / "app/router/MiniPalacePracticePage.tsx",
@@ -551,7 +564,7 @@ def check_forbidden_imports(errors: list[str]) -> None:
             for forbidden_import, message in FORBIDDEN_DASHBOARD_IMPORTS.items():
                 if forbidden_import in content:
                     errors.append(f"{relative}: {message}")
-        if relative.startswith("features/review/") or relative.startswith(
+        if relative.startswith("modules/practice/ui/review/") or relative.startswith(
             "app/router/"
         ):
             for forbidden_import, message in FORBIDDEN_REVIEW_API_IMPORTS.items():
@@ -784,7 +797,7 @@ def check_study_session_legacy_usage(errors: list[str]) -> None:
             ):
                 errors.append(
                     f"{path.relative_to(REPO_ROOT)}: production backend modules must use "
-                    "modules.sessions StudySession services instead of TimeRecord/time_records."
+                    "modules.session StudySession services instead of TimeRecord/time_records."
                 )
 
 
@@ -1014,7 +1027,7 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
     )
     managed_paths = {API_SRC / relative for relative in AI_RUNTIME_PORT_MANAGED_FILES}
     managed_application_roots = (
-        API_SRC / "modules" / "palace_quiz" / "application",
+        API_SRC / "modules" / "quiz" / "application",
         API_SRC / "modules" / "english_reading" / "application",
         API_SRC / "modules" / "english" / "application",
     )
@@ -1035,23 +1048,23 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
 
 
 def check_review_application_boundary(errors: list[str]) -> None:
-    application_root = API_SRC / "modules" / "reviews" / "application"
-    forbidden_prefix = "memory_anki.modules.palaces"
+    application_root = API_SRC / "modules" / "memory" / "application"
+    forbidden_prefix = "memory_anki.modules.content"
     for path in iter_files(application_root, (".py",)):
         tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if imported_module and imported_module.startswith(forbidden_prefix):
                 errors.append(
-                    f"{path.relative_to(REPO_ROOT).as_posix()}: reviews application must "
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: memory application must "
                     "depend on pure document contracts or injected ports, not the palace context."
                 )
                 break
 
 
 def check_palace_review_public_facade(errors: list[str]) -> None:
-    palace_root = API_SRC / "modules" / "palaces"
-    forbidden_prefix = "memory_anki.modules.reviews.application"
+    palace_root = API_SRC / "modules" / "content"
+    forbidden_prefix = "memory_anki.modules.memory.application"
     for path in iter_files(palace_root, (".py",)):
         tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
@@ -1059,15 +1072,15 @@ def check_palace_review_public_facade(errors: list[str]) -> None:
             if imported_module and imported_module.startswith(forbidden_prefix):
                 errors.append(
                     f"{path.relative_to(REPO_ROOT).as_posix()}: palace context must import "
-                    "review capabilities through memory_anki.modules.reviews.api."
+                    "review capabilities through memory_anki.modules.memory.api."
                 )
                 break
 
 
 def check_palace_read_side_purity(errors: list[str]) -> None:
     forbidden_repair_files = (
-        API_SRC / "modules" / "palaces" / "application" / "palace_serializer.py",
-        API_SRC / "modules" / "palaces" / "application" / "palace_view_resolvers.py",
+        API_SRC / "modules" / "content" / "application" / "palace_serializer.py",
+        API_SRC / "modules" / "content" / "application" / "palace_view_resolvers.py",
     )
     for path in forbidden_repair_files:
         if not path.exists():
@@ -1080,7 +1093,7 @@ def check_palace_read_side_purity(errors: list[str]) -> None:
 
     maintenance_symbol = "restore_all_archived_palaces"
     maintenance_path = (
-        API_SRC / "modules" / "palaces" / "application" / "palace_maintenance.py"
+        API_SRC / "modules" / "content" / "application" / "palace_maintenance.py"
     )
     for path in iter_files(API_SRC / "modules", (".py",)):
         if path == maintenance_path:
@@ -1092,9 +1105,21 @@ def check_palace_read_side_purity(errors: list[str]) -> None:
             )
 
 
+def _is_public_context_import(imported_module: str, owner: str) -> bool:
+    """Accept modules.<owner>.api and modules.<owner>.public* as public surfaces."""
+    prefixes = (
+        f"memory_anki.modules.{owner}.api",
+        f"memory_anki.modules.{owner}.public",
+    )
+    return any(
+        imported_module == prefix or imported_module.startswith(prefix + ".")
+        for prefix in prefixes
+    )
+
+
 def check_dashboard_public_facades(errors: list[str]) -> None:
     dashboard_root = API_SRC / "modules" / "dashboard"
-    protected_owners = {"palaces", "reviews", "sessions"}
+    protected_owners = {"content", "memory", "session"}
     for path in iter_files(dashboard_root, (".py",)):
         tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
@@ -1105,8 +1130,8 @@ def check_dashboard_public_facades(errors: list[str]) -> None:
                 continue
             parts = imported_module.split(".")
             owner = parts[2] if len(parts) > 2 else ""
-            if owner in protected_owners and imported_module != (
-                f"memory_anki.modules.{owner}.api"
+            if owner in protected_owners and not _is_public_context_import(
+                imported_module, owner
             ):
                 errors.append(
                     f"{path.relative_to(REPO_ROOT).as_posix()}: dashboard must consume "
@@ -1116,26 +1141,26 @@ def check_dashboard_public_facades(errors: list[str]) -> None:
 
 
 def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
-    quiz_application = API_SRC / "modules" / "palace_quiz" / "application"
+    quiz_application = API_SRC / "modules" / "quiz" / "application"
     for path in iter_files(quiz_application, (".py",)):
         tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
             imported_module = imported_module_from_node(node)
             if not imported_module:
                 continue
-            if imported_module.startswith("memory_anki.modules.palaces") and (
-                imported_module != "memory_anki.modules.palaces.api"
-            ):
+            if imported_module.startswith(
+                "memory_anki.modules.content"
+            ) and not _is_public_context_import(imported_module, "content"):
                 errors.append(
-                    f"{path.relative_to(REPO_ROOT).as_posix()}: palace_quiz application "
-                    "must consume palace capabilities through memory_anki.modules.palaces.api."
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: quiz application "
+                    "must consume palace capabilities through memory_anki.modules.content.api."
                 )
                 break
-            if imported_module.startswith("memory_anki.modules.mindmap_document") and (
-                imported_module != "memory_anki.modules.mindmap_document.api"
-            ):
+            if imported_module.startswith(
+                "memory_anki.modules.mindmap_document"
+            ) and not _is_public_context_import(imported_module, "mindmap_document"):
                 errors.append(
-                    f"{path.relative_to(REPO_ROOT).as_posix()}: palace_quiz application "
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: quiz application "
                     "must consume mind-map document operations through its public facade."
                 )
                 break
@@ -1144,19 +1169,19 @@ def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
 def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
     """Immersive queue must compose public facades; branch split stays freestyle-owned."""
     queue_service = (
-        API_SRC / "modules" / "freestyle" / "application" / "queue_service.py"
+        API_SRC / "modules" / "practice" / "application" / "queue_service.py"
     )
     if not queue_service.exists():
         errors.append(
-            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: freestyle immersive "
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: practice immersive "
             "queue service is required."
         )
         return
     source = queue_service.read_text(encoding="utf-8")
     for required in (
-        "memory_anki.modules.palaces.api",
-        "memory_anki.modules.reviews.api",
-        "memory_anki.modules.palace_quiz.api",
+        "memory_anki.modules.content.",
+        "memory_anki.modules.memory.",
+        "memory_anki.modules.quiz.",
         "build_freestyle_queue",
     ):
         if required not in source:
@@ -1164,17 +1189,42 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
                 f"public facades via `{required}`."
             )
+    # Prefer public/.api surfaces over private application layers.
+    if not (
+        "memory_anki.modules.content.api" in source
+        or "memory_anki.modules.content.public" in source
+    ):
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
+            "content via public or api surface."
+        )
+    if not (
+        "memory_anki.modules.memory.api" in source
+        or "memory_anki.modules.memory.public" in source
+    ):
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
+            "memory via public or api surface."
+        )
+    if not (
+        "memory_anki.modules.quiz.api" in source
+        or "memory_anki.modules.quiz.public" in source
+    ):
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
+            "quiz via public or api surface."
+        )
     for forbidden in (
-        "memory_anki.modules.reviews.application",
-        "memory_anki.modules.palaces.application",
-        "memory_anki.modules.palace_quiz.application",
+        "memory_anki.modules.memory.application",
+        "memory_anki.modules.content.application",
+        "memory_anki.modules.quiz.application",
     ):
         if forbidden in source:
             errors.append(
                 f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must not import "
                 f"private `{forbidden}` modules."
             )
-    public_ts = WEB_SRC / "modules" / "freestyle" / "public.ts"
+    public_ts = WEB_SRC / "modules" / "practice" / "public.ts"
     if public_ts.exists():
         public_source = public_ts.read_text(encoding="utf-8")
         for symbol in (
@@ -1185,7 +1235,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         ):
             if symbol not in public_source:
                 errors.append(
-                    f"{public_ts.relative_to(REPO_ROOT).as_posix()}: freestyle public "
+                    f"{public_ts.relative_to(REPO_ROOT).as_posix()}: practice public "
                     f"API must export `{symbol}`."
                 )
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
@@ -1199,19 +1249,24 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
 
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
-        "english": {"sessions"},
-        "english_reading": {"reviews", "sessions"},
-        "palace_quiz": {"backups"},
-        "palaces": {"backups", "sessions"},
-        "reviews": {"sessions"},
-        "search": {"palaces"},
-        "settings": {"backups", "reviews"},
-        "freestyle": {
+        "english": {"session"},
+        "english_reading": {"memory", "session"},
+        "quiz": {"backups"},
+        "content": {"backups", "session"},
+        "memory": {"session"},
+        "search": {"content"},
+        "settings": {"backups", "memory"},
+        "practice": {
             "english",
             "english_reading",
-            "palace_quiz",
-            "palaces",
-            "reviews",
+            "quiz",
+            "content",
+            "memory",
+        },
+        "produce": {
+            "content",
+            "backups",
+            "settings",
         },
     }
     for consumer, protected_owners in protected_by_consumer.items():
@@ -1226,19 +1281,20 @@ def check_consumer_context_public_facades(errors: list[str]) -> None:
                     continue
                 parts = imported_module.split(".")
                 owner = parts[2] if len(parts) > 2 else ""
-                if owner in protected_owners and imported_module != (
-                    f"memory_anki.modules.{owner}.api"
+                if owner in protected_owners and not _is_public_context_import(
+                    imported_module, owner
                 ):
                     errors.append(
                         f"{path.relative_to(REPO_ROOT).as_posix()}: {consumer} must "
-                        f"consume {owner} through memory_anki.modules.{owner}.api."
+                        f"consume {owner} through memory_anki.modules.{owner}.api "
+                        "or .public."
                     )
                     break
 
 
 def check_knowledge_context_boundaries(errors: list[str]) -> None:
     knowledge_root = API_SRC / "modules" / "knowledge"
-    protected_owners = {"backups", "mindmap_document", "palaces"}
+    protected_owners = {"backups", "mindmap_document", "content"}
     for path in iter_files(knowledge_root, (".py",)):
         tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
         for node in ast.walk(tree):
@@ -1260,7 +1316,7 @@ def check_knowledge_context_boundaries(errors: list[str]) -> None:
 
 
 def check_contexts_without_persistence_dependency(errors: list[str]) -> None:
-    for context in ("knowledge", "palace_quiz", "palaces", "reviews", "sessions"):
+    for context in ("knowledge", "quiz", "content", "memory", "session"):
         context_root = API_SRC / "modules" / context
         for path in iter_files(context_root, (".py",)):
             if "memory_anki.modules.persistence" not in path.read_text(
@@ -1383,7 +1439,7 @@ def check_palace_quiz_application_facades(errors: list[str]) -> None:
         if "from .service import" in content:
             relative = path.relative_to(REPO_ROOT)
             errors.append(
-                f"{relative}: palace_quiz application modules must import question leaf modules directly instead of the service facade."
+                f"{relative}: quiz application modules must import question leaf modules directly instead of the service facade."
             )
 
 
@@ -1404,10 +1460,10 @@ def check_ai_gateway_boundary(errors: list[str]) -> None:
 def check_settings_module_boundaries(errors: list[str]) -> None:
     for path in iter_files(SETTINGS_MODULE, (".py",)):
         content = path.read_text(encoding="utf-8")
-        if "memory_anki.modules.palaces" in content:
+        if "memory_anki.modules.content" in content:
             relative = path.relative_to(REPO_ROOT)
             errors.append(
-                f"{relative}: settings modules must not import palaces modules; move shared prompt/config helpers to settings or core."
+                f"{relative}: settings modules must not import content modules; move shared prompt/config helpers to settings or core."
             )
 
 
@@ -1469,7 +1525,7 @@ def check_mindmap_architecture(errors: list[str]) -> None:
         "sqlalchemy",
         "fastapi",
         "memory_anki.infrastructure",
-        "memory_anki.modules.palaces",
+        "memory_anki.modules.content",
         "memory_anki.modules.knowledge",
         "memory_anki.modules.backups",
         "memory_anki.modules.mindmap_learning",
@@ -1568,7 +1624,7 @@ def check_mindmap_architecture(errors: list[str]) -> None:
                 )
 
     ai_split_contracts = {
-        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split_service.py": (
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split_service.py": (
             "AI_SPLIT_REPLACEMENT_MODES",
             "AI_SPLIT_ADD_CHILDREN",
             "add_children",
@@ -1577,17 +1633,17 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             "replacement_nodes",
             "coerce_add_children_from_replacement_nodes",
         ),
-        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "contracts.py": (
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "contracts.py": (
             "AI_SPLIT_ADD_CHILDREN_MODE",
             "add_children",
             "legacy_children",
         ),
-        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
             "new_children",
             "child_assignments",
             "骑士学院",
         ),
-        API_SRC / "modules" / "palaces" / "application" / "mindmap_ai_split" / "gateway.py": (
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "gateway.py": (
             "ADD_CHILDREN_SYSTEM_PROMPT",
             "add_children",
         ),
@@ -1599,7 +1655,7 @@ def check_mindmap_architecture(errors: list[str]) -> None:
             "task.split_examples",
             "ai_split",
         ),
-        WEB_SRC / "features" / "mindmap-editor" / "capabilities.ts": (
+        WEB_SRC / "modules" / "content" / "ui" / "mindmap-editor" / "capabilities.ts": (
             "AI 分卡",
             "split_mode",
             "auto",
@@ -1763,11 +1819,30 @@ def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
             relative = source.relative_to(REPO_ROOT).as_posix()
             content = source.read_text(encoding="utf-8")
             relative_to_module = source.relative_to(module_dir).as_posix()
-            if relative_to_module.startswith("domain/"):
+            # Pure domain only (exclude migrated FSD entity packages under domain/*-entity)
+            parts_under = relative_to_module.split("/")
+            is_entity_pkg = (
+                len(parts_under) >= 2
+                and parts_under[0] == "domain"
+                and parts_under[1].endswith("-entity")
+            )
+            if relative_to_module.startswith("domain/") and not is_entity_pkg:
                 for forbidden in ("from 'react'", 'from "react"', "from 'xstate'", 'from "xstate"', "window.", "document.", "fetch("):
                     if forbidden in content:
                         errors.append(f"{relative}: domain code cannot depend on `{forbidden}`.")
-            if "xstate" in content and not relative_to_module.startswith("application/workflows/"):
+            # Machine definitions stay in workflows; UI may createActor for composition.
+            defines_machine = (
+                "createMachine" in content
+                or "setup(" in content
+                and "from 'xstate'" in content
+                or 'from "xstate"' in content
+                and ("createMachine" in content or "setup(" in content)
+            )
+            if (
+                "xstate" in content
+                and not relative_to_module.startswith("application/workflows/")
+                and defines_machine
+            ):
                 errors.append(f"{relative}: XState is restricted to application/workflows.")
             if relative_to_module.startswith("presentation/"):
                 for forbidden in ("window.history", "window.location", "requestFullscreen", "exitFullscreen", "localStorage", "sessionStorage", "fetch(", "navigator.serviceWorker"):
@@ -1784,6 +1859,9 @@ def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
                 if target_module == module_dir.name:
                     continue
                 if specifier != f"@/modules/{target_module}/public":
+                    # Tests may mock private paths; production UI must use public.
+                    if source.name.endswith((".test.ts", ".test.tsx")):
+                        continue
                     errors.append(
                         f"{relative}: cross-module imports must use @/modules/{target_module}/public, not `{specifier}`."
                     )
@@ -1812,7 +1890,7 @@ def check_ai_run_workspace(errors: list[str]) -> None:
 
     forbidden_call = "autoGenerateAndSavePalaceQuiz("
     allowed = {
-        "features/palace-quiz/quizGenerationController.ts",
+        "modules/quiz/ui/palace-quiz/quizGenerationController.ts",
     }
     for path in WEB_SRC.rglob("*.ts*"):
         relative = path.relative_to(WEB_SRC).as_posix()
@@ -1842,9 +1920,9 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         "widgets/mindmap-review-flow/ReviewSessionContainer.tsx": ("StageSelectDialog", "target_review_number", "needs_practice"),
         "app/router/review/ReviewOverview.tsx": ("spreadOverdue", "formatReviewStage", "interval_days"),
         "app/router/review/ReviewCompletion.tsx": ("completed_stage", "next_stage", "needs_practice"),
-        "features/palace-catalog/components/palace-list/PalaceListCard.tsx": ("PalaceStageProgress", "review_stages", "stage_labels"),
-        "features/profile/ProfileSettingsPage.tsx": ("repairReviewStageProgress", "复习阶段"),
-        "features/review/api/reviewApi.ts": ("spread-overdue", "repair-stage-progress", "stage-progress-health"),
+        "modules/content/ui/palace-catalog/components/palace-list/PalaceListCard.tsx": ("PalaceStageProgress", "review_stages", "stage_labels"),
+        "modules/settings/ui/profile/ProfileSettingsPage.tsx": ("repairReviewStageProgress", "复习阶段"),
+        "modules/practice/ui/review/api/reviewApi.ts": ("spread-overdue", "repair-stage-progress", "stage-progress-health"),
     }
     for relative, forbidden in guarded.items():
         path = WEB_SRC / relative
@@ -1856,9 +1934,9 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
                 errors.append(f"FSRS review runtime must not contain {marker!r}: {path.relative_to(REPO_ROOT)}")
 
     retired_components = (
-        "features/review/components/StageSelectDialog.tsx",
-        "features/palace-catalog/components/palace-list/PalaceStageEditDialog.tsx",
-        "features/palace-catalog/components/palace-list/PalaceStageProgress.tsx",
+        "modules/practice/ui/review/components/StageSelectDialog.tsx",
+        "modules/content/ui/palace-catalog/components/palace-list/PalaceStageEditDialog.tsx",
+        "modules/content/ui/palace-catalog/components/palace-list/PalaceStageProgress.tsx",
         "entities/review/api/stageAdjustmentApi.ts",
     )
     for relative in retired_components:
@@ -1866,7 +1944,7 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         if path.exists():
             errors.append(f"retired stage UI/API module must not return: {path.relative_to(REPO_ROOT)}")
 
-    router_path = API_SRC / "modules/reviews/presentation/router.py"
+    router_path = API_SRC / "modules/memory/presentation/router.py"
     router_source = router_path.read_text(encoding="utf-8")
     for marker in ("/review/spread-overdue", "/review/stage-progress-health", "/review/repair-stage-progress", "stage-adjustment"):
         if marker in router_source:
@@ -1875,11 +1953,11 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
     # Queue lifecycle vs settlement are split; complete lives in settlement.
     formal_review_sources = {
         "get_fsrs_queue_payload": API_SRC
-        / "modules/reviews/application/formal_review_service.py",
+        / "modules/memory/application/formal_review_service.py",
         "get_fsrs_load_forecast": API_SRC
-        / "modules/reviews/application/formal_review_service.py",
+        / "modules/memory/application/formal_review_service.py",
         "complete_formal_review": API_SRC
-        / "modules/reviews/application/formal_review_settlement.py",
+        / "modules/memory/application/formal_review_settlement.py",
     }
     for function_name, service_path in formal_review_sources.items():
         service_source = service_path.read_text(encoding="utf-8")
@@ -1896,8 +1974,8 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         if "ReviewSchedule" in function_source:
             errors.append(f"{function_name} must not read or write legacy ReviewSchedule")
 
-    wave_service_path = API_SRC / "modules/reviews/application/wave_service.py"
-    wave_session_path = API_SRC / "modules/reviews/application/wave_session_service.py"
+    wave_service_path = API_SRC / "modules/memory/application/wave_service.py"
+    wave_session_path = API_SRC / "modules/memory/application/wave_session_service.py"
     if wave_service_path.exists() and wave_session_path.exists():
         wave_service_source = wave_service_path.read_text(encoding="utf-8")
         wave_session_source = wave_session_path.read_text(encoding="utf-8")
@@ -1920,7 +1998,7 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
 
 
 def check_english_reading_gap_loop(errors: list[str]) -> None:
-    page_path = WEB_SRC / "features/english-reading/EnglishReadingPage.tsx"
+    page_path = WEB_SRC / "modules/english-reading/ui/english-reading/EnglishReadingPage.tsx"
     if not page_path.exists():
         errors.append("English Reading gap-loop page is missing")
         return
@@ -1989,7 +2067,7 @@ def main() -> int:
     check_tool_personal_paths(errors)
     for path in BATCH_GENERATION_APPLICATION.rglob("*.py"):
         source = path.read_text(encoding="utf-8")
-        if "modules.palaces.infrastructure" in source or "modules.palace_quiz.infrastructure" in source:
+        if "modules.content.infrastructure" in source or "modules.quiz.infrastructure" in source:
             errors.append(
                 f"{path.relative_to(REPO_ROOT)}: batch generation must use Palace/Quiz public facades instead of internal infrastructure."
             )

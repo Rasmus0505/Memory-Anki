@@ -7,19 +7,19 @@ import {
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
-import { getRuntimeInfoApi } from '@/entities/runtime/api'
+import { getRuntimeInfoApi } from '@/modules/settings/public'
 import {
   prefetchPalacesGroupedSummaryApi,
   prefetchPalaceSubjectShelfApi,
-} from '@/entities/palace/api'
+} from '@/modules/content/public'
 import {
   preloadFreestylePage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
-import { prefetchDashboardApi } from '@/features/dashboard/api'
-import { prefetchReviewQueueApi } from '@/features/review/api'
+import { prefetchDashboardApi } from '@/modules/dashboard/public'
+import { prefetchReviewQueueApi } from '@/modules/practice/public'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'

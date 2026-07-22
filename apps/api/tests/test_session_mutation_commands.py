@@ -6,7 +6,7 @@ from datetime import datetime
 import pytest
 
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.modules.sessions.presentation import router as sessions_router
+from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
 
 

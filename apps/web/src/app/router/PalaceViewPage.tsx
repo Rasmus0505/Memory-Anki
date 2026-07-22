@@ -2,19 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
-import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/entities/palace/api'
+import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/modules/content/public'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   MindMapEditorSurface,
   MindMapPageToolbar,
   type MindMapEditorSurfaceHandle,
-} from '@/features/mindmap-editor'
+} from '@/modules/content/public'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { cn } from '@/shared/lib/utils'
-import { readMindMapEditorState } from '@/entities/mindmap-document'
+import { readMindMapEditorState } from '@/modules/content/public'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'

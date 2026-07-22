@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db.models import Base, StudySession
-from memory_anki.modules.sessions.application.study_session_service import (
+from memory_anki.modules.session.application.study_session_service import (
     create_completed_study_session_from_time_payload,
     patch_study_session,
     reclassify_ghost_formal_review_time_sessions,
