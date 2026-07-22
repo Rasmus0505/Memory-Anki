@@ -25,7 +25,6 @@ from memory_anki.infrastructure.db._tables.reviews import (
 from memory_anki.modules.reviews.application.fsrs_runtime import (
     DEFAULT_MAXIMUM_INTERVAL,
     DEFAULT_RETENTION,
-    FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD,
     PARAMETER_VERSION,
     RATING_LABELS,
     SCHEDULER_VERSION,
@@ -50,11 +49,8 @@ __all__ = [
     "RATING_LABELS",
     "VALID_RATINGS",
     "due_node_uids_for_entry",
-    "get_completion_summary",
     "get_palace_due_rollup",
-    "get_palace_mastery_trend",
     "get_palace_memory_projection",
-    "list_due_nodes",
     "_apply_card",
     "_card_from_state",
     "_card_id",
@@ -174,13 +170,15 @@ def _descendants(nodes: dict[str, dict[str, Any]], uid: str) -> list[str]:
 def _card_from_state(state: ReviewNodeState | None, *, card_id: int) -> Card:
     if state is None:
         return Card(card_id=card_id, state=State.Learning, due=_utc_now())
+    # FSRS card clock uses raw suggestion when present; due_at is wave-effective.
+    raw = getattr(state, "raw_due_at", None) or state.due_at
     return Card(
         card_id=card_id,
         state=State(state.state),
         step=state.step,
         stability=state.stability,
         difficulty=state.difficulty,
-        due=_aware(state.due_at) or _utc_now(),
+        due=_aware(raw) or _utc_now(),
         last_review=_aware(state.last_review_at),
     )
 
@@ -198,11 +196,31 @@ def _state_dict(state: ReviewNodeState | None) -> dict[str, Any] | None:
         "stability": state.stability,
         "difficulty": state.difficulty,
         "due_at": state.due_at.isoformat(),
+        "raw_due_at": state.raw_due_at.isoformat() if getattr(state, "raw_due_at", None) else None,
         "last_review_at": state.last_review_at.isoformat() if state.last_review_at else None,
+        "last_direct_review_at": (
+            state.last_direct_review_at.isoformat()
+            if getattr(state, "last_direct_review_at", None)
+            else None
+        ),
+        "last_practice_at": (
+            state.last_practice_at.isoformat()
+            if getattr(state, "last_practice_at", None)
+            else None
+        ),
         "desired_retention": state.desired_retention,
         "maximum_interval": state.maximum_interval,
         "content_fingerprint": state.content_fingerprint,
         "state_source": state.state_source,
+        "schedule_source": getattr(state, "schedule_source", None) or "new",
+        "evidence_source": getattr(state, "evidence_source", None) or "none",
+        "effective_wave_id": getattr(state, "effective_wave_id", None),
+        "effective_local_date": (
+            state.effective_local_date.isoformat()
+            if getattr(state, "effective_local_date", None)
+            else None
+        ),
+        "schedule_reason": getattr(state, "schedule_reason", None),
         "scheduler_version": state.scheduler_version,
         "parameter_version": state.parameter_version,
     }
@@ -224,15 +242,39 @@ def _restore_state(
     row.stability = snapshot.get("stability")
     row.difficulty = snapshot.get("difficulty")
     row.due_at = datetime.fromisoformat(snapshot["due_at"])
+    row.raw_due_at = (
+        datetime.fromisoformat(snapshot["raw_due_at"])
+        if snapshot.get("raw_due_at")
+        else None
+    )
     row.last_review_at = (
         datetime.fromisoformat(snapshot["last_review_at"])
         if snapshot.get("last_review_at")
+        else None
+    )
+    row.last_direct_review_at = (
+        datetime.fromisoformat(snapshot["last_direct_review_at"])
+        if snapshot.get("last_direct_review_at")
+        else None
+    )
+    row.last_practice_at = (
+        datetime.fromisoformat(snapshot["last_practice_at"])
+        if snapshot.get("last_practice_at")
         else None
     )
     row.desired_retention = float(snapshot.get("desired_retention", DEFAULT_RETENTION))
     row.maximum_interval = int(snapshot.get("maximum_interval", DEFAULT_MAXIMUM_INTERVAL))
     row.content_fingerprint = str(snapshot.get("content_fingerprint") or "")
     row.state_source = str(snapshot.get("state_source") or "manual")
+    row.schedule_source = str(snapshot.get("schedule_source") or "manual")
+    row.evidence_source = str(snapshot.get("evidence_source") or "none")
+    row.effective_wave_id = snapshot.get("effective_wave_id")
+    row.effective_local_date = (
+        datetime.fromisoformat(snapshot["effective_local_date"]).date()
+        if snapshot.get("effective_local_date")
+        else None
+    )
+    row.schedule_reason = snapshot.get("schedule_reason")
     row.scheduler_version = str(snapshot.get("scheduler_version") or SCHEDULER_VERSION)
     row.parameter_version = str(snapshot.get("parameter_version") or PARAMETER_VERSION)
 
@@ -244,7 +286,9 @@ def _apply_card(
     row.step = card.step
     row.stability = card.stability
     row.difficulty = card.difficulty
-    row.due_at = _naive(card.due) or utc_now_naive()
+    due = _naive(card.due) or utc_now_naive()
+    row.due_at = due
+    row.raw_due_at = due
     row.last_review_at = _naive(card.last_review)
     row.desired_retention = DEFAULT_RETENTION
     row.maximum_interval = DEFAULT_MAXIMUM_INTERVAL
@@ -399,7 +443,7 @@ def _projection_from_tree(
 
     Rating/undo hot paths call this with ``include_ratings=False`` and
     ``include_nodes=False`` so a single score does not re-scan history or
-    serialize every node detail twice.
+    allocate per-node detail dicts twice.
 
     Batch list paths may pass a shared ``scheduler`` and ``mastery_horizon_days``
     so FSRS settings are loaded once per request instead of once per palace.
@@ -416,53 +460,142 @@ def _projection_from_tree(
         )
     else:
         resolved_ratings = {}
+    from memory_anki.modules.reviews.application.wave_policy import (
+        SCHEDULE_CONTENT_CHANGED,
+        SCHEDULE_REINFORCEMENT,
+        SCHEDULE_UNINITIALIZED,
+        is_formal_queue_eligible,
+    )
+
+    if mastery_horizon_days is None:
+        _, _, mastery_horizon_days = _schedule_settings(session)
+    mastery_horizon = int(mastery_horizon_days)
+
+    # Rate/undo responses only need aggregates. Avoid allocating a full detail dict
+    # per node (often hundreds) on every score write.
+    build_details = include_nodes or include_ratings
     details: list[dict[str, Any]] = []
+    due_items: list[dict[str, Any]] = []
+    total = len(valid_uids)
+    stability_sum = 0.0
+    retrievability_sum = 0.0
+    mastered_count = 0
+    due_count = 0
+    overdue_count = 0
+    reinforcement_count = 0
+    uninitialized_count = 0
+    content_changed_count = 0
+    severe = 0
+    next_due: str | None = None
+    now_iso = now.isoformat()
+
     for uid in valid_uids:
         row = states.get(uid)
         due_at: datetime | None
-        if row and row.content_fingerprint != nodes[uid]["content_fingerprint"]:
+        raw_due_at: datetime | None = None
+        schedule_source = SCHEDULE_UNINITIALIZED
+        formal_due = False
+        reinforcement_due = False
+        if row is None:
             stability = 0.0
             retrievability = 0.0
-            due_at = now
+            due_at = None
+            state_source = "new"
+            schedule_source = SCHEDULE_UNINITIALIZED
+        elif (
+            row.content_fingerprint
+            and row.content_fingerprint != nodes[uid]["content_fingerprint"]
+        ):
+            # Empty fingerprint means "not yet bound" (migration / seed); do not
+            # treat as content-changed until a real fingerprint has been stored.
+            stability = float(row.stability or 0.0)
+            card = _card_from_state(row, card_id=_card_id(palace.id, uid))
+            retrievability = (
+                active_scheduler.get_card_retrievability(card, current_datetime=now)
+                if row.last_review_at
+                else 0.0
+            )
+            due_at = None
+            raw_due_at = _aware(row.raw_due_at or row.due_at)
             state_source = "content_reset_pending"
+            schedule_source = SCHEDULE_CONTENT_CHANGED
         else:
             card = _card_from_state(row, card_id=_card_id(palace.id, uid))
             stability = float(card.stability or 0.0)
             retrievability = (
                 active_scheduler.get_card_retrievability(card, current_datetime=now)
-                if row and row.last_review_at
+                if row.last_review_at
                 else 0.0
             )
-            due_at = _aware(row.due_at) if row else now
+            due_at = _aware(row.due_at)
+            raw_due_at = _aware(row.raw_due_at or row.due_at)
             state_source = row.state_source if row else "new"
-        branch_uid = _top_level_branch_uid(nodes, root_uid, uid)
-        details.append(
-            {
+            schedule_source = getattr(row, "schedule_source", None) or (
+                "manual" if row.last_review_at else SCHEDULE_UNINITIALIZED
+            )
+            has_memory = row.last_review_at is not None
+            if schedule_source == SCHEDULE_REINFORCEMENT:
+                reinforcement_due = bool(due_at and due_at <= now)
+            elif is_formal_queue_eligible(schedule_source, has_memory=has_memory):
+                formal_due = bool(due_at and due_at <= now)
+
+        stability_days = round(stability, 3)
+        retrievability_clamped = round(max(0.0, min(retrievability, 1.0)), 4)
+        stability_sum += min(stability_days / mastery_horizon, 1.0)
+        retrievability_sum += retrievability_clamped
+        if stability_days >= mastery_horizon:
+            mastered_count += 1
+        if schedule_source == SCHEDULE_UNINITIALIZED:
+            uninitialized_count += 1
+        if schedule_source == SCHEDULE_CONTENT_CHANGED:
+            content_changed_count += 1
+        if reinforcement_due:
+            reinforcement_count += 1
+
+        due_at_api = to_api_datetime(due_at) if due_at else None
+        if formal_due:
+            due_count += 1
+            if due_at_api and due_at_api < now_iso:
+                overdue_count += 1
+            if due_at_api and (next_due is None or due_at_api < next_due):
+                next_due = due_at_api
+
+        rating_value = resolved_ratings.get(uid) if include_ratings else None
+        if include_ratings and rating_value == 1:
+            severe += 1
+
+        if build_details or formal_due:
+            branch_uid = _top_level_branch_uid(nodes, root_uid, uid)
+            item = {
                 "node_uid": uid,
-                "text": nodes[uid].get("text") or "",
+                "text": (nodes[uid].get("text") or "") if build_details else "",
                 "branch_uid": branch_uid,
-                "stability_days": round(stability, 3),
-                "retrievability": round(max(0.0, min(retrievability, 1.0)), 4),
-                "due_at": to_api_datetime(due_at) if due_at else None,
-                "due": bool(due_at and due_at <= now),
+                "stability_days": stability_days,
+                "retrievability": retrievability_clamped,
+                "due_at": due_at_api,
+                "raw_due_at": to_api_datetime(raw_due_at) if raw_due_at else None,
+                "effective_wave_id": getattr(row, "effective_wave_id", None) if row else None,
+                "effective_local_date": (
+                    row.effective_local_date.isoformat()
+                    if row and getattr(row, "effective_local_date", None)
+                    else None
+                ),
+                "schedule_source": schedule_source,
+                "schedule_reason": getattr(row, "schedule_reason", None) if row else None,
+                "evidence_source": getattr(row, "evidence_source", None) if row else "none",
+                # Formal long-term due only (excludes uninitialized / content_changed / reinforcement).
+                "due": formal_due,
+                "reinforcement_due": reinforcement_due,
                 "state_source": state_source,
-                "rating": resolved_ratings.get(uid) if include_ratings else None,
+                "rating": rating_value,
             }
-        )
-    total = len(details)
-    if mastery_horizon_days is None:
-        _, _, mastery_horizon_days = _schedule_settings(session)
-    mastery_horizon = int(mastery_horizon_days)
-    mastery_progress = (
-        (sum(min(item["stability_days"] / mastery_horizon, 1.0) for item in details) / total)
-        if total
-        else 0.0
-    )
-    memory_health = (sum(item["retrievability"] for item in details) / total) if total else 0.0
-    due_items = [item for item in details if item["due"]]
-    severe = sum(1 for item in details if item["rating"] == 1) if include_ratings else 0
-    mastered_count = sum(1 for item in details if item["stability_days"] >= mastery_horizon)
-    next_due = min((item["due_at"] for item in details if item["due_at"]), default=None)
+            if build_details:
+                details.append(item)
+            if formal_due:
+                due_items.append(item)
+
+    mastery_progress = (stability_sum / total) if total else 0.0
+    memory_health = (retrievability_sum / total) if total else 0.0
     entry = _entry_mode_payload(root_uid=root_uid, nodes=nodes, due_items=due_items)
     branch_summaries = (
         _branch_review_summaries(root_uid=root_uid, nodes=nodes, details=details, now=now)
@@ -478,14 +611,15 @@ def _projection_from_tree(
         "memory_health_percent": round(memory_health * 100),
         "mastered_node_count": mastered_count,
         "mastery_horizon_days": mastery_horizon,
-        "due_node_count": len(due_items),
-        "overdue_node_count": sum(
-            1 for item in due_items if item["due_at"] and item["due_at"] < now.isoformat()
-        ),
+        "due_node_count": due_count,
+        "overdue_node_count": overdue_count,
+        "reinforcement_due_count": reinforcement_count,
+        "uninitialized_node_count": uninitialized_count,
+        "content_changed_node_count": content_changed_count,
         "next_review_at": next_due,
         "mastered": total > 0 and mastered_count / total >= 0.9 and severe == 0,
         "severe_weak_node_count": severe,
-        "has_due_review": len(due_items) > 0,
+        "has_due_review": due_count > 0,
         **entry,
         "review_branch_summaries": branch_summaries,
         "nodes": details if include_nodes else [],
@@ -542,35 +676,42 @@ def due_node_uids_for_entry(
     *,
     entry_mode: str | None = None,
     branch_uid: str | None = None,
+    scope_node_uids: list[str] | None = None,
 ) -> list[str]:
     """Resolve frozen due UIDs for formal review entry (palace or single top-level branch).
 
-    Includes cards already due and those that become due within
-    ``FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD`` so short relearning/weak windows that
-    expire mid-session still enter the same frozen scope.
+    Freezes only currently formal-due and overdue nodes. Near-due look-ahead and
+    mid-session auto-expand are intentionally disabled (palace wave model).
+
+    When ``scope_node_uids`` is provided (freestyle unit batches), freeze exactly
+    the intersection of that list with currently due nodes — never fall back to
+    the full palace or top-level branch.
     """
     now = _utc_now()
-    horizon = now + FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD
     projection = get_palace_memory_projection(session, palace_id, now=now)
     mode = entry_mode or projection.get("review_entry_mode") or "none"
-    if mode == "none":
+    if mode == "none" and not scope_node_uids:
         return []
 
-    def _in_entry_wave(item: dict[str, Any]) -> bool:
-        if item.get("due"):
-            return True
-        raw = item.get("due_at")
-        if not raw:
-            return False
-        try:
-            due_at = _aware(datetime.fromisoformat(str(raw)))
-        except ValueError:
-            return False
-        return bool(due_at and due_at <= horizon)
-
-    wave = [item for item in projection.get("nodes") or [] if _in_entry_wave(item)]
+    wave = [item for item in projection.get("nodes") or [] if item.get("due")]
     if not wave:
         return []
+    due_by_uid = {
+        str(item["node_uid"]): item
+        for item in wave
+        if item.get("node_uid")
+    }
+    if scope_node_uids:
+        # Explicit unit scope: keep caller order, only currently due members.
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in scope_node_uids:
+            uid = str(raw or "").strip()
+            if not uid or uid in seen or uid not in due_by_uid:
+                continue
+            seen.add(uid)
+            ordered.append(uid)
+        return ordered
     if mode == "node":
         target_branch = branch_uid or projection.get("primary_branch_uid")
         if target_branch:
@@ -632,82 +773,4 @@ def get_palace_due_rollup(
         include_nodes=True,
     )
     return dict(batch[int(palace_id)])
-
-
-def get_palace_mastery_trend(session: Session, palace_id: int) -> dict[str, Any]:
-    """Return one mastery snapshot for each completed formal FSRS review."""
-    palace = session.get(Palace, palace_id)
-    if palace is None or palace.deleted_at is not None:
-        raise ValueError("palace not found")
-
-    rows = (
-        session.query(StudySession)
-        .filter(
-            StudySession.palace_id == palace_id,
-            StudySession.scene == "review",
-            StudySession.status == "completed",
-            StudySession.deleted_at.is_(None),
-            StudySession.ended_at.is_not(None),
-        )
-        .order_by(StudySession.ended_at.asc(), StudySession.id.asc())
-        .all()
-    )
-    points: list[dict[str, Any]] = []
-    for row in rows:
-        try:
-            summary = json.loads(row.summary_json or "{}")
-        except (TypeError, json.JSONDecodeError):
-            continue
-        receipt = summary.get("completion_receipt")
-        if not isinstance(receipt, dict):
-            continue
-        mastery_progress = receipt.get("mastery_progress")
-        mastery_percent = receipt.get("mastery_percent")
-        ended_at = row.ended_at
-        if (
-            ended_at is None
-            or not isinstance(mastery_progress, int | float)
-            or not isinstance(mastery_percent, int | float)
-        ):
-            continue
-        points.append(
-            {
-                "at": ended_at.isoformat(),
-                "mastery_progress": round(float(mastery_progress), 4),
-                "mastery_percent": round(float(mastery_percent)),
-            }
-        )
-    return {"palace_id": palace_id, "points": points}
-
-
-def get_completion_summary(
-    session: Session, palace_id: int, *, node_uids: list[str] | None = None
-) -> dict[str, Any]:
-    projection = get_palace_memory_projection(session, palace_id)
-    selected = set(node_uids or [item["node_uid"] for item in projection["nodes"]])
-    scoped = [item for item in projection["nodes"] if item["node_uid"] in selected]
-    rated = [item for item in scoped if item["rating"] in VALID_RATINGS]
-    rating_counts = {label: 0 for label in RATING_LABELS.values()}
-    for item in rated:
-        rating_counts[RATING_LABELS[item["rating"]]] += 1
-    return {
-        "palace_id": palace_id,
-        "scope_node_count": len(scoped),
-        "rated_node_count": len(rated),
-        "unrated_due_node_count": sum(
-            1 for item in scoped if item["due"] and item["rating"] is None
-        ),
-        "rating_counts": rating_counts,
-        "mastery_progress": projection["mastery_progress"],
-        "memory_health": projection["memory_health"],
-        "next_review_at": projection["next_review_at"],
-        "due_node_count": projection["due_node_count"],
-        "projection": projection,
-    }
-
-
-def list_due_nodes(session: Session, palace_id: int, *, now: datetime | None = None) -> list[str]:
-    projection = get_palace_memory_projection(session, palace_id)
-    return [item["node_uid"] for item in projection["nodes"] if item["due"]]
-
 

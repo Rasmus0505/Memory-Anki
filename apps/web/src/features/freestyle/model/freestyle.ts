@@ -6,6 +6,7 @@ import type {
   FreestyleQuizCard,
 } from '@/shared/api/contracts'
 import type { QuizRuntimeState } from '@/entities/quiz'
+import { isActionCard, isMindMapBranchCard } from './freestyle-cards'
 
 export type FreestyleOrderMode = 'palace_complete_then_random' | 'random' | 'sequential'
 export type FreestyleActionFrequency = 'none' | 'low' | 'medium' | 'high'
@@ -280,6 +281,7 @@ export function buildFreestyleQueue(
   const resolvedQuestionIds = new Set(options.resolvedQuestionIds ?? [])
   const enabled = new Set(enabledContentTypes(config))
   const filtered = cards.filter((card) => {
+    if (isMindMapBranchCard(card)) return false
     if (!enabled.has(card.content_type)) return false
     if (isQuizCard(card) && config.questionType !== 'all') {
       return card.question.question_type === config.questionType
@@ -296,7 +298,7 @@ export function buildFreestyleQueue(
 
   const quizCards = filtered.filter(isQuizCard)
   const actionCards = filtered
-    .filter((card): card is Exclude<FreestyleCard, FreestyleQuizCard> => !isQuizCard(card))
+    .filter(isActionCard)
     .sort((a, b) => b.priority - a.priority)
 
   if (config.orderMode === 'random') {

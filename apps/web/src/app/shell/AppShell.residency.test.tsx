@@ -75,7 +75,7 @@ describe('AppShell residency navigation memory', () => {
       target: { value: 'persisted palace state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
     await waitFor(() => {
       expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('false')
       expect(screen.getByTestId('page:/freestyle').getAttribute('data-active')).toBe('true')

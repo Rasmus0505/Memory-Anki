@@ -302,6 +302,7 @@ export function MindMapReviewFlow({
                     onNodeHover={review.flow.handleNodeHover}
                     toolbarExtensions={{
                       moreActions: [
+                        ...(props.extraMoreActions ?? []),
                         {
                           label: "翻卡快捷键",
                           onClick: () => setFlipShortcutsOpen(true),
@@ -320,9 +321,14 @@ export function MindMapReviewFlow({
                     directRatedUids={review.recallRatings.directRatedUids}
                     sessionRatedUids={review.recallRatings.sessionRatedUids}
                     rateableNodeUids={
-                      props.sessionKind === 'review' && review.reviewNodeUids.length > 0
+                      // Explicit scope (formal frozen due / freestyle unit) always gates rating.
+                      // Unscoped practice keeps unrestricted rating (null).
+                      Array.isArray(props.reviewScopeNodeUids) &&
+                      props.reviewScopeNodeUids.length > 0
                         ? review.reviewNodeUids
-                        : null
+                        : props.sessionKind === 'review' && review.reviewNodeUids.length > 0
+                          ? review.reviewNodeUids
+                          : null
                     }
                     onRateNode={
                       props.studySessionId

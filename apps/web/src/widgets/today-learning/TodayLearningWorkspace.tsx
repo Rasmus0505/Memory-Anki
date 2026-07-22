@@ -104,7 +104,7 @@ function ContinueLearningPanel({ data }: { data: DashboardResponse }) {
 
         <div className="flex flex-col gap-3">
           <Button asChild className="h-11 justify-center">
-            <Link to="/freestyle/session">
+            <Link to="/freestyle">
               <Play className="fill-current" />
               进入沉浸训练
             </Link>

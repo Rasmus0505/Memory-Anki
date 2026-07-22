@@ -15,9 +15,11 @@ from memory_anki.modules.freestyle.application.history_service import (
     list_question_attempts,
     list_question_explanations,
 )
+from memory_anki.modules.freestyle.application.queue_service import build_freestyle_queue
 from memory_anki.modules.freestyle.domain.schemas import (
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
+    FreestyleQueueBuildRequest,
 )
 
 router = APIRouter(tags=["freestyle"])
@@ -36,6 +38,23 @@ def api_freestyle_feed(
             range_value=range_,
             palace_ids_value=palace_ids,
             content_types_value=content_types,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/freestyle/queue/build")
+def api_freestyle_queue_build(
+    data: FreestyleQueueBuildRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return build_freestyle_queue(
+            session,
+            config_raw=data.config,
+            operation_id=data.operation_id,
+            completed_ids=list(data.completed_ids or []),
+            hidden_ids=list(data.hidden_ids or []),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

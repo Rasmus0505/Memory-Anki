@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowDownUp, ArrowRight, Brain, CalendarClock } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowDownUp, ArrowRight, Brain, CalendarClock, Zap } from 'lucide-react'
 import type { ReviewQueueResponse } from '@/shared/api/contracts'
-import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi } from '@/features/review/api'
+import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi, startReviewWaveSessionApi } from '@/features/review/api'
 import {
   DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
   isReviewQueueSortMode,
@@ -52,11 +52,13 @@ function entryButtonLabel(mode?: string | null, fallback = '开始复习') {
 }
 
 export default function ReviewOverview() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const rawChapterId = searchParams.get('chapterId')
   const chapterId = rawChapterId ? Number(rawChapterId) : null
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [startingWaveId, setStartingWaveId] = useState<string | null>(null)
   const [viewSettings, setViewSettings] = useLocalStorageState<ReviewQueueViewSettings>(
     REVIEW_QUEUE_VIEW_SETTINGS_KEY,
     DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
@@ -90,6 +92,18 @@ export default function ReviewOverview() {
     setViewSettings({ sortMode: value as ReviewQueueSortMode })
   }
 
+  const handleStartReinforcement = async (waveId: string) => {
+    setStartingWaveId(waveId)
+    try {
+      const session = await startReviewWaveSessionApi(waveId)
+      navigate(buildReviewSessionPath(session.id))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法开始强化复习')
+    } finally {
+      setStartingWaveId(null)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <PageIntro
@@ -103,6 +117,36 @@ export default function ReviewOverview() {
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">逾期节点</div><b className="text-2xl">{queue.overdue_count}</b></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">本周复习时长</div><b className="text-2xl">{formatDuration(queue.stats.review_duration_seconds)}</b></CardContent></Card>
       </div>
+      {queue.reinforcement_waves?.length ? (
+        <Card className="border-warning/35 bg-warning/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="size-5 text-warning" />
+              当天强化（{queue.reinforcement_waves.reduce((sum, wave) => sum + (wave.pending_count ?? wave.item_count), 0)} 个节点）
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {queue.reinforcement_waves.map((wave) => (
+              <div key={wave.id} className="flex items-center justify-between gap-4 rounded-2xl border border-warning/25 bg-background/80 px-4 py-4">
+                <div>
+                  <div className="font-semibold">{wave.palace_title || '未命名宫殿'}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    忘记/困难后的短时强化 · 待复习 {wave.pending_count ?? wave.item_count} 张
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={startingWaveId === wave.id}
+                  onClick={() => void handleStartReinforcement(wave.id)}
+                >
+                  {startingWaveId === wave.id ? '正在进入…' : '开始强化'}
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center justify-between gap-3">

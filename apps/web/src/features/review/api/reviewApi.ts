@@ -23,12 +23,102 @@ export function prefetchReviewQueueApi() { prefetchPromise('review:queue', () =>
 export function getReviewLoadForecastApi(days = 7) { return request<ReviewLoadForecastResponse>(`/review/load-forecast?days=${days}`) }
 export function getChapterReviewQueueApi(chapterId: number) { return request<ReviewQueueResponse>(`/review/chapter/${chapterId}/queue`) }
 export function getReviewSessionApi(id: string | number) { return request<ReviewScheduleSummary>(`/review/session/${id}`) }
+export function startReviewSessionApi(
+  palaceId: number,
+  data: {
+    entry_mode?: 'node' | 'palace'
+    branch_uid?: string
+    /** Freestyle unit freeze: due UIDs inside the branch unit only. */
+    scope_node_uids?: string[]
+  } = {},
+) {
+  return request<ReviewScheduleSummary>(`/review/palaces/${palaceId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
 export function getReviewSessionProgressApi(id: string | number) { return request<{ progress: SessionProgressPayload }>(`/review/session/${id}/progress`) }
 export function saveReviewSessionProgressApi(id: string | number, data: SessionProgressPayload) {
   return request<{ progress: SessionProgressPayload }>(`/review/session/${id}/progress`, { method: 'PUT', body: JSON.stringify(data) })
 }
 export function clearReviewSessionProgressApi(id: string | number) { return request<{ ok: boolean }>(`/review/session/${id}/progress`, { method: 'DELETE' }) }
 export function getReviewSessionCompletionSummaryApi(id: string | number) { return request<{ item: ReviewCompletionSummary }>(`/review/session/${id}/completion-summary`) }
+
+export function startReviewWaveSessionApi(waveId: string) {
+  return request<ReviewScheduleSummary>(`/review/waves/${encodeURIComponent(waveId)}/sessions`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export function listPalaceWavesApi(palaceId: number) {
+  return request<{ items: import('@/shared/api/contracts').ReviewWaveSummary[] }>(
+    `/review/palaces/${palaceId}/waves`,
+  )
+}
+export function pauseReviewWaveApi(waveId: string) {
+  return request<{ item: unknown }>(`/review/waves/${encodeURIComponent(waveId)}/pause`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+export function resumeReviewWaveApi(waveId: string, data?: { session_id?: string }) {
+  return request<{ item: unknown }>(`/review/waves/${encodeURIComponent(waveId)}/resume`, {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+  })
+}
+export function mergeNewDueIntoWaveApi(waveId: string, nodeUids?: string[]) {
+  return request<{ item: unknown }>(`/review/waves/${encodeURIComponent(waveId)}/merge-new-due`, {
+    method: 'POST',
+    body: JSON.stringify(nodeUids ? { node_uids: nodeUids } : {}),
+  })
+}
+export function diagnosePalaceCalibrationApi(palaceId: number) {
+  return request<{ item: import('@/shared/api/contracts').ReviewCalibrationDiagnose }>(
+    `/review/palaces/${palaceId}/calibration/diagnose`,
+  )
+}
+export function previewPalaceCalibrationApi(
+  palaceId: number,
+  data: {
+    operation_id: string
+    mode: 'align_wave' | 'baseline'
+    scope_kind?: 'palace' | 'branch' | 'nodes'
+    scope?: Record<string, unknown>
+    baseline_tier?: string
+    target_local_date?: string
+    palace_revision?: string
+  },
+) {
+  return request<{ item: unknown }>(`/review/palaces/${palaceId}/calibration/preview`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+export function applyPalaceCalibrationApi(
+  palaceId: number,
+  data: {
+    operation_id: string
+    mode: 'align_wave' | 'baseline'
+    scope_kind?: 'palace' | 'branch' | 'nodes'
+    scope?: Record<string, unknown>
+    baseline_tier?: string
+    target_local_date?: string
+    palace_revision?: string
+  },
+) {
+  return request<{ item: unknown }>(`/review/palaces/${palaceId}/calibration/apply`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+export function undoPalaceCalibrationApi(palaceId: number, operationId: string) {
+  return request<{ item: unknown }>(
+    `/review/palaces/${palaceId}/calibration/${encodeURIComponent(operationId)}/undo`,
+    { method: 'POST', body: '{}' },
+  )
+}
 
 type BulkRateResponse = {
   item: {

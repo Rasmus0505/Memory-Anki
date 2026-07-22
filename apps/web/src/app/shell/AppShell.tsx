@@ -360,8 +360,16 @@ function ShellFrame({ children }: PropsWithChildren) {
             sidebarCollapsed ? 'w-[76px]' : 'w-[236px]',
           )}
         >
-          <div className={cn('flex justify-end px-3 pt-3', sidebarCollapsed ? 'pb-1' : 'pb-0')}>
-            <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex px-3 pt-3',
+              sidebarCollapsed
+                ? 'flex-col items-center gap-2 pb-1'
+                : 'items-center justify-between gap-2 pb-0',
+            )}
+          >
+            <GlobalBackButton placement="sidebar" compact={sidebarCollapsed} />
+            <div className={cn('flex items-center gap-2', sidebarCollapsed && 'flex-col')}>
               <Button
                 type="button"
                 variant="outline"
@@ -403,7 +411,7 @@ function ShellFrame({ children }: PropsWithChildren) {
           </div>
         </main>
         <MobileBottomNav />
-        <GlobalBackButton />
+        <GlobalBackButton placement="mobile" />
         <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <GlobalCommandPalette />

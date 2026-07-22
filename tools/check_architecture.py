@@ -215,6 +215,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     "0003_reset_english_reading_dictionary_cache.py": (
         "Drops only a rebuildable provider cache when its legacy schema is detected."
     ),
+    "0044_english_reading_gap_loop.py": (
+        "User-approved one-time reset of legacy English Reading materials, generated versions, caches, and reading vocabulary."
+    ),
     "0005_relax_palace_quiz_question_palace_owner.py": (
         "SQLite batch recreation is required to relax nullability without removing question rows."
     ),
@@ -1138,6 +1141,62 @@ def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
                 break
 
 
+def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
+    """Immersive queue must compose public facades; branch split stays freestyle-owned."""
+    queue_service = (
+        API_SRC / "modules" / "freestyle" / "application" / "queue_service.py"
+    )
+    if not queue_service.exists():
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: freestyle immersive "
+            "queue service is required."
+        )
+        return
+    source = queue_service.read_text(encoding="utf-8")
+    for required in (
+        "memory_anki.modules.palaces.api",
+        "memory_anki.modules.reviews.api",
+        "memory_anki.modules.palace_quiz.api",
+        "build_freestyle_queue",
+    ):
+        if required not in source:
+            errors.append(
+                f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
+                f"public facades via `{required}`."
+            )
+    for forbidden in (
+        "memory_anki.modules.reviews.application",
+        "memory_anki.modules.palaces.application",
+        "memory_anki.modules.palace_quiz.application",
+    ):
+        if forbidden in source:
+            errors.append(
+                f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must not import "
+                f"private `{forbidden}` modules."
+            )
+    public_ts = WEB_SRC / "modules" / "freestyle" / "public.ts"
+    if public_ts.exists():
+        public_source = public_ts.read_text(encoding="utf-8")
+        for symbol in (
+            "sanitizeFreestyleFeedConfig",
+            "applySkip",
+            "mergeRefreshQueue",
+            "visibleMountIndices",
+        ):
+            if symbol not in public_source:
+                errors.append(
+                    f"{public_ts.relative_to(REPO_ROOT).as_posix()}: freestyle public "
+                    f"API must export `{symbol}`."
+                )
+    nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
+    nav_source = nav_path.read_text(encoding="utf-8")
+    if "label: '随心'" not in nav_source:
+        errors.append(
+            f"{nav_path.relative_to(REPO_ROOT).as_posix()}: primary freestyle nav "
+            "label must be 随心."
+        )
+
+
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
         "english": {"sessions"},
@@ -1606,7 +1665,7 @@ def check_prompt_catalog_boundaries(errors: list[str]) -> None:
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_content = nav_path.read_text(encoding="utf-8")
-    expected_labels = ("今日", "知识", "英语", "创建", "洞察")
+    expected_labels = ("随心", "知识", "英语", "创建", "洞察")
     labels = re.findall(r"label: '([^']+)'", nav_content)
     if labels != list(expected_labels):
         errors.append(
@@ -1837,9 +1896,53 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         if "ReviewSchedule" in function_source:
             errors.append(f"{function_name} must not read or write legacy ReviewSchedule")
 
+    wave_service_path = API_SRC / "modules/reviews/application/wave_service.py"
+    wave_session_path = API_SRC / "modules/reviews/application/wave_session_service.py"
+    if wave_service_path.exists() and wave_session_path.exists():
+        wave_service_source = wave_service_path.read_text(encoding="utf-8")
+        wave_session_source = wave_session_path.read_text(encoding="utf-8")
+        for function_name in (
+            "pause_formal_wave",
+            "resume_formal_wave",
+            "complete_formal_wave",
+            "start_reinforcement_wave_session",
+        ):
+            marker = f"def {function_name}"
+            if marker in wave_service_source or marker not in wave_session_source:
+                errors.append(
+                    f"review wave execution lifecycle must define {function_name} in "
+                    "wave_session_service.py, not wave_service.py"
+                )
+
     warmup_path = API_SRC / "app/startup_warmup.py"
     if warmup_path.exists() and "review_schedules" in warmup_path.read_text(encoding="utf-8"):
         errors.append("startup warmup must use review_node_states, not legacy review_schedules")
+
+
+def check_english_reading_gap_loop(errors: list[str]) -> None:
+    page_path = WEB_SRC / "features/english-reading/EnglishReadingPage.tsx"
+    if not page_path.exists():
+        errors.append("English Reading gap-loop page is missing")
+        return
+    source = page_path.read_text(encoding="utf-8")
+    retired_markers = (
+        "ReadingVersion",
+        "completeEnglishReadingMaterialApi",
+        "createEnglishReadingVocabularyNoteApi",
+        "EnglishReadingReadingPanels",
+        "ReadingDifficultyDelta",
+    )
+    for marker in retired_markers:
+        if marker in source:
+            errors.append(f"English Reading gap loop must not restore retired flow marker: {marker}")
+    required_markers = (
+        "createEnglishReadingTargetApi",
+        "explainEnglishReadingTargetApi",
+        "generateTargetedEnglishReadingArticleApi",
+    )
+    for marker in required_markers:
+        if marker not in source:
+            errors.append(f"English Reading gap loop must compose {marker}")
 
 
 def main() -> int:
@@ -1872,11 +1975,13 @@ def main() -> int:
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
     check_fsrs_review_frontend(errors)
+    check_english_reading_gap_loop(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)
     check_dashboard_public_facades(errors)
     check_palace_quiz_palace_boundary(errors)
     check_consumer_context_public_facades(errors)
+    check_freestyle_queue_facade_surface(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)

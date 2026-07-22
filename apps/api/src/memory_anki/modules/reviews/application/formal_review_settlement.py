@@ -17,8 +17,10 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     _json,
     _scope,
     ensure_formal_review_session_active,
-    expand_formal_review_frozen_scope,
     get_next_due_palace_id,
+)
+from memory_anki.modules.reviews.application.node_memory_batch_rating import (
+    rate_nodes_batch_single,
 )
 from memory_anki.modules.reviews.application.node_memory_service import (
     RATING_LABELS,
@@ -26,7 +28,6 @@ from memory_anki.modules.reviews.application.node_memory_service import (
     finalize_formal_review_schedules,
     get_palace_memory_projection,
     list_due_nodes,
-    rate_nodes,
 )
 from memory_anki.modules.reviews.application.review_queue_extras import (
     next_review_scope_from_projection,
@@ -111,9 +112,7 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None:
         raise ValueError("palace not found")
-    # Absorb cards that became due after freeze (delayed re-entry / long sessions)
-    # so settlement does not split them into a separate out-of-scope bulk rate.
-    expand_formal_review_frozen_scope(session, row)
+    # Freeze scope is fixed at wave start; no auto-expand on settlement.
     projection = get_palace_memory_projection(session, palace.id)
     projection_uids = {item["node_uid"] for item in projection["nodes"]}
     scope = set(_scope(row)) & projection_uids
@@ -184,10 +183,13 @@ def rate_unrated_formal_review_nodes(
     if row.palace_id is None:
         raise ValueError("palace not found")
 
-    summary = formal_review_completion_summary(session, row)
-    unrated_uids = [str(uid) for uid in (summary.get("unrated_node_uids") or []) if uid]
-    already_rated_count = int(summary.get("rated_node_count") or 0)
+    # Cheap unrated discovery: session events + frozen scope (no full FSRS rollup).
+    scope = set(_scope(row))
+    current = _effective_ratings(session, row, scope) if scope else {}
+    unrated_uids = sorted(scope - set(current))
+    already_rated_count = len(current)
     if not unrated_uids:
+        summary = formal_review_completion_summary(session, row)
         return {
             "affected_node_count": 0,
             "affected_node_uids": [],
@@ -196,38 +198,29 @@ def rate_unrated_formal_review_nodes(
             "summary": summary,
         }
 
-    affected: list[str] = []
-    operation_ids: list[str] = []
-    scope = set(_scope(row))
-    for index, node_uid in enumerate(unrated_uids):
-        # Re-check after each write so concurrent direct ratings are not overwritten.
-        current = _effective_ratings(session, row, scope)
-        if node_uid in current:
-            continue
-        # Stable per-node ids keep retries idempotent without clobbering siblings.
-        node_operation_id = f"{batch_id}:{index}"[:64]
-        rate_nodes(
-            session,
-            palace_id=int(row.palace_id),
-            node_uid=node_uid,
-            rating=rating,
-            study_session_id=str(row.id),
-            operation_id=node_operation_id,
-            rating_scope="single",
-            conflict_policy="skip_direct",
-            source_scene="formal_review",
-            recall_round="first",
-            rating_source="manual",
-        )
-        affected.append(node_uid)
-        operation_ids.append(node_operation_id)
-
+    # Stable per-node ids keep retries idempotent without clobbering siblings.
+    node_ops = [
+        (node_uid, f"{batch_id}:{index}"[:64])
+        for index, node_uid in enumerate(unrated_uids)
+    ]
+    batch = rate_nodes_batch_single(
+        session,
+        palace_id=int(row.palace_id),
+        node_operation_ids=node_ops,
+        rating=rating,
+        study_session_id=str(row.id),
+        conflict_policy="skip_direct",
+        source_scene="formal_review",
+        recall_round="first",
+        rating_source="manual",
+        commit=True,
+    )
     refreshed = formal_review_completion_summary(session, row)
     return {
-        "affected_node_count": len(affected),
-        "affected_node_uids": affected,
+        "affected_node_count": int(batch["affected_node_count"]),
+        "affected_node_uids": list(batch["affected_node_uids"]),
         "skipped_rated_node_count": already_rated_count,
-        "operation_ids": operation_ids,
+        "operation_ids": list(batch["operation_ids"]),
         "summary": refreshed,
     }
 
@@ -283,43 +276,31 @@ def rate_out_of_scope_due_formal_review_nodes(
     row.summary_json = json.dumps(summary_json, ensure_ascii=False)
     session.flush()
 
-    affected: list[str] = []
-    operation_ids: list[str] = []
-    try:
-        for index, node_uid in enumerate(target_uids):
-            node_operation_id = f"{batch_id}:oos:{index}"[:64]
-            try:
-                rate_nodes(
-                    session,
-                    palace_id=int(row.palace_id),
-                    node_uid=node_uid,
-                    rating=rating,
-                    study_session_id=str(row.id),
-                    operation_id=node_operation_id,
-                    rating_scope="single",
-                    conflict_policy="skip_direct",
-                    source_scene="formal_review",
-                    recall_round="first",
-                    rating_source="manual",
-                )
-            except ValueError as exc:
-                # Already rated / not found: skip that node and continue siblings.
-                if "没有可评分节点" in str(exc) or "not found" in str(exc).lower():
-                    continue
-                raise
-            affected.append(node_uid)
-            operation_ids.append(node_operation_id)
-    finally:
-        # Keep expanded scope so completion counts include the extra ratings.
-        # Do not shrink back — otherwise settlement would report unrated ghosts.
-        pass
+    node_ops = [
+        (node_uid, f"{batch_id}:oos:{index}"[:64])
+        for index, node_uid in enumerate(target_uids)
+    ]
+    batch = rate_nodes_batch_single(
+        session,
+        palace_id=int(row.palace_id),
+        node_operation_ids=node_ops,
+        rating=rating,
+        study_session_id=str(row.id),
+        conflict_policy="skip_direct",
+        source_scene="formal_review",
+        recall_round="first",
+        rating_source="manual",
+        commit=True,
+    )
+    # Keep expanded scope so completion counts include the extra ratings.
+    # Do not shrink back — otherwise settlement would report unrated ghosts.
 
     refreshed = formal_review_completion_summary(session, row)
     return {
-        "affected_node_count": len(affected),
-        "affected_node_uids": affected,
+        "affected_node_count": int(batch["affected_node_count"]),
+        "affected_node_uids": list(batch["affected_node_uids"]),
         "skipped_rated_node_count": int(summary.get("rated_node_count") or 0),
-        "operation_ids": operation_ids,
+        "operation_ids": list(batch["operation_ids"]),
         "summary": refreshed,
     }
 
@@ -341,17 +322,33 @@ def complete_formal_review(
     if palace is None:
         raise ValueError("palace not found")
     summary = formal_review_completion_summary(session, row)
+    # Palace-wave rule: only complete when every frozen item was rated (direct or inherited).
+    # Unrated items must use pause — never implicit advance.
+    if int(summary.get("unrated_due_node_count") or 0) > 0 and completion_mode not in {
+        "force_complete_unrated",  # reserved; not exposed as default UI
+    }:
+        raise ValueError(
+            "wave has unrated frozen nodes; pause and save instead of complete"
+        )
     ratings = summary.pop("ratings")
     score = round(sum(ratings.values()) / len(ratings)) if ratings else 0
     ended_at = utc_now_naive()
-    # Scheduling clock starts at completion, not at each mid-session click.
-    # 忘记/困难 caps (10/30 min) would otherwise expire during a long session.
-    finalize_formal_review_schedules(
-        session,
-        study_session_id=str(row.id),
-        palace_id=int(palace.id),
-        finalized_at=ended_at,
-    )
+    wave_id = existing.get("wave_id")
+    if not wave_id:
+        finalize_formal_review_schedules(
+            session,
+            study_session_id=str(row.id),
+            palace_id=int(palace.id),
+            finalized_at=ended_at,
+        )
+    if wave_id:
+        from memory_anki.modules.reviews.application.wave_service import complete_formal_wave
+
+        try:
+            complete_formal_wave(session, str(wave_id), allow_incomplete=False)
+        except ValueError:
+            # Race: counts may have drifted; surface as incomplete.
+            raise
     # Receipt due/next fields must reflect post-finalize schedules.
     projection = get_palace_memory_projection(session, palace.id)
     summary["remaining_due_node_count"] = projection["due_node_count"]

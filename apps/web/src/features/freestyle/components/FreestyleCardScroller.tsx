@@ -12,7 +12,7 @@ import {
 import { FreestyleQuizCardView } from '@/features/freestyle/components/FreestyleQuizCardView'
 import { FreestyleRoundSummaryCard } from '@/features/freestyle/components/FreestyleRoundSummaryCard'
 import type { FreestyleConfig } from '@/features/freestyle/model/freestyle'
-import { isQuizCard } from '@/features/freestyle/model/freestyle-cards'
+import { isActionCard, isQuizCard } from '@/features/freestyle/model/freestyle-cards'
 import type {
   FreestyleMode,
   TodayTrainingConfig,
@@ -125,9 +125,9 @@ export function FreestyleCardScroller({
                   onShortAnswerSubmit={() => onShortAnswerSubmit(card)}
                   onRequestShortAnswerFeedback={() => onRequestShortAnswerFeedback(card)}
                 />
-              ) : (
+              ) : isActionCard(card) ? (
                 <FreestyleActionCardView card={card} onOpenPalace={onOpenPalace} />
-              )}
+              ) : null}
             </section>
           ))}
           {mode === 'today' && canCompleteRound ? (

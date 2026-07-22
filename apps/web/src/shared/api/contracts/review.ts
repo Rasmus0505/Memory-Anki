@@ -35,13 +35,47 @@ export interface ReviewMemorySummary {
   /** Mastery after the previous completed formal review (for delta on completion UI). */
   previous_mastery_progress?: number | null
   previous_mastery_percent?: number | null
+  /** mean retrievability — display as 预计保持率 */
   memory_health: number
   memory_health_percent: number
   due_node_count: number
   overdue_node_count: number
+  reinforcement_due_count?: number
+  uninitialized_node_count?: number
+  content_changed_node_count?: number
   /** Most recent formal review end time (previous session in dialog; this session on receipt). */
   last_review_at?: string | null
   next_review_at: string | null
+}
+
+export interface ReviewWaveSummary {
+  id: string
+  palace_id: number
+  wave_type: 'formal_long_term' | 'same_day_reinforcement' | string
+  status: 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled' | string
+  local_date?: string | null
+  available_at?: string | null
+  item_count: number
+  rated_count: number
+  pending_count?: number
+  active_session_id?: string | null
+  palace_title?: string
+}
+
+export interface ReviewCalibrationDiagnose {
+  palace_id: number
+  palace_revision: string
+  wave_count: number
+  formal_wave_dates: string[]
+  date_spread_days: number
+  due_node_count: number
+  overdue_node_count: number
+  reinforcement_due_count: number
+  uninitialized_node_count: number
+  content_changed_node_count: number
+  direct_evidence_count: number
+  inherited_evidence_count: number
+  waves: ReviewWaveSummary[]
 }
 export interface ReviewBranchSummary {
   branch_uid: string
@@ -67,6 +101,17 @@ export interface ReviewScheduleSummary {
   due_node_count: number
   overdue_node_count: number
   frozen_due_node_uids?: string[]
+  wave_id?: string | null
+  wave_progress?: {
+    item_count: number
+    rated_count: number
+    pending_count: number
+    direct_rated_count?: number
+    inherited_rated_count?: number
+    complete?: boolean
+  } | null
+  mergeable_node_uids?: string[]
+  mergeable_count?: number
   memory_summary?: ReviewMemorySummary
   schedule_count: number
   overdue_schedule_count: number
@@ -90,6 +135,7 @@ export interface ReviewQueueResponse {
   chapter: ReviewQueueChapter | null
   reviews: ReviewScheduleSummary[]
   later_today_reviews: ReviewScheduleSummary[]
+  reinforcement_waves?: ReviewWaveSummary[]
 }
 export interface ReviewCompletionSummary extends ReviewMemorySummary {
   scope_node_count: number

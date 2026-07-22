@@ -7,6 +7,8 @@ import type {
   FreestyleFeedResponse,
   FreestyleHistoryMode,
   FreestyleHistorySummary,
+  FreestyleQueueBuildRequest,
+  FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
   WrongQuestionsResponse,
@@ -26,6 +28,13 @@ export function getFreestyleFeedApi(params: {
     searchParams.set('content_types', params.contentTypes.join(','))
   }
   return request<FreestyleFeedResponse>(`/freestyle/feed?${searchParams.toString()}`)
+}
+
+export function buildFreestyleQueueApi(payload: FreestyleQueueBuildRequest) {
+  return request<FreestyleQueueBuildResponse>('/freestyle/queue/build', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 function historySearchParams(params?: {

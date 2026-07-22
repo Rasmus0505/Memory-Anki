@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from memory_anki.core.time import utc_now_naive
@@ -244,3 +254,96 @@ class EnglishReadingDictionaryCache(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
+
+
+class EnglishReadingArticle(Base):
+    __tablename__ = "english_reading_articles"
+    __table_args__ = (
+        Index("ix_english_reading_articles_parent", "parent_article_id", "created_at"),
+        Index("ix_english_reading_articles_updated", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="source")
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="paste")
+    original_filename: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    original_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parent_article_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("english_reading_articles.id", ondelete="CASCADE"), nullable=True)
+    generation_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+
+
+class EnglishReadingTarget(Base):
+    __tablename__ = "english_reading_targets"
+    __table_args__ = (
+        Index("ix_english_reading_targets_article", "article_id", "start_offset"),
+        UniqueConstraint("article_id", "target_type", "start_offset", "end_offset", name="uq_english_reading_target_anchor"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(Integer, ForeignKey("english_reading_articles.id", ondelete="CASCADE"), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    quote_checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    normalized_value: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class EnglishReadingExplanation(Base):
+    __tablename__ = "english_reading_explanations"
+    __table_args__ = (
+        Index("ix_english_reading_explanations_target", "target_id", "created_at"),
+        UniqueConstraint("operation_id", name="uq_english_reading_explanation_operation"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    target_id: Mapped[int] = mapped_column(Integer, ForeignKey("english_reading_targets.id", ondelete="CASCADE"), nullable=False)
+    operation_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    cefr: Mapped[str] = mapped_column(String(8), nullable=False, default="B1")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    ai_runtime_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class EnglishReadingGenerationRun(Base):
+    __tablename__ = "english_reading_generation_runs"
+    __table_args__ = (
+        Index("ix_english_reading_generation_owner", "owner_article_id", "created_at"),
+        UniqueConstraint("operation_id", name="uq_english_reading_generation_operation"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_article_id: Mapped[int] = mapped_column(Integer, ForeignKey("english_reading_articles.id", ondelete="CASCADE"), nullable=False)
+    result_article_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("english_reading_articles.id", ondelete="SET NULL"), nullable=True)
+    operation_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    target_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    coverage_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ai_runtime_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class EnglishReadingArticleTargetLink(Base):
+    __tablename__ = "english_reading_article_target_links"
+    __table_args__ = (
+        UniqueConstraint("article_id", "target_id", name="uq_english_reading_article_target_link"),
+        Index("ix_english_reading_article_target_links_target", "target_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(Integer, ForeignKey("english_reading_articles.id", ondelete="CASCADE"), nullable=False)
+    target_id: Mapped[int] = mapped_column(Integer, ForeignKey("english_reading_targets.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)

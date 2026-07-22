@@ -3,6 +3,7 @@ import type { FreestyleMode } from '@/features/freestyle/model/today-training'
 import type {
   FreestyleActionCard,
   FreestyleCard,
+  FreestyleMindMapBranchCard,
   FreestylePalaceContext,
   FreestyleQuizCard,
   PalaceGroupedItem,
@@ -15,6 +16,12 @@ export function isQuizCard(card: FreestyleCard | null | undefined): card is Free
 
 export function isActionCard(card: FreestyleCard | null | undefined): card is FreestyleActionCard {
   return card?.type === 'action'
+}
+
+export function isMindMapBranchCard(
+  card: FreestyleCard | null | undefined,
+): card is FreestyleMindMapBranchCard {
+  return card?.type === 'mindmap_branch'
 }
 
 export function stringListsEqual(left: string[], right: string[]) {

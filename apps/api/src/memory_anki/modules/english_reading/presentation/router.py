@@ -11,6 +11,19 @@ from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.english_reading.application.ai_dependencies import (
     EnglishReadingAiDependencies,
 )
+from memory_anki.modules.english_reading.application.article_service import (
+    create_article,
+    create_target,
+    delete_article,
+    delete_explanation,
+    delete_target,
+    explain_target,
+    generate_article,
+    get_article,
+    list_articles,
+    rename_article,
+    update_target_priority,
+)
 from memory_anki.modules.english_reading.application.service import (
     complete_material,
     create_material,
@@ -90,6 +103,35 @@ class ReadingVocabularyReviewRequest(BaseModel):
     rating: int | str | None = None
 
 
+class ReadingArticleUpdateRequest(BaseModel):
+    title: str
+
+
+class ReadingTargetCreateRequest(BaseModel):
+    type: str
+    startOffset: int
+    endOffset: int
+    quote: str
+    priority: int = 1
+
+
+class ReadingTargetPriorityRequest(BaseModel):
+    priority: int
+
+
+class ReadingExplainRequest(BaseModel):
+    operationId: str
+    cefr: str = "B1"
+    ai_options: dict | None = None
+
+
+class ReadingArticleGenerationRequest(BaseModel):
+    operationId: str
+    targetIds: list[int]
+    config: dict
+    ai_options: dict | None = None
+
+
 @router.get("/english-reading/profile")
 def api_get_english_reading_profile(session: Session = Depends(session_dep)):
     return get_profile(session)
@@ -107,6 +149,149 @@ def api_update_english_reading_profile(
 ):
     try:
         return update_profile(session, declared_cefr=data.declaredCefr)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/english-reading/articles")
+def api_list_english_reading_articles(session: Session = Depends(session_dep)):
+    return list_articles(session)
+
+
+@router.post("/english-reading/articles")
+async def api_create_english_reading_article(
+    text: str = Form(""),
+    reading_file: UploadFile | None = File(None),
+    session: Session = Depends(session_dep),
+):
+    file_bytes = await reading_file.read() if reading_file is not None else None
+    original_filename = str(reading_file.filename or "") if reading_file is not None else ""
+    try:
+        return create_article(
+            session,
+            pasted_text=text,
+            file_bytes=file_bytes,
+            original_filename=original_filename,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if reading_file is not None:
+            await reading_file.close()
+
+
+@router.get("/english-reading/articles/{article_id}")
+def api_get_english_reading_article(article_id: int, session: Session = Depends(session_dep)):
+    try:
+        return get_article(session, article_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/english-reading/articles/{article_id}")
+def api_rename_english_reading_article(
+    article_id: int,
+    data: ReadingArticleUpdateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return rename_article(session, article_id=article_id, title=data.title)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/english-reading/articles/{article_id}")
+def api_delete_english_reading_article(article_id: int, session: Session = Depends(session_dep)):
+    try:
+        return delete_article(session, article_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/articles/{article_id}/targets")
+def api_create_english_reading_target(
+    article_id: int,
+    data: ReadingTargetCreateRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return create_target(
+            session,
+            article_id=article_id,
+            target_type=data.type,
+            start_offset=data.startOffset,
+            end_offset=data.endOffset,
+            quote=data.quote,
+            priority=data.priority,
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/english-reading/targets/{target_id}")
+def api_update_english_reading_target(
+    target_id: int,
+    data: ReadingTargetPriorityRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return update_target_priority(session, target_id=target_id, priority=data.priority)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/english-reading/targets/{target_id}")
+def api_delete_english_reading_target(target_id: int, session: Session = Depends(session_dep)):
+    try:
+        return delete_target(session, target_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/targets/{target_id}/explanations")
+def api_explain_english_reading_target(
+    target_id: int,
+    data: ReadingExplainRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return explain_target(
+            session,
+            target_id=target_id,
+            operation_id=data.operationId,
+            cefr=data.cefr,
+            ai_dependencies=_ai_dependencies(session),
+            ai_options=_ai_dependencies(session).runtime.normalize_options(data.ai_options),
+        )
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/english-reading/explanations/{explanation_id}")
+def api_delete_english_reading_explanation(explanation_id: int, session: Session = Depends(session_dep)):
+    try:
+        return delete_explanation(session, explanation_id)
+    except EnglishReadingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/english-reading/articles/{article_id}/generate")
+def api_generate_english_reading_article(
+    article_id: int,
+    data: ReadingArticleGenerationRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        dependencies = _ai_dependencies(session)
+        return generate_article(
+            session,
+            owner_article_id=article_id,
+            operation_id=data.operationId,
+            target_ids=data.targetIds,
+            config=data.config,
+            ai_dependencies=dependencies,
+            ai_options=dependencies.runtime.normalize_options(data.ai_options),
+        )
     except EnglishReadingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

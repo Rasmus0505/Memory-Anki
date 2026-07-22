@@ -91,7 +91,7 @@ describe('GlobalCommandPalette', () => {
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
-    for (const label of ['今日', '知识', '创建', '洞察']) {
+    for (const label of ['随心', '知识', '创建', '洞察']) {
       expect(screen.getByText(label)).toBeTruthy()
     }
 

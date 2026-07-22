@@ -71,7 +71,7 @@ def test_all_fsrs_ratings_persist(db_session):
 
 
 def test_again_and_hard_schedule_within_short_window_not_days(db_session):
-    """忘记 ≤10min, 困难 ≤30min; multi-day only after 记得/轻松 on mature cards."""
+    """忘记/困难 → reinforcement wave (≤60m defaults); multi-day only after 记得/轻松."""
     from datetime import UTC, datetime, timedelta
 
     palace = _palace(db_session)
@@ -105,7 +105,8 @@ def test_again_and_hard_schedule_within_short_window_not_days(db_session):
     )
     hard = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     hard_delta = hard.due_at - (hard.last_review_at or hard.due_at)
-    assert hard_delta <= timedelta(minutes=30, seconds=5)
+    assert hard.schedule_source == "reinforcement"
+    assert hard_delta <= timedelta(minutes=60, seconds=5)
     assert hard_delta < timedelta(days=1)
 
     rate_nodes(
@@ -119,7 +120,8 @@ def test_again_and_hard_schedule_within_short_window_not_days(db_session):
     )
     again = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     again_delta = again.due_at - (again.last_review_at or again.due_at)
-    assert again_delta <= timedelta(minutes=10, seconds=5)
+    assert again.schedule_source == "reinforcement"
+    assert again_delta <= timedelta(minutes=20, seconds=5)
 
 
 def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
@@ -141,7 +143,8 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
         rating_scope="single",
     )
     first = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
-    first_delta = first.due_at - (first.last_review_at or first.due_at)
+    first_raw = first.raw_due_at or first.due_at
+    first_delta = first_raw - (first.last_review_at or first_raw)
     assert first_delta >= timedelta(days=1) - timedelta(seconds=5)
     assert int(first.state) == int(State.Review)
 
@@ -166,7 +169,8 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
         rating_scope="single",
     )
     recovered = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
-    recovered_delta = recovered.due_at - (recovered.last_review_at or recovered.due_at)
+    recovered_raw = recovered.raw_due_at or recovered.due_at
+    recovered_delta = recovered_raw - (recovered.last_review_at or recovered_raw)
     assert recovered_delta >= timedelta(days=1) - timedelta(seconds=5)
     assert int(recovered.state) == int(State.Review)
 
@@ -180,7 +184,8 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
         rating_scope="single",
     )
     easy = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a").one()
-    easy_delta = easy.due_at - (easy.last_review_at or easy.due_at)
+    easy_raw = easy.raw_due_at or easy.due_at
+    easy_delta = easy_raw - (easy.last_review_at or easy_raw)
     assert easy_delta >= timedelta(days=3) - timedelta(seconds=5)
 
 
@@ -200,10 +205,11 @@ def test_projection_excludes_root_and_reports_due_nodes(db_session):
     palace = _palace(db_session)
     projection = get_palace_memory_projection(db_session, palace.id)
     assert projection["node_count"] == 3
-    assert projection["due_node_count"] == 3
+    # Wave model: nodes without memory are uninitialized, not formal-due.
+    assert projection["due_node_count"] == 0
+    assert projection.get("uninitialized_node_count", 0) == 3
     assert projection["mastery_percent"] == 0
-    assert projection["review_entry_mode"] == "palace"
-    assert projection["review_entry_label"] == "开始复习"
+    assert projection["review_entry_mode"] == "none"
     assert isinstance(projection["review_branch_summaries"], list)
     assert len(projection["review_branch_summaries"]) >= 2
     assert all("branch_uid" in row for row in projection["review_branch_summaries"])

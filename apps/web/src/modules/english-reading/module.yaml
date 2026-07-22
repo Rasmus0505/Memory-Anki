@@ -1,0 +1,16 @@
+{
+  "name": "english-reading",
+  "owns": ["gap selection", "target queue rules", "generation defaults"],
+  "forbids": ["route ownership", "AI transport", "database access"],
+  "publicEntry": "src/modules/english-reading/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "sentence targets use stable source offsets",
+    "a generation queue contains at most twelve targets",
+    "manual CEFR is the generation default"
+  ],
+  "requiredTests": ["gapLoop.test.ts"]
+}

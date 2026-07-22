@@ -287,6 +287,19 @@
           "freestyleTrainingMachine.test.ts"
         ]
       },
+      "freestyle.buildImmersiveQueue": {
+        "owner": "freestyle",
+        "facades": [
+          "palaces.api",
+          "reviews.api",
+          "palace_quiz.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/queue/build",
+        "tests": [
+          "test_freestyle_branch_units.py",
+          "feedConfig.test.ts"
+        ]
+      },
       "mindmap.enterFullscreen": {
         "owner": "mindmap",
         "workflow": "MindMapPresentationMachine",

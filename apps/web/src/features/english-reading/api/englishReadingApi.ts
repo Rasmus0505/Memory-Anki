@@ -14,7 +14,92 @@ import type {
   ReadingVocabularyNotesResponse,
   ReadingVocabularyReviewResult,
   ReadingWorkspaceResponse,
+  ReadingArticle,
+  ReadingArticlesResponse,
+  ReadingTarget,
+  ReadingExplanation,
+  ReadingArticleGenerationConfig,
 } from '@/shared/api/contracts'
+
+export function listEnglishReadingArticlesApi() {
+  return request<ReadingArticlesResponse>('/english-reading/articles')
+}
+
+export function getEnglishReadingArticleApi(articleId: number) {
+  return request<ReadingArticle>(`/english-reading/articles/${articleId}`)
+}
+
+export function createEnglishReadingArticleApi(input: { text?: string; file?: File | null }) {
+  const formData = new FormData()
+  if (input.text?.trim()) formData.append('text', input.text)
+  if (input.file) formData.append('reading_file', input.file)
+  return uploadWithFormData<ReadingArticle>('/english-reading/articles', formData, {
+    resourceKey: 'english-reading:article:create',
+    description: '导入英语阅读文章',
+  })
+}
+
+export function renameEnglishReadingArticleApi(articleId: number, title: string) {
+  return request<ReadingArticle>(`/english-reading/articles/${articleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function deleteEnglishReadingArticleApi(articleId: number) {
+  return request<{ deletedArticleIds: number[] }>(`/english-reading/articles/${articleId}`, { method: 'DELETE' })
+}
+
+export function createEnglishReadingTargetApi(articleId: number, payload: {
+  type: 'word' | 'sentence'
+  startOffset: number
+  endOffset: number
+  quote: string
+  priority?: number
+}) {
+  return request<ReadingTarget>(`/english-reading/articles/${articleId}/targets`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateEnglishReadingTargetApi(targetId: number, priority: number) {
+  return request<ReadingTarget>(`/english-reading/targets/${targetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ priority }),
+  })
+}
+
+export function deleteEnglishReadingTargetApi(targetId: number) {
+  return request<{ deletedTargetId: number }>(`/english-reading/targets/${targetId}`, { method: 'DELETE' })
+}
+
+export function explainEnglishReadingTargetApi(targetId: number, payload: {
+  operationId: string
+  cefr: string
+  ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
+}) {
+  return request<ReadingExplanation>(`/english-reading/targets/${targetId}/explanations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteEnglishReadingExplanationApi(explanationId: number) {
+  return request<{ deletedExplanationId: number }>(`/english-reading/explanations/${explanationId}`, { method: 'DELETE' })
+}
+
+export function generateTargetedEnglishReadingArticleApi(articleId: number, payload: {
+  operationId: string
+  targetIds: number[]
+  config: ReadingArticleGenerationConfig
+  ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
+}) {
+  return request<{ article: ReadingArticle; run: Record<string, unknown> }>(`/english-reading/articles/${articleId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
 
 export function getEnglishReadingProfileApi() {
   return request<ReadingProfile>('/english-reading/profile')

@@ -84,6 +84,9 @@ _DEBUG_FALLBACK.json
 # ===== Local study source PDFs (synced via Baidu disk, not part of app code) =====
 /原版/
 
+# ===== Git worktrees (local isolated workspaces) =====
+/.worktrees/
+
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul

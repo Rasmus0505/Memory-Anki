@@ -14,6 +14,58 @@ export type FreestyleContentType =
   | 'english'
   | 'english_reading'
 
+export type FreestyleDuePolicy =
+  | 'due_first_then_expand'
+  | 'due_only'
+  | 'all_content_due_weighted'
+
+export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces'
+
+export type FreestyleWithinPalaceOrder = 'tree_order' | 'deterministic_shuffle'
+
+export interface FreestyleFeedConfig {
+  content: {
+    mindmap_branch: boolean
+    quiz_question: boolean
+  }
+  weights: {
+    mindmap_branch: number
+    quiz_question: number
+  }
+  palace_order: FreestylePalaceOrder
+  within_palace_order: FreestyleWithinPalaceOrder
+  due_policy: FreestyleDuePolicy
+  node_limit: number
+  queue_length: number
+  specific_palace_ids: number[]
+  question_type: FreestyleQuestionTypeFilter
+  weak_quiz_priority: boolean
+  seed: number
+}
+
+export interface FreestyleContextPathItem {
+  uid: string
+  text: string
+}
+
+export interface FreestyleMindMapBranchCard {
+  id: string
+  type: 'mindmap_branch'
+  content_type: 'mindmap_branch'
+  palace_id: number
+  palace_title?: string
+  branch_uid: string
+  context_path: FreestyleContextPathItem[]
+  ratable_node_uids: string[]
+  due_node_uids: string[]
+  node_count: number
+  over_limit_delta: number
+  due_node_count?: number
+  selection_reason?: string
+  phase?: string
+  palace_context?: FreestylePalaceContext | null
+}
+
 export type FreestyleActionKind =
   | 'review'
   | 'practice'
@@ -86,12 +138,31 @@ export interface FreestyleActionCard {
   material?: Record<string, unknown>
 }
 
-export type FreestyleCard = FreestyleQuizCard | FreestyleActionCard
+export type FreestyleCard = FreestyleQuizCard | FreestyleActionCard | FreestyleMindMapBranchCard
 
 export interface FreestyleFeedResponse {
   cards: FreestyleCard[]
-  counts: Record<FreestyleContentType, number>
+  counts: Record<string, number>
   generated_at: string
+}
+
+export interface FreestyleQueueBuildRequest {
+  operation_id: string
+  config: FreestyleFeedConfig
+  completed_ids?: string[]
+  hidden_ids?: string[]
+}
+
+export interface FreestyleQueueBuildResponse {
+  operation_id: string
+  config: FreestyleFeedConfig
+  cards: FreestyleCard[]
+  phase_stats: Record<string, number | string>
+  counts: {
+    mindmap_branch: number
+    quiz_question: number
+    total: number
+  }
 }
 
 export type FreestyleQuestionTypeFilter = PalaceQuizQuestionType | 'all'

@@ -49,4 +49,16 @@ export interface MindMapReviewFlowProps {
   onFullscreenChange?: (active: boolean) => void;
   ratingMode?: boolean;
   onToggleRatingMode?: () => void;
+  /**
+   * Extra overflow-menu actions for the flip-card toolbar (e.g. freestyle
+   * “查看完整导图”). Merged before built-in 翻卡快捷键.
+   */
+  extraMoreActions?: Array<{
+    label: string
+    onClick: () => void
+    disabled?: boolean
+    opensOverlay?: boolean
+    destructive?: boolean
+    separatorBefore?: boolean
+  }>
 }

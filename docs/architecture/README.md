@@ -85,6 +85,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
 - Palace Quiz boundary: `docs/architecture/palace-quiz-boundary.md`
 - Consumer context boundaries: `docs/architecture/consumer-contexts.md`
+- Freestyle immersive feed: `docs/architecture/freestyle-immersive-feed.md`
 - Backup context boundary: `docs/architecture/backup-boundary.md`
 - Quiz frontend boundary: `docs/architecture/quiz-frontend-boundary.md`
 - Knowledge context boundary: `docs/architecture/knowledge-boundary.md`
@@ -107,7 +108,7 @@ Frontend AI scenario/model selection and per-run overrides are entity-owned unde
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion.
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/freestyle`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed).
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
@@ -118,4 +119,4 @@ The concentrated architecture replacement has started with the two failure-prone
 - Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
 
 - AI learning workbench and immutable run records: `docs/architecture/ai-learning-workbench.md`
-
+- English reading gap-driven input loop: `docs/architecture/english-reading-gap-loop.md`

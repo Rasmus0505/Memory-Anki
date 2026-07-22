@@ -274,6 +274,36 @@ def get_fsrs_queue_payload(
 
         stats = get_weekly_stats(session)
 
+    reinforcement_waves: list[dict[str, Any]] = []
+    if include_items:
+        from memory_anki.infrastructure.db._tables.reviews import ReviewWave
+        from memory_anki.modules.reviews.application.wave_queries import wave_payload
+
+        palace_by_id = {int(palace.id): palace for palace in palaces}
+        wave_rows = (
+            session.query(ReviewWave)
+            .filter(
+                ReviewWave.palace_id.in_(palace_ids),
+                ReviewWave.wave_type == "same_day_reinforcement",
+                ReviewWave.status.in_(["scheduled", "active", "paused"]),
+                ReviewWave.available_at.is_not(None),
+                ReviewWave.available_at <= utc_now_naive(),
+            )
+            .order_by(ReviewWave.available_at.asc())
+            .all()
+            if palace_ids
+            else []
+        )
+        for wave in wave_rows:
+            wave_palace = palace_by_id.get(int(wave.palace_id))
+            item = wave_payload(wave)
+            item["palace_title"] = (
+                wave_palace.manual_title or wave_palace.title or "未命名宫殿"
+                if wave_palace
+                else "未命名宫殿"
+            )
+            reinforcement_waves.append(item)
+
     return {
         "due_count": sum(item["due_node_count"] for item in due),
         "later_today_count": sum(item["due_node_count"] for item in later),
@@ -283,6 +313,7 @@ def get_fsrs_queue_payload(
         "chapter": chapter,
         "reviews": due if include_items else [],
         "later_today_reviews": later if include_items else [],
+        "reinforcement_waves": reinforcement_waves,
     }
 
 
@@ -347,57 +378,14 @@ def _has_frozen_scope(row: StudySession) -> bool:
 
 
 def expand_formal_review_frozen_scope(session: Session, row: StudySession) -> bool:
-    """Monotonically expand frozen due UIDs with the palace's current due wave.
+    """No-op under palace-wave model.
 
-    Product rule: delayed re-entry merges newly due cards into the same session
-    instead of treating them as out-of-scope with a separate bulk-rate path.
-    Scope never shrinks; already-rated UIDs stay for completion stats.
-
-    Uses whole-palace entry wave (due + near-due look-ahead), not a stale
-    node-mode branch clip. When a node-mode session gains multi-branch dues,
-    chrome upgrades to palace entry mode.
-
-    Returns True when summary_json was updated.
+    Freeze scope is fixed at wave start. Newly due nodes only join after explicit
+    user-confirmed merge (see wave_service.merge_new_due_into_wave). Kept as a
+    stub so older callers remain import-safe.
     """
-    if row.status not in ACTIVE_REVIEW_STATUSES:
-        return False
-    if row.palace_id is None:
-        return False
-    old = set(_scope(row))
-    if not old:
-        return False
-
-    palace_id = int(row.palace_id)
-    wave = set(
-        due_node_uids_for_entry(session, palace_id, entry_mode="palace")
-    )
-    expanded = sorted(old | wave)
-    summary = _json(row.summary_json)
-    changed = expanded != sorted(old)
-
-    # Upgrade node chrome when the palace now has a multi-branch due wave.
-    if summary.get("review_entry_mode") == "node":
-        projection = get_palace_memory_projection(session, palace_id)
-        current_mode = projection.get("review_entry_mode") or "palace"
-        if current_mode == "palace":
-            summary["review_entry_mode"] = "palace"
-            summary["primary_branch_uid"] = None
-            summary["primary_branch_title"] = None
-            summary["review_entry_label"] = (
-                projection.get("review_entry_label") or "开始复习"
-            )
-            changed = True
-
-    if not changed:
-        return False
-
-    summary["frozen_due_node_uids"] = expanded
-    if wave - old:
-        summary["scope_expanded_at"] = to_api_datetime(utc_now_naive())
-    row.summary_json = json.dumps(summary, ensure_ascii=False)
-    row.updated_at = utc_now_naive()
-    session.flush()
-    return True
+    del session, row
+    return False
 
 
 def _abandon_legacy_review_session(row: StudySession, *, reason: str) -> None:
@@ -462,12 +450,29 @@ def get_formal_review_scope(
     session: Session, study_session_id: str, palace_id: int, *, require_active: bool = True
 ) -> set[str]:
     row = session.get(StudySession, study_session_id)
-    if row is None or row.scene != "review" or row.palace_id != palace_id:
+    if (
+        row is None
+        or row.scene not in {"review", "reinforcement_review"}
+        or row.palace_id != palace_id
+    ):
         raise ValueError("formal review session not found")
     if require_active:
         ensure_formal_review_session_active(row)
-        expand_formal_review_frozen_scope(session, row)
     return set(_scope(row))
+
+
+def _normalize_scope_node_uids(raw: list[str] | None) -> list[str] | None:
+    if raw is None:
+        return None
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        uid = str(item or "").strip()
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        ordered.append(uid)
+    return ordered
 
 
 def start_or_resume_formal_review(
@@ -477,10 +482,20 @@ def start_or_resume_formal_review(
     chapter_id: int | None = None,
     entry_mode: str | None = None,
     branch_uid: str | None = None,
+    scope_node_uids: list[str] | None = None,
 ) -> StudySession:
+    from memory_anki.modules.reviews.application.wave_service import (
+        find_active_formal_wave,
+        frozen_node_uids,
+        start_formal_wave,
+    )
+
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None or palace.archived:
         raise ValueError("palace not found")
+    requested_scope = _normalize_scope_node_uids(scope_node_uids)
+    requested_scope_set = set(requested_scope) if requested_scope is not None else None
+
     active_rows = (
         session.query(StudySession)
         .filter(
@@ -494,12 +509,31 @@ def start_or_resume_formal_review(
     )
     for active in active_rows:
         if _has_frozen_scope(active):
+            # Explicit freestyle/unit scopes must not resume a mismatched palace session.
+            if requested_scope_set is not None and set(_scope(active)) != requested_scope_set:
+                continue
             keep = ensure_formal_review_session_active(active)
-            superseded = _supersede_duplicate_active_reviews(
-                session, palace_id=palace_id, keep_id=str(keep.id)
-            )
-            expanded = expand_formal_review_frozen_scope(session, keep)
-            if superseded or expanded:
+            # Full-palace starts still collapse duplicate actives; unit scopes do not.
+            if requested_scope_set is None:
+                superseded = _supersede_duplicate_active_reviews(
+                    session, palace_id=palace_id, keep_id=str(keep.id)
+                )
+            else:
+                superseded = []
+            # Attach/resume open formal wave without expanding freeze (palace path only).
+            summary = _json(keep.summary_json)
+            wave = None
+            if requested_scope_set is None:
+                wave = find_active_formal_wave(session, palace_id)
+                if wave is not None:
+                    wave.active_session_id = str(keep.id)
+                    if wave.status == "paused":
+                        wave.status = "active"
+                        wave.paused_at = None
+                    wave.updated_at = utc_now_naive()
+                    summary["wave_id"] = wave.id
+                    keep.summary_json = json.dumps(summary, ensure_ascii=False)
+            if superseded or wave is not None:
                 session.commit()
                 session.refresh(keep)
             return keep
@@ -509,6 +543,9 @@ def start_or_resume_formal_review(
         )
     projection = get_palace_memory_projection(session, palace_id)
     resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
+    if requested_scope is not None:
+        # Unit-scoped start (freestyle): force node mode and exact due intersection.
+        resolved_mode = "node"
     if resolved_mode == "none":
         raise ValueError("palace has no due FSRS nodes")
     frozen = due_node_uids_for_entry(
@@ -516,11 +553,38 @@ def start_or_resume_formal_review(
         palace_id,
         entry_mode=resolved_mode if resolved_mode in {"node", "palace"} else "palace",
         branch_uid=branch_uid or projection.get("primary_branch_uid"),
+        scope_node_uids=requested_scope,
     )
     if not frozen:
         raise ValueError("palace has no due FSRS nodes")
+    session_id = f"review-{uuid.uuid4()}"
+    wave_id: str | None = None
+    if requested_scope is None:
+        # Standard palace formal entry: freeze into the formal wave.
+        wave = start_formal_wave(
+            session,
+            palace_id,
+            node_uids=frozen,
+            session_id=session_id,
+        )
+        frozen = frozen_node_uids(session, wave.id) or frozen
+        wave_id = wave.id
+    else:
+        # Freestyle unit batch: session-only freeze so an active full-palace wave
+        # is never reused as this unit's scope.
+        existing_wave = find_active_formal_wave(session, palace_id)
+        if existing_wave is not None:
+            existing_uids = set(frozen_node_uids(session, existing_wave.id) or [])
+            if existing_uids == set(frozen):
+                existing_wave.active_session_id = session_id
+                existing_wave.updated_at = utc_now_naive()
+                if existing_wave.status == "paused":
+                    existing_wave.status = "active"
+                    existing_wave.paused_at = None
+                wave_id = existing_wave.id
+        # else: leave wave_id None; FSRS writes still apply via rate_nodes.
     row = StudySession(
-        id=f"review-{uuid.uuid4()}",
+        id=session_id,
         status="active",
         scene="review",
         target_type="palace",
@@ -533,6 +597,7 @@ def start_or_resume_formal_review(
         summary_json=json.dumps(
             {
                 "frozen_due_node_uids": frozen,
+                "wave_id": wave_id,
                 "chapter_id": chapter_id,
                 "review_entry_mode": resolved_mode,
                 "primary_branch_uid": (
@@ -544,6 +609,7 @@ def start_or_resume_formal_review(
                     projection.get("primary_branch_title") if resolved_mode == "node" else None
                 ),
                 "review_entry_label": projection.get("review_entry_label"),
+                "explicit_scope": bool(requested_scope is not None),
                 "editor_fingerprint": hashlib.sha256(
                     (palace.editor_doc or "").encode("utf-8")
                 ).hexdigest(),
@@ -553,9 +619,11 @@ def start_or_resume_formal_review(
     )
     session.add(row)
     session.flush()
-    _supersede_duplicate_active_reviews(
-        session, palace_id=palace_id, keep_id=str(row.id)
-    )
+    # Unit-scoped freestyle sessions must not supersede a full-palace formal session.
+    if requested_scope is None:
+        _supersede_duplicate_active_reviews(
+            session, palace_id=palace_id, keep_id=str(row.id)
+        )
     session.commit()
     session.refresh(row)
     return row
@@ -563,7 +631,11 @@ def start_or_resume_formal_review(
 
 def resolve_formal_review_session(session: Session, identifier: str) -> StudySession:
     row = session.get(StudySession, identifier)
-    if row is not None and row.scene == "review" and row.deleted_at is None:
+    if (
+        row is not None
+        and row.scene in {"review", "reinforcement_review"}
+        and row.deleted_at is None
+    ):
         if _has_frozen_scope(row):
             return row
         # Completed legacy rows keep their id so historical receipts/summaries still load
@@ -582,18 +654,30 @@ def resolve_formal_review_session(session: Session, identifier: str) -> StudySes
 
 
 def formal_review_session_payload(session: Session, row: StudySession) -> dict[str, Any]:
+    from memory_anki.modules.reviews.application.wave_service import (
+        resume_formal_wave,
+        wave_progress,
+    )
+
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None or palace.deleted_at is not None:
         raise ValueError("palace not found")
-    # Active sessions absorb newly due cards so flip targets match "open review now".
-    if row.status in ACTIVE_REVIEW_STATUSES and _has_frozen_scope(row):
-        if expand_formal_review_frozen_scope(session, row):
-            session.commit()
-            session.refresh(row)
     summary = _json(row.summary_json)
     frozen = _scope(row)
     projection = get_palace_memory_projection(session, palace.id)
     entry_mode = summary.get("review_entry_mode") or projection.get("review_entry_mode") or "palace"
+    wave_id = summary.get("wave_id")
+    mergeable: list[str] = []
+    progress: dict[str, Any] = {}
+    if wave_id and row.status in ACTIVE_REVIEW_STATUSES:
+        try:
+            resumed = resume_formal_wave(session, str(wave_id), session_id=str(row.id))
+            mergeable = list(resumed.get("mergeable_node_uids") or [])
+            progress = wave_progress(session, str(wave_id))
+            if mergeable or progress:
+                session.commit()
+        except ValueError:
+            pass
     return {
         "id": row.id,
         "session_id": row.id,
@@ -603,6 +687,10 @@ def formal_review_session_payload(session: Session, row: StudySession) -> dict[s
         "review_number": 0,
         "frozen_due_node_uids": frozen,
         "due_node_count": len(frozen),
+        "wave_id": wave_id,
+        "wave_progress": progress,
+        "mergeable_node_uids": mergeable,
+        "mergeable_count": len(mergeable),
         "chapter_id": summary.get("chapter_id"),
         "review_entry_mode": entry_mode,
         "review_entry_label": summary.get("review_entry_label")

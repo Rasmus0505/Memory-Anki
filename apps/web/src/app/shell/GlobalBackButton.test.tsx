@@ -24,15 +24,19 @@ describe('GlobalBackButton', () => {
     canGoForward = false
   })
 
-  it('always renders browser-like back and forward controls', () => {
-    render(<GlobalBackButton />)
-    expect(screen.getByRole('button', { name: '后退' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '前进' })).toBeTruthy()
+  it('always renders icon-only browser-like back and forward controls', () => {
+    render(<GlobalBackButton placement="sidebar" />)
+    const back = screen.getByRole('button', { name: '后退' })
+    const forward = screen.getByRole('button', { name: '前进' })
+    expect(back).toBeTruthy()
+    expect(forward).toBeTruthy()
+    expect(back.textContent?.replace(/\s/g, '')).toBe('')
+    expect(forward.textContent?.replace(/\s/g, '')).toBe('')
   })
 
   it('navigates through recorded history instead of a fixed parent route', () => {
     canGoForward = true
-    render(<GlobalBackButton />)
+    render(<GlobalBackButton placement="sidebar" />)
     fireEvent.click(screen.getByRole('button', { name: '后退' }))
     fireEvent.click(screen.getByRole('button', { name: '前进' }))
     expect(goBack).toHaveBeenCalledTimes(1)
@@ -42,8 +46,24 @@ describe('GlobalBackButton', () => {
   it('disables unavailable directions', () => {
     canGoBack = false
     canGoForward = false
-    render(<GlobalBackButton />)
+    render(<GlobalBackButton placement="sidebar" />)
     expect((screen.getByRole('button', { name: '后退' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: '前进' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('hides in system fullscreen so it is not shown without the sidebar', () => {
+    const host = document.createElement('div')
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => host,
+    })
+    const { container } = render(<GlobalBackButton placement="mobile" />)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByRole('button', { name: '后退' })).toBeNull()
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => null,
+    })
+  })
 })
+

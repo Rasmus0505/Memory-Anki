@@ -10,7 +10,7 @@ import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
-export const preloadFreestylePage = () => import('@/pages/today/TodayLearningPage')
+export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
 export const preloadFreestyleSessionPage = () => import('@/pages/today/FreestyleSessionPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadEnglishHubPage = () => import('@/pages/library/EnglishHubPage')

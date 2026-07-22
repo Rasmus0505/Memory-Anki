@@ -17,7 +17,6 @@ import {
   preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
-  preloadFreestyleSessionPage,
   preloadKnowledgePage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
@@ -63,7 +62,7 @@ export const navSections: NavSectionDefinition[] = [
   {
     key: 'freestyle',
     to: '/freestyle',
-    label: '今日',
+    label: '随心',
     icon: Shuffle,
     rememberLastVisited: false,
     matches: (pathname) =>
@@ -72,7 +71,6 @@ export const navSections: NavSectionDefinition[] = [
       isPracticeRoute(pathname),
     warmup: () => {
       void preloadFreestylePage()
-      void preloadFreestyleSessionPage()
       preloadPracticeRoutes()
       preloadReviewRoutes()
       prefetchReviewQueueApi()

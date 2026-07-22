@@ -83,7 +83,7 @@ export function FsrsCompletionDialog({
                   </b>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <div className="text-muted-foreground">掌握 / 记忆</div>
+                  <div className="text-muted-foreground">稳定度参考 / 预计保持率</div>
                   <b className="inline-flex items-baseline">
                     <span>{summary.mastery_percent}%</span>
                     <MasteryDeltaBadge
@@ -142,7 +142,8 @@ export function FsrsCompletionDialog({
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
                     <span>
-                      本次还有 {unratedCount} 个到期节点未评分。直接结束不会推进它们；也可以一键只给这些未评分节点打分（不会覆盖已评分节点）。
+                      本次还有 {unratedCount} 个到期节点未评分。正式 wave
+                      要求冻结范围内全部评分后才能完成结算；可返回继续评分，或一键只给这些未评分节点打分（不会覆盖已评分节点）。
                     </span>
                   </div>
                   {onBulkRateUnrated ? (
@@ -218,8 +219,20 @@ export function FsrsCompletionDialog({
               重新加载
             </Button>
           ) : (
-            <Button disabled={!summary || busy} onClick={onConfirm}>
-              {submitting ? '正在提交…' : '确认结束本次复习'}
+            <Button
+              disabled={!summary || busy || unratedCount > 0}
+              onClick={onConfirm}
+              title={
+                unratedCount > 0
+                  ? '请先完成冻结范围内全部到期节点评分，或使用一键补评'
+                  : undefined
+              }
+            >
+              {submitting
+                ? '正在提交…'
+                : unratedCount > 0
+                  ? `还有 ${unratedCount} 个未评分`
+                  : '确认结束本次复习'}
             </Button>
           )}
         </div>

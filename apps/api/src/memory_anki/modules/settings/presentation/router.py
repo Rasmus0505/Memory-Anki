@@ -73,6 +73,8 @@ FSRS_SETTINGS_KEYS = {
     "learning_steps",
     "relearning_steps",
     "daily_max_reviews",
+    "reinforcement_again_minutes",
+    "reinforcement_hard_minutes",
 }
 
 CLIENT_PREFERENCE_GROUPS = {

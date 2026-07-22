@@ -54,6 +54,9 @@ PROMPT_CONFIG_KEYS = (
     "ai_prompt_palace_quiz_text_formatting",
     "ai_prompt_palace_quiz_review_mindmap",
     "ai_prompt_english_reading_generate",
+    "ai_prompt_english_reading_word_explain",
+    "ai_prompt_english_reading_sentence_explain",
+    "ai_prompt_english_reading_target_article",
     "ai_prompt_english_translation_batch",
     "ai_prompt_english_translation_single",
 )
@@ -271,6 +274,71 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         default_template=ENGLISH_READING_GENERATE_PROMPT,
         source_location="apps/api/src/memory_anki/modules/english_reading/application/service.py",
     ),
+    "ai_prompt_english_reading_word_explain": PromptTemplateDefinition(
+        key="ai_prompt_english_reading_word_explain",
+        label="英语阅读词语英文解释",
+        description="按用户 CEFR 用纯英文解释词语在上下文中的含义和常见用法。",
+        default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
+
+Target word: {{target}}
+Context: {{context}}
+
+Required shape:
+{"meaningHere":"one short English gloss for this context","otherCommonUses":[{"partOfSpeech":"noun|verb|adjective|adverb","meaning":"English meaning","example":"short English example"}]}
+
+Rules:
+1. Use exact camelCase keys: meaningHere, otherCommonUses, partOfSpeech, meaning, example.
+2. otherCommonUses may be an empty array.
+3. Do not wrap the object in markdown or another field such as data/result.
+4. Do not include Chinese, bilingual notes, or pinyin.""",
+        available_placeholders=(
+            _placeholder("cefr", "用户手动选择的 CEFR。"),
+            _placeholder("target", "目标词语。"),
+            _placeholder("context", "目标所在上下文。"),
+        ),
+        required_placeholders=("cefr", "target", "context"),
+    ),
+    "ai_prompt_english_reading_sentence_explain": PromptTemplateDefinition(
+        key="ai_prompt_english_reading_sentence_explain",
+        label="英语阅读句子英文讲解",
+        description="按用户 CEFR 用纯英文解释句意和句法关系。",
+        default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
+
+Sentence: {{target}}
+Context: {{context}}
+
+Required shape:
+{"englishExplanation":"simple English paraphrase","howItWorks":[{"part":"phrase from the sentence","role":"subject|verb|object|modifier","explanation":"how this part works in English"}]}
+
+Rules:
+1. Use exact camelCase keys: englishExplanation, howItWorks, part, role, explanation.
+2. howItWorks may be an empty array.
+3. Do not wrap the object in markdown or another field such as data/result.
+4. Do not include Chinese, bilingual notes, or pinyin.""",
+        available_placeholders=(
+            _placeholder("cefr", "用户手动选择的 CEFR。"),
+            _placeholder("target", "目标句子。"),
+            _placeholder("context", "目标所在上下文。"),
+        ),
+        required_placeholders=("cefr", "target", "context"),
+    ),
+    "ai_prompt_english_reading_target_article": PromptTemplateDefinition(
+        key="ai_prompt_english_reading_target_article",
+        label="英语阅读定向文章",
+        description="围绕所选词句生成纯英文可理解输入文章和覆盖报告。",
+        default_template="""Return JSON only and use English only. Write a natural {{genre}} article of about {{word_count}} words at CEFR {{cefr}}. Topic: {{topic}}. Syntax density: {{syntax_density}}. Word targets should appear naturally about {{word_repetitions}} times. Sentence targets must become about {{sentence_variants}} different structural variants, not copied sentences. Targets: {{targets_json}}. Return {\"title\": \"...\", \"content\": \"...\", \"coverage\": {\"targets\": [{\"id\": 1, \"uses\": 3, \"note\": \"...\"}]}}.""",
+        available_placeholders=(
+            _placeholder("cefr", "用户手动选择的 CEFR。"),
+            _placeholder("word_count", "目标篇幅。"),
+            _placeholder("genre", "文章文体。"),
+            _placeholder("topic", "主题要求。"),
+            _placeholder("syntax_density", "句法密度。"),
+            _placeholder("word_repetitions", "词汇复现次数。"),
+            _placeholder("sentence_variants", "句式变体次数。"),
+            _placeholder("targets_json", "目标列表 JSON。"),
+        ),
+        required_placeholders=("cefr", "word_count", "genre", "topic", "syntax_density", "word_repetitions", "sentence_variants", "targets_json"),
+    ),
 }
 
 
@@ -429,6 +497,5 @@ def render_prompt(
         return "" if value is None else str(value)
 
     return PLACEHOLDER_PATTERN.sub(_replace, template).strip()
-
 
 

@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 from memory_anki.modules.dashboard.application.service import build_weekly_report_payload
@@ -47,8 +48,11 @@ def test_invalid_month_returns_400(client):
 
 
 def test_seeded_palace_with_fsrs_nodes_shows_up(client, session_factory):
+    from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+
     with session_factory() as session:
-        now = datetime.now()
+        now = utc_now_naive()
+        past = now - timedelta(days=1)
         palace = Palace(
             title="P1",
             description="",
@@ -59,6 +63,21 @@ def test_seeded_palace_with_fsrs_nodes_shows_up(client, session_factory):
         session.add(palace)
         session.flush()
         palace_id = palace.id
+        for uid in ("a", "b"):
+            session.add(
+                ReviewNodeState(
+                    palace_id=palace_id,
+                    node_uid=uid,
+                    state=2,
+                    stability=3.0,
+                    difficulty=5.0,
+                    due_at=past,
+                    raw_due_at=past,
+                    last_review_at=past - timedelta(days=3),
+                    schedule_source="manual",
+                    content_fingerprint="",
+                )
+            )
         session.commit()
 
     body = client.get("/api/v1/dashboard").json()

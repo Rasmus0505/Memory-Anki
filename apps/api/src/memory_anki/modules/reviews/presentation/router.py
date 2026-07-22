@@ -4,6 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.reviews.application.calibration_service import (
+    diagnose_palace,
+    preview_or_apply_calibration,
+    undo_calibration,
+)
 from memory_anki.modules.reviews.application.formal_review_service import (
     clear_formal_review_progress,
     complete_formal_review,
@@ -29,6 +34,14 @@ from memory_anki.modules.reviews.application.node_memory_service import (
 from memory_anki.modules.reviews.application.review_metrics_service import (
     get_weekly_stats,
     list_recent_review_notes,
+)
+from memory_anki.modules.reviews.application.wave_service import (
+    get_wave_detail,
+    list_palace_waves,
+    merge_new_due_into_wave,
+    pause_formal_wave,
+    resume_formal_wave,
+    start_reinforcement_wave_session,
 )
 from memory_anki.modules.reviews.presentation.response_models import (
     MasteryTrendResponse,
@@ -75,6 +88,137 @@ def api_palace_memory(palace_id: int, session: Session = Depends(session_dep)):
         return {"item": get_palace_memory_projection(session, palace_id)}
     except ValueError as exc:
         raise_not_found(str(exc))
+
+
+@router.get("/review/palaces/{palace_id}/waves")
+def api_palace_waves(palace_id: int, session: Session = Depends(session_dep)):
+    return {"items": list_palace_waves(session, palace_id)}
+
+
+@router.get("/review/waves/{wave_id}")
+def api_wave_detail(wave_id: str, session: Session = Depends(session_dep)):
+    try:
+        return {"item": get_wave_detail(session, wave_id)}
+    except ValueError as exc:
+        raise_not_found(str(exc))
+
+
+@router.post("/review/waves/{wave_id}/sessions")
+def api_start_wave_session(wave_id: str, session: Session = Depends(session_dep)):
+    try:
+        row = start_reinforcement_wave_session(session, wave_id)
+        session.commit()
+        session.refresh(row)
+        return formal_review_session_payload(session, row)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/waves/{wave_id}/pause")
+def api_pause_wave(wave_id: str, session: Session = Depends(session_dep)):
+    try:
+        wave = pause_formal_wave(session, wave_id)
+        session.commit()
+        return {"item": get_wave_detail(session, wave.id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/waves/{wave_id}/resume")
+def api_resume_wave(
+    wave_id: str, data: dict | None = None, session: Session = Depends(session_dep)
+):
+    try:
+        result = resume_formal_wave(
+            session,
+            wave_id,
+            session_id=str((data or {}).get("session_id") or "") or None,
+        )
+        session.commit()
+        return {"item": result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/waves/{wave_id}/merge-new-due")
+def api_merge_new_due(
+    wave_id: str, data: dict | None = None, session: Session = Depends(session_dep)
+):
+    try:
+        node_uids = (data or {}).get("node_uids")
+        wave = merge_new_due_into_wave(
+            session,
+            wave_id,
+            node_uids=[str(uid) for uid in node_uids] if isinstance(node_uids, list) else None,
+        )
+        session.commit()
+        return {"item": get_wave_detail(session, wave.id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/review/palaces/{palace_id}/calibration/diagnose")
+def api_calibration_diagnose(palace_id: int, session: Session = Depends(session_dep)):
+    try:
+        return {"item": diagnose_palace(session, palace_id)}
+    except ValueError as exc:
+        raise_not_found(str(exc))
+
+
+@router.post("/review/palaces/{palace_id}/calibration/preview")
+def api_calibration_preview(
+    palace_id: int, data: dict, session: Session = Depends(session_dep)
+):
+    try:
+        return {
+            "item": preview_or_apply_calibration(
+                session,
+                palace_id=palace_id,
+                operation_id=str(data.get("operation_id") or "").strip(),
+                mode=str(data.get("mode") or ""),
+                scope_kind=str(data.get("scope_kind") or "palace"),
+                scope=data.get("scope") if isinstance(data.get("scope"), dict) else {},
+                baseline_tier=data.get("baseline_tier"),
+                target_local_date=data.get("target_local_date"),
+                palace_revision=data.get("palace_revision"),
+                confirm=False,
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/palaces/{palace_id}/calibration/apply")
+def api_calibration_apply(
+    palace_id: int, data: dict, session: Session = Depends(session_dep)
+):
+    try:
+        return {
+            "item": preview_or_apply_calibration(
+                session,
+                palace_id=palace_id,
+                operation_id=str(data.get("operation_id") or "").strip(),
+                mode=str(data.get("mode") or ""),
+                scope_kind=str(data.get("scope_kind") or "palace"),
+                scope=data.get("scope") if isinstance(data.get("scope"), dict) else {},
+                baseline_tier=data.get("baseline_tier"),
+                target_local_date=data.get("target_local_date"),
+                palace_revision=data.get("palace_revision"),
+                confirm=True,
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/palaces/{palace_id}/calibration/{operation_id}/undo")
+def api_calibration_undo(
+    palace_id: int, operation_id: str, session: Session = Depends(session_dep)
+):
+    try:
+        return {"item": undo_calibration(session, operation_id=operation_id, palace_id=palace_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/review/palaces/{palace_id}/memory/trend", response_model=MasteryTrendResponse)
@@ -162,6 +306,10 @@ def api_chapter_queue(chapter_id: int, session: Session = Depends(session_dep)):
 @router.post("/review/palaces/{palace_id}/sessions")
 def api_start_formal_review_session(palace_id: int, data: dict | None = None, session: Session = Depends(session_dep)):
     payload = data or {}
+    raw_scope = payload.get("scope_node_uids")
+    scope_node_uids: list[str] | None = None
+    if isinstance(raw_scope, list):
+        scope_node_uids = [str(item) for item in raw_scope if str(item or "").strip()]
     try:
         row = start_or_resume_formal_review(
             session,
@@ -169,6 +317,7 @@ def api_start_formal_review_session(palace_id: int, data: dict | None = None, se
             chapter_id=int(payload["chapter_id"]) if payload.get("chapter_id") is not None else None,
             entry_mode=str(payload.get("entry_mode") or "") or None,
             branch_uid=str(payload.get("branch_uid") or "") or None,
+            scope_node_uids=scope_node_uids,
         )
         return formal_review_session_payload(session, row)
     except ValueError as exc:

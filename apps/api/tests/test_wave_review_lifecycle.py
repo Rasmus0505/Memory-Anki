@@ -1,0 +1,320 @@
+"""Palace wave freeze / merge / reinforcement lifecycle tests."""
+
+from __future__ import annotations
+
+import json
+from datetime import timedelta
+
+from memory_anki.core.time import utc_now_naive
+from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.infrastructure.db._tables.reviews import (
+    ReviewNodeState,
+    ReviewWave,
+    ReviewWaveItem,
+)
+from memory_anki.modules.reviews.application.calibration_service import (
+    preview_or_apply_calibration,
+    undo_calibration,
+)
+from memory_anki.modules.reviews.application.formal_review_service import (
+    formal_review_session_payload,
+    get_formal_review_scope,
+    start_or_resume_formal_review,
+)
+from memory_anki.modules.reviews.application.node_memory_service import (
+    rate_nodes,
+    undo_rating_operation,
+)
+from memory_anki.modules.reviews.application.wave_service import (
+    formal_due_node_uids,
+    merge_new_due_into_wave,
+    pause_formal_wave,
+    start_reinforcement_wave_session,
+)
+
+
+def _seed_palace(session, *, node_uids: list[str] | None = None):
+    uids = node_uids or ["a", "b", "c"]
+    children = [{"data": {"uid": uid, "text": uid.upper()}, "children": []} for uid in uids]
+    palace = Palace(
+        title="Wave palace",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": children,
+                }
+            }
+        ),
+    )
+    session.add(palace)
+    session.flush()
+    past = utc_now_naive() - timedelta(days=2)
+    for uid in uids:
+        session.add(
+            ReviewNodeState(
+                palace_id=palace.id,
+                node_uid=uid,
+                state=2,
+                stability=5.0,
+                difficulty=5.0,
+                due_at=past,
+                raw_due_at=past,
+                last_review_at=past - timedelta(days=5),
+                schedule_source="manual",
+                content_fingerprint="",
+            )
+        )
+    session.commit()
+    return palace
+
+
+def test_overdue_a_and_due_b_freeze_together(db_session):
+    palace = _seed_palace(db_session, node_uids=["a", "b"])
+    # A more overdue, B just due — both freeze together.
+    a = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    a.due_at = utc_now_naive() - timedelta(days=5)
+    a.raw_due_at = a.due_at
+    b = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    b.due_at = utc_now_naive() - timedelta(minutes=1)
+    b.raw_due_at = b.due_at
+    db_session.commit()
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    payload = formal_review_session_payload(db_session, row)
+    frozen = set(payload["frozen_due_node_uids"])
+    assert frozen == {"a", "b"}
+    assert payload.get("wave_id")
+
+
+def test_new_due_after_start_requires_merge(db_session):
+    palace = _seed_palace(db_session, node_uids=["a", "b", "c"])
+    # Only a is due initially.
+    for uid in ("b", "c"):
+        row = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
+        )
+        row.due_at = utc_now_naive() + timedelta(days=3)
+        row.raw_due_at = row.due_at
+    db_session.commit()
+
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    payload = formal_review_session_payload(db_session, session_row)
+    assert set(payload["frozen_due_node_uids"]) == {"a"}
+
+    # b becomes due while session open — must NOT auto-join.
+    b = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    b.due_at = utc_now_naive() - timedelta(minutes=1)
+    b.raw_due_at = b.due_at
+    db_session.commit()
+
+    payload2 = formal_review_session_payload(db_session, session_row)
+    assert set(payload2["frozen_due_node_uids"]) == {"a"}
+    assert "b" in set(payload2.get("mergeable_node_uids") or [])
+
+    wave_id = payload2["wave_id"]
+    merge_new_due_into_wave(db_session, wave_id, node_uids=["b"])
+    db_session.commit()
+    assert get_formal_review_scope(db_session, session_row.id, palace.id) == {"a", "b"}
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id=session_row.id,
+        operation_id="merged-b",
+        rating_scope="single",
+    )
+
+
+def test_weak_rating_goes_to_reinforcement_not_formal_due(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=session_row.id,
+        operation_id="wave-again-a",
+        rating_scope="single",
+    )
+    state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    assert state.schedule_source == "reinforcement"
+    waves = (
+        db_session.query(ReviewWave)
+        .filter_by(palace_id=palace.id, wave_type="same_day_reinforcement")
+        .all()
+    )
+    assert len(waves) >= 1
+    reinforcement_item = (
+        db_session.query(ReviewWaveItem)
+        .filter_by(wave_id=state.effective_wave_id, node_uid="a")
+        .one()
+    )
+    assert reinforcement_item.status == "pending_reinforcement"
+    assert reinforcement_item.rating is None
+    # Not formal-due after forget
+    assert "a" not in formal_due_node_uids(db_session, palace.id)
+
+
+def test_strong_rating_leaves_future_wave_item_pending(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    source_wave_id = formal_review_session_payload(db_session, session_row)["wave_id"]
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id=session_row.id,
+        operation_id="wave-good-a",
+        rating_scope="single",
+    )
+    state = db_session.query(ReviewNodeState).filter_by(
+        palace_id=palace.id, node_uid="a"
+    ).one()
+    source_item = db_session.query(ReviewWaveItem).filter_by(
+        wave_id=source_wave_id, node_uid="a"
+    ).one()
+    target_item = db_session.query(ReviewWaveItem).filter_by(
+        wave_id=state.effective_wave_id, node_uid="a"
+    ).one()
+    assert source_item.status == "rated_direct"
+    if state.effective_wave_id != source_wave_id:
+        assert target_item.status == "pending"
+        assert target_item.rating is None
+
+
+def test_rating_undo_restores_source_and_removes_target_membership(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    source_wave_id = formal_review_session_payload(db_session, session_row)["wave_id"]
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=session_row.id,
+        operation_id="undo-wave-a",
+        rating_scope="single",
+    )
+    target_wave_id = db_session.query(ReviewNodeState.effective_wave_id).filter_by(
+        palace_id=palace.id, node_uid="a"
+    ).scalar()
+    undo_rating_operation(
+        db_session,
+        operation_id="undo-wave-a",
+        study_session_id=session_row.id,
+    )
+    source_item = db_session.query(ReviewWaveItem).filter_by(
+        wave_id=source_wave_id, node_uid="a"
+    ).one()
+    assert source_item.status == "pending"
+    assert source_item.rating_operation_id is None
+    if target_wave_id != source_wave_id:
+        assert (
+            db_session.query(ReviewWaveItem)
+            .filter_by(wave_id=target_wave_id, node_uid="a")
+            .first()
+            is None
+        )
+
+
+def test_reinforcement_wave_can_start_as_review_session(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    formal_session = start_or_resume_formal_review(db_session, palace.id)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=formal_session.id,
+        operation_id="reinforcement-start-a",
+        rating_scope="single",
+    )
+    state = db_session.query(ReviewNodeState).filter_by(
+        palace_id=palace.id, node_uid="a"
+    ).one()
+    wave = db_session.get(ReviewWave, state.effective_wave_id)
+    wave.available_at = utc_now_naive() - timedelta(seconds=1)
+    reinforcement_session = start_reinforcement_wave_session(db_session, wave.id)
+    assert reinforcement_session.scene == "reinforcement_review"
+    assert get_formal_review_scope(
+        db_session, reinforcement_session.id, palace.id
+    ) == {"a"}
+
+
+def test_baseline_calibration_undo_restores_wave_membership(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    formal_session = start_or_resume_formal_review(db_session, palace.id)
+    wave_id = formal_review_session_payload(db_session, formal_session)["wave_id"]
+    preview_or_apply_calibration(
+        db_session,
+        palace_id=palace.id,
+        operation_id="calibrate-new-a",
+        mode="baseline",
+        scope_kind="nodes",
+        scope={"node_uids": ["a"]},
+        baseline_tier="new",
+        confirm=True,
+    )
+    assert (
+        db_session.query(ReviewWaveItem)
+        .filter_by(wave_id=wave_id, node_uid="a")
+        .first()
+        is None
+    )
+    undo_calibration(db_session, operation_id="calibrate-new-a", palace_id=palace.id)
+    restored = db_session.query(ReviewWaveItem).filter_by(
+        wave_id=wave_id, node_uid="a"
+    ).one()
+    assert restored.status == "pending"
+
+
+def test_pause_wave(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    payload = formal_review_session_payload(db_session, session_row)
+    wave = pause_formal_wave(db_session, payload["wave_id"])
+    db_session.commit()
+    assert wave.status == "paused"
+
+
+def test_uninitialized_nodes_not_in_formal_due(db_session):
+    palace = Palace(
+        title="New only",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {"data": {"uid": "x", "text": "X"}, "children": []},
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+    assert formal_due_node_uids(db_session, palace.id) == []

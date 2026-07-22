@@ -1335,3 +1335,47 @@ def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
     assert any("retired review runtime route" in error for error in errors)
     assert any("get_fsrs_queue_payload" in error for error in errors)
     assert any("startup warmup" in error for error in errors)
+
+
+def test_fsrs_review_boundary_keeps_wave_execution_in_session_service(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    application = api_src / "modules/reviews/application"
+    write_file(api_src / "modules/reviews/presentation/router.py", "")
+    write_file(
+        application / "formal_review_service.py",
+        "def get_fsrs_queue_payload(): pass\ndef get_fsrs_load_forecast(): pass\n",
+    )
+    write_file(
+        application / "formal_review_settlement.py",
+        "def complete_formal_review(): pass\n",
+    )
+    write_file(application / "wave_service.py", "def pause_formal_wave(): pass\n")
+    write_file(application / "wave_session_service.py", "")
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_fsrs_review_frontend(errors)
+
+    assert any("wave execution lifecycle" in error for error in errors)
+
+
+def test_english_reading_gap_loop_rejects_retired_colored_flow(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps/web/src"
+    write_file(
+        web_src / "features/english-reading/EnglishReadingPage.tsx",
+        "ReadingVersion\ncompleteEnglishReadingMaterialApi\n",
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_english_reading_gap_loop(errors)
+
+    assert any("retired flow marker" in error for error in errors)
+    assert any("createEnglishReadingTargetApi" in error for error in errors)

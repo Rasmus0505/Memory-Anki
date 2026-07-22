@@ -56,4 +56,24 @@ describe('FsrsCompletionDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认结束本次复习' }))
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
+
+  it('disables confirm when frozen due nodes remain unrated', () => {
+    const onConfirm = vi.fn()
+    render(
+      <FsrsCompletionDialog
+        open
+        summary={{ ...summary, rated_node_count: 1, unrated_due_node_count: 2 }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+        onBulkRateUnrated={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/还有 2 个到期节点未评分/)).toBeTruthy()
+    const confirm = screen.getByRole('button', { name: '还有 2 个未评分' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    fireEvent.click(confirm)
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
 })
+

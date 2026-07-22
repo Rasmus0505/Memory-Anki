@@ -229,4 +229,69 @@ export interface ReadingGenerateRequest {
   ai_options?: AiRuntimeOptions;
 }
 
+export type ReadingArticleKind = 'source' | 'generated'
+export type ReadingTargetType = 'word' | 'sentence'
+
+export interface ReadingExplanation {
+  id: number
+  targetId: number
+  operationId: string
+  type: ReadingTargetType
+  cefr: CefrLevel
+  status: string
+  result: Record<string, unknown>
+  createdAt: string | null
+}
+
+export interface ReadingArticleSummary {
+  id: number
+  title: string
+  kind: ReadingArticleKind
+  sourceType: string
+  originalFilename: string
+  wordCount: number
+  depth: number
+  parentArticleId: number | null
+  generationConfig: Record<string, unknown>
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface ReadingTarget {
+  id: number
+  articleId: number
+  type: ReadingTargetType
+  startOffset: number
+  endOffset: number
+  quote: string
+  normalizedValue: string
+  priority: number
+  explanations: ReadingExplanation[]
+  linkedArticles: ReadingArticleSummary[]
+}
+
+export interface ReadingArticle extends ReadingArticleSummary {
+  content: string
+  targets: ReadingTarget[]
+}
+
+export interface ReadingArticleTreeItem extends ReadingArticleSummary {
+  children: ReadingArticleTreeItem[]
+}
+
+export interface ReadingArticlesResponse {
+  items: ReadingArticleSummary[]
+  tree: ReadingArticleTreeItem[]
+}
+
+export interface ReadingArticleGenerationConfig {
+  cefr: CefrLevel
+  wordCount: 150 | 300 | 500
+  genre: 'argumentative' | 'expository' | 'narrative' | 'dialogue'
+  topic: string
+  wordRepetitions: number
+  sentenceVariants: number
+  syntaxDensity: 'low' | 'normal' | 'high'
+}
+
 export type ReadingGenerateStreamStatusEvent = ReadingGenerationTraceItem;

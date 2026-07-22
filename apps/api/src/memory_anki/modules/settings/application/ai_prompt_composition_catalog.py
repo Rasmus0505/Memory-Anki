@@ -220,6 +220,9 @@ PROMPT_SCENE_BINDINGS = {
     "ai_prompt_palace_quiz_review_mindmap": "quiz_review_mindmap_generation",
     "ai_prompt_palace_quiz_source_pair_transcription": "quiz_source_pair_transcription",
     "ai_prompt_english_reading_generate": "english_reading",
+    "ai_prompt_english_reading_word_explain": "english_reading",
+    "ai_prompt_english_reading_sentence_explain": "english_reading",
+    "ai_prompt_english_reading_target_article": "english_reading",
     "ai_prompt_english_translation_batch": "translation_course_batch",
     "ai_prompt_english_translation_single": "translation_reading_sentence",
 }

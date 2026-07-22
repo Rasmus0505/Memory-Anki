@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { FreestyleCard } from '@/shared/api/contracts'
+import type { FreestyleActionCard, FreestyleCard } from '@/shared/api/contracts'
 import {
   DEFAULT_FREESTYLE_CONFIG,
   buildFreestyleQueue,
@@ -64,7 +64,7 @@ function quizCard(id: number, groupKey: string, palaceId = 1): FreestyleCard {
 function actionCard(
   id: string,
   priority = 10,
-  contentType: Exclude<FreestyleCard['content_type'], 'quiz_question'> = 'review',
+  contentType: FreestyleActionCard['content_type'] = 'review',
 ): FreestyleCard {
   return {
     id,

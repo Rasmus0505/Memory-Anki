@@ -17,12 +17,18 @@ from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
     ReviewRatingOperation,
     ReviewRatingOperationItem,
+    ReviewWave,
+)
+from memory_anki.modules.reviews.application.node_memory_batch_rating import (
+    rate_nodes_batch_single,
 )
 from memory_anki.modules.reviews.application.fsrs_runtime import (
     RATING_LABELS,
     VALID_RATINGS,
-    cap_weak_rating_due,
     ensure_strong_rating_due,
+)
+from memory_anki.modules.reviews.application.node_due_rollup_batch import (
+    project_due_rollups_batch,
 )
 from memory_anki.modules.reviews.application.node_memory_projection import (
     _apply_card,
@@ -42,14 +48,8 @@ from memory_anki.modules.reviews.application.node_memory_projection import (
     _tree,
     _utc_now,
     due_node_uids_for_entry,
-    get_completion_summary,
     get_palace_due_rollup,
-    get_palace_mastery_trend,
     get_palace_memory_projection,
-    list_due_nodes,
-)
-from memory_anki.modules.reviews.application.node_due_rollup_batch import (
-    project_due_rollups_batch,
 )
 
 # Public re-exports keep existing import paths stable.
@@ -65,8 +65,98 @@ __all__ = [
     "list_due_nodes",
     "project_due_rollups_batch",
     "rate_nodes",
+    "rate_nodes_batch_single",
     "undo_rating_operation",
 ]
+
+
+def get_palace_mastery_trend(session: Session, palace_id: int) -> dict[str, Any]:
+    """Return one mastery snapshot for each completed formal FSRS review."""
+    palace = session.get(Palace, palace_id)
+    if palace is None or palace.deleted_at is not None:
+        raise ValueError("palace not found")
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.palace_id == palace_id,
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.ended_at.is_not(None),
+        )
+        .order_by(StudySession.ended_at.asc(), StudySession.id.asc())
+        .all()
+    )
+    points: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            summary = json.loads(row.summary_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        receipt = summary.get("completion_receipt")
+        if not isinstance(receipt, dict):
+            continue
+        mastery_progress = receipt.get("mastery_progress")
+        mastery_percent = receipt.get("mastery_percent")
+        ended_at = row.ended_at
+        if (
+            ended_at is None
+            or not isinstance(mastery_progress, int | float)
+            or not isinstance(mastery_percent, int | float)
+        ):
+            continue
+        points.append(
+            {
+                "at": ended_at.isoformat(),
+                "mastery_progress": round(float(mastery_progress), 4),
+                "mastery_percent": round(float(mastery_percent)),
+            }
+        )
+    return {"palace_id": palace_id, "points": points}
+
+
+def get_completion_summary(
+    session: Session, palace_id: int, *, node_uids: list[str] | None = None
+) -> dict[str, Any]:
+    projection = get_palace_memory_projection(session, palace_id)
+    selected = set(node_uids or [item["node_uid"] for item in projection["nodes"]])
+    scoped = [item for item in projection["nodes"] if item["node_uid"] in selected]
+    rated = [item for item in scoped if item["rating"] in VALID_RATINGS]
+    rating_counts = {label: 0 for label in RATING_LABELS.values()}
+    for item in rated:
+        rating_counts[RATING_LABELS[item["rating"]]] += 1
+    return {
+        "palace_id": palace_id,
+        "scope_node_count": len(scoped),
+        "rated_node_count": len(rated),
+        "unrated_due_node_count": sum(
+            1 for item in scoped if item["due"] and item["rating"] is None
+        ),
+        "rating_counts": rating_counts,
+        "mastery_progress": projection["mastery_progress"],
+        "memory_health": projection["memory_health"],
+        "next_review_at": projection["next_review_at"],
+        "due_node_count": projection["due_node_count"],
+        "projection": projection,
+    }
+
+
+def list_due_nodes(session: Session, palace_id: int, *, now: datetime | None = None) -> list[str]:
+    del now  # projection uses current time; kept for call-site compatibility
+    projection = get_palace_memory_projection(session, palace_id)
+    return [item["node_uid"] for item in projection["nodes"] if item["due"]]
+
+
+def _formal_session_wave_id(session: Session, study_session_id: str) -> str | None:
+    row = session.get(StudySession, study_session_id)
+    if row is None or not row.summary_json:
+        return None
+    try:
+        summary = json.loads(row.summary_json)
+    except (TypeError, ValueError):
+        return None
+    wave_id = summary.get("wave_id")
+    return str(wave_id) if wave_id else None
 
 
 def rate_nodes(
@@ -86,6 +176,7 @@ def rate_nodes(
     response_ms: int | None = None,
     hint_count: int = 0,
     retry_count: int = 0,
+    commit: bool = True,
 ) -> dict[str, Any]:
     if rating not in VALID_RATINGS:
         raise ValueError("rating must be between 1 and 4")
@@ -189,6 +280,21 @@ def rate_nodes(
     )
     before_ratings = _latest_ratings_for_palace(session, palace_id, selected)
     scheduler = _scheduler(session)
+    from memory_anki.modules.reviews.application.legacy_fsrs_repair import (
+        normalize_legacy_card_clock,
+    )
+    from memory_anki.modules.reviews.application.wave_service import (
+        apply_rating_to_schedule,
+        mark_wave_item_rated,
+    )
+
+    # Hoist session/wave lookups out of the selected-node loop (subtree scores).
+    formal_wave_id = (
+        _formal_session_wave_id(session, study_session_id)
+        if source_scene == "formal_review"
+        else None
+    )
+    formal_wave = session.get(ReviewWave, formal_wave_id) if formal_wave_id else None
     events: list[MindMapRecallEvent] = []
     items: list[ReviewRatingOperationItem] = []
     for uid in selected:
@@ -210,20 +316,39 @@ def rate_nodes(
             schedule_row.state_source == "legacy_estimate"
             or "legacy" in str(schedule_row.parameter_version or "").lower()
         ):
-            from memory_anki.modules.reviews.application.legacy_fsrs_repair import (
-                normalize_legacy_card_clock,
-            )
-
             card = normalize_legacy_card_clock(card)
         card, _log = scheduler.review_card(card, Rating(rating), review_datetime=reviewed_now)
-        # 忘记/困难 → 十几分钟到半小时内再遇到；记得/轻松至少多日（学习步不回 1h）。
-        card = cap_weak_rating_due(card, rating, now=reviewed_now)
+        # 记得/轻松至少多日（学习步不回 1h）。忘记/困难走当天强化波次，不再写入正式短 due。
         card = ensure_strong_rating_due(card, rating, now=reviewed_now)
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
             session.add(row)
             states[uid] = row
+        evidence_origin = "direct" if uid == node_uid else "batch_inherited"
         _apply_card(row, card, fingerprint=fingerprint, source="manual")
+
+        # Mark frozen formal-wave item before schedule reassignment (weak → reinforcement).
+        if formal_wave_id:
+            mark_wave_item_rated(
+                session,
+                palace_id=palace_id,
+                node_uid=uid,
+                wave_id=formal_wave_id,
+                rating=rating,
+                evidence_origin=evidence_origin,
+                operation_id=operation_id,
+                wave=formal_wave,
+            )
+
+        raw_due = _naive(card.due) or utc_now_naive()
+        apply_rating_to_schedule(
+            session,
+            row,
+            rating=rating,
+            raw_due_at=raw_due,
+            evidence_origin=evidence_origin,
+            source_scene=source_scene,
+        )
         event_id = _event_id(operation_id, uid)
         events.append(
             MindMapRecallEvent(
@@ -236,7 +361,7 @@ def rate_nodes(
                 rating=rating,
                 rating_source=rating_source,
                 rating_scope=rating_scope,
-                evidence_origin="direct" if uid == node_uid else "batch_inherited",
+                evidence_origin=evidence_origin,
                 inference_confidence=inference_confidence,
                 operation_id=operation_id,
                 response_ms=response_ms,
@@ -268,7 +393,8 @@ def rate_nodes(
         states=states,
         now=reviewed_now,
     )
-    session.commit()
+    if commit:
+        session.commit()
     return {
         "operation_id": operation_id,
         "affected_node_count": len(selected),
@@ -314,9 +440,32 @@ def undo_rating_operation(
         session, palace, root_uid=root_uid, nodes=nodes, states=before_states
     )
     items = session.query(ReviewRatingOperationItem).filter_by(operation_id=operation_id).all()
+    current_wave_ids = {
+        item.node_uid: (
+            session.query(ReviewNodeState.effective_wave_id)
+            .filter(
+                ReviewNodeState.palace_id == operation.palace_id,
+                ReviewNodeState.node_uid == item.node_uid,
+            )
+            .scalar()
+        )
+        for item in items
+    }
     for item in items:
         snapshot = json.loads(item.before_state_json) if item.before_state_json else None
         _restore_state(session, operation.palace_id, item.node_uid, snapshot)
+        from memory_anki.modules.reviews.application.wave_service import (
+            reconcile_rating_undo,
+        )
+
+        reconcile_rating_undo(
+            session,
+            palace_id=operation.palace_id,
+            node_uid=item.node_uid,
+            operation_id=operation_id,
+            target_wave_id=current_wave_ids.get(item.node_uid),
+            restored_wave_id=(snapshot or {}).get("effective_wave_id"),
+        )
     operation.undone_at = utc_now_naive()
     session.flush()
     _clear_due_rollup_cache(session)

@@ -275,14 +275,14 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    const expectedLabels = ['今日', '知识', '英语', '创建', '洞察']
+    const expectedLabels = ['随心', '知识', '英语', '创建', '洞察']
     const navLabels = screen
       .getAllByRole('link')
       .map((link) => link.textContent?.trim() || '')
       .filter((label) => expectedLabels.includes(label))
 
     expect(navLabels.slice(0, 5)).toEqual(expectedLabels)
-    const freestyleLink = screen.getAllByRole('link', { name: '今日' })[0]
+    const freestyleLink = screen.getAllByRole('link', { name: '随心' })[0]
     expect(freestyleLink.className).toContain('bg-primary')
 
     preloadFreestylePage.mockClear()
@@ -393,7 +393,7 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/freestyle')).toBeTruthy()
     })
@@ -428,7 +428,7 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '今日' })[0]!)
+    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/freestyle')).toBeTruthy()
     })

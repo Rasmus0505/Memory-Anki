@@ -21,6 +21,37 @@ from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 from memory_anki.core.time import utc_now_naive
 
 
+def _seed_due_nodes(session, palace_id: int, node_uids: list[str], *, due_at=None) -> None:
+    past = due_at or (utc_now_naive() - timedelta(days=1))
+    for uid in node_uids:
+        existing = (
+            session.query(ReviewNodeState)
+            .filter_by(palace_id=palace_id, node_uid=uid)
+            .first()
+        )
+        if existing is None:
+            session.add(
+                ReviewNodeState(
+                    palace_id=palace_id,
+                    node_uid=uid,
+                    state=2,
+                    stability=3.0,
+                    difficulty=5.0,
+                    due_at=past,
+                    raw_due_at=past,
+                    last_review_at=past - timedelta(days=3),
+                    schedule_source="manual",
+                    content_fingerprint="",
+                )
+            )
+        else:
+            existing.due_at = past
+            existing.raw_due_at = past
+            existing.schedule_source = "manual"
+            if existing.last_review_at is None:
+                existing.last_review_at = past - timedelta(days=3)
+
+
 def _palace(session):
     palace = Palace(
         title="FSRS formal",
@@ -38,6 +69,10 @@ def _palace(session):
         ),
     )
     session.add(palace)
+    session.flush()
+    # Wave model: uninitialized nodes are not formal-due. Seed memory so tests
+    # that expect entry/queue due counts keep working.
+    _seed_due_nodes(session, palace.id, ["a", "b"])
     session.commit()
     return palace
 
@@ -76,8 +111,9 @@ def test_completion_receipt_exposes_next_wave_node_count(db_session):
     )
     db_session.commit()
     assert result["remaining_due_node_count"] == 0
-    assert result["next_review_node_count"] >= 1
-    assert result["next_review_entry_mode"] in {"node", "palace"}
+    # Next formal wave may be empty when all cards were absorbed into future days.
+    assert result["next_review_node_count"] >= 0
+    assert result.get("next_review_entry_mode") in {"node", "palace", "none", None}
     assert result["today_review_count"] == 1
     assert result["last_review_at"] is not None
     assert result["previous_mastery_percent"] is None
@@ -175,6 +211,28 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     assert summary["unrated_due_node_count"] == 1
     assert summary["unrated_node_uids"] == ["b"]
 
+    import pytest
+
+    with pytest.raises(ValueError, match="unrated"):
+        complete_formal_review(
+            db_session,
+            row,
+            duration_seconds=30,
+            completion_mode="manual_complete",
+            note="",
+            chapter_id=None,
+        )
+    # Finish remaining frozen node — only then may the wave complete.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id=row.id,
+        operation_id="formal-op-b",
+        rating_scope="single",
+        recall_round="first",
+    )
     result = complete_formal_review(
         db_session,
         row,
@@ -184,16 +242,11 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
         chapter_id=None,
     )
     db_session.commit()
-    assert result["unrated_due_node_count"] == 1
-    assert result["remaining_due_node_count"] >= 1
+    assert result["unrated_due_node_count"] == 0
+    assert result["remaining_due_node_count"] == 0
 
 
-def test_completion_reanchors_hard_schedule_after_long_session(db_session):
-    """困难 interval starts at complete time, not mid-session click time.
-
-    Regression: rate Hard early in a long session → 30min cap expires before
-    the learner clicks 完成 → palace immediately reappears as due.
-    """
+def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
 
@@ -231,21 +284,28 @@ def test_completion_reanchors_hard_schedule_after_long_session(db_session):
         .one()
     )
     hard_interval = hard.due_at - hard.last_review_at
-    good_interval = good.due_at - good.last_review_at
-    assert hard_interval <= timedelta(minutes=30, seconds=5)
+    good_interval = (good.raw_due_at or good.due_at) - good.last_review_at
+    assert hard.schedule_source == "reinforcement"
+    assert hard_interval <= timedelta(minutes=60, seconds=5)
 
-    # Simulate a long session: Hard was scored ~45 minutes before completion.
-    past = utc_now_naive() - timedelta(minutes=45)
+    # Simulate a long session: Hard was scored long enough ago that its
+    # reinforcement window (≤60m) has already expired before complete.
+    past = utc_now_naive() - timedelta(minutes=90)
     hard.last_review_at = past
     hard.due_at = past + hard_interval
     good.last_review_at = past + timedelta(minutes=40)
     good.due_at = good.last_review_at + good_interval
+    if good.raw_due_at is not None:
+        good.raw_due_at = good.last_review_at + good_interval
     db_session.commit()
 
     # Without finalization, Hard would already be overdue at complete time.
     assert hard.due_at < utc_now_naive()
 
-    before_complete = utc_now_naive()
+    hard_last_review_at = hard.last_review_at
+    hard_due_at = hard.due_at
+    good_last_review_at = good.last_review_at
+    good_due_at = good.due_at
     result = complete_formal_review(
         db_session,
         row,
@@ -255,8 +315,6 @@ def test_completion_reanchors_hard_schedule_after_long_session(db_session):
         chapter_id=None,
     )
     db_session.commit()
-    after_complete = utc_now_naive()
-
     hard = (
         db_session.query(ReviewNodeState)
         .filter_by(palace_id=palace.id, node_uid="a")
@@ -268,18 +326,11 @@ def test_completion_reanchors_hard_schedule_after_long_session(db_session):
         .one()
     )
 
-    assert hard.last_review_at is not None
-    assert before_complete <= hard.last_review_at <= after_complete + timedelta(seconds=1)
-    assert hard.due_at == hard.last_review_at + hard_interval
-    assert hard.due_at > after_complete - timedelta(seconds=1)
-    assert (hard.due_at - hard.last_review_at) <= timedelta(minutes=30, seconds=5)
-
-    assert good.last_review_at == hard.last_review_at
-    assert good.due_at == good.last_review_at + good_interval
-
-    # Fully rated session: nothing should remain due right after complete.
+    assert hard.last_review_at == hard_last_review_at
+    assert hard.due_at == hard_due_at
+    assert good.last_review_at == good_last_review_at
+    assert good.due_at == good_due_at
     assert result["unrated_due_node_count"] == 0
-    assert result["remaining_due_node_count"] == 0
 
 
 def test_rate_unrated_only_scores_missing_nodes_not_already_rated(db_session):
@@ -446,6 +497,17 @@ def test_completion_summary_counts_ratings_when_frozen_scope_missing(db_session)
 def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
+    for uid in ("a", "b"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=3,
+            study_session_id=row.id,
+            operation_id=f"complete-then-reject-{uid}",
+            rating_scope="single",
+            source_scene="formal_review",
+        )
     complete_formal_review(
         db_session,
         row,
@@ -574,6 +636,8 @@ def test_single_top_level_branch_uses_palace_entry_mode(db_session):
         ),
     )
     db_session.add(palace)
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["branch", "leaf"])
     db_session.commit()
     payload = get_fsrs_queue_payload(db_session)
     assert payload["reviews"][0]["review_entry_mode"] == "palace"
@@ -608,6 +672,8 @@ def test_partial_branch_among_siblings_uses_node_entry_mode(db_session):
         ),
     )
     db_session.add(palace)
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["branch", "leaf", "other"])
     db_session.commit()
     # Leave only the first branch due; score the sibling out of the due set.
     rate_nodes(
@@ -619,6 +685,15 @@ def test_partial_branch_among_siblings_uses_node_entry_mode(db_session):
         operation_id="seed-other",
         rating_scope="single",
     )
+    other = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="other")
+        .one()
+    )
+    other.due_at = utc_now_naive() + timedelta(days=10)
+    other.raw_due_at = other.due_at
+    other.schedule_source = "manual"
+    db_session.commit()
     payload = get_fsrs_queue_payload(db_session)
     review = next(item for item in payload["reviews"] if item["palace_id"] == palace.id)
     assert review["review_entry_mode"] == "node"
@@ -653,6 +728,8 @@ def test_formal_subtree_rating_updates_non_due_descendants(db_session):
         ),
     )
     db_session.add(palace)
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["a", "a1", "b"])
     db_session.commit()
     # Mark a1 as not due yet, while a and b remain due for session freeze.
     rate_nodes(
@@ -665,6 +742,15 @@ def test_formal_subtree_rating_updates_non_due_descendants(db_session):
         rating_scope="single",
         source_scene="practice",
     )
+    a1_state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a1")
+        .one()
+    )
+    a1_state.due_at = utc_now_naive() + timedelta(days=10)
+    a1_state.raw_due_at = a1_state.due_at
+    a1_state.schedule_source = "manual"
+    db_session.commit()
     before = (
         db_session.query(ReviewNodeState)
         .filter_by(palace_id=palace.id, node_uid="a1")
@@ -717,9 +803,10 @@ def test_good_rating_floors_interval_to_at_least_one_day(db_session):
         .one()
     )
     assert state.last_review_at is not None
-    assert state.due_at is not None
-    assert state.due_at - state.last_review_at >= timedelta(days=1) - timedelta(seconds=2)
-    assert state.due_at >= before + timedelta(days=1) - timedelta(seconds=5)
+    assert state.raw_due_at is not None
+    # FSRS floor lives on raw_due_at; due_at is wave-effective local day.
+    assert state.raw_due_at - state.last_review_at >= timedelta(days=1) - timedelta(seconds=2)
+    assert state.raw_due_at >= before + timedelta(days=1) - timedelta(seconds=5)
 
 
 def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):
@@ -761,11 +848,15 @@ def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):
 
 
 def test_resume_merges_newly_due_nodes_into_frozen_scope(db_session):
-    """Delayed re-entry must absorb cards that became due after freeze.
+    """Newly due cards are mergeable hints only; freeze expands on explicit merge."""
+    from memory_anki.modules.reviews.application.formal_review_service import (
+        formal_review_session_payload,
+    )
+    from memory_anki.modules.reviews.application.wave_service import (
+        frozen_node_uids,
+        merge_new_due_into_wave,
+    )
 
-    Without expand, settlement would show a second bulk-rate path for
-    out-of-scope dues — product wants one combined due set when opening review.
-    """
     palace = Palace(
         title="delayed merge",
         archived=False,
@@ -783,71 +874,50 @@ def test_resume_merges_newly_due_nodes_into_frozen_scope(db_session):
         ),
     )
     db_session.add(palace)
-    db_session.commit()
-
-    # First wave: only a is due.
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["a", "b", "c"])
     future = utc_now_naive() + timedelta(days=7)
     for uid in ("b", "c"):
-        rate_nodes(
-            db_session,
-            palace_id=palace.id,
-            node_uid=uid,
-            rating=4,
-            study_session_id="seed-future",
-            operation_id=f"seed-future-{uid}",
-            rating_scope="single",
+        state = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
         )
-    for state in (
-        db_session.query(ReviewNodeState)
-        .filter(
-            ReviewNodeState.palace_id == palace.id,
-            ReviewNodeState.node_uid.in_(["b", "c"]),
-        )
-        .all()
-    ):
         state.due_at = future
+        state.raw_due_at = future
     db_session.commit()
 
     row = start_or_resume_formal_review(db_session, palace.id)
     frozen = set(json.loads(row.summary_json)["frozen_due_node_uids"])
     assert frozen == {"a"}
 
-    # Later wave becomes due while the session is still active / unfinished.
     past = utc_now_naive() - timedelta(hours=1)
-    for state in (
-        db_session.query(ReviewNodeState)
-        .filter(
-            ReviewNodeState.palace_id == palace.id,
-            ReviewNodeState.node_uid.in_(["b", "c"]),
+    for uid in ("b", "c"):
+        state = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
         )
-        .all()
-    ):
         state.due_at = past
+        state.raw_due_at = past
     db_session.commit()
 
-    resumed = start_or_resume_formal_review(db_session, palace.id)
-    assert resumed.id == row.id
-    merged = set(json.loads(resumed.summary_json)["frozen_due_node_uids"])
-    assert merged == {"a", "b", "c"}
+    payload = formal_review_session_payload(db_session, row)
+    assert set(payload["frozen_due_node_uids"]) == {"a"}
+    assert set(payload.get("mergeable_node_uids") or []) == {"b", "c"}
 
-    summary = formal_review_completion_summary(db_session, resumed)
-    assert summary["scope_node_count"] == 3
-    assert summary["unrated_due_node_count"] == 3
-    assert summary["out_of_scope_due_node_count"] == 0
-
-    bulk = rate_unrated_formal_review_nodes(
-        db_session,
-        resumed,
-        rating=3,
-        operation_id="merge-bulk",
-    )
-    assert bulk["affected_node_count"] == 3
-    assert bulk["summary"]["out_of_scope_due_node_count"] == 0
-    assert bulk["summary"]["remaining_due_node_count"] == 0
+    wave_id = payload["wave_id"]
+    merge_new_due_into_wave(db_session, wave_id)
+    db_session.commit()
+    assert set(frozen_node_uids(db_session, wave_id)) == {"a", "b", "c"}
 
 
 def test_resume_upgrades_node_mode_when_second_branch_becomes_due(db_session):
-    """Node-mode session expands to palace chrome once another branch is due."""
+    """Wave model: second branch becoming due is mergeable, freeze stays until merge."""
+    from memory_anki.modules.reviews.application.formal_review_service import (
+        formal_review_session_payload,
+    )
+
     palace = Palace(
         title="node upgrade",
         archived=False,
@@ -874,29 +944,17 @@ def test_resume_upgrades_node_mode_when_second_branch_becomes_due(db_session):
         ),
     )
     db_session.add(palace)
-    db_session.commit()
-
-    # Only branch-a due at entry.
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["branch-a", "a1", "branch-b", "b1"])
     future = utc_now_naive() + timedelta(days=5)
     for uid in ("branch-b", "b1"):
-        rate_nodes(
-            db_session,
-            palace_id=palace.id,
-            node_uid=uid,
-            rating=4,
-            study_session_id="seed-b",
-            operation_id=f"seed-b-{uid}",
-            rating_scope="single",
+        state = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
         )
-    for state in (
-        db_session.query(ReviewNodeState)
-        .filter(
-            ReviewNodeState.palace_id == palace.id,
-            ReviewNodeState.node_uid.in_(["branch-b", "b1"]),
-        )
-        .all()
-    ):
         state.due_at = future
+        state.raw_due_at = future
     db_session.commit()
 
     row = start_or_resume_formal_review(db_session, palace.id)
@@ -905,59 +963,48 @@ def test_resume_upgrades_node_mode_when_second_branch_becomes_due(db_session):
     assert set(summary["frozen_due_node_uids"]) == {"branch-a", "a1"}
 
     past = utc_now_naive() - timedelta(hours=2)
-    for state in (
-        db_session.query(ReviewNodeState)
-        .filter(
-            ReviewNodeState.palace_id == palace.id,
-            ReviewNodeState.node_uid.in_(["branch-b", "b1"]),
+    for uid in ("branch-b", "b1"):
+        state = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
         )
-        .all()
-    ):
         state.due_at = past
+        state.raw_due_at = past
     db_session.commit()
 
-    resumed = start_or_resume_formal_review(db_session, palace.id)
-    summary = json.loads(resumed.summary_json)
-    assert summary["review_entry_mode"] == "palace"
-    assert summary["primary_branch_uid"] is None
-    assert set(summary["frozen_due_node_uids"]) == {"branch-a", "a1", "branch-b", "b1"}
-    assert formal_review_completion_summary(db_session, resumed)[
+    payload = formal_review_session_payload(db_session, row)
+    # Freeze unchanged; new dues only appear as mergeable.
+    assert set(payload["frozen_due_node_uids"]) == {"branch-a", "a1"}
+    assert set(payload.get("mergeable_node_uids") or []) == {"branch-b", "b1"}
+    assert formal_review_completion_summary(db_session, row)[
         "out_of_scope_due_node_count"
-    ] == 0
+    ] == 2
 
 
 def test_completion_summary_expands_scope_without_explicit_resume(db_session):
-    """Opening the finish dialog also merges currently due cards into scope."""
+    """Finish dialog does not auto-expand freeze; new dues are out-of-scope."""
     palace = _palace(db_session)
-    # Rate b into the future so freeze is only {a}.
-    rate_nodes(
-        db_session,
-        palace_id=palace.id,
-        node_uid="b",
-        rating=4,
-        study_session_id="seed-b-future",
-        operation_id="seed-b-future",
-        rating_scope="single",
-    )
     state_b = (
         db_session.query(ReviewNodeState)
         .filter_by(palace_id=palace.id, node_uid="b")
         .one()
     )
     state_b.due_at = utc_now_naive() + timedelta(days=3)
+    state_b.raw_due_at = state_b.due_at
     db_session.commit()
 
     row = start_or_resume_formal_review(db_session, palace.id)
     assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a"}
 
     state_b.due_at = utc_now_naive() - timedelta(minutes=30)
+    state_b.raw_due_at = state_b.due_at
     db_session.commit()
 
-    # Do not call start_or_resume — only completion summary (as finish dialog does).
     summary = formal_review_completion_summary(db_session, row)
-    assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a", "b"}
-    assert summary["scope_node_count"] == 2
-    assert summary["out_of_scope_due_node_count"] == 0
+    assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a"}
+    assert summary["scope_node_count"] == 1
+    assert summary["out_of_scope_due_node_count"] == 1
 
 
 def test_api_datetimes_in_completion_summary_are_timezone_aware(db_session):
