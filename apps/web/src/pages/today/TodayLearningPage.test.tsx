@@ -51,7 +51,7 @@ describe('TodayLearningPage', () => {
 
     expect(await screen.findByRole('heading', { name: '今日学习' })).toBeTruthy()
     expect(screen.getAllByText('机器学习').length).toBeGreaterThan(0)
-    expect(screen.getByRole('link', { name: /进入沉浸训练/ }).getAttribute('href')).toBe('/freestyle')
+    expect(screen.getByRole('link', { name: /进入随心模式/ }).getAttribute('href')).toBe('/freestyle')
     expect(screen.getByText('待复习队列')).toBeTruthy()
     expect(screen.getByText('知识图谱')).toBeTruthy()
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))

@@ -10,8 +10,12 @@ import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
+/** Immersive freestyle card feed — default /freestyle entry. */
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
-export const preloadFreestyleSessionPage = () => import('@/pages/today/FreestyleSessionPage')
+/** @deprecated Alias kept for call sites that still preload the old session path. */
+export const preloadFreestyleSessionPage = preloadFreestylePage
+/** Today learning workspace (overview) — route /today. */
+export const preloadTodayLearningPage = () => import('@/pages/today/TodayLearningPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadEnglishHubPage = () => import('@/pages/library/EnglishHubPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
@@ -42,7 +46,7 @@ export function preloadPracticeRoutes() {
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
-const FreestyleSessionPage = lazyWithRetry(preloadFreestyleSessionPage)
+const TodayLearningPage = lazyWithRetry(preloadTodayLearningPage)
 const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
@@ -109,6 +113,7 @@ const REGISTERED_EXACT_PATHS = new Set<string>([
   '/dashboard',
   '/freestyle',
   '/freestyle/session',
+  '/today',
   '/knowledge',
   '/english',
   '/english/listening',
@@ -206,7 +211,8 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
-          <Route path="/freestyle/session" element={<FreestyleSessionPage />} />
+          <Route path="/freestyle/session" element={<Navigate to="/freestyle" replace />} />
+          <Route path="/today" element={<TodayLearningPage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<EnglishLegacyTabRedirect />} />
           <Route path="/english/listening" element={<EnglishWorkspacePage />} />

@@ -17,6 +17,7 @@ import {
   preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
+  preloadTodayLearningPage,
   preloadKnowledgePage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
@@ -71,6 +72,7 @@ export const navSections: NavSectionDefinition[] = [
       isPracticeRoute(pathname),
     warmup: () => {
       void preloadFreestylePage()
+      void preloadTodayLearningPage()
       preloadPracticeRoutes()
       preloadReviewRoutes()
       prefetchReviewQueueApi()

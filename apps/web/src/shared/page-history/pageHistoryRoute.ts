@@ -2,7 +2,8 @@ import type { PageHistorySectionKey } from './pageHistoryTypes'
 
 export function resolvePageHistorySection(pathname: string): PageHistorySectionKey {
   if (pathname === '/' || pathname === '/dashboard') return 'dashboard'
-  if (pathname === '/freestyle') return 'freestyle'
+  if (pathname === '/today') return 'dashboard'
+  if (pathname === '/freestyle' || pathname === '/freestyle/session') return 'freestyle'
   if (
     pathname === '/palaces' ||
     pathname.startsWith('/palaces/') ||
@@ -25,7 +26,9 @@ export function resolvePageHistorySection(pathname: string): PageHistorySectionK
 export function resolvePageHistoryKey(pathname: string) {
   const exactKeys: Record<string, string> = {
     '/dashboard': 'dashboard',
+    '/today': 'today:workspace',
     '/freestyle': 'freestyle',
+    '/freestyle/session': 'freestyle',
     '/palaces': 'palace:shelf',
     '/palaces/list': 'palace:list',
     '/palaces/new': 'palace:new',

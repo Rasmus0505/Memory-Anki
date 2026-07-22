@@ -27,7 +27,7 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadEnglishWorkspacePage: vi.fn(),
   preloadEnglishReadingPage: vi.fn(),
   preloadFreestylePage: vi.fn(),
-  preloadFreestyleSessionPage: vi.fn(),
+  preloadTodayLearningPage: vi.fn(),
   preloadKnowledgePage: vi.fn(),
   preloadProfilePage: vi.fn(),
 }))

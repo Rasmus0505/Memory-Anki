@@ -106,7 +106,7 @@ function ContinueLearningPanel({ data }: { data: DashboardResponse }) {
           <Button asChild className="h-11 justify-center">
             <Link to="/freestyle">
               <Play className="fill-current" />
-              进入沉浸训练
+              进入随心模式
             </Link>
           </Button>
           <Button asChild variant="outline" className="h-10 justify-center">
