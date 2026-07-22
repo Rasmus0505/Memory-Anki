@@ -10,13 +10,10 @@ import { TimeRecordsTrendChart } from '@/modules/settings/public'
 import { useTimeRecordsDashboard } from '@/modules/settings/public'
 import { getDashboardApi } from '@/modules/dashboard/public'
 import { DashboardNewPalacesCard } from '@/modules/dashboard/public'
-import { DashboardQuickActions } from '@/modules/dashboard/public'
 import {
   DashboardStatCards,
-  getTodayTodoTotal,
 } from '@/modules/dashboard/public'
 import { DashboardTodayLearningCard } from '@/modules/dashboard/public'
-import { ReviewNotesCard } from '@/modules/dashboard/public'
 import { StudyHeatmap } from '@/modules/dashboard/public'
 import { TimeRecordChartCard } from '@/modules/dashboard/public'
 import { WeeklyGoalsCard } from '@/modules/dashboard/public'
@@ -168,8 +165,6 @@ export default function Dashboard() {
     return <DashboardSkeleton />
   }
 
-  const todayTodoTotal = getTodayTodoTotal(data)
-
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -182,16 +177,17 @@ export default function Dashboard() {
         onUpdateDurationFilter={updateDurationFilter}
       />
 
-      <DashboardQuickActions todayTodoTotal={todayTodoTotal} />
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <WeeklyGoalsCard />
         <WeeklyReportCard />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         <DashboardTodayLearningCard palaces={data.today_learning_palaces} />
-        <DashboardNewPalacesCard data={data} />
+        <div className="flex flex-col gap-6">
+          <DashboardNewPalacesCard data={data} />
+          <StudyHeatmap />
+        </div>
       </div>
 
       <div className="flex flex-col gap-6">
@@ -220,10 +216,6 @@ export default function Dashboard() {
           </TimeRecordChartCard>
         </div>
 
-        <StudyHeatmap />
-
-        <ReviewNotesCard />
-
         <TimeRecordsTable
           thresholdInput={timeRecordsDashboard.thresholdInput}
           onThresholdInputChange={timeRecordsDashboard.setThresholdInput}
@@ -238,6 +230,13 @@ export default function Dashboard() {
           onSortByChange={timeRecordsDashboard.setSortBy}
           sortOrder={timeRecordsDashboard.sortOrder}
           onSortOrderChange={timeRecordsDashboard.setSortOrder}
+          rangePreset={timeRecordsDashboard.rangePreset}
+          onRangePresetChange={timeRecordsDashboard.setRangePreset}
+          customRangeFrom={timeRecordsDashboard.customRangeFrom}
+          onCustomRangeFromChange={timeRecordsDashboard.setCustomRangeFrom}
+          customRangeTo={timeRecordsDashboard.customRangeTo}
+          onCustomRangeToChange={timeRecordsDashboard.setCustomRangeTo}
+          sourceSummary={timeRecordsDashboard.sourceSummary}
           page={timeRecordsDashboard.page}
           pageSize={timeRecordsDashboard.pageSize}
           totalRecords={timeRecordsDashboard.totalRecords}

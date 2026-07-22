@@ -140,10 +140,8 @@ describe("DashboardPage overview", () => {
     expect(screen.getByText("优先清理")).toBeTruthy();
     expect(screen.getByText("按时推进")).toBeTruthy();
     expect(screen.getByText("状态维护")).toBeTruthy();
-    expect(screen.getByText("快速操作")).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: /开始复习/i }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /新建宫殿/i })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /做题练习/i })).toBeTruthy();
+    expect(screen.queryByText("快速操作")).toBeNull();
+    expect(screen.queryByText("最近复盘")).toBeNull();
   });
 
   it("renders weekly goals and report cards and saves edited goals", async () => {

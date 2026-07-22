@@ -35,6 +35,7 @@ interface PaginationProps {
   onPageChange: (page: number) => void
   disabled?: boolean
   className?: string
+  'aria-label'?: string
 }
 
 export function Pagination({
@@ -43,11 +44,12 @@ export function Pagination({
   onPageChange,
   disabled = false,
   className,
+  'aria-label': ariaLabel = '分页',
 }: PaginationProps) {
   const items = buildPaginationItems(page, totalPages)
   return (
     <nav
-      aria-label="时间记录分页"
+      aria-label={ariaLabel}
       className={cn('flex flex-wrap items-center justify-center gap-1', className)}
     >
       <Button

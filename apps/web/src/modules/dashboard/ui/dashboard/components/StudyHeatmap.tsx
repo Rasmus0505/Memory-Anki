@@ -54,9 +54,9 @@ export function StudyHeatmap() {
 
   return (
     <Card className="min-w-0 border-border/70">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
-        <CardTitle className="text-lg">学习热力图</CardTitle>
-        <div className="text-right text-sm leading-6 text-muted-foreground">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
+        <CardTitle className="text-base">学习热力图</CardTitle>
+        <div className="text-right text-xs leading-5 text-muted-foreground">
           连续 {data.current_streak} 天 · 最长 {data.longest_streak} 天 · 近半年学习{' '}
           {data.active_day_count} 天
         </div>
@@ -68,10 +68,10 @@ export function StudyHeatmap() {
               <div
                 key={item.date}
                 title={`${item.date}：复习 ${item.review_count} 次，学习 ${formatMinutes(item.study_seconds)} 分钟`}
-                className={`size-3 rounded-sm ${intensityClass(item)}`}
+                className={`size-2.5 rounded-sm ${intensityClass(item)}`}
               />
             ) : (
-              <div key={`empty-${index}`} className="size-3" />
+              <div key={`empty-${index}`} className="size-2.5" />
             ),
           )}
         </div>
