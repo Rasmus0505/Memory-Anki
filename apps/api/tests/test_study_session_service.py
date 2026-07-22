@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -5,8 +7,10 @@ from sqlalchemy.pool import StaticPool
 from memory_anki.infrastructure.db.models import Base, StudySession
 from memory_anki.modules.session.application.study_session_service import (
     create_completed_study_session_from_time_payload,
+    list_study_sessions,
     patch_study_session,
     reclassify_ghost_formal_review_time_sessions,
+    summarize_study_sessions_by_client_source,
 )
 
 
@@ -44,6 +48,88 @@ def test_completed_time_payload_persists_client_source_in_summary():
 
         persisted = session.query(StudySession).filter_by(id="mobile-record").one()
         assert '"client_source": "pwa"' in persisted.summary_json
+
+
+def test_source_summary_and_started_range_filter():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "desktop-range",
+                "kind": "practice",
+                "title": "Desktop",
+                "startedAt": "2026-07-09T08:00:00",
+                "endedAt": "2026-07-09T08:10:00",
+                "effectiveSeconds": 600,
+                "clientSource": "desktop",
+                "events": [],
+            },
+        )
+        create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "pwa-range",
+                "kind": "practice",
+                "title": "PWA",
+                "startedAt": "2026-07-09T09:00:00",
+                "endedAt": "2026-07-09T09:05:00",
+                "effectiveSeconds": 300,
+                "clientSource": "pwa",
+                "events": [],
+            },
+        )
+        create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "unknown-range",
+                "kind": "practice",
+                "title": "Unknown",
+                "startedAt": "2026-07-09T10:00:00",
+                "endedAt": "2026-07-09T10:02:00",
+                "effectiveSeconds": 120,
+                "events": [],
+            },
+        )
+        create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "outside-range",
+                "kind": "practice",
+                "title": "Outside",
+                "startedAt": "2026-07-08T08:00:00",
+                "endedAt": "2026-07-08T08:10:00",
+                "effectiveSeconds": 999,
+                "clientSource": "desktop",
+                "events": [],
+            },
+        )
+
+        summary = summarize_study_sessions_by_client_source(
+            session,
+            status="completed",
+            started_from=datetime(2026, 7, 9, 0, 0, 0),
+            started_to=datetime(2026, 7, 10, 0, 0, 0),
+        )
+        assert summary == {
+            "total_effective_seconds": 1020,
+            "desktop_effective_seconds": 600,
+            "pwa_effective_seconds": 300,
+            "unknown_effective_seconds": 120,
+        }
+
+        items = list_study_sessions(
+            session,
+            status="completed",
+            started_from=datetime(2026, 7, 9, 0, 0, 0),
+            started_to=datetime(2026, 7, 10, 0, 0, 0),
+        )
+        assert {item["id"] for item in items} == {
+            "desktop-range",
+            "pwa-range",
+            "unknown-range",
+        }
 
 
 def test_patch_study_session_merges_summary_fields():

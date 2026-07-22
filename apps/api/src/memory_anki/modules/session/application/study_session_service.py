@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
@@ -311,6 +312,8 @@ def list_study_sessions(
     keyword: str | None = None,
     kind: str | None = None,
     status: str | None = None,
+    started_from: datetime | None = None,
+    started_to: datetime | None = None,
     sort_by: str = "started_at",
     sort_order: str = "desc",
     limit: int | None = None,
@@ -321,6 +324,8 @@ def list_study_sessions(
         keyword=keyword,
         kind=kind,
         status=status,
+        started_from=started_from,
+        started_to=started_to,
     )
     sort_column = {
         "started_at": StudySession.started_at,
@@ -341,13 +346,73 @@ def count_study_sessions(
     keyword: str | None = None,
     kind: str | None = None,
     status: str | None = None,
+    started_from: datetime | None = None,
+    started_to: datetime | None = None,
 ) -> int:
     return _filtered_study_sessions_query(
         session,
         keyword=keyword,
         kind=kind,
         status=status,
+        started_from=started_from,
+        started_to=started_to,
     ).count()
+
+
+def summarize_study_sessions_by_client_source(
+    session: Session,
+    *,
+    keyword: str | None = None,
+    kind: str | None = None,
+    status: str | None = None,
+    started_from: datetime | None = None,
+    started_to: datetime | None = None,
+) -> dict[str, int]:
+    """Aggregate effective seconds for the current list filters by client source."""
+    rows = (
+        _filtered_study_sessions_query(
+            session,
+            keyword=keyword,
+            kind=kind,
+            status=status,
+            started_from=started_from,
+            started_to=started_to,
+        )
+        .with_entities(StudySession.effective_seconds, StudySession.summary_json)
+        .all()
+    )
+    total = 0
+    desktop = 0
+    pwa = 0
+    unknown = 0
+    for effective_seconds, summary_json in rows:
+        seconds = max(0, int(effective_seconds or 0))
+        total += seconds
+        source = _client_source_from_summary_json(summary_json)
+        if source == "desktop":
+            desktop += seconds
+        elif source == "pwa":
+            pwa += seconds
+        else:
+            unknown += seconds
+    return {
+        "total_effective_seconds": total,
+        "desktop_effective_seconds": desktop,
+        "pwa_effective_seconds": pwa,
+        "unknown_effective_seconds": unknown,
+    }
+
+
+def _client_source_from_summary_json(raw: str | None) -> str | None:
+    payload = _json_loads(raw, {})
+    if not isinstance(payload, dict):
+        return None
+    value = str(payload.get("client_source") or "").strip().lower()
+    if value == "desktop":
+        return "desktop"
+    if value in {"pwa", "mobile"}:
+        return "pwa"
+    return None
 
 
 def _filtered_study_sessions_query(
@@ -356,6 +421,8 @@ def _filtered_study_sessions_query(
     keyword: str | None,
     kind: str | None,
     status: str | None,
+    started_from: datetime | None = None,
+    started_to: datetime | None = None,
 ) -> Query:
     query = session.query(StudySession).filter(StudySession.deleted_at.is_(None))
     if status:
@@ -377,6 +444,11 @@ def _filtered_study_sessions_query(
                 ("palace_edit", "quiz", "custom", *FORMAL_REVIEW_SCENES)
             )
         )
+    # Filter by session wall time: prefer started_at for "records in this range".
+    if started_from is not None:
+        query = query.filter(StudySession.started_at >= started_from)
+    if started_to is not None:
+        query = query.filter(StudySession.started_at < started_to)
     return query
 
 

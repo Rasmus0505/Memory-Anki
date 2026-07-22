@@ -9,8 +9,10 @@ import {
   type SessionKind,
   type TimeRecordSortBy,
   type TimeRecordSortOrder,
+  type TimeRecordSourceSummary,
   type TimeSessionRecord,
 } from '@/modules/session/public'
+import type { TimeRecordRangePreset } from '@/modules/settings/ui/profile/hooks/useTimeRecordsDashboard'
 import {
   formatTableDateTime,
   sessionKindOptions,
@@ -25,6 +27,16 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Pagination } from '@/shared/components/ui/pagination'
 import { EmptyState } from '@/shared/components/state-placeholders'
+import { cn } from '@/shared/lib/utils'
+
+const RANGE_PRESETS: Array<{ value: TimeRecordRangePreset; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: '6h', label: '6 小时' },
+  { value: '24h', label: '24 小时' },
+  { value: '3d', label: '3 天' },
+  { value: '7d', label: '7 天' },
+  { value: 'custom', label: '自定义' },
+]
 
 interface TimeRecordsTableProps {
   thresholdInput: string
@@ -40,6 +52,13 @@ interface TimeRecordsTableProps {
   onSortByChange: (value: TimeRecordSortBy) => void
   sortOrder: TimeRecordSortOrder
   onSortOrderChange: (value: TimeRecordSortOrder) => void
+  rangePreset: TimeRecordRangePreset
+  onRangePresetChange: (value: TimeRecordRangePreset) => void
+  customRangeFrom: string
+  onCustomRangeFromChange: (value: string) => void
+  customRangeTo: string
+  onCustomRangeToChange: (value: string) => void
+  sourceSummary: TimeRecordSourceSummary
   page: number
   pageSize: number
   totalRecords: number
@@ -77,6 +96,13 @@ export function TimeRecordsTable({
   onSortByChange,
   sortOrder,
   onSortOrderChange,
+  rangePreset,
+  onRangePresetChange,
+  customRangeFrom,
+  onCustomRangeFromChange,
+  customRangeTo,
+  onCustomRangeToChange,
+  sourceSummary,
   page,
   pageSize,
   totalRecords,
@@ -132,6 +158,75 @@ export function TimeRecordsTable({
               {isBulkDeleting ? '删除中...' : '批量删除所选'}
             </Button>
           </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-md border border-border/60 bg-background/80 px-3 py-2">
+            <div className="text-[11px] text-muted-foreground">当前范围总时长</div>
+            <div className="mt-1 text-base font-semibold">
+              {formatDuration(sourceSummary.totalEffectiveSeconds)}
+            </div>
+          </div>
+          <div className="rounded-md border border-border/60 bg-background/80 px-3 py-2">
+            <div className="text-[11px] text-muted-foreground">电脑端</div>
+            <div className="mt-1 text-base font-semibold">
+              {formatDuration(sourceSummary.desktopEffectiveSeconds)}
+            </div>
+          </div>
+          <div className="rounded-md border border-border/60 bg-background/80 px-3 py-2">
+            <div className="text-[11px] text-muted-foreground">PWA 端</div>
+            <div className="mt-1 text-base font-semibold">
+              {formatDuration(sourceSummary.pwaEffectiveSeconds)}
+            </div>
+          </div>
+          <div className="rounded-md border border-border/60 bg-background/80 px-3 py-2">
+            <div className="text-[11px] text-muted-foreground">未知端</div>
+            <div className="mt-1 text-base font-semibold">
+              {formatDuration(sourceSummary.unknownEffectiveSeconds)}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">时间范围</span>
+            {RANGE_PRESETS.map((preset) => (
+              <Button
+                key={preset.value}
+                type="button"
+                size="sm"
+                variant={rangePreset === preset.value ? 'default' : 'outline'}
+                className={cn('h-8', rangePreset === preset.value ? '' : 'active:scale-[0.98]')}
+                onClick={() => onRangePresetChange(preset.value)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+          {rangePreset === 'custom' ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                开始时间
+                <Input
+                  type="datetime-local"
+                  step={1}
+                  value={customRangeFrom}
+                  onChange={(event) => onCustomRangeFromChange(event.target.value)}
+                  aria-label="自定义开始时间"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                结束时间
+                <Input
+                  type="datetime-local"
+                  step={1}
+                  value={customRangeTo}
+                  onChange={(event) => onCustomRangeToChange(event.target.value)}
+                  aria-label="自定义结束时间"
+                />
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_180px_180px_140px]">

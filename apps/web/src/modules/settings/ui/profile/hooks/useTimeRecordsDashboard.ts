@@ -5,6 +5,11 @@ import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
+  formatLocalDateTimeInputFromDate,
+  formatUtcApiDateTime,
+  parseLocalDateTimeInputValue,
+} from '@/shared/lib/dateTime'
+import {
   createStudySessionRecord,
   getStudySessionRecordAnalytics,
   listStudySessionRecords,
@@ -16,9 +21,54 @@ import {
   type TimeRecordChartRange,
   type TimeRecordSortBy,
   type TimeRecordSortOrder,
+  type TimeRecordSourceSummary,
   type TimeSessionRecord,
   updateStudySessionRecord,
 } from '@/modules/session/public'
+
+export type TimeRecordRangePreset = 'all' | '6h' | '24h' | '3d' | '7d' | 'custom'
+
+const EMPTY_SOURCE_SUMMARY: TimeRecordSourceSummary = {
+  totalEffectiveSeconds: 0,
+  desktopEffectiveSeconds: 0,
+  pwaEffectiveSeconds: 0,
+  unknownEffectiveSeconds: 0,
+}
+
+function resolveRangeBounds(
+  preset: TimeRecordRangePreset,
+  customFrom: string,
+  customTo: string,
+): { startedFrom: string | null; startedTo: string | null } {
+  if (preset === 'all') {
+    return { startedFrom: null, startedTo: null }
+  }
+  if (preset === 'custom') {
+    const fromDate = customFrom.trim()
+      ? parseLocalDateTimeInputValue(customFrom)
+      : null
+    const toDate = customTo.trim() ? parseLocalDateTimeInputValue(customTo) : null
+    return {
+      startedFrom:
+        fromDate && !Number.isNaN(fromDate.getTime())
+          ? formatUtcApiDateTime(fromDate)
+          : null,
+      // exclusive upper bound: add 1 second if user picked an end datetime-local
+      startedTo:
+        toDate && !Number.isNaN(toDate.getTime())
+          ? formatUtcApiDateTime(new Date(toDate.getTime() + 1000))
+          : null,
+    }
+  }
+  const now = new Date()
+  const hours =
+    preset === '6h' ? 6 : preset === '24h' ? 24 : preset === '3d' ? 72 : 168
+  const from = new Date(now.getTime() - hours * 60 * 60 * 1000)
+  return {
+    startedFrom: formatUtcApiDateTime(from),
+    startedTo: formatUtcApiDateTime(now),
+  }
+}
 import {
   applyTimeRecordFormPatch,
   applyTimeRecordQuickAddPatch,
@@ -58,6 +108,13 @@ export interface UseTimeRecordsDashboardResult {
   setSortBy: (value: TimeRecordSortBy) => void
   sortOrder: TimeRecordSortOrder
   setSortOrder: (value: TimeRecordSortOrder) => void
+  rangePreset: TimeRecordRangePreset
+  setRangePreset: (value: TimeRecordRangePreset) => void
+  customRangeFrom: string
+  setCustomRangeFrom: (value: string) => void
+  customRangeTo: string
+  setCustomRangeTo: (value: string) => void
+  sourceSummary: TimeRecordSourceSummary
   page: number
   pageSize: number
   totalRecords: number
@@ -124,6 +181,11 @@ export function useTimeRecordsDashboard(
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [sortBy, setSortBy] = useState<TimeRecordSortBy>('started_at')
   const [sortOrder, setSortOrder] = useState<TimeRecordSortOrder>('desc')
+  const [rangePreset, setRangePreset] = useState<TimeRecordRangePreset>('all')
+  const [customRangeFrom, setCustomRangeFrom] = useState('')
+  const [customRangeTo, setCustomRangeTo] = useState('')
+  const [sourceSummary, setSourceSummary] =
+    useState<TimeRecordSourceSummary>(EMPTY_SOURCE_SUMMARY)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [totalRecords, setTotalRecords] = useState(0)
@@ -160,6 +222,10 @@ export function useTimeRecordsDashboard(
   const trendRange = options.trendRange ?? 7
   const breakdownRange = options.breakdownRange ?? 'all'
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
+  const rangeBounds = useMemo(
+    () => resolveRangeBounds(rangePreset, customRangeFrom, customRangeTo),
+    [customRangeFrom, customRangeTo, rangePreset],
+  )
 
   const loadRecords = useCallback(async (targetPage: number) => {
     const requestId = ++recordsRequestIdRef.current
@@ -173,6 +239,9 @@ export function useTimeRecordsDashboard(
         kind: kindFilter === 'all' ? undefined : kindFilter,
         sortBy,
         sortOrder,
+        startedFrom: rangeBounds.startedFrom,
+        startedTo: rangeBounds.startedTo,
+        includeSourceSummary: true,
       })
       if (requestId !== recordsRequestIdRef.current) return
       const nextTotalPages = Math.max(1, Math.ceil(result.total / pageSize))
@@ -182,6 +251,7 @@ export function useTimeRecordsDashboard(
       }
       setRecords(result.items)
       setTotalRecords(result.total)
+      setSourceSummary(result.sourceSummary ?? EMPTY_SOURCE_SUMMARY)
     } catch (error) {
       if (requestId !== recordsRequestIdRef.current) return
       setRecordsError(error instanceof Error ? error.message : '加载时间记录失败。')
@@ -190,7 +260,15 @@ export function useTimeRecordsDashboard(
         setIsLoadingRecords(false)
       }
     }
-  }, [debouncedKeyword, kindFilter, pageSize, sortBy, sortOrder])
+  }, [
+    debouncedKeyword,
+    kindFilter,
+    pageSize,
+    rangeBounds.startedFrom,
+    rangeBounds.startedTo,
+    sortBy,
+    sortOrder,
+  ])
 
   const refreshRecords = useCallback(async () => {
     await loadRecords(page)
@@ -527,7 +605,17 @@ export function useTimeRecordsDashboard(
 
   useEffect(() => {
     setSelectedRecordIds([])
-  }, [debouncedKeyword, kindFilter, page, pageSize, sortBy, sortOrder])
+  }, [
+    customRangeFrom,
+    customRangeTo,
+    debouncedKeyword,
+    kindFilter,
+    page,
+    pageSize,
+    rangePreset,
+    sortBy,
+    sortOrder,
+  ])
 
   return {
     thresholdSeconds,
@@ -557,6 +645,28 @@ export function useTimeRecordsDashboard(
       setSortOrder(value)
       setPage(1)
     },
+    rangePreset,
+    setRangePreset: (value) => {
+      setRangePreset(value)
+      if (value === 'custom' && !customRangeFrom && !customRangeTo) {
+        const now = new Date()
+        const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        setCustomRangeFrom(formatLocalDateTimeInputFromDate(dayAgo))
+        setCustomRangeTo(formatLocalDateTimeInputFromDate(now))
+      }
+      setPage(1)
+    },
+    customRangeFrom,
+    setCustomRangeFrom: (value) => {
+      setCustomRangeFrom(value)
+      setPage(1)
+    },
+    customRangeTo,
+    setCustomRangeTo: (value) => {
+      setCustomRangeTo(value)
+      setPage(1)
+    },
+    sourceSummary,
     page,
     pageSize,
     totalRecords,

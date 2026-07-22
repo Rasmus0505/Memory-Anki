@@ -23,6 +23,7 @@ from memory_anki.modules.session.application.study_session_commands import (
     create_study_session_command,
     create_study_session_from_time_record_command,
 )
+from memory_anki.modules.session.application.serialization import _parse_datetime
 from memory_anki.modules.session.application.study_session_service import (
     build_study_session_stats,
     build_time_record_analytics,
@@ -34,6 +35,7 @@ from memory_anki.modules.session.application.study_session_service import (
     list_active_study_sessions,
     list_study_sessions,
     patch_study_session,
+    summarize_study_sessions_by_client_source,
 )
 from memory_anki.modules.session.domain.schemas import (
     PracticeProgressUpsert,
@@ -133,41 +135,54 @@ def api_list_study_sessions(
     offset: int = Query(default=0, ge=0),
     keyword: str | None = Query(default=None, max_length=300),
     kind: Literal["palace_edit", "practice", "quiz", "review", "custom"] | None = None,
+    started_from: str | None = Query(default=None, max_length=40),
+    started_to: str | None = Query(default=None, max_length=40),
     sort_by: Literal["started_at", "effective_seconds", "title"] = "started_at",
     sort_order: Literal["asc", "desc"] = "desc",
+    include_source_summary: bool = Query(default=False),
     session: Session = Depends(session_dep),
 ):
+    parsed_from = _parse_datetime(started_from) if started_from else None
+    parsed_to = _parse_datetime(started_to) if started_to else None
+    if started_from and parsed_from is None:
+        raise HTTPException(status_code=400, detail="started_from 时间格式无效。")
+    if started_to and parsed_to is None:
+        raise HTTPException(status_code=400, detail="started_to 时间格式无效。")
+    filter_kwargs = {
+        "keyword": keyword,
+        "kind": kind,
+        "status": status,
+        "started_from": parsed_from,
+        "started_to": parsed_to,
+    }
     if limit is None:
-        return {
+        payload: dict = {
             "items": list_study_sessions(
                 session,
-                keyword=keyword,
-                kind=kind,
-                status=status,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                **filter_kwargs,
             )
         }
-    return {
-        "items": list_study_sessions(
-            session,
-            keyword=keyword,
-            kind=kind,
-            status=status,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            limit=limit,
-            offset=offset,
-        ),
-        "total": count_study_sessions(
-            session,
-            keyword=keyword,
-            kind=kind,
-            status=status,
-        ),
-        "limit": limit,
-        "offset": offset,
-    }
+    else:
+        payload = {
+            "items": list_study_sessions(
+                session,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                limit=limit,
+                offset=offset,
+                **filter_kwargs,
+            ),
+            "total": count_study_sessions(session, **filter_kwargs),
+            "limit": limit,
+            "offset": offset,
+        }
+    if include_source_summary:
+        payload["source_summary"] = summarize_study_sessions_by_client_source(
+            session, **filter_kwargs
+        )
+    return payload
 
 
 @router.get("/study-sessions/{study_session_id}")

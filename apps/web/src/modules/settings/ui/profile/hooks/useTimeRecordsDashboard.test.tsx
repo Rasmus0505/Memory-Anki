@@ -34,7 +34,11 @@ vi.mock('@/shared/preferences/clientPreferences', () => ({
 }))
 
 vi.mock('@/shared/events/appEvents', () => ({
+  APP_EVENT_NAMES: {
+    timerAutomationUpdated: 'memory-anki:timer-automation-updated',
+  },
   onAppEvent: vi.fn(() => () => undefined),
+  emitAppEvent: vi.fn(),
 }))
 
 describe('useTimeRecordsDashboard', () => {

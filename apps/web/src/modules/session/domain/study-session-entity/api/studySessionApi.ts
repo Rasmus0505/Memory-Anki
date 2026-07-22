@@ -107,6 +107,18 @@ export interface StudySessionListOptions {
   status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'recovered'
   sortBy?: 'started_at' | 'effective_seconds' | 'title'
   sortOrder?: 'asc' | 'desc'
+  /** Inclusive lower bound (ISO / API datetime). */
+  startedFrom?: string | null
+  /** Exclusive upper bound (ISO / API datetime). */
+  startedTo?: string | null
+  includeSourceSummary?: boolean
+}
+
+export interface StudySessionSourceSummary {
+  total_effective_seconds: number
+  desktop_effective_seconds: number
+  pwa_effective_seconds: number
+  unknown_effective_seconds: number
 }
 
 export interface StudySessionListResult {
@@ -114,6 +126,7 @@ export interface StudySessionListResult {
   total?: number
   limit?: number
   offset?: number
+  source_summary?: StudySessionSourceSummary
 }
 
 export interface StudySessionAnalyticsResult {
@@ -136,6 +149,9 @@ function listPath(options?: StudySessionListOptions) {
   if (options?.status) query.set('status', options.status)
   if (options?.sortBy) query.set('sort_by', options.sortBy)
   if (options?.sortOrder) query.set('sort_order', options.sortOrder)
+  if (options?.startedFrom) query.set('started_from', options.startedFrom)
+  if (options?.startedTo) query.set('started_to', options.startedTo)
+  if (options?.includeSourceSummary) query.set('include_source_summary', 'true')
   const suffix = query.toString()
   return suffix ? `/study-sessions?${suffix}` : '/study-sessions'
 }

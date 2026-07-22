@@ -19,6 +19,13 @@ import {
 } from '@/modules/session/domain/study-session-entity/api'
 import { formatLocalDateKey, parseApiDateTime } from '@/shared/lib/dateTime'
 
+export interface TimeRecordSourceSummary {
+  totalEffectiveSeconds: number
+  desktopEffectiveSeconds: number
+  pwaEffectiveSeconds: number
+  unknownEffectiveSeconds: number
+}
+
 export async function listStudySessionRecords(options: {
   limit: number
   offset: number
@@ -26,17 +33,32 @@ export async function listStudySessionRecords(options: {
   kind?: SessionKind
   sortBy: 'started_at' | 'effective_seconds' | 'title'
   sortOrder: 'asc' | 'desc'
+  startedFrom?: string | null
+  startedTo?: string | null
+  includeSourceSummary?: boolean
 }) {
   const result = await listStudySessionsApi({
     ...options,
     kind: options.kind === 'custom' ? 'custom' : options.kind,
     status: 'completed',
+    startedFrom: options.startedFrom ?? undefined,
+    startedTo: options.startedTo ?? undefined,
+    includeSourceSummary: options.includeSourceSummary,
   })
+  const sourceSummary = result.source_summary
+    ? {
+        totalEffectiveSeconds: result.source_summary.total_effective_seconds,
+        desktopEffectiveSeconds: result.source_summary.desktop_effective_seconds,
+        pwaEffectiveSeconds: result.source_summary.pwa_effective_seconds,
+        unknownEffectiveSeconds: result.source_summary.unknown_effective_seconds,
+      }
+    : null
   return {
     items: result.items.map(studySessionToTimeRecord),
     total: result.total ?? result.items.length,
     limit: result.limit ?? options.limit,
     offset: result.offset ?? options.offset,
+    sourceSummary,
   }
 }
 
