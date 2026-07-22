@@ -14,12 +14,20 @@ from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 
 
-def _catalog_loader_options():
+def _list_loader_options():
+    """Lightweight list/catalog graph — no pegs, attachments, review_logs, or segments."""
     return (
         joinedload(Palace.primary_chapter).joinedload(Chapter.parent),
         joinedload(Palace.primary_chapter).joinedload(Chapter.subject),
+        selectinload(Palace.subjects),
         selectinload(Palace.chapters).joinedload(Chapter.subject),
         selectinload(Palace.chapters).joinedload(Chapter.parent),
+    )
+
+
+def _catalog_loader_options():
+    return (
+        *_list_loader_options(),
         selectinload(Palace.review_logs),
         selectinload(Palace.segments),
     )
@@ -50,7 +58,7 @@ class PalaceRepository:
     ) -> list[Palace]:
         query = (
             self._session.query(Palace)
-            .options(*_detail_loader_options())
+            .options(*_list_loader_options())
             .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
         )
         if search:
@@ -69,7 +77,7 @@ class PalaceRepository:
     def list_catalog_palaces(self, *, search: str = "") -> list[Palace]:
         query = (
             self._session.query(Palace)
-            .options(*_catalog_loader_options())
+            .options(*_list_loader_options())
             .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
         )
         if search:

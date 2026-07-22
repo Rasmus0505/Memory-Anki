@@ -16,9 +16,7 @@ def build_structured_error(
 ) -> dict[str, Any]:
     message = str(exc).strip() or "识别失败，请稍后重试。"
     lower_message = message.lower()
-    if "结构页" in message and ("未找到" in message or "不在" in message):
-        code = "invalid_structure_page"
-    elif "不是有效的脑图 json" in message or "json" in lower_message:
+    if "不是有效的脑图 json" in message or "json" in lower_message:
         code = "invalid_json"
     elif "http " in lower_message or "internal server error" in lower_message:
         code = "provider_http_error"

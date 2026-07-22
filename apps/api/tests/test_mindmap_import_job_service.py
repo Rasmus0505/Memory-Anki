@@ -77,7 +77,11 @@ def test_same_fingerprint_completed_job_is_reused_without_creating_a_new_job():
 
     with patch.object(
         job_service,
-        "_stream_call_dashscope_json",
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("节点"),
+    ), patch.object(
+        job_service,
+        "_stream_call_formatter_json",
         return_value=_stream_return({"title": "导入脑图", "children": [{"text": "节点", "children": []}]}),
     ):
         job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
@@ -137,11 +141,12 @@ def test_persisted_runtime_restores_credentials_through_platform_provider():
     assert restored_snapshots[0].scenario_key == "vision_batch_mindmap"
 
 
+@pytest.mark.skip(reason="structure/direct path removed")
 def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"struct", "structure.png"), (b"body", "body.png")], 0),
+        return_value=[(b"struct", "structure.png"), (b"body", "body.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -149,8 +154,7 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
                 entity_key="palace_1",
                 image_items=[(b"struct", "structure.png"), (b"body", "body.png")],
                 fallback_title="批量导入",
-                structure_image_index=0,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
             )
 
     with patch.object(
@@ -187,11 +191,12 @@ def test_resume_after_structure_checkpoint_only_reruns_merge_stage():
     assert mock_merge.call_count == 1
 
 
+@pytest.mark.skip(reason="structure/direct path removed")
 def test_batch_job_without_structure_image_uses_direct_generation_flow():
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+        return_value=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -199,8 +204,7 @@ def test_batch_job_without_structure_image_uses_direct_generation_flow():
                 entity_key="palace_1",
                 image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
                 fallback_title="批量导入",
-                structure_image_index=None,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
             )
 
     with patch.object(job_service, "_stream_call_dashscope_json") as mock_structure, patch.object(
@@ -244,7 +248,7 @@ def test_non_json_or_html_provider_errors_become_structured_retryable_failures()
 
     with patch.object(
         job_service,
-        "_stream_call_dashscope_json",
+        "_stream_call_dashscope_text",
         side_effect=MindMapImportError("Internal Server Error"),
     ):
         job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
@@ -354,7 +358,11 @@ def test_interrupted_job_can_resume_and_complete_from_checkpoint():
 
     with patch.object(
         job_service,
-        "_stream_call_dashscope_json",
+        "_stream_call_dashscope_text",
+        return_value=_stream_return("节点"),
+    ), patch.object(
+        job_service,
+        "_stream_call_formatter_json",
         return_value=_stream_return({"title": "导入脑图", "children": [{"text": "节点", "children": []}]}),
     ):
         job_service._run_job_worker(job_id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
@@ -364,11 +372,12 @@ def test_interrupted_job_can_resume_and_complete_from_checkpoint():
     assert payload["resumable"] is False
 
 
+@pytest.mark.skip(reason="structure/direct path removed")
 def test_request_pause_sets_pause_requested_and_worker_lands_on_paused_checkpoint():
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"struct", "structure.png"), (b"body", "body.png")], 0),
+        return_value=[(b"struct", "structure.png"), (b"body", "body.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -376,8 +385,7 @@ def test_request_pause_sets_pause_requested_and_worker_lands_on_paused_checkpoin
                 entity_key="palace_1",
                 image_items=[(b"struct", "structure.png"), (b"body", "body.png")],
                 fallback_title="批量导入",
-                structure_image_index=0,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
             )
 
     def _stream_and_request_pause():
@@ -475,11 +483,12 @@ def test_pdf_job_keeps_source_snapshot_and_rerun_gets_new_operation(tmp_path, mo
         session.commit()
 
         monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", import_dir)
+        monkeypatch.setattr(mindmap_import_job_api, "IMPORT_JOBS_DIR", import_dir)
         monkeypatch.setattr(mindmap_import_job_api, "PDF_LIBRARY_DIR", library_dir)
         with patch.object(
             mindmap_import_job_api.llm_gateway,
             "prepare_batch_items",
-            side_effect=lambda **kwargs: (kwargs["image_items"], None),
+            side_effect=lambda **kwargs: kwargs["image_items"],
         ):
             job = job_service.create_pdf_import_job(
                 session,
@@ -532,12 +541,13 @@ def test_pdf_job_reports_storage_exhaustion_and_removes_incomplete_job(tmp_path,
         session.commit()
 
         monkeypatch.setattr(job_service, "IMPORT_JOBS_DIR", import_dir)
+        monkeypatch.setattr(mindmap_import_job_api, "IMPORT_JOBS_DIR", import_dir)
         monkeypatch.setattr(mindmap_import_job_api, "PDF_LIBRARY_DIR", library_dir)
         with (
             patch.object(
                 mindmap_import_job_api.llm_gateway,
                 "prepare_batch_items",
-                side_effect=lambda **kwargs: (kwargs["image_items"], None),
+                side_effect=lambda **kwargs: kwargs["image_items"],
             ),
             patch.object(
                 mindmap_import_job_api.job_artifacts,
@@ -572,11 +582,12 @@ def test_pdf_job_reports_storage_exhaustion_and_removes_incomplete_job(tmp_path,
         RuntimeError('DataInspectionFailed: output rejected'),
     ],
 )
+@pytest.mark.skip(reason="structure/direct path removed")
 def test_invalid_direct_generation_falls_back_to_page_ocr_and_formatter(direct_error):
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+        return_value=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -584,8 +595,7 @@ def test_invalid_direct_generation_falls_back_to_page_ocr_and_formatter(direct_e
                 entity_key="palace_1",
                 image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
                 fallback_title="德国近代教育",
-                structure_image_index=None,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
             )
 
     with patch.object(
@@ -628,7 +638,7 @@ def test_ocr_resume_reuses_successful_page_artifact():
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+        return_value=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -636,18 +646,13 @@ def test_ocr_resume_reuses_successful_page_artifact():
                 entity_key="palace_1",
                 image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
                 fallback_title="德国近代教育",
-                structure_image_index=None,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
             )
     artifact_dir = job_service.get_job_artifact_dir(job.id)
     (artifact_dir / "ocr").mkdir(parents=True, exist_ok=True)
     (artifact_dir / "ocr" / "page-1.txt").write_text("已保存第一页", encoding="utf-8")
 
     with patch.object(
-        job_service,
-        "_stream_call_dashscope_batch_json",
-        side_effect=MindMapImportError("direct failed"),
-    ), patch.object(
         job_service,
         "_stream_call_dashscope_text",
         return_value=_stream_return("第二页"),
@@ -666,11 +671,12 @@ def test_ocr_resume_reuses_successful_page_artifact():
     assert payload["ocr_pages"][0]["reused"] is True
     assert payload["ocr_pages"][1]["reused"] is False
 
+@pytest.mark.skip(reason="structure/direct path removed")
 def test_ocr_role_model_skips_direct_generation():
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"page-1", "page-1.png")], None),
+        return_value=[(b"page-1", "page-1.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -678,8 +684,7 @@ def test_ocr_role_model_skips_direct_generation():
                 entity_key="palace_1",
                 image_items=[(b"page-1", "page-1.png")],
                 fallback_title="德国近代教育",
-                structure_image_index=None,
-                ai_runtime=_ai_runtime(session),
+                                ai_runtime=_ai_runtime(session),
                 vision_ai_options=AiRuntimeOptions(model="qwen3.5-ocr"),
             )
 
@@ -703,3 +708,41 @@ def test_ocr_role_model_skips_direct_generation():
     assert ocr_call.call_count == 1
     assert formatter_call.call_count == 1
     assert payload["vision_resolved_ai"]["vision_processing_role"] == "ocr_extraction"
+
+
+def test_extract_then_format_is_default_batch_pipeline():
+    with patch.object(
+        job_service,
+        "_prepare_batch_image_items",
+        return_value=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
+    ):
+        with Session(engine) as session:
+            job = job_service.create_batch_import_job(
+                session,
+                entity_key="palace_1",
+                image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
+                fallback_title="德国近代教育",
+                ai_runtime=_ai_runtime(session),
+            )
+
+    with patch.object(
+        job_service,
+        "_stream_call_dashscope_text",
+        side_effect=[_stream_return("第斯多惠"), _stream_return("影响")],
+    ) as ocr_call, patch.object(
+        job_service,
+        "_stream_call_formatter_json",
+        return_value=_stream_return(
+            {
+                "title": "德国近代教育",
+                "children": [{"text": "第斯多惠", "children": [{"text": "影响", "children": []}]}],
+            }
+        ),
+    ) as formatter_call:
+        job_service._run_job_worker(job.id, ai_runtime=_ai_runtime(), prompt_catalog=_prompt_catalog())
+
+    payload = _load_job(job.id)
+    assert payload["status"] == job_service.JOB_STATUS_COMPLETED, payload
+    assert payload["pipeline_strategy"] == "extract_then_format"
+    assert ocr_call.call_count == 2
+    assert formatter_call.call_count == 1

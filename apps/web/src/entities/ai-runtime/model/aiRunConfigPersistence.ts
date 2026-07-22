@@ -11,7 +11,6 @@ const SCENARIO_PROMPT_TEMPLATE_KEYS = {
   vision_image_mindmap: 'ai_prompt_import_image_mindmap',
   vision_image_text: 'ai_prompt_import_image_text',
   vision_batch_mindmap: 'ai_prompt_import_document_mindmap',
-  vision_structure_mindmap: 'ai_prompt_import_batch_mindmap',
   mindmap_ocr_formatter: 'ai_prompt_import_ocr_mindmap_format',
   quiz_image_generation: 'ai_prompt_palace_quiz_generate',
   quiz_text_generation: 'ai_prompt_palace_quiz_generate',

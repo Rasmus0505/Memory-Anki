@@ -274,7 +274,14 @@ export function useFlipCardRatingControls({
     if (isEditMode || !ratingMode || !onRateNode) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-      if (isEditableKeyboardTarget(event.target) || pendingSubtreeRating || document.querySelector('[role="dialog"]')) return
+      if (
+        isEditableKeyboardTarget(event.target) ||
+        pendingSubtreeRating ||
+        (event.target instanceof Element && event.target.closest('[role="dialog"]')) ||
+        Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
+      ) {
+        return
+      }
       if (event.key === 'Backspace' && onUndoRating) {
         event.preventDefault()
         handleUndoRating()

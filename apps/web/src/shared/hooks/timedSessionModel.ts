@@ -10,7 +10,7 @@ import type {
   TimerAutomationActivityKind,
   TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
-import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
+import { formatUtcApiDateTime } from '@/shared/lib/dateTime'
 
 export const AUTO_PAUSE_MS = 2 * 60 * 1000
 export const HIDDEN_PAUSE_MS = 15 * 1000
@@ -198,7 +198,8 @@ interface TimedSessionAutomationRuleInput {
 }
 
 function nowIso() {
-  return formatLocalApiDateTime(new Date())
+  // Absolute session timestamps must be UTC so API parse/display stay consistent.
+  return formatUtcApiDateTime(new Date())
 }
 
 export { nowIso }

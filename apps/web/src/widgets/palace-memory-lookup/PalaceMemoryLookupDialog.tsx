@@ -143,13 +143,13 @@ export function PalaceMemoryLookupDialog({
 
   const flipShortcutHandlers = useMemo(
     () => ({
-      flip_subtree_cards_practice: () => {
-        if (previewMode !== 'flip') return
-        revealSession.handleBulkRevealSubtree(null)
+      flip_subtree_cards_practice: (): boolean => {
+        if (previewMode !== 'flip') return false
+        return Boolean(revealSession.handleBulkRevealSubtree(null))
       },
-      flip_direct_child_cards_practice: () => {
-        if (previewMode !== 'flip') return
-        revealSession.handleBulkRevealDirectChildren(null)
+      flip_direct_child_cards_practice: (): boolean => {
+        if (previewMode !== 'flip') return false
+        return Boolean(revealSession.handleBulkRevealDirectChildren(null))
       },
     }),
     [previewMode, revealSession],

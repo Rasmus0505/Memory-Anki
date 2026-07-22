@@ -97,33 +97,14 @@ def _fallback_scenario_key(source_meta: dict[str, Any] | None) -> str:
     return "vision_image_mindmap"
 
 
-def _vision_processing_role(source_meta: dict[str, Any] | None) -> str:
-    runtime_meta = None
-    if isinstance(source_meta, dict):
-        runtime_meta = source_meta.get("vision_ai_runtime") or source_meta.get("ai_runtime")
-    if not isinstance(runtime_meta, dict):
-        return "direct_generation"
-    resolved_ai = runtime_meta.get("resolved_ai")
-    if isinstance(resolved_ai, dict):
-        role = str(resolved_ai.get("vision_processing_role") or "").strip()
-        if role in {"direct_generation", "ocr_extraction"}:
-            return role
-        model_key = str(resolved_ai.get("model_key") or "").strip()
-        if model_key in {"qwen3.5-ocr", "qwen-vl-ocr"}:
-            return "ocr_extraction"
-    model = str(runtime_meta.get("model") or "").strip()
-    return "ocr_extraction" if model in {"qwen3.5-ocr", "qwen-vl-ocr"} else "direct_generation"
-
 def _prepare_batch_image_items(
     *,
     ai_runtime: AiRuntimeProvider,
     image_items: list[tuple[bytes, str | None]],
-    structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int | None]:
+) -> list[tuple[bytes, str | None]]:
     return llm_gateway.prepare_batch_items(
         runtime=_dashscope_runtime(ai_runtime=ai_runtime),
         image_items=image_items,
-        structure_image_index=structure_image_index,
     )
 
 
@@ -190,36 +171,6 @@ def _stream_call_dashscope_text(
     )
 
 
-def _stream_call_dashscope_batch_json(
-    *,
-    ai_runtime: AiRuntimeProvider,
-    prompt_catalog: PromptCatalog,
-    source_meta: dict[str, Any] | None = None,
-    image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any],
-    channel: str,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-):
-    return (
-        yield from llm_gateway.stream_batch_json(
-            prompt_catalog=prompt_catalog,
-            runtime=_dashscope_runtime(source_meta, ai_runtime=ai_runtime),
-            image_items=image_items,
-            structure_tree=structure_tree,
-            channel=channel,
-            range_prompt=range_prompt,
-            page_numbers=page_numbers,
-            disable_rebalance=disable_rebalance,
-            extracted_text=extracted_text,
-            external_log_context=external_log_context,
-        )
-    )
-
-
 def _stream_call_formatter_json(
     *,
     ai_runtime: AiRuntimeProvider,
@@ -252,9 +203,7 @@ __all__ = [
     "_dashscope_runtime",
     "_prepare_batch_image_items",
     "_serialize_runtime_payload",
-    "_stream_call_dashscope_batch_json",
     "_stream_call_dashscope_json",
     "_stream_call_dashscope_text",
     "_stream_call_formatter_json",
-    "_vision_processing_role",
 ]

@@ -57,7 +57,7 @@ export function MindMapImportResultsPanel({
       <div className="grid gap-5">
         <section ref={previewSectionRef} className="space-y-3">
           <div className="text-sm font-medium">
-            {sourceKind === 'image-batch' ? '结构图预览' : '原图预览'}
+            原图预览
           </div>
           <div className="overflow-hidden rounded-lg border border-border/70 bg-background/70">
             {resolvedPreviewImageUrl ? (
@@ -70,7 +70,7 @@ export function MindMapImportResultsPanel({
             ) : (
               <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
                 {sourceKind === 'image-batch'
-                  ? '识别完成后，这里会显示本次使用的结构图。'
+                  ? '识别完成后，这里会显示本次上传的页面预览。'
                   : '还没有图片，先粘贴或选择一张图片。'}
               </div>
             )}
@@ -156,7 +156,7 @@ export function MindMapImportResultsPanel({
                 <div className="flex items-center gap-2">
                   {sourceKind === 'image-batch' && batchMeta ? (
                     <Badge variant="secondary">
-                      {batchMeta.imageCount} 张图{batchMeta.structureImageIndex != null ? ' / 结构补全' : ' / 直接生成'}
+                      {batchMeta.imageCount} 张图 / 识别后整理
                     </Badge>
                   ) : null}
                   {sourceTree?.title ? <Badge variant="outline">{sourceTree.title}</Badge> : null}

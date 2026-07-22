@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
@@ -19,6 +20,11 @@ from .study_session_constants import (
     TIME_RECORD_KIND_LABELS,
 )
 from .time_bounds import current_week_bounds, today_bounds
+
+
+def _local_calendar_date_expr(column):
+    """SQLite: treat stored UTC-naive as UTC and project to the host local calendar day."""
+    return func.date(column, "localtime")
 
 
 def get_study_session_duration_seconds(
@@ -158,19 +164,19 @@ def build_time_record_analytics(
     reference_date: date | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     today = reference_date or date.today()
-    tomorrow = datetime.combine(today + timedelta(days=1), time.min)
+    range_end = local_calendar_day_start_as_utc_naive(today + timedelta(days=1))
     return {
         "trend": _build_time_record_trend(
             session,
             range_value=trend_range,
             today=today,
-            tomorrow=tomorrow,
+            range_end=range_end,
         ),
         "breakdown": _build_time_record_breakdown(
             session,
             range_value=breakdown_range,
             today=today,
-            tomorrow=tomorrow,
+            range_end=range_end,
         ),
     }
 
@@ -189,7 +195,11 @@ def _range_start(
         .filter(StudySession.deleted_at.is_(None))
         .scalar()
     )
-    return earliest.date() if earliest is not None else today
+    if earliest is None:
+        return today
+    # Stored timestamps are UTC-naive; project to the host local calendar day.
+    aware = earliest if earliest.tzinfo is not None else earliest.replace(tzinfo=UTC)
+    return aware.astimezone().date()
 
 
 def _build_time_record_trend(
@@ -197,22 +207,23 @@ def _build_time_record_trend(
     *,
     range_value: int | str,
     today: date,
-    tomorrow: datetime,
+    range_end: datetime,
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
-    start = datetime.combine(start_date, time.min)
+    start = local_calendar_day_start_as_utc_naive(start_date)
     attributed_at = _session_attribution_at()
+    local_day = _local_calendar_date_expr(attributed_at)
     rows = (
         session.query(
-            func.date(attributed_at),
+            local_day,
             func.coalesce(func.sum(StudySession.effective_seconds), 0),
         )
         .filter(
             StudySession.deleted_at.is_(None),
             attributed_at >= start,
-            attributed_at < tomorrow,
+            attributed_at < range_end,
         )
-        .group_by(func.date(attributed_at))
+        .group_by(local_day)
         .all()
     )
     totals = {str(date_key): int(seconds or 0) for date_key, seconds in rows}
@@ -236,7 +247,7 @@ def _build_time_record_breakdown(
     *,
     range_value: int | str,
     today: date,
-    tomorrow: datetime,
+    range_end: datetime,
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
     attributed_at = _session_attribution_at()
@@ -244,8 +255,8 @@ def _build_time_record_breakdown(
         session.query(StudySession)
         .filter(
             StudySession.deleted_at.is_(None),
-            attributed_at >= datetime.combine(start_date, time.min),
-            attributed_at < tomorrow,
+            attributed_at >= local_calendar_day_start_as_utc_naive(start_date),
+            attributed_at < range_end,
         )
         .all()
     )

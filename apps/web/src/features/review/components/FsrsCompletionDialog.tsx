@@ -30,6 +30,8 @@ interface Props {
   onRetrySubmission?: () => void
   /** One-tap rate every still-unrated node in this session's frozen due scope. */
   onBulkRateUnrated?: (rating: MindMapRecallRating) => void | Promise<void>
+  /** Rate palace due nodes outside frozen scope (other branches). Requires confirmation. */
+  onBulkRateOutOfScopeDue?: (rating: MindMapRecallRating) => void | Promise<void>
   onConfirm: () => void
   onCancel: () => void
 }
@@ -46,10 +48,13 @@ export function FsrsCompletionDialog({
   onRetry,
   onRetrySubmission,
   onBulkRateUnrated,
+  onBulkRateOutOfScopeDue,
   onConfirm,
   onCancel,
 }: Props) {
   const unratedCount = summary?.unrated_due_node_count ?? 0
+  const outOfScopeDueCount = summary?.out_of_scope_due_node_count ?? 0
+  const remainingDueCount = summary?.remaining_due_node_count ?? 0
   const busy = submitting || bulkRating || preparing
 
   return (
@@ -72,7 +77,7 @@ export function FsrsCompletionDialog({
             <>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-lg border p-3">
-                  <div className="text-muted-foreground">本次评分</div>
+                  <div className="text-muted-foreground">本次到期评分</div>
                   <b>
                     {summary.rated_node_count}/{summary.scope_node_count} 个节点
                   </b>
@@ -102,7 +107,7 @@ export function FsrsCompletionDialog({
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-3 text-sm">
-                  <div className="text-muted-foreground">上次复习</div>
+                  <div className="text-muted-foreground">上次正式复习</div>
                   <b className="mt-0.5 block">
                     {summary.last_review_at
                       ? formatReviewAbsolute(summary.last_review_at)
@@ -113,7 +118,7 @@ export function FsrsCompletionDialog({
                   </div>
                 </div>
                 <div className="rounded-lg border p-3 text-sm">
-                  <div className="text-muted-foreground">下次复习</div>
+                  <div className="text-muted-foreground">下次复习（整宫）</div>
                   <b className="mt-0.5 block">{formatReviewAbsolute(summary.next_review_at)}</b>
                   <div className="mt-1 text-muted-foreground">
                     {formatNextReviewDetailLabel({
@@ -125,17 +130,24 @@ export function FsrsCompletionDialog({
                   </div>
                 </div>
               </div>
+              {unratedCount === 0 && remainingDueCount > 0 ? (
+                <div className="rounded-lg border border-info/40 bg-info/10 p-3 text-sm text-muted-foreground">
+                  本次到期节点已评分；整宫仍有 <b className="text-foreground">{remainingDueCount}</b> 个到期节点
+                  {outOfScopeDueCount > 0 ? `（其中 ${outOfScopeDueCount} 个尚未并入本次）` : ''}。
+                  确认结束后宫殿可能仍显示可立即复习，这是正常的。
+                </div>
+              ) : null}
               {unratedCount > 0 ? (
                 <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
                     <span>
-                      本轮还有 {unratedCount} 个节点未评分。直接结束不会推进它们；也可以一键只给这些未评分节点打分（不会覆盖已评分节点）。
+                      本次还有 {unratedCount} 个到期节点未评分。直接结束不会推进它们；也可以一键只给这些未评分节点打分（不会覆盖已评分节点）。
                     </span>
                   </div>
                   {onBulkRateUnrated ? (
                     <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">一键仅评分未评分节点（已评分节点保持原分）</div>
+                      <div className="text-xs text-muted-foreground">一键评分本次未评分到期节点</div>
                       <div className="grid grid-cols-4 gap-2">
                         {BULK_RATING_OPTIONS.map((option) => (
                           <Button
@@ -154,6 +166,40 @@ export function FsrsCompletionDialog({
                       </div>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {outOfScopeDueCount > 0 && onBulkRateOutOfScopeDue ? (
+                <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                    <span>
+                      另有 {outOfScopeDueCount} 个到期节点尚未并入本次（少见边角）。
+                      一键评分会写入它们的 FSRS，即使你没有翻到那些卡。
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">确认后一键评分尚未并入的到期节点</div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {BULK_RATING_OPTIONS.map((option) => (
+                        <Button
+                          key={`oos-${option.rating}`}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `将把尚未并入本次的 ${outOfScopeDueCount} 个到期节点记为「${option.label}」。确定？`,
+                            )
+                            if (!ok) return
+                            void onBulkRateOutOfScopeDue(option.rating)
+                          }}
+                        >
+                          {bulkRating ? '…' : option.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </>

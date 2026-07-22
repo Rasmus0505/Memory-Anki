@@ -46,8 +46,24 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertEqual(_index_columns(Palace, "ix_palaces_primary_chapter_id"), ["primary_chapter_id"])
         self.assertEqual(_index_columns(Palace, "ix_palaces_mastered_archived"), ["mastered", "archived"])
         self.assertEqual(
+            _index_columns(Palace, "ix_palaces_active_list"),
+            ["deleted_at", "archived", "group_sort_order", "id"],
+        )
+        self.assertEqual(
+            _index_columns(Palace, "ix_palaces_deleted_archived_updated"),
+            ["deleted_at", "archived", "updated_at"],
+        )
+        self.assertEqual(
             _index_columns(Peg, "ix_pegs_palace_parent_sort"),
             ["palace_id", "parent_id", "sort_order"],
+        )
+        self.assertEqual(
+            _index_columns(PalaceQuizQuestion, "ix_palace_quiz_questions_chapter_published"),
+            ["source_chapter_id", "lifecycle_status", "deleted_at"],
+        )
+        self.assertEqual(
+            _index_columns(PalaceQuizQuestion, "ix_palace_quiz_questions_palace_published_sort"),
+            ["palace_id", "deleted_at", "lifecycle_status", "sort_order"],
         )
         self.assertEqual(_index_columns(Attachment, "ix_attachments_palace_id"), ["palace_id"])
         self.assertEqual(
@@ -153,7 +169,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                     self.assertEqual(cursor.execute("PRAGMA foreign_keys").fetchone()[0], 1)
                     self.assertEqual(cursor.execute("PRAGMA busy_timeout").fetchone()[0], 30000)
                     self.assertEqual(cursor.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
-                    self.assertEqual(cursor.execute("PRAGMA cache_size").fetchone()[0], -32000)
+                    self.assertEqual(cursor.execute("PRAGMA cache_size").fetchone()[0], -64000)
                     self.assertEqual(cursor.execute("PRAGMA temp_store").fetchone()[0], 2)
                     self.assertGreaterEqual(cursor.execute("PRAGMA mmap_size").fetchone()[0], 268435456)
                 finally:
@@ -177,8 +193,12 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
 
 
     def test_weekly_report_uses_sql_aggregate_for_review_logs(self):
-        current_week_start, _current_week_end = current_week_bounds()
-        week_start = current_week_start - timedelta(days=7)
+        from datetime import date
+
+        today = date.today()
+        week_start_date = today - timedelta(days=today.weekday() + 7)
+        week_start, _week_end = current_week_bounds()
+        week_start = week_start - timedelta(days=7)
         with self.SessionLocal() as session:
             palace = Palace(
                 title="weekly-report-sql",
@@ -191,7 +211,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 [
                     ReviewLog(
                         palace_id=palace.id,
-                        review_date=(week_start + timedelta(days=index % 7)).date(),
+                        review_date=week_start_date + timedelta(days=index % 7),
                         score=index % 5,
                     )
                     for index in range(80)
@@ -498,6 +518,120 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
 
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, 3, 3))))
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
+
+    def test_fsrs_queue_select_count_stays_flat_with_many_palaces(self):
+        from memory_anki.modules.reviews.application.formal_review_service import (
+            get_fsrs_queue_payload,
+        )
+
+        editor_doc = json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {
+                            "data": {"uid": "n1", "text": "node-1"},
+                            "children": [],
+                        }
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        )
+        with self.SessionLocal() as session:
+            for index in range(12):
+                session.add(
+                    Palace(
+                        title=f"queue-palace-{index}",
+                        editor_doc=editor_doc,
+                        archived=False,
+                    )
+                )
+            session.commit()
+
+            statements: list[str] = []
+
+            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            event.listen(self.engine, "before_cursor_execute", record_select)
+            try:
+                payload = get_fsrs_queue_payload(
+                    session,
+                    include_stats=False,
+                    include_items=True,
+                )
+            finally:
+                event.remove(self.engine, "before_cursor_execute", record_select)
+
+        self.assertGreaterEqual(int(payload.get("due_count") or 0), 12)
+        # Batch path: palace list + states + settings/config + optional counts — not O(N).
+        self.assertLessEqual(len(statements), 12)
+
+    def test_batch_due_rollup_matches_single_palace_rollup(self):
+        from memory_anki.modules.reviews.application.node_due_rollup_batch import (
+            project_due_rollups_batch,
+        )
+        from memory_anki.modules.reviews.application.node_memory_projection import (
+            _clear_due_rollup_cache,
+            get_palace_due_rollup,
+        )
+
+        editor_doc = json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {"data": {"uid": "a", "text": "A"}, "children": []},
+                        {"data": {"uid": "b", "text": "B"}, "children": []},
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        )
+        with self.SessionLocal() as session:
+            left = Palace(title="batch-left", editor_doc=editor_doc)
+            right = Palace(title="batch-right", editor_doc=editor_doc)
+            session.add_all([left, right])
+            session.commit()
+            session.refresh(left)
+            session.refresh(right)
+
+            batch = project_due_rollups_batch(session, [left, right], include_nodes=True)
+            _clear_due_rollup_cache(session)
+            single_left = get_palace_due_rollup(session, left.id)
+            single_right = get_palace_due_rollup(session, right.id)
+
+        self.assertEqual(batch[left.id]["due_node_count"], single_left["due_node_count"])
+        self.assertEqual(batch[right.id]["due_node_count"], single_right["due_node_count"])
+        self.assertEqual(batch[left.id]["review_entry_mode"], single_left["review_entry_mode"])
+        self.assertEqual(batch[right.id]["review_entry_mode"], single_right["review_entry_mode"])
+
+    def test_list_palaces_loader_does_not_query_pegs_or_attachments(self):
+        from memory_anki.modules.palaces.application.palace_service import list_palaces
+
+        with self.SessionLocal() as session:
+            session.add(Palace(title="list-light"))
+            session.commit()
+            statements: list[str] = []
+
+            def record_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            event.listen(self.engine, "before_cursor_execute", record_select)
+            try:
+                palaces = list_palaces(session)
+            finally:
+                event.remove(self.engine, "before_cursor_execute", record_select)
+
+        self.assertEqual(len(palaces), 1)
+        joined = "\n".join(statements).lower()
+        self.assertNotIn("from pegs", joined)
+        self.assertNotIn("from attachments", joined)
+        self.assertNotIn("join pegs", joined)
+        self.assertNotIn("join attachments", joined)
 
 
 def _index_columns(model, index_name: str) -> list[str]:

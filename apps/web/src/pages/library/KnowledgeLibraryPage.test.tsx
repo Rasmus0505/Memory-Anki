@@ -189,7 +189,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       importExtractedText: '',
       importImagePreviewUrl: '',
       importBatchImages: [],
-      importStructureImageId: null,
+
       importBatchStatus: 'idle',
       importBatchMeta: null,
       importWarnings: [],
@@ -200,7 +200,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       handleBatchImportStart: vi.fn(),
       handleDeleteBatchImage: vi.fn(),
       handleMoveBatchImage: vi.fn(),
-      handleSetStructureImage: vi.fn(),
+
       handleImportApplyReplace: vi.fn(),
       handleImportApplyAppend: vi.fn(),
       handleUndoLastImport: vi.fn(),
@@ -426,8 +426,9 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       })
     })
 
+    // Mid-session rating events only patch local chapter detail — no extra refetch.
     expect(await screen.findByText('复习 3/5')).toBeTruthy()
-    await waitFor(() => expect(knowledgeApi.getChapterApi).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(knowledgeApi.getChapterApi).toHaveBeenCalledTimes(1))
   })
 
 })

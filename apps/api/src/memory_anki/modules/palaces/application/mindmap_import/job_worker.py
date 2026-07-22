@@ -54,8 +54,8 @@ def run_image_single_job(
     *,
     import_jobs_dir: Path,
     find_first_input_file_fn,
-    stream_call_dashscope_json,
     stream_call_dashscope_text,
+    stream_call_formatter_json,
 ) -> None:
     input_path = find_first_input_file_fn(artifact_dir)
     if input_path is None:
@@ -125,8 +125,9 @@ def run_image_single_job(
         set_job_result(session, job.id, result=result, stage=JOB_STAGE_COMPLETED)
         return
 
-    structure_path = artifact_dir / "structure_tree.json"
-    if not structure_path.exists():
+    # 单图脑图：先识别全部文字，再整理 JSON（与 PDF/多图同一语义）
+    result_path = artifact_dir / "result.json"
+    if not result_path.exists():
         _set_progress_step(
             session,
             job_id=job.id,
@@ -137,43 +138,18 @@ def run_image_single_job(
         )
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
-        _set_progress_step(
+        combined_text, ocr_pages = _run_page_ocr(
             session,
-            job_id=job.id,
-            import_jobs_dir=import_jobs_dir,
-            step=step_protocol.recognize_single_image_structure_step(
-                total_steps=step_protocol.IMAGE_MINDMAP_TOTAL_STEPS
-            ),
-            preview_text="",
-        )
-        source_tree = consume_stream_result(
-            session,
-            job_id=job.id,
+            job=job,
+            source_meta=source_meta,
             artifact_dir=artifact_dir,
-            generator=stream_call_dashscope_json(
-                image_bytes=image_bytes,
-                filename=filename,
-                channel="raw_model",
-                external_log_context={
-                    "feature": "图片转脑图",
-                    "operation": "single_image_structure",
-                    "job_id": job.id,
-                    "artifact_refs": artifact_refs,
-                },
-            ),
-            allow_preview_text=True,
+            image_items=[(image_bytes, filename)],
+            artifact_refs=artifact_refs,
             import_jobs_dir=import_jobs_dir,
+            stream_call_dashscope_text=stream_call_dashscope_text,
         )
-        write_json(structure_path, source_tree)
-        update_job_usage(session, job.id, stage_key="structure", increment=1)
-        set_job_stage(session, job.id, stage=JOB_STAGE_STRUCTURE)
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
-    else:
-        source_tree = read_json(structure_path)
-
-    result_path = artifact_dir / "result.json"
-    if not result_path.exists():
         _set_progress_step(
             session,
             job_id=job.id,
@@ -181,7 +157,19 @@ def run_image_single_job(
             step=step_protocol.normalize_tree_step(
                 total_steps=step_protocol.IMAGE_MINDMAP_TOTAL_STEPS
             ),
+            preview_text="",
         )
+        source_tree, formatter_metadata = _format_ocr_tree(
+            session,
+            job=job,
+            artifact_dir=artifact_dir,
+            combined_text=combined_text,
+            fallback_title=fallback_title,
+            import_jobs_dir=import_jobs_dir,
+            stream_call_formatter_json=stream_call_formatter_json,
+        )
+        if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
+            return
         _set_progress_step(
             session,
             job_id=job.id,
@@ -194,29 +182,31 @@ def run_image_single_job(
             source_tree=source_tree,
             fallback_title=fallback_title,
         )
+        result.update(
+            {
+                "pipeline_strategy": "extract_then_format",
+                "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime")
+                or _resolved_ai(source_meta, "ai_runtime"),
+                "formatter_resolved_ai": _resolved_ai(source_meta, "formatter_ai_runtime"),
+                "ocr_pages": ocr_pages,
+                "stage_usage": {
+                    "ocr": [item.get("usage") for item in ocr_pages],
+                    "formatter": formatter_metadata.get("usage"),
+                },
+                "formatter_response": (
+                    read_text(artifact_dir / "formatter_response.txt")
+                    if (artifact_dir / "formatter_response.txt").exists()
+                    else ""
+                ),
+            }
+        )
+        write_json(artifact_dir / "final_tree.json", source_tree)
         write_json(artifact_dir / "editor_doc.json", result["editor_doc"])
         write_json(result_path, result)
-        set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
     else:
         result = read_json(result_path)
 
     set_job_result(session, job.id, result=result, stage=JOB_STAGE_COMPLETED)
-
-
-def _vision_processing_role(source_meta: dict[str, Any]) -> str:
-    runtime_meta = source_meta.get("vision_ai_runtime") or source_meta.get("ai_runtime") or {}
-    if not isinstance(runtime_meta, dict):
-        return "direct_generation"
-    resolved_ai = runtime_meta.get("resolved_ai")
-    if isinstance(resolved_ai, dict):
-        role = str(resolved_ai.get("vision_processing_role") or "").strip()
-        if role in {"direct_generation", "ocr_extraction"}:
-            return role
-        model_key = str(resolved_ai.get("model_key") or "").strip()
-        if model_key in {"qwen3.5-ocr", "qwen-vl-ocr"}:
-            return "ocr_extraction"
-    model = str(runtime_meta.get("model") or "").strip()
-    return "ocr_extraction" if model in {"qwen3.5-ocr", "qwen-vl-ocr"} else "direct_generation"
 
 
 def _validate_direct_tree(tree: dict[str, Any]) -> None:
@@ -382,8 +372,6 @@ def run_image_batch_job(
     artifact_dir: Path,
     *,
     import_jobs_dir: Path,
-    stream_call_dashscope_json,
-    stream_call_dashscope_batch_json,
     stream_call_dashscope_text,
     stream_call_formatter_json,
 ) -> None:
@@ -398,8 +386,6 @@ def run_image_batch_job(
         if path.is_file()
     ]
     artifact_refs = _build_input_artifact_refs(input_paths)
-    raw_structure_index = source_meta.get("structure_image_index")
-    structure_index = int(raw_structure_index) if raw_structure_index is not None else None
     fallback_title = str(source_meta.get("fallback_title") or "未命名宫殿")
 
     if job.mode == MODE_TEXT:
@@ -445,6 +431,7 @@ def run_image_batch_job(
         )
         return
 
+    # 多图/PDF 脑图：阶段 A 全量识别文字 → 阶段 B 按范围整理 JSON
     result_path = artifact_dir / "result.json"
     if not result_path.exists():
         _set_progress_step(
@@ -456,157 +443,46 @@ def run_image_batch_job(
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
 
-        structure_path = artifact_dir / "structure_tree.json"
-        pipeline_strategy = "explicit_structure" if structure_index is not None else "vision_direct"
-        fallback_reason: str | None = None
-        ocr_pages: list[dict[str, Any]] = []
-        stage_usage: dict[str, Any] = {}
-        if structure_index is None:
-            role = _vision_processing_role(source_meta)
-            requested_strategy = str(source_meta.get("requested_pipeline_strategy") or "").strip()
-            direct_metadata: dict[str, Any] = {}
-            if requested_strategy == "ocr_reformat":
-                pipeline_strategy = "vision_ocr_fallback"
-                fallback_reason = "用户主动使用 OCR 原文重新整理。"
-            elif role == "ocr_extraction":
-                pipeline_strategy = "ocr_first"
-                fallback_reason = "所选视觉模型为 OCR 专用模型。"
-            else:
-                _set_progress_step(
-                    session,
-                    job_id=job.id,
-                    import_jobs_dir=import_jobs_dir,
-                    step=step_protocol.generate_batch_mindmap_direct_step(),
-                    preview_text="",
-                )
-                try:
-                    final_tree = consume_stream_result(
-                        session,
-                        job_id=job.id,
-                        artifact_dir=artifact_dir,
-                        generator=stream_call_dashscope_batch_json(
-                            image_items=image_items,
-                            structure_tree=None,
-                            channel="raw_model",
-                            range_prompt="",
-                            page_numbers=None,
-                            disable_rebalance=True,
-                            extracted_text=None,
-                            external_log_context={
-                                "feature": "PDF 转脑图" if job.source_kind == "pdf-document" else "图片转脑图",
-                                "operation": "batch_direct_generation",
-                                "job_id": job.id,
-                                "artifact_refs": artifact_refs,
-                                "stream_metadata": direct_metadata,
-                            },
-                        ),
-                        allow_preview_text=True,
-                        import_jobs_dir=import_jobs_dir,
-                    )
-                    _validate_direct_tree(final_tree)
-                    write_text(
-                        artifact_dir / "vision_response.txt",
-                        str(direct_metadata.get("partial_response") or ""),
-                    )
-                    stage_usage["vision"] = direct_metadata.get("usage")
-                    update_job_usage(session, job.id, stage_key="merge", increment=1)
-                    set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
-                except Exception as exc:
-                    pipeline_strategy = "vision_ocr_fallback"
-                    fallback_reason = str(exc)
-                    write_text(
-                        artifact_dir / "vision_response.txt",
-                        str(direct_metadata.get("partial_response") or ""),
-                    )
-            if pipeline_strategy != "vision_direct":
-                combined_text, ocr_pages = _run_page_ocr(
-                    session,
-                    job=job,
-                    source_meta=source_meta,
-                    artifact_dir=artifact_dir,
-                    image_items=image_items,
-                    artifact_refs=artifact_refs,
-                    import_jobs_dir=import_jobs_dir,
-                    stream_call_dashscope_text=stream_call_dashscope_text,
-                )
-                final_tree, formatter_metadata = _format_ocr_tree(
-                    session,
-                    job=job,
-                    artifact_dir=artifact_dir,
-                    combined_text=combined_text,
-                    fallback_title=fallback_title,
-                    import_jobs_dir=import_jobs_dir,
-                    stream_call_formatter_json=stream_call_formatter_json,
-                )
-                stage_usage["ocr"] = [item.get("usage") for item in ocr_pages]
-                stage_usage["formatter"] = formatter_metadata.get("usage")
-        else:
-            if not structure_path.exists():
-                _set_progress_step(
-                    session,
-                    job_id=job.id,
-                    import_jobs_dir=import_jobs_dir,
-                    step=step_protocol.extract_batch_structure_step(),
-                    preview_text="",
-                )
-                structure_bytes, structure_filename = image_items[structure_index]
-                structure_tree = consume_stream_result(
-                    session,
-                    job_id=job.id,
-                    artifact_dir=artifact_dir,
-                    generator=stream_call_dashscope_json(
-                        image_bytes=structure_bytes,
-                        filename=structure_filename,
-                        channel="raw_model",
-                        disable_rebalance=True,
-                        external_log_context={
-                            "feature": "多图转脑图",
-                            "operation": "batch_structure",
-                            "job_id": job.id,
-                            "artifact_refs": artifact_refs,
-                        },
-                    ),
-                    allow_preview_text=True,
-                    import_jobs_dir=import_jobs_dir,
-                )
-                write_json(structure_path, structure_tree)
-                update_job_usage(session, job.id, stage_key="structure", increment=1)
-                set_job_stage(session, job.id, stage=JOB_STAGE_STRUCTURE)
-                if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
-                    return
-            else:
-                structure_tree = read_json(structure_path)
+        _set_progress_step(
+            session,
+            job_id=job.id,
+            import_jobs_dir=import_jobs_dir,
+            step=step_protocol.extract_all_pages_text_step(),
+            preview_text="",
+        )
+        combined_text, ocr_pages = _run_page_ocr(
+            session,
+            job=job,
+            source_meta=source_meta,
+            artifact_dir=artifact_dir,
+            image_items=image_items,
+            artifact_refs=artifact_refs,
+            import_jobs_dir=import_jobs_dir,
+            stream_call_dashscope_text=stream_call_dashscope_text,
+        )
+        if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
+            return
 
-            _set_progress_step(
-                session,
-                job_id=job.id,
-                import_jobs_dir=import_jobs_dir,
-                step=step_protocol.enhance_batch_with_body_step(),
-                preview_text="",
-            )
-            final_tree = consume_stream_result(
-                session,
-                job_id=job.id,
-                artifact_dir=artifact_dir,
-                generator=stream_call_dashscope_batch_json(
-                    image_items=image_items,
-                    structure_tree=structure_tree,
-                    channel="raw_model",
-                    range_prompt="",
-                    page_numbers=None,
-                    disable_rebalance=True,
-                    external_log_context={
-                        "feature": "多图转脑图",
-                        "operation": "batch_structured_merge",
-                        "job_id": job.id,
-                        "artifact_refs": artifact_refs,
-                    },
-                ),
-                allow_preview_text=True,
-                import_jobs_dir=import_jobs_dir,
-            )
-            update_job_usage(session, job.id, stage_key="merge", increment=1)
-            set_job_stage(session, job.id, stage=JOB_STAGE_MERGE)
+        _set_progress_step(
+            session,
+            job_id=job.id,
+            import_jobs_dir=import_jobs_dir,
+            step=step_protocol.format_mindmap_json_step(),
+            preview_text="",
+        )
+        final_tree, formatter_metadata = _format_ocr_tree(
+            session,
+            job=job,
+            artifact_dir=artifact_dir,
+            combined_text=combined_text,
+            fallback_title=fallback_title,
+            import_jobs_dir=import_jobs_dir,
+            stream_call_formatter_json=stream_call_formatter_json,
+        )
+        stage_usage: dict[str, Any] = {
+            "ocr": [item.get("usage") for item in ocr_pages],
+            "formatter": formatter_metadata.get("usage"),
+        }
 
         if pause_if_requested(session, job.id, import_jobs_dir=import_jobs_dir):
             return
@@ -621,23 +497,17 @@ def run_image_batch_job(
         result = build_batch_import_result_payload(
             source_tree=final_tree,
             fallback_title=fallback_title,
-            structure_image_index=structure_index,
             image_count=len(image_items),
         )
         result.update(
             {
-                "pipeline_strategy": pipeline_strategy,
+                "pipeline_strategy": "extract_then_format",
                 "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime")
                 or _resolved_ai(source_meta, "ai_runtime"),
                 "formatter_resolved_ai": _resolved_ai(source_meta, "formatter_ai_runtime"),
-                "fallback_reason": fallback_reason,
+                "fallback_reason": None,
                 "ocr_pages": ocr_pages,
                 "stage_usage": stage_usage,
-                "vision_response": (
-                    read_text(artifact_dir / "vision_response.txt")
-                    if (artifact_dir / "vision_response.txt").exists()
-                    else ""
-                ),
                 "formatter_response": (
                     read_text(artifact_dir / "formatter_response.txt")
                     if (artifact_dir / "formatter_response.txt").exists()

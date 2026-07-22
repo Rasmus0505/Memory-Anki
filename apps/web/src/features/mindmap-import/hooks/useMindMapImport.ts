@@ -202,7 +202,6 @@ export function useMindMapImport({
     importHistory: jobs.importHistory,
     importHistoryJobs: jobs.importHistory,
     importBatchImages: batch.batchImages,
-    importStructureImageId: batch.structureImageId,
     importBatchStatus: batch.batchStatus,
     importBatchMeta: batch.lastBatchMeta as BatchImportMeta | null,
     pdfDocuments,
@@ -235,7 +234,7 @@ export function useMindMapImport({
     handleReformatFromOcr: jobs.handleReformatFromOcr,
     handleImportPaste,
     handleImportFileChange,
-    handleBatchImportStart: () => void jobs.handleBatchImportStart(batch.structureImageId),
+    handleBatchImportStart: () => void jobs.handleBatchImportStart(),
     handlePdfImportStart: () => void jobs.handlePdfImportStart(selectedPdfDocumentId, pdfPageSelection),
     handlePdfUpload: async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -252,7 +251,6 @@ export function useMindMapImport({
     },
     handleDeleteBatchImage: batch.handleDeleteBatchImage,
     handleMoveBatchImage: batch.handleMoveBatchImage,
-    handleSetStructureImage: batch.handleSetStructureImage,
     clearBatchQueue: batch.clearBatchQueue,
     handleImportApplyReplace: apply.handleApplyReplace,
     handleImportApplyAppend: apply.handleApplyAppend,

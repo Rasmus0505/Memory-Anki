@@ -84,6 +84,14 @@ class Palace(Base):
         Index("ix_palaces_primary_chapter_id", "primary_chapter_id"),
         Index("ix_palaces_mastered_archived", "mastered", "archived"),
         Index("ix_palaces_deleted_at", "deleted_at"),
+        Index(
+            "ix_palaces_active_list",
+            "deleted_at",
+            "archived",
+            "group_sort_order",
+            "id",
+        ),
+        Index("ix_palaces_deleted_archived_updated", "deleted_at", "archived", "updated_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -441,6 +449,19 @@ class PalaceQuizQuestion(Base):
         Index("ix_palace_quiz_questions_classified_chapter", "classified_chapter_id"),
         Index("ix_palace_quiz_questions_deleted_at", "deleted_at"),
         Index("ix_palace_quiz_questions_lifecycle_updated", "lifecycle_status", "updated_at"),
+        Index(
+            "ix_palace_quiz_questions_chapter_published",
+            "source_chapter_id",
+            "lifecycle_status",
+            "deleted_at",
+        ),
+        Index(
+            "ix_palace_quiz_questions_palace_published_sort",
+            "palace_id",
+            "deleted_at",
+            "lifecycle_status",
+            "sort_order",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

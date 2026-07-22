@@ -83,7 +83,7 @@ def test_ocr_reuses_document_cache_across_jobs(isolate_jobs_and_cache):
     with patch.object(
         job_service,
         "_prepare_batch_image_items",
-        return_value=([(b"page-1", "page-1.png"), (b"page-2", "page-2.png")], None),
+        return_value=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
     ):
         with Session(engine) as session:
             job = job_service.create_batch_import_job(
@@ -91,7 +91,6 @@ def test_ocr_reuses_document_cache_across_jobs(isolate_jobs_and_cache):
                 entity_key="palace_1",
                 image_items=[(b"page-1", "page-1.png"), (b"page-2", "page-2.png")],
                 fallback_title="俄国近代教育",
-                structure_image_index=None,
                 ai_runtime=_ai_runtime(session),
                 vision_ai_options=AiRuntimeOptions(model="qwen3.5-ocr"),
             )
@@ -110,7 +109,7 @@ def test_ocr_reuses_document_cache_across_jobs(isolate_jobs_and_cache):
         encoding="utf-8",
     )
 
-    with patch.object(job_service, "_stream_call_dashscope_batch_json") as direct_call, patch.object(
+    with patch.object(
         job_service,
         "_stream_call_dashscope_text",
         return_value=_stream_return("第二页新识别"),
@@ -133,4 +132,3 @@ def test_ocr_reuses_document_cache_across_jobs(isolate_jobs_and_cache):
     hit = ocr_cache.read_cached_page("pdf-shared", 2, cache_dir=cache_dir)
     assert hit is not None
     assert hit[0] == "第二页新识别"
-    assert direct_call.call_count == 0

@@ -1,6 +1,6 @@
 """dashboard aggregate endpoint direct tests."""
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -8,7 +8,6 @@ from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 from memory_anki.modules.dashboard.application.service import build_weekly_report_payload
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
-from memory_anki.modules.sessions.application.study_session_service import current_week_bounds
 
 EDITOR_DOC = json.dumps(
     {
@@ -95,14 +94,16 @@ def test_duration_month_mode_returns_selected_total(client, session_factory):
 
 def test_weekly_report_payload(session_factory):
     with session_factory() as session:
-        week_start, _ = current_week_bounds()
+        today = date.today()
+        current_week_start = today - timedelta(days=today.weekday())
+        previous_week_day = current_week_start - timedelta(days=1)
         palace = Palace(title="Weekly", editor_doc=EDITOR_DOC)
         session.add(palace)
         session.flush()
         session.add(
             ReviewLog(
                 palace_id=palace.id,
-                review_date=(week_start - timedelta(days=1)).date(),
+                review_date=previous_week_day,
                 score=4,
                 review_mode="fsrs",
                 duration_seconds=60,

@@ -58,7 +58,7 @@ describe('ReviewCompletion FSRS receipt', () => {
     expect(screen.getByText('下次复习')).toBeTruthy()
     expect(screen.getByText('+8')).toBeTruthy()
     expect(screen.getByText(/间隔 · 1天后 · 1 个节点 · 节点复习/)).toBeTruthy()
-    expect(screen.getByText(/本次未评分 1 个节点保持到期/)).toBeTruthy()
+    expect(screen.getByText(/本次未评分 1 个到期节点保持到期/)).toBeTruthy()
     expect(screen.getByText(/该宫殿今日第 1 次复习/)).toBeTruthy()
   })
 })

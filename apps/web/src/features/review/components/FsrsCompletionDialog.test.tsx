@@ -45,8 +45,8 @@ describe('FsrsCompletionDialog', () => {
       />,
     )
 
-    expect(screen.getByText('上次复习')).toBeTruthy()
-    expect(screen.getByText('下次复习')).toBeTruthy()
+    expect(screen.getByText('上次正式复习')).toBeTruthy()
+    expect(screen.getByText('下次复习（整宫）')).toBeTruthy()
     expect(screen.getByText(/距今 · 5天/)).toBeTruthy()
     expect(screen.getByText(/间隔 · 1天后/)).toBeTruthy()
     expect(screen.getByText('+5')).toBeTruthy()

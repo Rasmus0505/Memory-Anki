@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.palaces.application.segment_review_service import (
@@ -21,7 +22,25 @@ from memory_anki.modules.palaces.application.title_sync_service import (
     resolve_palace_subject,
     resolve_palace_title,
 )
-from memory_anki.modules.reviews.api import get_palace_due_rollup
+from memory_anki.modules.reviews.api import get_palace_due_rollup, project_due_rollups_batch
+
+
+def _loaded_collection(obj: Any, name: str) -> list[Any]:
+    """Return a relationship collection only if already eagerly loaded (avoid list N+1)."""
+    try:
+        state = sa_inspect(obj)
+    except Exception:
+        return list(getattr(obj, name, None) or [])
+    if name in state.unloaded:
+        return []
+    return list(getattr(obj, name, None) or [])
+
+
+def batch_palace_due_rollups(session: Session, palaces: list[Any]) -> dict[int, dict[str, Any]]:
+    """Precompute due rollups for a palace list in one batch (catalog/list paths)."""
+    if not palaces:
+        return {}
+    return project_due_rollups_batch(session, list(palaces), now=None, include_nodes=False)
 
 _EMPTY_MEMORY: dict[str, Any] = {
     "node_count": 0,
@@ -99,6 +118,8 @@ def palace_json(
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
     precomputed_stage_labels: list[str] | None = None,
+    precomputed_memory_projection: dict[str, Any] | None = None,
+    include_heavy_collections: bool = True,
 ) -> dict:
     del precomputed_stage_labels  # legacy stage labels removed
     explicit_chapter_ids: set[int] = set()
@@ -108,11 +129,16 @@ def palace_json(
             if precomputed_explicit_chapter_ids is not None
             else get_palace_explicit_chapter_ids(session, p)
         )
-    memory_projection = (
-        get_palace_due_rollup(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
-    )
+    if precomputed_memory_projection is not None:
+        memory_projection = precomputed_memory_projection
+    elif session is not None:
+        memory_projection = get_palace_due_rollup(session, p.id)
+    else:
+        memory_projection = dict(_EMPTY_MEMORY)
     default_segment = (
-        build_palace_default_segment_summary(session, p) if session is not None else None
+        build_palace_default_segment_summary(session, p)
+        if session is not None and include_heavy_collections
+        else None
     )
 
     primary_chapter = getattr(p, "primary_chapter", None)
@@ -120,6 +146,11 @@ def palace_json(
     parent_chapter = (
         primary_chapter.parent if primary_chapter and getattr(primary_chapter, "parent", None) else None
     )
+    pegs = p.pegs if include_heavy_collections else _loaded_collection(p, "pegs")
+    attachments = (
+        p.attachments if include_heavy_collections else _loaded_collection(p, "attachments")
+    )
+    chapters = list(getattr(p, "chapters", None) or [])
 
     return {
         "id": p.id,
@@ -127,11 +158,11 @@ def palace_json(
         "description": p.description,
         "archived": p.archived,
         "mastered": bool(memory_projection.get("mastered")),
-        "editor_doc": p.editor_doc,
+        "editor_doc": p.editor_doc if include_heavy_collections else "",
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         **_memory_fields(memory_projection),
-        "pegs": [peg_json(peg) for peg in p.pegs],
+        "pegs": [peg_json(peg) for peg in pegs],
         "attachments": [
             {
                 "id": a.id,
@@ -139,7 +170,7 @@ def palace_json(
                 "original_name": a.original_name,
                 "file_size": a.file_size,
             }
-            for a in p.attachments
+            for a in attachments
         ],
         "chapters": [
             {
@@ -150,11 +181,11 @@ def palace_json(
                 "is_explicit": c.id in explicit_chapter_ids,
                 "subject": {"id": c.subject.id, "name": c.subject.name} if c.subject else None,
             }
-            for c in p.chapters
+            for c in chapters
         ],
         "segments": (
             list_palace_segments(session, p, default_segment_payload=default_segment)
-            if session
+            if session is not None and include_heavy_collections
             else []
         ),
         "subjects": [
@@ -168,7 +199,7 @@ def palace_json(
         ],
         "explicit_chapter_ids": sorted(explicit_chapter_ids),
         "inherited_chapter_ids": sorted(
-            c.id for c in (getattr(p, "chapters", []) or []) if c.id not in explicit_chapter_ids
+            c.id for c in chapters if c.id not in explicit_chapter_ids
         ),
         "binding_revision": int(getattr(p, "binding_revision", 0) or 0),
         "title_mode": getattr(p, "title_mode", "sync") or "sync",
@@ -212,6 +243,7 @@ def palace_card_json(
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
     precomputed_stage_labels: list[str] | None = None,
+    precomputed_memory_projection: dict[str, Any] | None = None,
 ) -> dict:
     """Catalog card payload — same FSRS fields as summary, without editor_doc bulk."""
     return palace_summary_json(
@@ -219,6 +251,7 @@ def palace_card_json(
         session,
         precomputed_explicit_chapter_ids=precomputed_explicit_chapter_ids,
         precomputed_stage_labels=precomputed_stage_labels,
+        precomputed_memory_projection=precomputed_memory_projection,
     )
 
 
@@ -228,6 +261,7 @@ def palace_summary_json(
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
     precomputed_stage_labels: list[str] | None = None,
+    precomputed_memory_projection: dict[str, Any] | None = None,
 ) -> dict:
     del precomputed_stage_labels
     explicit_chapter_ids: set[int] = set()
@@ -237,9 +271,12 @@ def palace_summary_json(
             if precomputed_explicit_chapter_ids is not None
             else get_palace_explicit_chapter_ids(session, p)
         )
-    memory_projection = (
-        get_palace_due_rollup(session, p.id) if session is not None else dict(_EMPTY_MEMORY)
-    )
+    if precomputed_memory_projection is not None:
+        memory_projection = precomputed_memory_projection
+    elif session is not None:
+        memory_projection = get_palace_due_rollup(session, p.id)
+    else:
+        memory_projection = dict(_EMPTY_MEMORY)
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
     parent_chapter = (
@@ -306,11 +343,17 @@ def palace_editor_meta_json(p, session: Session | None = None) -> dict:
 
     Keep this payload intentionally lighter than ``palace_json`` by excluding
     heavy nested structures such as ``pegs`` and ``segments``.
+
+    ``subjects`` must still be present: the editor knowledge workspace binds and
+    reloads subject ownership from this meta payload. Omitting it makes the
+    frontend briefly apply a successful binding response and then wipe the
+    subject list on editor reload.
     """
     payload = palace_summary_json(p, session)
     explicit_chapter_ids: set[int] = set()
     if session is not None:
         explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+    subjects = list(getattr(p, "subjects", []) or [])
     payload.update(
         {
             "editor_doc": p.editor_doc,
@@ -334,6 +377,21 @@ def palace_editor_meta_json(p, session: Session | None = None) -> dict:
                 }
                 for c in (getattr(p, "chapters", []) or [])
             ],
+            "subjects": [
+                {
+                    "id": subject.id,
+                    "name": subject.name,
+                    "color": subject.color,
+                    "sort_order": subject.sort_order,
+                }
+                for subject in sorted(
+                    subjects,
+                    key=lambda item: (item.sort_order or 0, item.name or "", item.id),
+                )
+            ],
+            "inherited_chapter_ids": sorted(
+                c.id for c in (getattr(p, "chapters", []) or []) if c.id not in explicit_chapter_ids
+            ),
         }
     )
     return payload

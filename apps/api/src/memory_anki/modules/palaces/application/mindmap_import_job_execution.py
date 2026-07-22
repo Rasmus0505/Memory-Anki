@@ -24,8 +24,6 @@ from .mindmap_import import (
 )
 from .mindmap_import import summarize_model_output as _summarize_model_output
 from .mindmap_import_job_runtime import (
-    _stream_call_dashscope_batch_json,
-    _stream_call_dashscope_json,
     _stream_call_dashscope_text,
     _stream_call_formatter_json,
 )
@@ -151,13 +149,13 @@ def _run_image_single_job(
         artifact_dir,
         import_jobs_dir=IMPORT_JOBS_DIR,
         find_first_input_file_fn=_find_first_input_file,
-        stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
+        stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
             source_meta=source_meta,
             ai_runtime=ai_runtime,
             prompt_catalog=prompt_catalog,
             **kwargs,
         ),
-        stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
+        stream_call_formatter_json=lambda **kwargs: _stream_call_formatter_json(
             source_meta=source_meta,
             ai_runtime=ai_runtime,
             prompt_catalog=prompt_catalog,
@@ -181,18 +179,6 @@ def _run_image_batch_job(
         source_meta,
         artifact_dir,
         import_jobs_dir=IMPORT_JOBS_DIR,
-        stream_call_dashscope_json=lambda **kwargs: _stream_call_dashscope_json(
-            source_meta=source_meta,
-            ai_runtime=ai_runtime,
-            prompt_catalog=prompt_catalog,
-            **kwargs,
-        ),
-        stream_call_dashscope_batch_json=lambda **kwargs: _stream_call_dashscope_batch_json(
-            source_meta=source_meta,
-            ai_runtime=ai_runtime,
-            prompt_catalog=prompt_catalog,
-            **kwargs,
-        ),
         stream_call_dashscope_text=lambda **kwargs: _stream_call_dashscope_text(
             source_meta=source_meta,
             ai_runtime=ai_runtime,

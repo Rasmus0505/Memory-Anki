@@ -9,7 +9,6 @@ from .contracts import ImportStreamEvent
 from .events import stream_text_deltas_as_events
 from .runtime import (
     DashscopeImportRuntime,
-    call_dashscope_batch_json,
     call_dashscope_json,
     call_dashscope_text,
     call_dashscope_text_with_images,
@@ -19,7 +18,6 @@ from .runtime import (
     extract_message_content_text,
     parse_dashscope_response_stream,
     prepare_batch_image_items,
-    stream_call_dashscope_batch_json,
     stream_call_dashscope_formatter_json,
     stream_call_dashscope_json,
     stream_call_dashscope_text,
@@ -62,12 +60,10 @@ def prepare_batch_items(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int | None]:
+) -> list[tuple[bytes, str | None]]:
     return prepare_batch_image_items(
         runtime=runtime,
         image_items=image_items,
-        structure_image_index=structure_image_index,
     )
 
 
@@ -128,31 +124,6 @@ def call_text_with_images(
     )
 
 
-def call_batch_json(
-    *,
-    prompt_catalog: PromptCatalog,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any] | None,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return call_dashscope_batch_json(
-        runtime=runtime,
-        prompt_catalog=prompt_catalog,
-        image_items=image_items,
-        structure_tree=structure_tree,
-        range_prompt=range_prompt,
-        page_numbers=page_numbers,
-        disable_rebalance=disable_rebalance,
-        extracted_text=extracted_text,
-        external_log_context=external_log_context,
-    )
-
-
 def stream_json(
     *,
     prompt_catalog: PromptCatalog,
@@ -198,37 +169,6 @@ def stream_text(
                 image_items=image_items,
                 page_numbers=page_numbers,
                 range_prompt=range_prompt,
-                external_log_context=external_log_context,
-            ),
-            channel=channel,
-        )
-    )
-
-
-def stream_batch_json(
-    *,
-    prompt_catalog: PromptCatalog,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any] | None,
-    channel: str,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> Generator[ImportStreamEvent, None, dict[str, Any]]:
-    return (
-        yield from stream_text_deltas_as_events(
-            generator=stream_call_dashscope_batch_json(
-                runtime=runtime,
-                prompt_catalog=prompt_catalog,
-                image_items=image_items,
-                structure_tree=structure_tree,
-                range_prompt=range_prompt,
-                page_numbers=page_numbers,
-                disable_rebalance=disable_rebalance,
-                extracted_text=extracted_text,
                 external_log_context=external_log_context,
             ),
             channel=channel,

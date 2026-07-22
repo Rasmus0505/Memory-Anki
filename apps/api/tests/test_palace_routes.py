@@ -211,6 +211,38 @@ class TestPalaceEditor:
         assert body["palace"]["id"] == palace_id
         assert "editor_doc" in body
         assert EDITOR_FINGERPRINT_KEY in body
+        # Knowledge workspace reloads subject ownership from editor meta.
+        assert "subjects" in body["palace"]
+        assert isinstance(body["palace"]["subjects"], list)
+
+    def test_get_editor_includes_bound_subjects(self, make_client):
+        from memory_anki.modules.knowledge.presentation import router as knowledge_router
+
+        client = make_client(palace_router, knowledge_router, backups_router)
+        subject = client.post("/api/v1/subjects", json={"name": "外国教育史", "color": "#2563eb"}).json()
+        palace = client.post(
+            "/api/v1/palaces",
+            json={"title": "俄国近代教育", "subject_ids": [subject["id"]], "description": "", "pegs": []},
+        ).json()
+
+        body = client.get(f"/api/v1/palaces/{palace['id']}/editor").json()
+        subjects = body["palace"]["subjects"]
+        assert [item["id"] for item in subjects] == [subject["id"]]
+        assert subjects[0]["name"] == "外国教育史"
+
+        rebound = client.put(
+            f"/api/v1/palaces/{palace['id']}/knowledge-binding",
+            json={
+                "subject_ids": [subject["id"]],
+                "chapter_ids": [],
+                "primary_chapter_id": None,
+                "base_revision": body["palace"].get("binding_revision", 0),
+                "operation_id": "rebind-editor-subjects",
+            },
+        )
+        assert rebound.status_code == 200
+        reloaded = client.get(f"/api/v1/palaces/{palace['id']}/editor").json()
+        assert [item["id"] for item in reloaded["palace"]["subjects"]] == [subject["id"]]
 
     def test_get_editor_missing(self, client):
         assert_missing(client.get("/api/v1/palaces/99999/editor"))

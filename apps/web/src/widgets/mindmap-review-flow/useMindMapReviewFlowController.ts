@@ -14,6 +14,21 @@ import { useMindMapRecallRatings } from '@/features/review/hooks/useMindMapRecal
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = [];
 
+/** True when a modal dialog should block flip/rating shortcuts (not every role=dialog in the tree). */
+function isBlockingDialogOpen(eventTarget?: EventTarget | null) {
+  if (typeof document === "undefined") return false;
+  const target = eventTarget instanceof Element ? eventTarget : null;
+  if (target?.closest('[role="dialog"]')) return true;
+  // Prefer visible modal dialogs; bare role=dialog can linger in non-blocking chrome.
+  const modals = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+  for (const modal of modals) {
+    if (!(modal instanceof HTMLElement)) continue;
+    // offsetParent null can mean fixed/fullscreen still visible — check client box.
+    if (modal.getClientRects().length > 0) return true;
+  }
+  return false;
+}
+
 export function useMindMapReviewFlowController({
   title,
   palaceId,
@@ -161,11 +176,13 @@ React.useEffect(() => {
   );
 
 
-  const handleShortcutHideChildCards = React.useCallback(() => {
-    if (isInlineEditMode || ratingMode) return;
+  const handleShortcutHideChildCards = React.useCallback((): boolean => {
+    if (isInlineEditMode || ratingMode) return false;
+    if (isBlockingDialogOpen()) return false;
     const node = activeNodes[0];
-    if (!node?.uid) return;
+    if (!node?.uid) return false;
     flow.handleNodeContextMenu([node]);
+    return true;
   }, [activeNodes, flow, isInlineEditMode, ratingMode]);
 
   // Refs keep A/S handlers current without rebinding window listeners every render.
@@ -184,17 +201,21 @@ React.useEffect(() => {
   const handleBulkRevealDirectChildrenRef = React.useRef(flow.handleBulkRevealDirectChildren);
   handleBulkRevealDirectChildrenRef.current = flow.handleBulkRevealDirectChildren;
 
-  const handleShortcutFlipSubtree = React.useCallback(() => {
-    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) return;
-    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
-    // Live hover / sticky / selection resolved inside handleBulkReveal*.
-    handleBulkRevealSubtreeRef.current(selectedNodeUidRef.current);
+  const handleShortcutFlipSubtree = React.useCallback((): boolean => {
+    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) {
+      return false;
+    }
+    if (isBlockingDialogOpen()) return false;
+    // Live hover / sticky / locked bulk / selection resolved inside handleBulkReveal*.
+    return Boolean(handleBulkRevealSubtreeRef.current(selectedNodeUidRef.current));
   }, []);
 
-  const handleShortcutFlipDirectChildren = React.useCallback(() => {
-    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) return;
-    if (typeof document !== "undefined" && document.querySelector('[role="dialog"]')) return;
-    handleBulkRevealDirectChildrenRef.current(selectedNodeUidRef.current);
+  const handleShortcutFlipDirectChildren = React.useCallback((): boolean => {
+    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) {
+      return false;
+    }
+    if (isBlockingDialogOpen()) return false;
+    return Boolean(handleBulkRevealDirectChildrenRef.current(selectedNodeUidRef.current));
   }, []);
 
   const shortcutScene =
@@ -289,7 +310,7 @@ React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key !== ' ' && event.code !== 'Space') return
-      if (isEditableKeyboardTarget(event.target) || document.querySelector('[role="dialog"]')) return
+      if (isEditableKeyboardTarget(event.target) || isBlockingDialogOpen(event.target)) return
       event.preventDefault()
       event.stopPropagation()
       handleToggleRatingMode()

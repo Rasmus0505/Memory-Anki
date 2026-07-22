@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/entities/palace/api'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -11,7 +11,6 @@ import {
   type MindMapEditorSurfaceHandle,
 } from '@/features/mindmap-editor'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { cn } from '@/shared/lib/utils'
@@ -145,17 +144,7 @@ export default function PalaceView() {
           eyebrow="宫殿详情"
           title={palace.title}
           description="这是只读脑图视图。难度与旧的 review mode 已从产品界面移除。"
-          actions={
-            <>
-              <Link to="/palaces">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 size-4" />
-                  返回列表
-                </Button>
-              </Link>
-              <Badge variant="secondary">只读脑图</Badge>
-            </>
-          }
+          actions={<Badge variant="secondary">只读脑图</Badge>}
         />
       ) : null}
 

@@ -23,6 +23,7 @@ def create_image_job(
     import_jobs_dir: Path,
     max_image_bytes: int,
     import_error_cls: type[Exception],
+    source_meta_extra: dict[str, object] | None = None,
 ) -> MindMapImportJob:
     job_creation_support.validate_entity_key(entity_key, import_error_cls=import_error_cls)
     job_creation_support.validate_mode(mode, import_error_cls=import_error_cls)
@@ -38,6 +39,7 @@ def create_image_job(
         "image_sha256": job_creation_support.hash_bytes(image_bytes),
         "ai_runtime": dict(ai_runtime or {}),
     }
+    source_meta.update(source_meta_extra or {})
     job, created = _create_draft_job_record(
         session,
         entity_key=entity_key,
@@ -65,7 +67,6 @@ def create_batch_job(
     *,
     entity_key: str,
     normalized_items: list[tuple[bytes, str | None]],
-    resolved_structure_index: int | None,
     fallback_title: str,
     mode: str,
     ai_runtime: dict[str, object] | None,
@@ -78,7 +79,6 @@ def create_batch_job(
     job_creation_support.validate_mode(mode, import_error_cls=import_error_cls)
     source_meta: dict[str, object] = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
-        "structure_image_index": resolved_structure_index,
         "ai_runtime": dict(ai_runtime or {}),
         "images": [
             {

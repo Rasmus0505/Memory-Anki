@@ -133,6 +133,15 @@ def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> Star
         shared_state = started_state
     app.state.runtime_info = runtime_info
     app.state.startup_mode = startup_mode
+    logger = __import__("logging").getLogger(__name__)
+    logger.info(
+        "Using database: %s (app_home=%s source=%s)",
+        runtime_info.get("database_path") or runtime_info.get("app_home"),
+        runtime_info.get("app_home"),
+        runtime_info.get("app_home_source"),
+    )
+    for warning in runtime_info.get("alternate_home_warnings") or []:
+        logger.warning("%s", warning.get("message") or warning)
     return StartupState(
         mode=startup_mode,
         shared_state=shared_state,

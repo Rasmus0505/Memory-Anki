@@ -111,7 +111,7 @@ export function buildBatchJob(
         children: [{ text: '章节一', children: [{ text: '补充点', children: [] }] }],
       },
       editor_doc: buildEditorDoc(rootText, '章节一'),
-      structure_image_index: 0,
+
       image_count: 2,
       warnings: [],
       can_apply: true,

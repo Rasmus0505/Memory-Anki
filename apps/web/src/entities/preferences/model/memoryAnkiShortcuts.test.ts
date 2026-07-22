@@ -96,7 +96,9 @@ describe('memoryAnkiShortcuts', () => {
     )
 
     act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true, cancelable: true }),
+      )
     })
     expect(first).toHaveBeenCalledTimes(1)
     expect(second).not.toHaveBeenCalled()
@@ -104,9 +106,51 @@ describe('memoryAnkiShortcuts', () => {
     rerender({ handler: second })
 
     act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true }))
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true, cancelable: true }),
+      )
     })
     expect(first).toHaveBeenCalledTimes(1)
     expect(second).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not preventDefault when handler returns false', () => {
+    const handler = vi.fn(() => false)
+    renderHook(() =>
+      useMemoryAnkiShortcuts('practice', { flip_subtree_cards_practice: handler }, true),
+    )
+
+    let event!: KeyboardEvent
+    act(() => {
+      event = new KeyboardEvent('keydown', {
+        key: 'a',
+        code: 'KeyA',
+        bubbles: true,
+        cancelable: true,
+      })
+      window.dispatchEvent(event)
+    })
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('prevents default when handler runs successfully', () => {
+    const handler = vi.fn(() => true)
+    renderHook(() =>
+      useMemoryAnkiShortcuts('practice', { flip_subtree_cards_practice: handler }, true),
+    )
+
+    let event!: KeyboardEvent
+    act(() => {
+      event = new KeyboardEvent('keydown', {
+        key: 'a',
+        code: 'KeyA',
+        bubbles: true,
+        cancelable: true,
+      })
+      window.dispatchEvent(event)
+    })
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(true)
   })
 })

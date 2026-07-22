@@ -45,7 +45,6 @@ export function KnowledgeMindMapImportDrawer({
       extractedText={mindMapImport.importExtractedText}
       imagePreviewUrl={mindMapImport.importImagePreviewUrl}
       batchImages={mindMapImport.importBatchImages}
-      structureImageId={mindMapImport.importStructureImageId}
       batchStatus={mindMapImport.importBatchStatus}
       batchMeta={mindMapImport.importBatchMeta}
       importWarnings={mindMapImport.importWarnings}
@@ -72,7 +71,6 @@ export function KnowledgeMindMapImportDrawer({
       onBatchStart={mindMapImport.handleBatchImportStart}
       onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
       onBatchMoveImage={mindMapImport.handleMoveBatchImage}
-      onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
       onApplyReplace={mindMapImport.handleImportApplyReplace}
       onApplyAppend={mindMapImport.handleImportApplyAppend}
       onUndoLastImport={mindMapImport.handleUndoLastImport}

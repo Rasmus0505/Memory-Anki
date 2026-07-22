@@ -4,9 +4,11 @@ import type {
   TimeSessionRecord,
 } from '@/entities/session/model'
 import {
-  formatLocalApiDateTime,
+  formatLocalDateTimeInputFromDate,
   formatLocalDateTimeInputValue,
+  formatUtcApiDateTime,
   parseApiDateTime,
+  parseLocalDateTimeInputValue,
 } from '@/shared/lib/dateTime'
 import {
   formatDefaultQuickAddTitle,
@@ -138,7 +140,7 @@ export function buildTimeRecordFormState(
   record?: TimeSessionRecord | null,
 ): TimeRecordFormState {
   const defaultDate = new Date()
-  const defaultDateTime = formatLocalApiDateTime(defaultDate)
+  const defaultInput = formatLocalDateTimeInputFromDate(defaultDate)
   const tagId =
     record?.activityTag?.trim() ||
     (record?.kind && record.kind !== 'custom' ? record.kind : 'review')
@@ -151,10 +153,10 @@ export function buildTimeRecordFormState(
     palaceId: record?.palaceId == null ? '' : String(record.palaceId),
     startedAt: record
       ? toLocalDateTimeInputValue(record.startedAt)
-      : toLocalDateTimeInputValue(defaultDateTime),
+      : defaultInput,
     endedAt: record
       ? toLocalDateTimeInputValue(record.endedAt)
-      : toLocalDateTimeInputValue(defaultDateTime),
+      : defaultInput,
     effectiveMinutes: record
       ? formatEffectiveSecondsAsMinutes(record.effectiveSeconds)
       : '0',
@@ -174,7 +176,7 @@ function formatLocalDateInputValue(date: Date) {
 export function buildTimeRecordQuickAddFormState(
   now = new Date(),
 ): TimeRecordQuickAddFormState {
-  const dateTime = formatLocalDateTimeInputValue(formatLocalApiDateTime(now))
+  const dateTime = formatLocalDateTimeInputFromDate(now)
   return {
     tagId: 'review',
     minutes: '30',
@@ -243,8 +245,8 @@ export function calculateQuickAddBounds(
   if (Number.isNaN(endedAtDate.getTime())) return null
   const startedAtDate = new Date(endedAtDate.getTime() - effectiveSeconds * 1000)
   return {
-    startedAt: formatLocalDateTimeInputValue(formatLocalApiDateTime(startedAtDate)),
-    endedAt: formatLocalDateTimeInputValue(formatLocalApiDateTime(endedAtDate)),
+    startedAt: formatLocalDateTimeInputFromDate(startedAtDate),
+    endedAt: formatLocalDateTimeInputFromDate(endedAtDate),
     effectiveSeconds,
   }
 }
@@ -266,8 +268,8 @@ export function parseTimeRecordQuickAddFormState(
   let effectiveSeconds: number
 
   if (form.showAdvanced && form.startedAt && form.endedAt) {
-    startedAt = new Date(form.startedAt)
-    endedAt = new Date(form.endedAt)
+    startedAt = parseLocalDateTimeInputValue(form.startedAt)
+    endedAt = parseLocalDateTimeInputValue(form.endedAt)
     if (Number.isNaN(startedAt.getTime())) return { error: '开始时间不能为空。' }
     if (Number.isNaN(endedAt.getTime())) return { error: '结束时间不能为空。' }
     if (endedAt < startedAt) return { error: '结束时间不能早于开始时间。' }
@@ -275,8 +277,8 @@ export function parseTimeRecordQuickAddFormState(
   } else {
     const bounds = calculateQuickAddBounds(form.date, form.minutes, now)
     if (!bounds) return { error: '时长必须是大于等于 1 的整数分钟。' }
-    startedAt = new Date(bounds.startedAt)
-    endedAt = new Date(bounds.endedAt)
+    startedAt = parseLocalDateTimeInputValue(bounds.startedAt)
+    endedAt = parseLocalDateTimeInputValue(bounds.endedAt)
     effectiveSeconds = bounds.effectiveSeconds
   }
 
@@ -290,8 +292,8 @@ export function parseTimeRecordQuickAddFormState(
       title,
       kind,
       palaceId: null,
-      startedAt: formatLocalApiDateTime(startedAt),
-      endedAt: formatLocalApiDateTime(endedAt),
+      startedAt: formatUtcApiDateTime(startedAt),
+      endedAt: formatUtcApiDateTime(endedAt),
       effectiveSeconds,
       pauseCount: 0,
       completionMethod: 'manual_complete',
@@ -306,8 +308,8 @@ export function calculateTimeRangeSeconds(
   startedAtValue: string,
   endedAtValue: string,
 ) {
-  const startedAt = startedAtValue ? new Date(startedAtValue) : null
-  const endedAt = endedAtValue ? new Date(endedAtValue) : null
+  const startedAt = startedAtValue ? parseLocalDateTimeInputValue(startedAtValue) : null
+  const endedAt = endedAtValue ? parseLocalDateTimeInputValue(endedAtValue) : null
   if (!startedAt || !endedAt) return null
   if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) {
     return null
@@ -320,7 +322,7 @@ export function calculateEndedAtFromEffectiveMinutes(
   startedAtValue: string,
   effectiveMinutesValue: string,
 ) {
-  const startedAt = startedAtValue ? new Date(startedAtValue) : null
+  const startedAt = startedAtValue ? parseLocalDateTimeInputValue(startedAtValue) : null
   const effectiveSeconds = parseEffectiveMinutesToSeconds(
     effectiveMinutesValue,
   )
@@ -328,7 +330,7 @@ export function calculateEndedAtFromEffectiveMinutes(
   if (effectiveSeconds === null) return null
 
   const endedAt = new Date(startedAt.getTime() + effectiveSeconds * 1000)
-  return formatLocalDateTimeInputValue(formatLocalApiDateTime(endedAt))
+  return formatLocalDateTimeInputFromDate(endedAt)
 }
 
 export function applyTimeRecordFormPatch(
@@ -404,8 +406,8 @@ export function parseTimeRecordFormState(
   customTags: CustomTimeRecordTag[] = [],
 ): { error: string } | { value: TimeRecordMutationPayload } {
   const title = form.title.trim()
-  const startedAt = form.startedAt ? new Date(form.startedAt) : null
-  const endedAt = form.endedAt ? new Date(form.endedAt) : null
+  const startedAt = form.startedAt ? parseLocalDateTimeInputValue(form.startedAt) : null
+  const endedAt = form.endedAt ? parseLocalDateTimeInputValue(form.endedAt) : null
   const effectiveSeconds = parseEffectiveMinutesToSeconds(
     form.effectiveMinutes,
   )
@@ -445,8 +447,8 @@ export function parseTimeRecordFormState(
       title,
       kind,
       palaceId,
-      startedAt: formatLocalApiDateTime(startedAt),
-      endedAt: formatLocalApiDateTime(endedAt),
+      startedAt: formatUtcApiDateTime(startedAt),
+      endedAt: formatUtcApiDateTime(endedAt),
       effectiveSeconds,
       pauseCount,
       completionMethod: form.completionMethod,

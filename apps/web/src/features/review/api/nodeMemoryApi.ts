@@ -2,10 +2,13 @@ import { request } from '@/shared/api/http'
 import type { MindMapRecallRating } from '@/shared/api/contracts'
 import type { PalaceMemoryProjection, PalaceRatingOperationResult } from '@/shared/api/contracts'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
-import { invalidatePalaceCatalogCache } from '@/entities/palace/api'
 
+/**
+ * Mid-session node ratings must stay snappy: do not invalidate the palace
+ * catalog cache here. Catalog / queue refresh runs on formal completion
+ * (and settlement bulk-rate) via reviewApi.
+ */
 function notifyReviewStateChanged(result: PalaceRatingOperationResult, palaceId: number) {
-  invalidatePalaceCatalogCache()
   emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, {
     palaceId,
     chapterId: null,

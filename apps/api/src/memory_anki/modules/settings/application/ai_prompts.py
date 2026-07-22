@@ -16,7 +16,6 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     ENGLISH_READING_GENERATE_PROMPT,
     ENGLISH_TRANSLATION_BATCH_PROMPT,
     ENGLISH_TRANSLATION_SINGLE_PROMPT,
-    IMPORT_BATCH_MINDMAP_PROMPT,
     IMPORT_DOCUMENT_MINDMAP_PROMPT,
     IMPORT_IMAGE_MINDMAP_PROMPT,
     IMPORT_IMAGE_TEXT_PROMPT,
@@ -37,7 +36,6 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
 PROMPT_CONFIG_KEYS = (
     "ai_prompt_import_image_mindmap",
     "ai_prompt_import_image_text",
-    "ai_prompt_import_batch_mindmap",
     "ai_prompt_import_document_mindmap",
     "ai_prompt_import_ocr_mindmap_format",
     "ai_prompt_mindmap_ai_split_system",
@@ -90,13 +88,6 @@ def _placeholder(name: str, description: str) -> PromptPlaceholder:
     return PromptPlaceholder(name=name, description=description)
 
 
-_DEFAULT_BATCH_PROMPT_TEMPLATE = (
-    f"{IMPORT_BATCH_MINDMAP_PROMPT}\n\n"
-    "下面是已经从结构图中提取出的原始脑图 JSON，请以它为主结构进行增强：\n"
-    "{{structure_tree_json}}\n\n"
-    "接下来会按顺序提供结构图和正文图片。请综合所有图片后输出增强后的完整脑图 JSON。"
-)
-
 _DEFAULT_PALACE_QUIZ_GENERATE_TEMPLATE = PALACE_QUIZ_GENERATE_PROMPT
 
 _DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE = PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT
@@ -112,46 +103,35 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_import_image_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_image_mindmap",
         label="图片转脑图（兼容）",
-        description="旧版单图脑图提示词键。当前推荐使用 PDF 直接生成语义，保留此键仅用于兼容。",
+        description="兼容旧配置键；运行时为「识别全文 → 整理 JSON」。",
         default_template=IMPORT_IMAGE_MINDMAP_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
     "ai_prompt_import_image_text": PromptTemplateDefinition(
         key="ai_prompt_import_image_text",
         label="图片转文字",
-        description="图片/PDF OCR 的基础纯文本提示词。PDF 页码范围提示会在运行时追加。",
+        description="阶段 A：识别上传页全部文字。",
         default_template=IMPORT_IMAGE_TEXT_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
     ),
     "ai_prompt_import_document_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_document_mindmap",
-        label="教材正文直接转脑图",
-        description="普通 PDF 或未指定结构图的多图正文直接生成脑图。",
+        label="教材转脑图（兼容）",
+        description="兼容旧配置键；主路径已改为先识别全文再整理 JSON。",
         default_template=IMPORT_DOCUMENT_MINDMAP_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py",
     ),
     "ai_prompt_import_ocr_mindmap_format": PromptTemplateDefinition(
         key="ai_prompt_import_ocr_mindmap_format",
-        label="OCR 原文整理脑图",
-        description="把带页码的逐页 OCR 原文整理为严格脑图 JSON。",
+        label="识别原文整理脑图",
+        description="阶段 B：按范围删除多余内容并输出脑图 JSON。",
         default_template=IMPORT_OCR_MINDMAP_FORMAT_PROMPT,
         source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py",
         available_placeholders=(
             _placeholder("target_title", "当前宫殿的目标章节标题；占位标题时为空。"),
-            _placeholder("ocr_text", "带 PDF 页码标记的逐页 OCR 原文。"),
+            _placeholder("ocr_text", "带页码标记的已识别全文。"),
         ),
         required_placeholders=("target_title", "ocr_text"),
-    ),
-    "ai_prompt_import_batch_mindmap": PromptTemplateDefinition(
-        key="ai_prompt_import_batch_mindmap",
-        label="多图转脑图（兼容）",
-        description="批量图片导入脑图时的结构补全提示词。",
-        default_template=_DEFAULT_BATCH_PROMPT_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py",
-        available_placeholders=(
-            _placeholder("structure_tree_json", "结构图提取出的原始脑图 JSON。"),
-        ),
-        required_placeholders=("structure_tree_json",),
     ),
     "ai_prompt_mindmap_ai_split_system": PromptTemplateDefinition(
         key="ai_prompt_mindmap_ai_split_system",
@@ -451,15 +431,4 @@ def render_prompt(
     return PLACEHOLDER_PATTERN.sub(_replace, template).strip()
 
 
-def build_import_batch_prompt(
-    *,
-    structure_tree: dict[str, Any],
-    session: Session | None = None,
-) -> str:
-    return render_prompt(
-        "ai_prompt_import_batch_mindmap",
-        {
-            "structure_tree_json": json.dumps(structure_tree, ensure_ascii=False),
-        },
-        session=session,
-    )
+

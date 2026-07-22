@@ -25,8 +25,6 @@ describe('PalaceQuizPage core flows', () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
-    const shelfLink = screen.getByRole('link', { name: '返回学科书架' })
-    expect(shelfLink.getAttribute('href')).toBe('/palaces')
     expect(screen.getByRole('button', { name: '查看记忆宫殿' })).toBeTruthy()
     expect(screen.getByText('多图生成')).toBeTruthy()
     expect(useTimedSessionMock).toHaveBeenCalledWith(

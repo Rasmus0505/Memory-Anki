@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -158,12 +158,6 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         description={currentSubjectTitle ? `当前书架：${currentSubjectTitle}` : undefined}
         actions={
           <div className="flex items-center gap-3">
-            <Link to="/palaces">
-              <Button variant="ghost" size="sm" className="-ml-3">
-                <ArrowLeft className="size-4" />
-                返回学科书架
-              </Button>
-            </Link>
             <Link to="/palaces/new">
               <Button size="sm">
                 <Plus className="size-4" />

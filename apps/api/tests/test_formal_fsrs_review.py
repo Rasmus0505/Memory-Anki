@@ -552,7 +552,8 @@ def test_queue_orders_by_earliest_due_first(db_session):
     assert titles == sorted(titles, key=str.casefold)
 
 
-def test_single_top_level_branch_uses_node_entry_mode(db_session):
+def test_single_top_level_branch_uses_palace_entry_mode(db_session):
+    """Sole first-level branch due is palace review: root is never FSRS-scored."""
     palace = Palace(
         title="single branch",
         archived=False,
@@ -575,9 +576,54 @@ def test_single_top_level_branch_uses_node_entry_mode(db_session):
     db_session.add(palace)
     db_session.commit()
     payload = get_fsrs_queue_payload(db_session)
-    assert payload["reviews"][0]["review_entry_mode"] == "node"
-    assert payload["reviews"][0]["primary_branch_title"] == "Branch"
-    assert payload["reviews"][0]["review_entry_label"] == "节点复习"
+    assert payload["reviews"][0]["review_entry_mode"] == "palace"
+    assert payload["reviews"][0]["primary_branch_title"] is None
+    assert payload["reviews"][0]["review_entry_label"] == "开始复习"
+    row = start_or_resume_formal_review(db_session, palace.id)
+    summary = json.loads(row.summary_json)
+    assert summary["review_entry_mode"] == "palace"
+    assert set(summary["frozen_due_node_uids"]) == {"branch", "leaf"}
+
+
+def test_partial_branch_among_siblings_uses_node_entry_mode(db_session):
+    """One due top-level branch among multi-branch palaces stays node review."""
+    palace = Palace(
+        title="multi branch",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {
+                            "data": {"uid": "branch", "text": "Branch"},
+                            "children": [
+                                {"data": {"uid": "leaf", "text": "Leaf"}, "children": []},
+                            ],
+                        },
+                        {"data": {"uid": "other", "text": "Other"}, "children": []},
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+    # Leave only the first branch due; score the sibling out of the due set.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="other",
+        rating=4,
+        study_session_id="seed-other",
+        operation_id="seed-other",
+        rating_scope="single",
+    )
+    payload = get_fsrs_queue_payload(db_session)
+    review = next(item for item in payload["reviews"] if item["palace_id"] == palace.id)
+    assert review["review_entry_mode"] == "node"
+    assert review["primary_branch_title"] == "Branch"
+    assert review["review_entry_label"] == "节点复习"
     row = start_or_resume_formal_review(db_session, palace.id)
     summary = json.loads(row.summary_json)
     assert summary["review_entry_mode"] == "node"
@@ -649,3 +695,297 @@ def test_formal_subtree_rating_updates_non_due_descendants(db_session):
         .one()
     )
     assert after.due_at != before_due or after.stability != before_stability
+
+
+def test_good_rating_floors_interval_to_at_least_one_day(db_session):
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+    before = utc_now_naive()
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id=row.id,
+        operation_id="good-floor",
+        rating_scope="single",
+        source_scene="formal_review",
+    )
+    state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    assert state.last_review_at is not None
+    assert state.due_at is not None
+    assert state.due_at - state.last_review_at >= timedelta(days=1) - timedelta(seconds=2)
+    assert state.due_at >= before + timedelta(days=1) - timedelta(seconds=5)
+
+
+def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):
+    palace = _palace(db_session)
+    first = start_or_resume_formal_review(db_session, palace.id)
+    twin = StudySession(
+        id="review-twin-duplicate",
+        status="active",
+        scene="review",
+        target_type="palace",
+        target_id=palace.id,
+        palace_id=palace.id,
+        title="twin",
+        started_at=utc_now_naive(),
+        progress_json="{}",
+        events_json="[]",
+        summary_json=json.dumps(
+            {"frozen_due_node_uids": json.loads(first.summary_json)["frozen_due_node_uids"]}
+        ),
+    )
+    db_session.add(twin)
+    db_session.commit()
+
+    resumed = start_or_resume_formal_review(db_session, palace.id)
+    assert resumed.id in {first.id, twin.id}
+    active = (
+        db_session.query(StudySession)
+        .filter(
+            StudySession.palace_id == palace.id,
+            StudySession.scene == "review",
+            StudySession.status == "active",
+        )
+        .all()
+    )
+    assert len(active) == 1
+    abandoned = db_session.get(StudySession, twin.id if resumed.id == first.id else first.id)
+    assert abandoned is not None
+    assert abandoned.status == "abandoned"
+
+
+def test_resume_merges_newly_due_nodes_into_frozen_scope(db_session):
+    """Delayed re-entry must absorb cards that became due after freeze.
+
+    Without expand, settlement would show a second bulk-rate path for
+    out-of-scope dues — product wants one combined due set when opening review.
+    """
+    palace = Palace(
+        title="delayed merge",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {"data": {"uid": "a", "text": "A"}, "children": []},
+                        {"data": {"uid": "b", "text": "B"}, "children": []},
+                        {"data": {"uid": "c", "text": "C"}, "children": []},
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+
+    # First wave: only a is due.
+    future = utc_now_naive() + timedelta(days=7)
+    for uid in ("b", "c"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=4,
+            study_session_id="seed-future",
+            operation_id=f"seed-future-{uid}",
+            rating_scope="single",
+        )
+    for state in (
+        db_session.query(ReviewNodeState)
+        .filter(
+            ReviewNodeState.palace_id == palace.id,
+            ReviewNodeState.node_uid.in_(["b", "c"]),
+        )
+        .all()
+    ):
+        state.due_at = future
+    db_session.commit()
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    frozen = set(json.loads(row.summary_json)["frozen_due_node_uids"])
+    assert frozen == {"a"}
+
+    # Later wave becomes due while the session is still active / unfinished.
+    past = utc_now_naive() - timedelta(hours=1)
+    for state in (
+        db_session.query(ReviewNodeState)
+        .filter(
+            ReviewNodeState.palace_id == palace.id,
+            ReviewNodeState.node_uid.in_(["b", "c"]),
+        )
+        .all()
+    ):
+        state.due_at = past
+    db_session.commit()
+
+    resumed = start_or_resume_formal_review(db_session, palace.id)
+    assert resumed.id == row.id
+    merged = set(json.loads(resumed.summary_json)["frozen_due_node_uids"])
+    assert merged == {"a", "b", "c"}
+
+    summary = formal_review_completion_summary(db_session, resumed)
+    assert summary["scope_node_count"] == 3
+    assert summary["unrated_due_node_count"] == 3
+    assert summary["out_of_scope_due_node_count"] == 0
+
+    bulk = rate_unrated_formal_review_nodes(
+        db_session,
+        resumed,
+        rating=3,
+        operation_id="merge-bulk",
+    )
+    assert bulk["affected_node_count"] == 3
+    assert bulk["summary"]["out_of_scope_due_node_count"] == 0
+    assert bulk["summary"]["remaining_due_node_count"] == 0
+
+
+def test_resume_upgrades_node_mode_when_second_branch_becomes_due(db_session):
+    """Node-mode session expands to palace chrome once another branch is due."""
+    palace = Palace(
+        title="node upgrade",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {
+                            "data": {"uid": "branch-a", "text": "A"},
+                            "children": [
+                                {"data": {"uid": "a1", "text": "A1"}, "children": []},
+                            ],
+                        },
+                        {
+                            "data": {"uid": "branch-b", "text": "B"},
+                            "children": [
+                                {"data": {"uid": "b1", "text": "B1"}, "children": []},
+                            ],
+                        },
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+
+    # Only branch-a due at entry.
+    future = utc_now_naive() + timedelta(days=5)
+    for uid in ("branch-b", "b1"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=4,
+            study_session_id="seed-b",
+            operation_id=f"seed-b-{uid}",
+            rating_scope="single",
+        )
+    for state in (
+        db_session.query(ReviewNodeState)
+        .filter(
+            ReviewNodeState.palace_id == palace.id,
+            ReviewNodeState.node_uid.in_(["branch-b", "b1"]),
+        )
+        .all()
+    ):
+        state.due_at = future
+    db_session.commit()
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    summary = json.loads(row.summary_json)
+    assert summary["review_entry_mode"] == "node"
+    assert set(summary["frozen_due_node_uids"]) == {"branch-a", "a1"}
+
+    past = utc_now_naive() - timedelta(hours=2)
+    for state in (
+        db_session.query(ReviewNodeState)
+        .filter(
+            ReviewNodeState.palace_id == palace.id,
+            ReviewNodeState.node_uid.in_(["branch-b", "b1"]),
+        )
+        .all()
+    ):
+        state.due_at = past
+    db_session.commit()
+
+    resumed = start_or_resume_formal_review(db_session, palace.id)
+    summary = json.loads(resumed.summary_json)
+    assert summary["review_entry_mode"] == "palace"
+    assert summary["primary_branch_uid"] is None
+    assert set(summary["frozen_due_node_uids"]) == {"branch-a", "a1", "branch-b", "b1"}
+    assert formal_review_completion_summary(db_session, resumed)[
+        "out_of_scope_due_node_count"
+    ] == 0
+
+
+def test_completion_summary_expands_scope_without_explicit_resume(db_session):
+    """Opening the finish dialog also merges currently due cards into scope."""
+    palace = _palace(db_session)
+    # Rate b into the future so freeze is only {a}.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=4,
+        study_session_id="seed-b-future",
+        operation_id="seed-b-future",
+        rating_scope="single",
+    )
+    state_b = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    state_b.due_at = utc_now_naive() + timedelta(days=3)
+    db_session.commit()
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a"}
+
+    state_b.due_at = utc_now_naive() - timedelta(minutes=30)
+    db_session.commit()
+
+    # Do not call start_or_resume — only completion summary (as finish dialog does).
+    summary = formal_review_completion_summary(db_session, row)
+    assert set(json.loads(row.summary_json)["frozen_due_node_uids"]) == {"a", "b"}
+    assert summary["scope_node_count"] == 2
+    assert summary["out_of_scope_due_node_count"] == 0
+
+
+def test_api_datetimes_in_completion_summary_are_timezone_aware(db_session):
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+    for uid in ("a", "b"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=3,
+            study_session_id=row.id,
+            operation_id=f"tz-{uid}",
+            rating_scope="single",
+            source_scene="formal_review",
+        )
+    receipt = complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=10,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+    last = receipt["last_review_at"]
+    assert last is not None
+    assert last.endswith("+00:00") or last.endswith("Z")
+    if receipt.get("next_review_at"):
+        nxt = receipt["next_review_at"]
+        assert "+" in nxt or nxt.endswith("Z")

@@ -75,6 +75,12 @@ def _parse_steps(raw: str | None, fallback: tuple[timedelta, ...]) -> tuple[time
 
 
 def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
+    """Load FSRS config; cache on the SQLAlchemy session for the request lifetime."""
+    if session is not None:
+        cached = session.info.get("_fsrs_settings")
+        if isinstance(cached, dict):
+            return cached
+
     retention = DEFAULT_RETENTION
     maximum_interval = DEFAULT_MAXIMUM_INTERVAL
     horizon = MASTERY_HORIZON_DAYS
@@ -108,13 +114,16 @@ def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
             pass
         learning_steps = _parse_steps(values.get("learning_steps"), learning_steps)
         relearning_steps = _parse_steps(values.get("relearning_steps"), relearning_steps)
-    return {
+    result = {
         "desired_retention": retention,
         "maximum_interval": maximum_interval,
         "mastery_horizon_days": horizon,
         "learning_steps": learning_steps,
         "relearning_steps": relearning_steps,
     }
+    if session is not None:
+        session.info["_fsrs_settings"] = result
+    return result
 
 
 def build_scheduler(
@@ -123,8 +132,17 @@ def build_scheduler(
     retention: float | None = None,
     maximum_interval: int | None = None,
 ) -> Scheduler:
+    """Build FSRS scheduler; reuse one instance per session when defaults apply."""
+    use_cache = (
+        session is not None and retention is None and maximum_interval is None
+    )
+    if use_cache:
+        cached = session.info.get("_fsrs_scheduler")
+        if cached is not None:
+            return cached
+
     settings = load_fsrs_settings(session)
-    return Scheduler(
+    scheduler = Scheduler(
         desired_retention=settings["desired_retention"] if retention is None else retention,
         maximum_interval=(
             settings["maximum_interval"] if maximum_interval is None else maximum_interval
@@ -133,6 +151,9 @@ def build_scheduler(
         relearning_steps=settings["relearning_steps"],
         enable_fuzzing=False,
     )
+    if use_cache:
+        session.info["_fsrs_scheduler"] = scheduler
+    return scheduler
 
 
 def _review_now_aware(now: Any | None = None) -> Any:

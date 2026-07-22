@@ -42,7 +42,6 @@ export interface MindMapImportDrawerProps {
   extractedText: string
   imagePreviewUrl: string
   batchImages: BatchImportImageItem[]
-  structureImageId: string | null
   batchStatus: 'idle' | 'ready' | 'loading' | 'success' | 'error'
   batchMeta: BatchImportMeta | null
   importWarnings: string[]
@@ -71,7 +70,6 @@ export interface MindMapImportDrawerProps {
   onBatchStart: () => void
   onBatchDeleteImage: (id: string) => void
   onBatchMoveImage: (id: string, direction: 'up' | 'down') => void
-  onBatchSetStructureImage: (id: string) => void
   pdfDocuments?: PdfDocument[]
   selectedPdfDocumentId?: string
   onSelectedPdfDocumentIdChange?: (documentId: string) => void
@@ -159,7 +157,6 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'mode'
   | 'onBatchDeleteImage'
   | 'onBatchMoveImage'
-  | 'onBatchSetStructureImage'
   | 'onBatchStart'
   | 'onFileChange'
   | 'onPauseJob'
@@ -170,7 +167,6 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'sourceKind'
   | 'sourceTree'
   | 'streamStatusMessage'
-  | 'structureImageId'
   | 'undoing'
   | 'pdfDocuments'
   | 'selectedPdfDocumentId'

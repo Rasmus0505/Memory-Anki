@@ -212,8 +212,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
       data-testid="english-course-workbench"
     >
       <EnglishFocusChrome
-        backTo="/english/listening"
-        backLabel="返回听力"
         title={course.title}
         subtitle={
           activeSentence
@@ -260,7 +258,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" className="min-h-11 rounded-xl" onClick={() => navigate('/english')}>
-                返回英语
+                英语区
               </Button>
               <Button
                 className="min-h-11 rounded-xl"

@@ -87,12 +87,6 @@ from .mindmap_import_job_runtime import (
     _serialize_runtime_payload as _serialize_runtime_payload,
 )
 from .mindmap_import_job_runtime import (
-    _stream_call_dashscope_batch_json as _stream_call_dashscope_batch_json,
-)
-from .mindmap_import_job_runtime import (
-    _stream_call_dashscope_json as _stream_call_dashscope_json,
-)
-from .mindmap_import_job_runtime import (
     _stream_call_dashscope_text as _stream_call_dashscope_text,
 )
 from .mindmap_import_job_runtime import (
@@ -120,9 +114,7 @@ IMPORT_JOBS_DIR = DEFAULT_IMPORT_JOBS_DIR
 def _sync_facade_dependencies() -> None:
     _job_api.IMPORT_JOBS_DIR = IMPORT_JOBS_DIR
     _job_execution.IMPORT_JOBS_DIR = IMPORT_JOBS_DIR
-    _job_execution._stream_call_dashscope_json = _stream_call_dashscope_json
     _job_execution._stream_call_dashscope_text = _stream_call_dashscope_text
-    _job_execution._stream_call_dashscope_batch_json = _stream_call_dashscope_batch_json
     _job_execution._stream_call_formatter_json = _stream_call_formatter_json
     _job_runtime._prepare_batch_image_items = _prepare_batch_image_items
 
@@ -133,6 +125,7 @@ def create_image_import_job(*args, **kwargs):
 
 
 def create_batch_import_job(*args, **kwargs):
+    """Facade keeps prepare_batch mockable for tests."""
     _sync_facade_dependencies()
     if args:
         session = args[0]
@@ -145,35 +138,32 @@ def create_batch_import_job(*args, **kwargs):
     ai_options = kwargs.pop("ai_options", None)
     vision_ai_options = kwargs.pop("vision_ai_options", None)
     formatter_ai_options = kwargs.pop("formatter_ai_options", None)
+    # Ignore legacy structure_image_index if callers still pass it.
+    kwargs.pop("structure_image_index", None)
     ai_runtime: AiRuntimeProvider = kwargs.pop("ai_runtime")
     mode = kwargs.get("mode", MODE_MINDMAP)
-    structure_image_index = kwargs["structure_image_index"]
-    scenario_key = (
-        "vision_structure_mindmap"
-        if mode == MODE_MINDMAP and structure_image_index is not None
-        else "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text"
-    )
+    source_kind = kwargs.pop("source_kind", job_state.SOURCE_KIND_IMAGE_BATCH)
+    scenario_key = "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text"
     runtime = ai_runtime.resolve(scenario_key, options=vision_ai_options or ai_options)
     formatter_runtime = (
         ai_runtime.resolve("mindmap_ocr_formatter", options=formatter_ai_options)
         if mode == MODE_MINDMAP
         else None
     )
-    normalized_items, resolved_structure_index = _prepare_batch_image_items(
+    normalized_items = _prepare_batch_image_items(
         ai_runtime=ai_runtime,
         image_items=kwargs["image_items"],
-        structure_image_index=structure_image_index,
     )
     return job_creation.create_batch_job(
         session,
         entity_key=kwargs["entity_key"],
         normalized_items=normalized_items,
-        resolved_structure_index=resolved_structure_index,
         fallback_title=kwargs["fallback_title"],
         mode=mode,
         ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
+        source_kind=source_kind,
         source_meta_extra={
             "vision_ai_runtime": _serialize_runtime_payload(runtime),
             "formatter_ai_runtime": (
@@ -181,6 +171,7 @@ def create_batch_import_job(*args, **kwargs):
             ),
         },
     )
+
 
 def create_pdf_import_job(*args, **kwargs):
     _sync_facade_dependencies()
@@ -295,8 +286,6 @@ __all__ = [
     "_set_job_progress",
     "_set_job_result",
     "_set_job_stage",
-    "_stream_call_dashscope_batch_json",
-    "_stream_call_dashscope_json",
     "_stream_call_dashscope_text",
     "_sync_job_progress_artifact",
     "_update_job_usage",

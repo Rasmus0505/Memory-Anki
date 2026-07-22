@@ -259,19 +259,25 @@ export function useReviewFlowSession({
   )
 
   const handleBulkRevealSubtree = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'bulk_flip_subtree' })
-      reveal.handleBulkRevealSubtree(fallbackNodeId)
+    (fallbackNodeId: string | null = null): boolean => {
+      if (reveal.completed) return false
+      const handled = reveal.handleBulkRevealSubtree(fallbackNodeId)
+      if (handled) {
+        timer.registerActivity('practice_interaction', { source: 'bulk_flip_subtree' })
+      }
+      return handled
     },
     [reveal.completed, reveal.handleBulkRevealSubtree, timer.registerActivity],
   )
 
   const handleBulkRevealDirectChildren = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'bulk_flip_direct_children' })
-      reveal.handleBulkRevealDirectChildren(fallbackNodeId)
+    (fallbackNodeId: string | null = null): boolean => {
+      if (reveal.completed) return false
+      const handled = reveal.handleBulkRevealDirectChildren(fallbackNodeId)
+      if (handled) {
+        timer.registerActivity('practice_interaction', { source: 'bulk_flip_direct_children' })
+      }
+      return handled
     },
     [reveal.completed, reveal.handleBulkRevealDirectChildren, timer.registerActivity],
   )

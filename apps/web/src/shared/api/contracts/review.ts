@@ -97,6 +97,9 @@ export interface ReviewCompletionSummary extends ReviewMemorySummary {
   unrated_due_node_count: number
   /** Frozen due UIDs still missing a rating in this session (for one-tap bulk rate). */
   unrated_node_uids?: string[]
+  /** Palace due nodes outside this session's frozen scope (e.g. other branches). */
+  out_of_scope_due_node_count?: number
+  out_of_scope_due_node_uids?: string[]
   /** Effective per-node ratings in this session's frozen due scope. */
   ratings?: Record<string, number>
   rating_counts: FsrsRatingCounts
@@ -172,7 +175,8 @@ export interface PalaceMemoryProjection {
   nodes: PalaceMemoryProjectionNode[]
 }
 
-export interface PalaceRatingOperationResult extends PalaceMemoryProjection {
+/** Rating/undo mutation payload: slim rollup (nodes[] may be empty on purpose). */
+export interface PalaceRatingOperationResult extends Omit<PalaceMemoryProjection, 'nodes'> {
   operation_id: string
   affected_node_count: number
   affected_node_uids?: string[]
@@ -182,4 +186,6 @@ export interface PalaceRatingOperationResult extends PalaceMemoryProjection {
   current_memory_health?: number
   undo_available?: boolean
   idempotent?: boolean
+  /** Omitted or empty on the rating hot path to avoid large JSON. */
+  nodes?: PalaceMemoryProjectionNode[]
 }

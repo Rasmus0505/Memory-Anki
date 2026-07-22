@@ -100,7 +100,6 @@ export default function ReviewSession() {
       loadCompletionSummary={getReviewSessionCompletionSummaryApi}
       submitSession={submitReviewSessionApi}
       onSubmitted={(result) => navigate(`/review/completed/${result.review_log_id}`, { replace: true })}
-      backHref={buildReviewOverviewPath}
     />
   )
 }

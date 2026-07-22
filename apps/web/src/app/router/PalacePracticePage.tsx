@@ -39,8 +39,6 @@ export default function PalacePracticePage() {
         saveProgress: (palace, snapshot: PracticeProgressSnapshot) =>
           savePracticeSessionProgressApi(palace.id, snapshot),
         pageEyebrow: '练习',
-        backTo: '/palaces',
-        backLabel: '返回列表',
         renderBadge: (_palace, hasResumeProgress) =>
           hasResumeProgress ? (
             <Badge variant="secondary">已接续上次练习</Badge>

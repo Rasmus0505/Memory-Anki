@@ -13,6 +13,7 @@ from memory_anki.modules.reviews.application.formal_review_service import (
     get_fsrs_completion,
     get_fsrs_load_forecast,
     get_fsrs_queue_payload,
+    rate_out_of_scope_due_formal_review_nodes,
     rate_unrated_formal_review_nodes,
     resolve_formal_review_session,
     save_formal_review_progress,
@@ -236,6 +237,26 @@ def api_rate_unrated_formal_review_nodes(
     try:
         return {
             "item": rate_unrated_formal_review_nodes(
+                session,
+                resolve_formal_review_session(session, session_id),
+                rating=int(str(data.get("rating") or "")),
+                operation_id=str(data.get("operation_id") or "").strip(),
+            )
+        }
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/review/session/{session_id}/rate-out-of-scope-due")
+def api_rate_out_of_scope_due_formal_review_nodes(
+    session_id: str,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    """One-tap rate palace due nodes outside this session's frozen scope (confirmed)."""
+    try:
+        return {
+            "item": rate_out_of_scope_due_formal_review_nodes(
                 session,
                 resolve_formal_review_session(session, session_id),
                 rating=int(str(data.get("rating") or "")),

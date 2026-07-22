@@ -37,16 +37,12 @@ export async function previewImageTextApi(file: File, handlers?: ImportStreamHan
 export async function previewMindMapBatchImportApi(
   files: File[],
   options?: {
-    structureImageIndex?: number
     fallbackTitle?: string
   },
   handlers?: ImportStreamHandlers,
 ) {
   const form = new FormData()
   files.forEach((file) => form.append('files', file))
-  if (typeof options?.structureImageIndex === 'number') {
-    form.append('structure_image_index', String(options.structureImageIndex))
-  }
   if (options?.fallbackTitle) {
     form.append('fallback_title', options.fallbackTitle)
   }
@@ -96,7 +92,6 @@ export async function createBatchImportJobApi(
   options: {
     entityKey: string
     fallbackTitle?: string
-    structureImageIndex?: number
     mode?: 'mindmap' | 'text'
     ai_options?: AiRuntimeOptions
     vision_ai_options?: AiRuntimeOptions
@@ -109,9 +104,6 @@ export async function createBatchImportJobApi(
     form.append('fallback_title', options.fallbackTitle)
   }
   form.append('mode', options.mode ?? 'mindmap')
-  if (typeof options.structureImageIndex === 'number') {
-    form.append('structure_image_index', String(options.structureImageIndex))
-  }
   if (options.ai_options) form.append('ai_options', JSON.stringify(options.ai_options))
   if (options.vision_ai_options) form.append('vision_ai_options', JSON.stringify(options.vision_ai_options))
   if (options.formatter_ai_options) form.append('formatter_ai_options', JSON.stringify(options.formatter_ai_options))

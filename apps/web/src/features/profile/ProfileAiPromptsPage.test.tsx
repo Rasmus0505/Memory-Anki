@@ -17,16 +17,17 @@ describe('ProfileAiPromptsPage', () => {
     vi.spyOn(profileApi, 'getAiPromptTemplatesApi').mockResolvedValue({
       items: [
         {
-          key: 'ai_prompt_import_batch_mindmap',
-          label: '多图转脑图（兼容）',
+          key: 'ai_prompt_import_ocr_mindmap_format',
+          label: '识别原文整理脑图',
           description: '测试模板',
-          template: '默认模板 {{structure_tree_json}}',
-          default_template: '默认模板 {{structure_tree_json}}',
+          template: '默认模板 {{target_title}} {{ocr_text}}',
+          default_template: '默认模板 {{target_title}} {{ocr_text}}',
           is_customized: false,
-          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py',
-          required_placeholders: ['structure_tree_json'],
+          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py',
+          required_placeholders: ['target_title', 'ocr_text'],
           available_placeholders: [
-            { name: 'structure_tree_json', description: '结构 JSON' },
+            { name: 'target_title', description: '目标标题' },
+            { name: 'ocr_text', description: '识别全文' },
           ],
         },
       ],
@@ -34,16 +35,17 @@ describe('ProfileAiPromptsPage', () => {
     const updateSpy = vi.spyOn(profileApi, 'updateAiPromptTemplatesApi').mockResolvedValue({
       items: [
         {
-          key: 'ai_prompt_import_batch_mindmap',
-          label: '多图转脑图（兼容）',
+          key: 'ai_prompt_import_ocr_mindmap_format',
+          label: '识别原文整理脑图',
           description: '测试模板',
-          template: '自定义模板 {{structure_tree_json}}',
-          default_template: '默认模板 {{structure_tree_json}}',
+          template: '自定义模板 {{target_title}} {{ocr_text}}',
+          default_template: '默认模板 {{target_title}} {{ocr_text}}',
           is_customized: true,
-          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/prompts.py',
-          required_placeholders: ['structure_tree_json'],
+          source_location: 'apps/api/src/memory_anki/modules/palaces/application/mindmap_import/runtime.py',
+          required_placeholders: ['target_title', 'ocr_text'],
           available_placeholders: [
-            { name: 'structure_tree_json', description: '结构 JSON' },
+            { name: 'target_title', description: '目标标题' },
+            { name: 'ocr_text', description: '识别全文' },
           ],
         },
       ],
@@ -61,13 +63,13 @@ describe('ProfileAiPromptsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整模板兼容' }))
     fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: '自定义模板 {{structure_tree_json}}' },
+      target: { value: '自定义模板 {{target_title}} {{ocr_text}}' },
     })
     fireEvent.click(screen.getByRole('button', { name: '保存候选' }))
 
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledWith({
-        ai_prompt_import_batch_mindmap: '自定义模板 {{structure_tree_json}}',
+        ai_prompt_import_ocr_mindmap_format: '自定义模板 {{target_title}} {{ocr_text}}',
       })
     })
   })

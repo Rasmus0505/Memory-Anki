@@ -43,4 +43,58 @@ describe('Palace knowledge workspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: '移除学科 测试学科' }))
     await waitFor(() => expect(palaceApi.updatePalaceKnowledgeBindingApi).toHaveBeenCalledWith(101, expect.objectContaining({ subject_ids: [], chapter_ids: [], base_revision: 0 })))
   })
+
+  it('keeps a newly bound subject after editor reload returns subjects', async () => {
+    vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([
+      { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+      { id: 7, name: '外国教育史', color: '#2563eb', sort_order: 1 },
+    ])
+    vi.spyOn(palaceApi, 'updatePalaceKnowledgeBindingApi').mockResolvedValue({
+      palace_id: 101,
+      subjects: [
+        { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+        { id: 7, name: '外国教育史', color: '#2563eb', sort_order: 1 },
+      ],
+      explicit_chapter_ids: [],
+      inherited_chapter_ids: [],
+      primary_chapter_id: null,
+      binding_revision: 1,
+    })
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValueOnce({
+      palace: {
+        id: 101, title: '俄国近代教育', description: '', created_at: null, attachments: [],
+        subjects: [{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }],
+        explicit_chapter_ids: [], inherited_chapter_ids: [], binding_revision: 0, chapters: [],
+      },
+      editor_doc: { root: { data: { text: '俄国近代教育', uid: 'palace-root' }, children: [] } },
+      editor_config: {}, editor_local_config: {}, lang: 'zh',
+    } as never).mockResolvedValue({
+      palace: {
+        id: 101, title: '俄国近代教育', description: '', created_at: null, attachments: [],
+        subjects: [
+          { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+          { id: 7, name: '外国教育史', color: '#2563eb', sort_order: 1 },
+        ],
+        explicit_chapter_ids: [], inherited_chapter_ids: [], binding_revision: 1, chapters: [],
+      },
+      editor_doc: { root: { data: { text: '俄国近代教育', uid: 'palace-root' }, children: [] } },
+      editor_config: {}, editor_local_config: {}, lang: 'zh',
+    } as never)
+
+    renderPalaceEditPage()
+    await screen.findByText('学科与思维导图')
+    const foreignOption = await screen.findByRole('option', { name: '外国教育史' })
+    const subjectSelect = foreignOption.closest('select')
+    expect(subjectSelect).toBeTruthy()
+    fireEvent.change(subjectSelect as HTMLSelectElement, { target: { value: '7' } })
+
+    await waitFor(() =>
+      expect(palaceApi.updatePalaceKnowledgeBindingApi).toHaveBeenCalledWith(
+        101,
+        expect.objectContaining({ subject_ids: [1, 7], base_revision: 0 }),
+      ),
+    )
+    expect(await screen.findByRole('button', { name: '外国教育史' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '移除学科 外国教育史' })).toBeTruthy()
+  })
 })

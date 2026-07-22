@@ -16,9 +16,14 @@ from sqlalchemy.orm import DeclarativeBase, Session
 from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
 from memory_anki.infrastructure.db.migrations import run_migrations
 
+# Small pool for local single-user SQLite on USB: reuse connections without
+# opening many file handles. pool_pre_ping is unnecessary for a local file DB.
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 30},
+    pool_size=5,
+    max_overflow=2,
+    pool_pre_ping=False,
 )
 
 
@@ -37,7 +42,8 @@ def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA cache_size=-32000")
+        # ~64MB page cache reduces USB random reads for hot indexes.
+        cursor.execute("PRAGMA cache_size=-64000")
         cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.execute("PRAGMA mmap_size=268435456")
     finally:

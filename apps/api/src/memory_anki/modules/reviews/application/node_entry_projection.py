@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from memory_anki.core.time import to_api_datetime
+
 _BRANCH_SUMMARY_LIMIT = 8
 
 
@@ -24,12 +26,34 @@ def top_level_branch_uid(
     return None
 
 
+def top_level_branch_uids(
+    nodes: dict[str, dict[str, Any]], root_uid: str | None
+) -> list[str]:
+    """Direct children of the mind-map root (rateable top-level branches)."""
+    if root_uid is None:
+        return []
+    return [
+        uid
+        for uid, node in nodes.items()
+        if node.get("parent_uid") == root_uid
+    ]
+
+
 def entry_mode_payload(
     *,
     root_uid: str | None,
     nodes: dict[str, dict[str, Any]],
     due_items: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Classify formal-review entry as none / node / palace.
+
+    Root is never FSRS-scheduled, so a palace whose only rateable content sits
+    under a single top-level branch must still be ``palace`` when that branch
+    is due — not ``node`` merely because the unscored root was excluded.
+
+    ``node`` is reserved for a true partial-palace wave: due cards under exactly
+    one top-level branch while the tree has other top-level sibling branches.
+    """
     due_uids = [item["node_uid"] for item in due_items]
     branch_uids: list[str] = []
     seen: set[str] = set()
@@ -48,7 +72,10 @@ def entry_mode_payload(
             "due_branch_count": 0,
             "due_node_uids": [],
         }
-    if len(branch_uids) == 1:
+    all_branches = top_level_branch_uids(nodes, root_uid)
+    # Partial single-branch wave among multi-branch palaces → node review.
+    # Sole top-level branch (or every top-level branch due) → palace review.
+    if len(branch_uids) == 1 and len(all_branches) > 1:
         branch_uid = branch_uids[0]
         title = str(nodes.get(branch_uid, {}).get("text") or "未命名节点").strip() or "未命名节点"
         return {
@@ -155,7 +182,7 @@ def branch_review_summaries(
                 "branch_uid": row["branch_uid"],
                 "title": row["title"],
                 "due_node_count": int(row["due_node_count"]),
-                "next_review_at": next_at.isoformat() if next_at else None,
+                "next_review_at": to_api_datetime(next_at) if next_at else None,
                 "status": branch_review_status(
                     due_count=int(row["due_node_count"]),
                     next_review_at=next_at,

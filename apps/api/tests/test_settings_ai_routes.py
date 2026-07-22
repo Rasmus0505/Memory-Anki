@@ -49,19 +49,20 @@ class SettingsAiRouteTests(RouterTestCase):
         list_response = self.client.get("/api/v1/settings/ai-prompts")
         self.assertEqual(list_response.status_code, 200)
         items = list_response.json()["items"]
-        target = next(item for item in items if item["key"] == "ai_prompt_import_batch_mindmap")
-        self.assertIn("{{structure_tree_json}}", target["template"])
+        target = next(item for item in items if item["key"] == "ai_prompt_import_ocr_mindmap_format")
+        self.assertIn("{{ocr_text}}", target["template"])
+        self.assertIn("{{target_title}}", target["template"])
 
-        custom_template = "自定义批量提示词\n" "{{structure_tree_json}}\n" "请严格输出 JSON。"
+        custom_template = "自定义整理提示词\n目标：{{target_title}}\n原文：{{ocr_text}}\n请严格输出 JSON。"
         save_response = self.client.put(
             "/api/v1/settings/ai-prompts",
-            json={"templates": {"ai_prompt_import_batch_mindmap": custom_template}},
+            json={"templates": {"ai_prompt_import_ocr_mindmap_format": custom_template}},
         )
         self.assertEqual(save_response.status_code, 200)
         saved_target = next(
             item
             for item in save_response.json()["items"]
-            if item["key"] == "ai_prompt_import_batch_mindmap"
+            if item["key"] == "ai_prompt_import_ocr_mindmap_format"
         )
         self.assertNotEqual(saved_target["template"], custom_template)
         self.assertFalse(saved_target["is_customized"])
@@ -71,31 +72,31 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(candidate["status"], "candidate")
 
         versions_response = self.client.get(
-            "/api/v1/settings/ai-prompts/ai_prompt_import_batch_mindmap/versions"
+            "/api/v1/settings/ai-prompts/ai_prompt_import_ocr_mindmap_format/versions"
         )
         self.assertEqual(versions_response.status_code, 200)
         self.assertGreaterEqual(len(versions_response.json()["items"]), 2)
 
         reset_response = self.client.post(
             "/api/v1/settings/ai-prompts/reset",
-            json={"keys": ["ai_prompt_import_batch_mindmap"]},
+            json={"keys": ["ai_prompt_import_ocr_mindmap_format"]},
         )
         self.assertEqual(reset_response.status_code, 200)
         self.assertTrue(reset_response.json()["requires_evaluation"])
         self.assertEqual(reset_response.json()["candidates"][0]["source"], "builtin")
 
     def test_ai_prompt_candidate_requires_passing_eval_before_activation(self):
-        custom_template = "候选提示词\n{{structure_tree_json}}"
+        custom_template = "候选提示词\n{{target_title}}\n{{ocr_text}}"
         save_response = self.client.put(
             "/api/v1/settings/ai-prompts",
-            json={"templates": {"ai_prompt_import_batch_mindmap": custom_template}},
+            json={"templates": {"ai_prompt_import_ocr_mindmap_format": custom_template}},
         )
         candidate = save_response.json()["candidates"][0]
 
         eval_response = self.client.post(
             "/api/v1/settings/ai-evals/runs",
             json={
-                "prompt_key": "ai_prompt_import_batch_mindmap",
+                "prompt_key": "ai_prompt_import_ocr_mindmap_format",
                 "candidate_version_id": candidate["id"],
             },
         )
@@ -104,7 +105,7 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(eval_response.json()["case_count"], 0)
 
         activate_response = self.client.post(
-            f"/api/v1/settings/ai-prompts/ai_prompt_import_batch_mindmap/versions/{candidate['id']}/activate"
+            f"/api/v1/settings/ai-prompts/ai_prompt_import_ocr_mindmap_format/versions/{candidate['id']}/activate"
         )
         self.assertEqual(activate_response.status_code, 400)
         self.assertIn("尚未通过", activate_response.json()["detail"])
@@ -144,7 +145,7 @@ class SettingsAiRouteTests(RouterTestCase):
             "/api/v1/settings/ai-prompts",
             json={
                 "templates": {
-                    "ai_prompt_import_batch_mindmap": "坏模板 {{structure_tree_json}} {{unknown_var}}"
+                    "ai_prompt_import_ocr_mindmap_format": "坏模板 {{target_title}} {{ocr_text}} {{unknown_var}}"
                 }
             },
         )
@@ -158,26 +159,26 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertIn("content.fidelity", block_keys)
         self.assertIn("output.mindmap_json", block_keys)
         fidelity = next(item for item in blocks_response.json()["items"] if item["key"] == "content.fidelity")
-        self.assertIn("vision_batch_mindmap", fidelity["applicable_scene_keys"])
+        self.assertIn("mindmap_ocr_formatter", fidelity["applicable_scene_keys"])
         self.assertNotIn("ai_split", fidelity["applicable_scene_keys"])
         split_fidelity = next(
             item for item in blocks_response.json()["items"] if item["key"] == "content.split_source_fidelity"
         )
         self.assertIn("ai_split", split_fidelity["applicable_scene_keys"])
-        self.assertNotIn("vision_batch_mindmap", split_fidelity["applicable_scene_keys"])
+        self.assertNotIn("mindmap_ocr_formatter", split_fidelity["applicable_scene_keys"])
 
         scenes = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        pdf_scene = next(item for item in scenes if item["scene_key"] == "vision_batch_mindmap")
-        self.assertGreaterEqual(len(pdf_scene["block_keys"]), 5)
-        self.assertTrue(set(pdf_scene["recommended_block_keys"]).issubset(set(pdf_scene["block_keys"])))
-        self.assertFalse(pdf_scene.get("is_compatibility"))
+        format_scene = next(item for item in scenes if item["scene_key"] == "mindmap_ocr_formatter")
+        self.assertGreaterEqual(len(format_scene["block_keys"]), 4)
+        self.assertTrue(set(format_scene["recommended_block_keys"]).issubset(set(format_scene["block_keys"])))
+        self.assertFalse(format_scene.get("is_compatibility"))
         compat = next(item for item in scenes if item["scene_key"] == "ai_split_parallel")
         self.assertTrue(compat.get("is_compatibility"))
 
         preview = self.client.post(
             "/api/v1/settings/ai-prompt-compose/preview",
             json={
-                "scene_key": "vision_batch_mindmap",
+                "scene_key": "mindmap_ocr_formatter",
                 "selection": {
                     "block_keys": ["quality.json_integrity", "content.fidelity"],
                     "scene_instruction": "场景规则",
@@ -195,26 +196,26 @@ class SettingsAiRouteTests(RouterTestCase):
         # Saving an empty modular combination is not sticky: seed repair restores
         # catalog defaults before the response returns.
         repaired = self.client.put(
-            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/default",
+            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/default",
             json={"block_keys": [], "scene_instruction": "空组合错误态"},
         )
         self.assertEqual(repaired.status_code, 200)
         scene = repaired.json()
         self.assertIn("role.strict_json", scene["block_keys"])
         self.assertIn("output.mindmap_json", scene["block_keys"])
-        self.assertGreaterEqual(len(scene["block_keys"]), 5)
+        self.assertGreaterEqual(len(scene["block_keys"]), 4)
 
         listed = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        listed_scene = next(item for item in listed if item["scene_key"] == "vision_batch_mindmap")
+        listed_scene = next(item for item in listed if item["scene_key"] == "mindmap_ocr_formatter")
         self.assertEqual(listed_scene["block_keys"], scene["block_keys"])
 
     def test_scene_default_activates_immediately_and_can_roll_back(self):
         before = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        scene = next(item for item in before if item["scene_key"] == "vision_batch_mindmap")
+        scene = next(item for item in before if item["scene_key"] == "mindmap_ocr_formatter")
         original_version = scene["active_version_id"]
 
         saved = self.client.put(
-            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/default",
+            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/default",
             json={
                 "block_keys": ["content.fidelity", "output.mindmap_json"],
                 "scene_instruction": "新的场景默认要求",
@@ -225,11 +226,11 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertIn("新的场景默认要求", saved.json()["compiled_prompt"])
 
         versions = self.client.get(
-            "/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/versions"
+            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/versions"
         ).json()["items"]
         self.assertEqual(len(versions), 2)
         restored = self.client.post(
-            f"/api/v1/settings/ai-prompt-scenes/vision_batch_mindmap/versions/{original_version}/activate"
+            f"/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/versions/{original_version}/activate"
         )
         self.assertEqual(restored.status_code, 200)
         self.assertEqual(restored.json()["active_version_id"], original_version)
@@ -237,7 +238,7 @@ class SettingsAiRouteTests(RouterTestCase):
     def test_shared_block_update_requires_affected_scene_acknowledgement(self):
         blocks = self.client.get("/api/v1/settings/ai-prompt-blocks").json()["items"]
         block = next(item for item in blocks if item["key"] == "content.fidelity")
-        self.assertIn("vision_batch_mindmap", block["affected_scene_keys"])
+        self.assertIn("mindmap_ocr_formatter", block["affected_scene_keys"])
 
         rejected = self.client.put(
             "/api/v1/settings/ai-prompt-blocks/content.fidelity",

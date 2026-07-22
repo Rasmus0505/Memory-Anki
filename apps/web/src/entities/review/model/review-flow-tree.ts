@@ -328,6 +328,20 @@ function firstAppearStateForChild(
   return 'placeholder'
 }
 
+/** True when A/S bulk flip still has work under `nodeId` for the given scope. */
+export function hasPendingBulkReveal(
+  nodeId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+  scope: BulkRevealScope,
+): boolean {
+  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
+  return targets.some((target) => {
+    const state = revealMap[target.id] ?? 'hidden'
+    return state === 'hidden' || state === 'placeholder'
+  })
+}
+
 /**
  * Two-phase bulk flip under a hover/selection anchor:
  * 1) If any target is still hidden → turn those into placeholders

@@ -151,16 +151,12 @@ BUILTIN_BLOCKS = (
     PromptBlockSeed(
         key="boundary.document_chapter",
         label="教材章节边界",
-        description="综合正文层级，保留跨页续文并在下一同级章节停止。",
+        description="按目标范围保留内容，遇到下一同级章节停止。",
         layer="boundary",
         sort_order=10,
         template=(
-            "不要假设任何页面天然是结构页。综合标题、编号、段落、缩进和并列关系判断层级；"
-            "教材页内的「精华提要」、彩色导图、总览框图只能辅助判断章节骨架，"
-            "绝不能把精华提要整棵树当作最终输出；最终脑图必须以知识点正文段落为准展开，"
-            "覆盖正文中的全部小标题、编号条目、事实、年代、人物与结论。"
-            "若输出节点数明显接近精华提要而远少于正文条目，视为失败，应继续按正文补全。"
-            "保留跨页续文，遇到下一同级章节标题（如「第X节」）时立即停止，不收录下一节内容。"
+            "只保留目标范围内的内容；按原文标题、编号、段落建立层级。"
+            "遇到下一同级章节标题（如「第X节」）时立即停止。"
         ),
     ),
     PromptBlockSeed(
@@ -170,17 +166,6 @@ BUILTIN_BLOCKS = (
         layer="boundary",
         sort_order=20,
         template="排除页眉、页脚、页码、广告、群号、版权信息和扫描水印。",
-    ),
-    PromptBlockSeed(
-        key="boundary.explicit_structure",
-        label="显式结构图补全",
-        description="仅在用户明确指定结构图时，以其为骨架补充正文。",
-        layer="boundary",
-        sort_order=30,
-        template=(
-            "用户已显式指定结构图。以识别出的结构为主骨架，用其余正文补全节点；"
-            "不得让正文中的下一同级章节扩展当前结构。"
-        ),
     ),
     PromptBlockSeed(
         key="output.mindmap_json",
@@ -220,7 +205,6 @@ PROMPT_SCENE_BINDINGS = {
     "ai_prompt_import_image_mindmap": "vision_image_mindmap",
     "ai_prompt_import_image_text": "vision_image_text",
     "ai_prompt_import_document_mindmap": "vision_batch_mindmap",
-    "ai_prompt_import_batch_mindmap": "vision_structure_mindmap",
     "ai_prompt_import_ocr_mindmap_format": "mindmap_ocr_formatter",
     "ai_prompt_mindmap_ai_split_system": "ai_split",
     "ai_prompt_peg_association": "peg_association_suggestions",
@@ -247,7 +231,6 @@ SCENE_CATEGORY_BY_KEY: dict[str, str] = {
     "ai_split_hierarchy": "脑图分卡",
     "vision_image_mindmap": "脑图导入",
     "vision_batch_mindmap": "脑图导入",
-    "vision_structure_mindmap": "脑图导入",
     "mindmap_ocr_formatter": "OCR 与整理",
     "vision_image_text": "OCR 与整理",
     "peg_association_suggestions": "记忆与复习",
@@ -300,60 +283,12 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
     ),
     "vision_batch_mindmap": PromptSceneSeed(
         scene_key="vision_batch_mindmap",
-        prompt_key="ai_prompt_import_document_mindmap",
-        block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "content.knowledge_emphasis",
-            "boundary.document_chapter",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        scene_instruction=_mindmap_scene_instruction(
-            "读取全部教材页面中的正文，为目标章节生成完整思维导图。"
-            "禁止只复制页内精华提要/自带导图；必须展开知识点正文中的全部条目。"
-        ),
-        recommended_block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "content.knowledge_emphasis",
-            "boundary.document_chapter",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        label="PDF/教材转脑图",
-        description="根据教材正文页面生成完整思维导图。",
-        category="脑图导入",
-    ),
-    "vision_structure_mindmap": PromptSceneSeed(
-        scene_key="vision_structure_mindmap",
-        prompt_key="ai_prompt_import_batch_mindmap",
-        block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "content.knowledge_emphasis",
-            "boundary.explicit_structure",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        scene_instruction=(
-            "任务：根据用户显式指定的结构图和其余正文图片补全脑图。\n"
-            "已识别的结构图 JSON：\n{{structure_tree_json}}"
-        ),
-        recommended_block_keys=(
-            "role.strict_json",
-            "content.fidelity",
-            "content.knowledge_emphasis",
-            "boundary.explicit_structure",
-            "boundary.noise_filter",
-            "output.mindmap_json",
-            "quality.json_integrity",
-        ),
-        label="结构图补全脑图",
-        description="以用户指定结构图为骨架补全正文。",
+        prompt_key="ai_prompt_import_image_text",
+        block_keys=(),
+        scene_instruction="识别全部上传页的文字内容，尽量完整，不要总结。",
+        recommended_block_keys=(),
+        label="PDF/多图全文识别",
+        description="阶段 A：识别上传页全部文字（再进入整理阶段）。",
         category="脑图导入",
     ),
     "mindmap_ocr_formatter": PromptSceneSeed(
@@ -362,39 +297,35 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         block_keys=(
             "role.strict_json",
             "content.fidelity",
-            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",
             "quality.json_integrity",
         ),
         scene_instruction=(
-            "任务：把带页码的逐页 OCR 原文整理为目标章节脑图。\n"
-            "禁止把「精华提要」导图当作唯一内容；若 OCR 中同时出现提要与正文，"
-            "必须以「知识点」「（一）（二）」等正文结构展开，保留全部编号条目与关键事实。\n"
-            "目标章节标题：{{target_title}}\n\n逐页 OCR 原文：\n{{ocr_text}}"
+            "任务：把已识别全文按范围整理为脑图 JSON。\n"
+            "目标章节标题：{{target_title}}\n\n已识别全文：\n{{ocr_text}}"
         ),
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
-            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",
             "quality.json_integrity",
         ),
-        label="OCR 整理为脑图",
-        description="把逐页 OCR 原文整理成章节脑图。",
+        label="识别原文整理脑图",
+        description="阶段 B：按范围删多余内容并输出脑图 JSON。",
         category="OCR 与整理",
     ),
     "vision_image_text": PromptSceneSeed(
         scene_key="vision_image_text",
         prompt_key="ai_prompt_import_image_text",
         block_keys=("role.source_extractor", "content.literal_ocr", "boundary.noise_filter"),
-        scene_instruction="任务：提取图片或 PDF 页面中的正文文字，保持自然阅读顺序和段落。",
+        scene_instruction="任务：识别上传页面中的全部文字，尽量完整，不要总结。",
         recommended_block_keys=("role.source_extractor", "content.literal_ocr", "boundary.noise_filter"),
         label="图片/PDF 转文字",
-        description="逐字提取图片或 PDF 页面正文。",
+        description="阶段 A：识别页面全部文字。",
         category="OCR 与整理",
     ),
     "peg_association_suggestions": PromptSceneSeed(

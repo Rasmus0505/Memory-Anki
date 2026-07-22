@@ -134,7 +134,6 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     normalizedStreamPhase,
     onBatchDeleteImage: props.onBatchDeleteImage,
     onBatchMoveImage: props.onBatchMoveImage,
-    onBatchSetStructureImage: props.onBatchSetStructureImage,
     onBatchStart: props.onBatchStart,
     pdfDocuments: props.pdfDocuments,
     selectedPdfDocumentId: props.selectedPdfDocumentId,
@@ -156,7 +155,6 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     sourceTree: props.sourceTree,
     streamStatusMessage: props.streamStatusMessage,
     streamStepLabel,
-    structureImageId: props.structureImageId,
     undoing: props.undoing,
     usageLabel,
   }
@@ -371,9 +369,9 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
               {view === 'history'
                 ? '这里集中查看、恢复和删除当前页面实体的导入历史草稿。'
                 : sourceKind === 'image-batch'
-                    ? '先上传结构图和正文图，整理顺序后手动开始识别，再预览合成脑图草稿。'
+                    ? '上传教材页后开始识别：先识别全部文字，再整理为脑图草稿。'
                     : mode === 'mindmap'
-                      ? '粘贴一张结构图，先生成脑图草稿，再决定覆盖当前脑图或追加到选中知识点。'
+                      ? '上传或粘贴教材页，先识别全部文字，再整理为脑图草稿。'
                       : '识别出的文字会一直保留在右侧，方便你回到导图里多次复制。'}
             </p>
           </div>

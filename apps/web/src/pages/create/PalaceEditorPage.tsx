@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapEditorSurface,
@@ -301,14 +301,6 @@ export default function PalaceEdit() {
           compact
           title="新建宫殿"
           description="进入此页面不会创建数据。选择一种方式后，才会创建宫殿。"
-          actions={
-            <Button variant="outline" asChild>
-              <Link to="/palaces">
-                <ArrowLeft className="mr-2 size-4" />
-                返回宫殿
-              </Link>
-            </Button>
-          }
         />
         <PalaceCreateSetup
           busy={page.isCreatingDraft}
@@ -345,12 +337,6 @@ export default function PalaceEdit() {
           title={page.palace?.title || '宫殿编辑器'}
           actions={
             <>
-              <Link to="/palaces">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 size-4" />
-                  返回列表
-                </Button>
-              </Link>
               <Button
                 variant="outline"
                 size="sm"
@@ -605,7 +591,6 @@ export default function PalaceEdit() {
         extractedText={mindMapImport.importExtractedText}
         imagePreviewUrl={mindMapImport.importImagePreviewUrl}
         batchImages={mindMapImport.importBatchImages}
-        structureImageId={mindMapImport.importStructureImageId}
         batchStatus={mindMapImport.importBatchStatus}
         batchMeta={mindMapImport.importBatchMeta}
         importWarnings={mindMapImport.importWarnings}
@@ -633,7 +618,6 @@ export default function PalaceEdit() {
         onBatchStart={mindMapImport.handleBatchImportStart}
         onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
         onBatchMoveImage={mindMapImport.handleMoveBatchImage}
-        onBatchSetStructureImage={mindMapImport.handleSetStructureImage}
         pdfDocuments={mindMapImport.pdfDocuments}
         selectedPdfDocumentId={mindMapImport.selectedPdfDocumentId}
         onSelectedPdfDocumentIdChange={mindMapImport.setSelectedPdfDocumentId}

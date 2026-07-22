@@ -60,10 +60,16 @@ export function PalaceMindMapWorkspace({ palace, activeKey, onActiveKeyChange, o
   const [uiCleared, setUiCleared] = useState(false)
 
   useEffect(() => {
-    setSubjects(palace.subjects ?? [])
+    // Editor meta must include subjects; if an older/incomplete payload omits the
+    // field, keep the last known binding instead of wiping the UI after a save.
+    if (palace.subjects !== undefined) {
+      setSubjects(palace.subjects)
+    }
     setExplicitIds(palace.explicit_chapter_ids ?? palace.chapters.filter((chapter) => chapter.is_explicit !== false).map((chapter) => chapter.id))
     setPrimaryId(palace.primary_chapter_id ?? null)
-    setRevision(palace.binding_revision ?? 0)
+    if (palace.binding_revision !== undefined) {
+      setRevision(palace.binding_revision)
+    }
   }, [palace])
 
   useEffect(() => {
@@ -117,7 +123,11 @@ export function PalaceMindMapWorkspace({ palace, activeKey, onActiveKeyChange, o
       await onReload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存学科与章节关联失败。')
-      await onReload()
+      try {
+        await onReload()
+      } catch {
+        // Keep the last successful local binding state if reload also fails.
+      }
     } finally {
       setBindingBusy(false)
     }
@@ -136,7 +146,10 @@ export function PalaceMindMapWorkspace({ palace, activeKey, onActiveKeyChange, o
   }
 
   const addSubject = (subject: SubjectSummary) => {
-    if (subjects.some((item) => item.id === subject.id)) return
+    if (subjects.some((item) => item.id === subject.id)) {
+      toast.info(`学科「${subject.name}」已关联。`)
+      return
+    }
     void saveBinding([...subjects.map((item) => item.id), subject.id], explicitIds, primaryId)
   }
 

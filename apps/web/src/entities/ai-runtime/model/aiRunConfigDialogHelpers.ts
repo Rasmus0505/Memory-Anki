@@ -192,7 +192,7 @@ export function resolvePromptSceneKey(scenarioKey: string, promptSceneKey?: stri
 export const MINDMAP_EMPHASIS_SCENARIO_KEYS = new Set([
   'vision_image_mindmap',
   'vision_batch_mindmap',
-  'vision_structure_mindmap',
+
   'mindmap_ocr_formatter',
 ])
 

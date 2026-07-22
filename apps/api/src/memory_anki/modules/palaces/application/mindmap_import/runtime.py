@@ -66,8 +66,7 @@ def prepare_batch_image_items(
     *,
     runtime: DashscopeImportRuntime,
     image_items: list[tuple[bytes, str | None]],
-    structure_image_index: int | None,
-) -> tuple[list[tuple[bytes, str | None]], int | None]:
+) -> list[tuple[bytes, str | None]]:
     if not runtime.api_key:
         raise MindMapImportError("未配置 DASHSCOPE_API_KEY，无法调用图片转脑图模型。")
     if not image_items:
@@ -86,12 +85,7 @@ def prepare_batch_image_items(
     if total_bytes > MAX_IMAGE_BYTES * 6:
         raise MindMapImportError("本次上传图片总大小过大，请减少图片数量或压缩后重试。")
 
-    resolved_structure_index = structure_image_index if structure_image_index is not None else None
-    if resolved_structure_index is None:
-        return normalized_items, None
-    if resolved_structure_index < 0 or resolved_structure_index >= len(normalized_items):
-        raise MindMapImportError("结构图索引无效，请重新选择结构图后再试。")
-    return normalized_items, resolved_structure_index
+    return normalized_items
 
 
 def call_dashscope_json(
@@ -165,38 +159,6 @@ def call_dashscope_text_with_images(
     return normalize_extracted_text(content_text)
 
 
-def call_dashscope_batch_json(
-    *,
-    prompt_catalog: PromptCatalog,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any] | None,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    prompt = runtime.prompt_override or _build_batch_prompt(
-        prompt_catalog=prompt_catalog,
-        structure_tree=structure_tree,
-        range_prompt=range_prompt,
-        page_numbers=page_numbers,
-        extracted_text=extracted_text,
-    )
-    content_text = call_dashscope_with_images(
-        runtime=runtime,
-        image_items=image_items,
-        prompt=prompt,
-        response_format={"type": "json_object"},
-        external_log_context=external_log_context,
-    )
-    source_tree = parse_source_tree_json(content_text)
-    if disable_rebalance:
-        return normalize_source_tree(source_tree, disable_rebalance=True)
-    return normalize_source_tree(source_tree, disable_rebalance=False)
-
-
 def stream_call_dashscope_json(
     *,
     prompt_catalog: PromptCatalog,
@@ -248,38 +210,6 @@ def stream_call_dashscope_text(
         external_log_context=external_log_context,
     )
     return normalize_extracted_text(content_text)
-
-
-def stream_call_dashscope_batch_json(
-    *,
-    prompt_catalog: PromptCatalog,
-    runtime: DashscopeImportRuntime,
-    image_items: list[tuple[bytes, str | None]],
-    structure_tree: dict[str, Any] | None,
-    range_prompt: str = "",
-    page_numbers: list[int] | None = None,
-    disable_rebalance: bool = False,
-    extracted_text: str | None = None,
-    external_log_context: dict[str, Any] | None = None,
-) -> Generator[str, None, dict[str, Any]]:
-    prompt = runtime.prompt_override or _build_batch_prompt(
-        prompt_catalog=prompt_catalog,
-        structure_tree=structure_tree,
-        range_prompt=range_prompt,
-        page_numbers=page_numbers,
-        extracted_text=extracted_text,
-    )
-    content_text = yield from stream_call_dashscope_with_images(
-        runtime=runtime,
-        image_items=image_items,
-        prompt=prompt,
-        response_format={"type": "json_object"},
-        external_log_context=external_log_context,
-    )
-    source_tree = parse_source_tree_json(content_text)
-    if disable_rebalance:
-        return normalize_source_tree(source_tree, disable_rebalance=True)
-    return normalize_source_tree(source_tree, disable_rebalance=False)
 
 
 def call_dashscope(
@@ -550,26 +480,6 @@ def extract_dashscope_text_from_response_body(response_body: str) -> str:
 
 def extract_message_content_text(content: Any) -> str:
     return extract_openai_compatible_message_content_text(content)
-
-
-def _build_batch_prompt(
-    *,
-    prompt_catalog: PromptCatalog,
-    structure_tree: dict[str, Any] | None,
-    range_prompt: str,
-    page_numbers: list[int] | None,
-    extracted_text: str | None,
-) -> str:
-    if structure_tree is None:
-        prompt = prompt_catalog.render("ai_prompt_import_document_mindmap")
-    else:
-        prompt = prompt_catalog.render(
-            "ai_prompt_import_batch_mindmap",
-            {"structure_tree_json": json.dumps(structure_tree, ensure_ascii=False)},
-        )
-    if extracted_text:
-        prompt += f"\n\n已提取的图片文字参考：\n{extracted_text}"
-    return _extend_image_prompt(prompt, page_numbers=page_numbers, range_prompt=range_prompt)
 
 
 def _extend_image_prompt(

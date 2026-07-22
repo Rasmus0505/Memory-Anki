@@ -13,6 +13,7 @@ import {
   collectNodeIds,
   countNodes,
   flattenNodes,
+  hasPendingBulkReveal,
   hideRevealStateBranch,
   isNonFocusRevealTarget,
   parseEditorDoc,
@@ -101,8 +102,18 @@ export function useRevealSession({
    * Cleared only on session reset (not on transient leave).
    */
   const stickyBulkTargetNodeIdRef = React.useRef<string | null>(null)
+  /**
+   * Locked bulk anchor while a two-phase A/S flip is incomplete.
+   * Survives layout shifts that put the pointer over newly revealed children
+   * (live hover would otherwise steal the target and make phase-2 a no-op).
+   */
+  const lockedBulkTargetNodeIdRef = React.useRef<string | null>(null)
   const revealActionQueueRef = React.useRef<RevealAction[]>([])
   const revealActionFrameRef = React.useRef<number | null>(null)
+
+  const clearLockedBulkTarget = React.useCallback(() => {
+    lockedBulkTargetNodeIdRef.current = null
+  }, [])
 
   React.useEffect(() => {
     revealMapRef.current = revealMap
@@ -165,8 +176,8 @@ export function useRevealSession({
 
     // Urgent update: flip-card multi-click must paint on the next frame.
     // Do not wrap in startTransition — that deprioritizes reveal under load.
-    setRevealMap((current) =>
-      actions.reduce((nextRevealMap, action) => {
+    setRevealMap((current) => {
+      const nextMap = actions.reduce((nextRevealMap, action) => {
         if (action.type === 'advance') {
           return advanceRevealStateForNodeClick(
             action.nodeId,
@@ -177,7 +188,7 @@ export function useRevealSession({
           )
         }
         if (action.type === 'bulk') {
-          return advanceBulkRevealState(
+          const nextBulkMap = advanceBulkRevealState(
             action.nodeId,
             nodeMap,
             nextRevealMap,
@@ -185,6 +196,13 @@ export function useRevealSession({
             revealOptions,
             root,
           )
+          if (
+            lockedBulkTargetNodeIdRef.current === action.nodeId &&
+            !hasPendingBulkReveal(action.nodeId, nodeMap, nextBulkMap, action.scope)
+          ) {
+            lockedBulkTargetNodeIdRef.current = null
+          }
+          return nextBulkMap
         }
         return hideRevealStateBranch(
           action.nodeId,
@@ -193,8 +211,11 @@ export function useRevealSession({
           revealOptions,
           root,
         )
-      }, current),
-    )
+      }, current)
+      // Keep bulk lock / pending checks current before the next React commit.
+      revealMapRef.current = nextMap
+      return nextMap
+    })
   }, [nodeMap, revealOptions, root])
 
   const enqueueRevealAction = React.useCallback(
@@ -224,53 +245,76 @@ export function useRevealSession({
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
+    // Explicit click = new intent; drop incomplete A/S lock so the next bulk can retarget.
+    clearLockedBulkTarget()
     // Due and non-due can still advance/expand children one step at a time.
     // Only hide is restricted for non-due cards (see context menu).
     enqueueRevealAction({ type: 'advance', nodeId })
-  }, [enqueueRevealAction])
+  }, [clearLockedBulkTarget, enqueueRevealAction])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
     // Formal due-scope: only block hide on non-due cards. Due cards stay hideable.
     if (isNonFocusRevealTarget(nodeId, root, revealOptions)) return
+    clearLockedBulkTarget()
     enqueueRevealAction({ type: 'hide', nodeId })
-  }, [enqueueRevealAction, revealOptions, root])
+  }, [clearLockedBulkTarget, enqueueRevealAction, revealOptions, root])
 
   const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     hoveredNodeIdRef.current = nodeId
     // Only advance sticky on enter; mouseleave must not wipe the bulk-flip anchor.
+    // Locked bulk target is NOT updated here — child enter after phase-1 must not steal.
     if (nodeId) stickyBulkTargetNodeIdRef.current = nodeId
     setHoveredNodeId(nodeId)
   }, [])
 
   /**
    * Bulk two-phase flip under hover, with selection then sticky-hover fallbacks.
-   * Priority: live hover → explicit selection fallback → last hovered card.
-   * Sticky survives mouseleave from reveal re-renders so A/S phase-2 still works.
+   * Priority while a bulk is incomplete:
+   *   locked bulk target → live hover → selection fallback → sticky last hover.
+   * Lock survives layout re-enter onto newly revealed children so A/S phase-2 works.
+   * @returns true when a bulk action was enqueued.
    */
   const handleBulkReveal = React.useCallback(
-    (scope: BulkRevealScope, fallbackNodeId: string | null = null) => {
-      const targetId =
-        hoveredNodeIdRef.current ?? fallbackNodeId ?? stickyBulkTargetNodeIdRef.current
-      if (!targetId) return
+    (scope: BulkRevealScope, fallbackNodeId: string | null = null): boolean => {
+      const lockedId = lockedBulkTargetNodeIdRef.current
+      const revealSnapshot = revealMapRef.current
+      let targetId: string | null = null
+
+      if (lockedId && hasPendingBulkReveal(lockedId, nodeMap, revealSnapshot, scope)) {
+        targetId = lockedId
+      } else {
+        if (lockedId) clearLockedBulkTarget()
+        targetId =
+          hoveredNodeIdRef.current ?? fallbackNodeId ?? stickyBulkTargetNodeIdRef.current
+      }
+
+      if (!targetId) return false
+      if (!hasPendingBulkReveal(targetId, nodeMap, revealSnapshot, scope)) {
+        clearLockedBulkTarget()
+        return false
+      }
+
       stickyBulkTargetNodeIdRef.current = targetId
+      lockedBulkTargetNodeIdRef.current = targetId
       enqueueRevealAction({ type: 'bulk', nodeId: targetId, scope })
+      return true
     },
-    [enqueueRevealAction],
+    [clearLockedBulkTarget, enqueueRevealAction, nodeMap],
   )
 
   const handleBulkRevealSubtree = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      handleBulkReveal('subtree', fallbackNodeId)
+    (fallbackNodeId: string | null = null): boolean => {
+      return handleBulkReveal('subtree', fallbackNodeId)
     },
     [handleBulkReveal],
   )
 
   const handleBulkRevealDirectChildren = React.useCallback(
-    (fallbackNodeId: string | null = null) => {
-      handleBulkReveal('direct-children', fallbackNodeId)
+    (fallbackNodeId: string | null = null): boolean => {
+      return handleBulkReveal('direct-children', fallbackNodeId)
     },
     [handleBulkReveal],
   )
@@ -296,6 +340,7 @@ export function useRevealSession({
     setCompleted(false)
     hoveredNodeIdRef.current = null
     stickyBulkTargetNodeIdRef.current = null
+    lockedBulkTargetNodeIdRef.current = null
     setHoveredNodeId(null)
   }, [revealOptions, root])
 

@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 
+from memory_anki.core.time import parse_api_datetime, to_api_datetime
 from memory_anki.infrastructure.db._tables.misc import StudySession
 
 
@@ -24,19 +25,13 @@ def _json_loads[T](raw: str | None, fallback: T) -> T:
 
 
 def _parse_datetime(raw: Any) -> datetime | None:
-    if raw in (None, ""):
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=None)
-    return parsed.astimezone().replace(tzinfo=None)
+    """Parse client/API timestamps into UTC-naive storage."""
+    return parse_api_datetime(raw)
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    """Emit UTC with explicit offset so clients never treat naive UTC as local."""
+    return to_api_datetime(value)
 
 
 def _normalize_status(value: Any, default: str = "active") -> str:

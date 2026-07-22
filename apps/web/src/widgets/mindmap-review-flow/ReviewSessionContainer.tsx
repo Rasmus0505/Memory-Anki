@@ -1,6 +1,6 @@
-import { ArrowLeft, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { readMindMapEditorState } from '@/entities/mindmap-document'
 import {
   buildAttachmentUrl,
@@ -8,7 +8,10 @@ import {
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/entities/palace/api'
-import { rateUnratedReviewSessionNodesApi } from '@/features/review/api'
+import {
+  rateOutOfScopeDueReviewSessionNodesApi,
+  rateUnratedReviewSessionNodesApi,
+} from '@/features/review/api'
 import type {
   MindMapEditorState,
   MindMapRecallRating,
@@ -71,7 +74,6 @@ interface ReviewSessionContainerProps {
   loadCompletionSummary: (sessionId: string | number) => Promise<{ item: ReviewCompletionSummary }>
   submitSession: (sessionId: string | number, data: { chapter_id?: number; duration_seconds?: number; completion_mode?: 'manual_complete' | 'auto_complete'; revealed_remaining?: boolean; red_marked_count?: number; note?: string }, options?: { mutationId?: string }) => Promise<ReviewSessionSubmitResponse>
   onSubmitted?: (result: ReviewSessionSubmitResponse) => void
-  backHref: (chapterId: number | null) => string
   warmupKind?: StudyWarmupKind
   refreshReviewStateOnExitEdit?: boolean
   renderBelowFlow?: (args: { session: ReviewSessionContainerSession; mindMapFullscreen: boolean }) => React.ReactNode
@@ -146,7 +148,6 @@ export function ReviewSessionContainer({
   loadCompletionSummary,
   submitSession,
   onSubmitted,
-  backHref,
   warmupKind,
   renderBelowFlow,
 }: ReviewSessionContainerProps) {
@@ -311,7 +312,7 @@ export function ReviewSessionContainer({
 
       // Server recomputes the still-unrated set; never re-rate already scored nodes.
       if ((target.summary.unrated_due_node_count ?? 0) <= 0) {
-        toast.info('本轮没有未评分节点')
+        toast.info('本次没有未评分到期节点')
         return
       }
 
@@ -328,14 +329,58 @@ export function ReviewSessionContainer({
         const affected = response.item.affected_node_count
         const label =
           rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
+        const outOfScope = response.item.summary.out_of_scope_due_node_count ?? 0
         if (affected <= 0) {
-          toast.info('本轮没有未评分节点')
+          toast.info('本次没有未评分到期节点')
+        } else if (outOfScope > 0) {
+          toast.success(
+            `已将本次 ${affected} 个到期节点记为「${label}」；整宫仍有 ${outOfScope} 个尚未并入的到期节点`,
+          )
         } else {
-          toast.success(`已将 ${affected} 个未评分节点记为「${label}」`)
+          toast.success(`已将 ${affected} 个未评分到期节点记为「${label}」`)
         }
         await completion.retryPreparation()
       } catch (error) {
         toast.error(error instanceof Error && error.message ? error.message : '一键评分失败')
+      } finally {
+        setBulkRating(false)
+      }
+    },
+    [bulkRating, completion],
+  )
+
+  const handleBulkRateOutOfScopeDue = useCallback(
+    async (rating: MindMapRecallRating) => {
+      const target = completion.target
+      if (!target || bulkRating) return
+      const studySessionId = target.session.id
+      if (studySessionId == null || studySessionId === '') return
+      if ((target.summary.out_of_scope_due_node_count ?? 0) <= 0) {
+        toast.info('没有尚未并入的到期节点')
+        return
+      }
+
+      setBulkRating(true)
+      try {
+        const operationId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `bulk-rate-oos-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        const response = await rateOutOfScopeDueReviewSessionNodesApi(studySessionId, {
+          rating,
+          operation_id: operationId,
+        })
+        const affected = response.item.affected_node_count
+        const label =
+          rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
+        if (affected <= 0) {
+          toast.info('没有尚未并入的到期节点')
+        } else {
+          toast.success(`已将 ${affected} 个尚未并入的到期节点记为「${label}」`)
+        }
+        await completion.retryPreparation()
+      } catch (error) {
+        toast.error(error instanceof Error && error.message ? error.message : '范围外评分失败')
       } finally {
         setBulkRating(false)
       }
@@ -403,12 +448,6 @@ export function ReviewSessionContainer({
           compact
           actions={
             <>
-              <Link to={backHref(chapterId)}>
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="mr-2 size-4" />
-                  返回复习队列
-                </Button>
-              </Link>
               <Badge variant={displayMode === 'edit' ? 'secondary' : 'outline'}>
                 {displayMode === 'edit' ? '内联编辑中' : '翻卡复习中'}
               </Badge>
@@ -478,6 +517,13 @@ export function ReviewSessionContainer({
           (completion.target?.summary.unrated_due_node_count ?? 0) > 0
             ? (rating) => {
                 void handleBulkRateUnrated(rating)
+              }
+            : undefined
+        }
+        onBulkRateOutOfScopeDue={
+          (completion.target?.summary.out_of_scope_due_node_count ?? 0) > 0
+            ? (rating) => {
+                void handleBulkRateOutOfScopeDue(rating)
               }
             : undefined
         }

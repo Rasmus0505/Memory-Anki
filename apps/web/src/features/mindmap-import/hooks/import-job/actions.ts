@@ -114,7 +114,7 @@ export function buildImportJobActions({
     }
   }
 
-  const handleBatchImportStart = async (structureImageId: string | null) => {
+  const handleBatchImportStart = async () => {
     if (!options.entityKey) {
       state.setImportError(
         '当前页面还没有稳固的实体标识，暂时无法创建可恢复任务。',
@@ -126,11 +126,6 @@ export function buildImportJobActions({
       options.setBatchStatus('error')
       return
     }
-    const resolvedStructureIndex =
-      structureImageId != null
-        ? options.batchImagesRef.current.findIndex((item) => item.id === structureImageId)
-        : -1
-    const hasStructureImage = resolvedStructureIndex >= 0
     options.setBatchStatus('loading')
     state.setImportError('')
     state.setImportReusedExistingResult(false)
@@ -138,21 +133,16 @@ export function buildImportJobActions({
     let visionAiOptions: AiRuntimeOptions | undefined
     let formatterAiOptions: AiRuntimeOptions | undefined
     if (options.mode === 'mindmap') {
-      const visionScenarioKey = hasStructureImage
-        ? 'vision_structure_mindmap'
-        : 'vision_batch_mindmap'
       const configs = await options.promptForScenarioAiOptions({
         title: '图片转脑图配置',
         description:
-          '主路径：通用 VL 直接出脑图。回退路径：OCR 模型逐页识别后，再用格式整理模型组树。下方两套提示词互不串台，默认勾选的是各场景自己的推荐块。',
+          '两阶段：先用视觉模型识别全部上传页文字，再用文本模型按范围整理为脑图 JSON。',
         entries: [
           {
-            scenarioKey: visionScenarioKey,
-            entrypointKey: hasStructureImage
-              ? 'import-image-structure-mindmap'
-              : 'import-image-batch-mindmap',
-            label: '视觉模型',
-            description: '主路径：几乎总会调用。请选通用 VL；若选 OCR 角色模型会跳过直出。',
+            scenarioKey: 'vision_batch_mindmap',
+            entrypointKey: 'import-image-batch-mindmap',
+            label: '全文识别模型',
+            description: '阶段 A：识别全部上传页文字。',
             pathRole: 'primary',
             contextOptions: options.contextOptions,
           },
@@ -160,9 +150,8 @@ export function buildImportJobActions({
             scenarioKey: 'mindmap_ocr_formatter',
             entrypointKey: 'import-image-mindmap-formatter',
             label: '格式整理模型',
-            description: '回退路径：仅在 OCR 回退或用户主动重整时调用。',
-            pathRole: 'fallback',
-            collapsedByDefault: true,
+            description: '阶段 B：按范围删多余内容并输出脑图 JSON。',
+            pathRole: 'primary',
           },
         ],
       })
@@ -170,7 +159,7 @@ export function buildImportJobActions({
         options.setBatchStatus('ready')
         return
       }
-      visionAiOptions = configs[visionScenarioKey]
+      visionAiOptions = configs.vision_batch_mindmap
       formatterAiOptions = configs.mindmap_ocr_formatter
     } else {
       aiOptions = await options.promptForAiOptions({
@@ -183,10 +172,9 @@ export function buildImportJobActions({
         options.setBatchStatus('ready')
         return
       }
-    }    const feature = describeImportFeature('image-batch', options.mode)
-    const requestSummary = hasStructureImage
-      ? `共 ${options.batchImagesRef.current.length} 张；模式：结构补全；结构图序号：${resolvedStructureIndex + 1}`
-      : `共 ${options.batchImagesRef.current.length} 张；模式：直接生成`
+    }
+    const feature = describeImportFeature('image-batch', options.mode)
+    const requestSummary = `共 ${options.batchImagesRef.current.length} 张；模式：识别全文后整理脑图`
 
     try {
       logAiCall({
@@ -196,14 +184,12 @@ export function buildImportJobActions({
         meta: {
           entityKey: options.entityKey,
           imageCount: options.batchImagesRef.current.length,
-          structureImageIndex: hasStructureImage ? resolvedStructureIndex : null,
         },
       })
       const job = await createBatchImportJobApi(
         options.batchImagesRef.current.map((item) => item.file),
         {
           entityKey: options.entityKey,
-          structureImageIndex: hasStructureImage ? resolvedStructureIndex : undefined,
           mode: options.mode,
           ai_options: aiOptions,
           vision_ai_options: visionAiOptions,
@@ -240,7 +226,6 @@ export function buildImportJobActions({
         error: nextError,
         meta: {
           imageCount: options.batchImagesRef.current.length,
-          structureImageIndex: hasStructureImage ? resolvedStructureIndex : null,
         },
       })
       state.setImportError(

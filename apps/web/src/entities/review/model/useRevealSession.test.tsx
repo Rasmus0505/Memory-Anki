@@ -263,6 +263,113 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.a1).toBe('revealed')
   })
 
+  it('keeps locked bulk target when phase-1 re-hover lands on a child', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [
+                { data: { text: 'A1', uid: 'a1' }, children: [] },
+                { data: { text: 'A2', uid: 'a2' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+    })
+    flushRevealFrame()
+
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      expect(result.current.handleBulkRevealSubtree()).toBe(true)
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('placeholder')
+    expect(result.current.revealMap.a2).toBe('placeholder')
+
+    // Layout shift: pointer now over a newly revealed child (would steal live hover).
+    act(() => {
+      result.current.handleNodeHover([selection('a1', 'A1')])
+    })
+    expect(result.current.hoveredNodeId).toBe('a1')
+
+    act(() => {
+      expect(result.current.handleBulkRevealSubtree()).toBe(true)
+    })
+    flushRevealFrame()
+    // Phase-2 must still flip parent A's children, not no-op on leaf a1.
+    expect(result.current.revealMap.a1).toBe('revealed')
+    expect(result.current.revealMap.a2).toBe('revealed')
+  })
+
+  it('releases bulk lock after both phases so a new hover can retarget', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '知识点 A', uid: 'a' },
+              children: [{ data: { text: 'A1', uid: 'a1' }, children: [] }],
+            },
+            {
+              data: { text: '知识点 B', uid: 'b' },
+              children: [{ data: { text: 'B1', uid: 'b1' }, children: [] }],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    act(() => {
+      result.current.handleNodeClick([selection('a', '知识点 A')])
+      result.current.handleNodeClick([selection('b', '知识点 B')])
+    })
+    flushRevealFrame()
+
+    act(() => {
+      result.current.handleNodeHover([selection('a', '知识点 A')])
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    act(() => {
+      result.current.handleBulkRevealSubtree()
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a1).toBe('revealed')
+
+    // After complete bulk, hover B and flip B — lock must not stick on A.
+    act(() => {
+      result.current.handleNodeHover([selection('b', '知识点 B')])
+      expect(result.current.handleBulkRevealDirectChildren()).toBe(true)
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.b1).toBe('placeholder')
+  })
+
   it('keeps sticky bulk target after mouseleave so phase-2 A/S still flips', () => {
     const nested: MindMapEditorState = {
       ...editorState,

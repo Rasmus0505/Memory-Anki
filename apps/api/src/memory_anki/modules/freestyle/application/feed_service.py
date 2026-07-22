@@ -13,7 +13,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
 from memory_anki.modules.palaces.api import resolve_palace_title
-from memory_anki.modules.reviews.api import get_palace_due_rollup
+from memory_anki.modules.reviews.api import project_due_rollups_batch
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
@@ -138,14 +138,19 @@ def _load_active_palaces(
     *,
     specific_palace_ids: list[int],
     range_filter: str,
+    load_quiz: bool = True,
 ) -> list[Palace]:
+    options = [
+        selectinload(Palace.chapters).selectinload(Chapter.subject),
+        selectinload(Palace.segments),
+    ]
+    if load_quiz:
+        options.append(
+            selectinload(Palace.quiz_questions).selectinload(PalaceQuizQuestion.segments)
+        )
     query = (
         session.query(Palace)
-        .options(
-            selectinload(Palace.chapters).selectinload(Chapter.subject),
-            selectinload(Palace.quiz_questions).selectinload(PalaceQuizQuestion.segments),
-            selectinload(Palace.segments),
-        )
+        .options(*options)
         .filter(
             Palace.archived == False,
             Palace.deleted_at.is_(None),
@@ -159,48 +164,40 @@ def _load_active_palaces(
     return query.all()
 
 
-def _due_palace_ids(session: Session, candidate_ids: set[int] | None) -> set[int]:
-    ids: set[int] = set()
-    query = session.query(Palace).filter(
-        Palace.archived == False,
-        Palace.deleted_at.is_(None),
+def _due_rollups_for_palaces(
+    session: Session,
+    palaces: list[Palace],
+) -> dict[int, dict[str, Any]]:
+    """Single batch rollup for freestyle due filter + review cards."""
+    if not palaces:
+        return {}
+    return project_due_rollups_batch(
+        session,
+        palaces,
+        now=None,
+        include_nodes=False,
     )
-    if candidate_ids is not None:
-        if not candidate_ids:
-            return ids
-        query = query.filter(Palace.id.in_(candidate_ids))
-    for palace in query.all():
-        try:
-            projection = get_palace_due_rollup(session, palace.id)
-        except ValueError:
-            continue
+
+
+def _due_palace_ids_from_rollups(rollups: dict[int, dict[str, Any]]) -> set[int]:
+    ids: set[int] = set()
+    for palace_id, projection in rollups.items():
         if projection.get("has_due_review") or projection.get("due_node_count"):
-            ids.add(palace.id)
+            ids.add(int(palace_id))
     return ids
 
 
-def _build_review_cards(
-    session: Session,
+def _build_review_cards_from_rollups(
+    palaces: list[Palace],
+    rollups: dict[int, dict[str, Any]],
     *,
-    candidate_ids: set[int] | None,
     range_filter: str,
 ) -> list[dict[str, Any]]:
     if range_filter == FREESTYLE_RANGE_WRONG:
         return []
-    query = session.query(Palace).filter(
-        Palace.archived == False,
-        Palace.deleted_at.is_(None),
-    )
-    if candidate_ids is not None:
-        if not candidate_ids:
-            return []
-        query = query.filter(Palace.id.in_(candidate_ids))
     cards: list[dict[str, Any]] = []
-    for palace in query.order_by(Palace.id.asc()).all():
-        try:
-            projection = get_palace_due_rollup(session, palace.id)
-        except ValueError:
-            continue
+    for palace in palaces:
+        projection = rollups.get(int(palace.id)) or {}
         due_count = int(projection.get("due_node_count") or 0)
         if due_count <= 0:
             continue
@@ -416,18 +413,26 @@ def build_freestyle_feed(
     specific_palace_ids = parse_palace_ids(palace_ids_value)
     content_types = normalize_content_types(content_types_value)
 
+    need_quiz = CONTENT_TYPE_QUIZ_QUESTION in content_types
+    # Quiz ranking boosts due palaces; review cards need counts; DUE range filters by rollup.
+    need_due = (
+        need_quiz
+        or CONTENT_TYPE_REVIEW in content_types
+        or range_filter == FREESTYLE_RANGE_DUE
+    )
     palaces = _load_active_palaces(
         session,
         specific_palace_ids=specific_palace_ids,
         range_filter=range_filter,
+        load_quiz=need_quiz,
     )
-    candidate_ids = {palace.id for palace in palaces}
-    candidate_filter = candidate_ids if range_filter == FREESTYLE_RANGE_SPECIFIC_PALACES else None
-    due_ids = _due_palace_ids(session, candidate_filter)
+    # One batch rollup serves due filter + review cards (no double per-palace loop).
+    rollups = _due_rollups_for_palaces(session, palaces) if need_due else {}
+    due_ids = _due_palace_ids_from_rollups(rollups)
     practice_ids: set[int] = set()
 
     cards: list[dict[str, Any]] = []
-    if CONTENT_TYPE_QUIZ_QUESTION in content_types:
+    if need_quiz:
         cards.extend(
             build_quiz_cards(
                 session,
@@ -442,9 +447,9 @@ def build_freestyle_feed(
         )
     if CONTENT_TYPE_REVIEW in content_types:
         cards.extend(
-            _build_review_cards(
-                session,
-                candidate_ids=candidate_filter,
+            _build_review_cards_from_rollups(
+                palaces,
+                rollups,
                 range_filter=range_filter,
             )
         )

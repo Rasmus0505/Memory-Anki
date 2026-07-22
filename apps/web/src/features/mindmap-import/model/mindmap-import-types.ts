@@ -11,6 +11,5 @@ export interface BatchImportImageItem {
 }
 
 export interface BatchImportMeta {
-  structureImageIndex: number | null
   imageCount: number
 }

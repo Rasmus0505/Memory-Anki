@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, BookOpen } from 'lucide-react'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/entities/ai-runtime'
 import { getPalaceEditorApi } from '@/entities/palace/api'
 import { QuizGenerationWorkspace } from '@/features/palace-quiz/components/QuizGenerationWorkspace'
@@ -280,12 +280,6 @@ export default function PalaceQuizPage() {
         description="这里把宫殿级题库、手动管理和 AI 预览生成放在一起。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
         actions={
           <>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/palaces">
-                <ArrowLeft className="size-4" />
-                返回学科书架
-              </Link>
-            </Button>
             <Button
               type="button"
               variant="outline"

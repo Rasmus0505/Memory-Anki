@@ -39,11 +39,23 @@ def create_image_import_job(
     fallback_title: str,
     ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
+    formatter_ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
+    # 阶段 A 用 VL 抽全文；脑图模式下阶段 B 用 formatter 整理 JSON
     runtime = ai_runtime.resolve(
         "vision_image_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
         options=ai_options,
     )
+    formatter_runtime = (
+        ai_runtime.resolve("mindmap_ocr_formatter", options=formatter_ai_options)
+        if mode == MODE_MINDMAP
+        else None
+    )
+    source_meta_extra: dict[str, object] = {
+        "vision_ai_runtime": _serialize_runtime_payload(runtime),
+    }
+    if formatter_runtime is not None:
+        source_meta_extra["formatter_ai_runtime"] = _serialize_runtime_payload(formatter_runtime)
     return job_creation.create_image_job(
         session,
         entity_key=entity_key,
@@ -55,6 +67,7 @@ def create_image_import_job(
         import_jobs_dir=IMPORT_JOBS_DIR,
         max_image_bytes=MAX_IMAGE_BYTES,
         import_error_cls=MindMapImportError,
+        source_meta_extra=source_meta_extra,
     )
 
 
@@ -64,7 +77,6 @@ def create_batch_import_job(
     entity_key: str,
     image_items: list[tuple[bytes, str | None]],
     fallback_title: str,
-    structure_image_index: int | None,
     mode: str = MODE_MINDMAP,
     ai_runtime: AiRuntimeProvider,
     ai_options: AiRuntimeOptions | None = None,
@@ -72,11 +84,7 @@ def create_batch_import_job(
     formatter_ai_options: AiRuntimeOptions | None = None,
 ) -> MindMapImportJob:
     runtime = ai_runtime.resolve(
-        (
-            "vision_structure_mindmap"
-            if mode == MODE_MINDMAP and structure_image_index is not None
-            else "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text"
-        ),
+        "vision_batch_mindmap" if mode == MODE_MINDMAP else "vision_image_text",
         options=vision_ai_options or ai_options,
     )
     formatter_runtime = (
@@ -84,7 +92,7 @@ def create_batch_import_job(
         if mode == MODE_MINDMAP
         else None
     )
-    normalized_items, resolved_structure_index = llm_gateway.prepare_batch_items(
+    normalized_items = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
             api_key=runtime.api_key,
             base_url=runtime.base_url,
@@ -93,13 +101,11 @@ def create_batch_import_job(
             extra_payload=runtime.extra_payload,
         ),
         image_items=image_items,
-        structure_image_index=structure_image_index,
     )
     return job_creation.create_batch_job(
         session,
         entity_key=entity_key,
         normalized_items=normalized_items,
-        resolved_structure_index=resolved_structure_index,
         fallback_title=fallback_title,
         mode=mode,
         ai_runtime=_serialize_runtime_payload(runtime),
@@ -182,7 +188,7 @@ def create_pdf_import_job(
         if mode == MODE_MINDMAP
         else None
     )
-    normalized_items, _ = llm_gateway.prepare_batch_items(
+    normalized_items = llm_gateway.prepare_batch_items(
         runtime=llm_gateway.build_runtime(
             api_key=runtime.api_key,
             base_url=runtime.base_url,
@@ -191,13 +197,11 @@ def create_pdf_import_job(
             extra_payload=runtime.extra_payload,
         ),
         image_items=rendered_items,
-        structure_image_index=None,
     )
     job = job_creation.create_batch_job(
         session,
         entity_key=entity_key,
         normalized_items=normalized_items,
-        resolved_structure_index=None,
         fallback_title=fallback_title or document.original_name,
         mode=mode,
         ai_runtime=_serialize_runtime_payload(runtime),

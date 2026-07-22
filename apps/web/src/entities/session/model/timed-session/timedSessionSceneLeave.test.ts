@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
+import { formatUtcApiDateTime } from '@/shared/lib/dateTime'
 import { buildSuspendedSceneLeaveState } from './timedSessionSceneLeave'
 
 describe('timed session scene leave state', () => {
@@ -12,8 +12,8 @@ describe('timed session scene leave state', () => {
       meta: { source: 'scene_inactive' },
       includePersistedRecord: true,
     })).toEqual({
-      suspendedAt: formatLocalApiDateTime(new Date(currentMs)),
-      resumeDeadlineAt: formatLocalApiDateTime(new Date(currentMs + 90_000)),
+      suspendedAt: formatUtcApiDateTime(new Date(currentMs)),
+      resumeDeadlineAt: formatUtcApiDateTime(new Date(currentMs + 90_000)),
       persistedLeaveMeta: {
         source: 'scene_inactive',
         persisted_record: true,

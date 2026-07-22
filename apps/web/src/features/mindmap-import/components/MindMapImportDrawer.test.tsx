@@ -31,7 +31,6 @@ function buildProps(
     extractedText: '',
     imagePreviewUrl: '',
     batchImages: [],
-    structureImageId: null,
     batchStatus: 'idle',
     batchMeta: null,
     importWarnings: [],
@@ -56,7 +55,6 @@ function buildProps(
     onBatchStart: vi.fn(),
     onBatchDeleteImage: vi.fn(),
     onBatchMoveImage: vi.fn(),
-    onBatchSetStructureImage: vi.fn(),
     onApplyReplace: vi.fn(),
     onApplyAppend: vi.fn(),
     onUndoLastImport: vi.fn(),
@@ -201,17 +199,17 @@ describe('MindMapImportDrawer', () => {
       <MindMapImportDrawer
         {...buildProps({
           loading: true,
-          streamPhase: 'extracting_structure',
-          streamStatusMessage: '正在提取结构图',
+          streamPhase: 'extracting_text',
+          streamStatusMessage: '正在识别全部上传页文字',
           streamStep: 2,
           streamTotalSteps: 4,
         })}
       />,
     )
 
-    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('正在提取结构图')
+    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('正在识别全部上传页文字')
     expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('第 2/4 步')
-    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('extracting structure')
+    expect(screen.getByTestId('mindmap-import-stream-status').textContent).toContain('extracting text')
   })
 
   it('renders raw model preview without replacing the formal tree preview', () => {

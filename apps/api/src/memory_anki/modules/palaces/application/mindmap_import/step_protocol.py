@@ -32,19 +32,10 @@ def validate_single_image_step(*, total_steps: int) -> ImportStep:
     )
 
 
-def recognize_single_image_structure_step(*, total_steps: int) -> ImportStep:
-    return ImportStep(
-        phase="calling_model",
-        message="正在识别图片结构",
-        step=2,
-        total_steps=total_steps,
-    )
-
-
 def extract_single_image_text_step(*, total_steps: int) -> ImportStep:
     return ImportStep(
         phase="calling_model",
-        message="正在提取图片文字",
+        message="正在识别页面全部文字",
         step=2,
         total_steps=total_steps,
     )
@@ -53,7 +44,7 @@ def extract_single_image_text_step(*, total_steps: int) -> ImportStep:
 def normalize_tree_step(*, total_steps: int) -> ImportStep:
     return ImportStep(
         phase="normalizing_tree",
-        message="正在整理脑图结构",
+        message="正在整理脑图 JSON",
         step=3,
         total_steps=total_steps,
     )
@@ -86,28 +77,19 @@ def validate_image_batch_step() -> ImportStep:
     )
 
 
-def extract_batch_structure_step() -> ImportStep:
+def extract_all_pages_text_step() -> ImportStep:
     return ImportStep(
-        phase="extracting_structure",
-        message="正在提取结构图",
+        phase="extracting_text",
+        message="正在识别全部上传页文字",
         step=2,
         total_steps=BATCH_MINDMAP_TOTAL_STEPS,
     )
 
 
-def enhance_batch_with_body_step() -> ImportStep:
+def format_mindmap_json_step() -> ImportStep:
     return ImportStep(
-        phase="enhancing_with_body",
-        message="正在结合正文图片补全脑图",
-        step=3,
-        total_steps=BATCH_MINDMAP_TOTAL_STEPS,
-    )
-
-
-def generate_batch_mindmap_direct_step() -> ImportStep:
-    return ImportStep(
-        phase="generating_mindmap",
-        message="正在综合图片直接生成脑图",
+        phase="formatting_mindmap",
+        message="正在按范围整理脑图 JSON",
         step=3,
         total_steps=BATCH_MINDMAP_TOTAL_STEPS,
     )

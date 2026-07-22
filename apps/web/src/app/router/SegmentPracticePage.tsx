@@ -49,8 +49,6 @@ export default function SegmentPracticePage() {
         saveProgress: ({ segment }, snapshot: PracticeProgressSnapshot) =>
           saveSegmentPracticeSessionProgressApi(segment.id, snapshot),
         pageEyebrow: '学习组训练',
-        backTo: '/palaces',
-        backLabel: '返回列表',
         renderBadge: (_data: SegmentPracticeData, hasResumeProgress) =>
           hasResumeProgress ? (
             <Badge variant="secondary">已接续上次训练</Badge>

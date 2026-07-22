@@ -119,15 +119,21 @@ def write_settings(
 ) -> dict:
     before_settings = read_settings(session)
 
-    for key, value in data.items():
-        if key in DEFAULTS:
-            nextValue = value
-            row = session.query(Config).filter_by(key=key).first()
-            if row:
-                row.value = str(nextValue)
-                row.updated_at = utc_now_naive()
-            else:
-                session.add(Config(key=key, value=str(nextValue)))
+    keys = [key for key in data if key in DEFAULTS]
+    existing_by_key: dict[str, Config] = {}
+    if keys:
+        existing_by_key = {
+            row.key: row
+            for row in session.query(Config).filter(Config.key.in_(keys)).all()
+        }
+    for key in keys:
+        next_value = str(data[key])
+        row = existing_by_key.get(key)
+        if row is not None:
+            row.value = next_value
+            row.updated_at = utc_now_naive()
+        else:
+            session.add(Config(key=key, value=next_value))
     next_settings = read_settings(session)
     # FSRS settings apply to future ratings immediately; no legacy stage rebuild.
     del before_settings
@@ -142,8 +148,13 @@ def _client_preference_key(group: str) -> str:
 
 def read_client_preferences(session: Session) -> dict:
     result: dict[str, object | None] = {}
+    keys = [_client_preference_key(group) for group in CLIENT_PREFERENCE_GROUPS]
+    rows_by_key = {
+        row.key: row
+        for row in session.query(Config).filter(Config.key.in_(keys)).all()
+    }
     for group in CLIENT_PREFERENCE_GROUPS:
-        row = session.query(Config).filter_by(key=_client_preference_key(group)).first()
+        row = rows_by_key.get(_client_preference_key(group))
         if not row or not row.value:
             result[group] = None
             continue

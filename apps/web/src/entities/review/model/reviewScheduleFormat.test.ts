@@ -41,6 +41,8 @@ describe('reviewScheduleFormat', () => {
     expect(formatReviewElapsedFromNow('2026-07-14T10:00:00Z')).toBe('1天前')
     expect(formatLastReviewDetailLabel('2026-07-15T08:00:00Z')).toBe('距今 · 2小时前')
     expect(formatLastReviewDetailLabel(null)).toBe('本宫首次正式复习')
+    // Naive API timestamps are UTC; must match Z-suffixed values.
+    expect(formatReviewElapsedFromNow('2026-07-15T08:00:00')).toBe('2小时前')
   })
 
   it('labels next-review detail with node count and entry mode', () => {

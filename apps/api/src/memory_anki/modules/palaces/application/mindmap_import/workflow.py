@@ -36,7 +36,6 @@ def build_batch_import_result_payload(
     *,
     source_tree: dict[str, Any],
     fallback_title: str,
-    structure_image_index: int | None,
     image_count: int,
 ) -> dict[str, Any]:
     return {
@@ -44,7 +43,6 @@ def build_batch_import_result_payload(
             source_tree=source_tree,
             fallback_title=fallback_title,
         ),
-        "structure_image_index": structure_image_index,
         "image_count": image_count,
     }
 

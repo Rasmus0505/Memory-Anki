@@ -7,7 +7,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, APP_HOME_SOURCE, MIGRATION_STATE_PATH, REPO_ROOT
+from memory_anki.core.config import (
+    APP_HOME,
+    APP_HOME_SOURCE,
+    DB_PATH,
+    MIGRATION_STATE_PATH,
+    REPO_ROOT,
+)
 from memory_anki.core.runtime_activity import describe_active_runtime_instances
 from memory_anki.core.storage_layout import load_storage_layout
 from memory_anki.core.time import iso_utc_now
@@ -144,6 +150,22 @@ def build_runtime_info(
     runtime_snapshot = resolve_runtime_snapshot()
     release_id = resolve_release_id(runtime_snapshot)
     frontend_entry_asset = resolve_frontend_entry_asset()
+    database_path = Path(DB_PATH)
+    database_exists = database_path.exists()
+    database_mtime = None
+    database_size_bytes = None
+    if database_exists:
+        try:
+            stat = database_path.stat()
+            database_mtime = datetime_from_mtime(stat.st_mtime)
+            database_size_bytes = int(stat.st_size)
+        except OSError:
+            database_mtime = None
+            database_size_bytes = None
+    alternate_home_warnings = _detect_alternate_data_home_warnings(
+        app_home=Path(APP_HOME),
+        database_path=database_path,
+    )
     return {
         "channel": resolved_channel,
         "commit": resolved_commit,
@@ -151,6 +173,11 @@ def build_runtime_info(
         "last_started_at": shared_state.get("last_started_at"),
         "app_home": str(APP_HOME),
         "app_home_source": APP_HOME_SOURCE,
+        "database_path": str(database_path),
+        "database_exists": database_exists,
+        "database_mtime": database_mtime,
+        "database_size_bytes": database_size_bytes,
+        "alternate_home_warnings": alternate_home_warnings,
         "runtime_snapshot": runtime_snapshot,
         "release_id": release_id,
         "frontend_entry_asset": frontend_entry_asset,
@@ -160,6 +187,72 @@ def build_runtime_info(
         "backup_covered_items": backup_covered_items,
         "active_runtime_instances": active_runtime_instances,
     }
+
+
+def _detect_alternate_data_home_warnings(
+    *,
+    app_home: Path,
+    database_path: Path,
+) -> list[dict[str, Any]]:
+    """Warn when another Memory Anki DB is present on USB / default local path.
+
+    Does not auto-switch homes; operators must align local-config deliberately.
+    """
+    warnings: list[dict[str, Any]] = []
+    candidates: list[tuple[str, Path]] = []
+    # Default Windows local app data home.
+    local_app = Path(os.environ.get("LOCALAPPDATA") or "") / "MemoryAnki" / "data" / "memory_palace.db"
+    if local_app.name:
+        candidates.append(("localappdata", local_app))
+    # USB volume label layout from project convention.
+    try:
+        from memory_anki.core.local_config import _windows_volume_root_by_label
+
+        root = _windows_volume_root_by_label("MemoryAnki")
+        if root is not None:
+            candidates.append(
+                ("usb_vol_MemoryAnki", root / "memory anki data" / "data" / "memory_palace.db")
+            )
+    except Exception:
+        pass
+
+    live = database_path.resolve() if database_path.exists() else database_path
+    for label, candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved == live:
+            continue
+        if not candidate.exists():
+            continue
+        try:
+            stat = candidate.stat()
+            live_stat = database_path.stat() if database_path.exists() else None
+        except OSError:
+            continue
+        size_diff = abs(stat.st_size - (live_stat.st_size if live_stat else 0))
+        mtime_diff = abs(stat.st_mtime - (live_stat.st_mtime if live_stat else 0))
+        if live_stat is None or size_diff > 1024 or mtime_diff > 60:
+            warnings.append(
+                {
+                    "source": label,
+                    "path": str(candidate),
+                    "size_bytes": int(stat.st_size),
+                    "mtime": datetime_from_mtime(stat.st_mtime),
+                    "message": (
+                        f"发现另一份数据库 ({label})，与当前 live DB 不一致。"
+                        "请确认 local_app_home 是否指向预期目录，避免复习进度写到错误位置。"
+                    ),
+                }
+            )
+    return warnings
+
+
+def datetime_from_mtime(mtime: float) -> str:
+    from datetime import UTC, datetime
+
+    return datetime.fromtimestamp(mtime, tz=UTC).isoformat(timespec="seconds")
 
 
 def build_runtime_health(

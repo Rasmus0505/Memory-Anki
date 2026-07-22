@@ -12,20 +12,25 @@ import {
   parseTimeRecordQuickAddFormState,
   sessionKindOptions,
 } from '@/features/profile/model/time-record-form'
+import { formatLocalDateTimeInputValue } from '@/shared/lib/dateTime'
 
+// Absolute UTC instants; form fields show the host local wall clock.
 const baseRecord: TimeSessionRecord = {
   id: 'record-1',
   kind: 'review',
   palaceId: 12,
   title: '第一节',
-  startedAt: '2026-06-09T13:00:00.000',
-  endedAt: '2026-06-09T13:08:57.000',
+  startedAt: '2026-06-09T05:00:00.000Z',
+  endedAt: '2026-06-09T05:08:57.000Z',
   effectiveSeconds: 537,
   pauseCount: 1,
   completionMethod: 'manual_complete',
   durationEdited: false,
   events: [],
 }
+
+const localStarted = formatLocalDateTimeInputValue(baseRecord.startedAt)
+const localEnded = formatLocalDateTimeInputValue(baseRecord.endedAt)
 
 describe('time-record-form', () => {
   beforeEach(() => {
@@ -46,8 +51,8 @@ describe('time-record-form', () => {
     const form = buildTimeRecordFormState(baseRecord)
 
     expect(form.effectiveMinutes).toBe('8.95')
-    expect(form.startedAt).toBe('2026-06-09T13:00:00')
-    expect(form.endedAt).toBe('2026-06-09T13:08:57')
+    expect(form.startedAt).toBe(localStarted)
+    expect(form.endedAt).toBe(localEnded)
   })
 
   it('builds create form state with current time defaults', () => {
@@ -62,22 +67,25 @@ describe('time-record-form', () => {
   })
 
   it('parses minute input back to effective seconds for persistence', () => {
+    const form = buildTimeRecordFormState(baseRecord)
     const parsed = parseTimeRecordFormState({
-      ...buildTimeRecordFormState(baseRecord),
+      ...form,
       effectiveMinutes: '1.5',
-      endedAt: '2026-06-09T13:01:30',
+      endedAt: calculateEndedAtFromEffectiveMinutes(form.startedAt, '1.5') ?? form.endedAt,
     })
 
     expect('value' in parsed && parsed.value.effectiveSeconds).toBe(90)
+    if ('value' in parsed) {
+      // API payload must be UTC with Z, not local wall clock.
+      expect(parsed.value.startedAt.endsWith('Z')).toBe(true)
+      expect(parsed.value.endedAt.endsWith('Z')).toBe(true)
+    }
   })
 
   it('infers ended time from started time and effective minutes', () => {
     expect(
-      calculateEndedAtFromEffectiveMinutes(
-        '2026-06-09T13:00:00',
-        '8.95',
-      ),
-    ).toBe('2026-06-09T13:08:57')
+      calculateEndedAtFromEffectiveMinutes(localStarted, '8.95'),
+    ).toBe(localEnded)
   })
 
   it('updates ended time when effective minutes are edited', () => {
@@ -86,12 +94,16 @@ describe('time-record-form', () => {
     })
 
     expect(next.durationEdited).toBe(true)
-    expect(next.endedAt).toBe('2026-06-09T13:30:00')
+    expect(next.endedAt).toBe(
+      calculateEndedAtFromEffectiveMinutes(localStarted, '30'),
+    )
   })
 
   it('updates effective minutes from manual ended time while duration is not edited', () => {
+    const thirtyMinEnded =
+      calculateEndedAtFromEffectiveMinutes(localStarted, '30') ?? localEnded
     const next = applyTimeRecordFormPatch(buildTimeRecordFormState(baseRecord), {
-      endedAt: '2026-06-09T13:30:00',
+      endedAt: thirtyMinEnded,
     })
 
     expect(next.effectiveMinutes).toBe('30')

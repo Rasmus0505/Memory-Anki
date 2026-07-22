@@ -198,6 +198,9 @@ export default function Knowledge() {
     if (!selectedChapterId) return
     return onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (detail) => {
       if (detail.chapterId != null && detail.chapterId !== selectedChapterId) return
+      // Patch in place from the event. Avoid a full chapter refetch on every
+      // mid-session node rating (that was a major lag source). Formal complete
+      // already invalidates catalog/queue caches for a later cold load.
       setChapterDetail((current) => {
         if (!current) return current
         return {
@@ -213,7 +216,6 @@ export default function Knowledge() {
             : palace),
         }
       })
-      void getChapterApi(selectedChapterId).then(setChapterDetail)
     })
   }, [selectedChapterId])
 

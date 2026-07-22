@@ -1,21 +1,25 @@
+import {
+  formatDateTimeLocalValue,
+  formatUtcApiDateTime,
+  parseApiDateTime,
+  parseLocalDateTimeInputValue,
+} from '@/shared/lib/dateTime'
+
 export function formatDateTimeInputValue(value: string | null): string {
   if (!value) return ''
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
-  if (match) {
-    return `${match[1]}T${match[2]}`
-  }
-  const date = new Date(value)
+  const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) return ''
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  const hours = `${date.getHours()}`.padStart(2, '0')
-  const minutes = `${date.getMinutes()}`.padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  return formatDateTimeLocalValue(date)
 }
 
+/** Convert datetime-local input to UTC ISO for API writes. */
 export function toLocalDateTimePayload(value: string): string {
-  return `${value}:00`
+  const date = parseLocalDateTimeInputValue(value.includes(':') && value.length === 16 ? `${value}:00` : value)
+  if (Number.isNaN(date.getTime())) {
+    // Fallback: keep previous behavior for unexpected shapes.
+    return value.includes('T') && value.length === 16 ? `${value}:00` : value
+  }
+  return formatUtcApiDateTime(date)
 }
 
 export function formatVersionSavedAt(value: string | null): string {

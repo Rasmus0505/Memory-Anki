@@ -3,7 +3,7 @@ import type {
   SessionCompletionMethod,
   TimeSessionRecord,
 } from '@/entities/session/model/session-records'
-import { formatLocalApiDateTime } from '@/shared/lib/dateTime'
+import { formatUtcApiDateTime } from '@/shared/lib/dateTime'
 import { clearTimedSessionTimeout } from '@/shared/hooks/timedSessionBrowserEffects'
 import type {
   ResolvedTimedSessionAutomation,
@@ -22,8 +22,8 @@ export function buildSuspendedSceneLeaveState(input: {
   resumeDeadlineAt: string
   persistedLeaveMeta: TimedSessionMeta
 } {
-  const suspendedAt = formatLocalApiDateTime(new Date(input.currentMs))
-  const resumeDeadlineAt = formatLocalApiDateTime(
+  const suspendedAt = formatUtcApiDateTime(new Date(input.currentMs))
+  const resumeDeadlineAt = formatUtcApiDateTime(
     new Date(input.currentMs + input.resumeWindowMs),
   )
   return {

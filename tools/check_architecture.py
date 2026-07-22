@@ -1495,8 +1495,8 @@ def check_mindmap_architecture(errors: list[str]) -> None:
     prompt_runtime = API_SRC / "modules" / "palaces" / "application" / "mindmap_import" / "runtime.py"
     required_import_tokens = {
         import_runtime: ("vision_ai_runtime", "formatter_ai_runtime", "mindmap_ocr_formatter"),
-        import_worker: ("vision_response.txt", "ocr_combined.txt", "formatter_response.txt", "final_tree.json"),
-        prompt_runtime: ("ai_prompt_import_document_mindmap", "ai_prompt_import_batch_mindmap", "ai_prompt_import_ocr_mindmap_format"),
+        import_worker: ("ocr_combined.txt", "formatter_response.txt", "final_tree.json", "extract_then_format"),
+        prompt_runtime: ("ai_prompt_import_image_text", "ai_prompt_import_ocr_mindmap_format"),
     }
     for path, required_tokens in required_import_tokens.items():
         if not path.exists():
@@ -1813,10 +1813,25 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         if marker in router_source:
             errors.append(f"retired review runtime route must not return: {marker}")
 
-    service_path = API_SRC / "modules/reviews/application/formal_review_service.py"
-    service_source = service_path.read_text(encoding="utf-8")
-    for function_name in ("get_fsrs_queue_payload", "get_fsrs_load_forecast", "complete_formal_review"):
-        function_start = service_source.index(f"def {function_name}")
+    # Queue lifecycle vs settlement are split; complete lives in settlement.
+    formal_review_sources = {
+        "get_fsrs_queue_payload": API_SRC
+        / "modules/reviews/application/formal_review_service.py",
+        "get_fsrs_load_forecast": API_SRC
+        / "modules/reviews/application/formal_review_service.py",
+        "complete_formal_review": API_SRC
+        / "modules/reviews/application/formal_review_settlement.py",
+    }
+    for function_name, service_path in formal_review_sources.items():
+        service_source = service_path.read_text(encoding="utf-8")
+        marker = f"def {function_name}"
+        if marker not in service_source:
+            errors.append(
+                f"FSRS formal review must define {function_name} in "
+                f"{service_path.relative_to(REPO_ROOT)}"
+            )
+            continue
+        function_start = service_source.index(marker)
         next_function = service_source.find("\ndef ", function_start + 1)
         function_source = service_source[function_start: next_function if next_function >= 0 else None]
         if "ReviewSchedule" in function_source:

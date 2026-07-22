@@ -18,6 +18,9 @@ from .card_context import chapter_context, palace_context, segment_context
 
 CONTENT_TYPE_QUIZ_QUESTION = "quiz_question"
 
+# Soft cap so freestyle feed never serializes an unbounded question bank in one response.
+DEFAULT_QUIZ_CARD_LIMIT = 400
+
 
 def _question_sort_key(question: PalaceQuizQuestion) -> tuple[int, int, int]:
     return (
@@ -134,9 +137,11 @@ def build_quiz_cards(
     due_range: str,
     needs_practice_range: str,
     wrong_range: str = "",
+    limit: int = DEFAULT_QUIZ_CARD_LIMIT,
 ) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     chapter_questions_by_palace = _load_chapter_questions_by_palace(session, palaces)
+    card_limit = max(0, int(limit))
     for palace in palaces:
         if range_filter == due_range and palace.id not in due_ids:
             continue
@@ -164,11 +169,14 @@ def build_quiz_cards(
                     "group_key": f"palace:{palace.id}",
                 }
             )
+            if len(cards) >= card_limit:
+                return cards
     return cards
 
 
 __all__ = [
     "CONTENT_TYPE_QUIZ_QUESTION",
+    "DEFAULT_QUIZ_CARD_LIMIT",
     "build_quiz_cards",
 ]
 

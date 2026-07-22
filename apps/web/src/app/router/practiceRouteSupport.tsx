@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { LoadingState } from '@/shared/components/state-placeholders'
-import { Button } from '@/shared/components/ui/button'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
@@ -56,8 +54,6 @@ interface PracticeRouteConfig<TData, TSession> {
   clearProgress: (data: TData) => Promise<unknown>
   saveProgress: (data: TData, snapshot: PracticeProgressSnapshot) => Promise<unknown>
   pageEyebrow: string
-  backTo: string
-  backLabel: string
   renderBadge: (data: TData, hasResumeProgress: boolean) => ReactNode
   getFlowKey: (data: TData, resetVersion: number) => string
   getPersistKey: (data: TData) => string
@@ -178,17 +174,7 @@ export function PracticeSessionRoute<TData, TSession>({
         eyebrow={config.pageEyebrow}
         title={session.title}
         compact
-        actions={
-          <>
-            <Link to={config.backTo}>
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="mr-2 size-4" />
-                {config.backLabel}
-              </Button>
-            </Link>
-            {config.renderBadge(data, hasResumeProgress)}
-          </>
-        }
+        actions={config.renderBadge(data, hasResumeProgress)}
       />
 
       <MindMapReviewFlow

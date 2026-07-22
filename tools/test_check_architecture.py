@@ -1204,11 +1204,11 @@ def test_mindmap_architecture_requires_import_pipeline_contract(
     )
     write_file(
         api_src / "modules" / "palaces" / "application" / "mindmap_import" / "job_worker.py",
-        "vision_response.txt\nocr_combined.txt\nformatter_response.txt\nfinal_tree.json\n",
+        "ocr_combined.txt\nformatter_response.txt\nfinal_tree.json\nextract_then_format\n",
     )
     write_file(
         api_src / "modules" / "palaces" / "application" / "mindmap_import" / "runtime.py",
-        "ai_prompt_import_document_mindmap\nai_prompt_import_batch_mindmap\nai_prompt_import_ocr_mindmap_format\n",
+        "ai_prompt_import_image_text\nai_prompt_import_ocr_mindmap_format\n",
     )
 
     errors: list[str] = []
@@ -1315,14 +1315,15 @@ def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
     web_src = tmp_path / "apps/web/src"
     router = api_src / "modules/reviews/presentation/router.py"
     service = api_src / "modules/reviews/application/formal_review_service.py"
+    settlement = api_src / "modules/reviews/application/formal_review_settlement.py"
     warmup = api_src / "app/startup_warmup.py"
     write_file(router, '@router.post("/review/spread-overdue")\ndef retired(): pass\n')
     write_file(
         service,
         "def get_fsrs_queue_payload():\n    return ReviewSchedule\n\n"
-        "def get_fsrs_load_forecast():\n    return None\n\n"
-        "def complete_formal_review():\n    return None\n",
+        "def get_fsrs_load_forecast():\n    return None\n",
     )
+    write_file(settlement, "def complete_formal_review():\n    return None\n")
     write_file(warmup, "SELECT * FROM review_schedules")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)

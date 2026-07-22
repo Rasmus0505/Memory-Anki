@@ -103,7 +103,7 @@ vi.mock('@/features/mindmap-import', () => ({
       importExtractedText: '',
       importImagePreviewUrl: '',
       importBatchImages: [],
-      importStructureImageId: null,
+
       importBatchStatus: 'idle',
       importBatchMeta: null,
       importCanAppend: true,
@@ -127,7 +127,7 @@ vi.mock('@/features/mindmap-import', () => ({
       handleBatchImportStart: vi.fn(),
       handleDeleteBatchImage: vi.fn(),
       handleMoveBatchImage: vi.fn(),
-      handleSetStructureImage: vi.fn(),
+
       clearBatchQueue: vi.fn(),
       handleImportApplyReplace: importHookState.triggerReplace,
       handleImportApplyAppend: vi.fn(),

@@ -419,8 +419,6 @@ export default function EnglishReadingPage() {
       >
         {aiRunConfigDialog}
         <EnglishFocusChrome
-          backTo="/english/reading"
-          backLabel="返回阅读书架"
           title={workflow.material?.title || "英语阅读"}
           subtitle={
             workflow.version ? (

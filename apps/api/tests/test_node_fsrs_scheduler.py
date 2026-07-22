@@ -550,3 +550,92 @@ def test_content_fingerprint_change_reuses_existing_node_state(db_session):
         assert row.id == old_ids[row.node_uid]
         assert row.content_fingerprint  # refreshed after content edit
         assert row.state_source == "manual"
+
+def test_rate_nodes_returns_slim_payload_without_full_node_details(db_session):
+    """Rating hot path must not ship full per-node projection arrays."""
+    palace = _palace(db_session)
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id="s-slim",
+        operation_id="op-slim",
+        rating_scope="single",
+        source_scene="practice",
+    )
+    assert result["affected_node_uids"] == ["b"]
+    assert result["nodes"] == []
+    assert "mastery_progress" in result
+    assert "memory_health" in result
+    assert result["undo_available"] is True
+
+
+def test_rate_nodes_avoids_per_node_state_selects_on_subtree(db_session):
+    """Subtree rating should batch-load ReviewNodeState, not SELECT per selected uid."""
+    from sqlalchemy import event
+
+    document = {
+        "root": {
+            "data": {"uid": "root", "text": "root"},
+            "children": [
+                {
+                    "data": {"uid": f"n{i}", "text": f"N{i}"},
+                    "children": [
+                        {"data": {"uid": f"n{i}-c", "text": f"N{i}c"}, "children": []}
+                    ],
+                }
+                for i in range(12)
+            ],
+        }
+    }
+    palace = Palace(
+        title="perf",
+        description="",
+        difficulty=0,
+        review_mode="review",
+        editor_doc=json.dumps(document),
+    )
+    db_session.add(palace)
+    db_session.commit()
+
+    # Seed one leaf so after-rating has mixed new + existing rows.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="n0-c",
+        rating=3,
+        study_session_id="s-seed",
+        operation_id="op-seed",
+        rating_scope="single",
+        source_scene="practice",
+    )
+
+    statements: list[str] = []
+    bind = db_session.get_bind()
+
+    def record(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if "review_node_states" in statement.lower() and statement.lstrip().upper().startswith(
+            "SELECT"
+        ):
+            statements.append(statement)
+
+    event.listen(bind, "before_cursor_execute", record)
+    try:
+        result = rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid="n1",
+            rating=4,
+            study_session_id="s-perf",
+            operation_id="op-perf-subtree",
+            rating_scope="subtree",
+            source_scene="practice",
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", record)
+
+    assert set(result["affected_node_uids"]) == {"n1", "n1-c"}
+    # One palace-wide state load for before/after + write loop; never 2+ per-uid SELECTs.
+    assert len(statements) <= 2, statements
+    assert result["nodes"] == []

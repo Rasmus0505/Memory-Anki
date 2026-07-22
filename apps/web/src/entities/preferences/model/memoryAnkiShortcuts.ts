@@ -33,7 +33,10 @@ export interface MemoryAnkiShortcutActionDefinition {
 }
 
 export type MemoryAnkiShortcutMap = Record<MemoryAnkiShortcutActionId, ShortcutBinding | null>
-export type MemoryAnkiShortcutHandlers = Partial<Record<MemoryAnkiShortcutActionId, () => void>>
+/** Return `false` to skip preventDefault (handler chose not to run). Other returns swallow the key. */
+export type MemoryAnkiShortcutHandlers = Partial<
+  Record<MemoryAnkiShortcutActionId, () => boolean | void>
+>
 
 export const MEMORY_ANKI_SHORTCUTS_STORAGE_KEY = 'memory_anki_shortcuts'
 export const MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT = 'memory-anki-shortcuts-change'
@@ -202,15 +205,19 @@ export function useMemoryAnkiShortcuts(
     if (!enabled) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isEditableKeyboardTarget(event.target)) return
+      // Bare letter shortcuts must not fire while IME is composing.
+      if (event.isComposing || event.key === 'Process') return
       const matchedAction = sceneActions.find((action) =>
         isShortcutPressed(event, shortcutsRef.current[action.id]),
       )
       if (!matchedAction) return
       const handler = handlersRef.current[matchedAction.id]
       if (!handler) return
+      // Only swallow the key when the handler actually ran (not false).
+      const handled = handler()
+      if (handled === false) return
       event.preventDefault()
       event.stopPropagation()
-      handler()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)

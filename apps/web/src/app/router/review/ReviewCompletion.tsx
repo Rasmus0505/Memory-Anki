@@ -42,7 +42,10 @@ export default function ReviewCompletion() {
   const nextNodeCount = result.next_review_node_count ?? result.remaining_due_node_count
   const tertiaryBits: string[] = []
   if (result.unrated_due_node_count > 0) {
-    tertiaryBits.push(`本次未评分 ${result.unrated_due_node_count} 个节点保持到期`)
+    tertiaryBits.push(`本次未评分 ${result.unrated_due_node_count} 个到期节点保持到期`)
+  }
+  if ((result.out_of_scope_due_node_count ?? 0) > 0) {
+    tertiaryBits.push(`仍有 ${result.out_of_scope_due_node_count} 个到期节点尚未并入本次`)
   }
   if (result.today_review_count && result.today_review_count > 0) {
     tertiaryBits.push(`该宫殿今日第 ${result.today_review_count} 次复习`)
@@ -130,7 +133,7 @@ export default function ReviewCompletion() {
         <Button asChild variant="outline">
           <Link to="/review">
             <ListChecks className="mr-2 size-4" />
-            返回复习队列
+            复习队列
           </Link>
         </Button>
       </div>

@@ -28,7 +28,6 @@ class TextPreviewResult:
 class BatchImportPreviewResult:
     source_tree: dict[str, Any]
     editor_doc: dict[str, Any]
-    structure_image_index: int | None
     image_count: int
     review_preview: dict[str, Any] | None = None
 

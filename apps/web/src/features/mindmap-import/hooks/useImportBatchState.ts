@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   BatchImportMeta,
   BatchImportImageItem,
@@ -16,7 +16,6 @@ function createBatchImageItem(file: File): BatchImportImageItem {
 
 export function useImportBatchState(setError: (value: string) => void) {
   const [batchImages, setBatchImages] = useState<BatchImportImageItem[]>([])
-  const [structureImageId, setStructureImageId] = useState<string | null>(null)
   const [batchStatus, setBatchStatus] = useState<BatchImportStatus>('idle')
   const [lastBatchMeta, setLastBatchMeta] = useState<BatchImportMeta | null>(null)
   const batchImagesRef = useRef<BatchImportImageItem[]>([])
@@ -38,9 +37,6 @@ export function useImportBatchState(setError: (value: string) => void) {
     setLastBatchMeta(null)
     setBatchImages((current) => {
       const next = syncBatchImagesRef([...current, ...files.map(createBatchImageItem)])
-      setStructureImageId(
-        structureImageId && next.some((item) => item.id === structureImageId) ? structureImageId : null,
-      )
       setBatchStatus(next.length > 0 ? 'ready' : 'idle')
       return next
     })
@@ -51,7 +47,6 @@ export function useImportBatchState(setError: (value: string) => void) {
       current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
       return syncBatchImagesRef([])
     })
-    setStructureImageId(null)
     setBatchStatus('idle')
   }
 
@@ -62,8 +57,6 @@ export function useImportBatchState(setError: (value: string) => void) {
         URL.revokeObjectURL(target.previewUrl)
       }
       const next = syncBatchImagesRef(current.filter((item) => item.id !== id))
-      const nextStructureId = structureImageId === id ? null : structureImageId
-      setStructureImageId(nextStructureId)
       setBatchStatus(next.length > 0 ? 'ready' : 'idle')
       return next
     })
@@ -87,18 +80,9 @@ export function useImportBatchState(setError: (value: string) => void) {
     setBatchStatus('ready')
   }
 
-  const handleSetStructureImage = (id: string) => {
-    setStructureImageId((current) => (current === id ? null : id))
-    setError('')
-    setLastBatchMeta(null)
-    setBatchStatus(batchImagesRef.current.length > 0 ? 'ready' : 'idle')
-  }
-
   return {
     batchImages,
     batchImagesRef,
-    structureImageId,
-    setStructureImageId,
     batchStatus,
     setBatchStatus,
     lastBatchMeta,
@@ -107,6 +91,5 @@ export function useImportBatchState(setError: (value: string) => void) {
     clearBatchQueue,
     handleDeleteBatchImage,
     handleMoveBatchImage,
-    handleSetStructureImage,
   }
 }

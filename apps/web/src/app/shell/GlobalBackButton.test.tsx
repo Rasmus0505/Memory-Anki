@@ -2,36 +2,48 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GlobalBackButton } from './GlobalBackButton'
 
-const navigate = vi.fn()
-let pathname = '/palaces/12'
+const goBack = vi.fn()
+const goForward = vi.fn()
+let canGoBack = true
+let canGoForward = false
 
-vi.mock('react-router-dom', () => ({
-  useLocation: () => ({ pathname }),
-  useNavigate: () => navigate,
+vi.mock('@/shared/page-history/useNavigationHistory', () => ({
+  useNavigationHistory: () => ({
+    canGoBack,
+    canGoForward,
+    goBack,
+    goForward,
+  }),
 }))
 
 describe('GlobalBackButton', () => {
   beforeEach(() => {
-    navigate.mockReset()
-    pathname = '/palaces/12'
+    goBack.mockReset()
+    goForward.mockReset()
+    canGoBack = true
+    canGoForward = false
   })
 
-  it('is hidden on a main route', () => {
-    pathname = '/palaces'
+  it('always renders browser-like back and forward controls', () => {
     render(<GlobalBackButton />)
-    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull()
+    expect(screen.getByRole('button', { name: '后退' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '前进' })).toBeTruthy()
   })
 
-  it('always uses the semantic parent route', () => {
+  it('navigates through recorded history instead of a fixed parent route', () => {
+    canGoForward = true
     render(<GlobalBackButton />)
-    fireEvent.click(screen.getByRole('button', { name: '返回宫殿书架' }))
-    expect(navigate).toHaveBeenCalledWith('/palaces', { replace: true })
-  })
-  it('exits batch generation to the creation root', () => {
-    pathname = '/batch-generation'
-    render(<GlobalBackButton />)
-    fireEvent.click(screen.getByRole('button', { name: '退出批量生成' }))
-    expect(navigate).toHaveBeenCalledWith('/palaces/new', { replace: true })
+    fireEvent.click(screen.getByRole('button', { name: '后退' }))
+    fireEvent.click(screen.getByRole('button', { name: '前进' }))
+    expect(goBack).toHaveBeenCalledTimes(1)
+    expect(goForward).toHaveBeenCalledTimes(1)
   })
 
+  it('disables unavailable directions', () => {
+    canGoBack = false
+    canGoForward = false
+    render(<GlobalBackButton />)
+    expect((screen.getByRole('button', { name: '后退' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '前进' }) as HTMLButtonElement).disabled).toBe(true)
+  })
 })

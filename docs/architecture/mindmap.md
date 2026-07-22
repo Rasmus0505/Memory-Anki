@@ -97,16 +97,15 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 所有新任务携带稳定 `owner_id/entity_key` 和唯一 `operation_id`。复跑创建新的 operation 并复制来源工件，不覆盖旧任务。
 - AI 结果先进入导入预览。覆盖当前导图、追加到选中节点和写入文本均由宿主显式确认；后台任务不得直接修改正式导图。
 
-## 视觉直出与 OCR 回退
+## 两阶段导入：全量识别 → 范围整理
 
-- 普通 PDF/多图使用 `ai_prompt_import_document_mindmap`，视觉模型根据全部正文页面的标题、编号、段落和并列关系直接生成脑图；不得默认把第一张图当作结构图。
-- 用户显式指定结构图时使用独立场景 `vision_structure_mindmap` 和 `ai_prompt_import_batch_mindmap`，结构补全提示词不得进入普通正文流程。
-- 视觉模型目录公开 `vision_processing_role`：通用 VL 为 `direct_generation`，`qwen3.5-ocr` 与 `qwen-vl-ocr` 为 `ocr_extraction`。
-- 通用 VL 仅在流完整、JSON 可解析、根标题非空、节点 Schema 合法且至少有一个内容节点时直接进入预览；协议错误、网络中断、`finish_reason=length`、JSON 或 Schema 错误触发逐页 OCR 与文本模型整理。
+- PDF/多图/单图脑图导入统一走两阶段，不再保留「结构页 + 正文补全」或「视觉一次直出脑图」主路径。
+- **阶段 A（全文识别）**：用 VL 场景（`vision_batch_mindmap` / `vision_image_mindmap`）逐页识别上传页全部文字；提示词只要求完整识别，不做脑图。
+- **阶段 B（范围整理）**：用 `mindmap_ocr_formatter` 文本模型，按用户已选页范围与目标标题删除噪声/范围外内容，输出脑图 JSON。
 - OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可在同一任务内恢复复用；跨任务时按 `pdf_document_id + page` 写入 `%MEMORY_ANKI_HOME%/pdf_ocr_cache`，后续任务命中后复制进工件并跳过模型调用。覆盖查询：`GET /pdf-library/{id}/ocr-coverage`。
-- 同时保存 `vision_response.txt`、`ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
-- 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿视觉、OCR、整理和预览阶段。
-- 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；OCR 重整与视觉重试均创建新的 operation，不覆盖历史任务。
+- 同时保存 `ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
+- 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿识别、整理和预览阶段。
+- 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；重整创建新的 operation，不覆盖历史任务。
 ## AI 分卡 / AI 添卡边界
 
 - 脑图编辑页通过 capability 提供统一的“AI 分卡”入口；工作台配置里选择任务类型：

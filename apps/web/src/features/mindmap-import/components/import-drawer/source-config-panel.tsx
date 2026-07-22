@@ -34,7 +34,6 @@ export function MindMapImportSourceConfigPanel({
     onWorkflowChange,
     onFileChange,
     batchImages,
-    structureImageId,
     batchStatus,
     batchMeta,
     loading,
@@ -57,7 +56,6 @@ export function MindMapImportSourceConfigPanel({
     onBatchStart,
     onBatchDeleteImage,
     onBatchMoveImage,
-    onBatchSetStructureImage,
     pdfDocuments = [],
     selectedPdfDocumentId = '',
     onSelectedPdfDocumentIdChange = () => {},
@@ -184,7 +182,7 @@ export function MindMapImportSourceConfigPanel({
               <div>
                 <div className="text-sm font-medium">图片队列</div>
                 <div className="text-xs text-muted-foreground">
-                  可选指定 1 张结构图走“结构补全”；不指定时会把全部图片按“直接生成”处理。删除或排序后需要重新点开始识别。
+                  先识别全部上传页文字，再按范围整理为脑图。删除或排序后需要重新点开始识别。
                 </div>
               </div>
               <Button
@@ -199,17 +197,10 @@ export function MindMapImportSourceConfigPanel({
             {batchImages.length > 0 ? (
               <div className="max-h-[280px] overflow-y-auto pr-1">
                 <div className="space-y-2">
-                  {batchImages.map((item, index) => {
-                    const isStructure = structureImageId === item.id
-                    return (
+                  {batchImages.map((item, index) => (
                       <div
                         key={item.id}
-                        className={cn(
-                          'flex items-center gap-3 rounded-lg border px-3 py-3',
-                          isStructure
-                            ? 'border-foreground/30 bg-foreground/[0.04]'
-                            : 'border-border/70 bg-background/70',
-                        )}
+                        className="flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-3"
                       >
                         <img
                           src={item.previewUrl}
@@ -221,20 +212,9 @@ export function MindMapImportSourceConfigPanel({
                           <div className="truncate text-sm font-medium">{item.name || `图片 ${index + 1}`}</div>
                           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                             <span>第 {index + 1} 张</span>
-                            {isStructure ? <Badge variant="secondary">结构图</Badge> : null}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant={isStructure ? 'default' : 'outline'}
-                            size="sm"
-                            className="min-h-11 sm:h-8 sm:min-h-8"
-                            onClick={() => onBatchSetStructureImage(item.id)}
-                            disabled={loading || applying || undoing}
-                          >
-                            {isStructure ? '取消结构图' : '设为结构图'}
-                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -270,8 +250,7 @@ export function MindMapImportSourceConfigPanel({
                           </Button>
                         </div>
                       </div>
-                    )
-                  })}
+                    ))}
                 </div>
               </div>
             ) : (
@@ -292,9 +271,9 @@ export function MindMapImportSourceConfigPanel({
               <span>
                 {streamStatusMessage ||
                   (sourceKind === 'image-batch'
-                      ? '正在综合结构图和正文图片，生成章节脑图草稿…'
+                      ? '正在识别全部上传页文字并整理脑图…'
                       : mode === 'mindmap'
-                        ? '正在识别图片结构并生成脑图草稿…'
+                        ? '正在识别页面文字并整理脑图…'
                         : '正在提取图片文字…')}
               </span>
               {streamStepLabel ? <Badge variant="outline">{streamStepLabel}</Badge> : null}
@@ -316,9 +295,9 @@ export function MindMapImportSourceConfigPanel({
               已提取文字，可直接多次复制后回到导图粘贴
             </>
           ) : sourceKind === 'image-batch' ? (
-            '适合多张教材图统一转脑图；可选指定 1 张结构图走结构补全，不指定则直接生成。'
+            '适合多张教材图：先识别全部文字，再整理为脑图。'
           ) : (
-            '支持教材结构图、手写整理图、打印版脑图截图。'
+            '支持教材页截图、手写整理图、打印版资料图。'
           )}
         </div>
 
@@ -366,8 +345,8 @@ export function MindMapImportSourceConfigPanel({
               </pre>
             ) : null}
             <p className="mt-2 text-xs text-muted-foreground">
-              已完成 {currentJobUsage?.total ?? 0} 次 AI 调用（结构 {currentJobUsage?.structure ?? 0} / 文本{' '}
-              {currentJobUsage?.text ?? 0} / 合并 {currentJobUsage?.merge ?? 0}），继续识别只会重跑失败的阶段。
+              已完成 {currentJobUsage?.total ?? 0} 次 AI 调用（识别 {currentJobUsage?.ocr ?? currentJobUsage?.text ?? 0} / 整理{' '}
+              {currentJobUsage?.merge ?? 0}），继续识别只会重跑失败的阶段。
             </p>
           </div>
         ) : error ? (
@@ -378,10 +357,7 @@ export function MindMapImportSourceConfigPanel({
 
         {sourceKind === 'image-batch' && batchStatus === 'success' && batchMeta ? (
           <div className="text-xs text-muted-foreground">
-            本次识别使用了 {batchMeta.imageCount} 张图片，
-            {batchMeta.structureImageIndex != null
-              ? `按结构补全处理，结构图为第 ${batchMeta.structureImageIndex + 1} 张。`
-              : '按直接生成处理。'}
+            本次识别使用了 {batchMeta.imageCount} 张图片，已按「识别全文 → 整理 JSON」处理。
           </div>
         ) : null}
 

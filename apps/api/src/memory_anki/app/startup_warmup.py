@@ -38,6 +38,18 @@ def run_startup_warmup() -> None:
                 """
             )
         ).fetchall()
+        # Touch active-palace list path used by freestyle / queue batch loads.
+        connection.execute(
+            text(
+                """
+                SELECT id
+                FROM palaces
+                WHERE deleted_at IS NULL AND archived = 0
+                ORDER BY group_sort_order ASC, id ASC
+                LIMIT 8
+                """
+            )
+        ).fetchall()
         logger.info("startup warmup completed")
     finally:
         session.close()

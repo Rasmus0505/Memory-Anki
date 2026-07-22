@@ -11,6 +11,7 @@ from .application.fsrs_runtime import (
     load_fsrs_settings,
     normalize_rating,
 )
+from .application.node_due_rollup_batch import project_due_rollups_batch
 from .application.node_memory_service import (
     due_node_uids_for_entry,
     get_completion_summary,
@@ -37,6 +38,7 @@ __all__ = [
     "list_due_nodes",
     "load_fsrs_settings",
     "normalize_rating",
+    "project_due_rollups_batch",
     "rate_nodes",
     "start_or_resume_formal_review",
     "undo_rating_operation",
