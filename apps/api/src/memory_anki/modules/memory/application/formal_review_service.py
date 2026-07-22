@@ -475,6 +475,26 @@ def _normalize_scope_node_uids(raw: list[str] | None) -> list[str] | None:
     return ordered
 
 
+def _normalize_client_source(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if normalized == "desktop":
+        return "desktop"
+    if normalized in {"pwa", "mobile"}:
+        return "pwa"
+    return None
+
+
+def _stamp_client_source(summary: dict[str, Any], client_source: str | None) -> dict[str, Any]:
+    """Persist client source when provided; never wipe an existing value."""
+    normalized = _normalize_client_source(client_source)
+    if normalized is None:
+        return summary
+    current = _normalize_client_source(summary.get("client_source"))
+    if current is not None:
+        return summary
+    return {**summary, "client_source": normalized}
+
+
 def start_or_resume_formal_review(
     session: Session,
     palace_id: int,
@@ -483,6 +503,7 @@ def start_or_resume_formal_review(
     entry_mode: str | None = None,
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
+    client_source: str | None = None,
 ) -> StudySession:
     from memory_anki.modules.memory.application.wave_service import (
         find_active_formal_wave,
@@ -522,6 +543,7 @@ def start_or_resume_formal_review(
                 superseded = 0
             # Attach/resume open formal wave without expanding freeze (palace path only).
             summary = _json(keep.summary_json)
+            stamped_summary = _stamp_client_source(summary, client_source)
             wave = None
             if requested_scope_set is None:
                 wave = find_active_formal_wave(session, palace_id)
@@ -531,9 +553,10 @@ def start_or_resume_formal_review(
                         wave.status = "active"
                         wave.paused_at = None
                     wave.updated_at = utc_now_naive()
-                    summary["wave_id"] = wave.id
-                    keep.summary_json = json.dumps(summary, ensure_ascii=False)
-            if superseded or wave is not None:
+                    stamped_summary = {**stamped_summary, "wave_id": wave.id}
+            if stamped_summary != summary:
+                keep.summary_json = json.dumps(stamped_summary, ensure_ascii=False)
+            if superseded or wave is not None or stamped_summary != summary:
                 session.commit()
                 session.refresh(keep)
             return keep
@@ -595,25 +618,28 @@ def start_or_resume_formal_review(
         progress_json="{}",
         events_json="[]",
         summary_json=json.dumps(
-            {
-                "frozen_due_node_uids": frozen,
-                "wave_id": wave_id,
-                "chapter_id": chapter_id,
-                "review_entry_mode": resolved_mode,
-                "primary_branch_uid": (
-                    branch_uid or projection.get("primary_branch_uid")
-                    if resolved_mode == "node"
-                    else None
-                ),
-                "primary_branch_title": (
-                    projection.get("primary_branch_title") if resolved_mode == "node" else None
-                ),
-                "review_entry_label": projection.get("review_entry_label"),
-                "explicit_scope": bool(requested_scope is not None),
-                "editor_fingerprint": hashlib.sha256(
-                    (palace.editor_doc or "").encode("utf-8")
-                ).hexdigest(),
-            },
+            _stamp_client_source(
+                {
+                    "frozen_due_node_uids": frozen,
+                    "wave_id": wave_id,
+                    "chapter_id": chapter_id,
+                    "review_entry_mode": resolved_mode,
+                    "primary_branch_uid": (
+                        branch_uid or projection.get("primary_branch_uid")
+                        if resolved_mode == "node"
+                        else None
+                    ),
+                    "primary_branch_title": (
+                        projection.get("primary_branch_title") if resolved_mode == "node" else None
+                    ),
+                    "review_entry_label": projection.get("review_entry_label"),
+                    "explicit_scope": bool(requested_scope is not None),
+                    "editor_fingerprint": hashlib.sha256(
+                        (palace.editor_doc or "").encode("utf-8")
+                    ).hexdigest(),
+                },
+                client_source,
+            ),
             ensure_ascii=False,
         ),
     )

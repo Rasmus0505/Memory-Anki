@@ -125,8 +125,20 @@ def complete_formal_wave(
     return wave
 
 
+def _normalize_client_source(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if normalized == "desktop":
+        return "desktop"
+    if normalized in {"pwa", "mobile"}:
+        return "pwa"
+    return None
+
+
 def start_reinforcement_wave_session(
-    session: Session, wave_id: str
+    session: Session,
+    wave_id: str,
+    *,
+    client_source: str | None = None,
 ) -> StudySession:
     wave = session.get(ReviewWave, wave_id)
     if wave is None or wave.wave_type != WAVE_TYPE_REINFORCEMENT:
@@ -135,6 +147,7 @@ def start_reinforcement_wave_session(
         raise ValueError("reinforcement wave is closed")
     if wave.available_at is not None and wave.available_at > _now():
         raise ValueError("reinforcement wave is not available yet")
+    normalized_client_source = _normalize_client_source(client_source)
     if wave.active_session_id:
         existing = session.get(StudySession, wave.active_session_id)
         if (
@@ -146,6 +159,16 @@ def start_reinforcement_wave_session(
             wave.paused_at = None
             existing.status = "active"
             existing.ended_at = None
+            if normalized_client_source is not None:
+                try:
+                    summary = json.loads(existing.summary_json or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    summary = {}
+                if not isinstance(summary, dict):
+                    summary = {}
+                if _normalize_client_source(summary.get("client_source")) is None:
+                    summary["client_source"] = normalized_client_source
+                    existing.summary_json = json.dumps(summary, ensure_ascii=False)
             return existing
     palace = session.get(Palace, wave.palace_id)
     if palace is None or palace.deleted_at is not None:
@@ -155,6 +178,14 @@ def start_reinforcement_wave_session(
         raise ValueError("reinforcement wave has no pending nodes")
     session_id = f"reinforcement-{uuid.uuid4()}"
     now = _now()
+    summary_payload: dict[str, Any] = {
+        "frozen_due_node_uids": node_uids,
+        "wave_id": wave.id,
+        "review_entry_mode": "reinforcement",
+        "review_entry_label": "当天强化",
+    }
+    if normalized_client_source is not None:
+        summary_payload["client_source"] = normalized_client_source
     study_session = StudySession(
         id=session_id,
         status="active",
@@ -166,15 +197,7 @@ def start_reinforcement_wave_session(
         started_at=now,
         progress_json="{}",
         events_json="[]",
-        summary_json=json.dumps(
-            {
-                "frozen_due_node_uids": node_uids,
-                "wave_id": wave.id,
-                "review_entry_mode": "reinforcement",
-                "review_entry_label": "当天强化",
-            },
-            ensure_ascii=False,
-        ),
+        summary_json=json.dumps(summary_payload, ensure_ascii=False),
     )
     session.add(study_session)
     wave.status = WAVE_STATUS_ACTIVE

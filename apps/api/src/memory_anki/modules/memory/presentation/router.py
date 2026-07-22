@@ -104,9 +104,19 @@ def api_wave_detail(wave_id: str, session: Session = Depends(session_dep)):
 
 
 @router.post("/review/waves/{wave_id}/sessions")
-def api_start_wave_session(wave_id: str, session: Session = Depends(session_dep)):
+def api_start_wave_session(
+    wave_id: str,
+    data: dict | None = None,
+    session: Session = Depends(session_dep),
+):
+    payload = data or {}
+    client_source = payload.get("client_source") or payload.get("clientSource")
     try:
-        row = start_reinforcement_wave_session(session, wave_id)
+        row = start_reinforcement_wave_session(
+            session,
+            wave_id,
+            client_source=str(client_source) if client_source is not None else None,
+        )
         session.commit()
         session.refresh(row)
         return formal_review_session_payload(session, row)
@@ -310,6 +320,7 @@ def api_start_formal_review_session(palace_id: int, data: dict | None = None, se
     scope_node_uids: list[str] | None = None
     if isinstance(raw_scope, list):
         scope_node_uids = [str(item) for item in raw_scope if str(item or "").strip()]
+    client_source = payload.get("client_source") or payload.get("clientSource")
     try:
         row = start_or_resume_formal_review(
             session,
@@ -318,6 +329,7 @@ def api_start_formal_review_session(palace_id: int, data: dict | None = None, se
             entry_mode=str(payload.get("entry_mode") or "") or None,
             branch_uid=str(payload.get("branch_uid") or "") or None,
             scope_node_uids=scope_node_uids,
+            client_source=str(client_source) if client_source is not None else None,
         )
         return formal_review_session_payload(session, row)
     except ValueError as exc:

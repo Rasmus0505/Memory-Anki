@@ -10,6 +10,7 @@ import type {
   ReviewScheduleSummary,
   ReviewSessionSubmitResponse,
 } from '@/shared/api/contracts'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 export function invalidateReviewQueueCache() { invalidatePrefetchedPromise('review:queue') }
 async function withReviewStateInvalidation<T>(operation: Promise<T>) {
@@ -30,11 +31,15 @@ export function startReviewSessionApi(
     branch_uid?: string
     /** Freestyle unit freeze: due UIDs inside the branch unit only. */
     scope_node_uids?: string[]
+    client_source?: 'desktop' | 'pwa'
   } = {},
 ) {
   return request<ReviewScheduleSummary>(`/review/palaces/${palaceId}/sessions`, {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      ...data,
+      client_source: data.client_source ?? detectClientSource(),
+    }),
   })
 }
 export function getReviewSessionProgressApi(id: string | number) { return request<{ progress: SessionProgressPayload }>(`/review/session/${id}/progress`) }
@@ -47,7 +52,7 @@ export function getReviewSessionCompletionSummaryApi(id: string | number) { retu
 export function startReviewWaveSessionApi(waveId: string) {
   return request<ReviewScheduleSummary>(`/review/waves/${encodeURIComponent(waveId)}/sessions`, {
     method: 'POST',
-    body: '{}',
+    body: JSON.stringify({ client_source: detectClientSource() }),
   })
 }
 
