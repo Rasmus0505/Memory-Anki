@@ -12,8 +12,8 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
-from memory_anki.modules.palaces.api import resolve_palace_title
-from memory_anki.modules.reviews.api import project_due_rollups_batch
+from memory_anki.modules.content.public.queries import resolve_palace_title
+from memory_anki.modules.memory.public.queries import project_due_rollups_batch
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards

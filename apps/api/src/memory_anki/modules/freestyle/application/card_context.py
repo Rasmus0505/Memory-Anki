@@ -4,7 +4,7 @@ from typing import Any
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceSegment
-from memory_anki.modules.palaces.api import (
+from memory_anki.modules.content.public.queries import (
     resolve_palace_subject,
     resolve_palace_title,
 )

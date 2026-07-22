@@ -6,13 +6,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.palace_quiz.api import (
+from memory_anki.modules.content.public.queries import list_active_palace_tree_structures
+from memory_anki.modules.memory.public.queries import get_palace_memory_projection, list_due_nodes
+from memory_anki.modules.quiz.public.queries import (
     list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
-from memory_anki.modules.palaces.api import list_active_palace_tree_structures
-from memory_anki.modules.reviews.api import get_palace_memory_projection, list_due_nodes
 
 from ..domain.feed_config import sanitize_feed_config
 from ..domain.queue_builder import (

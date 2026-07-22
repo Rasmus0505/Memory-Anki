@@ -12,7 +12,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     chapter_palace_table,
 )
-from memory_anki.modules.palace_quiz.api import serialize_question
+from memory_anki.modules.quiz.public.queries import serialize_question
 
 from .card_context import chapter_context, palace_context, segment_context
 

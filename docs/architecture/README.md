@@ -1,4 +1,7 @@
-# Memory Anki Architecture
+﻿# Memory Anki Architecture
+
+> **Refactor in progress (branch `7.22-refactor-optimize`):** target map in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). New public paths under `modules.content|memory|quiz|practice|produce|session.public`. Legacy names remain until W2 moves.
+
 
 This directory is the current architectural source of truth. Product and runtime context lives in `AI_PROJECT_CONTEXT.md`; historical plans in `fable/` are not authoritative for current module ownership.
 

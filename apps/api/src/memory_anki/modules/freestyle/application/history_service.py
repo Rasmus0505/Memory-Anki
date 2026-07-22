@@ -12,7 +12,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleQuizAttempt,
     PalaceQuizQuestion,
 )
-from memory_anki.modules.palace_quiz.api import record_attempt_event
+from memory_anki.modules.quiz.public.commands import record_attempt_event
 
 FREESTYLE_HISTORY_MODES = {"today", "free"}
 AI_EXPLANATION_OPERATIONS = {
