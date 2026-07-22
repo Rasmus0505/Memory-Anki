@@ -186,6 +186,51 @@ export function filterMutedPalaces(cards: FreestyleCard[], mutedPalaceIds: numbe
   })
 }
 
+/**
+ * Index of the first card after ``currentIndex`` that belongs to a different palace.
+ * Returns ``null`` when there is no later palace (end of queue / single-palace tail).
+ */
+export function findNextPalaceIndex(
+  cards: FreestyleCard[],
+  currentIndex: number,
+): number | null {
+  if (!cards.length) return null
+  const clamped = Math.max(0, Math.min(currentIndex, cards.length - 1))
+  const currentPalace = cardPalaceId(cards[clamped])
+  for (let index = clamped + 1; index < cards.length; index += 1) {
+    const palaceId = cardPalaceId(cards[index])
+    if (currentPalace == null) {
+      // Unknown palace: treat the immediate next card as "next palace".
+      return index
+    }
+    if (palaceId !== currentPalace) return index
+  }
+  return null
+}
+
+/**
+ * Drop the current card and every later card from the same palace so the queue
+ * lands on the next palace (or becomes empty if none remain).
+ */
+export function skipRemainingPalaceCards(
+  cards: FreestyleCard[],
+  currentIndex: number,
+): { cards: FreestyleCard[]; nextIndex: number } {
+  if (!cards.length) return { cards: [], nextIndex: 0 }
+  const clamped = Math.max(0, Math.min(currentIndex, cards.length - 1))
+  const currentPalace = cardPalaceId(cards[clamped])
+  if (currentPalace == null) {
+    const nextIndex = Math.min(clamped + 1, Math.max(0, cards.length - 1))
+    return { cards, nextIndex }
+  }
+  const next = cards.filter((card, index) => {
+    if (index < clamped) return true
+    return cardPalaceId(card) !== currentPalace
+  })
+  const nextIndex = Math.min(clamped, Math.max(0, next.length - 1))
+  return { cards: next, nextIndex: next.length === 0 ? 0 : nextIndex }
+}
+
 export function mergeRefreshQueue(
   _previous: FreestyleCard[],
   incoming: FreestyleCard[],

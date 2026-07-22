@@ -12,6 +12,7 @@ import {
   saveFreestyleFeedConfig,
   saveQueueState,
   applySkip,
+  skipRemainingPalaceCards,
   undoSkip,
   type FreestyleSkipState,
 } from '@/modules/practice/public'
@@ -168,6 +169,14 @@ export function useImmersiveQueue() {
     setCards((current) => filterMutedPalaces(current, next.mutedPalaceIds))
   }, [currentIndex, persistQueueState])
 
+  /** Jump past the rest of the current palace (all remaining cards), not just the next item. */
+  const skipToNextPalace = useCallback(() => {
+    const result = skipRemainingPalaceCards(cardsRef.current, currentIndex)
+    cardsRef.current = result.cards
+    setCards(result.cards)
+    setCurrentIndex(result.nextIndex)
+  }, [currentIndex])
+
   const goToIndex = useCallback((index: number) => {
     setCurrentIndex(() => {
       const max = Math.max(0, cardsRef.current.length - 1)
@@ -191,6 +200,7 @@ export function useImmersiveQueue() {
     reshuffleQueue,
     completeCard,
     skipCurrent,
+    skipToNextPalace,
     undoLastSkip,
     muteCurrentPalace,
     buildQueue,

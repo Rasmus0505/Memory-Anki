@@ -62,6 +62,7 @@ export default function ImmersiveFreestylePage() {
     reshuffleQueue,
     completeCard,
     skipCurrent,
+    skipToNextPalace,
     undoLastSkip,
     muteCurrentPalace,
   } = useImmersiveQueue()
@@ -472,10 +473,10 @@ export default function ImmersiveFreestylePage() {
           <button
             type="button"
             className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-xs text-zinc-100 shadow-lg backdrop-blur"
-            title="下一项"
-            onClick={() => goToIndex(currentIndex + 1)}
+            title="下个宫殿：跳过本宫殿剩余全部内容"
+            onClick={skipToNextPalace}
           >
-            下一项
+            下个宫殿
           </button>
           {canUndoSkip ? (
             <button

@@ -6,6 +6,8 @@ import {
 import {
   DEFAULT_QUEUE_STATE,
   applySkip,
+  findNextPalaceIndex,
+  skipRemainingPalaceCards,
   filterMutedPalaces,
   mergeRefreshQueue,
   mutePalace,
@@ -106,5 +108,34 @@ describe('freestyle queue skip rules', () => {
     )
     expect(filterMutedPalaces(cards, muted.mutedPalaceIds).map((c) => c.id)).toEqual(['1'])
     expect([...visibleMountIndices(2, 6)].sort()).toEqual([1, 2, 3, 4])
+  })
+
+  it('finds the first card of the next palace and drops remaining same-palace cards', () => {
+    const cards = [
+      { id: 'a1', type: 'mindmap_branch', palace_id: 1 },
+      { id: 'a2', type: 'mindmap_branch', palace_id: 1 },
+      { id: 'a3', type: 'mindmap_branch', palace_id: 1 },
+      { id: 'b1', type: 'mindmap_branch', palace_id: 2 },
+      { id: 'b2', type: 'mindmap_branch', palace_id: 2 },
+    ] as FreestyleCard[]
+    expect(findNextPalaceIndex(cards, 0)).toBe(3)
+    expect(findNextPalaceIndex(cards, 1)).toBe(3)
+    expect(findNextPalaceIndex(cards, 3)).toBe(null)
+
+    const skipped = skipRemainingPalaceCards(cards, 1)
+    expect(skipped.cards.map((card) => card.id)).toEqual(['a1', 'b1', 'b2'])
+    expect(skipped.nextIndex).toBe(1)
+    expect(skipped.cards[skipped.nextIndex]?.id).toBe('b1')
+  })
+
+  it('skips to an empty queue when the current palace is the last remaining', () => {
+    const cards = [
+      { id: 'a1', type: 'mindmap_branch', palace_id: 9 },
+      { id: 'a2', type: 'mindmap_branch', palace_id: 9 },
+    ] as FreestyleCard[]
+    expect(findNextPalaceIndex(cards, 0)).toBe(null)
+    const skipped = skipRemainingPalaceCards(cards, 0)
+    expect(skipped.cards).toEqual([])
+    expect(skipped.nextIndex).toBe(0)
   })
 })
