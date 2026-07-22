@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg, ReviewLog
-from memory_anki.modules.palaces.api import build_today_new_palace_outline
-from memory_anki.modules.reviews.api import get_fsrs_queue_payload, get_weekly_stats
-from memory_anki.modules.sessions.api import (
+from memory_anki.modules.content.public.queries import build_today_new_palace_outline
+from memory_anki.modules.memory.public.queries import get_fsrs_queue_payload, get_weekly_stats
+from memory_anki.modules.session.public.queries import (
     FORMAL_REVIEW_SCENES,
     STUDY_DASHBOARD_SCENES,
     current_month_bounds,

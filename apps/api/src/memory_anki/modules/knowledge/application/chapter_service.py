@@ -47,7 +47,7 @@ def _palace_out(p: Palace, session: Session | None = None) -> dict:
     next_due = None
     mastered = bool(getattr(p, "mastered", False))
     if session is not None:
-        from memory_anki.modules.reviews.api import get_palace_due_rollup
+        from memory_anki.modules.memory.public.queries import get_palace_due_rollup
 
         try:
             projection = get_palace_due_rollup(session, p.id)

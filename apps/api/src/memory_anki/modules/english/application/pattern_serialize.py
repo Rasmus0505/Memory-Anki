@@ -15,7 +15,7 @@ from memory_anki.infrastructure.db._tables.english import (
     EnglishTopicPattern,
 )
 from memory_anki.modules.english.application.pattern_fsrs import is_sentence_due
-from memory_anki.modules.reviews.api import RATING_LABELS
+from memory_anki.modules.memory.public.queries import RATING_LABELS
 
 WHITESPACE_RE = re.compile(r"\s+")
 DEFAULT_PROMPT_COUNT = 6

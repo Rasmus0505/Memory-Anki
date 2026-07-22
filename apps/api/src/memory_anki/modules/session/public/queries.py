@@ -1,4 +1,55 @@
-"""Read queries for session.
+﻿"""Public surface for session — transitional re-export of sessions.api."""
 
-Populated as legacy code is moved in W2.
-"""
+from __future__ import annotations
+
+from memory_anki.modules.sessions.api import (
+    ACTIVE_STATUSES,
+    ENGLISH_READING_SCENES,
+    FORMAL_REVIEW_SCENES,
+    STUDY_DASHBOARD_SCENES,
+    calculate_reveal_progress,
+    clear_practice_progress,
+    clear_review_progress,
+    create_review_study_session,
+    current_month_bounds,
+    current_week_bounds,
+    date_range_bounds,
+    ensure_review_log_study_sessions,
+    get_all_time_study_session_duration_seconds,
+    get_english_study_stats,
+    get_practice_progress,
+    get_review_progress,
+    get_study_session_duration_seconds,
+    get_today_palace_learning_breakdown,
+    month_bounds,
+    reclassify_ghost_formal_review_time_sessions,
+    today_bounds,
+    upsert_practice_progress,
+    upsert_review_progress,
+)
+
+__all__ = [
+    "ACTIVE_STATUSES",
+    "ENGLISH_READING_SCENES",
+    "FORMAL_REVIEW_SCENES",
+    "STUDY_DASHBOARD_SCENES",
+    "calculate_reveal_progress",
+    "clear_practice_progress",
+    "clear_review_progress",
+    "create_review_study_session",
+    "current_month_bounds",
+    "current_week_bounds",
+    "date_range_bounds",
+    "ensure_review_log_study_sessions",
+    "get_all_time_study_session_duration_seconds",
+    "get_english_study_stats",
+    "get_practice_progress",
+    "get_review_progress",
+    "get_study_session_duration_seconds",
+    "get_today_palace_learning_breakdown",
+    "month_bounds",
+    "reclassify_ghost_formal_review_time_sessions",
+    "today_bounds",
+    "upsert_practice_progress",
+    "upsert_review_progress",
+]

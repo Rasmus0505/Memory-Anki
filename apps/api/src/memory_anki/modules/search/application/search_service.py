@@ -11,7 +11,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     Peg,
 )
-from memory_anki.modules.palaces.api import resolve_palace_title
+from memory_anki.modules.content.public.queries import resolve_palace_title
 
 PER_GROUP_LIMIT = 10
 _LIKE_ESCAPE = "\\"

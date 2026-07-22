@@ -33,7 +33,7 @@ from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingVersion,
 )
 from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.modules.sessions.api import (
+from memory_anki.modules.session.public.queries import (
     ENGLISH_READING_SCENES,
     get_all_time_study_session_duration_seconds,
     get_study_session_duration_seconds,

@@ -31,7 +31,7 @@ from memory_anki.modules.english.application.pattern_serialize import (
     serialize_pattern_summary,
 )
 from memory_anki.modules.english.domain.errors import EnglishCourseError
-from memory_anki.modules.reviews.api import VALID_RATINGS, normalize_rating
+from memory_anki.modules.memory.public.queries import VALID_RATINGS, normalize_rating
 
 PATTERN_STATUSES = {"draft", "learning", "speakable", "mature", "archived"}
 SENTENCE_SOURCES = {"manual", "from_listening", "from_reading", "ai"}
