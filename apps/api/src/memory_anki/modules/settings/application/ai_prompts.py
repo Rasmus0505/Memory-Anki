@@ -277,7 +277,7 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_english_reading_word_explain": PromptTemplateDefinition(
         key="ai_prompt_english_reading_word_explain",
         label="英语阅读词语英文解释",
-        description="按用户 CEFR 用纯英文解释词语在上下文中的含义和常见用法。",
+        description="按用户 CEFR 解释词语在上下文中的含义和常见用法（可中英，默认直出）。",
         default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
 
 Target word: {{target}}
@@ -301,7 +301,7 @@ Rules:
     "ai_prompt_english_reading_sentence_explain": PromptTemplateDefinition(
         key="ai_prompt_english_reading_sentence_explain",
         label="英语阅读句子英文讲解",
-        description="按用户 CEFR 用纯英文解释句意和句法关系。",
+        description="按用户 CEFR 解释句意和句法关系（可中英，默认直出）。",
         default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
 
 Sentence: {{target}}
@@ -325,7 +325,7 @@ Rules:
     "ai_prompt_english_reading_target_article": PromptTemplateDefinition(
         key="ai_prompt_english_reading_target_article",
         label="英语阅读定向文章",
-        description="围绕所选词句生成纯英文可理解输入文章和覆盖报告。",
+        description="围绕所选词句生成可理解输入文章和覆盖报告（默认不因含中文拒绝）。",
         default_template="""Return JSON only and use English only. Write a natural {{genre}} article of about {{word_count}} words at CEFR {{cefr}}. Topic: {{topic}}. Syntax density: {{syntax_density}}. Word targets should appear naturally about {{word_repetitions}} times. Sentence targets must become about {{sentence_variants}} different structural variants, not copied sentences. Targets: {{targets_json}}. Return {\"title\": \"...\", \"content\": \"...\", \"coverage\": {\"targets\": [{\"id\": 1, \"uses\": 3, \"note\": \"...\"}]}}.""",
         available_placeholders=(
             _placeholder("cefr", "用户手动选择的 CEFR。"),

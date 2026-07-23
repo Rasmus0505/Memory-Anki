@@ -140,12 +140,12 @@ BUILTIN_BLOCKS = (
         layer="content",
         sort_order=40,
         template=(
-            "若本次运行提供了“重点标记线索”，请按该线索识别教材中的知识重点原文片段，"
-            "并在对应节点输出可选字段 emphasis_marks："
+            "知识重点（黄色底色）：若本次运行提供了“重点标记线索”，"
+            "请按该线索识别教材中的知识重点原文片段，并在对应节点可选输出 emphasis_marks："
             '[{"kind":"highlight","text":"原文子串"}]。'
-            "text 字段保持纯文本；emphasis_marks.text 必须是该节点 text 的子串，不要改写。"
-            "未提供线索时可以不输出 emphasis_marks。"
-            "不要用 markdown 标记重点；产品侧会把 emphasis_marks 渲染为黄色底色。"
+            "节点 text 保持纯文本；emphasis_marks.text 必须是该节点 text 的子串，不要改写。"
+            "不要用 markdown 标记重点；未提供线索时可不输出 emphasis_marks。"
+            "产品侧会把 emphasis_marks 渲染为黄色底色。"
         ),
     ),
     PromptBlockSeed(
@@ -170,15 +170,19 @@ BUILTIN_BLOCKS = (
     PromptBlockSeed(
         key="output.mindmap_json",
         label="脑图 JSON Schema",
-        description="统一脑图根节点和 children 递归结构。",
+        description="简单脑图树：根 title + 子 text/children；禁止编辑器内部字段。",
         layer="output",
         sort_order=10,
         template=(
             '顶层格式必须为 {"title":"根节点标题","children":[{"text":"节点文字","children":[]}]}。'
-            "每个节点必须有非空 text 和数组 children；无子节点也必须输出 children: []。"
-            "多个并列要点必须拆成并列 children。"
+            "根节点用 title；每个子节点必须有非空 text 和数组 children；叶子也必须 children: []。"
+            "结构保真：若是单张文字卡或一段连续文字，输出 "
+            '{"title":"全文","children":[]}；'
+            "若是多节点导图才拆成树，节点文字与来源标签一致。"
+            "合理分卡：并列要点拆成并列 children；确有从属/分类关系时再做父子。"
+            "禁止输出编辑器内部字段（data、uid、richText、theme、layout 等）。"
             "可选：节点可含 emphasis_marks（数组），每项为 "
-            '{"kind":"highlight","text":"原文子串"}，用于标识知识重点。'
+            '{"kind":"highlight","text":"原文子串"}，用于标识知识重点（黄色底色）。'
         ),
     ),
     PromptBlockSeed(
@@ -257,7 +261,12 @@ SCENE_PROMPT_BINDINGS = {scene: prompt for prompt, scene in PROMPT_SCENE_BINDING
 
 
 def _mindmap_scene_instruction(task: str) -> str:
-    return f"任务：{task}\n根据输入中实际出现的标题、编号、段落、缩进和并列关系建立层级。"
+    return (
+        f"任务：{task}\n"
+        "根据输入中实际出现的标题、编号、段落、缩进和并列关系建立层级；"
+        "单段连续文字不要硬拆成空树；多节点才拆树。"
+        "只输出简单 JSON（title/text/children），不要输出编辑器内部字段。"
+    )
 
 
 BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
@@ -272,7 +281,9 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
             "output.mindmap_json",
             "quality.json_integrity",
         ),
-        scene_instruction=_mindmap_scene_instruction("识别单张现成脑图截图，尽量一比一还原图中的层级和顺序。"),
+        scene_instruction=_mindmap_scene_instruction(
+            "识别单张现成脑图截图或文字卡，尽量一比一还原图中的层级和顺序。"
+        ),
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
@@ -300,6 +311,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",
@@ -307,11 +319,14 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         ),
         scene_instruction=(
             "任务：把已识别全文按范围整理为脑图 JSON。\n"
+            "结构保真与合理分卡：单段连续文字用 title + 空 children；"
+            "多节点才拆树；并列要点并列，有从属再父子。\n"
             "目标章节标题：{{target_title}}\n\n已识别全文：\n{{ocr_text}}"
         ),
         recommended_block_keys=(
             "role.strict_json",
             "content.fidelity",
+            "content.knowledge_emphasis",
             "boundary.document_chapter",
             "boundary.noise_filter",
             "output.mindmap_json",

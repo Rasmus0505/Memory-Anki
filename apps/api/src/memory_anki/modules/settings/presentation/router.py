@@ -73,8 +73,7 @@ FSRS_SETTINGS_KEYS = {
     "learning_steps",
     "relearning_steps",
     "daily_max_reviews",
-    "reinforcement_again_minutes",
-    "reinforcement_hard_minutes",
+    # reinforcement_again/hard_minutes retired: weak ratings use end-of-batch restudy
 }
 
 CLIENT_PREFERENCE_GROUPS = {
@@ -90,6 +89,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "palace_shelf_view_settings",
     "review_queue_view_settings",
     "time_record_tags",
+    "freestyle_feed_config",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

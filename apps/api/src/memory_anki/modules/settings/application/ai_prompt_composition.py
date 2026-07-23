@@ -85,9 +85,41 @@ def ensure_prompt_composition_seed(session: Session) -> None:
             row.layer = block_seed.layer
             row.sort_order = block_seed.sort_order
             row.is_builtin = True
+            placeholders_json = json.dumps(
+                sorted(set(PLACEHOLDER_PATTERN.findall(block_seed.template))),
+                ensure_ascii=False,
+            )
+            if row.placeholders_json != placeholders_json:
+                row.placeholders_json = placeholders_json
+                changed = True
             # Keep scene scoping current so run dialogs only show relevant blocks.
             if row.applicable_scenes_json != applicable_json:
                 row.applicable_scenes_json = applicable_json
+                changed = True
+            # Auto-bump builtin templates when code seeds change; never overwrite user edits.
+            active_block = (
+                session.get(AiPromptBlockVersion, row.active_version_id)
+                if row.active_version_id
+                else None
+            )
+            if (
+                active_block is not None
+                and active_block.source == "builtin"
+                and str(active_block.template or "") != block_seed.template
+            ):
+                active_block.status = "archived"
+                version_id = uuid.uuid4().hex
+                session.add(
+                    AiPromptBlockVersion(
+                        id=version_id,
+                        block_key=block_seed.key,
+                        template=block_seed.template,
+                        status="active",
+                        source="builtin",
+                        activated_at=now,
+                    )
+                )
+                row.active_version_id = version_id
                 changed = True
 
     for scene_seed in BUILTIN_SCENES.values():
