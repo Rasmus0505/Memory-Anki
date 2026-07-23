@@ -97,7 +97,7 @@ export function selectionToolbarButtonClass(variant: SelectionToolbarAction['var
     case 'destructive':
       return `${base} bg-destructive text-white hover:bg-destructive/90`
     case 'outline':
-      return `${base} border border-border bg-background hover:bg-muted`
+      return `${base} border border-border bg-background text-foreground hover:bg-muted`
     case 'secondary':
       return `${base} bg-secondary text-secondary-foreground hover:bg-secondary/80`
     case 'ghost':

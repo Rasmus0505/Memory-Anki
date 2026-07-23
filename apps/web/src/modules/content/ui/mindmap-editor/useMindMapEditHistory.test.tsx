@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MindMapDoc } from '@/shared/api/contracts'
 import {
   pushMindMapHistory,
@@ -16,6 +16,13 @@ function makeDoc(text: string): MindMapDoc {
 }
 
 describe('mind map edit history', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('limits past snapshots and supports undo/redo transitions', () => {
     let history: MindMapEditHistoryState = { past: [], future: [] }
     history = pushMindMapHistory(history, makeDoc('A'), 2)
@@ -67,6 +74,10 @@ describe('mind map edit history', () => {
     expect(result.current.canUndo).toBe(true)
 
     // Parent applied a doc outside commit() (e.g. AI 分卡「替换原卡片」).
+    // Wait past local-echo absorb window so this is treated as a true external write.
+    act(() => {
+      vi.advanceTimersByTime(8_001)
+    })
     rerender({ doc: makeDoc('EXTERNAL') })
     expect(result.current.canUndo).toBe(true)
     // New branch: previous future from any redo path is cleared by pushMindMapHistory.
@@ -92,5 +103,54 @@ describe('mind map edit history', () => {
       result.current.redo()
     })
     expect(onApply).toHaveBeenLastCalledWith(makeDoc('EXTERNAL'))
+  })
+
+  it('keeps redo after parent/session rewrites the undone doc (autosave normalize echo)', () => {
+    const onApply = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ doc }) => useMindMapEditHistory(doc, onApply),
+      { initialProps: { doc: makeDoc('A') } },
+    )
+
+    act(() => {
+      result.current.commit(makeDoc('B'))
+    })
+    // Controlled parent adopts the committed doc.
+    rerender({ doc: makeDoc('B') })
+
+    act(() => {
+      result.current.undo()
+    })
+    expect(result.current.canRedo).toBe(true)
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('A'))
+
+    // Parent setState echo of undo result.
+    rerender({ doc: makeDoc('A') })
+    expect(result.current.canRedo).toBe(true)
+
+    // Autosave response: backend-normalized form of the same undo target (different fingerprint).
+    const serverNormalizedA: MindMapDoc = {
+      schemaVersion: 1,
+      layout: 'logicalStructure',
+      theme: { template: 'avocado', config: {} },
+      root: {
+        data: {
+          text: 'A',
+          uid: 'root',
+          memoryAnkiRootKind: 'palace',
+          memoryAnkiNodeType: 'peg',
+        },
+        children: [],
+      },
+    }
+    rerender({ doc: serverNormalizedA })
+    expect(result.current.canRedo).toBe(true)
+
+    act(() => {
+      result.current.redo()
+    })
+    expect(onApply).toHaveBeenLastCalledWith(makeDoc('B'))
+    expect(result.current.canUndo).toBe(true)
+    expect(result.current.canRedo).toBe(false)
   })
 })

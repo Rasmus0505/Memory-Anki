@@ -297,6 +297,38 @@ describe('NodeCard', () => {
     expect(onEditTextChange).toHaveBeenLastCalledWith('peg-1', 'abdef')
   })
 
+  it('does not jump the caret to the end after mid-edit deletes that change node height', () => {
+    // Multi-line label: deleting a whole line shrinks measured height. The old enter-edit
+    // effect re-ran on focusEditorCaret identity churn and forced caret to end.
+    const label = '第一行内容比较长\n第二行内容也比较长\n第三行收尾'
+    renderNodeCard({
+      label,
+      metadata: { depth: 1, layoutRole: 'branch', text: label },
+    })
+    fireEvent.doubleClick(screen.getByRole('button', { name: label }))
+    const editor = screen.getByRole('textbox')
+
+    // Place caret at the start, then delete enough text to change node height.
+    selectEditorText(editor, 0, 0)
+    const shortened = '第二行内容也比较长\n第三行收尾'
+    setEditorText(editor, shortened)
+    // Re-assert after React flushes layout from the shorter draft (do not re-select).
+    act(() => {
+      // Allow any deferred layout/focus retries to run.
+    })
+
+    const selection = window.getSelection()
+    const textLen = editor.textContent?.length ?? 0
+    const forcedToEnd =
+      Boolean(selection?.rangeCount) &&
+      Boolean(selection?.isCollapsed) &&
+      selection?.anchorNode === editor.firstChild &&
+      selection?.anchorOffset === textLen
+    // Must not re-place caret at end after draft/size updates mid-session.
+    expect(forcedToEnd).toBe(false)
+    expect(editor.textContent).toBe(shortened)
+  })
+
   it('uses local text undo without leaving edit mode', () => {
     renderNodeCard({ label: '原始内容' })
     fireEvent.doubleClick(screen.getByRole('button', { name: '原始内容' }))

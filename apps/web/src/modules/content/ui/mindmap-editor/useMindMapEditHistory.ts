@@ -9,6 +9,13 @@ interface HistoryState {
 }
 
 const HISTORY_LIMIT = 100
+/**
+ * After a local publish (commit / undo / redo / stage), the parent may echo the
+ * document back more than once: first as controlled-state setState, then as an
+ * autosave response with backend normalization (uids, theme, layout, fingerprint).
+ * Those echoes must not be treated as external branches, or redo is wiped.
+ */
+const LOCAL_ECHO_ABSORB_MS = 8_000
 
 function fingerprint(editorDoc: EditorDoc) {
   return JSON.stringify(editorDoc ?? null)
@@ -56,6 +63,7 @@ export function useMindMapEditHistory(
   const historyRef = useRef<HistoryState>({ past: [], future: [] })
   const currentEditorDocRef = useRef<EditorDoc>(incomingEditorDoc)
   const pendingLocalFingerprintsRef = useRef<Set<string>>(new Set())
+  const localEchoUntilMsRef = useRef(0)
   const onApplyRef = useRef(onApply)
   onApplyRef.current = onApply
   const incomingFingerprint = fingerprint(incomingEditorDoc)
@@ -79,6 +87,10 @@ export function useMindMapEditHistory(
     [syncAvailability],
   )
 
+  const markLocalPublish = useCallback(() => {
+    localEchoUntilMsRef.current = Date.now() + LOCAL_ECHO_ABSORB_MS
+  }, [])
+
   const publish = useCallback((editorDoc: EditorDoc) => {
     currentEditorDocRef.current = editorDoc
     pendingLocalFingerprintsRef.current.add(fingerprint(editorDoc))
@@ -86,8 +98,9 @@ export function useMindMapEditHistory(
       const oldest = pendingLocalFingerprintsRef.current.values().next().value
       if (typeof oldest === 'string') pendingLocalFingerprintsRef.current.delete(oldest)
     }
+    markLocalPublish()
     onApplyRef.current(editorDoc)
-  }, [])
+  }, [markLocalPublish])
 
   const commit = useCallback(
     (editorDoc: EditorDoc) => {
@@ -147,6 +160,15 @@ export function useMindMapEditHistory(
       return
     }
     if (fingerprint(currentEditorDocRef.current) === incomingFingerprint) return
+
+    // Controlled-state / autosave may rewrite the doc we just published with a
+    // backend-normalized form (different fingerprint, same edit lineage).
+    // Absorb those echoes in place so undo's redo stack is not wiped.
+    if (Date.now() < localEchoUntilMsRef.current) {
+      currentEditorDocRef.current = incomingEditorDoc
+      pendingLocalFingerprintsRef.current.clear()
+      return
+    }
 
     // Parent/session writes that bypass commit() (AI 分卡应用、导入应用、版本预览写回等)
     // must still enter the global undo stack. Only wipe future (new branch), never clear past.

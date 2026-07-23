@@ -193,14 +193,23 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     },
     [nodeData.selectEditText, resizeEditor],
   )
+  const focusEditorCaretRef = useRef(focusEditorCaret)
+  focusEditorCaretRef.current = focusEditorCaret
 
-  // Enter-edit: put caret at end (or select-all for new nodes). Retry because toolbar
-  // teardown / React Flow layout can steal focus right after the first attempt.
-  // Intentionally depends only on isEditing / select-all mode so draft keystrokes
-  // do not re-init the session or thrash focus.
+  // Enter-edit only: put caret at end (or select-all for new nodes). Retry because
+  // toolbar teardown / React Flow layout can steal focus right after the first attempt.
+  // Must NOT re-run placement when draft text / node height changes mid-session —
+  // that used to force the caret to the end and cause accidental end deletes.
+  // Depends only on isEditing so resizeEditor/focusEditorCaret identity churn never
+  // cancels enter-edit focus retries or re-places the caret while typing.
   useLayoutEffect(() => {
     if (!isEditing) {
       wasEditingRef.current = false
+      return undefined
+    }
+
+    // Already in an edit session: never re-seed or re-place the caret.
+    if (wasEditingRef.current) {
       return undefined
     }
 
@@ -208,24 +217,20 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       typeof nodeData.editText === 'string' ? nodeData.editText : resolveNodeRawText(nodeData)
     const selectAll = Boolean(nodeData.selectEditText)
 
-    const isEnterEdit = !wasEditingRef.current
-    if (isEnterEdit) {
-      wasEditingRef.current = true
-      editStartedAtRef.current = Date.now()
-      setEditText(initialValue)
-      editHistoryRef.current = { past: [], future: [] }
-      pendingInputSnapshotRef.current = null
-      compositionStartSnapshotRef.current = null
-      isComposingRef.current = false
-      editSessionClosedRef.current = false
-    }
+    wasEditingRef.current = true
+    editStartedAtRef.current = Date.now()
+    setEditText(initialValue)
+    editHistoryRef.current = { past: [], future: [] }
+    pendingInputSnapshotRef.current = null
+    compositionStartSnapshotRef.current = null
+    isComposingRef.current = false
+    editSessionClosedRef.current = false
 
-    // Seed content on enter-edit (and if Strict Mode remount wiped the editor DOM).
-    const editorDomEmpty = !(inputRef.current?.textContent || inputRef.current?.innerHTML)
-    focusEditorCaret({
+    // Seed content once on enter-edit.
+    focusEditorCaretRef.current({
       selectAll,
       value: initialValue,
-      seedContent: isEnterEdit || editorDomEmpty,
+      seedContent: true,
     })
 
     const restoreIfBlurred = () => {
@@ -234,7 +239,19 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       if (!input) return
       // If focus held, do not clobber caret while the user is already typing.
       if (document.activeElement === input) return
-      focusEditorCaret({ selectAll })
+      // Recover focus only. If a live selection still sits inside the editor,
+      // keep it — never force the caret to the end after the user moved it.
+      const selection = window.getSelection()
+      const selectionInside =
+        Boolean(selection?.anchorNode) &&
+        input.contains(selection!.anchorNode) &&
+        Boolean(selection?.focusNode) &&
+        input.contains(selection!.focusNode)
+      if (selectionInside) {
+        input.focus({ preventScroll: true })
+        return
+      }
+      focusEditorCaretRef.current({ selectAll })
     }
 
     const timers: number[] = []
@@ -253,9 +270,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       cancelAnimationFrame(nestedRaf)
       for (const timer of timers) window.clearTimeout(timer)
     }
-    // nodeData.editText / label are read only when isEditing flips true.
+    // nodeData.editText / label / selectEditText are read only when isEditing flips true.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- enter-edit snapshot
-  }, [focusEditorCaret, isEditing, nodeData.selectEditText])
+  }, [isEditing])
 
   // Drop optimistic local edit once the host confirms or ends the session.
   // Do not clear while optimisticEditPendingRef is set — that would wipe the
@@ -314,12 +331,26 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       return
     }
     if (Date.now() - editStartedAtRef.current < EDIT_BLUR_GUARD_MS) {
-      // Toolbar / layout blur: refocus and keep caret at end (or select-all).
+      // Toolbar / layout blur right after enter-edit: refocus without clobbering a
+      // caret/selection the user already moved (e.g. selecting prefix to delete).
       requestAnimationFrame(() => {
+        const input = inputRef.current
+        if (!input || editSessionClosedRef.current) return
+        if (document.activeElement === input) return
+        const selection = window.getSelection()
+        const selectionInside =
+          Boolean(selection?.anchorNode) &&
+          input.contains(selection!.anchorNode) &&
+          Boolean(selection?.focusNode) &&
+          input.contains(selection!.focusNode)
+        if (selectionInside) {
+          input.focus({ preventScroll: true })
+          return
+        }
         focusEditorCaret({
           selectAll: Boolean(nodeData.selectEditText),
           value: editValue,
-          seedContent: !(inputRef.current?.textContent || inputRef.current?.innerHTML),
+          seedContent: !(input.textContent || input.innerHTML),
         })
       })
       return
