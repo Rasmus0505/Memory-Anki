@@ -182,7 +182,11 @@ def _due_rollups_for_palaces(
 def _due_palace_ids_from_rollups(rollups: dict[int, dict[str, Any]]) -> set[int]:
     ids: set[int] = set()
     for palace_id, projection in rollups.items():
-        if projection.get("has_due_review") or projection.get("due_node_count"):
+        if (
+            projection.get("has_due_review")
+            or projection.get("due_node_count")
+            or int(projection.get("reinforcement_due_count") or 0) > 0
+        ):
             ids.add(int(palace_id))
     return ids
 
@@ -199,34 +203,58 @@ def _build_review_cards_from_rollups(
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
         due_count = int(projection.get("due_node_count") or 0)
-        if due_count <= 0:
+        reinforcement_count = int(projection.get("reinforcement_due_count") or 0)
+        if due_count <= 0 and reinforcement_count <= 0:
             continue
         overdue = int(projection.get("overdue_node_count") or 0)
         palace_title = resolve_palace_title(palace)
-        label = projection.get("review_entry_label") or "开始复习"
-        mode = projection.get("review_entry_mode") or "palace"
-        branch = projection.get("primary_branch_title")
-        subtitle = label
-        if mode == "node" and branch:
-            subtitle = f"{label} · {branch}"
-        cards.append(
-            _action_card(
-                card_id=f"review:palace:{palace.id}",
-                content_type=CONTENT_TYPE_REVIEW,
-                action_kind="review",
-                title=f"{'节点复习' if mode == 'node' else '正式复习'}：{palace_title}",
-                subtitle=subtitle,
-                href=f"/review/session/{palace.id}",
-                priority=110 if overdue else 100,
-                reason=f"{overdue} 个逾期节点" if overdue else "今天有到期节点",
-                palace=palace,
-                extra={
-                    "palace_id": palace.id,
-                    "due_node_count": due_count,
-                    "review_entry_mode": mode,
-                },
+        if due_count > 0:
+            label = projection.get("review_entry_label") or "开始复习"
+            mode = projection.get("review_entry_mode") or "palace"
+            branch = projection.get("primary_branch_title")
+            subtitle = label
+            if mode == "node" and branch:
+                subtitle = f"{label} · {branch}"
+            cards.append(
+                _action_card(
+                    card_id=f"review:palace:{palace.id}",
+                    content_type=CONTENT_TYPE_REVIEW,
+                    action_kind="review",
+                    title=f"{'节点复习' if mode == 'node' else '正式复习'}：{palace_title}",
+                    subtitle=subtitle,
+                    href=f"/review/session/{palace.id}",
+                    priority=110 if overdue else 100,
+                    reason=f"{overdue} 个逾期节点" if overdue else "今天有到期节点",
+                    palace=palace,
+                    extra={
+                        "palace_id": palace.id,
+                        "due_node_count": due_count,
+                        "review_entry_mode": mode,
+                    },
+                )
             )
-        )
+        if reinforcement_count > 0:
+            # Same-day reinforcement is a separate track from formal due; still
+            # surface it in freestyle so weak cards are not only on /review.
+            cards.append(
+                _action_card(
+                    card_id=f"review:reinforcement:{palace.id}",
+                    content_type=CONTENT_TYPE_REVIEW,
+                    action_kind="review",
+                    title=f"本轮补刷：{palace_title}",
+                    subtitle=f"忘记/困难后的队尾补刷 · 待复习 {reinforcement_count} 张",
+                    href="/review",
+                    priority=115,
+                    reason=f"{reinforcement_count} 个节点待本轮补刷",
+                    palace=palace,
+                    extra={
+                        "palace_id": palace.id,
+                        "due_node_count": reinforcement_count,
+                        "review_entry_mode": "reinforcement",
+                        "reinforcement_due_count": reinforcement_count,
+                    },
+                )
+            )
     return cards
 
 

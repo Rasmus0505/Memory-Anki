@@ -21,7 +21,16 @@ export function isActionCard(card: FreestyleCard | null | undefined): card is Fr
 export function isMindMapBranchCard(
   card: FreestyleCard | null | undefined,
 ): card is FreestyleMindMapBranchCard {
-  return card?.type === 'mindmap_branch'
+  return card?.type === 'mindmap_branch' || card?.type === 'anki_card'
+}
+
+export function isAnkiPresentationCard(
+  card: FreestyleCard | null | undefined,
+): card is FreestyleMindMapBranchCard {
+  return (
+    isMindMapBranchCard(card) &&
+    (card.presentation === 'anki' || card.type === 'anki_card')
+  )
 }
 
 export function stringListsEqual(left: string[], right: string[]) {

@@ -46,7 +46,9 @@ export function useQuizAttemptOrchestration({
   const handleChoiceSelect = useCallback(
     (question: PalaceQuizQuestion, optionId: string, correctOverride?: boolean) => {
       const currentState = adapter.readQuestionState(question.id)
-      if (currentState.resolved) return
+      // Skip duplicate handling when already resolved, unless the caller explicitly
+      // supplies correctOverride (freestyle resolves UI state first in the same click).
+      if (currentState.resolved && correctOverride === undefined) return
       const correct = correctOverride ?? question.answer_payload.correct_option_id === optionId
       onChoiceStart?.({ question, optionId, correct })
       void recordPalaceQuizChoiceAttemptApi(question.id, optionId)

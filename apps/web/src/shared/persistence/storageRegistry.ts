@@ -139,6 +139,13 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Review queue sort mode (due / node count / overdue / title).',
   },
   {
+    id: 'clientPreference.freestyleFeedConfig',
+    key: 'memory-anki.freestyle.feed-config.v1',
+    area: 'localStorage',
+    owner: 'modules/practice',
+    purpose: 'Legacy freestyle immersive feed config before backend preference migration.',
+  },
+  {
     id: 'clientPreference.dashboardDurationFilter',
     key: 'memory_anki_dashboard_total_duration_filter',
     area: 'localStorage',

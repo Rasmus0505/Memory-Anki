@@ -405,6 +405,8 @@ export interface ClientPreferences {
   palace_shelf_view_settings: Record<string, unknown> | null
   review_queue_view_settings: Record<string, unknown> | null
   time_record_tags: Array<Record<string, unknown>> | null
+  /** Immersive freestyle queue settings; shared across PWA and desktop via backend. */
+  freestyle_feed_config: Record<string, unknown> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

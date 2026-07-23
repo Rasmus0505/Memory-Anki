@@ -7,7 +7,15 @@ import {
   type KeyboardEvent,
   type UIEvent,
 } from 'react'
-import { History, RefreshCw, Settings2, SkipForward, Undo2 } from 'lucide-react'
+import {
+  EyeOff,
+  History,
+  RefreshCw,
+  Settings2,
+  SkipForward,
+  Undo2,
+  Waypoints,
+} from 'lucide-react'
 import { FreestyleFeedSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleFeedSettingsDialog'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
@@ -41,8 +49,13 @@ export default function ImmersiveFreestylePage() {
   const reducedMotion = usePrefersReducedMotion()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const queueRef = useRef<FreestyleCard[]>([])
-  const autoAdvanceTimerRef = useRef<number | null>(null)
-  const pauseAutoAdvanceRef = useRef(false)
+  const programmaticScrollRef = useRef(false)
+  /**
+   * When set to an index, the next matching `currentIndex` effect will scrollTo.
+   * Finger/wheel scroll only updates index and leaves this null so we never fight the gesture.
+   */
+  const requestedScrollIndexRef = useRef<number | null>(null)
+  const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [ratingMode, setRatingMode] = useState(true)
@@ -61,6 +74,8 @@ export default function ImmersiveFreestylePage() {
     refreshQueue,
     reshuffleQueue,
     completeCard,
+    acknowledgeCard,
+    dropStaleCard,
     skipCurrent,
     skipToNextPalace,
     undoLastSkip,
@@ -101,6 +116,8 @@ export default function ImmersiveFreestylePage() {
     timer,
     reducedMotion,
     promptForAiOptions,
+    // Avoid restoring prior choice states that disable options on reappearance.
+    freshAttemptStates: true,
     updateFeedQuestion: () => {
       // Question payload updates are optional for immersive queue cards.
     },
@@ -117,60 +134,119 @@ export default function ImmersiveFreestylePage() {
     timer.start({ source: 'page_enter' })
   }, [isActive, timer])
 
+  // New round / reshuffle clears completed bookkeeping; reset local ack set too.
+  // Intentionally omit completedIds: mid-round membership must not rebuild the ack set
+  // (settlement may still be in flight after a local ack).
   useEffect(() => {
-    const node = scrollRef.current
-    if (!node) return
-    const targetTop = currentIndex * node.clientHeight
-    node.scrollTo({
-      top: targetTop,
-      behavior: reducedMotion ? 'auto' : 'smooth',
-    })
-  }, [currentIndex, reducedMotion, cards.length])
+    acknowledgedCardIdsRef.current = new Set(queueState.completedIds)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on new round
+  }, [queueState.roundId])
 
-  const clearAutoAdvance = useCallback(() => {
-    if (autoAdvanceTimerRef.current != null) {
-      window.clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-  }, [])
-
-  const scheduleAdvance = useCallback(() => {
-    clearAutoAdvance()
-    if (reducedMotion || pauseAutoAdvanceRef.current) {
-      goToIndex(currentIndex + 1)
-      return
-    }
-    autoAdvanceTimerRef.current = window.setTimeout(() => {
-      if (!pauseAutoAdvanceRef.current) {
-        goToIndex(currentIndex + 1)
-      }
-    }, 800)
-  }, [clearAutoAdvance, currentIndex, goToIndex, reducedMotion])
-
-  const handleBranchComplete = useCallback(
-    (cardId: string) => {
-      if (saveError) return
-      completeCard(cardId)
-      scheduleAdvance()
+  const scrollToIndex = useCallback(
+    (index: number, behavior?: ScrollBehavior) => {
+      const node = scrollRef.current
+      if (!node || !node.clientHeight) return
+      programmaticScrollRef.current = true
+      node.scrollTo({
+        top: index * node.clientHeight,
+        behavior: behavior ?? (reducedMotion ? 'auto' : 'smooth'),
+      })
+      window.setTimeout(() => {
+        programmaticScrollRef.current = false
+      }, reducedMotion ? 50 : 420)
     },
-    [completeCard, saveError, scheduleAdvance],
+    [reducedMotion],
   )
 
-  const handleQuizResolved = useCallback(
-    (card: FreestyleQuizCard) => {
-      completeCard(card.id)
-      scheduleAdvance()
+  /**
+   * Navigate the feed index. Programmatic scroll only when `scroll` is true
+   * (keyboard / 下一题). Finger/wheel scroll only updates index — never fights
+   * the gesture with a second scrollTo / snap takeover.
+   */
+  const navigateToIndex = useCallback(
+    (index: number, options?: { scroll?: boolean }) => {
+      const max = Math.max(0, cards.length - 1)
+      const next = Math.max(0, Math.min(index, max))
+      if (options?.scroll !== false) {
+        // Same index: React may bail out of setState; still align the viewport.
+        if (next === currentIndex) {
+          scrollToIndex(next)
+          return
+        }
+        requestedScrollIndexRef.current = next
+      }
+      goToIndex(next)
     },
-    [completeCard, scheduleAdvance],
+    [cards.length, currentIndex, goToIndex, scrollToIndex],
+  )
+
+  useEffect(() => {
+    if (requestedScrollIndexRef.current !== currentIndex) return
+    requestedScrollIndexRef.current = null
+    scrollToIndex(currentIndex)
+  }, [currentIndex, scrollToIndex])
+
+  const acknowledgeQuizCard = useCallback(
+    (card: FreestyleQuizCard) => {
+      if (acknowledgedCardIdsRef.current.has(card.id)) return
+      acknowledgedCardIdsRef.current.add(card.id)
+      // Keep the card in the feed so analysis stays visible and swipe-back works.
+      // User advances manually (swipe / 下一题) — never auto-jump after answer.
+      acknowledgeCard(card.id)
+    },
+    [acknowledgeCard],
+  )
+
+  const handleBranchComplete = useCallback(
+    (cardId: string, options?: { restudy?: boolean }) => {
+      if (saveError) return
+      // Successful FSRS only: marks completedIds + silent rebuild; stay on card.
+      // Weak ratings (restudy) skip completedIds; never auto-flip to the next unit.
+      completeCard(cardId, options)
+    },
+    [completeCard, saveError],
+  )
+
+  const handleStaleDrop = useCallback(
+    (cardId: string) => {
+      // Do not mark completed — still-due units must stay eligible (vs Insights queue).
+      dropStaleCard(cardId)
+    },
+    [dropStaleCard],
   )
 
   const onChoiceResolve = useCallback(
     (card: FreestyleQuizCard, optionId: string, isCorrect: boolean) => {
       handleChoiceResolve(card, optionId, isCorrect)
-      handleQuizResolved(card)
+      acknowledgeQuizCard(card)
     },
-    [handleChoiceResolve, handleQuizResolved],
+    [acknowledgeQuizCard, handleChoiceResolve],
   )
+
+  const onShortAnswerSubmit = useCallback(
+    (card: FreestyleQuizCard) => {
+      handleShortAnswerSubmit(card)
+      acknowledgeQuizCard(card)
+    },
+    [acknowledgeQuizCard, handleShortAnswerSubmit],
+  )
+
+  // Non-choice types (true/false, fill, match, …) resolve only via onStateChange.
+  useEffect(() => {
+    const card = cards[currentIndex]
+    if (!card || !isQuizCard(card)) return
+    if (acknowledgedCardIdsRef.current.has(card.id)) return
+    const state = progress.questionStates[card.question.id]
+    if (!state?.resolved) return
+    // Multiple-choice / short-answer already handled in their explicit handlers.
+    if (
+      card.question.question_type === 'multiple_choice' ||
+      card.question.question_type === 'short_answer'
+    ) {
+      return
+    }
+    acknowledgeQuizCard(card)
+  }, [acknowledgeQuizCard, cards, currentIndex, progress.questionStates])
 
   const mounted = useMemo(
     () => visibleMountIndices(currentIndex, cards.length),
@@ -190,6 +266,7 @@ export default function ImmersiveFreestylePage() {
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
+      if (programmaticScrollRef.current) return
       const element = event.currentTarget
       if (!element.clientHeight || cards.length === 0) return
       const nextIndex = Math.max(
@@ -197,9 +274,12 @@ export default function ImmersiveFreestylePage() {
         Math.min(cards.length - 1, Math.round(element.scrollTop / element.clientHeight)),
       )
       timer.registerActivity('practice_interaction', { source: 'freestyle_scroll' })
-      if (nextIndex !== currentIndex) goToIndex(nextIndex)
+      if (nextIndex !== currentIndex) {
+        // Index only — do not call scrollTo; CSS snap + the user's gesture own the viewport.
+        navigateToIndex(nextIndex, { scroll: false })
+      }
     },
-    [cards.length, currentIndex, goToIndex, timer],
+    [cards.length, currentIndex, navigateToIndex, timer],
   )
 
   const handleKeyDown = useCallback(
@@ -213,18 +293,18 @@ export default function ImmersiveFreestylePage() {
       }
       if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
         event.preventDefault()
-        goToIndex(currentIndex + 1)
+        navigateToIndex(currentIndex + 1)
       }
       if (event.key === 'ArrowUp' || event.key === 'PageUp') {
         event.preventDefault()
-        goToIndex(currentIndex - 1)
+        navigateToIndex(currentIndex - 1)
       }
       if (event.key === 's' || event.key === 'S') {
         event.preventDefault()
         skipCurrent()
       }
     },
-    [currentIndex, goToIndex, skipCurrent],
+    [currentIndex, navigateToIndex, skipCurrent],
   )
 
   const mindmapCount = cards.filter(isMindMapBranchCard).length
@@ -233,22 +313,20 @@ export default function ImmersiveFreestylePage() {
     (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
   ).length
 
+  const hudActionClass =
+    'inline-flex size-10 shrink-0 items-center justify-center rounded-full text-zinc-200 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-9'
+
   return (
     <TooltipProvider>
       <div
         className={cn(
-          'relative max-w-full overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
+          'relative max-w-full overflow-hidden text-zinc-50',
+          // Soft stage: one continuous dark field so card chrome does not float on flat black.
+          'bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(52,211,153,0.08),transparent_45%),linear-gradient(180deg,#0c0d10_0%,#09090b_100%)]',
           // Bottom nav (~4.5rem) + shell padding (~1rem) + safe area; keep the feed fully on-screen.
-          'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] min-h-0 rounded-lg lg:h-[calc(100vh-88px)]',
+          'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] min-h-0 rounded-xl border border-white/5 shadow-2xl lg:h-[calc(100vh-88px)]',
         )}
         onKeyDown={handleKeyDown}
-        onPointerDown={() => {
-          pauseAutoAdvanceRef.current = true
-          clearAutoAdvance()
-        }}
-        onPointerUp={() => {
-          pauseAutoAdvanceRef.current = false
-        }}
         tabIndex={-1}
       >
         <FreestyleFeedSettingsDialog
@@ -271,61 +349,70 @@ export default function ImmersiveFreestylePage() {
           onOpenChange={setHistoryOpen}
         />
 
-        {/* Compact top HUD — single bar so it does not wrap over the card */}
-        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-center gap-1.5 px-2 py-2 sm:px-3">
-          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-full border border-white/10 bg-zinc-950/90 px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur">
-            <span className="shrink-0 font-medium text-emerald-200">随心</span>
-            <span className="shrink-0 text-zinc-600">·</span>
-            <span className="shrink-0 tabular-nums text-zinc-300">
-              {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
-            </span>
-            <span className="hidden shrink-0 text-zinc-600 sm:inline">·</span>
-            <span className="hidden min-w-0 truncate text-zinc-400 sm:inline">
-              导图{mindmapCount} · 题{quizCount}
-              {resolvedQuiz > 0 ? ` · 已答${resolvedQuiz}` : ''}
-            </span>
-            <span className="ml-auto shrink-0 tabular-nums text-zinc-400">
-              {formatTimer(timer.effectiveSeconds)}
-            </span>
-            <button
-              type="button"
-              className={cn(
-                'shrink-0 rounded-full px-2 py-1 text-[11px]',
-                ratingMode ? 'bg-amber-300/20 text-amber-100' : 'text-zinc-400',
-              )}
-              onClick={() => setRatingMode((value) => !value)}
-            >
-              评分{ratingMode ? '开' : '关'}
-            </button>
-            <button
-              type="button"
-              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
-              title="刷新队列"
-              onClick={refreshQueue}
-            >
-              <RefreshCw className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
-              title="历史"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
-              title="设置"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings2 className="size-3.5" />
-            </button>
+        {/* Compact top HUD — single bar; roomy hit targets on PWA, denser on desktop */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-2 sm:px-3 sm:pt-2.5">
+          <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1.5 py-1 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2">
+              <span className="shrink-0 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-200">
+                随心
+              </span>
+              <span className="shrink-0 tabular-nums text-sm text-zinc-100">
+                {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
+              </span>
+              <span className="hidden min-w-0 truncate text-xs text-zinc-500 md:inline">
+                导图 {mindmapCount} · 题 {quizCount}
+                {resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''}
+              </span>
+              <span className="ml-auto shrink-0 tabular-nums text-xs text-zinc-400 sm:text-sm">
+                {formatTimer(timer.effectiveSeconds)}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1 sm:gap-1 sm:pl-1.5">
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex h-10 shrink-0 items-center rounded-full px-2.5 text-xs font-medium sm:h-9 sm:px-2.5',
+                  ratingMode
+                    ? 'bg-amber-300/20 text-amber-50'
+                    : 'text-zinc-400 hover:bg-white/10 hover:text-zinc-200',
+                )}
+                onClick={() => setRatingMode((value) => !value)}
+              >
+                评分{ratingMode ? '开' : '关'}
+              </button>
+              <button
+                type="button"
+                className={hudActionClass}
+                title="刷新队列"
+                aria-label="刷新队列"
+                onClick={refreshQueue}
+              >
+                <RefreshCw className="size-4" />
+              </button>
+              <button
+                type="button"
+                className={hudActionClass}
+                title="历史"
+                aria-label="历史"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="size-4" />
+              </button>
+              <button
+                type="button"
+                className={hudActionClass}
+                title="设置"
+                aria-label="设置"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings2 className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
 
         {saveError ? (
-          <div className="absolute left-1/2 top-16 z-30 -translate-x-1/2 rounded-full border border-rose-400/30 bg-rose-950/90 px-4 py-2 text-xs text-rose-100">
+          <div className="absolute left-1/2 top-[4.25rem] z-30 max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-2xl border border-rose-400/30 bg-rose-950/95 px-4 py-2.5 text-sm text-rose-100 shadow-lg">
             {saveError}
             <button
               type="button"
@@ -387,6 +474,9 @@ export default function ImmersiveFreestylePage() {
               onSwitchMode={() => undefined}
               onReshuffle={reshuffleQueue}
               onOpenSettings={() => setSettingsOpen(true)}
+              completedCount={queueState.completedIds.length}
+              mutedCount={queueState.mutedPalaceIds.length}
+              hiddenCount={queueState.hiddenIds.length}
             />
           ) : (
             cards.map((card, index) => {
@@ -402,7 +492,11 @@ export default function ImmersiveFreestylePage() {
               return (
                 <div
                   key={card.id}
-                  className="box-border flex h-full min-h-full flex-col snap-start snap-always px-2 pb-16 pt-12 sm:px-3 sm:pb-20 sm:pt-14"
+                  className={cn(
+                    'box-border flex h-full min-h-full flex-col snap-start snap-always',
+                    // Leave clear space for HUD + bottom action dock / PWA bottom nav — not map center.
+                    'px-2 pb-[5.5rem] pt-[3.75rem] sm:px-3 sm:pb-20 sm:pt-14',
+                  )}
                 >
                   {isMindMapBranchCard(card) ? (
                     <FreestyleMindMapBranchCardView
@@ -411,6 +505,7 @@ export default function ImmersiveFreestylePage() {
                       ratingMode={ratingMode}
                       onToggleRatingMode={() => setRatingMode((value) => !value)}
                       onBranchComplete={handleBranchComplete}
+                      onStaleDrop={handleStaleDrop}
                       onSaveFailed={(message) => {
                         setSaveError(message)
                         toast.error(message)
@@ -427,11 +522,13 @@ export default function ImmersiveFreestylePage() {
                         onChoiceResolve(card, optionId, isCorrect)
                       }
                       onShortAnswerSubmit={() => {
-                        handleShortAnswerSubmit(card)
-                        handleQuizResolved(card)
+                        onShortAnswerSubmit(card)
                       }}
                       onRequestShortAnswerFeedback={() => {
                         void handleShortAnswerFeedback(card)
+                      }}
+                      onRequestNext={() => {
+                        navigateToIndex(index + 1)
                       }}
                     />
                   ) : (
@@ -445,49 +542,63 @@ export default function ImmersiveFreestylePage() {
           )}
         </div>
 
-        {/* Desktop right / mobile thumb actions — sit above bottom nav, not over the map center */}
+        {/* One glass action dock: desktop mid-right, PWA bottom-right above nav — not scattered pills */}
         <div
           className={cn(
-            'pointer-events-none absolute z-20 flex flex-col gap-2',
+            'pointer-events-none absolute z-20',
             'right-3 top-1/2 -translate-y-1/2',
-            'max-lg:bottom-2 max-lg:right-2 max-lg:top-auto max-lg:translate-y-0 max-lg:flex-row max-lg:flex-wrap max-lg:justify-end',
+            'max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
           )}
         >
-          <button
-            type="button"
-            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-2.5 text-zinc-100 shadow-lg backdrop-blur max-lg:p-2"
-            title="跳过"
-            onClick={skipCurrent}
+          <div
+            className={cn(
+              'pointer-events-auto flex flex-col gap-1 rounded-2xl border border-white/12 bg-zinc-950/90 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-md',
+              'max-lg:flex-row max-lg:items-center',
+            )}
           >
-            <SkipForward className="size-4" />
-          </button>
-          <button
-            type="button"
-            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-2.5 py-1.5 text-[11px] text-zinc-100 shadow-lg backdrop-blur"
-            title="下个宫殿：跳过本宫殿剩余全部内容"
-            onClick={skipToNextPalace}
-          >
-            下个宫殿
-          </button>
-          {canUndoSkip ? (
             <button
               type="button"
-              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-2.5 text-zinc-100 shadow-lg backdrop-blur max-lg:p-2"
-              title="撤销跳过"
-              onClick={undoLastSkip}
+              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-10"
+              title="跳过当前"
+              aria-label="跳过当前"
+              onClick={skipCurrent}
             >
-              <Undo2 className="size-4" />
+              <SkipForward className="size-5 sm:size-4" />
             </button>
-          ) : null}
-          {currentCard ? (
             <button
               type="button"
-              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-2.5 py-1.5 text-[11px] text-zinc-300 shadow-lg backdrop-blur"
-              onClick={muteCurrentPalace}
+              className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
+              title="下个宫殿：本宫殿剩余内容移到队尾"
+              aria-label="下个宫殿"
+              onClick={skipToNextPalace}
             >
-              少看此宫殿
+              <Waypoints className="size-4 shrink-0" />
+              <span className="leading-none">下个</span>
             </button>
-          ) : null}
+            {canUndoSkip ? (
+              <button
+                type="button"
+                className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-10"
+                title="撤销跳过"
+                aria-label="撤销跳过"
+                onClick={undoLastSkip}
+              >
+                <Undo2 className="size-5 sm:size-4" />
+              </button>
+            ) : null}
+            {currentCard ? (
+              <button
+                type="button"
+                className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 hover:text-zinc-100 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
+                title="少看此宫殿"
+                aria-label="少看此宫殿"
+                onClick={muteCurrentPalace}
+              >
+                <EyeOff className="size-4 shrink-0" />
+                <span className="leading-none">少看</span>
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </TooltipProvider>

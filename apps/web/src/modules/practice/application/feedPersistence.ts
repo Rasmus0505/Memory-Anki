@@ -12,24 +12,29 @@ import {
   type FreestyleSkipState,
 } from '../domain/queueState'
 import type { FreestyleFeedConfig } from '@/shared/api/contracts'
+import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
+
+export const FREESTYLE_FEED_CONFIG_UPDATED_EVENT = 'memory-anki-freestyle-feed-config-change'
+
+const feedConfigStore = createPersistentPreferenceStore<FreestyleFeedConfig>({
+  cacheKey: 'freestyle_feed_config',
+  defaultValue: DEFAULT_FREESTYLE_FEED_CONFIG,
+  localStorageKey: FREESTYLE_FEED_CONFIG_STORAGE_KEY,
+  sanitize: sanitizeFreestyleFeedConfig,
+  updatedEvent: FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+  isValidCache: (value): value is FreestyleFeedConfig => Boolean(value && typeof value === 'object'),
+})
 
 export function readFreestyleFeedConfig(): FreestyleFeedConfig {
-  if (typeof window === 'undefined') return DEFAULT_FREESTYLE_FEED_CONFIG
-  try {
-    const raw = window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)
-    if (!raw) return DEFAULT_FREESTYLE_FEED_CONFIG
-    return sanitizeFreestyleFeedConfig(JSON.parse(raw))
-  } catch {
-    return DEFAULT_FREESTYLE_FEED_CONFIG
-  }
+  return feedConfigStore.read()
 }
 
 export function saveFreestyleFeedConfig(config: FreestyleFeedConfig) {
-  const sanitized = sanitizeFreestyleFeedConfig(config)
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY, JSON.stringify(sanitized))
-  }
-  return sanitized
+  return feedConfigStore.write(config)
+}
+
+export function resetFreestyleFeedConfig() {
+  return feedConfigStore.reset()
 }
 
 export function readQueueState(): FreestyleSkipState {

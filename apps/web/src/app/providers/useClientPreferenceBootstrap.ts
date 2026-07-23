@@ -9,9 +9,13 @@ import {
   PALACE_SHELF_VIEW_SETTINGS_KEY,
 } from '@/modules/settings/public'
 import {
+  DEFAULT_FREESTYLE_FEED_CONFIG,
   DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
+  FREESTYLE_FEED_CONFIG_STORAGE_KEY,
+  FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   isReviewQueueViewSettings,
   REVIEW_QUEUE_VIEW_SETTINGS_KEY,
+  sanitizeFreestyleFeedConfig,
 } from '@/modules/practice/public'
 import {
   DEFAULT_ENGLISH_PRACTICE_SETTINGS,
@@ -126,6 +130,13 @@ export async function bootstrapClientPreferences() {
       DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
       isReviewQueueViewSettings,
     ),
+    migrateAndNotify(
+      'freestyle_feed_config',
+      FREESTYLE_FEED_CONFIG_STORAGE_KEY,
+      DEFAULT_FREESTYLE_FEED_CONFIG,
+      sanitizeFreestyleFeedConfig,
+      FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+    ),
   ]
 
   const hadLegacyLocalState =
@@ -137,7 +148,8 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY))
+    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))
 
   await Promise.all(migrations)
 
@@ -150,7 +162,8 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY))
+    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY)) ||
+    Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))
 
   if (hadLegacyLocalState && !hasRemainingLegacyLocalState) {
     toast.success('关键个人设置已迁移到后端保存，改代码和切版本时会更稳。')

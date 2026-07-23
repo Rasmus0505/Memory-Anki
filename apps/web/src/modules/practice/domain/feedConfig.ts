@@ -11,20 +11,24 @@ export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-con
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   content: {
     mindmap_branch: true,
+    anki_card: true,
     quiz_question: true,
   },
   weights: {
     mindmap_branch: 2,
+    anki_card: 2,
     quiz_question: 1,
   },
   palace_order: 'finish_palace_then_next',
   within_palace_order: 'tree_order',
-  due_policy: 'due_first_then_expand',
+  // Mind-map cards are formal-due only; expand still fills with quizzes when enabled.
+  due_policy: 'due_only',
   node_limit: 12,
   queue_length: 20,
   specific_palace_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
+  include_calendar_today_due: false,
   seed: 17,
 }
 
@@ -60,8 +64,8 @@ function asWithinOrder(value: unknown): FreestyleWithinPalaceOrder {
 }
 
 function asDuePolicy(value: unknown): FreestyleDuePolicy {
-  if (value === 'due_only' || value === 'all_content_due_weighted') return value
-  return 'due_first_then_expand'
+  if (value === 'due_first_then_expand' || value === 'all_content_due_weighted') return value
+  return 'due_only'
 }
 
 function asQuestionType(value: unknown): FreestyleQuestionTypeFilter {
@@ -85,18 +89,22 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
   const contentRaw = raw.content && typeof raw.content === 'object' ? (raw.content as Record<string, unknown>) : {}
   const weightsRaw = raw.weights && typeof raw.weights === 'object' ? (raw.weights as Record<string, unknown>) : {}
   let mindmap = asBoolean(contentRaw.mindmap_branch, true)
+  let anki = asBoolean(contentRaw.anki_card, true)
   let quiz = asBoolean(contentRaw.quiz_question, true)
-  if (!mindmap && !quiz) {
+  if (!mindmap && !anki && !quiz) {
     mindmap = true
+    anki = true
     quiz = true
   }
   return {
     content: {
       mindmap_branch: mindmap,
+      anki_card: anki,
       quiz_question: quiz,
     },
     weights: {
       mindmap_branch: asInt(weightsRaw.mindmap_branch, 2, 0, 20),
+      anki_card: asInt(weightsRaw.anki_card, 2, 0, 20),
       quiz_question: asInt(weightsRaw.quiz_question, 1, 0, 20),
     },
     palace_order: asPalaceOrder(raw.palace_order),
@@ -107,6 +115,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     specific_palace_ids: asIdList(raw.specific_palace_ids),
     question_type: asQuestionType(raw.question_type),
     weak_quiz_priority: asBoolean(raw.weak_quiz_priority, true),
+    include_calendar_today_due: asBoolean(raw.include_calendar_today_due, false),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
   }
 }

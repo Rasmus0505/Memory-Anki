@@ -469,13 +469,14 @@ def test_all_weighted_is_not_an_alias_of_due_first():
 
     due = BranchUnit(1, "due", (), ("due",), 1, 0)
     fill = BranchUnit(1, "fill", (), ("fill",), 1, 0)
+    fill_quiz = QuizCandidate(30, 1, (), 0.9, "stable", {"id": 30, "palace_id": 1})
     common = {
         "palace_meta": {1: {"title": "P"}},
         "units_by_palace": {1: [due, fill]},
         "due_by_palace": {1: {"due"}},
         "mastery_by_palace": {1: 0.5},
         "recent_practice_rank": {},
-        "quizzes": [],
+        "quizzes": [fill_quiz],
     }
     due_first = assemble_queue(
         config=sanitize_feed_config({"due_policy": "due_first_then_expand"}),
@@ -485,9 +486,35 @@ def test_all_weighted_is_not_an_alias_of_due_first():
         config=sanitize_feed_config({"due_policy": "all_content_due_weighted"}),
         **common,
     )
+    # Mind-map fill units without due nodes are never emitted (formal review only).
+    assert all(
+        card.get("type") != "mindmap_branch" or card.get("due_node_count", 0) > 0
+        for card in due_first.cards + weighted.cards
+    )
+    # due_first keeps fill quizzes in phase2; weighted folds everything into phase1.
     assert due_first.phase_stats["phase2_count"] == 1
     assert weighted.phase_stats["phase2_count"] == 0
     assert weighted.phase_stats["phase1_count"] == 2
+    assert sum(1 for card in due_first.cards if card["type"] == "mindmap_branch") == 1
+    assert sum(1 for card in weighted.cards if card["type"] == "mindmap_branch") == 1
+
+
+def test_mindmap_cards_require_due_nodes():
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
+
+    fill_only = BranchUnit(1, "fill", (), ("f1", "f2"), 2, 0)
+    result = assemble_queue(
+        config=sanitize_feed_config({"due_policy": "due_first_then_expand", "queue_length": 10}),
+        palace_meta={1: {"title": "P"}},
+        units_by_palace={1: [fill_only]},
+        due_by_palace={1: set()},
+        mastery_by_palace={1: 0.5},
+        recent_practice_rank={},
+        quizzes=[],
+        operation_id="op-no-due",
+    )
+    assert result.cards == []
+    assert result.phase_stats["fill_unit_count"] == 1
 
 
 def test_sanitize_feed_config_bounds():
@@ -505,3 +532,14 @@ def test_sanitize_feed_config_bounds():
     # Both disabled → re-enable both
     assert config["content"]["mindmap_branch"] is True
     assert config["content"]["quiz_question"] is True
+    assert config["include_calendar_today_due"] is False
+
+
+def test_sanitize_feed_config_calendar_today_opt_in():
+    assert sanitize_feed_config({}).get("include_calendar_today_due") is False
+    assert (
+        sanitize_feed_config({"include_calendar_today_due": True})[
+            "include_calendar_today_due"
+        ]
+        is True
+    )

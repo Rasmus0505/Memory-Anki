@@ -64,7 +64,19 @@ def build_freestyle_queue(
             seed=int(config["seed"]),
         )
         try:
-            due_by_palace[palace_id] = set(list_due_nodes(session, palace_id))
+            # Freestyle treats formal due and available same-day reinforcement as one
+            # actionable set so weak-rated cards reappear in the immersive stream.
+            # Optional: formal nodes due later today (local calendar) when configured.
+            due_by_palace[palace_id] = set(
+                list_due_nodes(
+                    session,
+                    palace_id,
+                    include_reinforcement=True,
+                    include_calendar_today_due=bool(
+                        config.get("include_calendar_today_due")
+                    ),
+                )
+            )
         except ValueError:
             due_by_palace[palace_id] = set()
         try:
@@ -121,6 +133,11 @@ def build_freestyle_queue(
                     "title": str(question.get("palace_title") or f"宫殿 {palace_id}"),
                 }
 
+    nodes_by_palace = {
+        int(tree["palace_id"]): tree.get("nodes") or {}
+        for tree in trees
+    }
+
     result = assemble_queue(
         config=config,
         palace_meta=palace_meta,
@@ -132,6 +149,7 @@ def build_freestyle_queue(
         completed_ids=completed_ids or [],
         hidden_ids=hidden_ids or [],
         operation_id=op_id,
+        nodes_by_palace=nodes_by_palace,
     )
 
     return {
@@ -141,6 +159,7 @@ def build_freestyle_queue(
         "phase_stats": result.phase_stats,
         "counts": {
             "mindmap_branch": sum(1 for card in result.cards if card.get("type") == "mindmap_branch"),
+            "anki_card": sum(1 for card in result.cards if card.get("type") == "anki_card"),
             "quiz_question": sum(1 for card in result.cards if card.get("type") == "quiz_question"),
             "total": len(result.cards),
         },

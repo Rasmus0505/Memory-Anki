@@ -287,6 +287,32 @@ class FreestyleRouteTests(RouterTestCase):
             )
         )
 
+    def test_feed_surfaces_reinforcement_only_palace(self):
+        past = utc_now_naive() - timedelta(minutes=5)
+        with self.SessionLocal() as session:
+            row = (
+                session.query(ReviewNodeState)
+                .filter_by(palace_id=self.palace_id, node_uid="a")
+                .one()
+            )
+            row.schedule_source = "reinforcement"
+            row.schedule_reason = "reinforcement_r1_batch"
+            row.due_at = past
+            row.raw_due_at = past + timedelta(days=3)
+            session.commit()
+
+        response = self.client.get("/api/v1/freestyle/feed?content_types=review&range=due")
+        self.assertEqual(response.status_code, 200)
+        cards = response.json()["cards"]
+        reinforcement = [
+            card
+            for card in cards
+            if card.get("id") == f"review:reinforcement:{self.palace_id}"
+        ]
+        self.assertEqual(len(reinforcement), 1)
+        self.assertIn("本轮补刷", reinforcement[0]["title"])
+        self.assertEqual(reinforcement[0]["review_entry_mode"], "reinforcement")
+
     def test_wrong_range_returns_only_wrong_quiz_cards(self):
         with self.SessionLocal() as session:
             wrong_question = session.query(PalaceQuizQuestion).filter_by(stem="细胞宫殿题").one()

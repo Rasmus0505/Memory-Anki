@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 DEFAULT_MINDMAP_WEIGHT = 2
+DEFAULT_ANKI_WEIGHT = 2
 DEFAULT_QUIZ_WEIGHT = 1
 DEFAULT_NODE_LIMIT = 12
 DEFAULT_QUEUE_LENGTH = 20
@@ -84,9 +85,11 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     raw_weights = data.get("weights")
     weights: dict[str, Any] = raw_weights if isinstance(raw_weights, dict) else {}
     mindmap_enabled = _as_bool(content.get("mindmap_branch"), True)
+    anki_enabled = _as_bool(content.get("anki_card"), True)
     quiz_enabled = _as_bool(content.get("quiz_question"), True)
-    if not mindmap_enabled and not quiz_enabled:
+    if not mindmap_enabled and not anki_enabled and not quiz_enabled:
         mindmap_enabled = True
+        anki_enabled = True
         quiz_enabled = True
 
     palace_order = str(data.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
@@ -97,9 +100,11 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     if within_palace_order not in WITHIN_PALACE_ORDERS:
         within_palace_order = WITHIN_PALACE_TREE
 
-    due_policy = str(data.get("due_policy") or DUE_POLICY_DUE_FIRST)
+    # Default due_only: freestyle mind-map cards are formal FSRS units only
+    # (no zero-due practice fill). Expand policies still only emit due mindmaps.
+    due_policy = str(data.get("due_policy") or DUE_POLICY_DUE_ONLY)
     if due_policy not in DUE_POLICIES:
-        due_policy = DUE_POLICY_DUE_FIRST
+        due_policy = DUE_POLICY_DUE_ONLY
 
     question_type = str(data.get("question_type") or "all")
     if question_type not in QUESTION_TYPES:
@@ -108,12 +113,19 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     return {
         "content": {
             "mindmap_branch": mindmap_enabled,
+            "anki_card": anki_enabled,
             "quiz_question": quiz_enabled,
         },
         "weights": {
             "mindmap_branch": _as_int(
                 weights.get("mindmap_branch"),
                 DEFAULT_MINDMAP_WEIGHT,
+                minimum=0,
+                maximum=20,
+            ),
+            "anki_card": _as_int(
+                weights.get("anki_card"),
+                DEFAULT_ANKI_WEIGHT,
                 minimum=0,
                 maximum=20,
             ),
@@ -134,11 +146,17 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "specific_palace_ids": _as_positive_ids(data.get("specific_palace_ids")),
         "question_type": question_type,
         "weak_quiz_priority": _as_bool(data.get("weak_quiz_priority"), True),
+        # Default off: freestyle stays clock-due only unless user opts into
+        # local-calendar "due later today" nodes.
+        "include_calendar_today_due": _as_bool(
+            data.get("include_calendar_today_due"), False
+        ),
         "seed": _as_int(data.get("seed"), DEFAULT_SEED, minimum=1, maximum=2_147_483_647),
     }
 
 
 __all__ = [
+    "DEFAULT_ANKI_WEIGHT",
     "DEFAULT_MINDMAP_WEIGHT",
     "DEFAULT_NODE_LIMIT",
     "DEFAULT_QUEUE_LENGTH",

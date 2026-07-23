@@ -8,6 +8,7 @@ export {
 } from './domain/feedConfig'
 export {
   createOperationId,
+  FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   readFreestyleFeedConfig,
   readQueueState,
   saveFreestyleFeedConfig,
@@ -17,16 +18,24 @@ export {
   DEFAULT_QUEUE_STATE,
   FREESTYLE_QUEUE_STATE_STORAGE_KEY,
   UNDO_SKIP_WINDOW_MS,
+  applyDeferredPalaceOrder,
   applySkip,
   cardPalaceId,
+  deferPalace,
   filterMutedPalaces,
   findNextPalaceIndex,
   markCompleted,
+  mergeQueuePreservingHistory,
   mergeRefreshQueue,
   moveCardToTail,
+  moveRemainingPalaceToTail,
   mutePalace,
+  needsRestudyAfterRatings,
+  placeRestudyCardAtTail,
+  resolveRebuildIndex,
+  resolveRestudyPreferCardId,
   sanitizeQueueState,
-  skipRemainingPalaceCards,
+  startNewRound,
   undoSkip,
   visibleMountIndices,
   type FreestyleSkipState,
@@ -37,6 +46,7 @@ export * from './ui/review/api'
 export * from './ui/review/components/FsrsCompletionDialog'
 export * from './ui/review/components/MasteryDeltaBadge'
 export * from './ui/review/components/MindMapRatingHistoryDrawer'
+export * from './ui/review/components/PalaceCalibrationDrawer'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/ReviewLoadForecastCard'
 export * from './ui/review/hooks/useMindMapRecallRatings'

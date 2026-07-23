@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientPreferences } from '@/shared/api/contracts'
-import {
-  getClientPreferencesApi,
-  updateClientPreferencesApi,
-} from '@/modules/settings/public'
 import { toast } from '@/shared/feedback/toast'
 import {
   BREAK_GUARD_STORAGE_KEY,
@@ -11,13 +7,10 @@ import {
   DEFAULT_BREAK_GUARD_CONFIG,
   sanitizeBreakGuardConfig,
 } from '@/shared/components/session/break-guard-config'
+import { FREESTYLE_FEED_CONFIG_STORAGE_KEY } from '@/modules/practice/domain/feedConfig'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { bootstrapClientPreferences } from './useClientPreferenceBootstrap'
-
-vi.mock('@/modules/settings/public', () => ({
-  getClientPreferencesApi: vi.fn(),
-  updateClientPreferencesApi: vi.fn(),
-}))
+import * as clientPreferencesApi from '@/modules/settings/domain/preferences-entity/api/clientPreferencesApi'
 
 vi.mock('@/shared/feedback/toast', () => ({
   toast: {
@@ -25,8 +18,6 @@ vi.mock('@/shared/feedback/toast', () => ({
   },
 }))
 
-const mockGetClientPreferencesApi = vi.mocked(getClientPreferencesApi)
-const mockUpdateClientPreferencesApi = vi.mocked(updateClientPreferencesApi)
 const mockToast = vi.mocked(toast)
 
 function emptyPreferences(): ClientPreferences {
@@ -43,6 +34,7 @@ function emptyPreferences(): ClientPreferences {
     palace_shelf_view_settings: null,
     review_queue_view_settings: null,
     time_record_tags: null,
+    freestyle_feed_config: null,
   }
 }
 
@@ -50,7 +42,16 @@ describe('bootstrapClientPreferences', () => {
   beforeEach(() => {
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
-    vi.clearAllMocks()
+    vi.restoreAllMocks()
+    vi.spyOn(clientPreferencesApi, 'getClientPreferencesApi').mockResolvedValue({
+      items: emptyPreferences(),
+    })
+    vi.spyOn(clientPreferencesApi, 'updateClientPreferencesApi').mockImplementation(async (data) => ({
+      items: {
+        ...emptyPreferences(),
+        ...data,
+      },
+    }))
   })
 
   it('migrates legacy break guard localStorage without replacing it with defaults', async () => {
@@ -69,13 +70,6 @@ describe('bootstrapClientPreferences', () => {
     const expectedConfig = sanitizeBreakGuardConfig(legacyConfig)
     const events: unknown[] = []
 
-    mockGetClientPreferencesApi.mockResolvedValue({ items: emptyPreferences() })
-    mockUpdateClientPreferencesApi.mockImplementation(async (data) => ({
-      items: {
-        ...emptyPreferences(),
-        ...data,
-      },
-    }))
     window.localStorage.setItem(BREAK_GUARD_STORAGE_KEY, JSON.stringify(legacyConfig))
     window.addEventListener(BREAK_GUARD_UPDATED_EVENT, (event) => {
       events.push(event instanceof CustomEvent ? event.detail : null)
@@ -84,7 +78,7 @@ describe('bootstrapClientPreferences', () => {
     await bootstrapClientPreferences()
 
     expect(expectedConfig).not.toEqual(DEFAULT_BREAK_GUARD_CONFIG)
-    expect(mockUpdateClientPreferencesApi).toHaveBeenCalledWith(
+    expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
       expect.objectContaining({
         break_guard_config: expectedConfig,
       }),
@@ -92,5 +86,36 @@ describe('bootstrapClientPreferences', () => {
     expect(events).toContainEqual(expectedConfig)
     expect(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)).toBeNull()
     expect(mockToast.success).toHaveBeenCalledWith('关键个人设置已迁移到后端保存，改代码和切版本时会更稳。')
+  })
+
+  it('migrates legacy freestyle feed config into client preferences', async () => {
+    const legacyConfig = {
+      content: { mindmap_branch: true, quiz_question: false },
+      weights: { mindmap_branch: 3, quiz_question: 0 },
+      palace_order: 'interleave_palaces',
+      within_palace_order: 'tree_order',
+      due_policy: 'due_only',
+      node_limit: 8,
+      queue_length: 15,
+      specific_palace_ids: [3],
+      question_type: 'all',
+      weak_quiz_priority: false,
+      seed: 42,
+    }
+    window.localStorage.setItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY, JSON.stringify(legacyConfig))
+
+    await bootstrapClientPreferences()
+
+    expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        freestyle_feed_config: expect.objectContaining({
+          node_limit: 8,
+          queue_length: 15,
+          seed: 42,
+          content: { mindmap_branch: true, quiz_question: false },
+        }),
+      }),
+    )
+    expect(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)).toBeNull()
   })
 })

@@ -18,6 +18,7 @@ export function FreestyleQuizCardView({
   onChoiceResolve,
   onShortAnswerSubmit,
   onRequestShortAnswerFeedback,
+  onRequestNext,
 }: {
   card: FreestyleQuizCard
   state: QuizRuntimeState | undefined
@@ -26,6 +27,8 @@ export function FreestyleQuizCardView({
   onChoiceResolve: (optionId: string, isCorrect: boolean) => void
   onShortAnswerSubmit: () => void
   onRequestShortAnswerFeedback: () => void
+  /** Immersive feed: explicit next after reading analysis. */
+  onRequestNext?: () => void
 }) {
   const palaceTitle = card.palace_context.resolved_title || card.palace_context.title
   const segmentNames = card.segment_contexts?.map((segment) => segment.name).filter(Boolean).join('、')
@@ -35,15 +38,15 @@ export function FreestyleQuizCardView({
   const isIncorrect = state?.correct === false
   const isResolved = state?.resolved === true
   return (
-    <div className="mx-auto flex min-h-[min(760px,calc(100vh-140px))] w-full max-w-[calc(100vw-3rem)] flex-col justify-center px-0 py-16 sm:max-w-4xl sm:px-4">
+    <div className="mx-auto flex h-full w-full max-w-4xl flex-col justify-center py-2 sm:py-4">
       <div
         className={cn(
-          'rounded-2xl border bg-zinc-900/82 p-4 text-zinc-50 shadow-[0_8px_40px_rgba(0,0,0,0.6)] backdrop-blur-md sm:p-6',
+          'rounded-2xl border bg-zinc-900/88 p-4 text-zinc-50 shadow-[0_12px_40px_rgba(0,0,0,0.4)] backdrop-blur-md sm:p-6',
           isResolved && isCorrect
-            ? 'border-emerald-500/30 shadow-[0_0_24px_rgba(16,185,129,0.12),0_8px_40px_rgba(0,0,0,0.6)]'
+            ? 'border-emerald-500/30 shadow-[0_0_24px_rgba(16,185,129,0.12),0_12px_40px_rgba(0,0,0,0.4)]'
             : isResolved && isIncorrect
-              ? 'border-red-500/30 shadow-[0_0_24px_rgba(239,68,68,0.12),0_8px_40px_rgba(0,0,0,0.6)]'
-              : 'border-white/10',
+              ? 'border-red-500/30 shadow-[0_0_24px_rgba(239,68,68,0.12),0_12px_40px_rgba(0,0,0,0.4)]'
+              : 'border-white/12',
         )}
       >
         {accent ? (
@@ -80,7 +83,7 @@ export function FreestyleQuizCardView({
         <div className="mt-5 whitespace-pre-wrap text-xl font-semibold leading-8 sm:text-2xl">
           {card.question.stem}
         </div>
-        <div className="mt-6">
+        <div className="freestyle-quiz-interaction mt-6 text-zinc-100 [&_button]:border-white/15 [&_button]:bg-white/5 [&_button:hover]:bg-white/10 [&_.text-muted-foreground]:text-zinc-400 [&_.bg-background\/70]:bg-zinc-950/70 [&_.border-border\/70]:border-white/15">
           <QuizQuestionInteraction
             question={card.question}
             state={state}
@@ -91,6 +94,17 @@ export function FreestyleQuizCardView({
             onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
           />
         </div>
+        {isResolved && onRequestNext ? (
+          <div className="mt-5 flex justify-stretch sm:justify-end">
+            <button
+              type="button"
+              className="min-h-11 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20 sm:w-auto"
+              onClick={onRequestNext}
+            >
+              下一题
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   )

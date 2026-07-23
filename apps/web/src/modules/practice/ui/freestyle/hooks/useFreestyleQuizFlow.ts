@@ -45,6 +45,12 @@ export function useFreestyleQuizFlow({
   reducedMotion,
   promptForAiOptions,
   updateFeedQuestion,
+  /**
+   * Immersive freestyle: do not restore prior choice/short-answer runtime states.
+   * Historical localStorage answers were locking options (unable to re-answer) while
+   * still showing cards. Keep a separate historical set only for the「已做过」badge.
+   */
+  freshAttemptStates = false,
 }: {
   mode: FreestyleMode
   queueRef: MutableRefObject<FreestyleCard[]>
@@ -52,10 +58,22 @@ export function useFreestyleQuizFlow({
   reducedMotion: boolean
   promptForAiOptions: PromptForAiOptions
   updateFeedQuestion: (question: FreestyleQuizCard['question']) => void
+  freshAttemptStates?: boolean
 }) {
-  const [progress, setProgress] = useState<FreestyleProgressSnapshot>(() =>
-    mode === 'today' ? readTodayTrainingProgress() : readFreestyleProgress(),
-  )
+  const historicalAnsweredIdsRef = useRef<Set<number>>(new Set())
+  const [progress, setProgress] = useState<FreestyleProgressSnapshot>(() => {
+    const stored =
+      mode === 'today' ? readTodayTrainingProgress() : readFreestyleProgress()
+    if (!freshAttemptStates) return stored
+    historicalAnsweredIdsRef.current = new Set(stored.resolvedQuestionIds)
+    return {
+      ...DEFAULT_FREESTYLE_PROGRESS,
+      // Session-local streak; historical resolved ids are badge-only (ref above).
+      correctStreak: 0,
+      resolvedQuestionIds: [],
+      questionStates: {},
+    }
+  })
   const previousResolvedQuestionIdsRef = useRef<Set<number>>(
     new Set(progress.resolvedQuestionIds),
   )
@@ -67,12 +85,26 @@ export function useFreestyleQuizFlow({
       setProgress((current) => {
         const next = updater(current)
         if (next === current) return current
-        return mode === 'today'
-          ? saveTodayTrainingProgress(next)
-          : saveFreestyleProgress(next)
+        if (mode === 'today') {
+          return saveTodayTrainingProgress(next)
+        }
+        if (freshAttemptStates) {
+          // Merge session answers into historical badge set; never re-lock options
+          // by persisting resolved questionStates for immersive freestyle.
+          const mergedIds = new Set(historicalAnsweredIdsRef.current)
+          next.resolvedQuestionIds.forEach((id) => mergedIds.add(id))
+          historicalAnsweredIdsRef.current = mergedIds
+          saveFreestyleProgress({
+            ...next,
+            resolvedQuestionIds: Array.from(mergedIds),
+            questionStates: {},
+          })
+          return next
+        }
+        return saveFreestyleProgress(next)
       })
     },
-    [mode],
+    [freshAttemptStates, mode],
   )
 
   const resetRuntimeRefs = useCallback((nextProgress: FreestyleProgressSnapshot) => {
@@ -158,14 +190,26 @@ export function useFreestyleQuizFlow({
       },
     )
     if (!confirmed) return
+    if (freshAttemptStates) {
+      historicalAnsweredIdsRef.current = new Set()
+    }
     const nextProgress =
       mode === 'today'
         ? saveTodayTrainingProgress(DEFAULT_FREESTYLE_PROGRESS)
         : saveFreestyleProgress(DEFAULT_FREESTYLE_PROGRESS)
     previousResolvedQuestionIdsRef.current = new Set(nextProgress.resolvedQuestionIds)
     emittedMilestonesRef.current = new Set()
-    setProgress(nextProgress)
-  }, [mode])
+    setProgress(
+      freshAttemptStates
+        ? {
+            ...DEFAULT_FREESTYLE_PROGRESS,
+            correctStreak: 0,
+            resolvedQuestionIds: [],
+            questionStates: {},
+          }
+        : nextProgress,
+    )
+  }, [freshAttemptStates, mode])
 
   useEffect(() => {
     const previousResolvedIds = previousResolvedQuestionIdsRef.current
@@ -233,10 +277,14 @@ export function useFreestyleQuizFlow({
     reducedMotion,
   ])
 
-  const answeredQuestionIds = useMemo(
-    () => new Set(progress.resolvedQuestionIds),
-    [progress.resolvedQuestionIds],
-  )
+  const answeredQuestionIds = useMemo(() => {
+    if (!freshAttemptStates) {
+      return new Set(progress.resolvedQuestionIds)
+    }
+    const merged = new Set(historicalAnsweredIdsRef.current)
+    progress.resolvedQuestionIds.forEach((id) => merged.add(id))
+    return merged
+  }, [freshAttemptStates, progress.resolvedQuestionIds])
 
   return {
     progress,

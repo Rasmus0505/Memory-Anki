@@ -83,20 +83,32 @@ export function FreestyleEmptyState({
   onSwitchMode,
   onReshuffle,
   onOpenSettings,
+  completedCount = 0,
+  mutedCount = 0,
+  hiddenCount = 0,
 }: {
   mode: FreestyleMode
   onSwitchMode: (mode: FreestyleMode) => void
   onReshuffle: () => void
   onOpenSettings: () => void
+  /** Local round filters — explain why Insights can still show due palaces. */
+  completedCount?: number
+  mutedCount?: number
+  hiddenCount?: number
 }) {
+  const filteredRound = completedCount > 0 || mutedCount > 0 || hiddenCount > 0
+  const freeTitle = filteredRound ? '本轮随心已刷完或被过滤' : '这组暂时刷空了'
+  const freeDescription = filteredRound
+    ? `洞察「今日复习」是全库宫殿到期列表；随心会排除本轮已完成${completedCount ? `（${completedCount}）` : ''}、跳过隐藏${hiddenCount ? `（${hiddenCount}）` : ''}和「少看」宫殿${mutedCount ? `（${mutedCount}）` : ''}。点「再来一轮」可重新拉取仍到期的单位。`
+    : '当前筛选下没有可展示的到期导图/题目。可改设置范围，或到洞察打开宫殿正式复习。'
   return (
     <section className="flex h-full snap-start items-center justify-center px-4">
       <EmptyState
-        title={mode === 'today' ? '今天暂时没有可训练内容' : '这组暂时刷空了'}
+        title={mode === 'today' ? '今天暂时没有可训练内容' : freeTitle}
         description={
           mode === 'today'
             ? '到期复习、需练习和可补足题卡都暂时为空。'
-            : '当前筛选没有可展示的随心卡，换个范围或重洗队列再来一轮。'
+            : freeDescription
         }
         action={
           <div>
@@ -107,22 +119,24 @@ export function FreestyleEmptyState({
                 </Button>
               ) : (
                 <>
-                  <Button type="button" variant="secondary" onClick={onReshuffle}>
+                  <Button type="button" onClick={onReshuffle}>
                     <Shuffle className="size-4" />
-                    重洗
+                    再来一轮
                   </Button>
-                  <Button type="button" onClick={onOpenSettings}>
+                  <Button type="button" variant="secondary" onClick={onOpenSettings}>
                     <SlidersHorizontal className="size-4" />
                     设置
                   </Button>
                 </>
               )}
               <Button asChild variant="outline">
-                <Link to="/palaces/new">{mode === 'today' ? '新建宫殿' : '记忆宫殿'}</Link>
+                <Link to={mode === 'today' ? '/palaces/new' : '/review'}>
+                  {mode === 'today' ? '新建宫殿' : '今日复习'}
+                </Link>
               </Button>
             </div>
             <p className="mt-3 text-xs text-zinc-600">
-              提示：在设置中开启更多题型或扩大内容范围，可以让随心队列更丰富。
+              提示：再来一轮会清空本轮已完成/隐藏（保留「少看」宫殿），与洞察到期列表重新对齐。
             </p>
           </div>
         }

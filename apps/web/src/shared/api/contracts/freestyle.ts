@@ -26,10 +26,13 @@ export type FreestyleWithinPalaceOrder = 'tree_order' | 'deterministic_shuffle'
 export interface FreestyleFeedConfig {
   content: {
     mindmap_branch: boolean
+    /** Anki-style front/back cards from marked palace nodes. */
+    anki_card: boolean
     quiz_question: boolean
   }
   weights: {
     mindmap_branch: number
+    anki_card: number
     quiz_question: number
   }
   palace_order: FreestylePalaceOrder
@@ -40,6 +43,8 @@ export interface FreestyleFeedConfig {
   specific_palace_ids: number[]
   question_type: FreestyleQuestionTypeFilter
   weak_quiz_priority: boolean
+  /** When true, formal nodes due later today (local calendar) enter freestyle before clock due. */
+  include_calendar_today_due: boolean
   seed: number
 }
 
@@ -48,16 +53,24 @@ export interface FreestyleContextPathItem {
   text: string
 }
 
+export type FreestyleMindMapPresentation = 'palace' | 'anki'
+
 export interface FreestyleMindMapBranchCard {
   id: string
-  type: 'mindmap_branch'
-  content_type: 'mindmap_branch'
+  type: 'mindmap_branch' | 'anki_card'
+  content_type: 'mindmap_branch' | 'anki_card'
+  /** How the freestyle card should render: palace flip vs Anki front/back. */
+  presentation?: FreestyleMindMapPresentation
   palace_id: number
   palace_title?: string
   branch_uid: string
   context_path: FreestyleContextPathItem[]
   ratable_node_uids: string[]
   due_node_uids: string[]
+  /** Anki: front node uid when presentation is anki. */
+  anki_front_uid?: string
+  /** Anki: back node uids for multi-placeholder reveal. */
+  anki_back_uids?: string[]
   node_count: number
   over_limit_delta: number
   due_node_count?: number

@@ -8,6 +8,11 @@ export type FreestyleSkipState = {
   hiddenIds: string[]
   completedIds: string[]
   mutedPalaceIds: number[]
+  /**
+   * Palaces deferred via「下个宫殿」. Incomplete cards for these palaces are
+   * kept at the tail after local reorder and after queue rebuilds.
+   */
+  deferredPalaceIds: number[]
   lastSkippedId: string | null
   lastSkippedAt: number | null
 }
@@ -20,6 +25,7 @@ export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
   hiddenIds: [],
   completedIds: [],
   mutedPalaceIds: [],
+  deferredPalaceIds: [],
   lastSkippedId: null,
   lastSkippedAt: null,
 }
@@ -33,6 +39,21 @@ export function createQueueRoundState(seed = 17, now = Date.now()): FreestyleSki
     roundId: `freestyle-round-${now}`,
     startedAt: now,
     seed,
+  }
+}
+
+/**
+ * Start a fresh freestyle round: clear completed / hidden / skip / deferred so
+ * still-due units can reappear. Keeps muted palaces (user preference).
+ */
+export function startNewRound(
+  state: FreestyleSkipState,
+  seed = state.seed,
+  now = Date.now(),
+): FreestyleSkipState {
+  return {
+    ...createQueueRoundState(seed, now),
+    mutedPalaceIds: [...state.mutedPalaceIds],
   }
 }
 
@@ -87,6 +108,7 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
     hiddenIds: asStringList(raw.hiddenIds),
     completedIds: asStringList(raw.completedIds),
     mutedPalaceIds: asIdList(raw.mutedPalaceIds),
+    deferredPalaceIds: asIdList(raw.deferredPalaceIds),
     lastSkippedId: typeof raw.lastSkippedId === 'string' ? raw.lastSkippedId : null,
     lastSkippedAt:
       typeof raw.lastSkippedAt === 'number' && Number.isFinite(raw.lastSkippedAt)
@@ -97,7 +119,7 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
 
 export function cardPalaceId(card: FreestyleCard | null | undefined): number | null {
   if (!card) return null
-  if (card.type === 'mindmap_branch') return card.palace_id
+  if (card.type === 'mindmap_branch' || card.type === 'anki_card') return card.palace_id
   if (card.type === 'quiz_question') return card.palace_context?.id ?? null
   return card.palace_context?.id ?? null
 }
@@ -160,6 +182,28 @@ export function markCompleted(state: FreestyleSkipState, cardId: string): Freest
   }
 }
 
+/**
+ * Keep already-viewed (completed) cards that are still in the local feed when a
+ * refresh arrives, so swipe-back still shows the real previous card with analysis.
+ * New incoming cards append after preserved ones (deduped by id).
+ */
+export function mergeQueuePreservingHistory(
+  previous: FreestyleCard[],
+  incoming: FreestyleCard[],
+  completedIds: Iterable<string>,
+): FreestyleCard[] {
+  const completed = new Set(
+    Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
+  )
+  if (completed.size === 0) return incoming
+  const incomingIds = new Set(incoming.map((card) => card.id))
+  const preserved = previous.filter(
+    (card) => completed.has(card.id) && !incomingIds.has(card.id),
+  )
+  if (preserved.length === 0) return incoming
+  return [...preserved, ...incoming]
+}
+
 export function mutePalace(state: FreestyleSkipState, palaceId: number): FreestyleSkipState {
   if (state.mutedPalaceIds.includes(palaceId)) return state
   return {
@@ -175,6 +219,53 @@ export function moveCardToTail(cards: FreestyleCard[], cardId: string): Freestyl
   const [card] = next.splice(index, 1)
   next.push(card)
   return next
+}
+
+/**
+ * After a weak rating pass, put the unit at the end of the current queue so the
+ * rest of the feed is finished first (end-of-batch restudy).
+ */
+export function placeRestudyCardAtTail(
+  cards: FreestyleCard[],
+  cardId: string,
+): FreestyleCard[] {
+  return moveCardToTail(cards, cardId)
+}
+
+/**
+ * True when this formal pass still has 忘记/困难 scores that need another restudy
+ * pass before graduating to long-interval FSRS.
+ */
+export function needsRestudyAfterRatings(
+  ratingCounts:
+    | Partial<Record<'忘记' | '困难' | '记得' | '轻松' | 'forgot' | 'hard', number>>
+    | null
+    | undefined,
+): boolean {
+  if (!ratingCounts) return false
+  const weak =
+    Number(ratingCounts['忘记'] ?? ratingCounts.forgot ?? 0) +
+    Number(ratingCounts['困难'] ?? ratingCounts.hard ?? 0)
+  return weak > 0
+}
+
+/**
+ * Prefer card id after a weak-rating settle.
+ *
+ * Always stays on the restudied unit — freestyle never auto-flips after rating.
+ * (Queue tail reordering for end-of-batch restudy is handled separately when the
+ * learner has already left the unit.)
+ */
+export function resolveRestudyPreferCardId(args: {
+  previousCards: ReadonlyArray<{ id: string }>
+  nextCards: ReadonlyArray<{ id: string }>
+  restudyCardId: string
+  completedIds?: Iterable<string>
+}): string | null {
+  const { nextCards, restudyCardId } = args
+  if (!restudyCardId) return null
+  if (nextCards.some((card) => card.id === restudyCardId)) return restudyCardId
+  return null
 }
 
 export function filterMutedPalaces(cards: FreestyleCard[], mutedPalaceIds: number[]): FreestyleCard[] {
@@ -209,26 +300,108 @@ export function findNextPalaceIndex(
 }
 
 /**
- * Drop the current card and every later card from the same palace so the queue
- * lands on the next palace (or becomes empty if none remain).
+ * Record a palace as deferred (「下个宫殿」). Later rebuilds keep its incomplete
+ * cards at the tail. Re-deferring moves it to the end of the defer list.
  */
-export function skipRemainingPalaceCards(
+export function deferPalace(state: FreestyleSkipState, palaceId: number): FreestyleSkipState {
+  if (!Number.isInteger(palaceId) || palaceId <= 0) return state
+  const rest = state.deferredPalaceIds.filter((id) => id !== palaceId)
+  return {
+    ...state,
+    deferredPalaceIds: [...rest, palaceId],
+  }
+}
+
+/**
+ * Keep incomplete cards of deferred palaces at the tail (in defer order).
+ * Completed cards stay where they are so swipe-back history is preserved.
+ */
+export function applyDeferredPalaceOrder(
+  cards: FreestyleCard[],
+  deferredPalaceIds: number[],
+  completedIds: Iterable<string> = [],
+): FreestyleCard[] {
+  if (!cards.length || !deferredPalaceIds.length) return cards
+  const completed = new Set(
+    Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
+  )
+  const deferredSet = new Set(deferredPalaceIds)
+  const front: FreestyleCard[] = []
+  const buckets = new Map<number, FreestyleCard[]>()
+  deferredPalaceIds.forEach((id) => buckets.set(id, []))
+
+  cards.forEach((card) => {
+    const palaceId = cardPalaceId(card)
+    if (
+      palaceId != null &&
+      deferredSet.has(palaceId) &&
+      !completed.has(card.id)
+    ) {
+      buckets.get(palaceId)?.push(card)
+      return
+    }
+    front.push(card)
+  })
+
+  const tail: FreestyleCard[] = []
+  deferredPalaceIds.forEach((id) => {
+    const bucket = buckets.get(id)
+    if (bucket?.length) tail.push(...bucket)
+  })
+  if (!tail.length) return cards
+  return [...front, ...tail]
+}
+
+/**
+ * Move the current card and every later card from the same palace to the tail
+ * so the queue lands on the next palace. Earlier cards (history) stay put.
+ *
+ * When no other palace remains in the queue, remaining cards of this palace are
+ * removed from the local feed (still tracked via deferredPalaceIds so rebuilds
+ * put them last instead of reappearing at the front).
+ */
+export function moveRemainingPalaceToTail(
   cards: FreestyleCard[],
   currentIndex: number,
-): { cards: FreestyleCard[]; nextIndex: number } {
-  if (!cards.length) return { cards: [], nextIndex: 0 }
+): { cards: FreestyleCard[]; nextIndex: number; deferredPalaceId: number | null } {
+  if (!cards.length) return { cards: [], nextIndex: 0, deferredPalaceId: null }
   const clamped = Math.max(0, Math.min(currentIndex, cards.length - 1))
   const currentPalace = cardPalaceId(cards[clamped])
   if (currentPalace == null) {
     const nextIndex = Math.min(clamped + 1, Math.max(0, cards.length - 1))
-    return { cards, nextIndex }
+    return { cards, nextIndex, deferredPalaceId: null }
   }
-  const next = cards.filter((card, index) => {
-    if (index < clamped) return true
-    return cardPalaceId(card) !== currentPalace
+
+  const head: FreestyleCard[] = []
+  const deferred: FreestyleCard[] = []
+  const rest: FreestyleCard[] = []
+  cards.forEach((card, index) => {
+    if (index < clamped) {
+      head.push(card)
+      return
+    }
+    if (cardPalaceId(card) === currentPalace) {
+      deferred.push(card)
+      return
+    }
+    rest.push(card)
   })
-  const nextIndex = Math.min(clamped, Math.max(0, next.length - 1))
-  return { cards: next, nextIndex: next.length === 0 ? 0 : nextIndex }
+
+  // No other palace left: drop remaining same-palace cards for now (deferred list
+  // will restore them at the tail on the next rebuild).
+  if (rest.length === 0) {
+    return {
+      cards: head,
+      nextIndex: head.length === 0 ? 0 : Math.min(clamped, head.length - 1),
+      deferredPalaceId: currentPalace,
+    }
+  }
+
+  return {
+    cards: [...head, ...rest, ...deferred],
+    nextIndex: head.length,
+    deferredPalaceId: currentPalace,
+  }
 }
 
 export function mergeRefreshQueue(
@@ -246,4 +419,43 @@ export function visibleMountIndices(currentIndex: number, total: number) {
     if (index >= 0 && index < total) indices.add(index)
   }
   return indices
+}
+
+/**
+ * After a silent queue rebuild, pick the index that follows the user.
+ *
+ * `preferCardId` (just-finished card) only wins when the user is still on that
+ * card. If they already swiped away before the rebuild resolved, keep their card.
+ */
+export function resolveRebuildIndex(args: {
+  nextCards: ReadonlyArray<{ id: string }>
+  preferCardId?: string | null
+  userCardId?: string | null
+  fallbackIndex: number
+}): number {
+  const { nextCards, preferCardId, userCardId, fallbackIndex } = args
+  if (!nextCards.length) return 0
+
+  const findIndex = (id: string | null | undefined) => {
+    if (!id) return -1
+    return nextCards.findIndex((card) => card.id === id)
+  }
+
+  // User already left the preferred card — follow them, never yank back.
+  if (preferCardId && userCardId && userCardId !== preferCardId) {
+    const userIdx = findIndex(userCardId)
+    if (userIdx >= 0) return userIdx
+  }
+
+  if (preferCardId) {
+    const preferIdx = findIndex(preferCardId)
+    if (preferIdx >= 0) return preferIdx
+  }
+
+  if (userCardId) {
+    const userIdx = findIndex(userCardId)
+    if (userIdx >= 0) return userIdx
+  }
+
+  return Math.min(Math.max(0, fallbackIndex), nextCards.length - 1)
 }

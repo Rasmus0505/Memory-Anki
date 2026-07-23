@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
+from .anki_cards import collect_anki_cards, resolve_effective_role
 from .branch_units import (
     BranchUnit,
     order_units_within_palace,
@@ -270,12 +271,33 @@ def mindmap_card_payload(
     palace_title: str,
     due_uids: set[str],
     phase: str,
-) -> dict[str, Any]:
+    presentation: str = "palace",
+    anki_front_uid: str | None = None,
+    anki_back_uids: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Build a mind-map queue card, or None when the unit has no actionable nodes.
+
+    Freestyle mind-map cards cover formal FSRS due **and** same-day reinforcement
+    (when those UIDs are present in ``due_uids``). Units without either kind of
+    actionable node are never emitted as practice/fill filler.
+
+    ``presentation`` is ``palace`` (default flip) or ``anki`` (front/back card).
+    """
     due_in_unit = [uid for uid in unit.ratable_node_uids if uid in due_uids]
-    return {
-        "id": unit_key(unit),
-        "type": "mindmap_branch",
-        "content_type": "mindmap_branch",
+    if not due_in_unit:
+        return None
+    is_anki = presentation == "anki"
+    card_type = "anki_card" if is_anki else "mindmap_branch"
+    card_id = (
+        f"anki_card:{unit.palace_id}:{anki_front_uid or unit.branch_uid}"
+        if is_anki
+        else unit_key(unit)
+    )
+    payload: dict[str, Any] = {
+        "id": card_id,
+        "type": card_type,
+        "content_type": card_type,
+        "presentation": "anki" if is_anki else "palace",
         "palace_id": unit.palace_id,
         "palace_title": palace_title,
         "branch_uid": unit.branch_uid,
@@ -293,6 +315,10 @@ def mindmap_card_payload(
             "resolved_title": palace_title,
         },
     }
+    if is_anki:
+        payload["anki_front_uid"] = anki_front_uid or unit.branch_uid
+        payload["anki_back_uids"] = list(anki_back_uids or [])
+    return payload
 
 
 def quiz_card_payload(
@@ -350,6 +376,7 @@ def assemble_queue(
     completed_ids: Iterable[str] = (),
     hidden_ids: Iterable[str] = (),
     operation_id: str = "",
+    nodes_by_palace: Mapping[int, Mapping[str, Mapping[str, Any]]] | None = None,
 ) -> QueueBuildResult:
     completed = {str(item) for item in completed_ids if item}
     hidden = {str(item) for item in hidden_ids if item}
@@ -358,11 +385,16 @@ def assemble_queue(
     palace_order = str(config.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
     queue_length = int(config.get("queue_length") or 20)
     mindmap_enabled = bool((config.get("content") or {}).get("mindmap_branch", True))
+    anki_enabled = bool((config.get("content") or {}).get("anki_card", True))
     quiz_enabled = bool((config.get("content") or {}).get("quiz_question", True))
     weights = config.get("weights") or {}
     mindmap_weight = int(weights.get("mindmap_branch", 2))
+    anki_weight = int(weights.get("anki_card", 2))
     quiz_weight = int(weights.get("quiz_question", 1))
+    # Combine mindmap streams for interleave against quiz.
+    map_stream_weight = max(mindmap_weight, 0) + max(anki_weight, 0)
     weak_priority = bool(config.get("weak_quiz_priority", True))
+    nodes_by_palace = nodes_by_palace or {}
 
     palace_ids = list(palace_meta.keys())
     if palace_order == PALACE_ORDER_INTERLEAVE:
@@ -399,20 +431,67 @@ def assemble_queue(
         )
 
     def unit_cards(units: Sequence[BranchUnit], phase: str) -> list[dict[str, Any]]:
-        if not mindmap_enabled:
+        if not mindmap_enabled and not anki_enabled:
             return []
         cards: list[dict[str, Any]] = []
         for unit in units:
             title = str((palace_meta.get(unit.palace_id) or {}).get("title") or "")
             due_uids = due_by_palace.get(unit.palace_id, set())
-            cards.append(
-                mindmap_card_payload(
+            palace_nodes = nodes_by_palace.get(unit.palace_id) or {}
+            memo: dict[str, str] = {}
+            due_fronts = [
+                uid
+                for uid in unit.ratable_node_uids
+                if uid in due_uids
+                and resolve_effective_role(str(uid), palace_nodes, memo) == "front"
+            ]
+            # Prefer Anki presentation when enabled and unit has due front(s).
+            if anki_enabled and due_fronts and palace_nodes:
+                anki_defs = {
+                    str(item["front_uid"]): item
+                    for item in collect_anki_cards(palace_nodes)
+                }
+                for front_uid in due_fronts:
+                    definition = anki_defs.get(str(front_uid)) or {
+                        "front_uid": front_uid,
+                        "back_uids": [],
+                    }
+                    back_uids = [str(uid) for uid in list(definition.get("back_uids") or [])]
+                    ratable = [str(front_uid), *back_uids]
+                    due_for_card = [uid for uid in ratable if uid in due_uids]
+                    if not due_for_card:
+                        due_for_card = [str(front_uid)]
+                    # Synthetic unit scope for this Anki card.
+                    scoped = replace(
+                        unit,
+                        branch_uid=str(front_uid),
+                        ratable_node_uids=tuple(ratable),
+                        node_count=len(ratable),
+                    )
+                    payload = mindmap_card_payload(
+                        scoped,
+                        palace_title=title,
+                        due_uids=set(due_for_card),
+                        phase=phase,
+                        presentation="anki",
+                        anki_front_uid=str(front_uid),
+                        anki_back_uids=back_uids,
+                    )
+                    if payload is not None:
+                        cards.append(payload)
+                # Avoid double-queue: unit with Anki fronts skips palace flip.
+                continue
+
+            if mindmap_enabled:
+                payload = mindmap_card_payload(
                     unit,
                     palace_title=title,
                     due_uids=due_uids,
                     phase=phase,
+                    presentation="palace",
                 )
-            )
+                if payload is not None:
+                    cards.append(payload)
         return cards
 
     def quiz_cards(items: Sequence[QuizCandidate], phase: str) -> list[dict[str, Any]]:
@@ -447,7 +526,7 @@ def assemble_queue(
             stream = interleave_by_weights(
                 stream,
                 quiz_cards(sort_quiz_candidates(unbound, weak_priority=weak_priority), phase),
-                mindmap_weight=mindmap_weight,
+                mindmap_weight=map_stream_weight or mindmap_weight,
                 quiz_weight=quiz_weight,
                 seed=seed + palace_id,
             )
