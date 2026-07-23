@@ -48,6 +48,7 @@ function mockSettings() {
       palace_shelf_view_settings: null,
       review_queue_view_settings: null,
       time_record_tags: null,
+      freestyle_feed_config: null,
     },
   })
 }

@@ -24,7 +24,7 @@ const TABS: Array<{
     key: 'review',
     to: '/review',
     label: '今日复习',
-    description: '到期队列与当天强化',
+    description: '到期队列与本轮补刷',
     icon: Brain,
     isActive: (pathname) => pathname === '/review' || pathname.startsWith('/review/'),
   },

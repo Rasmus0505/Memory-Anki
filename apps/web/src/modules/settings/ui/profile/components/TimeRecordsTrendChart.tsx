@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import {
   Area,
   AreaChart,
@@ -15,9 +16,25 @@ interface TimeRecordsTrendChartProps {
   trend: DailyTrendPoint[]
 }
 
-export function TimeRecordsTrendChart({
+const formatAxisDuration = (value: number | string) =>
+  formatDuration(Number(value ?? 0))
+
+const trendTooltipContent = (
+  <ChartTooltipContent formatter={(value) => formatDuration(value)} />
+)
+
+function TimeRecordsTrendChartComponent({
   trend,
 }: TimeRecordsTrendChartProps) {
+  // Cap dense ranges so recharts does not recompute hundreds of monotone points.
+  const chartData = useMemo(() => {
+    if (trend.length <= 120) return trend
+    const step = Math.ceil(trend.length / 90)
+    return trend.filter((_, index) => index % step === 0 || index === trend.length - 1)
+  }, [trend])
+
+  const xInterval = chartData.length > 14 ? Math.ceil(chartData.length / 8) - 1 : 0
+
   return (
     <div className="h-[360px] min-h-[360px] min-w-0">
       <ChartContainer
@@ -28,10 +45,11 @@ export function TimeRecordsTrendChart({
           width="100%"
           height="100%"
           minWidth={0}
-          initialDimension={{ width: 1, height: 1 }}
+          initialDimension={{ width: 480, height: 320 }}
+          debounce={80}
         >
           <AreaChart
-            data={trend}
+            data={chartData}
             margin={{ left: 8, right: 16, top: 16, bottom: 8 }}
           >
             <defs>
@@ -64,32 +82,35 @@ export function TimeRecordsTrendChart({
               tickLine={false}
               axisLine={false}
               tickMargin={10}
+              interval={xInterval}
+              minTickGap={28}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={12}
               width={60}
-              tickFormatter={(value) => formatDuration(Number(value ?? 0))}
+              tickFormatter={formatAxisDuration}
+              allowDecimals={false}
             />
             <Tooltip
+              isAnimationActive={false}
               cursor={{
                 stroke: 'rgba(37,99,235,0.18)',
                 strokeWidth: 1,
               }}
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => formatDuration(value)}
-                />
-              }
+              content={trendTooltipContent}
             />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="seconds"
               name="有效时长"
               stroke="var(--color-seconds)"
-              strokeWidth={2.5}
+              strokeWidth={2}
               fill="url(#trendFill)"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={{ r: 4 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -97,3 +118,5 @@ export function TimeRecordsTrendChart({
     </div>
   )
 }
+
+export const TimeRecordsTrendChart = memo(TimeRecordsTrendChartComponent)

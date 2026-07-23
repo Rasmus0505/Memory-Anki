@@ -1,11 +1,10 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   getDashboardApi,
-  getStudyGoalsApi,
+  getDashboardHeatmapApi,
   getWeeklyReportApi,
   renderDashboardPage,
-  saveStudyGoalsApi,
   setupDashboardPageTest,
 } from "@/pages/insights/InsightsPage.test-support";
 
@@ -144,7 +143,7 @@ describe("DashboardPage overview", () => {
     expect(screen.queryByText("最近复盘")).toBeNull();
   });
 
-  it("renders weekly goals and report cards and saves edited goals", async () => {
+  it("renders last-week summary inside the study heatmap card", async () => {
     getDashboardApi.mockResolvedValue({
       due_count: 0,
       reviews: [],
@@ -161,48 +160,42 @@ describe("DashboardPage overview", () => {
       today_new_palace_count: 0,
       today_new_palaces: [],
     });
-    getStudyGoalsApi.mockResolvedValue({
-      weekly_study_minutes: 60,
-      weekly_review_count: 4,
+    getDashboardHeatmapApi.mockResolvedValue({
+      start_date: "2026-01-08",
+      end_date: "2026-07-08",
+      items: [
+        {
+          date: "2026-07-08",
+          study_seconds: 1800,
+          review_count: 2,
+          active: true,
+        },
+      ],
+      current_streak: 3,
+      longest_streak: 10,
+      active_day_count: 42,
     });
-    getWeeklyReportApi.mockImplementation(async (offsetWeeks = 1) => ({
-      week_start: offsetWeeks === 0 ? "2026-07-06" : "2026-06-29",
-      week_end: offsetWeeks === 0 ? "2026-07-12" : "2026-07-05",
-      study_seconds: offsetWeeks === 0 ? 1800 : 7200,
-      review_count: offsetWeeks === 0 ? 2 : 6,
-      average_score: offsetWeeks === 0 ? 0 : 4.5,
-      new_palace_count: offsetWeeks === 0 ? 0 : 3,
-    }));
+    getWeeklyReportApi.mockResolvedValue({
+      week_start: "2026-06-29",
+      week_end: "2026-07-05",
+      study_seconds: 7200,
+      review_count: 6,
+      average_score: 4.5,
+      new_palace_count: 3,
+    });
 
     renderDashboardPage();
 
-    expect(await screen.findByText("本周目标")).toBeTruthy();
-    expect(await screen.findByText("本周 30 / 目标 60 分钟")).toBeTruthy();
-    expect(screen.getByText("本周 2 / 目标 4 次")).toBeTruthy();
-    expect(screen.getByText("上周摘要（2026-06-29 ~ 2026-07-05）")).toBeTruthy();
-    expect(screen.getByText("2小时 0分")).toBeTruthy();
+    expect(await screen.findByText("学习热力图")).toBeTruthy();
+    expect(await screen.findByText(/连续 3 天/)).toBeTruthy();
+    expect(await screen.findByText("上周摘要（2026-06-29 ~ 2026-07-05）")).toBeTruthy();
+    expect(await screen.findByText("2小时 0分")).toBeTruthy();
     expect(screen.getByText("6 次")).toBeTruthy();
     expect(screen.getByText("4.5")).toBeTruthy();
     expect(screen.getByText("3 个")).toBeTruthy();
-    expect(getWeeklyReportApi).toHaveBeenCalledWith(0);
+    expect(screen.queryByText("本周目标")).toBeNull();
     expect(getWeeklyReportApi).toHaveBeenCalledWith(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑学习目标" }));
-    fireEvent.change(screen.getByLabelText("每周学习时长目标"), {
-      target: { value: "45" },
-    });
-    fireEvent.change(screen.getByLabelText("每周复习次数目标"), {
-      target: { value: "5" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => {
-      expect(saveStudyGoalsApi).toHaveBeenCalledWith({
-        weekly_study_minutes: 45,
-        weekly_review_count: 5,
-      });
-    });
-    expect(await screen.findByText("本周 30 / 目标 45 分钟")).toBeTruthy();
+    expect(getWeeklyReportApi).not.toHaveBeenCalledWith(0);
   });
 
   it("shows learning tooltip immediately on hover", async () => {

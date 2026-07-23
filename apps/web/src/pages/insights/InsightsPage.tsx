@@ -16,8 +16,6 @@ import {
 import { DashboardTodayLearningCard } from '@/modules/dashboard/public'
 import { StudyHeatmap } from '@/modules/dashboard/public'
 import { TimeRecordChartCard } from '@/modules/dashboard/public'
-import { WeeklyGoalsCard } from '@/modules/dashboard/public'
-import { WeeklyReportCard } from '@/modules/dashboard/public'
 import {
   DASHBOARD_TOTAL_DURATION_FILTER_STORAGE_KEY,
   createDefaultDurationFilterState,
@@ -191,11 +189,6 @@ export default function Dashboard() {
         durationFilter={normalizedDurationFilter}
         onUpdateDurationFilter={updateDurationFilter}
       />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <WeeklyGoalsCard />
-        <WeeklyReportCard />
-      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         <DashboardTodayLearningCard palaces={data.today_learning_palaces} />

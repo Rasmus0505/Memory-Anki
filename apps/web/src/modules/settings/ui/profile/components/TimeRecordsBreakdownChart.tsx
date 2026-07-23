@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import {
   Bar,
   BarChart,
@@ -22,9 +23,25 @@ interface TimeRecordsBreakdownChartProps {
   breakdown: SessionKindBreakdownItem[]
 }
 
-export function TimeRecordsBreakdownChart({
+const formatAxisDuration = (value: number | string) =>
+  formatDuration(Number(value ?? 0))
+
+const breakdownTooltipContent = (
+  <ChartTooltipContent formatter={(value) => formatDuration(value)} />
+)
+
+function TimeRecordsBreakdownChartComponent({
   breakdown,
 }: TimeRecordsBreakdownChartProps) {
+  const chartData = useMemo(
+    () =>
+      breakdown.map((entry) => ({
+        ...entry,
+        fill: getTimeRecordChartColor(entry.kind),
+      })),
+    [breakdown],
+  )
+
   return (
     <div className="h-[360px] min-h-[360px] min-w-0">
       <ChartContainer
@@ -35,10 +52,11 @@ export function TimeRecordsBreakdownChart({
           width="100%"
           height="100%"
           minWidth={0}
-          initialDimension={{ width: 1, height: 1 }}
+          initialDimension={{ width: 480, height: 320 }}
+          debounce={80}
         >
           <BarChart
-            data={breakdown}
+            data={chartData}
             margin={{ left: 8, right: 16, top: 16, bottom: 8 }}
           >
             <CartesianGrid
@@ -51,32 +69,31 @@ export function TimeRecordsBreakdownChart({
               tickLine={false}
               axisLine={false}
               tickMargin={10}
+              interval={0}
+              minTickGap={16}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={12}
               width={60}
-              tickFormatter={(value) => formatDuration(Number(value ?? 0))}
+              tickFormatter={formatAxisDuration}
+              allowDecimals={false}
             />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => formatDuration(value)}
-                />
-              }
+              content={breakdownTooltipContent}
             />
             <Bar
               dataKey="seconds"
               name="有效时长"
               radius={[12, 12, 6, 6]}
+              isAnimationActive={false}
+              maxBarSize={64}
             >
-              {breakdown.map((entry) => (
-                <Cell
-                  key={entry.kind}
-                  fill={getTimeRecordChartColor(entry.kind)}
-                />
+              {chartData.map((entry) => (
+                <Cell key={entry.kind} fill={entry.fill} />
               ))}
             </Bar>
           </BarChart>
@@ -85,3 +102,5 @@ export function TimeRecordsBreakdownChart({
     </div>
   )
 }
+
+export const TimeRecordsBreakdownChart = memo(TimeRecordsBreakdownChartComponent)
