@@ -1,4 +1,4 @@
-import { BookOpen, ChevronRight, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
+import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
@@ -226,14 +226,22 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
     <div className="space-y-8">
       <PageIntro
         title="学科书架"
-        description="一个学科就是一本书，点击进入后继续查看你熟悉的章节和宫殿列表。"
+        description="一科一书：点击封面进入该学科的宫殿列表。常见科目如中国教育史、外国教育史、英语会各自成册。"
         actions={
-          <Link to="/palaces/new">
-            <Button size="sm">
-              <Plus className="size-4" />
-              新建宫殿
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/knowledge">
+              <Button size="sm" variant="outline">
+                <FolderTree className="size-4" />
+                知识树编辑
+              </Button>
+            </Link>
+            <Link to="/palaces/new">
+              <Button size="sm">
+                <Plus className="size-4" />
+                新建宫殿
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -405,26 +413,43 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
                   )
                 }
                 className="text-left"
+                data-testid="subject-book-card"
               >
-                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 transition-all hover:-translate-y-1 hover:shadow-xl">
+                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 transition-all hover:-translate-y-1.5 hover:shadow-xl">
+                  {/* Book spine + cover wash */}
                   <div
-                    className="absolute inset-y-0 left-0 w-5 rounded-l-xl opacity-90"
-                    style={{ backgroundColor: color }}
+                    className="absolute inset-y-0 left-0 w-4 rounded-l-xl opacity-95 shadow-inner"
+                    style={{
+                      background: `linear-gradient(180deg, ${color} 0%, color-mix(in srgb, ${color} 72%, #0f172a) 100%)`,
+                    }}
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-[0.12]"
+                    style={{
+                      background: `linear-gradient(135deg, ${color} 0%, transparent 55%)`,
+                    }}
                   />
                   <CardContent className={cn('relative flex h-full flex-col justify-between', getShelfCardContentClass(viewSettings.densityMode))}>
                     <div className={getShelfMetaSpacingClass(viewSettings.densityMode)}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div
-                            className="flex size-11 items-center justify-center rounded-lg text-white shadow-sm"
-                            style={{ backgroundColor: color }}
+                            className="relative flex size-14 shrink-0 items-center justify-center rounded-md border border-white/20 text-white shadow-md"
+                            style={{
+                              background: `linear-gradient(160deg, ${color} 0%, color-mix(in srgb, ${color} 55%, #111827) 100%)`,
+                            }}
+                            aria-hidden
                           >
-                            {isUncategorized ? <LibraryBig className="size-5" /> : <BookOpen className="size-5" />}
+                            {isUncategorized ? <LibraryBig className="size-6" /> : <BookOpen className="size-6" />}
+                            <span className="absolute inset-y-1 left-1 w-0.5 rounded-full bg-white/25" />
                           </div>
                           <div>
+                            <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                              {isUncategorized ? 'Unfiled' : 'Subject book'}
+                            </div>
                             <div className={cn('font-semibold text-foreground', getShelfTitleClass(viewSettings.densityMode))}>{title}</div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {isUncategorized ? '尚未归入学科的宫殿' : '点击进入学科详情'}
+                              {isUncategorized ? '尚未归入学科的宫殿' : '点击封面进入本书的宫殿'}
                             </div>
                           </div>
                         </div>
@@ -446,7 +471,7 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
                     <div className="mt-6 flex items-center justify-between gap-3 text-sm">
                       {renderShelfStatusSummary(item)}
                       <span className="inline-flex items-center font-medium text-foreground">
-                        打开
+                        打开书架
                         <ChevronRight className="ml-1 size-4 transition-transform group-hover:translate-x-1" />
                       </span>
                     </div>

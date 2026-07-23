@@ -71,6 +71,12 @@ export function KnowledgeMindMapImportDrawer({
       onBatchStart={mindMapImport.handleBatchImportStart}
       onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
       onBatchMoveImage={mindMapImport.handleMoveBatchImage}
+      manualImportText={mindMapImport.manualImportText}
+      onManualImportTextChange={mindMapImport.setManualImportText}
+      manualImportFileName={mindMapImport.manualImportFileName}
+      manualImportFormatPrompt={mindMapImport.manualImportFormatPrompt}
+      onManualImportParse={mindMapImport.handleManualImportParse}
+      onManualImportFileChange={(event) => void mindMapImport.handleManualImportFileChange(event)}
       onApplyReplace={mindMapImport.handleImportApplyReplace}
       onApplyAppend={mindMapImport.handleImportApplyAppend}
       onUndoLastImport={mindMapImport.handleUndoLastImport}

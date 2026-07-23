@@ -40,10 +40,14 @@ vi.mock('@/modules/content/domain/palace-segment-entity/api', () => ({
   updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
 
-vi.mock('@/modules/settings/public', () => ({
-  getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
-  updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
-}))
+vi.mock('@/modules/settings/public', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/settings/public')>()
+  return {
+    ...actual,
+    getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
+    updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
+  }
+})
 
 const mockUpdateClientPreferencesApi = vi.mocked(updateClientPreferencesApi)
 

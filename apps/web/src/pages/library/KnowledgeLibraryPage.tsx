@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FolderTree, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
@@ -56,9 +56,15 @@ type ChapterDetail = ChapterDetailResponse
 
 export default function Knowledge() {
   const isPwaClient = detectClientSource() === 'pwa'
+  const [searchParams, setSearchParams] = useSearchParams()
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [subjects, setSubjects] = useState<SubjectSummary[]>([])
-  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(() => {
+    const raw = searchParams.get('subjectId')
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  })
   const [subjectName, setSubjectName] = useState('')
   const [subjectColor, setSubjectColor] = useState('#6366f1')
   const [newSubjectName, setNewSubjectName] = useState('')
@@ -173,12 +179,40 @@ export default function Knowledge() {
     defaultTask: 'build',
   })
 
+  const subjectIdFromQuery = useMemo(() => {
+    const raw = searchParams.get('subjectId')
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }, [searchParams])
+
   useEffect(() => {
     void getSubjectsApi().then((items) => {
       setSubjects(items)
-      setSelectedSubjectId((current) => current ?? items[0]?.id ?? null)
+      setSelectedSubjectId((current) => {
+        if (subjectIdFromQuery != null && items.some((item) => item.id === subjectIdFromQuery)) {
+          return subjectIdFromQuery
+        }
+        if (current != null && items.some((item) => item.id === current)) return current
+        return items[0]?.id ?? null
+      })
     })
+    // Only hydrate the subject list once on mount; selection follows subjectIdFromQuery separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot load
   }, [])
+
+  useEffect(() => {
+    if (subjectIdFromQuery == null) return
+    setSelectedSubjectId((current) => (current === subjectIdFromQuery ? current : subjectIdFromQuery))
+  }, [subjectIdFromQuery])
+
+  useEffect(() => {
+    if (selectedSubjectId == null) return
+    if (searchParams.get('subjectId') === String(selectedSubjectId)) return
+    const next = new URLSearchParams(searchParams)
+    next.set('subjectId', String(selectedSubjectId))
+    setSearchParams(next, { replace: true })
+  }, [searchParams, selectedSubjectId, setSearchParams])
 
   useEffect(() => {
     if (!activeSubject) return

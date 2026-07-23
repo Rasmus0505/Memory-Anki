@@ -155,6 +155,14 @@ vi.mock('@/modules/produce/ui/mindmap-import', () => ({
   MindMapImportDrawer: () => null,
 }))
 
+function renderKnowledgePage(initialEntry = '/knowledge') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <KnowledgePage />
+    </MemoryRouter>,
+  )
+}
+
 describe('KnowledgePage mind map host refresh behavior', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -210,6 +218,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     }))
     vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([
       { id: 7, name: '历史', color: '#334155', sort_order: 1 },
+      { id: 9, name: '教育心理学', color: '#2563eb', sort_order: 2 },
     ] as never)
     vi.spyOn(knowledgeApi, 'updateSubjectApi').mockResolvedValue({ ok: true } as never)
     vi.spyOn(knowledgeApi, 'getChapterApi').mockResolvedValue({
@@ -229,7 +238,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       })),
     })
 
-    render(<KnowledgePage />)
+    renderKnowledgePage()
 
     expect(await screen.findByText('knowledge-presentation-viewport-only')).toBeTruthy()
     expect(screen.getByRole('button', { name: '全屏' })).toBeTruthy()
@@ -238,15 +247,25 @@ describe('KnowledgePage mind map host refresh behavior', () => {
   })
 
   it('preserves the existing desktop fullscreen actions', async () => {
-    render(<KnowledgePage />)
+    renderKnowledgePage()
 
     expect(await screen.findByText('knowledge-presentation-native-preferred')).toBeTruthy()
     expect(screen.getByRole('button', { name: '沉浸模式' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '原生全屏' })).toBeTruthy()
   })
 
+  it('opens the subject from the knowledge deep link query', async () => {
+    renderKnowledgePage('/knowledge?subjectId=9')
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('名称') as HTMLInputElement).value).toBe('教育心理学')
+    })
+    expect(screen.getByRole('button', { name: /教育心理学/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /教育心理学/ }).textContent).toContain('当前')
+  })
+
   it('keeps the same host instance when saving subject info and stays on soft sync', async () => {
-    render(<KnowledgePage />)
+    renderKnowledgePage()
 
     await waitFor(() => {
       expect(screen.getByText('knowledge-mount-1')).toBeTruthy()
@@ -279,7 +298,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
   it('passes import applied sync version into forceSyncKey for replace sync after import', async () => {
     knowledgeImportMockState.importAppliedSyncVersion = 2
 
-    render(<KnowledgePage />)
+    renderKnowledgePage()
 
     await waitFor(() => {
       expect(screen.getByText('knowledge-force-subject:7:2')).toBeTruthy()
@@ -289,7 +308,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
   })
 
   it('passes an explicit applyEditorState callback into useMindMapImport', async () => {
-    render(<KnowledgePage />)
+    renderKnowledgePage()
 
     await waitFor(() => {
       expect(knowledgeUseMindMapImportMock).toHaveBeenCalled()

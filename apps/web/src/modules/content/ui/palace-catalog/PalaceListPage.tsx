@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { ChevronLeft, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -154,10 +154,22 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
   return (
     <div className="space-y-8">
       <PageIntro
-        title="记忆宫殿"
-        description={currentSubjectTitle ? `当前书架：${currentSubjectTitle}` : undefined}
+        title={currentSubjectTitle ? `${currentSubjectTitle}` : '记忆宫殿'}
+        description={
+          currentSubjectTitle
+            ? '本书内的宫殿按章节排列；返回书架可切换中国教育史、外国教育史、英语等学科。'
+            : '浏览全部宫殿，或从学科书架进入某一本书。'
+        }
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedSubjectId || showUncategorizedOnly ? (
+              <Link to="/palaces">
+                <Button size="sm" variant="outline">
+                  <ChevronLeft className="size-4" />
+                  返回书架
+                </Button>
+              </Link>
+            ) : null}
             <Link to="/palaces/new">
               <Button size="sm">
                 <Plus className="size-4" />
