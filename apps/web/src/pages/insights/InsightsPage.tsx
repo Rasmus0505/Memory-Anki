@@ -31,6 +31,7 @@ import {
 } from '@/modules/dashboard/public'
 import { Button } from '@/shared/components/ui/button'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
@@ -149,26 +150,40 @@ export default function Dashboard() {
 
   if (!data && loadError) {
     return (
-      <ErrorState
-        title="仪表盘加载失败"
-        description={loadError}
-        action={
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadDashboard().catch(() => undefined)}>
-            重新加载
-          </Button>
-        }
-      />
+      <div className="flex flex-col gap-4">
+        <InsightsSectionNav />
+        <ErrorState
+          title="仪表盘加载失败"
+          description={loadError}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={() => void loadDashboard().catch(() => undefined)}>
+              重新加载
+            </Button>
+          }
+        />
+      </div>
     )
   }
 
   if (!data) {
-    return <DashboardSkeleton />
+    return (
+      <div className="flex flex-col gap-4">
+        <InsightsSectionNav />
+        <DashboardSkeleton />
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
+      <div className="flex flex-col gap-3">
+        <InsightsSectionNav />
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            时长统计、时间记录与学习概览
+          </p>
+        </div>
       </div>
 
       <DashboardStatCards

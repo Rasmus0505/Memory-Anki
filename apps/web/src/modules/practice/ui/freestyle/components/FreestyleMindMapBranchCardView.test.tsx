@@ -152,6 +152,7 @@ describe('FreestyleMindMapBranchCardView', () => {
     expect(capturedFlowProps?.studySessionId).toBe('formal-session-1')
     expect(capturedFlowProps?.reviewScopeNodeUids).toEqual(['child'])
     expect(capturedFlowProps?.autoRevealNonDueCards).toBe(false)
+    expect(capturedFlowProps?.chromeDensity).toBe('compact')
     expect(capturedFlowProps?.checkpointNodeUids).toEqual(['branch', 'child'])
     // Clipped unit tree under synthetic freestyle root — not the whole palace.
     const editor = capturedFlowProps?.reviewEditorState as {

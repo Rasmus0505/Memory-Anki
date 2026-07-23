@@ -13,6 +13,24 @@ vi.mock("react-router-dom", () => ({
     children: React.ReactNode;
     to: string;
   }) => <a href={to}>{children}</a>,
+  NavLink: ({
+    children,
+    to,
+    className,
+    title,
+    "aria-current": ariaCurrent,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    className?: string;
+    title?: string;
+    "aria-current"?: "page" | undefined;
+  }) => (
+    <a href={to} className={className} title={title} aria-current={ariaCurrent}>
+      {children}
+    </a>
+  ),
+  useLocation: () => ({ pathname: "/dashboard", search: "", hash: "" }),
 }));
 
 export const getDashboardApi = vi.fn();

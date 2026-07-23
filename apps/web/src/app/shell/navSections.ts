@@ -128,7 +128,10 @@ export const navSections: NavSectionDefinition[] = [
     to: '/dashboard',
     label: '洞察',
     icon: Brain,
-    rememberLastVisited: true,
+    // Always open the stats/time-records hub. Review queue is a sibling tab
+    // inside 洞察 (InsightsSectionNav); remembering /review made the bottom
+    // nav look like it only owned the queue with no way to switch.
+    rememberLastVisited: false,
     matches: (pathname) =>
       pathname === '/' ||
       pathname === '/dashboard' ||

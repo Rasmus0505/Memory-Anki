@@ -78,6 +78,10 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   toolbarExtensions?: FlipCardToolbarExtensions
   /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
   hidePresentationOverflowActions?: boolean
+  /**
+   * compact: freestyle/PWA — denser mobile guided rail so the map keeps height.
+   */
+  chromeDensity?: 'default' | 'compact'
   onToggleFullscreen: (active?: boolean) => void
   onToggleMode?: () => void
   visibleEditorState: MindMapEditorState
@@ -113,8 +117,10 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   /** Any node scored this round (direct or batch_inherited); drives 避开 conflict counts. */
   sessionRatedUids?: ReadonlySet<string>
   /**
-   * Formal due-scope UIDs for this review round. When set in rating mode:
-   * only these nodes may *start* a rating; others are muted/translucent.
+   * Formal due-scope UIDs for this review round. When set:
+   * - only these nodes may *start* a rating (rating mode)
+   * - all other non-root nodes are soft-dimmed (opacity) even while flipping,
+   *   so out-of-scope cards stay readable but visually secondary
    * Parent subtree cascade still walks the full rating tree (including
    * unrevealed due children) and follows backend formal-review behavior.
    */
@@ -136,6 +142,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   surfaceClassName,
   toolbarExtensions,
   hidePresentationOverflowActions = false,
+  chromeDensity = 'default',
   onToggleFullscreen,
   onToggleMode,
   visibleEditorState,
@@ -279,12 +286,14 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     return new Set(rateableNodeUids.filter(Boolean))
   }, [rateableNodeUids])
 
+  // Soft-dim every non-root node outside formal due/rateable scope while flipping
+  // or rating (not only in rating mode). Edit mode keeps full opacity.
   const ratingScopeMutedUids = useMemo(() => {
-    if (!ratingMode || isEditMode || !rateableUidSet) return [] as string[]
+    if (isEditMode || !rateableUidSet) return [] as string[]
     return guidedModel.nodes
       .map((node) => node.uid)
       .filter((uid) => uid !== guidedModel.rootUid && !rateableUidSet.has(uid))
-  }, [guidedModel.nodes, guidedModel.rootUid, isEditMode, rateableUidSet, ratingMode])
+  }, [guidedModel.nodes, guidedModel.rootUid, isEditMode, rateableUidSet])
 
   const resolvedMutedNodeUids = useMemo(() => {
     if (!mutedNodeUidsProp?.length) return ratingScopeMutedUids
@@ -475,18 +484,31 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     />
   ) : null
 
+  const compactChrome = chromeDensity === 'compact'
+
   return (
-    <div className={cn('h-full min-h-0', fullscreen && 'flex h-full flex-col', className)}>
+    <div className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}>
       {!isEditMode ? (
-        <div className="mb-3 space-y-2 rounded-xl border border-border/70 bg-background/95 p-2 shadow-sm md:hidden">
-          <div className="flex min-h-9 items-center gap-1 overflow-hidden px-1 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            'shrink-0 rounded-xl border border-border/70 bg-background/95 shadow-sm md:hidden',
+            compactChrome ? 'mb-1.5 space-y-1 p-1.5' : 'mb-3 space-y-2 p-2',
+          )}
+        >
+          <div
+            className={cn(
+              'flex items-center gap-1 overflow-hidden px-1 text-xs text-muted-foreground',
+              compactChrome ? 'min-h-6' : 'min-h-9',
+            )}
+          >
             {guidedPath.length > 0 ? (
               guidedPath.map((node, index) => (
                 <span key={node.uid} className="inline-flex min-w-0 items-center gap-1">
                   {index > 0 ? <span className="shrink-0 text-muted-foreground/50">/</span> : null}
                   <span
                     className={cn(
-                      'max-w-[8rem] truncate',
+                      'truncate',
+                      compactChrome ? 'max-w-[5.5rem]' : 'max-w-[8rem]',
                       index === guidedPath.length - 1 && 'font-medium text-foreground',
                     )}
                   >
@@ -498,17 +520,43 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               <span className="truncate">未命名导图</span>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" disabled={!guidedParentNode} onClick={() => selectGuidedNode(guidedParentNode?.uid ?? null, { syncCanvas: true })}>
+          <div className={cn('grid grid-cols-4', compactChrome ? 'gap-1' : 'gap-1.5')}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              disabled={!guidedParentNode}
+              onClick={() => selectGuidedNode(guidedParentNode?.uid ?? null, { syncCanvas: true })}
+            >
               <CornerUpLeft className="size-4" />上级
             </Button>
-            <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" disabled={!guidedNextNode} onClick={handleGuidedNext}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              disabled={!guidedNextNode}
+              onClick={handleGuidedNext}
+            >
               <ArrowRight className="size-4" />下一个
             </Button>
-            <Button type="button" size="sm" className="min-h-11 px-1 text-xs" disabled={!guidedCurrentNode} onClick={handleGuidedReveal}>
+            <Button
+              type="button"
+              size="sm"
+              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              disabled={!guidedCurrentNode}
+              onClick={handleGuidedReveal}
+            >
               <Eye className="size-4" />揭示
             </Button>
-            <Button type="button" size="sm" variant="outline" className="min-h-11 px-1 text-xs" onClick={handleGuidedGlobal}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              onClick={handleGuidedGlobal}
+            >
               <Network className="size-4" />全局
             </Button>
           </div>
@@ -628,7 +676,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onReadyTimeout={handleSurfaceReadyTimeout}
         className={cn(
           'w-full rounded-lg border border-border/70 bg-background',
-          fullscreen ? 'h-full' : 'h-[64vh]',
+          fullscreen || compactChrome ? 'min-h-0 flex-1' : 'h-[64vh]',
           surfaceClassName,
         )}
       />

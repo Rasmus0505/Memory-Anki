@@ -144,6 +144,27 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: /记得/ })).toBeNull()
   })
 
+  it('dims out-of-scope nodes while flipping (not only in rating mode)', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode={false}
+        rateableNodeUids={['child']}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).toEqual(
+      expect.arrayContaining(['grandchild']),
+    )
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).not.toContain('child')
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).not.toContain('root')
+  })
+
   it('mutes out-of-scope nodes and only lets formal due nodes start a rating', async () => {
     const onRateNode = vi.fn()
     renderInRouter(

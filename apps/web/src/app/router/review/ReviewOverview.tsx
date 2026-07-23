@@ -29,6 +29,7 @@ import {
 } from '@/shared/components/ui/select'
 import { ReviewLoadForecastCard } from '@/modules/practice/public'
 import { ReviewEntryTooltip } from '@/modules/memory/public'
+import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { cn } from '@/shared/lib/utils'
 
@@ -83,8 +84,22 @@ export default function ReviewOverview() {
     [queue, sortMode],
   )
 
-  if (error) return <ErrorState title="复习队列加载失败" description={error} />
-  if (!queue) return <LoadingState text="正在读取 FSRS 到期节点…" />
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <InsightsSectionNav />
+        <ErrorState title="复习队列加载失败" description={error} />
+      </div>
+    )
+  }
+  if (!queue) {
+    return (
+      <div className="space-y-4">
+        <InsightsSectionNav />
+        <LoadingState text="正在读取 FSRS 到期节点…" />
+      </div>
+    )
+  }
   const warm = (id: string | number) => prefetchStudySession('review-session', Number(id), () => Promise.all([getReviewSessionApi(id), getReviewSessionProgressApi(id)]).then(([session, progress]) => ({ session, progress })))
 
   const handleSortChange = (value: string) => {
@@ -106,6 +121,7 @@ export default function ReviewOverview() {
 
   return (
     <div className="space-y-5">
+      <InsightsSectionNav />
       <PageIntro
         eyebrow="FSRS"
         title={chapterId ? '章节复习' : '今日复习'}

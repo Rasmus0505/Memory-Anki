@@ -21,10 +21,22 @@ import {
   rateUnratedReviewSessionNodesApi,
 } from '@/modules/practice/ui/review/api'
 import { cn } from '@/shared/lib/utils'
+import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import {
   clipEditorStateToBranchUnit,
   foldedParentUidsForBranch,
 } from '@/modules/practice/ui/freestyle/model/clipBranchUnitEditor'
+
+function plainContextLabel(
+  contextPath: FreestyleMindMapBranchCard['context_path'] | undefined,
+  palaceTitle: string | undefined,
+  palaceId: number,
+) {
+  const path = (contextPath || [])
+    .map((item) => stripMindMapHtml(item.text) || item.uid)
+    .filter(Boolean)
+  return path.length ? path.join(' / ') : palaceTitle || `宫殿 ${palaceId}`
+}
 
 const palaceEditorCache = new Map<number, Promise<MindMapEditorState>>()
 type BranchSession = {
@@ -140,10 +152,14 @@ export function FreestyleMindMapBranchCardView({
   const completedRef = useRef(false)
   const branchSessionRef = useRef<BranchSession | null>(null)
 
-  const contextLabel = useMemo(() => {
-    const path = (card.context_path || []).map((item) => item.text || item.uid).filter(Boolean)
-    return path.length ? path.join(' / ') : card.palace_title || `宫殿 ${card.palace_id}`
-  }, [card.context_path, card.palace_id, card.palace_title])
+  const contextLabel = useMemo(
+    () => plainContextLabel(card.context_path, card.palace_title, card.palace_id),
+    [card.context_path, card.palace_id, card.palace_title],
+  )
+  const palaceTitleLabel = useMemo(
+    () => stripMindMapHtml(card.palace_title) || card.palace_title || `宫殿 ${card.palace_id}`,
+    [card.palace_id, card.palace_title],
+  )
 
   useEffect(() => {
     branchSessionRef.current = branchSession
@@ -158,14 +174,15 @@ export function FreestyleMindMapBranchCardView({
       .then(([state, session]) => {
         if (cancelled) return
         // Clip to this queue unit: small branch map, not the whole palace.
-        const contextText = (card.context_path || [])
-          .map((item) => item.text || item.uid)
-          .filter(Boolean)
-          .join(' / ')
+        const contextText = plainContextLabel(
+          card.context_path,
+          card.palace_title,
+          card.palace_id,
+        )
         const clipped = clipEditorStateToBranchUnit(
           state,
           card.branch_uid,
-          contextText || card.palace_title || `宫殿 ${card.palace_id}`,
+          contextText,
           {
             includeAncestorUids: foldedParentUidsForBranch(
               state,
@@ -280,39 +297,23 @@ export function FreestyleMindMapBranchCardView({
   return (
     <section
       className={cn(
-        'relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/80',
+        'relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/80',
         active ? 'ring-1 ring-emerald-400/30' : 'opacity-90',
       )}
     >
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-zinc-100">
-            {card.palace_title || `宫殿 ${card.palace_id}`}
-          </div>
-          <div className="truncate text-xs text-zinc-500">{contextLabel}</div>
+      <header className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium text-zinc-100">{palaceTitleLabel}</div>
+          <div className="truncate text-[11px] text-zinc-500">{contextLabel}</div>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-          <span>
-            {card.node_count} 节点
-            {card.due_node_count ? ` · ${card.due_node_count} 到期` : ''}
-            {card.over_limit_delta > 0 ? ` · 超限 +${card.over_limit_delta}` : ''}
-          </span>
-          <button
-            type="button"
-            className={cn(
-              'rounded-full border px-2.5 py-1 transition-colors',
-              ratingMode
-                ? 'border-amber-300/40 bg-amber-300/15 text-amber-100'
-                : 'border-white/10 bg-white/5 text-zinc-300',
-            )}
-            onClick={onToggleRatingMode}
-          >
-            评分模式 {ratingMode ? '开' : '关'}
-          </button>
-        </div>
+        <span className="shrink-0 text-[10px] tabular-nums text-zinc-500">
+          {card.node_count}节点
+          {card.due_node_count ? ` · ${card.due_node_count}到期` : ''}
+          {card.over_limit_delta > 0 ? ` · +${card.over_limit_delta}` : ''}
+        </span>
       </header>
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-zinc-400">
             加载导图…
@@ -328,15 +329,16 @@ export function FreestyleMindMapBranchCardView({
                 setLoading(true)
                 void loadPalaceEditor(card.palace_id)
                   .then((state) => {
-                    const contextText = (card.context_path || [])
-                      .map((item) => item.text || item.uid)
-                      .filter(Boolean)
-                      .join(' / ')
+                    const contextText = plainContextLabel(
+                      card.context_path,
+                      card.palace_title,
+                      card.palace_id,
+                    )
                     setEditorState(
                       clipEditorStateToBranchUnit(
                         state,
                         card.branch_uid,
-                        contextText || card.palace_title || `宫殿 ${card.palace_id}`,
+                        contextText,
                         {
                           includeAncestorUids: foldedParentUidsForBranch(
                             state,
@@ -358,7 +360,7 @@ export function FreestyleMindMapBranchCardView({
           </div>
         ) : editorState && branchSession ? (
           <MindMapReviewFlow
-            title={card.palace_title || `宫殿 ${card.palace_id}`}
+            title={palaceTitleLabel}
             palaceId={card.palace_id}
             sessionKind={branchSession.kind}
             studySessionId={branchSession.id}
@@ -371,6 +373,7 @@ export function FreestyleMindMapBranchCardView({
             checkpointNodeUids={card.ratable_node_uids}
             ratingMode={ratingMode}
             onToggleRatingMode={onToggleRatingMode}
+            chromeDensity="compact"
             persistProgress={false}
             submitting={completion.submitting}
             onComplete={(payload) => {

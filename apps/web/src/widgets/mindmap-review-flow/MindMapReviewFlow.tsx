@@ -36,6 +36,7 @@ export function MindMapReviewFlow({
   editSaving = false,
   editError = null,
   submitting = false,
+  chromeDensity = "default",
   ...props
 }: MindMapReviewFlowProps) {
   const review = useMindMapReviewFlowController({
@@ -46,6 +47,7 @@ export function MindMapReviewFlow({
     editError,
     submitting,
   });
+  const compact = chromeDensity === "compact";
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
   const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
@@ -76,8 +78,119 @@ export function MindMapReviewFlow({
     [getOpenQuestionIds],
   );
 
+  const flipPanel = (
+    <FlipCardMindMapPanel
+      fullscreen={review.flow.fullscreen}
+      displayMode={review.mapDisplayMode}
+      sessionKind={props.sessionKind === 'review' ? 'review' : 'practice'}
+      modeSyncVersion={modeSyncVersion}
+      viewMemoryScope={viewMemoryScope}
+      chromeDensity={chromeDensity}
+      className={compact ? 'h-full min-h-0' : undefined}
+      onToggleFullscreen={review.handleFullscreenToggle}
+      onToggleMode={
+        review.inlineEditEnabled && props.onModeToggle
+          ? () => {
+              void props.onModeToggle?.();
+            }
+          : undefined
+      }
+      visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
+      editableEditorState={props.editEditorState}
+      ratingTreeEditorState={
+        // Prefer the explicit full rating tree over reveal-filtered visible state.
+        props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
+      }
+      visibleEditorSyncKey={review.mapVisibleSyncKey}
+      currentPalaceId={props.palaceId}
+      reviewFxSignal={review.flow.feedback.reviewFxSignal}
+      onEditorStateChange={review.handleEditorStateChange}
+      onNodeActive={review.handleActiveNodes}
+      onNodeClick={review.flow.handleNodeClick}
+      onNodeContextMenu={review.flow.handleNodeContextMenu}
+      onNodeHover={review.flow.handleNodeHover}
+      toolbarExtensions={{
+        moreActions: [
+          ...(props.extraMoreActions ?? []),
+          {
+            label: "翻卡快捷键",
+            onClick: () => setFlipShortcutsOpen(true),
+            opensOverlay: true,
+          },
+        ],
+      }}
+      onQuizBreakOpen={review.handleQuizBreakOpen}
+      countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
+      onCountBadgeClick={handleOpenNodeQuiz}
+      // Always merge first + weak_retry so entering the retry round
+      // never blanks already-scored chips (记得/困难/轻松).
+      recallRatings={review.recallRatings.displayRatings}
+      recallRound={review.recallRatings.round}
+      weakNodeUids={review.recallRatings.weakNodeUids}
+      directRatedUids={review.recallRatings.directRatedUids}
+      sessionRatedUids={review.recallRatings.sessionRatedUids}
+      rateableNodeUids={
+        // Explicit scope (formal frozen due / freestyle unit) always gates rating.
+        // Unscoped practice keeps unrestricted rating (null).
+        Array.isArray(props.reviewScopeNodeUids) &&
+        props.reviewScopeNodeUids.length > 0
+          ? review.reviewNodeUids
+          : props.sessionKind === 'review' && review.reviewNodeUids.length > 0
+            ? review.reviewNodeUids
+            : null
+      }
+      onRateNode={
+        props.studySessionId
+          ? (
+              nodeUid: string,
+              rating: MindMapRecallRating,
+              round: MindMapRecallRound,
+              scope?: 'single' | 'subtree',
+              evidence?: {
+                source?: 'manual' | 'inferred'
+                confidence?: number | null
+                responseMs?: number | null
+              },
+              conflictPolicy?: RatingConflictPolicy,
+            ) => {
+              void review.recallRatings
+                .rateNode(nodeUid, rating, round, scope, evidence, conflictPolicy)
+                .catch((error: unknown) => {
+                  toast.error(
+                    error instanceof Error && error.message
+                      ? error.message
+                      : '节点评分保存失败',
+                  )
+                })
+            }
+          : undefined
+      }
+      onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
+      onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
+      ratingMode={review.ratingMode}
+      onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
+    />
+  );
+
+  const aiWorkbench = (
+    <AiLearningWorkbench
+      open={aiWorkbenchOpen}
+      onOpenChange={setAiWorkbenchOpen}
+      title={props.title}
+      palaceId={props.palaceId}
+      reviewSessionId={props.studySessionId ? Number(props.studySessionId) : null}
+      editorState={review.mapEditorState ?? review.flow.visibleEditorState}
+      sourceRevision={(review.mapEditorState ?? review.flow.visibleEditorState).editor_fingerprint ?? String(modeSyncVersion)}
+      activeNodeUid={review.selectedNodeUid}
+      reviewNodeUids={review.reviewNodeUids}
+      redNodeUids={[...review.flow.redNodeIds]}
+      ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
+      fullscreen={review.flow.fullscreen}
+    />
+  );
+
   return (
-    <div className={cn("space-y-5", review.flow.screenGlowClass)}>
+    <div className={cn(compact ? "flex h-full min-h-0 flex-col" : "space-y-5", review.flow.screenGlowClass)}>
       {review.comboBurst ? (
         <ComboMilestoneBurst
           key={review.flow.feedback.milestoneCelebration?.nonce ?? review.comboBurst.comboCount}
@@ -114,6 +227,79 @@ export function MindMapReviewFlow({
         />
       ) : null}
 
+      {compact ? (
+        <div
+          className={cn(
+            "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-card/90",
+            review.cardFlashClassName,
+            review.flow.fullscreen &&
+              "fixed inset-x-2 bottom-2 top-2 z-[90] bg-card/96 shadow-2xl sm:inset-x-5 sm:bottom-5 sm:top-5",
+          )}
+        >
+          {review.flow.feedback.completionCeremonyActive ? (
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-[100] flex justify-center px-3 pt-2">
+              <div className="memory-anki-review-completion-banner inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-3 py-1 text-xs font-semibold text-warning shadow-lg">
+                <Sparkles className="size-3.5" />
+                通关结算中
+              </div>
+            </div>
+          ) : null}
+          {!review.isInlineEditMode ? (
+            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-2.5 py-1.5">
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                {review.flow.visibleNonRootCount}/{Math.max(review.flow.totalNodeCount - 1, 0)}
+              </span>
+              <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width,background] duration-300",
+                    review.progressToneClassName,
+                  )}
+                  style={{ width: `${review.flow.feedback.progressPercent}%` }}
+                />
+              </div>
+              {review.flow.feedback.comboCount > 0 ? (
+                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                  链{review.flow.feedback.comboCount}
+                </span>
+              ) : null}
+              {review.flow.redNodeCount > 0 ? (
+                <Badge variant="outline" className="h-6 px-1.5 text-[10px]">
+                  红{review.flow.redNodeCount}
+                </Badge>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={aiWorkbenchOpen ? "secondary" : "ghost"}
+                className="size-8 shrink-0 p-0"
+                title="AI 学习"
+                onClick={() => setAiWorkbenchOpen((value) => !value)}
+              >
+                <Bot className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={submitting || review.flow.feedback.completionCeremonyActive || false}
+                className={cn("h-8 shrink-0 px-2.5 text-xs", review.completeButtonClassName)}
+                onClick={() => {
+                  void review.flow.finishFlow("manual_complete");
+                }}
+              >
+                <SquareCheckBig className="mr-1 size-3.5" />
+                {review.flow.feedback.allClearReady ? "结算" : "完成"}
+              </Button>
+            </div>
+          ) : null}
+          <div className="relative flex min-h-0 flex-1 flex-col p-1.5 sm:p-2">
+            <div className="relative flex min-h-0 flex-1">
+              <div className="min-h-0 min-w-0 flex-1">{flipPanel}</div>
+              {aiWorkbench}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={cn("space-y-4", review.flow.fullscreen && "space-y-0")}>
           <Card
             className={cn(
@@ -271,115 +457,13 @@ export function MindMapReviewFlow({
               )}
             >
               <div className="relative flex h-full min-h-0">
-                <div className="min-w-0 flex-1">
-                  <FlipCardMindMapPanel
-                    fullscreen={review.flow.fullscreen}
-                    displayMode={review.mapDisplayMode}
-                    sessionKind={props.sessionKind === 'review' ? 'review' : 'practice'}
-                    modeSyncVersion={modeSyncVersion}
-                    viewMemoryScope={viewMemoryScope}
-                    onToggleFullscreen={review.handleFullscreenToggle}
-                    onToggleMode={
-                      review.inlineEditEnabled && props.onModeToggle
-                        ? () => {
-                            void props.onModeToggle?.();
-                          }
-                        : undefined
-                    }
-                    visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
-                    editableEditorState={props.editEditorState}
-                    ratingTreeEditorState={
-                      // Prefer the explicit full rating tree over reveal-filtered visible state.
-                      props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
-                    }
-                    visibleEditorSyncKey={review.mapVisibleSyncKey}
-                    currentPalaceId={props.palaceId}
-                    reviewFxSignal={review.flow.feedback.reviewFxSignal}
-                    onEditorStateChange={review.handleEditorStateChange}
-                    onNodeActive={review.handleActiveNodes}
-                    onNodeClick={review.flow.handleNodeClick}
-                    onNodeContextMenu={review.flow.handleNodeContextMenu}
-                    onNodeHover={review.flow.handleNodeHover}
-                    toolbarExtensions={{
-                      moreActions: [
-                        ...(props.extraMoreActions ?? []),
-                        {
-                          label: "翻卡快捷键",
-                          onClick: () => setFlipShortcutsOpen(true),
-                          opensOverlay: true,
-                        },
-                      ],
-                    }}
-                    onQuizBreakOpen={review.handleQuizBreakOpen}
-                    countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
-                    onCountBadgeClick={handleOpenNodeQuiz}
-                    // Always merge first + weak_retry so entering the retry round
-                    // never blanks already-scored chips (记得/困难/轻松).
-                    recallRatings={review.recallRatings.displayRatings}
-                    recallRound={review.recallRatings.round}
-                    weakNodeUids={review.recallRatings.weakNodeUids}
-                    directRatedUids={review.recallRatings.directRatedUids}
-                    sessionRatedUids={review.recallRatings.sessionRatedUids}
-                    rateableNodeUids={
-                      // Explicit scope (formal frozen due / freestyle unit) always gates rating.
-                      // Unscoped practice keeps unrestricted rating (null).
-                      Array.isArray(props.reviewScopeNodeUids) &&
-                      props.reviewScopeNodeUids.length > 0
-                        ? review.reviewNodeUids
-                        : props.sessionKind === 'review' && review.reviewNodeUids.length > 0
-                          ? review.reviewNodeUids
-                          : null
-                    }
-                    onRateNode={
-                      props.studySessionId
-                        ? (
-                            nodeUid: string,
-                            rating: MindMapRecallRating,
-                            round: MindMapRecallRound,
-                            scope?: 'single' | 'subtree',
-                            evidence?: {
-                              source?: 'manual' | 'inferred'
-                              confidence?: number | null
-                              responseMs?: number | null
-                            },
-                            conflictPolicy?: RatingConflictPolicy,
-                          ) => {
-                            void review.recallRatings
-                              .rateNode(nodeUid, rating, round, scope, evidence, conflictPolicy)
-                              .catch((error: unknown) => {
-                                toast.error(
-                                  error instanceof Error && error.message
-                                    ? error.message
-                                    : '节点评分保存失败',
-                                )
-                              })
-                          }
-                        : undefined
-                    }
-                    onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
-                    onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
-                    ratingMode={review.ratingMode}
-                    onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
-                  />
-                </div>
-                <AiLearningWorkbench
-                  open={aiWorkbenchOpen}
-                  onOpenChange={setAiWorkbenchOpen}
-                  title={props.title}
-                  palaceId={props.palaceId}
-                  reviewSessionId={props.studySessionId ? Number(props.studySessionId) : null}
-                  editorState={review.mapEditorState ?? review.flow.visibleEditorState}
-                  sourceRevision={(review.mapEditorState ?? review.flow.visibleEditorState).editor_fingerprint ?? String(modeSyncVersion)}
-                  activeNodeUid={review.selectedNodeUid}
-                  reviewNodeUids={review.reviewNodeUids}
-                  redNodeUids={[...review.flow.redNodeIds]}
-                  ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
-                  fullscreen={review.flow.fullscreen}
-                />
+                <div className="min-w-0 flex-1">{flipPanel}</div>
+                {aiWorkbench}
               </div>
             </CardContent>
           </Card>
       </div>
+      )}
 
       <MindMapRatingHistoryDrawer
         open={review.recallRatings.historyOpen}

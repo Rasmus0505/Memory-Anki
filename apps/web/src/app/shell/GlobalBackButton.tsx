@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { useNavigationHistory } from '@/shared/page-history/useNavigationHistory'
@@ -13,10 +14,23 @@ type GlobalBackButtonProps = {
   compact?: boolean
 }
 
+/** Immersive feed owns its own top chrome; floating back/forward would cover the card. */
+function isImmersiveFeedPath(pathname: string) {
+  return (
+    pathname === '/freestyle' ||
+    pathname.startsWith('/freestyle/') ||
+    pathname === '/m' ||
+    pathname.startsWith('/m/') ||
+    pathname === '/mobile' ||
+    pathname.startsWith('/mobile/')
+  )
+}
+
 export function GlobalBackButton({
   placement = 'sidebar',
   compact = false,
 }: GlobalBackButtonProps) {
+  const { pathname } = useLocation()
   const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory()
   // Bound to shell sidebar / mobile chrome — never surface in system fullscreen
   // where the sidebar is gone (mind-map / flip-card fullscreen).
@@ -32,6 +46,8 @@ export function GlobalBackButton({
   }, [])
 
   if (isSystemFullscreen) return null
+  // Mobile freestyle/PWA entry: card HUD already covers the top edge.
+  if (placement === 'mobile' && isImmersiveFeedPath(pathname)) return null
 
   const controls = (
     <div

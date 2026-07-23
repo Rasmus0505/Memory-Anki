@@ -238,7 +238,8 @@ export default function ImmersiveFreestylePage() {
       <div
         className={cn(
           'relative max-w-full overflow-hidden bg-zinc-950 text-zinc-50 shadow-2xl',
-          'min-h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] rounded-lg lg:min-h-[calc(100vh-88px)]',
+          // Bottom nav (~4.5rem) + shell padding (~1rem) + safe area; keep the feed fully on-screen.
+          'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] min-h-0 rounded-lg lg:h-[calc(100vh-88px)]',
         )}
         onKeyDown={handleKeyDown}
         onPointerDown={() => {
@@ -270,33 +271,26 @@ export default function ImmersiveFreestylePage() {
           onOpenChange={setHistoryOpen}
         />
 
-        {/* Compact top HUD */}
-        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex flex-wrap items-start justify-between gap-2 px-3 py-3 sm:px-4">
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-xs shadow-lg backdrop-blur">
-            <span className="font-medium text-emerald-200">随心</span>
-            <span className="text-zinc-600">·</span>
-            <span className="tabular-nums text-zinc-300">
+        {/* Compact top HUD — single bar so it does not wrap over the card */}
+        <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex items-center gap-1.5 px-2 py-2 sm:px-3">
+          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-full border border-white/10 bg-zinc-950/90 px-2.5 py-1.5 text-[11px] shadow-lg backdrop-blur">
+            <span className="shrink-0 font-medium text-emerald-200">随心</span>
+            <span className="shrink-0 text-zinc-600">·</span>
+            <span className="shrink-0 tabular-nums text-zinc-300">
               {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
             </span>
-            <span className="text-zinc-600">·</span>
-            <span className="text-zinc-400">
+            <span className="hidden shrink-0 text-zinc-600 sm:inline">·</span>
+            <span className="hidden min-w-0 truncate text-zinc-400 sm:inline">
               导图{mindmapCount} · 题{quizCount}
+              {resolvedQuiz > 0 ? ` · 已答${resolvedQuiz}` : ''}
             </span>
-            {resolvedQuiz > 0 ? (
-              <>
-                <span className="text-zinc-600">·</span>
-                <span className="text-emerald-300">已答{resolvedQuiz}</span>
-              </>
-            ) : null}
-          </div>
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-950/85 p-1 shadow-lg backdrop-blur">
-            <span className="px-2 text-[11px] tabular-nums text-zinc-400">
+            <span className="ml-auto shrink-0 tabular-nums text-zinc-400">
               {formatTimer(timer.effectiveSeconds)}
             </span>
             <button
               type="button"
               className={cn(
-                'rounded-full px-2.5 py-1.5 text-[11px]',
+                'shrink-0 rounded-full px-2 py-1 text-[11px]',
                 ratingMode ? 'bg-amber-300/20 text-amber-100' : 'text-zinc-400',
               )}
               onClick={() => setRatingMode((value) => !value)}
@@ -305,7 +299,7 @@ export default function ImmersiveFreestylePage() {
             </button>
             <button
               type="button"
-              className="rounded-full p-2 text-zinc-300 hover:bg-white/10"
+              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
               title="刷新队列"
               onClick={refreshQueue}
             >
@@ -313,7 +307,7 @@ export default function ImmersiveFreestylePage() {
             </button>
             <button
               type="button"
-              className="rounded-full p-2 text-zinc-300 hover:bg-white/10"
+              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
               title="历史"
               onClick={() => setHistoryOpen(true)}
             >
@@ -321,7 +315,7 @@ export default function ImmersiveFreestylePage() {
             </button>
             <button
               type="button"
-              className="rounded-full p-2 text-zinc-300 hover:bg-white/10"
+              className="shrink-0 rounded-full p-1.5 text-zinc-300 hover:bg-white/10"
               title="设置"
               onClick={() => setSettingsOpen(true)}
             >
@@ -346,10 +340,7 @@ export default function ImmersiveFreestylePage() {
         <div
           ref={scrollRef}
           data-page-history-scroll-key="freestyle-immersive"
-          className={cn(
-            'snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain',
-            'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] lg:h-[calc(100vh-88px)]',
-          )}
+          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain"
           onScroll={handleScroll}
         >
           {loading ? (
@@ -403,7 +394,7 @@ export default function ImmersiveFreestylePage() {
                 return (
                   <div
                     key={card.id}
-                    className="h-full min-h-[calc(100dvh-5.5rem)] snap-start snap-always lg:min-h-[calc(100vh-88px)]"
+                    className="h-full min-h-full snap-start snap-always"
                     aria-hidden
                   />
                 )
@@ -411,7 +402,7 @@ export default function ImmersiveFreestylePage() {
               return (
                 <div
                   key={card.id}
-                  className="box-border h-full min-h-[calc(100dvh-5.5rem)] snap-start snap-always px-3 pb-24 pt-16 sm:px-4 lg:min-h-[calc(100vh-88px)]"
+                  className="box-border flex h-full min-h-full flex-col snap-start snap-always px-2 pb-16 pt-12 sm:px-3 sm:pb-20 sm:pt-14"
                 >
                   {isMindMapBranchCard(card) ? (
                     <FreestyleMindMapBranchCardView
@@ -454,17 +445,17 @@ export default function ImmersiveFreestylePage() {
           )}
         </div>
 
-        {/* Desktop right / mobile thumb actions */}
+        {/* Desktop right / mobile thumb actions — sit above bottom nav, not over the map center */}
         <div
           className={cn(
             'pointer-events-none absolute z-20 flex flex-col gap-2',
             'right-3 top-1/2 -translate-y-1/2',
-            'max-lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] max-lg:right-3 max-lg:top-auto max-lg:translate-y-0 max-lg:flex-row',
+            'max-lg:bottom-2 max-lg:right-2 max-lg:top-auto max-lg:translate-y-0 max-lg:flex-row max-lg:flex-wrap max-lg:justify-end',
           )}
         >
           <button
             type="button"
-            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-3 text-zinc-100 shadow-lg backdrop-blur"
+            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-2.5 text-zinc-100 shadow-lg backdrop-blur max-lg:p-2"
             title="跳过"
             onClick={skipCurrent}
           >
@@ -472,7 +463,7 @@ export default function ImmersiveFreestylePage() {
           </button>
           <button
             type="button"
-            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-xs text-zinc-100 shadow-lg backdrop-blur"
+            className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-2.5 py-1.5 text-[11px] text-zinc-100 shadow-lg backdrop-blur"
             title="下个宫殿：跳过本宫殿剩余全部内容"
             onClick={skipToNextPalace}
           >
@@ -481,7 +472,7 @@ export default function ImmersiveFreestylePage() {
           {canUndoSkip ? (
             <button
               type="button"
-              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-3 text-zinc-100 shadow-lg backdrop-blur"
+              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 p-2.5 text-zinc-100 shadow-lg backdrop-blur max-lg:p-2"
               title="撤销跳过"
               onClick={undoLastSkip}
             >
@@ -491,7 +482,7 @@ export default function ImmersiveFreestylePage() {
           {currentCard ? (
             <button
               type="button"
-              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-3 py-2 text-[11px] text-zinc-300 shadow-lg backdrop-blur"
+              className="pointer-events-auto rounded-full border border-white/10 bg-zinc-950/85 px-2.5 py-1.5 text-[11px] text-zinc-300 shadow-lg backdrop-blur"
               onClick={muteCurrentPalace}
             >
               少看此宫殿
