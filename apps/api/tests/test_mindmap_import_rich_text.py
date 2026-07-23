@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from memory_anki.modules.produce.application.mindmap_import.normalization import (
     build_editor_doc,
+    normalize_source_tree,
     source_node_to_editor_node,
 )
 from memory_anki.modules.produce.application.mindmap_import.rich_text import (
@@ -105,3 +106,55 @@ def test_build_editor_doc_preserves_highlights() -> None:
     child = doc["root"]["children"][0]
     assert child["data"]["richText"] is True
     assert 'data-emphasis="highlight"' in child["data"]["text"]
+
+
+def test_normalize_source_tree_projects_simple_schema_and_strips_noise() -> None:
+    tree = normalize_source_tree(
+        {
+            "title": "细胞膜",
+            "uid": "should-drop",
+            "theme": {"template": "avocado"},
+            "children": [
+                {
+                    "text": "磷脂双分子层构成屏障",
+                    "uid": "noise",
+                    "data": {"uid": "nested-noise"},
+                    "emphasis_marks": [{"kind": "highlight", "text": "磷脂双分子层"}],
+                    "children": [],
+                }
+            ],
+        }
+    )
+    assert tree == {
+        "title": "细胞膜",
+        "children": [
+            {
+                "text": "磷脂双分子层构成屏障",
+                "emphasis_marks": [{"kind": "highlight", "text": "磷脂双分子层"}],
+                "children": [],
+            }
+        ],
+    }
+
+
+def test_normalize_source_tree_accepts_single_card_and_coerces_editor_shape() -> None:
+    single = normalize_source_tree({"title": "一整段连续文字", "children": []})
+    assert single == {"title": "一整段连续文字", "children": []}
+
+    coerced = normalize_source_tree(
+        {
+            "root": {
+                "data": {"text": "根标题", "uid": "palace-root"},
+                "children": [
+                    {
+                        "data": {"text": "子节点", "uid": "c1"},
+                        "children": [],
+                    }
+                ],
+            }
+        }
+    )
+    assert coerced == {
+        "title": "根标题",
+        "children": [{"text": "子节点", "children": []}],
+    }

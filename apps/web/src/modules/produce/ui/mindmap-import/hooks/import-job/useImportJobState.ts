@@ -58,6 +58,11 @@ export interface ImportJobStateController {
   clearCurrentJobState: () => void
   applyJobProgressState: (job: MindMapImportJob | null) => void
   hydrateJobResult: (job: MindMapImportJob, options?: ImportJobHydrateOptions) => void
+  applyManualImportResult: (payload: {
+    sourceTree: MindMapImportSourceTree
+    editorDoc: MindMapEditorState['editor_doc']
+    warnings?: string[]
+  }) => void
   clearPreviewState: () => void
 }
 
@@ -223,6 +228,27 @@ export function useImportJobState({
     resetStreamState()
   }
 
+  const applyManualImportResult = (payload: {
+    sourceTree: MindMapImportSourceTree
+    editorDoc: MindMapEditorState['editor_doc']
+    warnings?: string[]
+  }) => {
+    clearCurrentJobState()
+    resetStreamState()
+    setLoading(false)
+    setSourceTree(payload.sourceTree)
+    setImportEditorDoc(payload.editorDoc)
+    setExtractedText('')
+    setImagePreviewUrl('')
+    setError('')
+    setImportWarnings(payload.warnings ?? [])
+    setReviewPreview(null)
+    setImportReusedExistingResult(false)
+    setLastBatchMeta(null)
+    setSourceKindState('manual-json')
+    setModeState('mindmap')
+  }
+
   return {
     importOpen: open,
     setImportOpenState: setOpen,
@@ -260,6 +286,7 @@ export function useImportJobState({
     clearCurrentJobState,
     applyJobProgressState,
     hydrateJobResult,
+    applyManualImportResult,
     clearPreviewState,
   }
 }

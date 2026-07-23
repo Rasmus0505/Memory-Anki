@@ -13,6 +13,11 @@ import {
   uploadPdfDocumentApi,
 } from '@/modules/produce/domain/knowledge-import-entity/api'
 import type { PdfDocument, PdfOcrCoverage } from '@/modules/produce/domain/knowledge-import-entity/model'
+import {
+  MANUAL_MINDMAP_JSON_PROMPT,
+  parseManualMindMapImport,
+  parseManualMindMapImportFile,
+} from '@/modules/produce/ui/mindmap-import/model/manual-import'
 import type {
   BatchImportMeta,
   ImportMode,
@@ -51,6 +56,8 @@ export function useMindMapImport({
   const [pdfPageSelection, setPdfPageSelection] = useState('1')
   const [pdfLibraryLoading, setPdfLibraryLoading] = useState(false)
   const [pdfOcrCoverage, setPdfOcrCoverage] = useState<PdfOcrCoverage | null>(null)
+  const [manualImportText, setManualImportText] = useState('')
+  const [manualImportFileName, setManualImportFileName] = useState('')
 
   const batch = useImportBatchState(setControllerError)
   const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -132,6 +139,10 @@ export function useMindMapImport({
 
   const setImportMode = (nextMode: ImportMode) => {
     setModeState(nextMode)
+    if (nextMode === 'text' && sourceKind === 'manual-json') {
+      setSourceKindState('image-batch')
+      setMindMapWorkflowState('batch')
+    }
     setControllerError('')
     jobs.setImportError('')
   }
@@ -140,6 +151,9 @@ export function useMindMapImport({
     setSourceKindState(nextSourceKind)
     if (nextSourceKind === 'image-batch') {
       setMindMapWorkflowState('batch')
+    }
+    if (nextSourceKind === 'manual-json') {
+      setModeState('mindmap')
     }
     setControllerError('')
     jobs.setImportError('')
@@ -155,9 +169,46 @@ export function useMindMapImport({
     }
   }
 
+  const applyParsedManualImport = (parsed: ReturnType<typeof parseManualMindMapImport>) => {
+    if (parsed.ok === false) {
+      setControllerError(parsed.error)
+      jobs.setImportError(parsed.error)
+      return false
+    }
+    setControllerError('')
+    jobs.setImportError('')
+    jobs.applyManualImportResult({
+      sourceTree: parsed.sourceTree,
+      editorDoc: parsed.editorDoc,
+      warnings: parsed.warnings,
+    })
+    return true
+  }
+
+  const handleManualImportParse = () => {
+    applyParsedManualImport(parseManualMindMapImport(manualImportText))
+  }
+
+  const handleManualImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const content = await file.text()
+      setManualImportFileName(file.name)
+      setManualImportText(content)
+      applyParsedManualImport(parseManualMindMapImportFile(file.name, content))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '读取文件失败。'
+      setControllerError(message)
+      jobs.setImportError(message)
+    }
+  }
+
   const handleImportPaste = (event: ClipboardEvent<HTMLDivElement>) => {
     const items = event.clipboardData?.items
     if (!items) return
+    if (sourceKind === 'manual-json' || sourceKind === 'pdf-document') return
     const imageFiles: File[] = []
     for (const item of Array.from(items)) {
       if (!item.type.startsWith('image/')) continue
@@ -165,7 +216,6 @@ export function useMindMapImport({
       if (file) imageFiles.push(file)
     }
     if (imageFiles.length === 0) return
-    if (sourceKind === 'pdf-document') return
     batch.appendBatchFiles(imageFiles)
   }
 
@@ -178,6 +228,12 @@ export function useMindMapImport({
   }
 
   return {
+    manualImportText,
+    setManualImportText,
+    manualImportFileName,
+    manualImportFormatPrompt: MANUAL_MINDMAP_JSON_PROMPT,
+    handleManualImportParse,
+    handleManualImportFileChange,
     importOpen: jobs.importOpen,
     setImportOpen: jobs.setImportOpen,
     importMode: mode,

@@ -113,6 +113,9 @@ from .text_splitting import (
 
 __all__ = [
     "MAX_IMAGE_BYTES",
+    "coerce_model_payload_to_source_tree",
+    "project_source_node",
+    "project_source_tree",
     "normalize_source_tree",
     "normalize_pdf_source_tree",
     "build_editor_doc",
@@ -121,22 +124,94 @@ __all__ = [
 
 MAX_NODE_COUNT = 400
 
-def normalize_source_tree(value: Any, *, disable_rebalance: bool = False) -> dict[str, Any]:
+
+def coerce_model_payload_to_source_tree(value: Any) -> dict[str, Any]:
+    """Accept the simple AI schema, or coerce a mistaken editor-doc-shaped payload."""
     if not isinstance(value, dict):
         raise MindMapImportError("模型返回的顶层结构不是对象。")
+
+    if isinstance(value.get("title"), str) and isinstance(value.get("children"), list):
+        return value
+
+    root = value.get("root")
+    if isinstance(root, dict):
+        raw_data = root.get("data")
+        root_data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+        raw_title = root_data.get("text")
+        title = raw_title if isinstance(raw_title, str) else root.get("text")
+        children = root.get("children")
+        if isinstance(title, str) and isinstance(children, list):
+            return {"title": title, "children": children}
+
+    raise MindMapImportError("模型返回缺少 title 字符串与 children 数组。")
+
+
+def project_source_node(value: Any) -> dict[str, Any]:
+    """Keep only the simple AI node fields: text, children, optional emphasis_marks / rich_text_html."""
+    if not isinstance(value, dict):
+        raise MindMapImportError("模型返回的节点结构非法。")
+
+    if isinstance(value.get("text"), str):
+        text = value["text"]
+        children = value.get("children")
+        emphasis_marks = value.get("emphasis_marks")
+        rich_text_html = value.get("rich_text_html")
+    elif isinstance(value.get("data"), dict):
+        data = value["data"]
+        raw_text = data.get("text")
+        if not isinstance(raw_text, str):
+            raise MindMapImportError("模型返回了空节点文本。")
+        plain = html_to_plain_text(raw_text) if "<" in raw_text else raw_text
+        text = plain
+        children = value.get("children")
+        emphasis_marks = value.get("emphasis_marks") or data.get("emphasis_marks")
+        rich_text_html = value.get("rich_text_html")
+        if rich_text_html is None and raw_text != plain and raw_text.strip().startswith("<"):
+            rich_text_html = raw_text
+    else:
+        raise MindMapImportError("模型返回了空节点文本。")
+
+    if not isinstance(text, str) or not text.strip():
+        raise MindMapImportError("模型返回了空节点文本。")
+    if not isinstance(children, list):
+        raise MindMapImportError("模型返回的 children 不是数组。")
+
+    node: dict[str, Any] = {
+        "text": text,
+        "children": [project_source_node(child) for child in children],
+    }
+    marks = normalize_emphasis_marks(emphasis_marks)
+    if marks:
+        node["emphasis_marks"] = marks
+    if isinstance(rich_text_html, str) and rich_text_html.strip():
+        node["rich_text_html"] = rich_text_html
+    return node
+
+
+def project_source_tree(value: dict[str, Any]) -> dict[str, Any]:
     title = value.get("title")
     if not isinstance(title, str):
         raise MindMapImportError("模型返回缺少 title 字符串。")
     children = value.get("children")
     if not isinstance(children, list):
         raise MindMapImportError("模型返回缺少 children 数组。")
+    return {
+        "title": title,
+        "children": [project_source_node(child) for child in children],
+    }
+
+
+def normalize_source_tree(value: Any, *, disable_rebalance: bool = False) -> dict[str, Any]:
+    del disable_rebalance  # retained for call-site compatibility
+    coerced = coerce_model_payload_to_source_tree(value)
+    projected = project_source_tree(coerced)
 
     counter = {"count": 0}
-    for child in children:
+    for child in projected["children"]:
         validate_source_node(child, counter)
     if counter["count"] > MAX_NODE_COUNT:
         raise MindMapImportError("识别出的节点过多，请换一张更聚焦的图片后重试。")
-    return value
+    return projected
 
 
 def normalize_pdf_source_tree(value: Any) -> dict[str, Any]:
@@ -144,8 +219,9 @@ def normalize_pdf_source_tree(value: Any) -> dict[str, Any]:
 
 
 def normalize_source_node(value: Any, counter: dict[str, int]) -> dict[str, Any]:
-    validate_source_node(value, counter)
-    return value
+    projected = project_source_node(value)
+    validate_source_node(projected, counter)
+    return projected
 
 
 def validate_source_node(value: Any, counter: dict[str, int]) -> None:

@@ -104,8 +104,16 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
         ? '已复用已有草稿，未重复识别'
         : ''
   const resolvedPreviewImageUrl = imagePreviewUrl
-  const sourceTitle = mode === 'mindmap' ? '图片转脑图' : '图片转文字'
-  const resolvedModelBadgeLabel = currentJobResolvedAi?.model_label || '等待实际调用模型'
+  const sourceTitle =
+    sourceKind === 'manual-json'
+      ? '手动转脑图'
+      : mode === 'mindmap'
+        ? '图片转脑图'
+        : '图片转文字'
+  const resolvedModelBadgeLabel =
+    sourceKind === 'manual-json'
+      ? '手动解析 · 不调用 AI'
+      : currentJobResolvedAi?.model_label || '等待实际调用模型'
 
   const historyViewModel: MindMapImportHistoryViewModel = {
     history: props.history,
@@ -145,6 +153,12 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     onPdfUpload: props.onPdfUpload,
     onPdfDelete: props.onPdfDelete,
     onPdfStart: props.onPdfStart,
+    manualImportText: props.manualImportText,
+    onManualImportTextChange: props.onManualImportTextChange,
+    manualImportFileName: props.manualImportFileName,
+    manualImportFormatPrompt: props.manualImportFormatPrompt,
+    onManualImportParse: props.onManualImportParse,
+    onManualImportFileChange: props.onManualImportFileChange,
     onFileChange: props.onFileChange,
     onPauseJob: props.onPauseJob,
     onResumeJob: props.onResumeJob,

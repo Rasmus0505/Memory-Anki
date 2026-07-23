@@ -92,6 +92,57 @@ describe('MindMapImportDrawer', () => {
     window.localStorage.clear()
   })
 
+  it('shows manual import controls with format prompt copy action', async () => {
+    const onManualImportParse = vi.fn()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    })
+
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          sourceKind: 'manual-json',
+          mode: 'mindmap',
+          manualImportText: '',
+          manualImportFormatPrompt: '请输出 JSON 脑图',
+          onManualImportTextChange: vi.fn(),
+          onManualImportParse,
+          onManualImportFileChange: vi.fn(),
+        })}
+      />,
+    )
+
+    expect(screen.getByText('手动转脑图')).toBeTruthy()
+    expect(screen.getByText('格式整理提示词')).toBeTruthy()
+    expect(screen.getByText('请输出 JSON 脑图')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '复制提示词' }))
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('请输出 JSON 脑图')
+    })
+    fireEvent.change(screen.getByPlaceholderText(/根节点标题/), {
+      target: { value: '{"title":"A","children":[]}' },
+    })
+    // text change is controlled by parent; parse button is enabled only with non-empty text via props
+  })
+
+  it('parses manual import when parse button is clicked', () => {
+    const onManualImportParse = vi.fn()
+    render(
+      <MindMapImportDrawer
+        {...buildProps({
+          sourceKind: 'manual-json',
+          mode: 'mindmap',
+          manualImportText: '{"title":"A","children":[{"text":"B","children":[]}]}',
+          manualImportFormatPrompt: 'prompt',
+          onManualImportParse,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '解析为脑图草稿' }))
+    expect(onManualImportParse).toHaveBeenCalled()
+  })
+
   it('expands on open even when its previous floating state was collapsed', async () => {
     window.localStorage.setItem(
       'memory-anki-floating-dialog:mindmap-import',

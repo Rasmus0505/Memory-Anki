@@ -2,6 +2,8 @@
   ArrowDown,
   ArrowUp,
   Check,
+  ClipboardCopy,
+  FileJson,
   FileText,
   ImagePlus,
   LoaderCircle,
@@ -9,7 +11,7 @@
   Trash2,
   Type,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { MindMapImportSourceConfigModel } from '@/modules/produce/ui/mindmap-import/components/import-drawer/types'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -66,7 +68,14 @@ export function MindMapImportSourceConfigPanel({
     onPdfUpload = () => {},
     onPdfDelete = () => {},
     onPdfStart = () => {},
+    manualImportText = '',
+    onManualImportTextChange = () => {},
+    manualImportFileName = '',
+    manualImportFormatPrompt = '',
+    onManualImportParse = () => {},
+    onManualImportFileChange = () => {},
   } = model
+  const [promptCopied, setPromptCopied] = useState(false)
   const cachedPages = pdfOcrCoverage?.page_numbers ?? []
   const cachedPagesLabel =
     cachedPages.length === 0
@@ -74,13 +83,23 @@ export function MindMapImportSourceConfigPanel({
       : cachedPages.length <= 12
         ? cachedPages.join('、')
         : `${cachedPages.slice(0, 12).join('、')}… 共 ${cachedPages.length} 页`
+  const isManual = sourceKind === 'manual-json'
+  const isPdf = sourceKind === 'pdf-document'
+  const isImage = !isManual && !isPdf
+
+  const handleCopyFormatPrompt = async () => {
+    if (!manualImportFormatPrompt) return
+    await navigator.clipboard.writeText(manualImportFormatPrompt)
+    setPromptCopied(true)
+    window.setTimeout(() => setPromptCopied(false), 1400)
+  }
 
   return (
     <div className="border-b px-6 py-4">
       <div className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <SourceKindButton
-            active={sourceKind !== 'pdf-document'}
+            active={isImage}
             onClick={() => {
               onSourceKindChange('image-batch')
               onWorkflowChange('batch')
@@ -89,19 +108,100 @@ export function MindMapImportSourceConfigPanel({
             label="图片"
           />
           <SourceKindButton
-            active={sourceKind === 'pdf-document'}
+            active={isPdf}
             onClick={() => onSourceKindChange('pdf-document')}
             icon={<FileText className="size-4" />}
             label="PDF"
           />
+          {mode === 'mindmap' ? (
+            <SourceKindButton
+              active={isManual}
+              onClick={() => onSourceKindChange('manual-json')}
+              icon={<FileJson className="size-4" />}
+              label="手动"
+            />
+          ) : null}
         </div>
 
-        {sourceKind !== 'pdf-document' ? (
+        {isImage ? (
           <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-5 text-sm text-muted-foreground transition-colors hover:text-foreground">
             <ImagePlus className="mr-2 size-4" />
             选择一张或多张图片，或直接在这里粘贴
             <input type="file" accept="image/*" multiple className="hidden" onChange={onFileChange} />
           </label>
+        ) : isManual ? (
+          <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">手动导入脑图</div>
+                <div className="text-xs text-muted-foreground">
+                  不走 AI 识别。可粘贴 JSON / 缩进大纲，或导入 .json / .txt / .md 文件，解析后应用为宫殿结构。
+                </div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm hover:bg-secondary">
+                <FileJson className="mr-2 size-4" />
+                选择文件
+                <input
+                  type="file"
+                  accept=".json,.txt,.md,.markdown,application/json,text/plain,text/markdown"
+                  className="hidden"
+                  onChange={onManualImportFileChange}
+                />
+              </label>
+            </div>
+
+            {manualImportFileName ? (
+              <div className="text-xs text-muted-foreground">
+                当前文件：<span className="font-medium text-foreground">{manualImportFileName}</span>
+              </div>
+            ) : null}
+
+            <div className="space-y-2 rounded-md border border-dashed border-border/70 bg-muted/15 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium">格式整理提示词</div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleCopyFormatPrompt()}
+                  disabled={!manualImportFormatPrompt}
+                >
+                  <ClipboardCopy className="mr-2 size-4" />
+                  {promptCopied ? '已复制' : '复制提示词'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                若从外部复制的节点/JSON 格式有误，可复制此提示词到 ChatGPT 等工具，把内容整理成可导入 JSON 后再粘贴回来。
+              </p>
+              <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/80 p-2 text-[11px] leading-relaxed text-muted-foreground">
+                {manualImportFormatPrompt || '提示词加载中…'}
+              </pre>
+            </div>
+
+            <label className="grid gap-1 text-sm">
+              <span>粘贴 JSON 或大纲文本</span>
+              <textarea
+                className="min-h-[160px] rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+                value={manualImportText}
+                onChange={(event) => onManualImportTextChange(event.target.value)}
+                placeholder={`{\n  "title": "根节点标题",\n  "children": [\n    { "text": "节点文字", "children": [] }\n  ]\n}`}
+                spellCheck={false}
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={onManualImportParse}
+                disabled={!manualImportText.trim() || loading || applying || undoing}
+              >
+                解析为脑图草稿
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                支持：source-tree JSON、Memory Anki 导出 JSON、编辑器文档 JSON、Markdown/缩进大纲
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -176,7 +276,7 @@ export function MindMapImportSourceConfigPanel({
           </div>
         )}
 
-        {sourceKind !== 'pdf-document' ? (
+        {isImage ? (
           <div className="rounded-lg border border-border/70 bg-background/60 p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -288,12 +388,15 @@ export function MindMapImportSourceConfigPanel({
               <Sparkles className="h-3.5 w-3.5" />
               已生成草稿，共 {nodeCount} 个知识点
               {sourceKind === 'image-batch' && batchMeta ? `，共使用 ${batchMeta.imageCount} 张图片` : ''}
+              {isManual ? '（手动导入，未调用 AI）' : ''}
             </>
           ) : extractedText ? (
             <>
               <Type className="h-3.5 w-3.5" />
               已提取文字，可直接多次复制后回到导图粘贴
             </>
+          ) : isManual ? (
+            '粘贴或导入 JSON/大纲后，点击「解析为脑图草稿」，再覆盖或追加到宫殿。'
           ) : sourceKind === 'image-batch' ? (
             '适合多张教材图：先识别全部文字，再整理为脑图。'
           ) : (

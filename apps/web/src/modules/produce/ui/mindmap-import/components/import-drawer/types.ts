@@ -80,6 +80,12 @@ export interface MindMapImportDrawerProps {
   onPdfUpload?: (event: ChangeEvent<HTMLInputElement>) => void
   onPdfDelete?: (documentId: string) => void
   onPdfStart?: () => void
+  manualImportText?: string
+  onManualImportTextChange?: (value: string) => void
+  manualImportFileName?: string
+  manualImportFormatPrompt?: string
+  onManualImportParse?: () => void
+  onManualImportFileChange?: (event: ChangeEvent<HTMLInputElement>) => void
   onApplyReplace: () => void
   onApplyAppend: () => void
   onUndoLastImport: () => void
@@ -178,6 +184,12 @@ export type MindMapImportSourceConfigModel = Pick<
   | 'onPdfUpload'
   | 'onPdfDelete'
   | 'onPdfStart'
+  | 'manualImportText'
+  | 'onManualImportTextChange'
+  | 'manualImportFileName'
+  | 'manualImportFormatPrompt'
+  | 'onManualImportParse'
+  | 'onManualImportFileChange'
 > & {
   hasCurrentJob: boolean
   nodeCount: number
