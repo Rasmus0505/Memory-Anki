@@ -67,15 +67,14 @@ function normalizeRememberedSectionTarget(section: NavSectionDefinition, target:
   }
 }
 
-function resolveNavSectionTarget(section: NavSectionDefinition) {
+function resolveNavSectionTarget(section: NavSectionDefinition, isActive = false) {
+  // While already in this section, the nav link points at the section root so a
+  // second click can leave a deep page (edit/practice/queue) without hunting for it.
+  if (isActive) return section.to
   if (!section.rememberLastVisited) return section.to
   const rememberedTarget = navSectionLastUrls[section.key] ?? readPageHistorySectionUrl(section.key)
   if (!rememberedTarget) return section.to
   return normalizeRememberedSectionTarget(section, rememberedTarget)
-}
-
-function resolveMobileNavSectionTarget(section: NavSectionDefinition) {
-  return resolveNavSectionTarget(section)
 }
 
 export function resetNavSectionHistoryForTest() {
@@ -161,8 +160,8 @@ function NavSectionLink({
   compact: boolean
 }) {
   const { to, label, icon: Icon } = section
-  const target = resolveNavSectionTarget(section)
   const isActive = section.matches(pathname)
+  const target = resolveNavSectionTarget(section, isActive)
   const runningCount = useRunningTaskCountBySection(
     section.key as BackgroundTaskSection,
   )
@@ -303,7 +302,7 @@ function MobileBottomNav() {
       {mobileSections.map((section) => {
         const Icon = section.icon
         const isActive = section.matches(pathname)
-        const target = resolveMobileNavSectionTarget(section)
+        const target = resolveNavSectionTarget(section, isActive)
         return (
           <NavLink
             key={section.key}

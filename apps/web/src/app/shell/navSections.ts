@@ -65,7 +65,9 @@ export const navSections: NavSectionDefinition[] = [
     to: '/freestyle',
     label: '随心',
     icon: Shuffle,
-    rememberLastVisited: false,
+    // Restore last freestyle/practice URL when switching back from another section.
+    // Clicking 随心 again while already active still returns to /freestyle (section root).
+    rememberLastVisited: true,
     matches: (pathname) =>
       pathname === '/freestyle' ||
       pathname === '/freestyle/session' ||
@@ -115,9 +117,9 @@ export const navSections: NavSectionDefinition[] = [
     to: '/palaces/new',
     label: '创建',
     icon: FolderTree,
-    // Always open a fresh create route. Remembering the last /palaces/:id/edit
-    // made "创建" reopen the previous palace and blocked starting a new one.
-    rememberLastVisited: false,
+    // Remember the last create/edit/quiz URL when leaving this section.
+    // Clicking 创建 again while already active returns to /palaces/new for a fresh draft.
+    rememberLastVisited: true,
     matches: isCreationRoute,
     warmup: () => {
       void preloadPalaceEditPage()
@@ -128,10 +130,10 @@ export const navSections: NavSectionDefinition[] = [
     to: '/dashboard',
     label: '洞察',
     icon: Brain,
-    // Always open the stats/time-records hub. Review queue is a sibling tab
-    // inside 洞察 (InsightsSectionNav); remembering /review made the bottom
-    // nav look like it only owned the queue with no way to switch.
-    rememberLastVisited: false,
+    // Remember dashboard vs review-queue (and other insight routes) when switching sections.
+    // Active review sessions are normalized to the dashboard hub; clicking 洞察 again
+    // while already active returns to /dashboard so the hub remains one click away.
+    rememberLastVisited: true,
     matches: (pathname) =>
       pathname === '/' ||
       pathname === '/dashboard' ||

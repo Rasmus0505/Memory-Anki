@@ -62,7 +62,7 @@ describe('AppShell residency navigation memory', () => {
     vi.restoreAllMocks()
   })
 
-  it('keeps the create nav fixed on /palaces/new instead of reopening the last edited palace', async () => {
+  it('restores the last create page and keeps resident page state when switching sections', async () => {
     render(
       <MemoryRouter initialEntries={['/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit']}>
         <AppShell>
@@ -82,17 +82,32 @@ describe('AppShell residency navigation memory', () => {
     })
 
     fireEvent.change(screen.getByLabelText('input:/freestyle'), {
-      target: { value: 'persisted english state' },
+      target: { value: 'persisted freestyle state' },
     })
 
-    fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
-    await waitFor(() => {
-      expect(screen.getByTestId('page:/palaces/new').getAttribute('data-active')).toBe('true')
-    })
+    const createLinks = screen.getAllByRole('link', { name: '创建' })
+    expect(
+      createLinks.some(
+        (link) => link.getAttribute('href') === '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
+      ),
+    ).toBe(true)
 
-    expect((screen.getByLabelText('input:/freestyle') as HTMLInputElement).value).toBe(
-      'persisted english state',
+    fireEvent.click(
+      createLinks.find(
+        (link) => link.getAttribute('href') === '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit',
+      )!,
     )
+    await waitFor(() => {
+      expect(screen.getByTestId('page:/palaces/30/edit').getAttribute('data-active')).toBe('true')
+    })
+
+    expect((screen.getByLabelText('input:/palaces/30/edit') as HTMLInputElement).value).toBe(
+      'persisted palace state',
+    )
+    expect((screen.getByLabelText('input:/freestyle') as HTMLInputElement).value).toBe(
+      'persisted freestyle state',
+    )
+    // While active on a deep create route, the nav link points at the section root.
     expect(screen.getAllByRole('link', { name: '创建' })[0]?.getAttribute('href')).toBe('/palaces/new')
     expect(screen.getAllByRole('link', { name: '创建' })[1]?.getAttribute('href')).toBe('/palaces/new')
   })

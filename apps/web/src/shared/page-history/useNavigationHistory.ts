@@ -5,14 +5,17 @@ import {
   useNavigationType,
   type NavigationType,
 } from 'react-router-dom'
+import { resolveNavigationSection } from './navigationSection'
 import {
-  applyNavigationHistoryTransition,
-  canNavigateHistoryBack,
-  canNavigateHistoryForward,
-  createNavigationHistoryState,
-  type NavigationHistoryEntry,
-  type NavigationHistoryState,
-} from './navigationHistory'
+  applySectionHistoryPointerMove,
+  applySectionNavigationTransition,
+  canSectionNavigateBack,
+  canSectionNavigateForward,
+  createSectionNavigationHistoryState,
+  peekSectionHistoryTarget,
+  type SectionNavigationHistoryState,
+} from './sectionNavigationHistory'
+import type { NavigationHistoryEntry } from './navigationHistory'
 
 function toEntry(location: {
   key: string
@@ -36,47 +39,58 @@ export function useNavigationHistory() {
   const location = useLocation()
   const navigate = useNavigate()
   const navigationType = useNavigationType()
-  const [state, setState] = useState<NavigationHistoryState>(() =>
-    createNavigationHistoryState(toEntry(location)),
+  const [state, setState] = useState<SectionNavigationHistoryState>(() =>
+    createSectionNavigationHistoryState(
+      toEntry(location),
+      resolveNavigationSection(location.pathname),
+    ),
   )
-  const pendingDeltaRef = useRef(0)
+  const pendingDeltaRef = useRef<-1 | 1 | 0>(0)
 
   useEffect(() => {
     const entry = toEntry(location)
+    const section = resolveNavigationSection(location.pathname)
     setState((current) => {
-      if (pendingDeltaRef.current !== 0) {
-        const nextIndex = current.index + pendingDeltaRef.current
+      if (pendingDeltaRef.current !== 0 && section) {
+        const delta = pendingDeltaRef.current
         pendingDeltaRef.current = 0
-        if (
-          nextIndex >= 0 &&
-          nextIndex < current.entries.length &&
-          current.entries[nextIndex]?.key === entry.key
-        ) {
-          return { entries: current.entries, index: nextIndex }
-        }
+        const moved = applySectionHistoryPointerMove(current, entry, section, delta)
+        if (moved) return moved
+      } else {
+        pendingDeltaRef.current = 0
       }
-      return applyNavigationHistoryTransition(current, entry, toHistoryAction(navigationType))
+      return applySectionNavigationTransition(
+        current,
+        entry,
+        section,
+        toHistoryAction(navigationType),
+      )
     })
   }, [location, navigationType])
 
-  return useMemo(
-    () => ({
-      canGoBack: canNavigateHistoryBack(state),
-      canGoForward: canNavigateHistoryForward(state),
+  return useMemo(() => {
+    const activeStack = state.activeSection
+      ? state.stacks[state.activeSection] ?? null
+      : null
+    return {
+      canGoBack: canSectionNavigateBack(state),
+      canGoForward: canSectionNavigateForward(state),
       goBack: () => {
-        if (!canNavigateHistoryBack(state)) return
+        const target = peekSectionHistoryTarget(state, -1)
+        if (!target) return
         pendingDeltaRef.current = -1
-        navigate(-1)
+        navigate(target.fullPath)
       },
       goForward: () => {
-        if (!canNavigateHistoryForward(state)) return
+        const target = peekSectionHistoryTarget(state, 1)
+        if (!target) return
         pendingDeltaRef.current = 1
-        navigate(1)
+        navigate(target.fullPath)
       },
-      currentPath: state.entries[state.index]?.fullPath ?? null,
-      stackSize: state.entries.length,
-      index: state.index,
-    }),
-    [navigate, state],
-  )
+      currentPath: activeStack?.entries[activeStack.index]?.fullPath ?? null,
+      stackSize: activeStack?.entries.length ?? 0,
+      index: activeStack?.index ?? -1,
+      activeSection: state.activeSection,
+    }
+  }, [navigate, state])
 }

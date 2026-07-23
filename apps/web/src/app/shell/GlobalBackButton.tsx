@@ -62,7 +62,7 @@ export function GlobalBackButton({
         size="icon"
         className={cn('size-8', !canGoBack && 'opacity-45')}
         aria-label="后退"
-        title="后退到上一页"
+        title="本分区上一页"
         disabled={!canGoBack}
         onClick={goBack}
       >
@@ -74,7 +74,7 @@ export function GlobalBackButton({
         size="icon"
         className={cn('size-8', !canGoForward && 'opacity-45')}
         aria-label="前进"
-        title="前进到下一页"
+        title="本分区下一页"
         disabled={!canGoForward}
         onClick={goForward}
       >

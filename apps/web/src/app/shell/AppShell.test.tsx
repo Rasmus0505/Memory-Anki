@@ -372,7 +372,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('always routes content creation to a fresh /palaces/new draft', async () => {
+  it('restores the last create-section page when switching back from another section', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -393,23 +393,39 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
+    // While still in 创建, the nav link points at the section root for a second-click reset.
+    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
+    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
+
     fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/freestyle')).toBeTruthy()
     })
 
-    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
-    const desktopLinks = screen.getAllByRole('link').filter((link) => !mobileNav.contains(link))
-    expect(desktopLinks.some((link) => link.getAttribute('href') === '/palaces/new')).toBe(true)
-    expect(mobileNav.querySelector('a[href="/palaces/new"]')).toBeTruthy()
+    const createLinks = screen.getAllByRole('link', { name: '创建' })
+    expect(
+      createLinks.some(
+        (link) =>
+          link.getAttribute('href') ===
+          '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap',
+      ),
+    ).toBe(true)
 
-    fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
+    fireEvent.click(
+      createLinks.find(
+        (link) =>
+          link.getAttribute('href') ===
+          '/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap',
+      )!,
+    )
     await waitFor(() => {
-      expect(screen.getByText('/palaces/new')).toBeTruthy()
+      expect(
+        screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap'),
+      ).toBeTruthy()
     })
   })
 
-  it('returns review navigation to the stable dashboard after visiting a review session', async () => {
+  it('returns content creation to /palaces/new when the create nav is clicked while already active', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -418,6 +434,54 @@ describe('AppShell', () => {
       max_supported_generation: 1,
       last_started_at: '2026-06-01T12:00:00+08:00',
     })
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/30/edit']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/palaces/new')).toBeTruthy()
+    })
+  })
+
+  it('remembers review overview routes but not active review sessions', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/review']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/freestyle')).toBeTruthy()
+    })
+
+    const reviewLinks = screen.getAllByRole('link', { name: '洞察' })
+    expect(reviewLinks.some((link) => link.getAttribute('href') === '/review')).toBe(true)
+    fireEvent.click(reviewLinks.find((link) => link.getAttribute('href') === '/review')!)
+    await waitFor(() => {
+      expect(screen.getByText('/review')).toBeTruthy()
+    })
+    unmount()
+    resetNavSectionHistoryForTest()
 
     render(
       <MemoryRouter initialEntries={['/review/session/9']}>
@@ -433,13 +497,49 @@ describe('AppShell', () => {
       expect(screen.getByText('/freestyle')).toBeTruthy()
     })
 
-    const reviewLinks = screen.getAllByRole('link', { name: '洞察' })
-    const reviewHrefs = reviewLinks.map((link) => link.getAttribute('href'))
-    expect(reviewHrefs).toContain('/dashboard')
-    const reviewOverviewLink = reviewLinks.find((link) => link.getAttribute('href') === '/dashboard')
-    fireEvent.click(reviewOverviewLink!)
+    const sessionReviewLinks = screen.getAllByRole('link', { name: '洞察' })
+    expect(sessionReviewLinks.map((link) => link.getAttribute('href'))).toContain('/dashboard')
+    fireEvent.click(
+      sessionReviewLinks.find((link) => link.getAttribute('href') === '/dashboard')!,
+    )
     await waitFor(() => {
       expect(screen.getByText('/dashboard')).toBeTruthy()
+    })
+  })
+
+  it('restores freestyle practice when switching back from another section', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/palaces/12/practice']}>
+        <AppShell>
+          <LocationEcho />
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText(/Stable abcdef12/)
+    fireEvent.click(screen.getAllByRole('link', { name: '知识' })[0]!)
+    await waitFor(() => {
+      expect(screen.getByText('/palaces')).toBeTruthy()
+    })
+
+    const freestyleLinks = screen.getAllByRole('link', { name: '随心' })
+    expect(
+      freestyleLinks.some((link) => link.getAttribute('href') === '/palaces/12/practice'),
+    ).toBe(true)
+    fireEvent.click(
+      freestyleLinks.find((link) => link.getAttribute('href') === '/palaces/12/practice')!,
+    )
+    await waitFor(() => {
+      expect(screen.getByText('/palaces/12/practice')).toBeTruthy()
     })
   })
 
