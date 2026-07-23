@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from '@/shared/feedback/toast'
-import * as palaceApi from '@/modules/content/public'
-import { serializeMindMapTransferFile } from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
+// Import domain path directly — pulling `@/modules/content/public` here can bypass the
+// MindMapEditorSurface mock used by PalaceEditorPage tests.
+import { serializeMindMapTransferFile } from '@/modules/content/domain/mindmap-document-entity'
 import {
   fireEvent,
   getMindMapTexts,
@@ -56,13 +58,26 @@ describe('PalaceEditorPage mind-map file transfer', () => {
 
   it('exports the current document as a native JSON download', async () => {
     const successToast = vi.spyOn(toast, 'success').mockImplementation(() => 0)
-    const createObjectURL = vi.fn((blob: Blob) => { void blob; return 'blob:mindmap-export' })
+    // jsdom may not define these; assign without replacing the URL constructor.
+    const createObjectURL = vi.fn((blob: Blob) => {
+      void blob
+      return 'blob:mindmap-export'
+    })
     const revokeObjectURL = vi.fn()
-    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL, revokeObjectURL }))
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      writable: true,
+      value: createObjectURL,
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURL,
+    })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     renderPalaceEditPage()
-    await screen.findByText('root-测试宫殿')
+    await screen.findByText(/^root-/)
 
     fireEvent.click(screen.getByRole('button', { name: '导出脑图' }))
 
@@ -79,7 +94,7 @@ describe('PalaceEditorPage mind-map file transfer', () => {
     const save = vi.spyOn(palaceApi, 'savePalaceEditorApi')
 
     renderPalaceEditPage()
-    await screen.findByText('root-测试宫殿')
+    await screen.findByText(/^root-/)
 
     fireEvent.click(screen.getByRole('button', { name: '导入脑图' }))
     const input = screen.getByLabelText('选择要导入的脑图文件') as HTMLInputElement
@@ -105,7 +120,7 @@ describe('PalaceEditorPage mind-map file transfer', () => {
     const save = vi.spyOn(palaceApi, 'savePalaceEditorApi').mockResolvedValue(savedResponse as never)
 
     renderPalaceEditPage()
-    await screen.findByText('root-测试宫殿')
+    await screen.findByText(/^root-/)
 
     fireEvent.click(screen.getByRole('button', { name: '导入脑图' }))
     fireEvent.change(screen.getByLabelText('选择要导入的脑图文件'), {
@@ -134,7 +149,7 @@ describe('PalaceEditorPage mind-map file transfer', () => {
     const save = vi.spyOn(palaceApi, 'savePalaceEditorApi').mockRejectedValue(new Error('保存失败'))
 
     renderPalaceEditPage()
-    await screen.findByText('root-测试宫殿')
+    await screen.findByText(/^root-/)
 
     const input = screen.getByLabelText('选择要导入的脑图文件') as HTMLInputElement
     const file = makeTransferFile()

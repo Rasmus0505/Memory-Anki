@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as palaceApi from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 import {
   fireEvent,
   renderPalaceEditPage,
@@ -37,7 +37,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '转脑图' }))
@@ -47,7 +47,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '覆盖当前脑图' }))
 
-    expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+    expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
   })
 
   it('keeps the same mind map host instance when saving meta and only uses soft sync props', async () => {
@@ -71,7 +71,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
-    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-soft-edit:0:0:0-0-')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '保存元信息' }))
 
@@ -81,7 +81,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
-    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-soft-edit:0:0:0-0-')).toBeTruthy()
   })
 
   it('keeps the same mind map host instance and bumps replace sync key after restore version', async () => {
@@ -105,7 +105,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
-    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-soft-edit:0:0:0-0-')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '恢复点' }))
     await waitFor(() => {
@@ -119,7 +119,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
     })
-    expect(screen.getByText('sync-soft-replace-edit:1:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('sync-soft-soft-edit:1:0:0-0-')).toBeTruthy()
   })
 
   it('raises the import drawer above the immersive card when fullscreen is active', async () => {
@@ -181,7 +181,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
     expect(screen.getByText('aisplit-idle')).toBeTruthy()
     expect(screen.getByText('child-原节点')).toBeTruthy()
@@ -229,7 +229,7 @@ describe('usePalaceEditPage sync and ai split behavior', () => {
     await waitFor(() => {
       expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
-    expect(screen.getByText(/sync-soft-replace-edit:0:0:1/)).toBeTruthy()
+    expect(screen.getByText(/sync-soft-soft-edit:0:0:1/)).toBeTruthy()
   })
 
   it('exits immersive mode on Escape regardless of practice or edit mode shell state', async () => {

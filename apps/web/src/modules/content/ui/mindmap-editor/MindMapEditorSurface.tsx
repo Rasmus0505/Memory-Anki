@@ -77,6 +77,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   segmentColorMode = 'all',
   segmentRangeDraft = EMPTY_SEGMENT_RANGE_DRAFT,
   highlightedNodeUids = EMPTY_UIDS,
+  ankiEditMode = false,
   mutedNodeUids = EMPTY_UIDS,
   masteryByNodeUid = EMPTY_MASTERY_BY_UID,
   statusChipsByNodeUid,
@@ -200,11 +201,12 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     () =>
       editorDocToGraph(normalizedEditorState.editor_doc, {
         ...graphOptions,
+        ankiEditMode,
         readonly,
       }),
     // graphOptions is read from the latest closure when signature changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- signature tracks decoration content
-    [graphOptionsSignature, normalizedEditorState.editor_doc, readonly],
+    [ankiEditMode, graphOptionsSignature, normalizedEditorState.editor_doc, readonly],
   )
   // Host remounts only on intentional document-identity changes.
   // Mode switches (build/learn, flip syncReason, preserveView flag) must not rebuild ReactFlow.

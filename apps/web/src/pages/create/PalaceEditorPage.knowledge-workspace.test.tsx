@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as knowledgeApi from '@/modules/content/public'
-import * as palaceApi from '@/modules/content/public'
+import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 import {
   fireEvent, renderPalaceEditPage, screen, setupPalaceEditPageTestDefaults, waitFor,
 } from './PalaceEditorPage.test-support'
@@ -21,6 +21,13 @@ function mockPalaceWithSubject() {
     editor_config: {}, editor_local_config: {}, lang: 'zh',
   } as never)
   vi.spyOn(knowledgeApi, 'saveSubjectEditorApi').mockResolvedValue({} as never)
+  vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({
+    subject: { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+    chapters: [],
+  } as never)
+  vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([
+    { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+  ])
 }
 
 describe('Palace knowledge workspace', () => {
@@ -96,5 +103,39 @@ describe('Palace knowledge workspace', () => {
     )
     expect(await screen.findByRole('button', { name: '外国教育史' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '移除学科 外国教育史' })).toBeTruthy()
+  })
+
+  it('binds a chapter from the subject chapter tree without opening link mode', async () => {
+    vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({
+      subject: { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },
+      chapters: [
+        { id: 11, name: '第一章 总论', parent_id: null, subject_id: 1, children: [] },
+        { id: 12, name: '第二章 展开', parent_id: null, subject_id: 1, children: [] },
+      ],
+    } as never)
+    vi.spyOn(palaceApi, 'updatePalaceKnowledgeBindingApi').mockResolvedValue({
+      palace_id: 101,
+      subjects: [{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }],
+      explicit_chapter_ids: [11],
+      inherited_chapter_ids: [],
+      primary_chapter_id: 11,
+      binding_revision: 1,
+    })
+
+    renderPalaceEditPage()
+    await screen.findByText('绑定章节')
+    fireEvent.click(await screen.findByRole('checkbox', { name: '关联章节 第一章 总论' }))
+
+    await waitFor(() =>
+      expect(palaceApi.updatePalaceKnowledgeBindingApi).toHaveBeenCalledWith(
+        101,
+        expect.objectContaining({
+          subject_ids: [1],
+          chapter_ids: [11],
+          primary_chapter_id: 11,
+          base_revision: 0,
+        }),
+      ),
+    )
   })
 })

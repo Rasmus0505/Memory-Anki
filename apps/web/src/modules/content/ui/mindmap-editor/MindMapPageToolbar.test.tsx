@@ -41,7 +41,7 @@ describe('MindMapPageToolbar', () => {
       <MindMapPageToolbar
         ratingAction={{ label: '评分', onClick: vi.fn() }}
         modeToggle={{ label: '编辑', onClick: vi.fn() }}
-        moreActions={[{ label: '本轮评分记录', onClick: vi.fn() }]}
+        moreActions={[{ label: '宫殿进度校准', onClick: vi.fn() }]}
       />,
     )
 

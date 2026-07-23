@@ -32,7 +32,11 @@ import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
-import type { MindMapSelection } from '@/modules/content/public'
+import {
+  cycleMindMapAnkiRole,
+  parseMindMapDocument,
+  type MindMapSelection,
+} from '@/modules/content/public'
 
 function SaveStatusBadge({
   status,
@@ -88,6 +92,10 @@ export default function PalaceEdit() {
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
   const [templateSaving, setTemplateSaving] = useState(false)
+  /** Session-only: default palace mode each entry; Anki is temporary. */
+  const [ankiEditMode, setAnkiEditMode] = useState(false)
+  /** When true in Anki mode, click cycles front/back/none instead of normal select. */
+  const [ankiRolePen, setAnkiRolePen] = useState(false)
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -132,7 +140,28 @@ export default function PalaceEdit() {
     lastBuildActivationRef.current = becameActiveAt
     setMindMapTask('build')
     if (editorMode !== 'edit') exitInlinePractice()
+    // Always re-enter in palace mode (Anki switch is session-only).
+    setAnkiEditMode(false)
+    setAnkiRolePen(false)
   }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
+
+  const handleAnkiRoleCycleClick = useCallback(
+    (nodes: MindMapSelection[]) => {
+      const uid = nodes[0]?.uid
+      if (!uid || !page.editorState) return
+      const doc = parseMindMapDocument(page.editorState.editor_doc)
+      const result = cycleMindMapAnkiRole(doc, uid)
+      if (!result.changed) return
+      page.handleMindMapEditorStateChange({
+        ...page.editorState,
+        editor_doc: result.document,
+      })
+      const label =
+        result.role === 'front' ? '正面' : result.role === 'back' ? '反面' : '取消角色'
+      toast.success(`已标为${label}`)
+    },
+    [page],
+  )
   const recallModeActive = page.editorMode === 'recall'
   const segmentToolbarOptions = useMemo(
     () =>
@@ -252,6 +281,31 @@ export default function PalaceEdit() {
         }
       : null,
     moreActions: [
+      {
+        label: ankiEditMode ? '切换到记忆宫殿模式' : '切换到 Anki 正反面模式',
+        onClick: () => {
+          setAnkiEditMode((current) => {
+            const next = !current
+            if (!next) setAnkiRolePen(false)
+            toast.success(next ? 'Anki 模式：可用「角色笔」点节点标正/反面' : '已回到记忆宫殿模式')
+            return next
+          })
+        },
+      },
+      ...(ankiEditMode
+        ? [
+            {
+              label: ankiRolePen ? '关闭角色笔' : '打开角色笔（点节点循环正/反面）',
+              onClick: () => {
+                setAnkiRolePen((current) => {
+                  const next = !current
+                  toast.success(next ? '角色笔已开：单击节点 中性→正面→反面→中性' : '角色笔已关')
+                  return next
+                })
+              },
+            },
+          ]
+        : []),
       {
         label: `结构检查（${mindMapExperience.structureIssues.length}）`,
         onClick: () => {
@@ -510,6 +564,7 @@ export default function PalaceEdit() {
                     reviewFxSignal={page.reviewFxSignal}
                     feedbackFxSignal={page.feedbackFxSignal}
                     highlightedNodeUids={mindMapExperience.highlightedNodeUids}
+                    ankiEditMode={ankiEditMode && !recallModeActive}
                     masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
                     onCountBadgeClick={quizBindingsHost.openNodeQuiz}
@@ -529,7 +584,13 @@ export default function PalaceEdit() {
                     onNodeActive={handleMindMapNodeActive}
                     onNodeClick={page.handleInlinePracticeNodeClick}
                     onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
-                    onEditNodeClick={page.isSegmentRangeMode ? page.handleSegmentRangeNodeClick : undefined}
+                    onEditNodeClick={
+                      ankiEditMode && ankiRolePen && !recallModeActive
+                        ? handleAnkiRoleCycleClick
+                        : page.isSegmentRangeMode
+                          ? page.handleSegmentRangeNodeClick
+                          : undefined
+                    }
                     onAiSplitRequest={page.handleAiSplitRequest}
                     onQuizBreakOpen={handleOpenQuizPage}
                     onSegmentSelect={page.setActiveSegmentId}
@@ -628,6 +689,12 @@ export default function PalaceEdit() {
         onPdfUpload={mindMapImport.handlePdfUpload}
         onPdfDelete={(documentId) => void mindMapImport.handlePdfDelete(documentId)}
         onPdfStart={mindMapImport.handlePdfImportStart}
+        manualImportText={mindMapImport.manualImportText}
+        onManualImportTextChange={mindMapImport.setManualImportText}
+        manualImportFileName={mindMapImport.manualImportFileName}
+        manualImportFormatPrompt={mindMapImport.manualImportFormatPrompt}
+        onManualImportParse={mindMapImport.handleManualImportParse}
+        onManualImportFileChange={(event) => void mindMapImport.handleManualImportFileChange(event)}
         onApplyReplace={mindMapImport.handleImportApplyReplace}
         onApplyAppend={mindMapImport.handleImportApplyAppend}
         onUndoLastImport={mindMapImport.handleUndoLastImport}

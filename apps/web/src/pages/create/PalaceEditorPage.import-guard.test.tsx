@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
-import * as palaceApi from '@/modules/content/public'
-import * as knowledgeApi from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
+import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 
 vi.mock('sonner', () => ({
   toast: {

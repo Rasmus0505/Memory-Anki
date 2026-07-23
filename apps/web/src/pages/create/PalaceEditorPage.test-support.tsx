@@ -10,9 +10,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import * as appLogs from '@/shared/logs/model/appLogs'
-import * as knowledgeApi from '@/modules/content/public'
+import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 import * as importApi from '@/modules/produce/public'
-import * as palaceApi from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
+import * as preferencesApi from '@/modules/settings/domain/preferences-entity/api'
+import * as settingsPublic from '@/modules/settings/public'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -539,6 +541,57 @@ export function renderPalaceEditPageStrict() {
   )
 }
 
+const AI_SPLIT_SCENARIO_FIXTURE = {
+  scenes: [
+    {
+      key: 'ai_split',
+      label: 'AI 分卡',
+      description: '分卡',
+      default_model: 'qwen3.6-flash',
+      default_thinking_enabled: false,
+      available_models: [
+        {
+          key: 'qwen3.6-flash',
+          label: 'Qwen Flash',
+          provider: 'dashscope',
+          supports_thinking: false,
+        },
+      ],
+    },
+  ],
+  scenarios: [],
+}
+
+const AI_SPLIT_PROMPT_BLOCKS_FIXTURE = {
+  items: [
+    {
+      key: 'role.strict_json',
+      label: '严格 JSON',
+      description: 'test',
+      layer: 'role',
+      sort_order: 10,
+      template: 'json only',
+      is_active: true,
+      applicable_scene_keys: ['ai_split'],
+    },
+  ],
+}
+
+const AI_SPLIT_PROMPT_SCENES_FIXTURE = {
+  items: [
+    {
+      scene_key: 'ai_split',
+      prompt_key: 'ai_prompt_mindmap_ai_split_system',
+      label: 'AI 分卡',
+      description: '分卡',
+      category: '脑图分卡',
+      block_keys: ['role.strict_json'],
+      recommended_block_keys: ['role.strict_json'],
+      scene_instruction: 'split',
+    },
+  ],
+}
+
 export function setupPalaceEditPageTestDefaults() {
   vi.restoreAllMocks()
   window.localStorage.clear()
@@ -559,6 +612,17 @@ export function setupPalaceEditPageTestDefaults() {
   promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
+  // restoreAllMocks clears module-level vi.fn implementations; re-bind AI catalog fixtures.
+  // Spy both the domain module and public facade so workbench imports resolve either way.
+  for (const api of [preferencesApi, settingsPublic]) {
+    vi.spyOn(api, 'getAiModelScenariosApi').mockResolvedValue(AI_SPLIT_SCENARIO_FIXTURE as never)
+    vi.spyOn(api, 'getAiPromptBlocksApi').mockResolvedValue(AI_SPLIT_PROMPT_BLOCKS_FIXTURE as never)
+    vi.spyOn(api, 'getAiPromptScenesApi').mockResolvedValue(AI_SPLIT_PROMPT_SCENES_FIXTURE as never)
+    vi.spyOn(api, 'previewAiPromptCompositionApi').mockResolvedValue({
+      text: 'compiled split prompt',
+      warnings: [],
+    } as never)
+  }
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)

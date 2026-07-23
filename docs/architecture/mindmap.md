@@ -85,7 +85,8 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 ## 知识重点黄底标记
 
-- AI 转脑图可在节点上返回可选 `emphasis_marks: [{ kind: "highlight", text: "原文子串" }]`；用户在 AI 运行配置中填写“重点标记线索”（如带有下划线的文字），未填写时不强制识别。
+- AI 契约只使用简单 `source_tree`：`{"title":"...","children":[{"text":"...","children":[],"emphasis_marks?":[...]}]}`。禁止模型输出 `data`/`uid`/`richText`/`theme` 等编辑器字段；已有导图库仍持久化为 `editor_doc`，两套形状在 `build_editor_doc` 边界转换。
+- AI 转脑图可在节点上返回可选 `emphasis_marks: [{ kind: "highlight", text: "原文子串" }]`；用户在 AI 运行配置中填写“重点标记线索”（如带有下划线的文字），未填写时不强制识别。节点 `text` 保持纯文本，marks 必须是其子串。
 - 服务端将 marks / `rich_text_html` 归一为带 `data-emphasis="highlight"` 的黄底 HTML，写入 `data.text` 并置 `data.richText`。
 - 画布展示安全 HTML；编辑态选中文字可 toggle 黄色底色（再点取消）。产品语义是知识重点，不复刻教材下划线样式。
 

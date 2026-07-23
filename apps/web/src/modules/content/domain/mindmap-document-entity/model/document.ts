@@ -9,6 +9,10 @@ export interface MindMapNodeData {
   memoryAnkiRootKind?: string | null
   /** When true, parent reveal auto-shows this node's body during review flip. */
   memoryAnkiQuestionCard?: boolean
+  /** Anki presentation role: front / back / none (explicit). Unset = infer. */
+  ankiRole?: 'front' | 'back' | 'none'
+  /** When ankiRole is back, optional explicit front uid (overrides parent inference). */
+  ankiFrontUid?: string
   [key: string]: unknown
 }
 
@@ -208,6 +212,39 @@ export function setMindMapQuestionCards(
     }
   })
   return { document: nextDocument, count }
+}
+
+/**
+ * Cycle Anki role on a node: none → front → back → none (stored explicitly).
+ * Root is skipped. Returns the role after the click (for toast/UI).
+ */
+export function cycleMindMapAnkiRole(
+  document: MindMapDocumentInput,
+  nodeUid: string,
+): { document: MindMapDocumentV1; role: 'front' | 'back' | 'none'; changed: boolean } {
+  let nextRole: 'front' | 'back' | 'none' = 'none'
+  let changed = false
+  const nextDocument = updateDocument(document, (draft) => {
+    const rootUid = getMindMapNodeUid(draft.root, 'root')
+    if (!nodeUid || nodeUid === rootUid) return
+    const found = findNode(draft.root, nodeUid)
+    if (!found) return
+    const current = found.node.data?.ankiRole
+    const from: 'front' | 'back' | 'none' =
+      current === 'front' || current === 'back' || current === 'none' ? current : 'none'
+    nextRole = from === 'none' ? 'front' : from === 'front' ? 'back' : 'none'
+    const nextData: MindMapNodeData = { ...(found.node.data ?? {}) }
+    if (nextRole === 'none') {
+      delete nextData.ankiRole
+      delete nextData.ankiFrontUid
+    } else {
+      nextData.ankiRole = nextRole
+      if (nextRole !== 'back') delete nextData.ankiFrontUid
+    }
+    found.node.data = nextData
+    changed = true
+  })
+  return { document: nextDocument, role: nextRole, changed }
 }
 
 export function addMindMapChild(document: MindMapDocumentInput, parentUid: string) {

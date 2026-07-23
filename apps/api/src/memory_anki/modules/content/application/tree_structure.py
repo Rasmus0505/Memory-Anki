@@ -22,6 +22,20 @@ def _node_text(raw: dict[str, Any]) -> str:
     return str(data.get("text") or "").strip()
 
 
+def _node_anki_fields(raw: dict[str, Any]) -> dict[str, Any]:
+    value = raw.get("data")
+    data: dict[str, Any] = value if isinstance(value, dict) else {}
+    role = data.get("ankiRole")
+    safe_role = role if role in {"front", "back", "none"} else None
+    front_uid = str(data.get("ankiFrontUid") or "").strip() or None
+    fields: dict[str, Any] = {}
+    if safe_role is not None:
+        fields["anki_role"] = safe_role
+    if front_uid:
+        fields["anki_front_uid"] = front_uid
+    return fields
+
+
 def build_tree_from_editor_doc(editor_doc: Any) -> tuple[str | None, dict[str, dict[str, Any]]]:
     """Return (root_uid, nodes) with children ordered as stored in the document."""
     document = editor_doc
@@ -50,6 +64,7 @@ def build_tree_from_editor_doc(editor_doc: Any) -> tuple[str | None, dict[str, d
             "parent_uid": parent_uid,
             "children": children,
             "text": _node_text(raw),
+            **_node_anki_fields(raw),
         }
         return uid
 

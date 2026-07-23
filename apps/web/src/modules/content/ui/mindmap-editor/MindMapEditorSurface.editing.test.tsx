@@ -116,5 +116,12 @@ describe('MindMapEditorSurface editing workflow', () => {
       expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('3')
       expect(screen.getByTestId('editing-canvas').getAttribute('data-can-redo')).toBe('yes')
     })
+
+    fireEvent.keyDown(screen.getByTestId('editing-canvas'), { key: 'y', ctrlKey: true })
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('1')
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-can-redo')).toBe('no')
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-can-undo')).toBe('yes')
+    })
   })
 })

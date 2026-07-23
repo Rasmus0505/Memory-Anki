@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import * as palaceApi from '@/modules/content/public'
+import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 import {
   fireEvent,
   getMindMapTexts,
@@ -23,7 +23,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
       expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
     })
     expect(window.localStorage.getItem('memory-anki:mindmap-task:palace:101')).toBe('build')
@@ -56,8 +56,8 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
 
     expect(screen.getByText('学科与思维导图')).toBeTruthy()
-    expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-    expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
+    expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
+    expect(screen.getByText('sync-soft-soft-edit:0:0:0-0-')).toBeTruthy()
     expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
     expect(screen.getByRole('button', { name: '转脑图' })).toBeTruthy()
 
@@ -82,8 +82,8 @@ describe('usePalaceEditPage inline practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
       expect(screen.getByText('学科与思维导图')).toBeTruthy()
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-      expect(screen.getByText('sync-soft-replace-edit:0:0:0-0-')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
+      expect(screen.getByText('sync-soft-soft-edit:0:0:0-0-')).toBeTruthy()
       expect(screen.getByText('scope-palace-edit:101')).toBeTruthy()
       expect(screen.getByRole('button', { name: '学习' })).toBeTruthy()
       expect(screen.getByText('mindmap-mount-1')).toBeTruthy()
@@ -122,7 +122,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '学习' }))
@@ -170,7 +170,7 @@ describe('usePalaceEditPage inline practice mode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '构建' }))
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
     fireEvent.click(screen.getByRole('button', { name: '学习' }))
     await waitFor(() => {
@@ -186,7 +186,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     })
   })
 
-  it('carries the current node focus across edit and practice mode switches', async () => {
+  it('keeps camera continuity across edit and practice mode switches without forced node focus', async () => {
     vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
       palace: {
         id: 101,
@@ -215,7 +215,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
     expect(screen.getByText('focus-:0')).toBeTruthy()
 
@@ -224,7 +224,8 @@ describe('usePalaceEditPage inline practice mode', () => {
 
     await waitFor(() => {
       expect(screen.getByText('mindmap-practice-readonly-toolbar-preserve-import-sync')).toBeTruthy()
-      expect(screen.getByText('focus-education-purpose:1')).toBeTruthy()
+      // Mode switches re-anchor via canvas scene transition; do not force-focus selected node.
+      expect(screen.getByText('focus-:0')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '点击根节点' }))
@@ -235,8 +236,8 @@ describe('usePalaceEditPage inline practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: '构建' }))
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
-      expect(screen.getByText('focus-education-purpose:2')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
+      expect(screen.getByText('focus-:0')).toBeTruthy()
     })
   })
 
@@ -269,7 +270,7 @@ describe('usePalaceEditPage inline practice mode', () => {
     renderPalaceEditPage()
 
     await waitFor(() => {
-      expect(screen.getByText('mindmap-edit-editable-plain-reset-import-sync')).toBeTruthy()
+      expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: '学习' }))
