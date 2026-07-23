@@ -8,6 +8,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceSegment,
 )
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.session.application.serialization import _parse_datetime
 from memory_anki.modules.session.application.session_progress_service import (
     clear_practice_progress,
     clear_segment_practice_progress,
@@ -23,7 +24,6 @@ from memory_anki.modules.session.application.study_session_commands import (
     create_study_session_command,
     create_study_session_from_time_record_command,
 )
-from memory_anki.modules.session.application.serialization import _parse_datetime
 from memory_anki.modules.session.application.study_session_service import (
     build_study_session_stats,
     build_time_record_analytics,
@@ -148,39 +148,52 @@ def api_list_study_sessions(
         raise HTTPException(status_code=400, detail="started_from 时间格式无效。")
     if started_to and parsed_to is None:
         raise HTTPException(status_code=400, detail="started_to 时间格式无效。")
-    filter_kwargs = {
-        "keyword": keyword,
-        "kind": kind,
-        "status": status,
-        "started_from": parsed_from,
-        "started_to": parsed_to,
-    }
     if limit is None:
-        payload: dict = {
+        payload: dict[str, object] = {
             "items": list_study_sessions(
                 session,
+                keyword=keyword,
+                kind=kind,
+                status=status,
+                started_from=parsed_from,
+                started_to=parsed_to,
                 sort_by=sort_by,
                 sort_order=sort_order,
-                **filter_kwargs,
             )
         }
     else:
         payload = {
             "items": list_study_sessions(
                 session,
+                keyword=keyword,
+                kind=kind,
+                status=status,
+                started_from=parsed_from,
+                started_to=parsed_to,
                 sort_by=sort_by,
                 sort_order=sort_order,
                 limit=limit,
                 offset=offset,
-                **filter_kwargs,
             ),
-            "total": count_study_sessions(session, **filter_kwargs),
+            "total": count_study_sessions(
+                session,
+                keyword=keyword,
+                kind=kind,
+                status=status,
+                started_from=parsed_from,
+                started_to=parsed_to,
+            ),
             "limit": limit,
             "offset": offset,
         }
     if include_source_summary:
         payload["source_summary"] = summarize_study_sessions_by_client_source(
-            session, **filter_kwargs
+            session,
+            keyword=keyword,
+            kind=kind,
+            status=status,
+            started_from=parsed_from,
+            started_to=parsed_to,
         )
     return payload
 

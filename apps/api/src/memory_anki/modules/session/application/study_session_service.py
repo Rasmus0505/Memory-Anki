@@ -404,7 +404,7 @@ def summarize_study_sessions_by_client_source(
 
 
 def _client_source_from_summary_json(raw: str | None) -> str | None:
-    payload = _json_loads(raw, {})
+    payload: Any = _json_loads(raw, {})
     if not isinstance(payload, dict):
         return None
     value = str(payload.get("client_source") or "").strip().lower()
