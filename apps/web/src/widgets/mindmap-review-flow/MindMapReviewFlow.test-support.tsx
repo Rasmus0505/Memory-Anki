@@ -174,6 +174,7 @@ vi.mock("@/modules/content/ui/mindmap-editor", () => ({
     immersiveAction,
     nativeFullscreenAction,
     clearUiAction,
+    moreActions = [],
   }: Record<string, any>) => (
     <div data-testid="mind-map-toolbar">
       {ratingAction ? (
@@ -196,6 +197,11 @@ vi.mock("@/modules/content/ui/mindmap-editor", () => ({
           {miniPalaceAction.label}
         </button>
       ) : null}
+      {(moreActions as Array<{ label: string; onClick: () => void }>).map((action) => (
+        <button key={action.label} type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
       {immersiveAction ? (
         <button type="button" onClick={immersiveAction.onClick}>
           {immersiveAction.label}

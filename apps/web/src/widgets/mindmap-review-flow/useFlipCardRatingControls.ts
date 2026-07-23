@@ -28,6 +28,8 @@ export type FlipCardRateNodeHandler = (
   scope?: 'single' | 'subtree',
   evidence?: { source?: 'manual' | 'inferred'; confidence?: number | null; responseMs?: number | null },
   conflictPolicy?: RatingConflictPolicy,
+  /** Full rating-tree cascade targets (parent + all descendants). */
+  cascadeNodeUids?: string[],
 ) => void | Promise<void>
 
 export function useFlipCardRatingControls({
@@ -129,6 +131,12 @@ export function useFlipCardRatingControls({
     ) => {
       if (!ratingMode || !onRateNode || !isRateableNode(nodeUid)) return
       const scope = scopeOverride ?? getRatingScopeForNode(nodeUid)
+      // Always walk the full rating tree for cascade targets — including deep
+      // grandchildren under a single-child spine (P → C → G1/G2/G3).
+      const cascadeNodeUids =
+        scope === 'subtree'
+          ? collectSubtreeUids(guidedNodes, nodeUid, rootUid)
+          : [nodeUid]
       void onRateNode(
         nodeUid,
         rating,
@@ -141,6 +149,7 @@ export function useFlipCardRatingControls({
         },
         // Single-node rating has no cascade conflicts to resolve.
         scope === 'single' ? 'overwrite' : conflictPolicy,
+        cascadeNodeUids,
       )
       if (source === 'inferred') setInferredNodeUid(nodeUid)
       else setInferredNodeUid(null)
@@ -155,11 +164,13 @@ export function useFlipCardRatingControls({
     [
       byUid,
       getRatingScopeForNode,
+      guidedNodes,
       isRateableNode,
       onNodeActive,
       onRateNode,
       ratingMode,
       recallRound,
+      rootUid,
       selectGuidedNode,
     ],
   )

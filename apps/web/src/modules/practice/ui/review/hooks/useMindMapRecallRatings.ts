@@ -167,30 +167,55 @@ export function useMindMapRecallRatings({
       scope: 'single' | 'subtree' = 'subtree',
       evidence: RateNodeEvidence = {},
       conflictPolicy: RatingConflictPolicy = 'overwrite',
+      /**
+       * Full cascade targets from the rating tree (including deep grandchildren under
+       * a single-child spine). Used for optimistic batch_inherited chips so UI does
+       * not wait for the server list — and as a fallback if affected_node_uids is missing.
+       */
+      cascadeNodeUids?: string[],
     ) => {
       if (!enabled || !palaceId || !studySessionId) return
       const previous = byKey.get(`${nodeUid}:${targetRound}`) ?? null
       const operationId = makeOperationId()
-      const optimistic: MindMapRecallEvent = {
-        id: `${operationId}:${nodeUid}`.slice(0, 64),
+      const optimisticBase = {
         study_session_id: studySessionId,
         palace_id: palaceId,
-        node_uid: nodeUid,
         source_scene: sourceScene,
         recall_round: targetRound,
         rating,
         rating_source: evidence.source ?? 'manual',
         rating_scope: scope,
-        evidence_origin: 'direct',
         inference_confidence: evidence.source === 'inferred' ? evidence.confidence ?? 0.35 : null,
         response_ms: evidence.responseMs ?? null,
         hint_count: evidence.hintCount ?? 0,
         retry_count: evidence.retryCount ?? 0,
         operation_id: operationId,
         occurred_at: new Date().toISOString(),
-        supersedes_event_id: previous?.id ?? null,
-      }
-      setEvents((current) => [...current, optimistic])
+      } as const
+      const makeEvent = (
+        uid: string,
+        origin: 'direct' | 'batch_inherited',
+        supersedes: string | null,
+      ): MindMapRecallEvent => ({
+        ...optimisticBase,
+        id: `${operationId}:${uid}`.slice(0, 64),
+        node_uid: uid,
+        evidence_origin: origin,
+        supersedes_event_id: supersedes,
+      })
+      const optimistic = makeEvent(nodeUid, 'direct', previous?.id ?? null)
+      // Subtree: optimistically mark every known descendant (not only the parent).
+      // Critical for P→single-child→multi-grandchildren: chips must follow all branches.
+      const optimisticCascade =
+        scope === 'subtree' && cascadeNodeUids && cascadeNodeUids.length > 0
+          ? cascadeNodeUids
+              .filter((uid) => uid !== nodeUid)
+              .map((uid) => {
+                const prior = byKey.get(`${uid}:${targetRound}`)
+                return makeEvent(uid, 'batch_inherited', prior?.id ?? null)
+              })
+          : []
+      setEvents((current) => [...current, optimistic, ...optimisticCascade])
       try {
         const response = await ratePalaceNodesApi(palaceId, {
           node_uid: nodeUid,
@@ -207,39 +232,31 @@ export function useMindMapRecallRatings({
           hint_count: evidence.hintCount ?? 0,
           retry_count: evidence.retryCount ?? 0,
         })
-        const affected = response.item.affected_node_uids ?? [nodeUid]
+        // Prefer server list; fall back to client cascade UIDs so deep spines still paint.
+        const affected =
+          response.item.affected_node_uids ??
+          (scope === 'subtree' && cascadeNodeUids?.length
+            ? cascadeNodeUids
+            : [nodeUid])
         setEvents((current) => {
           const latest = latestEventsByNodeRound(current)
-          const existingForOp = new Set(
-            current.filter((event) => event.operation_id === operationId).map((event) => event.node_uid),
-          )
-          const inherited = affected
-            .filter((uid) => !existingForOp.has(uid))
-            .map((uid) => {
-              const prior = latest.get(`${uid}:${targetRound}`)
-              return {
-                ...optimistic,
-                id: `${operationId}:${uid}`.slice(0, 64),
-                node_uid: uid,
-                rating_scope: scope,
-                evidence_origin: (uid === nodeUid ? 'direct' : 'batch_inherited') as
-                  | 'direct'
-                  | 'batch_inherited',
-                // Supersede prior event so latest-by-node stays consistent offline.
-                supersedes_event_id: prior?.id ?? null,
-              }
-            })
-          // When skip_direct, parent may be the only optimistic row; drop optimistic if not in affected.
-          if (!affected.includes(nodeUid)) {
-            return [
-              ...current.filter((event) => event.id !== optimistic.id),
-              ...inherited,
-            ]
-          }
-          return [...current, ...inherited]
+          // Drop this op's optimistic rows, then re-apply authoritative affected set.
+          const withoutOp = current.filter((event) => event.operation_id !== operationId)
+          const applied = affected.map((uid) => {
+            const prior = latest.get(`${uid}:${targetRound}`)
+            // Prefer prior outside this op (latest may still hold optimistic same-op rows).
+            const supersedeId =
+              prior && prior.operation_id !== operationId ? prior.id : prior?.supersedes_event_id ?? null
+            return makeEvent(
+              uid,
+              uid === nodeUid ? 'direct' : 'batch_inherited',
+              supersedeId,
+            )
+          })
+          return [...withoutOp, ...applied]
         })
       } catch (error) {
-        setEvents((current) => current.filter((event) => event.id !== optimistic.id))
+        setEvents((current) => current.filter((event) => event.operation_id !== operationId))
         throw new Error(errorMessage(error, '节点评分保存失败'), { cause: error })
       }
       return operationId

@@ -134,7 +134,7 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('placeholder')
   })
 
-  it('blocks hide only on non-due cards; due hide sticks and expand stays stepwise', () => {
+  it('allows hide on non-due and root in formal due-scope; expand stays stepwise', () => {
     const nested: MindMapEditorState = {
       ...editorState,
       editor_doc: {
@@ -165,12 +165,27 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.due).toBe('placeholder')
     expect(result.current.revealMap['nested-fresh']).toBe('hidden')
 
+    // Root hide must work even when formal focus is set (non-due soft-dim only).
     act(() => {
-      result.current.handleNodeContextMenu([selection('fresh', 'Fresh')])
+      result.current.handleNodeContextMenu([selection('root', '宫殿')])
     })
     flushRevealFrame()
-    // Non-due cards cannot be hidden in formal due-scope review.
+    expect(result.current.revealMap.fresh).toBe('hidden')
+    expect(result.current.revealMap.due).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    // One step: free sibling auto-opens fully; due still waits for the next expand.
     expect(result.current.revealMap.fresh).toBe('revealed')
+    expect(result.current.revealMap.due).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.due).toBe('placeholder')
 
     act(() => {
       result.current.handleNodeClick([selection('due', 'Due')])

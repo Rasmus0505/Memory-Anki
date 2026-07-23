@@ -113,7 +113,7 @@ export default function ReviewOverview() {
       const session = await startReviewWaveSessionApi(waveId)
       navigate(buildReviewSessionPath(session.id))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '无法开始强化复习')
+      setError(reason instanceof Error ? reason.message : '无法开始本轮补刷')
     } finally {
       setStartingWaveId(null)
     }
@@ -138,7 +138,7 @@ export default function ReviewOverview() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="size-5 text-warning" />
-              当天强化（{queue.reinforcement_waves.reduce((sum, wave) => sum + (wave.pending_count ?? wave.item_count), 0)} 个节点）
+              本轮补刷（{queue.reinforcement_waves.reduce((sum, wave) => sum + (wave.pending_count ?? wave.item_count), 0)} 个节点）
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -147,7 +147,7 @@ export default function ReviewOverview() {
                 <div>
                   <div className="font-semibold">{wave.palace_title || '未命名宫殿'}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    忘记/困难后的短时强化 · 待复习 {wave.pending_count ?? wave.item_count} 张
+                    忘记/困难后的队尾补刷 · 待复习 {wave.pending_count ?? wave.item_count} 张
                   </div>
                 </div>
                 <Button
@@ -156,7 +156,7 @@ export default function ReviewOverview() {
                   disabled={startingWaveId === wave.id}
                   onClick={() => void handleStartReinforcement(wave.id)}
                 >
-                  {startingWaveId === wave.id ? '正在进入…' : '开始强化'}
+                  {startingWaveId === wave.id ? '正在进入…' : '开始补刷'}
                 </Button>
               </div>
             ))}

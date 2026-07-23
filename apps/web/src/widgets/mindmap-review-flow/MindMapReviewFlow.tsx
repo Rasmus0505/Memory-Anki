@@ -1,7 +1,7 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
-import { MindMapRatingHistoryDrawer } from "@/modules/practice/public";
+import { PalaceCalibrationDrawer } from "@/modules/practice/public";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
@@ -30,6 +30,18 @@ export type {
   MindMapReviewFlowProps,
 } from "@/modules/practice/public";
 
+const QUICK_SETTLE_OPTIONS: Array<{
+  rating: MindMapRecallRating;
+  label: string;
+  title: string;
+  variant: "destructive" | "outline" | "default" | "secondary";
+}> = [
+  { rating: 1, label: "忘", title: "一键记为忘记并结算", variant: "destructive" },
+  { rating: 2, label: "难", title: "一键记为困难并结算", variant: "outline" },
+  { rating: 3, label: "记", title: "一键记为记得并结算", variant: "default" },
+  { rating: 4, label: "轻", title: "一键记为轻松并结算", variant: "secondary" },
+];
+
 export function MindMapReviewFlow({
   modeSyncVersion = 0,
   viewMemoryScope = null,
@@ -37,6 +49,7 @@ export function MindMapReviewFlow({
   editError = null,
   submitting = false,
   chromeDensity = "default",
+  chromeFrame = "card",
   ...props
 }: MindMapReviewFlowProps) {
   const review = useMindMapReviewFlowController({
@@ -48,12 +61,14 @@ export function MindMapReviewFlow({
     submitting,
   });
   const compact = chromeDensity === "compact";
+  const hostFrame = chromeFrame === "host";
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
   const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
   const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
+  const [calibrationOpen, setCalibrationOpen] = React.useState(false);
   const flipShortcutScene =
     props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
   const editorDocForBindings =
@@ -95,6 +110,7 @@ export function MindMapReviewFlow({
             }
           : undefined
       }
+      modeToggleLabels={props.modeToggleLabels}
       visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
       editableEditorState={props.editEditorState}
       ratingTreeEditorState={
@@ -152,9 +168,18 @@ export function MindMapReviewFlow({
                 responseMs?: number | null
               },
               conflictPolicy?: RatingConflictPolicy,
+              cascadeNodeUids?: string[],
             ) => {
               void review.recallRatings
-                .rateNode(nodeUid, rating, round, scope, evidence, conflictPolicy)
+                .rateNode(
+                  nodeUid,
+                  rating,
+                  round,
+                  scope,
+                  evidence,
+                  conflictPolicy,
+                  cascadeNodeUids,
+                )
                 .catch((error: unknown) => {
                   toast.error(
                     error instanceof Error && error.message
@@ -166,7 +191,9 @@ export function MindMapReviewFlow({
           : undefined
       }
       onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
-      onOpenRatingHistory={props.studySessionId ? () => review.recallRatings.setHistoryOpen(true) : undefined}
+      onOpenPalaceCalibration={
+        props.palaceId ? () => setCalibrationOpen(true) : undefined
+      }
       ratingMode={review.ratingMode}
       onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
     />
@@ -230,10 +257,15 @@ export function MindMapReviewFlow({
       {compact ? (
         <div
           className={cn(
-            "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-card/90",
+            // Pin card foreground: immersive freestyle shell uses text-zinc-50 and would
+            // otherwise wash out outline/ghost labels on this light surface.
+            "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-card text-card-foreground",
+            hostFrame
+              ? "rounded-none border-0"
+              : "rounded-xl border border-border/50 bg-card/90",
             review.cardFlashClassName,
             review.flow.fullscreen &&
-              "fixed inset-x-2 bottom-2 top-2 z-[90] bg-card/96 shadow-2xl sm:inset-x-5 sm:bottom-5 sm:top-5",
+              "fixed inset-x-2 bottom-2 top-2 z-[90] rounded-xl border border-border/50 bg-card/96 shadow-2xl sm:inset-x-5 sm:bottom-5 sm:top-5",
           )}
         >
           {review.flow.feedback.completionCeremonyActive ? (
@@ -245,7 +277,13 @@ export function MindMapReviewFlow({
             </div>
           ) : null}
           {!review.isInlineEditMode ? (
-            <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-2.5 py-1.5">
+            <div
+              className={cn(
+                "flex shrink-0 items-center gap-2 border-b border-border/60",
+                // Keep ≥40px touch row on compact/PWA without eating map height.
+                hostFrame ? "min-h-10 px-3 py-1.5" : "px-2.5 py-1.5",
+              )}
+            >
               <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                 {review.flow.visibleNonRootCount}/{Math.max(review.flow.totalNodeCount - 1, 0)}
               </span>
@@ -272,17 +310,48 @@ export function MindMapReviewFlow({
                 type="button"
                 size="sm"
                 variant={aiWorkbenchOpen ? "secondary" : "ghost"}
-                className="size-8 shrink-0 p-0"
+                className="size-9 shrink-0 p-0 sm:size-8"
                 title="AI 学习"
                 onClick={() => setAiWorkbenchOpen((value) => !value)}
               >
                 <Bot className="size-4" />
               </Button>
+              {props.onQuickSettle ? (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {QUICK_SETTLE_OPTIONS.map((option) => (
+                    <Button
+                      key={option.rating}
+                      type="button"
+                      size="sm"
+                      variant={option.variant}
+                      title={option.title}
+                      aria-label={option.title}
+                      disabled={
+                        submitting ||
+                        review.flow.feedback.completionCeremonyActive ||
+                        false
+                      }
+                      className="h-9 min-w-8 shrink-0 px-1.5 text-[11px] font-semibold sm:h-8 sm:min-w-7 sm:px-1.5"
+                      onClick={() => {
+                        void review.flow.finishFlowWithPayload(
+                          "manual_complete",
+                          (payload) => props.onQuickSettle?.(option.rating, payload),
+                        );
+                      }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
                 disabled={submitting || review.flow.feedback.completionCeremonyActive || false}
-                className={cn("h-8 shrink-0 px-2.5 text-xs", review.completeButtonClassName)}
+                className={cn(
+                  "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
+                  review.completeButtonClassName,
+                )}
                 onClick={() => {
                   void review.flow.finishFlow("manual_complete");
                 }}
@@ -292,7 +361,12 @@ export function MindMapReviewFlow({
               </Button>
             </div>
           ) : null}
-          <div className="relative flex min-h-0 flex-1 flex-col p-1.5 sm:p-2">
+          <div
+            className={cn(
+              "relative flex min-h-0 flex-1 flex-col",
+              hostFrame ? "p-0" : "p-1.5 sm:p-2",
+            )}
+          >
             <div className="relative flex min-h-0 flex-1">
               <div className="min-h-0 min-w-0 flex-1">{flipPanel}</div>
               {aiWorkbench}
@@ -465,16 +539,14 @@ export function MindMapReviewFlow({
       </div>
       )}
 
-      <MindMapRatingHistoryDrawer
-        open={review.recallRatings.historyOpen}
-        onOpenChange={review.recallRatings.setHistoryOpen}
-        events={review.recallRatings.currentEvents}
-        onCorrect={(nodeUid, rating, round) => {
-          void review.recallRatings.rateNode(nodeUid, rating, round).catch((error: unknown) => {
-            toast.error(error instanceof Error && error.message ? error.message : '节点评分保存失败')
-          })
-        }}
-      />
+      {props.palaceId ? (
+        <PalaceCalibrationDrawer
+          open={calibrationOpen}
+          onOpenChange={setCalibrationOpen}
+          palaceId={props.palaceId}
+          selectedNodeUid={review.selectedNodeUid}
+        />
+      ) : null}
 
       <NodeBoundQuizDialog
         open={nodeQuizOpen}

@@ -15,9 +15,12 @@ from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewWave, ReviewWaveItem
 from memory_anki.modules.memory.application.wave_policy import (
     ITEM_DONE,
+    ITEM_PENDING,
+    ITEM_PENDING_REINFORCEMENT,
     ITEM_RATED_DIRECT,
     ITEM_RATED_INHERITED,
     WAVE_STATUS_ACTIVE,
+    WAVE_STATUS_CANCELLED,
     WAVE_STATUS_COMPLETED,
     WAVE_STATUS_PAUSED,
     WAVE_STATUS_SCHEDULED,
@@ -26,7 +29,6 @@ from memory_anki.modules.memory.application.wave_policy import (
 )
 from memory_anki.modules.memory.application.wave_queries import (
     formal_due_node_uids,
-    frozen_node_uids,
     wave_payload,
 )
 
@@ -173,8 +175,26 @@ def start_reinforcement_wave_session(
     palace = session.get(Palace, wave.palace_id)
     if palace is None or palace.deleted_at is not None:
         raise ValueError("palace not found")
-    node_uids = frozen_node_uids(session, wave.id)
+    # Only pending reinforcement membership counts; rated/done shells are not startable.
+    pending_items = (
+        session.query(ReviewWaveItem)
+        .filter(
+            ReviewWaveItem.wave_id == wave.id,
+            ReviewWaveItem.status.in_([ITEM_PENDING, ITEM_PENDING_REINFORCEMENT]),
+        )
+        .order_by(ReviewWaveItem.node_uid.asc())
+        .all()
+    )
+    node_uids = [item.node_uid for item in pending_items]
     if not node_uids:
+        # Ghost empty waves left after node reassignment / abandoned sessions.
+        wave.status = WAVE_STATUS_CANCELLED
+        wave.completed_at = _now()
+        wave.active_session_id = None
+        wave.item_count = (
+            session.query(ReviewWaveItem).filter(ReviewWaveItem.wave_id == wave.id).count()
+        )
+        wave.updated_at = wave.completed_at
         raise ValueError("reinforcement wave has no pending nodes")
     session_id = f"reinforcement-{uuid.uuid4()}"
     now = _now()
@@ -182,7 +202,7 @@ def start_reinforcement_wave_session(
         "frozen_due_node_uids": node_uids,
         "wave_id": wave.id,
         "review_entry_mode": "reinforcement",
-        "review_entry_label": "当天强化",
+        "review_entry_label": "本轮补刷",
     }
     if normalized_client_source is not None:
         summary_payload["client_source"] = normalized_client_source
@@ -193,7 +213,7 @@ def start_reinforcement_wave_session(
         target_type="palace",
         target_id=wave.palace_id,
         palace_id=wave.palace_id,
-        title=f"强化复习 · {palace.manual_title or palace.title or '未命名宫殿'}",
+        title=f"本轮补刷 · {palace.manual_title or palace.title or '未命名宫殿'}",
         started_at=now,
         progress_json="{}",
         events_json="[]",

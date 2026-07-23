@@ -50,6 +50,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'segmentColorMode'
   | 'segmentRangeDraft'
   | 'highlightedNodeUids'
+  | 'ankiEditMode'
   | 'mutedNodeUids'
   | 'masteryByNodeUid'
   | 'countBadgeByNodeUid'
@@ -84,6 +85,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   chromeDensity?: 'default' | 'compact'
   onToggleFullscreen: (active?: boolean) => void
   onToggleMode?: () => void
+  /** Defaults: enter edit "编辑", leave edit "复习". Freestyle uses "返回随心". */
+  modeToggleLabels?: {
+    enterEdit?: string
+    leaveEdit?: string
+  }
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
   /**
@@ -119,15 +125,16 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   /**
    * Formal due-scope UIDs for this review round. When set:
    * - only these nodes may *start* a rating (rating mode)
-   * - all other non-root nodes are soft-dimmed (opacity) even while flipping,
-   *   so out-of-scope cards stay readable but visually secondary
+   * - non-due nodes are soft-dimmed (opacity) even while flipping,
+   *   except ancestors of due nodes (path context stays full opacity)
    * Parent subtree cascade still walks the full rating tree (including
    * unrevealed due children) and follows backend formal-review behavior.
    */
   rateableNodeUids?: string[] | null
   onRateNode?: FlipCardRateNodeHandler
   onUndoRating?: () => { node_uid: string } | null
-  onOpenRatingHistory?: () => void
+  /** Opens palace-level FSRS/wave calibration (not session rating history). */
+  onOpenPalaceCalibration?: () => void
   ratingMode?: boolean
   onToggleRatingMode?: () => void
 }
@@ -145,6 +152,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   chromeDensity = 'default',
   onToggleFullscreen,
   onToggleMode,
+  modeToggleLabels,
   visibleEditorState,
   editableEditorState = null,
   ratingTreeEditorState = null,
@@ -188,7 +196,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   rateableNodeUids = null,
   onRateNode,
   onUndoRating,
-  onOpenRatingHistory,
+  onOpenPalaceCalibration,
   ratingMode = false,
   onToggleRatingMode,
   segments,
@@ -196,6 +204,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   segmentColorMode,
   segmentRangeDraft,
   highlightedNodeUids,
+  ankiEditMode = false,
   mutedNodeUids: mutedNodeUidsProp,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const navigate = useNavigate()
@@ -286,14 +295,35 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     return new Set(rateableNodeUids.filter(Boolean))
   }, [rateableNodeUids])
 
-  // Soft-dim every non-root node outside formal due/rateable scope while flipping
+  // Soft-dim non-root nodes outside formal due/rateable scope while flipping
   // or rating (not only in rating mode). Edit mode keeps full opacity.
+  // Ancestors of due nodes stay full opacity: they sit on the path to due
+  // children and must not look "out of scope" when only leaves are due.
   const ratingScopeMutedUids = useMemo(() => {
     if (isEditMode || !rateableUidSet) return [] as string[]
+    // Walk the full rating tree so parents of unrevealed due children stay unmuted.
+    const parentByUid =
+      ratingTreeModel.byUid.size > 0 ? ratingTreeModel.byUid : guidedModel.byUid
+    const keepFullOpacity = new Set<string>(rateableUidSet)
+    for (const uid of rateableUidSet) {
+      let current = parentByUid.get(uid) ?? guidedModel.byUid.get(uid)
+      while (current?.parentUid) {
+        keepFullOpacity.add(current.parentUid)
+        current =
+          parentByUid.get(current.parentUid) ?? guidedModel.byUid.get(current.parentUid)
+      }
+    }
     return guidedModel.nodes
       .map((node) => node.uid)
-      .filter((uid) => uid !== guidedModel.rootUid && !rateableUidSet.has(uid))
-  }, [guidedModel.nodes, guidedModel.rootUid, isEditMode, rateableUidSet])
+      .filter((uid) => uid !== guidedModel.rootUid && !keepFullOpacity.has(uid))
+  }, [
+    guidedModel.byUid,
+    guidedModel.nodes,
+    guidedModel.rootUid,
+    isEditMode,
+    rateableUidSet,
+    ratingTreeModel.byUid,
+  ])
 
   const resolvedMutedNodeUids = useMemo(() => {
     if (!mutedNodeUidsProp?.length) return ratingScopeMutedUids
@@ -491,7 +521,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       {!isEditMode ? (
         <div
           className={cn(
-            'shrink-0 rounded-xl border border-border/70 bg-background/95 shadow-sm md:hidden',
+            // text-foreground: avoid inheriting light shell text onto light chrome (PWA freestyle).
+            'shrink-0 rounded-xl border border-border/70 bg-background/95 text-foreground shadow-sm md:hidden',
             compactChrome ? 'mb-1.5 space-y-1 p-1.5' : 'mb-3 space-y-2 p-2',
           )}
         >
@@ -585,9 +616,20 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
             ratingAction={onToggleRatingMode ? { label: '评分', active: ratingMode, onClick: onToggleRatingMode } : null}
             moreActions={[
               ...(toolbarExtensions?.moreActions ?? []),
-              ...(onOpenRatingHistory ? [{ label: '本轮评分记录', onClick: onOpenRatingHistory }] : []),
+              ...(onOpenPalaceCalibration
+                ? [{ label: '宫殿进度校准', onClick: onOpenPalaceCalibration }]
+                : []),
             ]}
-            modeToggle={onToggleMode ? { label: isEditMode ? '复习' : '编辑', onClick: onToggleMode } : null}
+            modeToggle={
+              onToggleMode
+                ? {
+                    label: isEditMode
+                      ? (modeToggleLabels?.leaveEdit ?? '复习')
+                      : (modeToggleLabels?.enterEdit ?? '编辑'),
+                    onClick: onToggleMode,
+                  }
+                : null
+            }
             quizAction={currentPalaceId ? { label: '做题', onClick: handleOpenQuizPage } : null}
             immersiveAction={
               hidePresentationOverflowActions || resolvedPresentationStrategy === 'viewport-only'
@@ -642,6 +684,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         segmentColorMode={segmentColorMode}
         segmentRangeDraft={segmentRangeDraft}
         highlightedNodeUids={highlightedNodeUids}
+        ankiEditMode={ankiEditMode}
         mutedNodeUids={resolvedMutedNodeUids}
         masteryByNodeUid={ratingMasteryByNodeUid}
         statusChipsByNodeUid={statusChipsByNodeUid}

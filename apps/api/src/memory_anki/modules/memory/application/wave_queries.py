@@ -15,12 +15,16 @@ from memory_anki.infrastructure.db._tables.reviews import (
 )
 from memory_anki.modules.memory.application.wave_policy import (
     ITEM_DONE,
+    ITEM_PENDING,
+    ITEM_PENDING_REINFORCEMENT,
     ITEM_RATED_DIRECT,
     ITEM_RATED_INHERITED,
     SCHEDULE_REINFORCEMENT,
     WAVE_STATUS_ACTIVE,
     WAVE_STATUS_PAUSED,
+    WAVE_STATUS_SCHEDULED,
     WAVE_TYPE_FORMAL,
+    WAVE_TYPE_REINFORCEMENT,
     is_formal_queue_eligible,
     local_date_of,
 )
@@ -42,6 +46,46 @@ def wave_payload(wave: ReviewWave) -> dict[str, Any]:
         "rated_count": int(wave.rated_count or 0),
         "pending_count": max(0, int(wave.item_count or 0) - int(wave.rated_count or 0)),
     }
+
+
+def find_available_reinforcement_for_palace(
+    session: Session, palace_id: int
+) -> dict[str, Any] | None:
+    """Next restudy batch for a palace: open reinforcement with pending items.
+
+    Used by formal completion receipts so the client can auto-chain into the
+    end-of-batch restudy pass without a clock wait.
+    """
+    now = utc_now_naive()
+    waves = (
+        session.query(ReviewWave)
+        .filter(
+            ReviewWave.palace_id == palace_id,
+            ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
+            ReviewWave.status.in_(
+                [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
+            ),
+            ReviewWave.available_at.is_not(None),
+            ReviewWave.available_at <= now,
+        )
+        .order_by(ReviewWave.available_at.asc(), ReviewWave.id.asc())
+        .all()
+    )
+    for wave in waves:
+        pending = (
+            session.query(ReviewWaveItem)
+            .filter(
+                ReviewWaveItem.wave_id == wave.id,
+                ReviewWaveItem.status.in_([ITEM_PENDING, ITEM_PENDING_REINFORCEMENT]),
+            )
+            .count()
+        )
+        if pending > 0:
+            return {
+                "wave_id": wave.id,
+                "pending_count": int(pending),
+            }
+    return None
 
 
 def list_palace_waves(session: Session, palace_id: int) -> list[dict[str, Any]]:
@@ -91,17 +135,42 @@ def formal_due_node_uids(
     now: datetime | None = None,
     include_overdue: bool = True,
 ) -> list[str]:
-    """Nodes eligible for a new formal freeze (due or overdue on formal waves)."""
+    """Nodes eligible for a new formal freeze (due/overdue + first-learn).
+
+    Walks the palace tree so brand-new palaces without ``ReviewNodeState`` rows
+    still freeze every non-root card for first learning.
+    """
+    from memory_anki.infrastructure.db._tables.palaces import Palace
+    from memory_anki.modules.memory.application.node_memory_projection import _tree
+
     now = now or utc_now_naive()
     today = local_date_of(now)
-    states = session.query(ReviewNodeState).filter(ReviewNodeState.palace_id == palace_id).all()
+    palace = session.get(Palace, palace_id)
+    if palace is None or palace.deleted_at is not None:
+        return []
+    root_uid, nodes = _tree(palace)
+    states = {
+        row.node_uid: row
+        for row in session.query(ReviewNodeState)
+        .filter(ReviewNodeState.palace_id == palace_id)
+        .all()
+    }
     result: list[str] = []
-    for row in states:
-        if not is_formal_queue_eligible(
-            row.schedule_source, has_memory=row.last_review_at is not None
-        ):
+    for uid in nodes:
+        if root_uid is not None and uid == root_uid:
+            continue
+        row = states.get(uid)
+        if row is None:
+            result.append(uid)
+            continue
+        has_memory = row.last_review_at is not None
+        if not is_formal_queue_eligible(row.schedule_source, has_memory=has_memory):
             continue
         if row.schedule_source == SCHEDULE_REINFORCEMENT:
+            continue
+        # Never-reviewed nodes: always due for first learning.
+        if not has_memory:
+            result.append(uid)
             continue
         if row.effective_local_date is not None:
             if (
@@ -109,10 +178,10 @@ def formal_due_node_uids(
                 if include_overdue
                 else row.effective_local_date == today
             ):
-                result.append(row.node_uid)
+                result.append(uid)
             continue
         if row.due_at is not None and row.due_at <= now:
-            result.append(row.node_uid)
+            result.append(uid)
     return sorted(set(result))
 
 

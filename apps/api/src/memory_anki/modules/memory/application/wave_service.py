@@ -11,15 +11,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
     ReviewWave,
     ReviewWaveItem,
 )
 from memory_anki.modules.memory.application.wave_policy import (
-    DEFAULT_AGAIN_REINFORCEMENT_MINUTES,
-    DEFAULT_HARD_REINFORCEMENT_MINUTES,
     ITEM_DONE,
     ITEM_PENDING,
     ITEM_PENDING_REINFORCEMENT,
@@ -32,6 +30,7 @@ from memory_anki.modules.memory.application.wave_policy import (
     SCHEDULE_UNINITIALIZED,
     SCHEDULE_WAVE_ADSORB,
     WAVE_STATUS_ACTIVE,
+    WAVE_STATUS_CANCELLED,
     WAVE_STATUS_PAUSED,
     WAVE_STATUS_SCHEDULED,
     WAVE_TYPE_FORMAL,
@@ -63,6 +62,7 @@ __all__ = [
     "apply_rating_to_schedule",
     "assign_node_to_formal_wave",
     "assign_node_to_reinforcement",
+    "close_empty_open_wave",
     "complete_formal_wave",
     "find_active_formal_wave",
     "formal_due_node_uids",
@@ -110,6 +110,34 @@ def _recount_wave(session: Session, wave: ReviewWave) -> None:
     wave.updated_at = _now()
 
 
+def close_empty_open_wave(session: Session, wave: ReviewWave) -> bool:
+    """Remove or cancel open waves that have no remaining items.
+
+    Scheduled empty shells are deleted. Active/paused empty shells (often left
+    after abandoned sessions or node reassignment) are cancelled so they stop
+    appearing in the insights reinforcement list.
+    """
+    if wave.status not in {
+        WAVE_STATUS_SCHEDULED,
+        WAVE_STATUS_ACTIVE,
+        WAVE_STATUS_PAUSED,
+    }:
+        return False
+    _recount_wave(session, wave)
+    if int(wave.item_count or 0) > 0:
+        return False
+    now = _now()
+    if wave.status == WAVE_STATUS_SCHEDULED:
+        session.delete(wave)
+        return True
+    wave.status = WAVE_STATUS_CANCELLED
+    wave.completed_at = now
+    wave.active_session_id = None
+    wave.paused_at = None
+    wave.updated_at = now
+    return True
+
+
 def _sync_active_session_scope(session: Session, wave: ReviewWave) -> None:
     if not wave.active_session_id:
         return
@@ -127,27 +155,9 @@ def _sync_active_session_scope(session: Session, wave: ReviewWave) -> None:
 
 
 def load_reinforcement_settings(session: Session) -> tuple[int, int]:
-    cached = session.info.get("_reinforcement_settings")
-    if cached is not None:
-        return cached
-    keys = ("reinforcement_again_minutes", "reinforcement_hard_minutes")
-    values = {
-        row.key: row.value
-        for row in session.query(Config).filter(Config.key.in_(keys)).all()
-    }
-    again = DEFAULT_AGAIN_REINFORCEMENT_MINUTES
-    hard = DEFAULT_HARD_REINFORCEMENT_MINUTES
-    try:
-        again = int(values.get("reinforcement_again_minutes", again))
-    except (TypeError, ValueError):
-        pass
-    try:
-        hard = int(values.get("reinforcement_hard_minutes", hard))
-    except (TypeError, ValueError):
-        pass
-    result = (max(1, again), max(1, hard))
-    session.info["_reinforcement_settings"] = result
-    return result
+    """Legacy settings accessor; batch restudy always uses zero delay."""
+    del session
+    return (0, 0)
 
 
 def formal_candidates(session: Session, palace_id: int) -> list[WaveCandidate]:
@@ -241,7 +251,26 @@ def get_or_create_reinforcement_wave(
     palace_id: int,
     available_at: datetime,
 ) -> ReviewWave:
-    """Merge reinforcement into the nearest same-palace open reinforcement bucket."""
+    """Merge reinforcement into a non-active same-palace restudy bucket.
+
+    Never merge into an ACTIVE wave: weak re-ratings during a pass must land on
+    the *next* batch so the current freeze can complete, then auto-chain.
+    """
+    # Prefer any already-available scheduled/paused shell (end-of-batch restudy).
+    mature = (
+        session.query(ReviewWave)
+        .filter(
+            ReviewWave.palace_id == palace_id,
+            ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
+            ReviewWave.status.in_([WAVE_STATUS_SCHEDULED, WAVE_STATUS_PAUSED]),
+            ReviewWave.available_at.is_not(None),
+            ReviewWave.available_at <= _now(),
+        )
+        .order_by(ReviewWave.available_at.asc())
+        .first()
+    )
+    if mature is not None:
+        return mature
     window_start = available_at - timedelta(minutes=5)
     window_end = available_at + timedelta(minutes=5)
     existing = (
@@ -249,9 +278,7 @@ def get_or_create_reinforcement_wave(
         .filter(
             ReviewWave.palace_id == palace_id,
             ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
-            ReviewWave.status.in_(
-                [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
-            ),
+            ReviewWave.status.in_([WAVE_STATUS_SCHEDULED, WAVE_STATUS_PAUSED]),
             ReviewWave.available_at.is_not(None),
             ReviewWave.available_at >= window_start,
             ReviewWave.available_at <= window_end,
@@ -261,24 +288,6 @@ def get_or_create_reinforcement_wave(
     )
     if existing is not None:
         return existing
-    # Also merge into any mature (already available) open reinforcement wave for the palace.
-    mature = (
-        session.query(ReviewWave)
-        .filter(
-            ReviewWave.palace_id == palace_id,
-            ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
-            ReviewWave.status.in_(
-                [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
-            ),
-            ReviewWave.available_at.is_not(None),
-            ReviewWave.available_at <= _now(),
-        )
-        .order_by(ReviewWave.available_at.asc())
-        .first()
-    )
-    if mature is not None and mature.available_at is not None:
-        # Keep the earlier available_at so the wave stays due.
-        return mature
     wave = ReviewWave(
         id=_new_wave_id("rw"),
         palace_id=palace_id,
@@ -415,6 +424,7 @@ def _detach_from_other_formal_waves(
         if wave is not None:
             wave.item_count = max(0, int(wave.item_count or 0) - 1)
             wave.updated_at = _now()
+            close_empty_open_wave(session, wave)
 
 
 def assign_node_to_reinforcement(
@@ -424,23 +434,22 @@ def assign_node_to_reinforcement(
     rating: int,
     raw_due_at: datetime | None = None,
 ) -> ReviewWave:
+    """Park a weak-rated node on the next same-day restudy batch (immediately available)."""
     remove_node_from_open_waves(session, row)
-    again_m, hard_m = load_reinforcement_settings(session)
-    delay = reinforcement_delay_minutes(rating, again_minutes=again_m, hard_minutes=hard_m)
-    if delay is None:
+    if reinforcement_delay_minutes(rating) is None:
         raise ValueError("reinforcement only for rating 1 or 2")
-    available_at = _now() + timedelta(minutes=delay)
+    # Batch restudy: no clock wait — next pass is end of current queue / auto-chain.
+    available_at = _now()
     wave = get_or_create_reinforcement_wave(session, row.palace_id, available_at)
     if raw_due_at is not None:
         row.raw_due_at = raw_due_at
-    # Keep formal due_at out of short window: park effective due on reinforcement available time
-    # so queue projections that still read due_at do not show formal due immediately.
-    # Formal eligibility is gated by schedule_source=reinforcement.
+    # Park effective due on reinforcement available time so dual-date projections
+    # stay coherent. Formal eligibility is gated by schedule_source=reinforcement.
     row.due_at = available_at
     row.effective_wave_id = wave.id
     row.effective_local_date = None
     row.schedule_source = SCHEDULE_REINFORCEMENT
-    row.schedule_reason = f"reinforcement_r{rating}_{delay}m"
+    row.schedule_reason = f"reinforcement_r{rating}_batch"
     row.updated_at = _now()
     _ensure_item(
         session,
@@ -706,6 +715,8 @@ def remove_node_from_open_waves(session: Session, row: ReviewNodeState) -> None:
         session.flush()
     for wave in affected.values():
         _recount_wave(session, wave)
+        if close_empty_open_wave(session, wave):
+            continue
         _sync_active_session_scope(session, wave)
 
 
@@ -759,4 +770,6 @@ def reconcile_rating_undo(
     session.flush()
     for wave in affected.values():
         _recount_wave(session, wave)
+        if close_empty_open_wave(session, wave):
+            continue
         _sync_active_session_scope(session, wave)

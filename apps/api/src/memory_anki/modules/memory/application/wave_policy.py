@@ -42,8 +42,9 @@ MAX_PUSH_LATER_RATIO = 0.10
 MAX_PUSH_LATER_DAYS = 1
 MAX_RETENTION_DROP = 0.03
 
-DEFAULT_AGAIN_REINFORCEMENT_MINUTES = 20
-DEFAULT_HARD_REINFORCEMENT_MINUTES = 60
+# Legacy defaults (clock delay removed). Weak ratings use end-of-batch restudy.
+DEFAULT_AGAIN_REINFORCEMENT_MINUTES = 0
+DEFAULT_HARD_REINFORCEMENT_MINUTES = 0
 
 BASELINE_TIERS: dict[str, dict[str, Any]] = {
     "new": {"stability": None, "difficulty": None, "initialized": False},
@@ -185,21 +186,36 @@ def pick_adsorb_wave(
     return eligible[0][2]
 
 
-def reinforcement_delay_minutes(rating: int, *, again_minutes: int, hard_minutes: int) -> int | None:
-    if rating == 1:
-        return max(1, again_minutes)
-    if rating == 2:
-        return max(1, hard_minutes)
+def reinforcement_delay_minutes(
+    rating: int, *, again_minutes: int = 0, hard_minutes: int = 0
+) -> int | None:
+    """Return delay minutes for weak ratings, or None when not reinforcement.
+
+    Product rule (batch restudy): 忘记/困难 are immediately available for the
+    next pass (delay 0). Clock-based 20/60m waits are retired; ``again_minutes`` /
+    ``hard_minutes`` are ignored so legacy settings cannot reintroduce waits.
+    """
+    del again_minutes, hard_minutes
+    if rating in (1, 2):
+        return 0
     return None
 
 
 def is_formal_queue_eligible(schedule_source: str | None, *, has_memory: bool) -> bool:
-    """Nodes that may appear in formal long-term due queues."""
-    if not has_memory:
-        return False
+    """Nodes that may appear in formal long-term due queues.
+
+    Product rule: brand-new / never-reviewed nodes (no memory yet) enter the
+    formal learn queue immediately so a newly built palace is reviewable without
+    a separate calibration step. Content-changed and same-day reinforcement stay
+    out of the formal queue.
+    """
     source = schedule_source or SCHEDULE_UNINITIALIZED
-    return source not in {
-        SCHEDULE_UNINITIALIZED,
-        SCHEDULE_CONTENT_CHANGED,
-        SCHEDULE_REINFORCEMENT,
-    }
+    if source in {SCHEDULE_CONTENT_CHANGED, SCHEDULE_REINFORCEMENT}:
+        return False
+    # First-learn: unlearned tree nodes are formal-due now.
+    if not has_memory:
+        return True
+    # After the first rating, pure uninitialized shells should not linger as due.
+    if source == SCHEDULE_UNINITIALIZED:
+        return False
+    return True

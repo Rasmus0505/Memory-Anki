@@ -470,6 +470,9 @@ export function ReviewSessionContainer({
           revealMode={session.revealMode ?? 'standard'}
           checkpointNodeUids={session.checkpointNodeUids ?? []}
           reviewScopeNodeUids={frozenDueNodeUids}
+          // Classic flip for every card (hidden → 待回忆 → content), including non-due.
+          // Due scope only soft-dims + gates FSRS single ratings — same as freestyle.
+          autoRevealNonDueCards={false}
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}
           viewMemoryScope={resolvedViewMemoryScope}

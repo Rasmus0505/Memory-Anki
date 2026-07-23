@@ -15,7 +15,6 @@ import {
   flattenNodes,
   hasPendingBulkReveal,
   hideRevealStateBranch,
-  isNonFocusRevealTarget,
   parseEditorDoc,
   pourCheckpointRevealState,
   type BulkRevealScope,
@@ -32,7 +31,11 @@ interface UseRevealSessionOptions {
   resetCompletedOnDocChange?: boolean
   mode?: RevealFlowMode
   checkpointIds?: Iterable<string>
-  /** Frozen due node UIDs for formal review — auto-reveal everything else. */
+  /**
+   * Optional legacy focus set: when non-empty, auto-reveal every non-focus node
+   * on entry and skip placeholder for free cards on expand. Product formal review
+   * no longer passes this (classic flip for all cards).
+   */
   focusNodeIds?: Iterable<string>
 }
 
@@ -247,19 +250,18 @@ export function useRevealSession({
     if (!nodeId) return
     // Explicit click = new intent; drop incomplete A/S lock so the next bulk can retarget.
     clearLockedBulkTarget()
-    // Due and non-due can still advance/expand children one step at a time.
-    // Only hide is restricted for non-due cards (see context menu).
+    // Due and non-due both advance/expand one step at a time (same flip ops as freestyle).
     enqueueRevealAction({ type: 'advance', nodeId })
   }, [clearLockedBulkTarget, enqueueRevealAction])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
-    // Formal due-scope: only block hide on non-due cards. Due cards stay hideable.
-    if (isNonFocusRevealTarget(nodeId, root, revealOptions)) return
+    // Hide works on every card (including non-due / root). Formal due-scope only
+    // soft-dims non-due via rateableNodeUids — it must not block flip/hide ops.
     clearLockedBulkTarget()
     enqueueRevealAction({ type: 'hide', nodeId })
-  }, [clearLockedBulkTarget, enqueueRevealAction, revealOptions, root])
+  }, [clearLockedBulkTarget, enqueueRevealAction])
 
   const handleNodeHover = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)

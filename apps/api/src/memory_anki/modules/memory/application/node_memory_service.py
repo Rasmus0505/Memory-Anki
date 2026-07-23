@@ -47,7 +47,6 @@ from memory_anki.modules.memory.application.node_memory_projection import (
     _state_dict,
     _tree,
     _utc_now,
-    due_node_uids_for_entry,
     get_palace_due_rollup,
     get_palace_memory_projection,
 )
@@ -141,10 +140,88 @@ def get_completion_summary(
     }
 
 
-def list_due_nodes(session: Session, palace_id: int, *, now: datetime | None = None) -> list[str]:
+def list_due_nodes(
+    session: Session,
+    palace_id: int,
+    *,
+    now: datetime | None = None,
+    include_reinforcement: bool = False,
+    include_calendar_today_due: bool = False,
+) -> list[str]:
+    """List currently actionable node UIDs for a palace.
+
+    By default only formal long-term due/overdue (and first-learn) nodes.
+    When ``include_reinforcement`` is True (freestyle immersive queue), also
+    include same-day reinforcement nodes that are already available.
+    When ``include_calendar_today_due`` is True, also include formal nodes
+    whose ``due_at`` falls on the local calendar day even if the clock time
+    has not arrived yet (freestyle opt-in only).
+    """
     del now  # projection uses current time; kept for call-site compatibility
     projection = get_palace_memory_projection(session, palace_id)
-    return [item["node_uid"] for item in projection["nodes"] if item["due"]]
+    result: list[str] = []
+    for item in projection["nodes"]:
+        if item.get("due"):
+            result.append(item["node_uid"])
+        elif include_reinforcement and item.get("reinforcement_due"):
+            result.append(item["node_uid"])
+        elif include_calendar_today_due and item.get("calendar_today_due"):
+            result.append(item["node_uid"])
+    return result
+
+
+def due_node_uids_for_entry(
+    session: Session,
+    palace_id: int,
+    *,
+    entry_mode: str | None = None,
+    branch_uid: str | None = None,
+    scope_node_uids: list[str] | None = None,
+) -> list[str]:
+    """Freeze actionable UIDs; freestyle scope may include reinforcement / calendar-today."""
+    projection = get_palace_memory_projection(session, palace_id, now=_utc_now())
+    mode = entry_mode or projection.get("review_entry_mode") or "none"
+    if mode == "none" and not scope_node_uids:
+        return []
+
+    # Freestyle passes explicit unit scope: allow reinforcement + calendar-today
+    # formal nodes so scoped freezes match the immersive card due_node_uids set.
+    allow_scope_extras = scope_node_uids is not None
+    wave = [
+        item
+        for item in projection.get("nodes") or []
+        if item.get("due")
+        or (
+            allow_scope_extras
+            and (item.get("reinforcement_due") or item.get("calendar_today_due"))
+        )
+    ]
+    if not wave:
+        return []
+    due_by_uid = {
+        str(item["node_uid"]): item for item in wave if item.get("node_uid")
+    }
+    if scope_node_uids is not None:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in scope_node_uids:
+            uid = str(raw or "").strip()
+            if not uid or uid in seen or uid not in due_by_uid:
+                continue
+            seen.add(uid)
+            ordered.append(uid)
+        return ordered
+    if mode == "node":
+        target_branch = branch_uid or projection.get("primary_branch_uid")
+        if target_branch:
+            scoped = [
+                item["node_uid"]
+                for item in wave
+                if item.get("branch_uid") == target_branch
+            ]
+            if scoped:
+                return scoped
+    return [item["node_uid"] for item in wave]
 
 
 def _formal_session_wave_id(session: Session, study_session_id: str) -> str | None:
@@ -222,12 +299,26 @@ def rate_nodes(
     # clicks outside this session do not mutate distant cards. Subtree ratings
     # intentionally write the full document descendants (including non-due /
     # unrevealed nodes) so parent scores cascade regardless of expand state.
+    # Also reopen completed formal sessions so post-settlement amendments work
+    # (subtree path would otherwise skip the active-session gate).
+    study_row = session.get(StudySession, study_session_id)
+    if (
+        source_scene == "formal_review"
+        and study_row is not None
+        and study_row.scene in {"review", "reinforcement_review"}
+        and study_row.status == "completed"
+    ):
+        from memory_anki.modules.memory.application.formal_review_service import (
+            reopen_formal_review_for_amendment,
+        )
+
+        reopen_formal_review_for_amendment(session, study_row)
     if (
         rating_scope == "single"
         and source_scene == "formal_review"
         and (
             study_session_id.startswith("review-")
-            or session.get(StudySession, study_session_id) is not None
+            or study_row is not None
         )
     ):
         from memory_anki.modules.memory.application.formal_review_service import (
@@ -318,7 +409,7 @@ def rate_nodes(
         ):
             card = normalize_legacy_card_clock(card)
         card, _log = scheduler.review_card(card, Rating(rating), review_datetime=reviewed_now)
-        # 记得/轻松至少多日（学习步不回 1h）。忘记/困难走当天强化波次，不再写入正式短 due。
+        # 记得/轻松至少多日（学习步不回 1h）。忘记/困难走本轮补刷 wave，不再写入正式短 due。
         card = ensure_strong_rating_due(card, rating, now=reviewed_now)
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
@@ -431,6 +522,19 @@ def undo_rating_operation(
     )
     if newer is not None:
         raise ValueError("only the latest rating operation can be undone")
+    # Post-settlement undo: reopen completed formal session + wave so wave items
+    # leave ITEM_DONE and reconcile_rating_undo can restore pending membership.
+    study_row = session.get(StudySession, study_session_id)
+    if (
+        study_row is not None
+        and study_row.scene in {"review", "reinforcement_review"}
+        and study_row.status == "completed"
+    ):
+        from memory_anki.modules.memory.application.formal_review_service import (
+            reopen_formal_review_for_amendment,
+        )
+
+        reopen_formal_review_for_amendment(session, study_row)
     palace = session.get(Palace, operation.palace_id)
     if palace is None:
         raise ValueError("palace not found")

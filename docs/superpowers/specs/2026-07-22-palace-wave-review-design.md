@@ -15,7 +15,7 @@ Split FSRS node memory computation from user-facing review tasks. FSRS owns `raw
 3. **Compatibility:** `ReviewNodeState.due_at` remains the effective formal due used by existing queue fields; `raw_due_at` stores FSRS suggestion.
 4. **No auto-expand:** Starting freezes current due+overdue only; new dues require explicit merge on resume.
 5. **Weak ratings → reinforcement waves** (default 20m/60m), not formal short `due_at` caps.
-6. **Uninitialized / content-changed** nodes do not enter formal due queues until rated, relearned, or calibrated.
+6. **First-learn / never-reviewed** tree nodes enter formal due immediately (new palaces are reviewable without calibration). **Content-changed** nodes stay out of formal due until relearned or calibrated.
 
 ## Tables
 

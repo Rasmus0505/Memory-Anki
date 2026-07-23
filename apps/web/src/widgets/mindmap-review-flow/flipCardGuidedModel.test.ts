@@ -72,4 +72,48 @@ describe('flipCardGuidedModel rating scope tree', () => {
     expect(model.byUid.has('7')).toBe(true)
     expect(collectSubtreeUids(model.nodes, '1', model.rootUid)).toEqual(['7'])
   })
+
+  it('cascades through a single-child spine into multi-grandchild branches', () => {
+    // P → C (only child) → G1/G2/G3 — cascade from P must include all grandchildren.
+    const spineThenBranch: MindMapEditorState = {
+      editor_doc: {
+        root: {
+          data: { uid: 'root', text: 'Root' },
+          children: [
+            {
+              data: { uid: 'p', text: 'Parent' },
+              children: [
+                {
+                  data: { uid: 'c', text: 'Child' },
+                  children: [
+                    { data: { uid: 'g1', text: 'G1' }, children: [] },
+                    { data: { uid: 'g2', text: 'G2' }, children: [] },
+                    { data: { uid: 'g3', text: 'G3' }, children: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+      editor_fingerprint: 'spine-then-branch',
+    }
+    const model = buildGuidedMindMapModel(spineThenBranch)
+    expect(collectSubtreeUids(model.nodes, 'p', model.rootUid).sort()).toEqual([
+      'c',
+      'g1',
+      'g2',
+      'g3',
+      'p',
+    ])
+    expect(collectSubtreeUids(model.nodes, 'c', model.rootUid).sort()).toEqual([
+      'c',
+      'g1',
+      'g2',
+      'g3',
+    ])
+  })
 })

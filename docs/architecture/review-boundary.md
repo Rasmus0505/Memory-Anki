@@ -46,7 +46,7 @@ Reviews now owns an independent FSRS card for every non-root palace node, keyed 
 
 Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Under the wave model, rating time writes the next formal or reinforcement membership; completion closes the source wave without re-anchoring those dates.
 
-**Interval policy after FSRS:** 忘记/困难 are *capped* at 10/30 minutes (same-day restudy). 记得/轻松 are *floored* at 1 day / 3 days so default learning/relearning steps (10m, 1h) cannot bounce a “记得” card back within the hour; Learning/Relearning cards are promoted to Review after Good/Easy. Formal session freeze also includes nodes that become due within a 1-hour look-ahead so near-due relearning cards enter the same frozen scope instead of remaining due after completion.
+**Interval policy after FSRS:** 忘记/困难 enter the next same-day **restudy batch** immediately (no clock wait; end-of-queue / auto-chain after the current pass). 记得/轻松 are *floored* at 1 day / 3 days so default learning/relearning steps (10m, 1h) cannot bounce a “记得” card back within the hour; Learning/Relearning cards are promoted to Review after Good/Easy. Formal session freeze also includes nodes that become due within a 1-hour look-ahead so near-due relearning cards enter the same frozen scope instead of remaining due after completion.
 
 Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
 
@@ -71,7 +71,7 @@ Entry UX is derived from due-node top-level branch coverage (root is never FSRS-
 
 Node counts are not embedded in CTA labels. Per-branch schedule detail for tooltips lives in `review_branch_summaries` (top-level branches only: title, due count, next review, status).
 
-A formal session freezes its due-node UID scope on entry (whole palace or single top-level branch). Completion progress and unrated-due counts still use that frozen set. Flip-card reveal uses the same frozen set as `focusNodeIds`: non-due cards auto-reveal on entry; only due cards stay as flip targets (subtrees under unrevealed due cards stay hidden until that due card is flipped). **Subtree ratings** write FSRS state for the full document descendants of the rated node (including non-due / unrevealed nodes). **Single** ratings in formal review still require the target node to be in the frozen scope.
+A formal session freezes its due-node UID scope on entry (whole palace or single top-level branch). Completion progress and unrated-due counts still use that frozen set. Flip-card reveal is classic for **every** card (`autoRevealNonDueCards=false`): hidden → 待回忆 → content, including non-due. The frozen due set only **soft-dims** non-due cards and gates **starting a single FSRS rating** (same as freestyle). Flip / hide / bulk reveal work on all cards. **Subtree ratings** write FSRS state for the full document descendants of the rated node (including non-due / unrevealed nodes). **Single** ratings in formal review still require the target node to be in the frozen scope.
 
 Freestyle unit batches may start formal review with explicit `scope_node_uids` (a due subset for one complete branch unit). That path must freeze exactly the due intersection of the requested UIDs, must not resume a mismatched full-palace formal session, and must not fall back to the whole palace due set when the unit is nested under a top-level branch.
 
@@ -89,13 +89,15 @@ Formal long-term scheduling is a **write-time wave domain** (`ReviewWave` / `Rev
 | StudySession | Execution slice of an active formal wave |
 | Calibration (`calibration_service`) | `align_wave` / `baseline` with audited snapshots (no recall events) |
 
-`ReviewNodeState.due_at` is the **effective** formal due for legacy queue fields. Projections also expose `raw_due_at`, `schedule_source`, `reinforcement_due`, and dual-date fields. Uninitialized and content-changed nodes are not formal-due.
+`ReviewNodeState.due_at` is the **effective** formal due for legacy queue fields. Projections also expose `raw_due_at`, `schedule_source`, `reinforcement_due`, and dual-date fields. **Never-reviewed / first-learn nodes** (no `last_review_at`, including tree nodes with no `ReviewNodeState` row yet) **are formal-due immediately** so a newly built palace enters the review queue without calibration. Content-changed nodes stay out of formal due until relearned or calibrated; reinforcement membership stays on same-day reinforcement waves only.
 
-- Start freezes all current formal due+overdue nodes (no count cap); no mid-session auto-expand.
-- 忘记/困难 → reinforcement wave (settings: `reinforcement_again_minutes` / `reinforcement_hard_minutes`, default 20/60).
-- 记得/轻松 → long-term FSRS raw due + safety-window formal adsorb.
-- Complete only when every frozen item is rated (direct or explicit inherited); otherwise pause.
+- Start freezes all current formal due+overdue nodes **plus first-learn nodes** (no count cap); no mid-session auto-expand.
+- 忘记/困难 → reinforcement restudy wave, **immediately available** (no 20/60 minute delay). Weak nodes do not re-enter the *active* pass; they accumulate on the next scheduled shell so the current freeze can complete, then freestyle pins the unit to the queue tail / formal UI auto-chains into the next pass until 记得/轻松.
+- 记得/轻松 → long-term FSRS raw due + safety-window formal adsorb (graduate out of immediate restudy).
+- Complete only when every frozen item is rated (direct or explicit inherited); otherwise pause. Completion receipts may include `pending_reinforcement: { wave_id, pending_count }` for auto-chain.
+- Empty open waves (0 items after reassignment) are closed: scheduled shells deleted, active/paused shells cancelled. Queue listing hides 0-pending reinforcement waves.
 - Public APIs: wave list/detail, reinforcement start, pause/resume/merge, calibration diagnose/preview/apply/undo.
+- Legacy config keys `reinforcement_again_minutes` / `reinforcement_hard_minutes` are ignored (batch restudy only).
 
 Queue/session lifecycle: `formal_review_service`. Settlement: `formal_review_settlement`. Facade: `reviews.api`.
 

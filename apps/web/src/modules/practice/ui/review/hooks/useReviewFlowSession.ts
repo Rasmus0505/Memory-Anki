@@ -169,15 +169,24 @@ export function useReviewFlowSession({
     }
   }, [persistProgress])
 
-  const finishFlow = React.useCallback(
-    async (modeName: 'manual_complete' | 'auto_complete') => {
-      if (reveal.completed || completionPendingRef.current) return
+  const beginSettlement = React.useCallback(
+    (modeName: 'manual_complete' | 'auto_complete'): CompleteFlowPayload | null => {
+      // Allow re-opening settlement after a first complete so wrong bulk scores
+      // can be amended. Still block concurrent settlement dialogs.
+      if (completionPendingRef.current) return null
 
       // Opening the settlement dialog is not completion. Only finalize() after the
       // user confirms in the dialog marks the session completed / reveals remaining.
       completionPendingRef.current = true
       timer.pause({ source: 'completion_pending' })
-      const finishState = revealRemainingNodes(reveal.root, reveal.revealMap, reveal.redNodeIds)
+      const alreadyCompleted = reveal.completed
+      const finishState = alreadyCompleted
+        ? {
+            revealMap: reveal.revealMap,
+            redNodeIds: reveal.redNodeIds,
+            revealedRemaining: false,
+          }
+        : revealRemainingNodes(reveal.root, reveal.revealMap, reveal.redNodeIds)
       let settled = false
       const cancel = () => {
         if (settled) return
@@ -190,44 +199,75 @@ export function useReviewFlowSession({
         if (settled) return
         settled = true
         // Confirmed end only: apply remaining reveals + mark completed.
-        reveal.setRevealMap(finishState.revealMap)
-        reveal.setRedNodeIds(finishState.redNodeIds)
-        reveal.setCompleted(true)
+        // Re-settlement after a prior complete keeps the map as-is (already open).
+        if (!alreadyCompleted) {
+          reveal.setRevealMap(finishState.revealMap)
+          reveal.setRedNodeIds(finishState.redNodeIds)
+          reveal.setCompleted(true)
+        }
         const completionMeta = {
           revealed_remaining: finishState.revealedRemaining,
           red_marked_count: finishState.redNodeIds.size,
         }
         try {
-          try {
-            await feedback.runCompletionCeremony()
-          } catch (error) {
-            console.error('Review completion ceremony failed.', error)
-          }
-          if (options?.persistTimeRecord === false) {
-            await timer.complete(modeName, completionMeta, { persistRecord: false })
-          } else {
-            await timer.complete(modeName, completionMeta)
+          if (!alreadyCompleted) {
+            try {
+              await feedback.runCompletionCeremony()
+            } catch (error) {
+              console.error('Review completion ceremony failed.', error)
+            }
+            if (options?.persistTimeRecord === false) {
+              await timer.complete(modeName, completionMeta, { persistRecord: false })
+            } else {
+              await timer.complete(modeName, completionMeta)
+            }
           }
         } finally {
           completionPendingRef.current = false
         }
       }
 
+      return {
+        durationSeconds: timer.getEffectiveSeconds(),
+        completionMode: modeName,
+        revealedRemaining: finishState.revealedRemaining,
+        redNodeIds: [...finishState.redNodeIds],
+        finalize,
+        cancel,
+      }
+    },
+    [feedback, reveal, timer],
+  )
+
+  const finishFlow = React.useCallback(
+    async (modeName: 'manual_complete' | 'auto_complete') => {
+      const payload = beginSettlement(modeName)
+      if (!payload) return
       try {
-        await onComplete({
-          durationSeconds: timer.getEffectiveSeconds(),
-          completionMode: modeName,
-          revealedRemaining: finishState.revealedRemaining,
-          redNodeIds: [...finishState.redNodeIds],
-          finalize,
-          cancel,
-        })
+        await onComplete(payload)
       } catch (error) {
-        cancel()
+        payload.cancel()
         throw error
       }
     },
-    [feedback, onComplete, reveal, timer],
+    [beginSettlement, onComplete],
+  )
+
+  const finishFlowWithPayload = React.useCallback(
+    async (
+      modeName: 'manual_complete' | 'auto_complete',
+      handler: (payload: CompleteFlowPayload) => void | Promise<void>,
+    ) => {
+      const payload = beginSettlement(modeName)
+      if (!payload) return
+      try {
+        await handler(payload)
+      } catch (error) {
+        payload.cancel()
+        throw error
+      }
+    },
+    [beginSettlement],
   )
 
   // Depend on stable action identities, not the whole timer/reveal shells — timer
@@ -333,6 +373,7 @@ export function useReviewFlowSession({
     handleRestart,
     handleSpacePour,
     startWeakRetryRound,
+    finishFlowWithPayload,
     finishFlow,
     screenGlowClass,
   }

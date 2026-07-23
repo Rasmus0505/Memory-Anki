@@ -425,8 +425,8 @@ export function hideRevealStateBranch(
   _options: RevealFlowOptions = {},
   _root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
-  // Hide must stick for due cards. Do not re-heal free cards back open here —
-  // non-due hide is blocked at the session handler instead.
+  // Hide always sticks for every card (due and non-due). Formal due-scope only
+  // soft-dims non-due in the UI; it does not re-open free cards after hide.
   void _options
   void _root
   return hideNodeAndDescendants(nodeId, nodeMap, revealMap)
@@ -434,8 +434,8 @@ export function hideRevealStateBranch(
 
 /**
  * Formal due-scope: true for cards that are not in the frozen due set
- * (including the palace root). Hide / content-conceal ops must not run on these.
- * Due cards remain fully operable.
+ * (including the palace root). Used for soft-dim / labeling only — flip and hide
+ * remain available on every card (same as freestyle).
  */
 export function isNonFocusRevealTarget(
   nodeId: string,

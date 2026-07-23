@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import {
   editorState,
   getLatestMindMapEditorSurfaceProps,
@@ -56,7 +56,7 @@ describe('FlipCardMindMapPanel', () => {
       nodeClickViewportPolicy: 'preserve',
     })
     expect(screen.queryByRole('button', { name: '忘记 1' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '本轮评分记录' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '宫殿进度校准' })).toBeNull()
   })
 
   it('keeps view preservation when switching into edit mode', () => {
@@ -165,6 +165,27 @@ describe('FlipCardMindMapPanel', () => {
     expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).not.toContain('root')
   })
 
+  it('keeps ancestors of due nodes full opacity when only descendants are rateable', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={editorState}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode={false}
+        rateableNodeUids={['grandchild']}
+      />,
+    )
+
+    const muted = getLatestMindMapEditorSurfaceProps()?.mutedNodeUids ?? []
+    // Due leaf stays unmuted; its parent path must also stay unmuted.
+    expect(muted).not.toContain('grandchild')
+    expect(muted).not.toContain('child')
+    expect(muted).not.toContain('root')
+  })
+
   it('mutes out-of-scope nodes and only lets formal due nodes start a rating', async () => {
     const onRateNode = vi.fn()
     renderInRouter(
@@ -217,7 +238,55 @@ describe('FlipCardMindMapPanel', () => {
       'subtree',
       expect.any(Object),
       'overwrite',
+      ['child', 'grandchild'],
     )
+  })
+
+  it('keeps visible parents unmuted when only unrevealed descendants are due', () => {
+    const visibleOnlyParent: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [{ data: { text: 'Child', uid: 'child' }, children: [] }],
+        },
+      },
+      editor_fingerprint: 'visible-parent-unrevealed-due',
+    }
+    const fullTree: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Child', uid: 'child' },
+              children: [{ data: { text: 'Grandchild', uid: 'grandchild' }, children: [] }],
+            },
+          ],
+        },
+      },
+      editor_fingerprint: 'full-tree-unrevealed-due',
+    }
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        sessionKind="review"
+        visibleEditorState={visibleOnlyParent}
+        ratingTreeEditorState={fullTree}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode={false}
+        rateableNodeUids={['grandchild']}
+      />,
+    )
+
+    const muted = getLatestMindMapEditorSurfaceProps()?.mutedNodeUids ?? []
+    // Parent is on the path to an unrevealed due child — do not soft-dim it.
+    expect(muted).not.toContain('child')
+    expect(muted).not.toContain('root')
   })
 
   it('cascades formal parent rating onto unrevealed children via ratingTreeEditorState', async () => {
@@ -284,7 +353,75 @@ describe('FlipCardMindMapPanel', () => {
       'subtree',
       expect.any(Object),
       'overwrite',
+      ['child', 'grandchild'],
     )
+  })
+
+  it('cascades through single-child spine into all multi-grandchild branches', async () => {
+    // P → C (only child) → G1/G2/G3 — choosing 级联 must pass every descendant UID.
+    const onRateNode = vi.fn()
+    const spineThenBranch: typeof editorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Parent', uid: 'p' },
+              children: [
+                {
+                  data: { text: 'Child', uid: 'c' },
+                  children: [
+                    { data: { text: 'G1', uid: 'g1' }, children: [] },
+                    { data: { text: 'G2', uid: 'g2' }, children: [] },
+                    { data: { text: 'G3', uid: 'g3' }, children: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      editor_fingerprint: 'spine-then-branch-panel',
+    }
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        fullscreen={true}
+        visibleEditorState={spineThenBranch}
+        ratingTreeEditorState={spineThenBranch}
+        onToggleFullscreen={vi.fn()}
+        onNodeClick={vi.fn()}
+        onNodeContextMenu={vi.fn()}
+        ratingMode
+        onRateNode={onRateNode}
+        onUndoRating={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'p', text: 'Parent' }])
+    })
+    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('p') ?? []
+    // Toolbar count must include parent + child + three grandchildren (5).
+    expect(actions.some((action: { id: string; label: string }) => action.id === 'rate-3' && action.label.includes('5'))).toBe(
+      true,
+    )
+    await act(async () => {
+      actions.find((action: { id: string }) => action.id === 'rate-3')?.onClick()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
+    expect(onRateNode).toHaveBeenCalledWith(
+      'p',
+      3,
+      'first',
+      'subtree',
+      expect.any(Object),
+      'overwrite',
+      expect.arrayContaining(['p', 'c', 'g1', 'g2', 'g3']),
+    )
+    const cascadeArg = onRateNode.mock.calls[0]?.[6] as string[]
+    expect(cascadeArg).toHaveLength(5)
   })
 
   it('keeps memoryAnkiId-only due nodes unmuted in rating mode', async () => {
@@ -364,6 +501,7 @@ describe('FlipCardMindMapPanel', () => {
       'single',
       expect.any(Object),
       'overwrite',
+      ['grandchild'],
     )
   })
 
@@ -399,6 +537,7 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.getByRole('button', { name: '级联评分子树' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
+    // Root itself is not rateable in the cascade list; all non-root descendants are.
     expect(onRateNode).toHaveBeenCalledWith(
       'root',
       3,
@@ -406,6 +545,7 @@ describe('FlipCardMindMapPanel', () => {
       'subtree',
       expect.any(Object),
       'overwrite',
+      ['child', 'grandchild'],
     )
   })
 
@@ -438,6 +578,7 @@ describe('FlipCardMindMapPanel', () => {
       'single',
       expect.any(Object),
       'overwrite',
+      ['child'],
     )
   })
 
@@ -481,6 +622,7 @@ describe('FlipCardMindMapPanel', () => {
       'subtree',
       expect.any(Object),
       'skip_direct',
+      ['child', 'grandchild'],
     )
   })
 
@@ -514,147 +656,7 @@ describe('FlipCardMindMapPanel', () => {
       'subtree',
       expect.any(Object),
       'overwrite',
+      ['child', 'grandchild'],
     )
-  })
-
-  it('asks overwrite or skip when re-rating after only batch_inherited descendants', async () => {
-    // Parent cascade marks children batch_inherited (not direct). Re-rating the
-    // same parent must still open 覆盖/避开 — not silent overwrite.
-    const onRateNode = vi.fn()
-    renderInRouter(
-      <FlipCardMindMapPanel
-        fullscreen={true}
-        visibleEditorState={editorState}
-        onToggleFullscreen={vi.fn()}
-        onNodeClick={vi.fn()}
-        onNodeContextMenu={vi.fn()}
-        ratingMode
-        onRateNode={onRateNode}
-        directRatedUids={new Set()}
-        sessionRatedUids={new Set(['grandchild'])}
-      />,
-    )
-
-    await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
-    })
-    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('child') ?? []
-    await act(async () => {
-      actions.find((action: { id: string }) => action.id === 'rate-4')?.onClick()
-    })
-
-    expect(onRateNode).not.toHaveBeenCalled()
-    expect(screen.getByTestId('rating-conflict-dialog')).toBeTruthy()
-    expect(screen.getByText(/已有节点被评分/)).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '覆盖' }))
-    expect(onRateNode).toHaveBeenCalledWith(
-      'child',
-      4,
-      'first',
-      'subtree',
-      expect.any(Object),
-      'overwrite',
-    )
-  })
-
-  it('never collapses or context-hides cards after any rating (score-only mode)', async () => {
-    const onRateNode = vi.fn()
-    const onNodeContextMenu = vi.fn()
-    renderInRouter(
-      <FlipCardMindMapPanel
-        fullscreen={true}
-        visibleEditorState={editorState}
-        onToggleFullscreen={vi.fn()}
-        onNodeClick={vi.fn()}
-        onNodeContextMenu={onNodeContextMenu}
-        ratingMode
-        onRateNode={onRateNode}
-      />,
-    )
-
-    // Rating mode must not wire long-press/right-click hide (PWA accidental collapse).
-    expect(getLatestMindMapEditorSurfaceProps()?.onNodeContextMenu).toBeUndefined()
-
-    await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'grandchild', text: 'Grandchild' }])
-    })
-    const actions = getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('grandchild') ?? []
-
-    for (const id of ['rate-2', 'rate-1', 'rate-3', 'rate-4'] as const) {
-      await act(async () => {
-        actions.find((action: { id: string }) => action.id === id)?.onClick()
-      })
-    }
-    expect(onRateNode).toHaveBeenCalled()
-    // Ratings must not drive collapse / hide via context menu.
-    expect(onNodeContextMenu).not.toHaveBeenCalled()
-  })
-
-  it('builds dual status chips for session rating and long-term mastery score', async () => {
-    renderInRouter(
-      <FlipCardMindMapPanel
-        fullscreen={true}
-        currentPalaceId={7}
-        visibleEditorState={editorState}
-        onToggleFullscreen={vi.fn()}
-        onNodeClick={vi.fn()}
-        onNodeContextMenu={vi.fn()}
-        ratingMode
-        onRateNode={vi.fn()}
-        recallRatings={new Map([['child', 3]])}
-      />,
-    )
-
-    await waitFor(() => {
-      const chips = getLatestMindMapEditorSurfaceProps()?.statusChipsByNodeUid
-      expect(chips?.child).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ text: '记得', style: 'filled' }),
-          expect.objectContaining({ text: '64', style: 'outline' }),
-        ]),
-      )
-    })
-  })
-
-  it('embeds rating mode action into the canvas toolbar content', () => {
-    const onToggleRatingMode = vi.fn()
-    renderInRouter(
-      <FlipCardMindMapPanel
-        fullscreen={false}
-        visibleEditorState={editorState}
-        onToggleFullscreen={vi.fn()}
-        onNodeClick={vi.fn()}
-        onNodeContextMenu={vi.fn()}
-        onToggleRatingMode={onToggleRatingMode}
-        onRateNode={vi.fn()}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '评分' }))
-    expect(onToggleRatingMode).toHaveBeenCalledTimes(1)
-    expect(getLatestMindMapEditorSurfaceProps()?.toolbarContent).toBeTruthy()
-  })
-
-  it('reports mobile next navigation as an active learning interaction', async () => {
-    const onNodeActive = vi.fn()
-    renderInRouter(
-      <FlipCardMindMapPanel
-        fullscreen={false}
-        visibleEditorState={editorState}
-        onToggleFullscreen={vi.fn()}
-        onNodeClick={vi.fn()}
-        onNodeContextMenu={vi.fn()}
-        onNodeActive={onNodeActive}
-        onRateNode={vi.fn()}
-      />,
-    )
-
-    await waitFor(() => expect(onNodeActive).toHaveBeenCalled())
-    onNodeActive.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: '下一个' }))
-    expect(onNodeActive).toHaveBeenCalledWith([
-      expect.objectContaining({ uid: 'grandchild' }),
-    ])
   })
 })

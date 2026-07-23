@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.modules.memory.application.formal_review_amendment import (
+    reopen_formal_review_for_amendment,
+)
 from memory_anki.modules.memory.application.node_due_rollup_batch import (
     project_due_rollups_batch,
 )
@@ -295,8 +298,12 @@ def get_fsrs_queue_payload(
             else []
         )
         for wave in wave_rows:
-            wave_palace = palace_by_id.get(int(wave.palace_id))
             item = wave_payload(wave)
+            pending = int(item.get("pending_count") or 0)
+            # Hide empty shells (0-node leftovers after reassignment / abandoned starts).
+            if pending <= 0 or int(item.get("item_count") or 0) <= 0:
+                continue
+            wave_palace = palace_by_id.get(int(wave.palace_id))
             item["palace_title"] = (
                 wave_palace.manual_title or wave_palace.title or "未命名宫殿"
                 if wave_palace
@@ -431,18 +438,23 @@ def _supersede_duplicate_active_reviews(
     return len(duplicates)
 
 
-def ensure_formal_review_session_active(row: StudySession) -> StudySession:
-    """Keep formal review ratable while the user is still on the session page.
-
-    Recovered rows are healed back to active (same spirit as general study sessions).
-    Completed / abandoned sessions stay closed.
-    """
+def ensure_formal_review_session_active(
+    row: StudySession,
+    session: Session | None = None,
+) -> StudySession:
+    """Keep formal review ratable; reopen completed sessions when ``session`` given."""
     if row.status in ACTIVE_REVIEW_STATUSES:
         if row.status == "recovered":
             row.status = "active"
             row.ended_at = None
             row.updated_at = utc_now_naive()
         return row
+    if (
+        session is not None
+        and row.status == "completed"
+        and row.scene in {"review", "reinforcement_review"}
+    ):
+        return reopen_formal_review_for_amendment(session, row)
     raise ValueError(INACTIVE_REVIEW_MESSAGE)
 
 
@@ -457,7 +469,7 @@ def get_formal_review_scope(
     ):
         raise ValueError("formal review session not found")
     if require_active:
-        ensure_formal_review_session_active(row)
+        ensure_formal_review_session_active(row, session)
     return set(_scope(row))
 
 
@@ -735,7 +747,7 @@ def get_formal_review_progress(row: StudySession) -> dict[str, Any]:
 def save_formal_review_progress(
     session: Session, row: StudySession, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    ensure_formal_review_session_active(row)
+    ensure_formal_review_session_active(row, session)
     row.progress_json = json.dumps(payload, ensure_ascii=False)
     row.updated_at = utc_now_naive()
     session.commit()
@@ -776,6 +788,7 @@ __all__ = [
     "get_next_due_palace_id",
     "rate_out_of_scope_due_formal_review_nodes",
     "rate_unrated_formal_review_nodes",
+    "reopen_formal_review_for_amendment",
     "resolve_formal_review_session",
     "save_formal_review_progress",
     "sort_queue_items",

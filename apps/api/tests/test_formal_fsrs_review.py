@@ -18,6 +18,7 @@ from memory_anki.modules.memory.application.formal_review_service import (
 )
 from memory_anki.modules.memory.application.node_memory_service import (
     rate_nodes,
+    undo_rating_operation,
 )
 
 
@@ -246,6 +247,80 @@ def test_formal_session_freezes_scope_and_unrated_nodes_stay_due(db_session):
     assert result["remaining_due_node_count"] == 0
 
 
+def test_post_settlement_can_undo_rerate_and_recomplete(db_session):
+    """After complete, learner may undo/re-rate and settle again without a new session."""
+    palace = _palace(db_session)
+    row = start_or_resume_formal_review(db_session, palace.id)
+    for uid in ("a", "b"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid=uid,
+            rating=3,
+            study_session_id=row.id,
+            operation_id=f"settle-{uid}",
+            rating_scope="single",
+            recall_round="first",
+        )
+    first = complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=30,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    db_session.commit()
+    assert row.status == "completed"
+    first_log_id = first["review_log_id"]
+    assert first["rating_counts"]["记得"] == 2
+
+    # Pure re-submit without amendments returns the same receipt.
+    again = complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=30,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    assert again["review_log_id"] == first_log_id
+
+    undone = undo_rating_operation(
+        db_session, operation_id="settle-b", study_session_id=row.id
+    )
+    assert undone["undone"] is True
+    db_session.refresh(row)
+    assert row.status == "active"
+    assert "completion_receipt" not in json.loads(row.summary_json or "{}")
+
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=1,
+        study_session_id=row.id,
+        operation_id="settle-b-amend",
+        rating_scope="single",
+        recall_round="first",
+    )
+    second = complete_formal_review(
+        db_session,
+        row,
+        duration_seconds=45,
+        completion_mode="manual_complete",
+        note="amended",
+        chapter_id=None,
+    )
+    db_session.commit()
+    db_session.refresh(row)
+    assert row.status == "completed"
+    assert second["review_log_id"] == first_log_id
+    assert second["rating_counts"]["记得"] == 1
+    assert second["rating_counts"]["忘记"] == 1
+    assert second["duration_seconds"] == 45
+
+
 def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
@@ -286,10 +361,11 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
     hard_interval = hard.due_at - hard.last_review_at
     good_interval = (good.raw_due_at or good.due_at) - good.last_review_at
     assert hard.schedule_source == "reinforcement"
-    assert hard_interval <= timedelta(minutes=60, seconds=5)
+    # Immediate restudy batch (no multi-hour wait).
+    assert hard_interval <= timedelta(minutes=1, seconds=5)
 
-    # Simulate a long session: Hard was scored long enough ago that its
-    # reinforcement window (≤60m) has already expired before complete.
+    # Simulate a long session: move clocks into the past before complete so we
+    # can assert completion does not re-anchor already-written schedules.
     past = utc_now_naive() - timedelta(minutes=90)
     hard.last_review_at = past
     hard.due_at = past + hard_interval
@@ -382,6 +458,52 @@ def test_rate_unrated_only_scores_missing_nodes_not_already_rated(db_session):
     assert again["affected_node_count"] == 0
     assert again["summary"]["ratings"]["a"] == 1
     assert again["summary"]["ratings"]["b"] == 4
+
+
+def test_rate_unrated_handles_uninitialized_shells_without_stability(db_session):
+    """Calibration baseline_new leaves Relearning shells with S/D=None.
+
+    py-fsrs review_card asserts stability is not None for non-Learning cards.
+    Settlement one-tap and single ratings must treat these as first-learn.
+    """
+    palace = _palace(db_session)
+    past = utc_now_naive() - timedelta(days=1)
+    for uid in ("a", "b"):
+        row = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
+        )
+        # Mirror live palace-25 shells after baseline_new calibration.
+        row.state = 3  # Relearning
+        row.stability = None
+        row.difficulty = None
+        row.last_review_at = None
+        row.raw_due_at = None
+        row.schedule_source = "uninitialized"
+        row.schedule_reason = "baseline_new"
+        row.state_source = "manual"
+        row.due_at = past
+    db_session.commit()
+
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    bulk = rate_unrated_formal_review_nodes(
+        db_session,
+        session_row,
+        rating=3,
+        operation_id="settlement-uninitialized-shells",
+    )
+    assert bulk["affected_node_count"] == 2
+    assert set(bulk["affected_node_uids"]) == {"a", "b"}
+    assert bulk["summary"]["unrated_due_node_count"] == 0
+    for uid in ("a", "b"):
+        state = (
+            db_session.query(ReviewNodeState)
+            .filter_by(palace_id=palace.id, node_uid=uid)
+            .one()
+        )
+        assert state.stability is not None
+        assert state.last_review_at is not None
 
 
 def test_recovered_formal_session_can_still_rate_single_nodes(db_session):
@@ -494,7 +616,8 @@ def test_completion_summary_counts_ratings_when_frozen_scope_missing(db_session)
     assert summary["ratings"]["b"] == 4
 
 
-def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
+def test_completed_formal_session_reopens_for_post_settlement_rating(db_session):
+    """Post-settlement rating reopens the same session instead of hard-rejecting."""
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
     for uid in ("a", "b"):
@@ -504,7 +627,7 @@ def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
             node_uid=uid,
             rating=3,
             study_session_id=row.id,
-            operation_id=f"complete-then-reject-{uid}",
+            operation_id=f"complete-then-amend-{uid}",
             rating_scope="single",
             source_scene="formal_review",
         )
@@ -517,22 +640,24 @@ def test_completed_formal_session_rejects_rating_with_clear_message(db_session):
         chapter_id=None,
     )
     db_session.commit()
+    assert row.status == "completed"
 
-    try:
-        rate_nodes(
-            db_session,
-            palace_id=palace.id,
-            node_uid="a",
-            rating=3,
-            study_session_id=row.id,
-            operation_id="after-complete",
-            rating_scope="single",
-            source_scene="formal_review",
-            recall_round="first",
-        )
-        raise AssertionError("expected completed session to reject rating")
-    except ValueError as exc:
-        assert "已结束" in str(exc)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=row.id,
+        operation_id="after-complete-amend",
+        rating_scope="single",
+        source_scene="formal_review",
+        recall_round="first",
+    )
+    db_session.refresh(row)
+    assert row.status == "active"
+    summary = formal_review_completion_summary(db_session, row)
+    assert summary["ratings"]["a"] == 1
+    assert summary["ratings"]["b"] == 3
 
 
 def _set_all_due_at(session, palace_id: int, due_at: datetime) -> None:

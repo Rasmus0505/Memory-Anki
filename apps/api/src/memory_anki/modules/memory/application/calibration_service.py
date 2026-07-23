@@ -33,6 +33,7 @@ from memory_anki.modules.memory.application.wave_policy import (
 from memory_anki.modules.memory.application.wave_service import (
     _recount_wave,
     assign_node_to_formal_wave,
+    close_empty_open_wave,
     list_palace_waves,
     remove_node_from_open_waves,
 )
@@ -130,8 +131,7 @@ def _restore_open_wave_items(
         if wave is None:
             continue
         _recount_wave(session, wave)
-        if wave.status == "scheduled" and wave.item_count == 0:
-            session.delete(wave)
+        close_empty_open_wave(session, wave)
 
 
 def _palace_revision(palace: Palace) -> str:
@@ -314,6 +314,10 @@ def preview_or_apply_calibration(
                 raise ValueError("invalid baseline_tier")
             if not tier["initialized"]:
                 remove_node_from_open_waves(session, row)
+                # First-learn shell: Learning + no S/D. Leaving Review/Relearning
+                # with stability=None makes py-fsrs review_card assert (HTTP 500).
+                row.state = int(State.Learning)
+                row.step = 0
                 row.stability = None
                 row.difficulty = None
                 row.last_review_at = None

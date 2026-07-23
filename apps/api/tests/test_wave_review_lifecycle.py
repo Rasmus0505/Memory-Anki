@@ -21,6 +21,9 @@ from memory_anki.modules.memory.application.formal_review_service import (
     get_formal_review_scope,
     start_or_resume_formal_review,
 )
+from memory_anki.modules.memory.application.formal_review_settlement import (
+    complete_formal_review,
+)
 from memory_anki.modules.memory.application.node_memory_service import (
     rate_nodes,
     undo_rating_operation,
@@ -160,6 +163,7 @@ def test_weak_rating_goes_to_reinforcement_not_formal_due(db_session):
         .one()
     )
     assert state.schedule_source == "reinforcement"
+    assert state.schedule_reason == "reinforcement_r1_batch"
     waves = (
         db_session.query(ReviewWave)
         .filter_by(palace_id=palace.id, wave_type="same_day_reinforcement")
@@ -271,6 +275,48 @@ def test_rating_undo_restores_source_and_removes_target_membership(db_session):
         )
 
 
+def test_complete_receipt_includes_pending_reinforcement(db_session):
+    """Formal complete exposes the next restudy batch for auto-chain."""
+    palace = _seed_palace(db_session, node_uids=["a", "b"])
+    session_row = start_or_resume_formal_review(db_session, palace.id)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=session_row.id,
+        operation_id="complete-again-a",
+        rating_scope="single",
+    )
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id=session_row.id,
+        operation_id="complete-good-b",
+        rating_scope="single",
+    )
+    receipt = complete_formal_review(
+        db_session,
+        session_row,
+        duration_seconds=20,
+        completion_mode="manual_complete",
+        note="",
+        chapter_id=None,
+    )
+    pending = receipt.get("pending_reinforcement")
+    assert pending is not None
+    assert pending["pending_count"] >= 1
+    assert pending["wave_id"]
+    state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    assert pending["wave_id"] == state.effective_wave_id
+
+
 def test_reinforcement_wave_can_start_as_review_session(db_session):
     palace = _seed_palace(db_session, node_uids=["a"])
     formal_session = start_or_resume_formal_review(db_session, palace.id)
@@ -287,12 +333,213 @@ def test_reinforcement_wave_can_start_as_review_session(db_session):
         palace_id=palace.id, node_uid="a"
     ).one()
     wave = db_session.get(ReviewWave, state.effective_wave_id)
-    wave.available_at = utc_now_naive() - timedelta(seconds=1)
+    # Immediate restudy: available_at is already due (no clock wait).
+    assert wave is not None
+    assert wave.available_at is not None
+    assert wave.available_at <= utc_now_naive()
     reinforcement_session = start_reinforcement_wave_session(db_session, wave.id)
     assert reinforcement_session.scene == "reinforcement_review"
     assert get_formal_review_scope(
         db_session, reinforcement_session.id, palace.id
     ) == {"a"}
+
+
+def test_freestyle_includes_available_reinforcement_nodes(db_session):
+    """Same-day restudy is freestyle-actionable immediately (no clock wait)."""
+    from memory_anki.modules.memory.application.node_memory_service import (
+        due_node_uids_for_entry,
+        list_due_nodes,
+    )
+    from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
+
+    palace = _seed_palace(db_session, node_uids=["a"])
+    formal_session = start_or_resume_formal_review(db_session, palace.id)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=1,
+        study_session_id=formal_session.id,
+        operation_id="freestyle-reinforcement-a",
+        rating_scope="single",
+    )
+    state = db_session.query(ReviewNodeState).filter_by(
+        palace_id=palace.id, node_uid="a"
+    ).one()
+    assert state.schedule_source == "reinforcement"
+    assert state.schedule_reason == "reinforcement_r1_batch"
+
+    # Formal queue still excludes reinforcement.
+    assert "a" not in list_due_nodes(db_session, palace.id)
+    assert "a" not in formal_due_node_uids(db_session, palace.id)
+
+    # Freestyle due set includes immediately available restudy.
+    assert "a" in list_due_nodes(db_session, palace.id, include_reinforcement=True)
+
+    # Unit-scoped freeze (freestyle card start) accepts reinforcement UIDs.
+    frozen = due_node_uids_for_entry(
+        db_session,
+        palace.id,
+        entry_mode="node",
+        scope_node_uids=["a"],
+    )
+    assert frozen == ["a"]
+
+    # Immersive queue emits a mindmap card for the reinforcement-only palace.
+    queue = build_freestyle_queue(
+        db_session,
+        config_raw={
+            "specific_palace_ids": [palace.id],
+            "content": {"mindmap_branch": True, "quiz_question": False},
+            "queue_length": 10,
+            "seed": 1,
+        },
+        operation_id="op-freestyle-reinforcement",
+    )
+    mindmap = [c for c in queue["cards"] if c.get("type") == "mindmap_branch"]
+    assert mindmap, queue
+    assert any("a" in (c.get("due_node_uids") or []) for c in mindmap)
+
+
+def test_freestyle_calendar_today_due_opt_in(db_session):
+    """Later-today formal due enters freestyle only when include_calendar_today_due."""
+    from memory_anki.modules.memory.application.node_memory_service import (
+        due_node_uids_for_entry,
+        list_due_nodes,
+    )
+    from memory_anki.modules.memory.application.wave_policy import local_date_of
+    from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
+
+    palace = _seed_palace(db_session, node_uids=["a"])
+    now = utc_now_naive()
+    # Schedule due this evening (still same local calendar day if now is not too late).
+    later_today = now + timedelta(hours=6)
+    if local_date_of(later_today) != local_date_of(now):
+        # Near midnight: keep a short offset that still lands on local today.
+        later_today = now + timedelta(minutes=30)
+        if local_date_of(later_today) != local_date_of(now):
+            later_today = now + timedelta(seconds=5)
+    state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    state.due_at = later_today
+    state.raw_due_at = later_today
+    state.last_review_at = now - timedelta(days=3)
+    state.schedule_source = "manual"
+    db_session.commit()
+
+    assert "a" not in list_due_nodes(db_session, palace.id)
+    assert "a" not in list_due_nodes(
+        db_session, palace.id, include_reinforcement=True
+    )
+    assert "a" in list_due_nodes(
+        db_session,
+        palace.id,
+        include_calendar_today_due=True,
+    )
+
+    # Scoped freestyle freeze can rate the calendar-today node.
+    assert due_node_uids_for_entry(
+        db_session,
+        palace.id,
+        entry_mode="node",
+        scope_node_uids=["a"],
+    ) == ["a"]
+
+    queue_off = build_freestyle_queue(
+        db_session,
+        config_raw={
+            "specific_palace_ids": [palace.id],
+            "content": {"mindmap_branch": True, "quiz_question": False},
+            "include_calendar_today_due": False,
+            "queue_length": 10,
+            "seed": 1,
+        },
+        operation_id="op-calendar-off",
+    )
+    mindmap_off = [c for c in queue_off["cards"] if c.get("type") == "mindmap_branch"]
+    assert not any("a" in (c.get("due_node_uids") or []) for c in mindmap_off)
+
+    queue_on = build_freestyle_queue(
+        db_session,
+        config_raw={
+            "specific_palace_ids": [palace.id],
+            "content": {"mindmap_branch": True, "quiz_question": False},
+            "include_calendar_today_due": True,
+            "queue_length": 10,
+            "seed": 1,
+        },
+        operation_id="op-calendar-on",
+    )
+    mindmap_on = [c for c in queue_on["cards"] if c.get("type") == "mindmap_branch"]
+    assert mindmap_on, queue_on
+    assert any("a" in (c.get("due_node_uids") or []) for c in mindmap_on)
+
+    # Tomorrow stays excluded even with opt-in.
+    tomorrow = now + timedelta(days=1, hours=2)
+    state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    state.due_at = tomorrow
+    state.raw_due_at = tomorrow
+    db_session.commit()
+    assert "a" not in list_due_nodes(
+        db_session,
+        palace.id,
+        include_calendar_today_due=True,
+    )
+
+
+def test_empty_reinforcement_wave_is_cancelled_on_start(db_session):
+    palace = _seed_palace(db_session, node_uids=["a"])
+    ghost = ReviewWave(
+        id="rw-ghost-empty",
+        palace_id=palace.id,
+        wave_type="same_day_reinforcement",
+        status="scheduled",
+        available_at=utc_now_naive() - timedelta(minutes=1),
+        item_count=0,
+        rated_count=0,
+        created_at=utc_now_naive(),
+        updated_at=utc_now_naive(),
+    )
+    db_session.add(ghost)
+    db_session.commit()
+    try:
+        start_reinforcement_wave_session(db_session, ghost.id)
+        raise AssertionError("expected empty reinforcement start to fail")
+    except ValueError as exc:
+        assert "no pending nodes" in str(exc)
+    db_session.refresh(ghost)
+    assert ghost.status == "cancelled"
+
+
+def test_queue_hides_empty_reinforcement_waves(db_session):
+    from memory_anki.modules.memory.application.formal_review_service import (
+        get_fsrs_queue_payload,
+    )
+
+    palace = _seed_palace(db_session, node_uids=["a"])
+    ghost = ReviewWave(
+        id="rw-ghost-queue",
+        palace_id=palace.id,
+        wave_type="same_day_reinforcement",
+        status="scheduled",
+        available_at=utc_now_naive() - timedelta(minutes=1),
+        item_count=0,
+        rated_count=0,
+        created_at=utc_now_naive(),
+        updated_at=utc_now_naive(),
+    )
+    db_session.add(ghost)
+    db_session.commit()
+    payload = get_fsrs_queue_payload(db_session, include_stats=False, include_items=True)
+    ids = {wave["id"] for wave in payload.get("reinforcement_waves") or []}
+    assert "rw-ghost-queue" not in ids
 
 
 def test_baseline_calibration_undo_restores_wave_membership(db_session):
@@ -331,7 +578,8 @@ def test_pause_wave(db_session):
     assert wave.status == "paused"
 
 
-def test_uninitialized_nodes_not_in_formal_due(db_session):
+def test_unlearned_nodes_enter_formal_due(db_session):
+    """Brand-new palace nodes (no FSRS rows) freeze as first-learn formal due."""
     palace = Palace(
         title="New only",
         archived=False,
@@ -348,7 +596,10 @@ def test_uninitialized_nodes_not_in_formal_due(db_session):
     )
     db_session.add(palace)
     db_session.commit()
-    assert formal_due_node_uids(db_session, palace.id) == []
+    assert formal_due_node_uids(db_session, palace.id) == ["x"]
+    row = start_or_resume_formal_review(db_session, palace.id)
+    payload = formal_review_session_payload(db_session, row)
+    assert set(payload["frozen_due_node_uids"]) == {"x"}
 
 def test_future_formal_schedule_exposes_next_review_at(db_session):
     """Not-yet-due formal nodes must still surface next_review_at on catalog."""

@@ -49,6 +49,71 @@ describe("MindMapReviewFlow session", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
+  it("renders freestyle quick-settle grades between AI and settlement in compact chrome", async () => {
+    const onQuickSettle = vi.fn(async (_rating, payload: { finalize: () => Promise<void> }) => {
+      await payload.finalize();
+    });
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        studySessionId="review-quick-1"
+        reviewEditorState={editorState}
+        chromeDensity="compact"
+        onComplete={vi.fn()}
+        onQuickSettle={onQuickSettle}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "AI 学习" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "一键记为忘记并结算" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "一键记为困难并结算" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "一键记为记得并结算" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "一键记为轻松并结算" })).toBeTruthy();
+    // Settlement button remains (short label "完成" / "结算", not the one-tap aria labels).
+    expect(screen.getByRole("button", { name: "完成" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "一键记为记得并结算" }));
+    await waitFor(() => expect(onQuickSettle).toHaveBeenCalledTimes(1));
+    expect(onQuickSettle.mock.calls[0]?.[0]).toBe(3);
+  });
+
+  it("keeps settlement and rating mode available after the first complete", async () => {
+    const onComplete = vi.fn(async (payload: { finalize: () => Promise<void> }) => {
+      await payload.finalize();
+    });
+
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="review"
+        studySessionId="review-amend-1"
+        reviewEditorState={editorState}
+        onComplete={onComplete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("本次已完成")).toBeTruthy());
+
+    // Rating chrome stays available for undo/re-rate after settlement.
+    expect(screen.getByRole("button", { name: "评分" })).toBeTruthy();
+
+    // Wait until the completion ceremony releases the settle button.
+    await waitFor(() => {
+      const settle = screen.getByRole("button", { name: /完成/ }) as HTMLButtonElement;
+      expect(settle.disabled).toBe(false);
+    });
+
+    // Settlement can be opened again to amend results.
+    fireEvent.click(screen.getByRole("button", { name: /完成/ }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(2));
+  });
+
   it("requests final completion directly without an intermediate decision dialog", async () => {
     const onComplete = vi.fn();
 

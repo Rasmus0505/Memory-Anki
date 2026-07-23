@@ -70,8 +70,8 @@ def test_all_fsrs_ratings_persist(db_session):
     assert [row.rating for row in rows] == [1, 2, 3, 4]
 
 
-def test_again_and_hard_schedule_within_short_window_not_days(db_session):
-    """忘记/困难 → reinforcement wave (≤60m defaults); multi-day only after 记得/轻松."""
+def test_again_and_hard_schedule_immediate_restudy_not_days(db_session):
+    """忘记/困难 → immediate reinforcement restudy batch; multi-day only after 记得/轻松."""
     from datetime import UTC, datetime, timedelta
 
     palace = _palace(db_session)
@@ -106,7 +106,9 @@ def test_again_and_hard_schedule_within_short_window_not_days(db_session):
     hard = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     hard_delta = hard.due_at - (hard.last_review_at or hard.due_at)
     assert hard.schedule_source == "reinforcement"
-    assert hard_delta <= timedelta(minutes=60, seconds=5)
+    assert hard.schedule_reason == "reinforcement_r2_batch"
+    # Immediately available for the next restudy pass (no multi-day bounce).
+    assert hard_delta <= timedelta(minutes=1, seconds=5)
     assert hard_delta < timedelta(days=1)
 
     rate_nodes(
@@ -121,7 +123,8 @@ def test_again_and_hard_schedule_within_short_window_not_days(db_session):
     again = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     again_delta = again.due_at - (again.last_review_at or again.due_at)
     assert again.schedule_source == "reinforcement"
-    assert again_delta <= timedelta(minutes=20, seconds=5)
+    assert again.schedule_reason == "reinforcement_r1_batch"
+    assert again_delta <= timedelta(minutes=1, seconds=5)
 
 
 def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
@@ -205,11 +208,12 @@ def test_projection_excludes_root_and_reports_due_nodes(db_session):
     palace = _palace(db_session)
     projection = get_palace_memory_projection(db_session, palace.id)
     assert projection["node_count"] == 3
-    # Wave model: nodes without memory are uninitialized, not formal-due.
-    assert projection["due_node_count"] == 0
+    # First-learn: unlearned tree nodes are formal-due so new palaces enter review.
+    assert projection["due_node_count"] == 3
     assert projection.get("uninitialized_node_count", 0) == 3
     assert projection["mastery_percent"] == 0
-    assert projection["review_entry_mode"] == "none"
+    assert projection["has_due_review"] is True
+    assert projection["review_entry_mode"] in {"node", "palace"}
     assert isinstance(projection["review_branch_summaries"], list)
     assert len(projection["review_branch_summaries"]) >= 2
     assert all("branch_uid" in row for row in projection["review_branch_summaries"])

@@ -6,10 +6,11 @@ import {
   getReviewSessionCompletionSummaryApi,
   getReviewSessionProgressApi,
   saveReviewSessionProgressApi,
+  startReviewWaveSessionApi,
   submitReviewSessionApi,
 } from '@/modules/practice/public'
 import { ReviewSessionContainer, type ReviewSessionContainerSession } from '@/widgets/mindmap-review-flow'
-import { buildReviewOverviewPath } from '@/modules/memory/public'
+import { buildReviewOverviewPath, buildReviewSessionPath } from '@/modules/memory/public'
 
 export function toContainerSession(session: ReviewScheduleSummary): ReviewSessionContainerSession {
   return {
@@ -53,9 +54,9 @@ function asEditorDoc(value: unknown): string | Record<string, unknown> | null {
 
 /**
  * Flip-card view always uses the full palace map.
- * Node mode only changes entry labeling / frozen due scope: non-due cards auto-reveal via
- * focusNodeIds; due cards stay as manual flip targets. Do not clip to primary_branch_uid —
- * other branches must remain visible context.
+ * Node mode only changes entry labeling / frozen due scope (soft-dim + FSRS rating gate).
+ * Every card — due or not — uses classic flip: hidden → 待回忆 → content. Do not clip to
+ * primary_branch_uid — other branches must remain visible context.
  */
 export function buildReviewEditorState(session: ReviewSessionContainerSession) {
   return {
@@ -99,7 +100,23 @@ export default function ReviewSession() {
       saveProgress={saveReviewSessionProgressApi}
       loadCompletionSummary={getReviewSessionCompletionSummaryApi}
       submitSession={submitReviewSessionApi}
-      onSubmitted={(result) => navigate(`/review/completed/${result.review_log_id}`, { replace: true })}
+      onSubmitted={async (result) => {
+        const pending = result.pending_reinforcement
+        const waveId = pending?.wave_id ? String(pending.wave_id) : ''
+        const pendingCount = Number(pending?.pending_count || 0)
+        // End-of-batch restudy: weak nodes are immediately available — chain into
+        // the next reinforcement pass without sending the learner back to the queue.
+        if (waveId && pendingCount > 0) {
+          try {
+            const session = await startReviewWaveSessionApi(waveId)
+            navigate(buildReviewSessionPath(session.id), { replace: true })
+            return
+          } catch {
+            // Fall through to completion receipt if start fails (empty wave, etc.).
+          }
+        }
+        navigate(`/review/completed/${result.review_log_id}`, { replace: true })
+      }}
     />
   )
 }

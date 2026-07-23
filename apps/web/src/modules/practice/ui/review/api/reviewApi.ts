@@ -79,50 +79,70 @@ export function mergeNewDueIntoWaveApi(waveId: string, nodeUids?: string[]) {
     body: JSON.stringify(nodeUids ? { node_uids: nodeUids } : {}),
   })
 }
+export type ReviewCalibrationPayload = {
+  operation_id: string
+  mode: 'align_wave' | 'baseline'
+  scope_kind?: 'palace' | 'branch' | 'nodes'
+  scope?: Record<string, unknown>
+  baseline_tier?: string
+  target_local_date?: string
+  palace_revision?: string
+}
+
+export type ReviewCalibrationResult = {
+  operation_id: string
+  preview?: boolean
+  palace_revision?: string
+  mode?: string
+  baseline_tier?: string | null
+  target_local_date?: string | null
+  affected_node_count: number
+  idempotent?: boolean
+  undone?: boolean
+  items?: Array<{ node_uid: string; before?: unknown; after?: unknown }>
+}
+
+function notifyCalibrationChanged(palaceId: number, affectedNodeCount: number) {
+  invalidateReviewQueueCache()
+  invalidatePalaceCatalogCache()
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, {
+    palaceId,
+    chapterId: null,
+    completedStageCount: affectedNodeCount,
+    totalStageCount: affectedNodeCount,
+    mastered: false,
+    nextReviewAt: null,
+  })
+}
+
 export function diagnosePalaceCalibrationApi(palaceId: number) {
   return request<{ item: import('@/shared/api/contracts').ReviewCalibrationDiagnose }>(
     `/review/palaces/${palaceId}/calibration/diagnose`,
   )
 }
-export function previewPalaceCalibrationApi(
-  palaceId: number,
-  data: {
-    operation_id: string
-    mode: 'align_wave' | 'baseline'
-    scope_kind?: 'palace' | 'branch' | 'nodes'
-    scope?: Record<string, unknown>
-    baseline_tier?: string
-    target_local_date?: string
-    palace_revision?: string
-  },
-) {
-  return request<{ item: unknown }>(`/review/palaces/${palaceId}/calibration/preview`, {
+export function previewPalaceCalibrationApi(palaceId: number, data: ReviewCalibrationPayload) {
+  return request<{ item: ReviewCalibrationResult }>(`/review/palaces/${palaceId}/calibration/preview`, {
     method: 'POST',
     body: JSON.stringify(data),
   })
 }
-export function applyPalaceCalibrationApi(
-  palaceId: number,
-  data: {
-    operation_id: string
-    mode: 'align_wave' | 'baseline'
-    scope_kind?: 'palace' | 'branch' | 'nodes'
-    scope?: Record<string, unknown>
-    baseline_tier?: string
-    target_local_date?: string
-    palace_revision?: string
-  },
-) {
-  return request<{ item: unknown }>(`/review/palaces/${palaceId}/calibration/apply`, {
+export function applyPalaceCalibrationApi(palaceId: number, data: ReviewCalibrationPayload) {
+  return request<{ item: ReviewCalibrationResult }>(`/review/palaces/${palaceId}/calibration/apply`, {
     method: 'POST',
     body: JSON.stringify(data),
+  }).then((response) => {
+    notifyCalibrationChanged(palaceId, response.item.affected_node_count ?? 0)
+    return response
   })
 }
 export function undoPalaceCalibrationApi(palaceId: number, operationId: string) {
-  return request<{ item: unknown }>(
+  return request<{ item: ReviewCalibrationResult }>(
     `/review/palaces/${palaceId}/calibration/${encodeURIComponent(operationId)}/undo`,
     { method: 'POST', body: '{}' },
-  )
+  ).then((response) => {
+    notifyCalibrationChanged(palaceId, response.item.affected_node_count ?? 0)
+    return response
+  })
 }
 
 type BulkRateResponse = {

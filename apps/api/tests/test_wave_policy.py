@@ -60,16 +60,22 @@ def test_pick_adsorb_returns_none_outside_window() -> None:
 
 
 def test_reinforcement_delays() -> None:
-    assert reinforcement_delay_minutes(1, again_minutes=20, hard_minutes=60) == 20
-    assert reinforcement_delay_minutes(2, again_minutes=20, hard_minutes=60) == 60
+    # Batch restudy: weak ratings are immediately available (delay 0).
+    assert reinforcement_delay_minutes(1, again_minutes=20, hard_minutes=60) == 0
+    assert reinforcement_delay_minutes(2, again_minutes=20, hard_minutes=60) == 0
     assert reinforcement_delay_minutes(3, again_minutes=20, hard_minutes=60) is None
+    assert reinforcement_delay_minutes(1) == 0
 
 
 def test_formal_queue_eligibility() -> None:
     assert is_formal_queue_eligible("manual", has_memory=True) is True
-    assert is_formal_queue_eligible("uninitialized", has_memory=False) is False
+    # First-learn: never-reviewed nodes enter the formal queue immediately.
+    assert is_formal_queue_eligible("uninitialized", has_memory=False) is True
+    assert is_formal_queue_eligible("manual", has_memory=False) is True
     assert is_formal_queue_eligible("content_changed", has_memory=True) is False
+    assert is_formal_queue_eligible("content_changed", has_memory=False) is False
     assert is_formal_queue_eligible("reinforcement", has_memory=True) is False
+    assert is_formal_queue_eligible("uninitialized", has_memory=True) is False
 
 
 def test_interval_days_minimum() -> None:

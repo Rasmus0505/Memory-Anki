@@ -205,4 +205,49 @@ describe('useMindMapRecallRatings', () => {
     expect(result.current.directRatedUids.has('child')).toBe(true)
     expect(result.current.sessionRatedUids.has('child')).toBe(true)
   })
+
+  it('optimistically cascades through single-child spine into all grandchildren', async () => {
+    listMindMapSessionEventsApi.mockResolvedValue({ items: [] })
+    const { result } = renderHook(() =>
+      useMindMapRecallRatings({
+        palaceId: 7,
+        studySessionId: 'session-1',
+        enabled: true,
+      }),
+    )
+    await waitFor(() => expect(listMindMapSessionEventsApi).toHaveBeenCalled())
+
+    // Server list arrives later; client cascade UIDs must paint G* immediately.
+    let resolveApi!: (value: { item: { affected_node_uids: string[] } }) => void
+    ratePalaceNodesApi.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveApi = resolve
+      }),
+    )
+    let pending: Promise<string | undefined>
+    await act(async () => {
+      pending = result.current.rateNode(
+        'p',
+        3,
+        'first',
+        'subtree',
+        {},
+        'overwrite',
+        ['p', 'c', 'g1', 'g2', 'g3'],
+      )
+    })
+    expect(result.current.sessionRatedUids.has('p')).toBe(true)
+    expect(result.current.sessionRatedUids.has('c')).toBe(true)
+    expect(result.current.sessionRatedUids.has('g1')).toBe(true)
+    expect(result.current.sessionRatedUids.has('g2')).toBe(true)
+    expect(result.current.sessionRatedUids.has('g3')).toBe(true)
+    expect(result.current.directRatedUids.has('p')).toBe(true)
+    expect(result.current.directRatedUids.has('g1')).toBe(false)
+
+    await act(async () => {
+      resolveApi({ item: { affected_node_uids: ['p', 'c', 'g1', 'g2', 'g3'] } })
+      await pending
+    })
+    expect(result.current.sessionRatedUids.has('g3')).toBe(true)
+  })
 })

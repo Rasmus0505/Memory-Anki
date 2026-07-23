@@ -174,7 +174,7 @@ def rate_unrated_formal_review_nodes(
     Settlement one-tap scoring must never overwrite nodes the user already rated.
     The unrated set is always recomputed server-side from session events.
     """
-    ensure_formal_review_session_active(row)
+    ensure_formal_review_session_active(row, session)
     if rating not in VALID_RATINGS:
         raise ValueError("rating must be between 1 and 4")
     batch_id = str(operation_id or "").strip()
@@ -237,7 +237,7 @@ def rate_out_of_scope_due_formal_review_nodes(
     Used when node-mode review settled its branch but other branches remain due.
     Temporarily expands formal single-rating scope so rate_nodes accepts them.
     """
-    ensure_formal_review_session_active(row)
+    ensure_formal_review_session_active(row, session)
     if rating not in VALID_RATINGS:
         raise ValueError("rating must be between 1 and 4")
     batch_id = str(operation_id or "").strip()
@@ -315,9 +315,14 @@ def complete_formal_review(
     chapter_id: int | None,
 ) -> dict[str, Any]:
     existing = _json(row.summary_json)
+    # Pure re-submit of an already-settled session with no intermediate amendments:
+    # return the stored receipt (idempotent). After reopen + rate/undo, receipt is
+    # cleared and this path rebuilds a fresh one.
     if row.status == "completed" and existing.get("completion_receipt"):
         return dict(existing["completion_receipt"])
-    ensure_formal_review_session_active(row)
+    ensure_formal_review_session_active(row, session)
+    # Re-read after possible reopen (active again; receipt may have been moved).
+    existing = _json(row.summary_json)
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None:
         raise ValueError("palace not found")
@@ -375,20 +380,40 @@ def complete_formal_review(
     summary["last_review_at"] = to_api_datetime(ended_at)
     # review_date is the learner's local calendar day (matches today_review_counts).
     # ended_at is UTC-naive; using its .date() near UTC midnight miscounts "今日".
-    log = ReviewLog(
-        palace_id=palace.id,
-        review_date=date.today(),
-        score=score,
-        review_mode="fsrs",
-        duration_seconds=max(0, int(duration_seconds)),
-        note=note.strip()[:2000],
-    )
-    session.add(log)
-    session.flush()
+    duration = max(0, int(duration_seconds))
+    note_text = note.strip()[:2000]
+    amendable_log_id = existing.pop("amendable_review_log_id", None)
+    log: ReviewLog | None = None
+    if amendable_log_id is not None:
+        log = session.get(ReviewLog, int(amendable_log_id))
+    if log is not None:
+        log.score = score
+        log.duration_seconds = duration
+        log.note = note_text
+        log.review_date = date.today()
+        session.flush()
+    else:
+        log = ReviewLog(
+            palace_id=palace.id,
+            review_date=date.today(),
+            score=score,
+            review_mode="fsrs",
+            duration_seconds=duration,
+            note=note_text,
+        )
+        session.add(log)
+        session.flush()
     next_id = get_next_due_palace_id(session, chapter_id=chapter_id)
     # Include this just-written log so the receipt matches queue "today" count.
     today_review_count = today_review_counts_by_palace(session, [int(palace.id)]).get(
         int(palace.id), 0
+    )
+    from memory_anki.modules.memory.application.wave_queries import (
+        find_available_reinforcement_for_palace,
+    )
+
+    pending_reinforcement = find_available_reinforcement_for_palace(
+        session, int(palace.id)
     )
     receipt = {
         "ok": True,
@@ -398,8 +423,9 @@ def complete_formal_review(
         "review_log_id": log.id,
         "palace_id": palace.id,
         "chapter_id": chapter_id,
-        "duration_seconds": max(0, int(duration_seconds)),
+        "duration_seconds": duration,
         "today_review_count": today_review_count,
+        "pending_reinforcement": pending_reinforcement,
         **summary,
     }
     row.status = "completed"

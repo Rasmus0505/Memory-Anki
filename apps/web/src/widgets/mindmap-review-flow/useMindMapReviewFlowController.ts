@@ -37,7 +37,7 @@ export function useMindMapReviewFlowController({
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   reviewScopeNodeUids,
-  autoRevealNonDueCards = true,
+  autoRevealNonDueCards = false,
   displayMode = "review",
   persistKey = null,
   reviewEditorState,
@@ -89,8 +89,8 @@ export function useMindMapReviewFlowController({
     sessionKind,
     revealMode,
     checkpointNodeUids,
-    // Formal palace: focus=due so non-due open fully. Freestyle units pass
-    // autoRevealNonDueCards=false for classic placeholder flip on every node.
+    // Default false: every card is hidden → 待回忆 → content (formal + freestyle).
+    // true is a legacy opt-in that auto-opens non-due via focusNodeIds.
     focusNodeUids: autoRevealNonDueCards ? reviewScopeNodeUids : EMPTY_CHECKPOINT_NODE_UIDS,
     persistKey,
     editorState: reviewEditorState,
@@ -266,7 +266,9 @@ React.useEffect(() => {
   const handleSpacePourRef = React.useRef(flow.handleSpacePour)
   handleSpacePourRef.current = flow.handleSpacePour
 
-  const canUseRatingMode = Boolean(palaceId && studySessionId && !isInlineEditMode && !flow.completed)
+  // Keep rating mode after settlement so the learner can undo/re-rate mistakes
+  // and re-run 结算 without leaving the page.
+  const canUseRatingMode = Boolean(palaceId && studySessionId && !isInlineEditMode)
   React.useEffect(() => {
     if (canUseRatingMode || isInlineEditMode || !isCheckpointMode) return
     const onKeyDown = (event: KeyboardEvent) => {

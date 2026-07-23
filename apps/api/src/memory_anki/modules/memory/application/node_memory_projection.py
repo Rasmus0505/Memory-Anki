@@ -47,7 +47,6 @@ from memory_anki.modules.memory.application.node_entry_projection import (
 __all__ = [
     "RATING_LABELS",
     "VALID_RATINGS",
-    "due_node_uids_for_entry",
     "get_palace_due_rollup",
     "get_palace_memory_projection",
     "_apply_card",
@@ -171,13 +170,19 @@ def _card_from_state(state: ReviewNodeState | None, *, card_id: int) -> Card:
         return Card(card_id=card_id, state=State.Learning, due=_utc_now())
     # FSRS card clock uses raw suggestion when present; due_at is wave-effective.
     raw = getattr(state, "raw_due_at", None) or state.due_at
+    due = _aware(raw) or _utc_now()
+    card_state = State(state.state)
+    stability = state.stability
+    # Incomplete calibration shells may lack stability; py-fsrs requires it for non-Learning.
+    if stability is None and card_state != State.Learning:
+        return Card(card_id=card_id, state=State.Learning, due=due)
     return Card(
         card_id=card_id,
-        state=State(state.state),
+        state=card_state,
         step=state.step,
-        stability=state.stability,
+        stability=stability,
         difficulty=state.difficulty,
-        due=_aware(raw) or _utc_now(),
+        due=due,
         last_review=_aware(state.last_review_at),
     )
 
@@ -466,6 +471,7 @@ def _projection_from_tree(
         SCHEDULE_REINFORCEMENT,
         SCHEDULE_UNINITIALIZED,
         is_formal_queue_eligible,
+        local_date_of,
     )
 
     if mastery_horizon_days is None:
@@ -500,9 +506,11 @@ def _projection_from_tree(
         if row is None:
             stability = 0.0
             retrievability = 0.0
-            due_at = None
+            # First-learn: new palace nodes have no FSRS row yet — treat as due now.
+            due_at = now
             state_source = "new"
             schedule_source = SCHEDULE_UNINITIALIZED
+            formal_due = True
         elif (
             row.content_fingerprint
             and row.content_fingerprint != nodes[uid]["content_fingerprint"]
@@ -538,7 +546,28 @@ def _projection_from_tree(
             if schedule_source == SCHEDULE_REINFORCEMENT:
                 reinforcement_due = bool(due_at and due_at <= now)
             elif is_formal_queue_eligible(schedule_source, has_memory=has_memory):
-                formal_due = bool(due_at and due_at <= now)
+                if not has_memory:
+                    # Never reviewed: enter formal learn queue immediately.
+                    formal_due = True
+                    if due_at is None:
+                        due_at = now
+                else:
+                    formal_due = bool(due_at and due_at <= now)
+
+        # Formal nodes scheduled later today (local calendar) but not yet clock-due.
+        # Does not inflate due_node_count; freestyle opt-in via list_due_nodes.
+        calendar_today_due = False
+        if (
+            not formal_due
+            and not reinforcement_due
+            and due_at is not None
+            and schedule_source != SCHEDULE_REINFORCEMENT
+            and schedule_source != SCHEDULE_CONTENT_CHANGED
+        ):
+            row_has_memory = row is not None and row.last_review_at is not None
+            if is_formal_queue_eligible(schedule_source, has_memory=row_has_memory):
+                # Compare local wall dates (device timezone), matching wave policy.
+                calendar_today_due = local_date_of(due_at) == local_date_of(now)
 
         stability_days = round(stability, 3)
         retrievability_clamped = round(max(0.0, min(retrievability, 1.0)), 4)
@@ -567,11 +596,10 @@ def _projection_from_tree(
         if schedule_source == SCHEDULE_REINFORCEMENT:
             # Prefer the reinforcement slot (due_at); fall back to FSRS raw formal due.
             display_due_api = due_at_api or raw_due_api
-        elif schedule_source not in {
-            SCHEDULE_UNINITIALIZED,
-            SCHEDULE_CONTENT_CHANGED,
-        }:
-            # Formal-eligible (manual / wave_adsorb / practice / ...): effective due.
+        elif schedule_source == SCHEDULE_CONTENT_CHANGED:
+            display_due_api = None
+        elif formal_due or schedule_source != SCHEDULE_UNINITIALIZED:
+            # Formal-eligible, including first-learn (uninitialized, due now).
             display_due_api = due_at_api
         if display_due_api and (next_due is None or display_due_api < next_due):
             next_due = display_due_api
@@ -602,6 +630,7 @@ def _projection_from_tree(
                 # Formal long-term due only (excludes uninitialized / content_changed / reinforcement).
                 "due": formal_due,
                 "reinforcement_due": reinforcement_due,
+                "calendar_today_due": calendar_today_due,
                 "state_source": state_source,
                 "rating": rating_value,
             }
@@ -684,61 +713,6 @@ def _rating_mutation_projection(
         include_ratings=False,
         include_nodes=False,
     )
-
-
-def due_node_uids_for_entry(
-    session: Session,
-    palace_id: int,
-    *,
-    entry_mode: str | None = None,
-    branch_uid: str | None = None,
-    scope_node_uids: list[str] | None = None,
-) -> list[str]:
-    """Resolve frozen due UIDs for formal review entry (palace or single top-level branch).
-
-    Freezes only currently formal-due and overdue nodes. Near-due look-ahead and
-    mid-session auto-expand are intentionally disabled (palace wave model).
-
-    When ``scope_node_uids`` is provided (freestyle unit batches), freeze exactly
-    the intersection of that list with currently due nodes — never fall back to
-    the full palace or top-level branch.
-    """
-    now = _utc_now()
-    projection = get_palace_memory_projection(session, palace_id, now=now)
-    mode = entry_mode or projection.get("review_entry_mode") or "none"
-    if mode == "none" and not scope_node_uids:
-        return []
-
-    wave = [item for item in projection.get("nodes") or [] if item.get("due")]
-    if not wave:
-        return []
-    due_by_uid = {
-        str(item["node_uid"]): item
-        for item in wave
-        if item.get("node_uid")
-    }
-    if scope_node_uids:
-        # Explicit unit scope: keep caller order, only currently due members.
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for raw in scope_node_uids:
-            uid = str(raw or "").strip()
-            if not uid or uid in seen or uid not in due_by_uid:
-                continue
-            seen.add(uid)
-            ordered.append(uid)
-        return ordered
-    if mode == "node":
-        target_branch = branch_uid or projection.get("primary_branch_uid")
-        if target_branch:
-            scoped = [
-                item["node_uid"]
-                for item in wave
-                if item.get("branch_uid") == target_branch
-            ]
-            if scoped:
-                return scoped
-    return [item["node_uid"] for item in wave]
 
 
 def get_palace_memory_projection(

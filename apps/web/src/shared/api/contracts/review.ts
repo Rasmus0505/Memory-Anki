@@ -156,6 +156,11 @@ export interface ReviewCompletionSummary extends ReviewMemorySummary {
   next_review_entry_mode?: 'none' | 'node' | 'palace' | null
   next_review_entry_label?: string | null
 }
+export interface PendingReinforcementHint {
+  wave_id: string
+  pending_count: number
+}
+
 export interface ReviewSessionSubmitResponse extends ReviewCompletionSummary {
   ok: boolean
   completion_mode: "manual_complete" | "auto_complete" | string
@@ -167,6 +172,11 @@ export interface ReviewSessionSubmitResponse extends ReviewCompletionSummary {
   duration_seconds: number
   /** Formal reviews completed for this palace today (includes this receipt). */
   today_review_count?: number
+  /**
+   * Weak-rated nodes waiting for the next end-of-batch restudy pass.
+   * When present, the formal session UI should auto-chain into that wave.
+   */
+  pending_reinforcement?: PendingReinforcementHint | null
 }
 export interface MasteryTrendPoint {
   at: string
