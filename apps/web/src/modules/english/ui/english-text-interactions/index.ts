@@ -5,6 +5,7 @@
  */
 export { ReadingLookupText as EnglishLookupText } from '@/modules/english-reading/public'
 export { EnglishDictionaryFloat } from './EnglishDictionaryFloat'
+export { EnglishInteractiveText } from './EnglishInteractiveText'
 export {
   LOOKUP_WORD_RE,
   normalizeLookupWord,

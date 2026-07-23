@@ -4,6 +4,7 @@
  */
 export * from './domain/english-entity/api'
 export * from './ui/english-shell'
+export * from './ui/english-text-interactions'
 export { default as EnglishCoursePage } from './ui/english/EnglishCoursePage'
 export { default as EnglishHubPage } from './ui/english/EnglishHubPage'
 export { default as EnglishPatternsPage } from './ui/english/EnglishPatternsPage'

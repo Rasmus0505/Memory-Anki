@@ -365,8 +365,9 @@ def normalize_generation_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_generated_article(content: str, *, targets: list[EnglishReadingTarget], config: dict[str, Any]) -> None:
-    if not content or CJK_RE.search(content):
-        raise EnglishReadingError("模型未返回纯英文文章。")
+    # Do not reject model output for containing Chinese/CJK — surface content as-is.
+    if not str(content or "").strip():
+        raise EnglishReadingError("模型未返回文章内容。")
     actual_word_count = legacy_service.count_words(content)
     target_word_count = int(config["wordCount"])
     if actual_word_count < int(target_word_count * 0.6) or actual_word_count > int(target_word_count * 1.4):
@@ -401,7 +402,16 @@ def run_english_json(
     prompt: str,
     ai_options: AiRuntimeOptions | None,
     required_keys: tuple[str, ...],
+    language_mode: str = "free",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Call the reading model and return parsed JSON.
+
+    ``language_mode``:
+    - ``pure_en``: prompt asks for English-only strings (soft guidance only)
+    - ``free`` (default): Chinese/English both accepted; never reject for CJK
+
+    Hard language validation is intentionally removed — model text is returned to the user.
+    """
     runtime = ai_dependencies.runtime.resolve("english_reading", options=ai_options)
     if not runtime.api_key:
         raise EnglishReadingError("未配置英语阅读模型对应的 Provider API Key。")
@@ -412,11 +422,19 @@ def run_english_json(
         temperature=0.35 if runtime.supports_temperature else None,
         timeout_seconds=120,
     )
-    system_message = (
-        "You are an English-only tutor for second-language learners. "
-        "Reply with one JSON object only. Every string value must be plain English. "
-        "Never use Chinese characters, pinyin glosses, or bilingual notes."
-    )
+    pure_en = str(language_mode or "free").strip().lower() in {"pure_en", "english_only", "en_only"}
+    if pure_en:
+        system_message = (
+            "You are a tutor for second-language learners. "
+            "Reply with one JSON object only. Prefer plain English in string values. "
+            "Do not include chain-of-thought or markdown fences."
+        )
+    else:
+        system_message = (
+            "You are a tutor for second-language learners. "
+            "Reply with one JSON object only. String values may use Chinese, English, or both. "
+            "Do not include chain-of-thought or markdown fences. Return content the learner can read directly."
+        )
     current_prompt = prompt
     last_error = "模型未返回有效 JSON。"
     for _attempt in range(3):
@@ -433,22 +451,20 @@ def run_english_json(
             parsed = normalize_english_payload(parse_json_object(response), required_keys)
         except EnglishReadingError as exc:
             last_error = str(exc)
+            lang_hint = (
+                "Prefer English string values when possible."
+                if pure_en
+                else "Chinese or English string values are both fine."
+            )
             current_prompt = (
                 f"{prompt}\n\nYour previous result was invalid ({last_error}). "
                 f"Return valid JSON with exact keys {', '.join(required_keys)}. "
-                "Use English-only string values. Do not include Chinese characters."
+                f"{lang_hint}"
             )
             continue
-        if has_cjk_text(parsed):
-            last_error = "响应包含中文，必须改为纯英文。"
-            current_prompt = (
-                f"{prompt}\n\nYour previous result contained Chinese characters. "
-                f"Return the same JSON keys ({', '.join(required_keys)}) again, "
-                "but rewrite every string value in plain English only. No Chinese."
-            )
-            continue
+        # Never reject for CJK / mixed language — deliver parsed payload as-is.
         return parsed, serialize_resolved_ai_runtime(runtime)
-    raise EnglishReadingError(f"模型连续多次未返回有效的纯英文内容。{last_error}")
+    raise EnglishReadingError(f"模型连续多次未返回有效 JSON。{last_error}")
 
 
 def parse_json_object(value: str) -> dict[str, Any]:

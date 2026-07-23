@@ -67,9 +67,8 @@ export default function EnglishHubPage() {
   return (
     <EnglishZoneLayout
       zone="hub"
-      showZoneNav={false}
       title="英语学习"
-      description="先选听力或阅读；句模与生词是全局库，在学习过程中自然沉淀。"
+      description="上方可随时切换听力 / 阅读 / 句模 / 生词；句模与生词是全局库。"
       headerAside={
         <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 text-right shadow-soft">
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">

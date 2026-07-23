@@ -37,7 +37,7 @@ import {
 } from '@/modules/english/ui/english/components/EnglishCourseParts'
 import type { EnglishPracticeSettings } from '@/modules/settings/public'
 import { shouldKeepEnglishPracticeControlFocus } from '@/modules/english/ui/english/englishTypingHelpers'
-import { EnglishFocusChrome } from '@/modules/english/ui/english-shell'
+import { EnglishFocusChrome, EnglishZoneNav } from '@/modules/english/ui/english-shell'
 import {
   EnglishDictionaryFloat,
   EnglishLookupText,
@@ -211,6 +211,9 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
       className="flex h-[calc(100dvh-3rem)] min-h-[calc(100dvh-3rem)] flex-col overflow-hidden bg-gradient-to-b from-background via-background to-muted/20"
       data-testid="english-course-workbench"
     >
+      <div className="shrink-0 border-b border-border/40 bg-background/90 px-2 py-2 sm:px-3">
+        <EnglishZoneNav zone="listening" sticky={false} className="bg-muted/70" />
+      </div>
       <EnglishFocusChrome
         title={course.title}
         subtitle={
@@ -222,6 +225,15 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
         }
         trailing={
           <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-10 rounded-xl"
+              onClick={() => navigate('/english/listening')}
+              title="返回听力库"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"

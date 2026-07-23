@@ -479,7 +479,32 @@ export default function EnglishReadingPage() {
             <Button className="mt-3 w-full" onClick={() => void generate()} disabled={!selectedIds.length || busy === 'generate' || (article?.depth ?? 2) >= 2}>{busy === 'generate' ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}生成定向文章</Button>
           </section>
 
-          <section className="rounded-2xl border bg-card p-4"><h3 className="mb-3 font-semibold">文章历史</h3><div className="space-y-1">{tree.map((item) => <TreeRow key={item.id} item={item} activeId={article?.id ?? 0} onOpen={(id) => navigate(`/english/reading/materials/${id}`)} onDelete={async (id) => { if (!window.confirm('删除该文章及全部后代文章？')) return; await deleteEnglishReadingArticleApi(id); await refreshTree(); if (article?.id === id) navigate('/english/reading') }} />)}</div></section>
+          <section className="rounded-2xl border bg-card p-4" data-testid="reading-article-history">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="font-semibold">文章历史</h3>
+              <span className="text-xs text-muted-foreground">{tree.length} 篇</span>
+            </div>
+            <div className="space-y-1">
+              {tree.length > 0 ? (
+                tree.map((item) => (
+                  <TreeRow
+                    key={item.id}
+                    item={item}
+                    activeId={article?.id ?? 0}
+                    onOpen={(id) => navigate(`/english/reading/materials/${id}`)}
+                    onDelete={async (id) => {
+                      if (!window.confirm('删除该文章及全部后代文章？')) return
+                      await deleteEnglishReadingArticleApi(id)
+                      await refreshTree()
+                      if (article?.id === id) navigate('/english/reading')
+                    }}
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">还没有阅读历史。导入文章后会出现在这里。</p>
+              )}
+            </div>
+          </section>
         </aside>
       </div>
 

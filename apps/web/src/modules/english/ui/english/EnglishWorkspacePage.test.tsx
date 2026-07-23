@@ -142,6 +142,17 @@ describe('EnglishWorkspacePage', () => {
     window.confirm = vi.fn(() => true)
   })
 
+  it('keeps the english zone nav visible on the listening workspace', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
+
+    renderPage()
+
+    expect(await screen.findByTestId('english-zone-nav')).toBeTruthy()
+    expect(screen.getByTestId('english-zone-listening')).toBeTruthy()
+    expect(screen.getByTestId('english-zone-reading')).toBeTruthy()
+    expect(screen.getByTestId('listening-course-history')).toBeTruthy()
+  })
+
   it('prioritizes the current task view and hides upload actions while generation is active', async () => {
     const task = buildTask()
     mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace({ currentTask: task }))
@@ -152,6 +163,8 @@ describe('EnglishWorkspacePage', () => {
     expect(await screen.findByText('生成任务')).toBeTruthy()
     expect(screen.getByText('lesson.mp4')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '上传并生成' })).toBeNull()
+    // Zone routing bar must remain while generation is active.
+    expect(screen.getByTestId('english-zone-nav')).toBeTruthy()
   })
 
   it('navigates straight into the generated course when the task completes', async () => {
