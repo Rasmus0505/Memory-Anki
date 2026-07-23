@@ -440,9 +440,12 @@ export default function Knowledge() {
         <PageIntro
           title="知识树编辑器"
           actions={
-            <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link to="/palaces">返回学科书架</Link>
+              </Button>
               {renderStatus()}
-            </>
+            </div>
           }
         />
       ) : null}

@@ -46,8 +46,9 @@ describe('useNavigationHistory', () => {
       </MemoryRouter>,
     )
 
+    // Deep landing is anchored to the section home so 后退 is never a dead end.
     expect(screen.getByTestId('path').textContent).toBe('/knowledge')
-    expect((screen.getByRole('button', { name: 'back' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'back' }) as HTMLButtonElement).disabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: 'knowledge-editor' }))
     expect(screen.getByTestId('path').textContent).toBe('/knowledge/tree/1')
@@ -64,6 +65,41 @@ describe('useNavigationHistory', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'forward' }))
     expect(screen.getByTestId('path').textContent).toBe('/knowledge/tree/1')
+  })
+
+  it('returns from the knowledge tree editor to the subject bookshelf via back', () => {
+    render(
+      <MemoryRouter initialEntries={['/knowledge']}>
+        <Routes>
+          <Route path="*" element={<HistoryProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId('path').textContent).toBe('/knowledge')
+    fireEvent.click(screen.getByRole('button', { name: 'back' }))
+    expect(screen.getByTestId('path').textContent).toBe('/palaces')
+    expect(screen.getByTestId('section').textContent).toBe('palaces')
+  })
+
+  it('steps english course → listening library → english hub via section back', () => {
+    render(
+      <MemoryRouter initialEntries={['/english/listening/courses/7']}>
+        <Routes>
+          <Route path="*" element={<HistoryProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId('path').textContent).toBe('/english/listening/courses/7')
+    expect(screen.getByTestId('section').textContent).toBe('english')
+
+    fireEvent.click(screen.getByRole('button', { name: 'back' }))
+    expect(screen.getByTestId('path').textContent).toBe('/english/listening')
+
+    fireEvent.click(screen.getByRole('button', { name: 'back' }))
+    expect(screen.getByTestId('path').textContent).toBe('/english')
+    expect((screen.getByRole('button', { name: 'back' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('keeps back inside the section after a cross-tab round trip', () => {

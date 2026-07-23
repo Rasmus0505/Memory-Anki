@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveNavigationSection } from '@/shared/page-history/navigationSection'
+import {
+  getNavigationSectionRoot,
+  resolveNavigationSection,
+} from '@/shared/page-history/navigationSection'
 import { navSections } from './navSections'
 
 /** Guard against drift between shell matchers and section-scoped history. */
@@ -33,6 +36,12 @@ describe('navSections ↔ navigationSection sync', () => {
     for (const pathname of SAMPLE_PATHS) {
       const fromShell = navSections.find((section) => section.matches(pathname))?.key ?? null
       expect(resolveNavigationSection(pathname)).toBe(fromShell)
+    }
+  })
+
+  it('keeps section home paths aligned with navSections[].to', () => {
+    for (const section of navSections) {
+      expect(getNavigationSectionRoot(section.key)).toBe(section.to)
     }
   })
 })

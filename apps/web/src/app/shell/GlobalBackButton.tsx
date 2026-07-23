@@ -31,7 +31,15 @@ export function GlobalBackButton({
   compact = false,
 }: GlobalBackButtonProps) {
   const { pathname } = useLocation()
-  const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory()
+  const {
+    canGoBack,
+    canGoForward,
+    goBack,
+    goForward,
+    sectionLabel,
+    backTargetLabel,
+    forwardTargetLabel,
+  } = useNavigationHistory()
   // Bound to shell sidebar / mobile chrome — never surface in system fullscreen
   // where the sidebar is gone (mind-map / flip-card fullscreen).
   const [isSystemFullscreen, setIsSystemFullscreen] = useState(
@@ -49,12 +57,26 @@ export function GlobalBackButton({
   // Mobile freestyle/PWA entry: card HUD already covers the top edge.
   if (placement === 'mobile' && isImmersiveFeedPath(pathname)) return null
 
+  const sectionHint = sectionLabel ? `${sectionLabel}分区` : '本分区'
+  const backTitle = canGoBack
+    ? backTargetLabel
+      ? `${sectionHint} · 返回「${backTargetLabel}」`
+      : `${sectionHint} · 返回上一页`
+    : `${sectionHint} · 已在分区起点（不会跨到其他侧栏）`
+  const forwardTitle = canGoForward
+    ? forwardTargetLabel
+      ? `${sectionHint} · 前进到「${forwardTargetLabel}」`
+      : `${sectionHint} · 前进`
+    : `${sectionHint} · 没有可前进的页面`
+
   const controls = (
     <div
       className={cn(
         'pointer-events-auto flex rounded-xl border border-border/70 bg-background/85 p-0.5 shadow-sm backdrop-blur-xl',
         compact ? 'flex-col gap-0.5' : 'items-center gap-0.5',
       )}
+      data-testid="section-history-controls"
+      title={`${sectionHint}内前进/后退（不会跨到其他侧栏分区）`}
     >
       <Button
         type="button"
@@ -62,7 +84,7 @@ export function GlobalBackButton({
         size="icon"
         className={cn('size-8', !canGoBack && 'opacity-45')}
         aria-label="后退"
-        title="本分区上一页"
+        title={backTitle}
         disabled={!canGoBack}
         onClick={goBack}
       >
@@ -74,7 +96,7 @@ export function GlobalBackButton({
         size="icon"
         className={cn('size-8', !canGoForward && 'opacity-45')}
         aria-label="前进"
-        title="本分区下一页"
+        title={forwardTitle}
         disabled={!canGoForward}
         onClick={goForward}
       >

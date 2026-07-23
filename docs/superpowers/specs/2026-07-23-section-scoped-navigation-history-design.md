@@ -47,6 +47,7 @@ Outside the five sections (e.g. profile): both buttons disabled.
 
 - Deep page → other tab → return deep → back stays in-section and steps out.
 - Only root in stack → back disabled; second click on the tab still returns to section root.
+- Deep landing with a single entry (refresh / launch restore / direct open of `/knowledge`) seeds a synthetic section-root anchor so **后退** can still leave to the section home (e.g. 知识树编辑器 → 学科书架 `/palaces`) without crossing tabs.
 - Second click on active tab to root is a normal in-section PUSH (truncates forward).
 
 ## Implementation touchpoints

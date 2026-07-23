@@ -7,16 +7,21 @@ import {
 
 interface UseNodeCardLongPressInput {
   nodeId: string
-  readonly: boolean
+  /**
+   * When false, long-press is disabled (e.g. node is mid text-edit so native selection wins).
+   * Parent also omits `onTouchLongPress` when the canvas scene does not support it.
+   */
+  enabled?: boolean
   onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
 }
 
 /**
- * Readonly touch long-press → context action, with synthetic contextmenu suppression.
+ * Touch long-press → context action (practice hide / edit menu), with synthetic contextmenu suppression.
+ * Desktop mouse uses native right-click; this path is for touch/pen (PWA).
  */
 export function useNodeCardLongPress({
   nodeId,
-  readonly,
+  enabled = true,
   onTouchLongPress,
 }: UseNodeCardLongPressInput) {
   const longPressTimerRef = useRef<number | null>(null)
@@ -59,7 +64,12 @@ export function useNodeCardLongPress({
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       const pointerType = event.pointerType || 'touch'
-      if (!onTouchLongPress || !readonly || pointerType === 'mouse' || event.isPrimary === false) {
+      if (
+        !enabled
+        || !onTouchLongPress
+        || pointerType === 'mouse'
+        || event.isPrimary === false
+      ) {
         return
       }
       clearLongPress()
@@ -75,7 +85,7 @@ export function useNodeCardLongPress({
         })
       }, LONG_PRESS_DELAY_MS)
     },
-    [clearLongPress, onTouchLongPress, readonly, triggerLongPress],
+    [clearLongPress, enabled, onTouchLongPress, triggerLongPress],
   )
 
   const finishPointerInteraction = useCallback(

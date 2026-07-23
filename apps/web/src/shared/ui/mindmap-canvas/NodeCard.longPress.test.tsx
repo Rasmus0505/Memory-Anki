@@ -8,7 +8,6 @@ describe('NodeCard long press', () => {
     vi.useFakeTimers()
     const onTouchLongPress = vi.fn()
     renderNodeCard({
-      readonly: true,
       onTouchLongPress,
     })
 
@@ -37,7 +36,6 @@ describe('NodeCard long press', () => {
     vi.useFakeTimers()
     const onTouchLongPress = vi.fn()
     renderNodeCard({
-      readonly: true,
       onTouchLongPress,
     })
 
@@ -68,7 +66,6 @@ describe('NodeCard long press', () => {
     const wrapperOnClick = vi.fn()
     renderNodeCard(
       {
-        readonly: true,
         onTouchLongPress,
       },
       wrapperOnClick,
@@ -99,11 +96,61 @@ describe('NodeCard long press', () => {
     vi.useRealTimers()
   })
 
+  it('fires long press in editable (non-readonly) edit mode for PWA right-click parity', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    renderNodeCard({
+      readonly: false,
+      onTouchLongPress,
+    })
+
+    const button = screen.getByRole('button', { name: /第一行/ })
+    fireEvent.pointerDown(button, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS)
+    })
+
+    expect(onTouchLongPress).toHaveBeenCalledTimes(1)
+    expect(onTouchLongPress.mock.calls[0]?.[0]).toBe('peg-1')
+    // Point object is always passed (coords come from the pointer event when available).
+    expect(onTouchLongPress.mock.calls[0]?.[1]).toMatchObject({})
+    vi.useRealTimers()
+  })
+
+  it('does not start long press while the node is mid text-edit', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    renderNodeCard({
+      readonly: false,
+      editing: true,
+      editText: '编辑中',
+      onTouchLongPress,
+    })
+
+    const shell = document.querySelector('[data-mindmap-node-id="peg-1"]') as HTMLElement
+    fireEvent.pointerDown(shell, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS + 50)
+    })
+
+    expect(onTouchLongPress).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
   it('lets a desktop context menu from the text button bubble to the node wrapper', () => {
     const wrapperOnContextMenu = vi.fn()
     renderNodeCard(
       {
-        readonly: true,
         onTouchLongPress: vi.fn(),
       },
       undefined,
@@ -121,7 +168,6 @@ describe('NodeCard long press', () => {
     const wrapperOnContextMenu = vi.fn()
     renderNodeCard(
       {
-        readonly: true,
         onTouchLongPress,
       },
       undefined,
@@ -160,7 +206,6 @@ describe('NodeCard long press', () => {
     const wrapperOnContextMenu = vi.fn()
     renderNodeCard(
       {
-        readonly: true,
         onTouchLongPress: vi.fn(),
       },
       undefined,

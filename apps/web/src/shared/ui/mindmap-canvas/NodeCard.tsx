@@ -90,7 +90,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   })
   const longPress = useNodeCardLongPress({
     nodeId: id,
-    readonly,
+    // While contentEditable is open, keep native text selection; long-press is for idle cards.
+    enabled: !isEditing,
     onTouchLongPress: nodeData.onTouchLongPress,
   })
 

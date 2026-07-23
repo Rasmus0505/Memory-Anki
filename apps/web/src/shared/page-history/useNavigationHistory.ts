@@ -7,15 +7,21 @@ import {
 } from 'react-router-dom'
 import { resolveNavigationSection } from './navigationSection'
 import {
+  applySectionHierarchicalBack,
   applySectionHistoryPointerMove,
   applySectionNavigationTransition,
   canSectionNavigateBack,
   canSectionNavigateForward,
   createSectionNavigationHistoryState,
+  peekSectionBackTarget,
   peekSectionHistoryTarget,
   type SectionNavigationHistoryState,
 } from './sectionNavigationHistory'
 import type { NavigationHistoryEntry } from './navigationHistory'
+import {
+  describeNavigationPath,
+  getNavigationSectionLabel,
+} from './sectionRouteHierarchy'
 
 function toEntry(location: {
   key: string
@@ -46,11 +52,18 @@ export function useNavigationHistory() {
     ),
   )
   const pendingDeltaRef = useRef<-1 | 1 | 0>(0)
+  const pendingHierarchicalBackRef = useRef(false)
 
   useEffect(() => {
     const entry = toEntry(location)
     const section = resolveNavigationSection(location.pathname)
     setState((current) => {
+      if (pendingHierarchicalBackRef.current && section) {
+        pendingHierarchicalBackRef.current = false
+        pendingDeltaRef.current = 0
+        const hierarchical = applySectionHierarchicalBack(current, entry, section)
+        if (hierarchical) return hierarchical
+      }
       if (pendingDeltaRef.current !== 0 && section) {
         const delta = pendingDeltaRef.current
         pendingDeltaRef.current = 0
@@ -59,6 +72,7 @@ export function useNavigationHistory() {
       } else {
         pendingDeltaRef.current = 0
       }
+      pendingHierarchicalBackRef.current = false
       return applySectionNavigationTransition(
         current,
         entry,
@@ -72,18 +86,33 @@ export function useNavigationHistory() {
     const activeStack = state.activeSection
       ? state.stacks[state.activeSection] ?? null
       : null
+    const backTarget = peekSectionBackTarget(state)
+    const forwardTarget = peekSectionHistoryTarget(state, 1)
+    const sectionLabel = state.activeSection
+      ? getNavigationSectionLabel(state.activeSection)
+      : null
+    const backTargetLabel = backTarget ? describeNavigationPath(backTarget.fullPath) : null
+    const forwardTargetLabel = forwardTarget ? describeNavigationPath(forwardTarget.fullPath) : null
+
     return {
       canGoBack: canSectionNavigateBack(state),
       canGoForward: canSectionNavigateForward(state),
       goBack: () => {
-        const target = peekSectionHistoryTarget(state, -1)
+        const target = peekSectionBackTarget(state)
         if (!target) return
-        pendingDeltaRef.current = -1
+        if (target.mode === 'stack') {
+          pendingDeltaRef.current = -1
+          pendingHierarchicalBackRef.current = false
+        } else {
+          pendingDeltaRef.current = 0
+          pendingHierarchicalBackRef.current = true
+        }
         navigate(target.fullPath)
       },
       goForward: () => {
         const target = peekSectionHistoryTarget(state, 1)
         if (!target) return
+        pendingHierarchicalBackRef.current = false
         pendingDeltaRef.current = 1
         navigate(target.fullPath)
       },
@@ -91,6 +120,13 @@ export function useNavigationHistory() {
       stackSize: activeStack?.entries.length ?? 0,
       index: activeStack?.index ?? -1,
       activeSection: state.activeSection,
+      sectionLabel,
+      backTargetPath: backTarget?.fullPath ?? null,
+      backTargetLabel,
+      /** @deprecated use backTargetLabel */
+      backParentLabel: backTargetLabel,
+      forwardTargetPath: forwardTarget?.fullPath ?? null,
+      forwardTargetLabel,
     }
   }, [navigate, state])
 }

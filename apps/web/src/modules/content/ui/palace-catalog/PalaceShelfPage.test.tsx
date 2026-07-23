@@ -275,7 +275,7 @@ describe('PalaceShelfPage', () => {
 
     await screen.findByText('中国近代史')
     expect(getPalacesGroupedApi).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
@@ -305,7 +305,7 @@ describe('PalaceShelfPage', () => {
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
@@ -320,7 +320,7 @@ describe('PalaceShelfPage', () => {
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '展开' }))
+    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     fireEvent.click(screen.getByLabelText(/更多操作/))

@@ -410,6 +410,27 @@ describe('MindMapCanvas recovery', () => {
     expect(screen.getByRole('button', { name: '标记重点' })).toBeTruthy()
   })
 
+  it('opens the same edit context menu from touch long press as desktop right-click', () => {
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        onHighlightNodes={vi.fn()}
+      />,
+    )
+
+    const rootNode = screen.getByTestId('node-root')
+    expect(rootNode.getAttribute('data-long-press')).toBe('yes')
+    fireEvent.click(rootNode)
+
+    expect(screen.getByRole('button', { name: '添加子知识点 (Tab)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '标记重点' })).toBeTruthy()
+  })
+
   it('runs the practice context action without leaving a stale node menu open', () => {
     const onNodeContextAction = vi.fn()
 

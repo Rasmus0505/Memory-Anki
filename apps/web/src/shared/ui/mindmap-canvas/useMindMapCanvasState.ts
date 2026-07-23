@@ -94,6 +94,7 @@ export interface UseMindMapCanvasStateResult {
   canUndo: boolean
   canRedo: boolean
   runFitView: (duration?: number) => void
+  centerRootInView: () => void
   zoomInCanvas: () => void
   zoomOutCanvas: () => void
   resetLayout: () => void
@@ -260,12 +261,13 @@ export function useMindMapCanvasState(
   } = drag
   const { clearEdgeSelection } = menus
   const { runFitView } = viewport
-  const touchLongPressEnabled = practiceModeActive
+  // Practice: long-press = hide branch (via contextActionOnly). Edit: long-press = desktop right-click menu.
+  const touchLongPressEnabled = practiceModeActive || !readonly
   const handleTouchLongPress = useCallback(
-    (nodeId: string) => {
-      onNodeContextAction?.(nodeId)
+    (nodeId: string, point: { x: number; y: number }) => {
+      menus.openNodeContext(nodeId, point)
     },
-    [onNodeContextAction],
+    [menus.openNodeContext],
   )
   const handleStartEdit = useCallback(
     (nodeId: string) => {

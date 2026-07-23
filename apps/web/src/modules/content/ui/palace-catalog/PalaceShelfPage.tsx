@@ -270,24 +270,30 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
               data-testid="shelf-view-toolbar"
               data-display-mode={viewSettings.displayMode}
             >
-              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
+              <div
+                className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1"
+                role="group"
+                aria-label="书架显示模式"
+              >
                 <Button
                   type="button"
                   variant={viewSettings.displayMode === 'shelf' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="min-h-11 sm:h-8 sm:min-h-8"
+                  data-testid="shelf-mode-covers"
                   onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
                 >
-                  收纳
+                  书架封面
                 </Button>
                 <Button
                   type="button"
                   variant={viewSettings.displayMode === 'expanded' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="min-h-11 sm:h-8 sm:min-h-8"
+                  data-testid="shelf-mode-expanded"
                   onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'expanded' }))}
                 >
-                  展开
+                  章节目录
                 </Button>
               </div>
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
@@ -353,7 +359,34 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <Badge variant="secondary">{categorizedCount} 个学科书架</Badge>
         <Badge variant="outline">{items.find((item) => item.subject == null) ? '含未分类' : '全部已分类'}</Badge>
+        <Badge variant="outline">
+          {viewSettings.displayMode === 'shelf' ? '封面模式' : '目录模式'}
+        </Badge>
       </div>
+
+      {viewSettings.displayMode === 'expanded' ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-info/25 bg-info/5 px-4 py-3 text-sm"
+          data-testid="shelf-expanded-hint"
+        >
+          <div className="text-muted-foreground">
+            当前是<strong className="mx-1 text-foreground">章节目录</strong>
+            视图，会直接铺开各学科下的宫殿。要看「一科一本书」的封面书架，请点右侧按钮。
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="shrink-0 rounded-xl"
+            onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
+          >
+            回到书架封面
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          一科一本书：点击封面进入该书宫殿列表。左上角后退只会在「知识」分区内按层级返回（书架 → 书内列表 → 宫殿），不会跨到英语或随心。
+        </div>
+      )}
 
       {loadError ? (
         <ErrorState

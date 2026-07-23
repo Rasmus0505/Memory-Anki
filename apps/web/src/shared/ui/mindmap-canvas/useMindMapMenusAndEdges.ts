@@ -66,37 +66,45 @@ export function useMindMapMenusAndEdges({
     setEdgeMenu(null)
   }, [])
 
-  const handleNodeContextMenu = useCallback(
-    (event: MouseEvent, node: Node) => {
-      event.preventDefault()
+  /** Shared by desktop right-click and touch long-press (PWA edit menu / practice hide). */
+  const openNodeContext = useCallback(
+    (nodeId: string, point: { x: number; y: number }) => {
       setEdgeMenu(null)
       setSelectedEdgeId(null)
       // Same rule as multi-drag: right-clicking an already-selected node keeps the multi-set.
-      const alreadySelected = selectedNodeIds.includes(node.id)
+      const alreadySelected = selectedNodeIds.includes(nodeId)
       const targetNodeIds =
         alreadySelected && selectedNodeIds.length > 1
           ? [...selectedNodeIds]
-          : [node.id]
+          : [nodeId]
       if (!alreadySelected) {
-        onNodeSelect(node.id)
+        onNodeSelect(nodeId)
       }
       if (contextActionOnly && onNodeContextAction) {
         setCtxMenu(null)
-        onNodeContextAction(node.id)
+        onNodeContextAction(nodeId)
       } else {
         setCtxMenu({
-          x: event.clientX,
-          y: event.clientY,
-          nodeId: node.id,
+          x: point.x,
+          y: point.y,
+          nodeId,
           targetNodeIds,
         })
       }
       dispatchGlobalFeedback('context_menu', {
-        point: { x: event.clientX, y: event.clientY },
+        point,
         origin: 'node',
       })
     },
     [contextActionOnly, onNodeContextAction, onNodeSelect, selectedNodeIds],
+  )
+
+  const handleNodeContextMenu = useCallback(
+    (event: MouseEvent, node: Node) => {
+      event.preventDefault()
+      openNodeContext(node.id, { x: event.clientX, y: event.clientY })
+    },
+    [openNodeContext],
   )
 
   const handlePaneClick = useCallback(() => {
@@ -222,6 +230,7 @@ export function useMindMapMenusAndEdges({
     closeNodeMenu,
     closeEdgeMenu,
     clearEdgeSelection,
+    openNodeContext,
     handleNodeClick,
     handleNodeContextMenu,
     handleNodeMouseEnter,
