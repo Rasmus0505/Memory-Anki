@@ -320,6 +320,7 @@ function MindMapCanvasInner({
           showHistoryControls={state.canShowHistoryControls}
           leadingContent={props.toolbarContent}
           onRefreshHost={onHostRefresh}
+          onCenterRootView={state.centerRootInView}
           onToggleSystemFullscreen={handleToggleSystemFullscreen}
           onToggleWebpageFullscreen={handleToggleWebpageFullscreen}
           onUndo={props.onUndo}

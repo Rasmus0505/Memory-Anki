@@ -1,4 +1,5 @@
 import {
+  Crosshair,
   Expand,
   Maximize2,
   Minimize2,
@@ -24,6 +25,8 @@ interface MindMapCanvasToolbarProps {
   showHistoryControls: boolean
   leadingContent?: ReactNode
   onRefreshHost: () => void
+  /** Center the graph root node in the viewport without reloading the host. */
+  onCenterRootView?: () => void
   onToggleSystemFullscreen?: () => void
   onToggleWebpageFullscreen?: () => void
   /** @deprecated Prefer dual toggles; kept for single-control callers. */
@@ -49,6 +52,7 @@ export function MindMapCanvasToolbar({
   showHistoryControls,
   leadingContent,
   onRefreshHost,
+  onCenterRootView,
   onToggleSystemFullscreen,
   onToggleWebpageFullscreen,
   onToggleFocusMode,
@@ -72,6 +76,16 @@ export function MindMapCanvasToolbar({
       >
         <RefreshCw className="size-4" />
       </button>
+      {onCenterRootView ? (
+        <button
+          type="button"
+          onClick={onCenterRootView}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="根节点归位"
+        >
+          <Crosshair className="size-4" />
+        </button>
+      ) : null}
       {showSystemFullscreenControl ? (
         <button
           type="button"

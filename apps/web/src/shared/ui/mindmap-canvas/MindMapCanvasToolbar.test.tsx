@@ -5,6 +5,7 @@ import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 describe('MindMapCanvasToolbar', () => {
   it('renders page and canvas actions in one scrolling row without retired controls', () => {
     const onRefreshHost = vi.fn()
+    const onCenterRootView = vi.fn()
     render(
       <MindMapCanvasToolbar
         focusMode={false}
@@ -13,6 +14,7 @@ describe('MindMapCanvasToolbar', () => {
         showHistoryControls
         leadingContent={<button type="button">学习组</button>}
         onRefreshHost={onRefreshHost}
+        onCenterRootView={onCenterRootView}
         onToggleFocusMode={vi.fn()}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
@@ -23,6 +25,7 @@ describe('MindMapCanvasToolbar', () => {
     expect(toolbar?.className).toContain('flex-nowrap')
     expect(toolbar?.className).toContain('overflow-x-auto')
     expect(screen.getByTitle('刷新脑图')).toBeTruthy()
+    expect(screen.getByTitle('根节点归位')).toBeTruthy()
     expect(screen.getByTitle('进入全屏')).toBeTruthy()
     expect(screen.queryByTitle('进入系统全屏')).toBeNull()
     expect(screen.getByTitle('撤销')).toBeTruthy()
@@ -34,6 +37,8 @@ describe('MindMapCanvasToolbar', () => {
 
     fireEvent.click(screen.getByTitle('刷新脑图'))
     expect(onRefreshHost).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByTitle('根节点归位'))
+    expect(onCenterRootView).toHaveBeenCalledTimes(1)
   })
 
   it('places webpage fullscreen to the right of system fullscreen with distinct icons', () => {

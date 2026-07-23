@@ -517,6 +517,16 @@ export function useMindMapCanvasState(
     resetLayout()
   }, [onHostRefresh, resetLayout])
 
+  const centerRootInView = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'CENTER_ROOT',
+    })
+    const root = graphData.nodes.find((node) => node.parentId == null)
+    if (!root) return
+    viewport.centerNodeInCanvas(root.id, 240)
+  }, [graphData.nodes, viewport.centerNodeInCanvas])
+
   return {
     frameRef,
     canvasRef,
@@ -534,6 +544,7 @@ export function useMindMapCanvasState(
     canUndo,
     canRedo,
     runFitView,
+    centerRootInView,
     zoomInCanvas: viewport.zoomInCanvas,
     zoomOutCanvas: viewport.zoomOutCanvas,
     resetLayout,
