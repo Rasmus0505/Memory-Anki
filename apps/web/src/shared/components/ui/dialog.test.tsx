@@ -190,7 +190,11 @@ describe('Dialog', () => {
     fireEvent.pointerUp(window)
 
     expect(onAction).toHaveBeenCalledTimes(1)
-    expect(window.localStorage.getItem('memory-anki-floating-dialog:header-drag-test')).toBeNull()
+    // Open always persists a centered layout; control clicks must not drag.
+    const beforeDrag = JSON.parse(
+      window.localStorage.getItem('memory-anki-floating-dialog:header-drag-test') || '{}',
+    )
+    expect(typeof beforeDrag.x).toBe('number')
 
     const header = screen.getByText('header drag dialog').closest('div.cursor-move')
     expect(header).toBeTruthy()
@@ -206,6 +210,7 @@ describe('Dialog', () => {
     const stored = JSON.parse(
       window.localStorage.getItem('memory-anki-floating-dialog:header-drag-test') || '{}',
     )
+    expect(stored.x).not.toBe(beforeDrag.x)
     expect(stored.x).toBeGreaterThan(16)
     expect(stored.y).toBeGreaterThan(16)
   })

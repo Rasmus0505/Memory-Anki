@@ -77,35 +77,48 @@ function clampLayout(layout: FloatingDialogLayout): FloatingDialogLayout {
   }
 }
 
-function createDefaultFloatingLayout(): FloatingDialogLayout {
+function createCenteredFloatingLayout(
+  partial?: Partial<Pick<FloatingDialogLayout, 'width' | 'height' | 'collapsed' | 'pinned'>>,
+): FloatingDialogLayout {
   const viewport = getViewportSize()
-  const width = Math.min(820, Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - 32))
+  const width = Math.min(
+    partial?.width ?? 820,
+    Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - FLOATING_DIALOG_VIEWPORT_PADDING * 2),
+  )
+  const height = partial?.height ?? null
+  const effectiveHeight = height ?? Math.min(560, viewport.height - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
   return clampLayout({
     x: Math.max(FLOATING_DIALOG_VIEWPORT_PADDING, Math.round((viewport.width - width) / 2)),
-    y: Math.max(FLOATING_DIALOG_VIEWPORT_PADDING, Math.round(viewport.height * 0.08)),
+    // True vertical center (was ~8% top-biased, which looked "off-center").
+    y: Math.max(
+      FLOATING_DIALOG_VIEWPORT_PADDING,
+      Math.round((viewport.height - effectiveHeight) / 2),
+    ),
     width,
-    height: null,
-    collapsed: false,
-    pinned: false,
+    height,
+    collapsed: Boolean(partial?.collapsed),
+    pinned: Boolean(partial?.pinned),
   })
 }
 
+function createDefaultFloatingLayout(): FloatingDialogLayout {
+  return createCenteredFloatingLayout()
+}
+
+/**
+ * Restore size/pin/collapsed from storage, but always re-center x/y on open
+ * so dialogs do not reappear skewed from a previous drag.
+ */
 function readStoredFloatingLayout(storageKey: string): FloatingDialogLayout {
   if (typeof window === 'undefined') return createDefaultFloatingLayout()
   try {
     const raw = window.localStorage.getItem(storageKey)
     if (!raw) return createDefaultFloatingLayout()
     const parsed = JSON.parse(raw) as Partial<FloatingDialogLayout>
-    if (
-      typeof parsed.x !== 'number' ||
-      typeof parsed.y !== 'number' ||
-      typeof parsed.width !== 'number'
-    ) {
+    if (typeof parsed.width !== 'number') {
       return createDefaultFloatingLayout()
     }
-    return clampLayout({
-      x: parsed.x,
-      y: parsed.y,
+    return createCenteredFloatingLayout({
       width: parsed.width,
       height: typeof parsed.height === 'number' ? parsed.height : null,
       collapsed: Boolean(parsed.collapsed),
@@ -267,6 +280,21 @@ const DialogContent = forwardRef<
     if (!floatingEnabled) return
     setFloatingLayout(readStoredFloatingLayout(storageKey))
   }, [floatingEnabled, storageKey])
+
+  // Each open: re-center on screen while keeping remembered width/height/pin.
+  useEffect(() => {
+    if (!open || !floatingEnabled) return
+    setFloatingLayout((current) => {
+      const next = createCenteredFloatingLayout({
+        width: current.width,
+        height: current.height,
+        collapsed: expandOnOpen ? false : current.collapsed,
+        pinned: current.pinned,
+      })
+      writeStoredFloatingLayout(storageKey, next)
+      return next
+    })
+  }, [expandOnOpen, floatingEnabled, open, storageKey])
 
   useEffect(() => {
     if (!open || !floatingEnabled || !expandOnOpen) return
