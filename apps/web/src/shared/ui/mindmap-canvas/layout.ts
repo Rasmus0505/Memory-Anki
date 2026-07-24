@@ -170,49 +170,50 @@ function getWeightedTextLength(text: string): number {
   }, 0)
 }
 
+/** Longest unbreakable English token — cards widen so mid-word wraps stay rare. */
+function getLongestEnglishTokenWeightedLength(text: string): number {
+  const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? []
+  let longest = 0
+  for (const token of tokens) {
+    longest = Math.max(longest, getWeightedTextLength(token))
+  }
+  return longest
+}
+
 export function getNodeMaxWidth(source?: NodeSizeSource): number {
   const base = getBaseNodeSize(getNodeRole(source))
   return Math.ceil(
-    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth +
-      base.horizontalChrome +
-      NODE_WIDTH_SAFETY_PX,
+    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
   )
 }
 
-export function getNodeSize(
-  source?: NodeSizeSource,
-  labelOverride?: string,
-): NodeSize {
+export function getNodeSize(source?: NodeSizeSource, labelOverride?: string): NodeSize {
   const role = getNodeRole(source)
   const base = getBaseNodeSize(role)
   const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
   const longestLineLength = label
     .split(/\r?\n/)
     .reduce((longest, line) => Math.max(longest, getWeightedTextLength(line)), 0)
-  // Safety is applied to natural width so short labels keep a full single line under real fonts.
+  const tokenMinWidth = Math.ceil(
+    getLongestEnglishTokenWeightedLength(label) * base.averageCharWidth +
+      base.horizontalChrome +
+      NODE_WIDTH_SAFETY_PX,
+  )
+  const maxWidth = Math.max(getNodeMaxWidth(role), tokenMinWidth)
+  // Safety on natural width so short CJK labels keep a single line under real fonts.
   const naturalWidth = Math.ceil(
     longestLineLength * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
   )
-  const maxWidth = getNodeMaxWidth(role)
   const width = Math.min(
     maxWidth,
-    Math.max(base.horizontalChrome + base.averageCharWidth + NODE_WIDTH_SAFETY_PX, naturalWidth),
+    Math.max(base.horizontalChrome + base.averageCharWidth + NODE_WIDTH_SAFETY_PX, naturalWidth, tokenMinWidth),
   )
-  // Height uses the content box without safety so line count still tracks the character budget.
-  const contentWidth = Math.max(
-    width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX,
-    base.averageCharWidth,
-  )
+  const contentWidth = Math.max(width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX, base.averageCharWidth)
   const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
   const textLineCount = label
     .split(/\r?\n/)
     .reduce((total, line) => total + Math.max(1, Math.ceil(getWeightedTextLength(line) / charsPerLine)), 0)
-  const textHeight = textLineCount * base.lineHeight
-  const height = Math.max(
-    base.minHeight,
-    Math.ceil(base.verticalChrome + textHeight + base.metaHeight),
-  )
-
+  const height = Math.max(base.minHeight, Math.ceil(base.verticalChrome + textLineCount * base.lineHeight + base.metaHeight))
   return { width, height }
 }
 

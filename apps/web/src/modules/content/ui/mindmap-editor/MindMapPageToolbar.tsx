@@ -57,7 +57,8 @@ export interface MindMapPageToolbarProps {
   modeToggle?: MindMapToolbarAction | null
   importMindMapAction?: MindMapToolbarAction | null
   importTextAction?: MindMapToolbarAction | null
-  englishAction?: MindMapToolbarAction | null
+  /** Dedicated toggle after modeToggle (编辑右边). Not buried in overflow. */
+  englishAction?: MindMapToolbarToggleAction | null
   quizAction?: MindMapToolbarAction | null
   immersiveAction?: MindMapToolbarToggleAction | null
   nativeFullscreenAction?: MindMapToolbarToggleAction | null
@@ -77,7 +78,8 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     importTextAction = null, englishAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
-  const legacyActions = [importMindMapAction, importTextAction, englishAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
+  // englishAction is a first-class toolbar toggle (right of 编辑); keep it out of overflow.
+  const legacyActions = [importMindMapAction, importTextAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
   const modern = Boolean(taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length)
   const overflowMenu = useDropdownMenuActionCoordinator()
@@ -130,6 +132,17 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           </div>
         ) : null}
         {modeToggle ? <Button type="button" variant="outline" onClick={modeToggle.onClick}><Wand2 className="size-4" />{modeToggle.label}</Button> : null}
+        {englishAction ? (
+          <Button
+            type="button"
+            variant={englishAction.active ? 'default' : 'outline'}
+            disabled={englishAction.disabled}
+            aria-pressed={Boolean(englishAction.active)}
+            onClick={englishAction.onClick}
+          >
+            {englishAction.label}
+          </Button>
+        ) : null}
         {!modern ? legacyActions.map((action) => <Button key={action.label} type="button" variant="outline" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>) : null}
         {!modern && immersiveAction ? <Button type="button" variant="outline" onClick={immersiveAction.onClick}>{immersiveAction.label}</Button> : null}
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}

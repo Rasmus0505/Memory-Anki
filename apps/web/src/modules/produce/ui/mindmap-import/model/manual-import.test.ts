@@ -25,6 +25,64 @@ describe('manual mindmap import parser', () => {
     expect(result.editorDoc.root?.children).toHaveLength(2)
   })
 
+  it('parses source-tree JSON with ankiRole and writes it into editor doc', () => {
+    const result = parseManualMindMapImport(
+      JSON.stringify({
+        title: '骑士学院',
+        children: [
+          {
+            text: '骑士学院设立的目的是什么？',
+            ankiRole: 'front',
+            children: [
+              {
+                text: '培养文武官员、巩固政治。',
+                ankiRole: 'back',
+                children: [],
+              },
+            ],
+          },
+          {
+            text: '分类节点（不标角色）',
+            children: [],
+          },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sourceTree.children[0]).toMatchObject({
+      text: '骑士学院设立的目的是什么？',
+      ankiRole: 'front',
+    })
+    expect(result.sourceTree.children[0]?.children[0]).toMatchObject({
+      text: '培养文武官员、巩固政治。',
+      ankiRole: 'back',
+    })
+    expect(result.sourceTree.children[1]?.ankiRole).toBeUndefined()
+    expect(result.editorDoc.root?.children?.[0]?.data).toMatchObject({
+      text: '骑士学院设立的目的是什么？',
+      ankiRole: 'front',
+    })
+    expect(result.editorDoc.root?.children?.[0]?.children?.[0]?.data).toMatchObject({
+      text: '培养文武官员、巩固政治。',
+      ankiRole: 'back',
+    })
+    expect(result.editorDoc.root?.children?.[1]?.data?.ankiRole).toBeUndefined()
+  })
+
+  it('ignores invalid ankiRole values', () => {
+    const result = parseManualMindMapImport(
+      JSON.stringify({
+        title: '根',
+        children: [{ text: '节点', ankiRole: 'side', children: [] }],
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sourceTree.children[0]?.ankiRole).toBeUndefined()
+    expect(result.editorDoc.root?.children?.[0]?.data?.ankiRole).toBeUndefined()
+  })
+
   it('parses fenced JSON and transfer file format', () => {
     const transfer = {
       format: 'memory-anki-mindmap',
@@ -106,6 +164,30 @@ describe('manual mindmap import parser', () => {
     expect(tree).toEqual({
       title: 'Root',
       children: [{ text: 'Child', children: [] }],
+    })
+  })
+
+  it('preserves ankiRole when converting editor doc to source tree', () => {
+    const tree = sourceTreeFromEditorDoc({
+      root: {
+        data: { text: 'Root' },
+        children: [
+          {
+            data: { text: '正面', ankiRole: 'front' },
+            children: [{ data: { text: '反面', ankiRole: 'back' }, children: [] }],
+          },
+        ],
+      },
+    })
+    expect(tree).toEqual({
+      title: 'Root',
+      children: [
+        {
+          text: '正面',
+          ankiRole: 'front',
+          children: [{ text: '反面', ankiRole: 'back', children: [] }],
+        },
+      ],
     })
   })
 })

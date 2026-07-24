@@ -1,0 +1,51 @@
+[
+  {
+    "palace_id": 39,
+    "title": "第一节 夸美纽斯的教育思想",
+    "chapter_id": 70,
+    "nodes": 247,
+    "quizzes": 23
+  },
+  {
+    "palace_id": 40,
+    "title": "第二节 卢梭的教育思想",
+    "chapter_id": 71,
+    "nodes": 150,
+    "quizzes": 14
+  },
+  {
+    "palace_id": 41,
+    "title": "第三节 裴斯泰洛齐的教育思想",
+    "chapter_id": 72,
+    "nodes": 218,
+    "quizzes": 9
+  },
+  {
+    "palace_id": 42,
+    "title": "第四节 赫尔巴特的教育思想",
+    "chapter_id": 73,
+    "nodes": 125,
+    "quizzes": 18
+  },
+  {
+    "palace_id": 43,
+    "title": "第五节 福禄培尔的教育思想",
+    "chapter_id": 74,
+    "nodes": 127,
+    "quizzes": 6
+  },
+  {
+    "palace_id": 44,
+    "title": "第六节 马克思和恩格斯的教育思想",
+    "chapter_id": 75,
+    "nodes": 69,
+    "quizzes": 2
+  },
+  {
+    "palace_id": 45,
+    "title": "第七节 西欧近代教育思潮",
+    "chapter_id": 76,
+    "nodes": 186,
+    "quizzes": 3
+  }
+]

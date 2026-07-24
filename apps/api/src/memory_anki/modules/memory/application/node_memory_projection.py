@@ -472,6 +472,7 @@ def _projection_from_tree(
         SCHEDULE_UNINITIALIZED,
         is_formal_queue_eligible,
         local_date_of,
+        resolve_progress_bucket,
     )
 
     if mastery_horizon_days is None:
@@ -557,6 +558,7 @@ def _projection_from_tree(
         # Formal nodes scheduled later today (local calendar) but not yet clock-due.
         # Does not inflate due_node_count; freestyle opt-in via list_due_nodes.
         calendar_today_due = False
+        row_has_memory = row is not None and row.last_review_at is not None
         if (
             not formal_due
             and not reinforcement_due
@@ -564,10 +566,19 @@ def _projection_from_tree(
             and schedule_source != SCHEDULE_REINFORCEMENT
             and schedule_source != SCHEDULE_CONTENT_CHANGED
         ):
-            row_has_memory = row is not None and row.last_review_at is not None
             if is_formal_queue_eligible(schedule_source, has_memory=row_has_memory):
                 # Compare local wall dates (device timezone), matching wave policy.
                 calendar_today_due = local_date_of(due_at) == local_date_of(now)
+
+        progress_bucket = resolve_progress_bucket(
+            schedule_source=schedule_source,
+            has_memory=row_has_memory if row is not None else False,
+            due_at=due_at,
+            now=now,
+            formal_due=formal_due,
+            reinforcement_due=reinforcement_due,
+            calendar_today_due=calendar_today_due,
+        )
 
         stability_days = round(stability, 3)
         retrievability_clamped = round(max(0.0, min(retrievability, 1.0)), 4)
@@ -631,6 +642,8 @@ def _projection_from_tree(
                 "due": formal_due,
                 "reinforcement_due": reinforcement_due,
                 "calendar_today_due": calendar_today_due,
+                # Mutually exclusive freestyle progress bucket (or null if not actionable).
+                "progress_bucket": progress_bucket,
                 "state_source": state_source,
                 "rating": rating_value,
             }

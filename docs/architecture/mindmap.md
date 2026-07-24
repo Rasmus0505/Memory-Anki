@@ -12,6 +12,7 @@
 | React Flow 布局、拖拽、视口、通用节点外观 | `apps/web/src/shared/ui/mindmap-canvas` |
 | 编辑历史、快捷键、全屏、编辑器运行时 | `apps/web/src/features/mindmap-editor` |
 | 实体级加载、自动保存、陈旧请求隔离 | `apps/web/src/shared/hooks/useMindMapDocumentSession.ts` 与 `shared/lib/mindmapDocumentSessionModel.ts` |
+| 编辑写前本地草稿（每文档单槽覆盖，关页可恢复） | `apps/web/src/shared/persistence/mindmapEditorDraftStore.ts` |
 | 学习组、焦点、AI 拆分 | `features/palace-edit` 提供业务状态，`pages/create/PalaceEditorPage` 组合编辑器与跨 feature UI |
 | 图片/PDF 导入、任务历史、预览应用 | `features/mindmap-import`，服务端任务通过 `entities/knowledge-import/api` 访问 |
 | 复习揭示、评分、掌握度 | `widgets/mindmap-review-flow` 宿主和 capability 输入 |
@@ -55,6 +56,13 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 ```
 
 前端优先读取 `snapshot`，旧字段仅作为兼容回退。保存接口接受旧字段，也接受 `{ snapshot, baseRevision }`。
+
+## 自动保存与关页耐久
+
+- **正式数据只有一份**：服务端对同一 `editor_doc` 就地覆盖；`PalaceVersion` 仍按约 5 分钟节流（最多 50 条），不为每次编辑增殖版本。
+- **编辑即写本地草稿**：`scheduleSave` 将最新快照写入 IndexedDB 草稿槽（key = `loadCacheKey:entityId`，同 key 覆盖）。浏览器关页/杀进程后重开时，若草稿内容与服务端不一致则恢复草稿并立即回写。
+- **HTTP 防抖约 450ms**，单飞保存；在飞期间的后续编辑更新 `pendingSnapshot`；当前保存成功后若仍有更新的 pending，**必须**再发一次（不依赖组件仍 mounted）。
+- **关页**时 `visibilitychange` / `pagehide` 刷新草稿；若无在飞请求则立刻 flush。失败请求仍走既有 `mutationQueue`。
 
 ## 新增能力流程
 

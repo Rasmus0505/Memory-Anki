@@ -125,6 +125,37 @@ describe('mind map node context actions', () => {
     expect(onDelete).not.toHaveBeenCalled()
   })
 
+  it('exposes mark-color for multi-select with last-apply and palette trailing', () => {
+    const onApplyLastMarkColor = vi.fn()
+    const onOpenMarkColorPalette = vi.fn()
+    const actions = buildActions({
+      ctxMenu: {
+        x: 12,
+        y: 18,
+        nodeId: 'child-a',
+        targetNodeIds: ['child-a', 'child-b'],
+      },
+      onApplyLastMarkColor,
+      onOpenMarkColorPalette,
+      markColorSwatch: '#fecaca',
+      isRootNode: (id) => id === 'root',
+    })
+
+    const markAction = actions.find((action) => action.label === '标记颜色（2 张）')
+    expect(markAction).toBeTruthy()
+    expect(markAction?.trailing?.ariaLabel).toBe('打开调色板')
+    expect(markAction?.trailing?.swatchColor).toBe('#fecaca')
+
+    markAction?.onClick()
+    expect(onApplyLastMarkColor).toHaveBeenCalledWith(['child-a', 'child-b'])
+
+    markAction?.trailing?.onClick()
+    expect(onOpenMarkColorPalette).toHaveBeenCalledWith(
+      ['child-a', 'child-b'],
+      { x: 232, y: 18 },
+    )
+  })
+
   it('excludes root from multi-select delete targets', () => {
     const onDeleteNodes = vi.fn()
     const onDelete = vi.fn()

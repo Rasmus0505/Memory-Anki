@@ -1,8 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { getPalacesGroupedApi } from '@/modules/content/public'
+import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
-import { sanitizeFreestyleFeedConfig } from '@/modules/practice/public'
-import type { FreestyleFeedConfig, FreestylePalaceContext } from '@/shared/api/contracts'
+import type {
+  FreestyleFeedConfig,
+  FreestylePalaceContext,
+  FreestyleProgressScope,
+} from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -19,6 +23,38 @@ import { cn } from '@/shared/lib/utils'
 
 const FIELD_CLASS =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+
+const PROGRESS_SCOPE_OPTIONS: Array<{
+  value: FreestyleProgressScope
+  label: string
+  description: string
+}> = [
+  {
+    value: 'overdue',
+    label: '逾期',
+    description: '该复习日已经过去，优先清掉积压。',
+  },
+  {
+    value: 'due',
+    label: '已到期',
+    description: '今天该复习，并且时间已经到了。',
+  },
+  {
+    value: 'calendar_today',
+    label: '今日将到期',
+    description: '今天排了复习，但还没到点；提前练可选。',
+  },
+  {
+    value: 'reinforcement',
+    label: '同日补刷',
+    description: '刚才忘记/困难后，20/60 分钟再练的节点。',
+  },
+  {
+    value: 'new',
+    label: '新学',
+    description: '还没评过分的节点（新建宫殿也能进队列）。',
+  },
+]
 
 function Section({
   title,
@@ -57,7 +93,12 @@ function ToggleRow({
         <div className="text-sm font-medium leading-none">{label}</div>
         {description ? <div className="text-xs leading-5 text-muted-foreground">{description}</div> : null}
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} className="shrink-0" />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="shrink-0"
+        aria-label={label}
+      />
     </label>
   )
 }
@@ -95,6 +136,8 @@ export function FreestyleFeedSettingsDialog({
 }) {
   const [draft, setDraft] = useState(config)
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
+  const allPalacesSelected =
+    palaces.length > 0 && palaces.every((palace) => draft.specific_palace_ids.includes(palace.id))
 
   useEffect(() => {
     if (open) setDraft(config)
@@ -204,8 +247,35 @@ export function FreestyleFeedSettingsDialog({
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-medium">只练这些宫殿</div>
-              <p className="text-xs text-muted-foreground">不勾选 = 全部宫殿都可以出现。</p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-sm font-medium">只练这些宫殿</div>
+                  <p className="text-xs text-muted-foreground">
+                    {draft.specific_palace_ids.length
+                      ? `已选 ${draft.specific_palace_ids.length} 个宫殿`
+                      : '不勾选 = 全部宫殿都可以出现'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={!palaces.length}
+                  aria-pressed={allPalacesSelected}
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      // 同一按钮：未全选 → 全选；已全选 → 清空（恢复不限制）
+                      specific_palace_ids: allPalacesSelected
+                        ? []
+                        : palaces.map((palace) => palace.id),
+                    }))
+                  }
+                >
+                  全选
+                </Button>
+              </div>
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-background/70 p-2 sm:max-h-44">
                 {palaces.length ? (
                   palaces.map((palace) => {
@@ -336,7 +406,52 @@ export function FreestyleFeedSettingsDialog({
                 </select>
               </Field>
 
-              <Field label="今天练哪些进度" className="sm:col-span-2">
+              <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">今天练哪些进度</div>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    可多选组合；至少保留一项。关掉的类型不会进宫殿翻卡队列。
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {PROGRESS_SCOPE_OPTIONS.map((option) => {
+                    const checked = draft.progress_scopes.includes(option.value)
+                    return (
+                      <ToggleRow
+                        key={option.value}
+                        label={option.label}
+                        description={option.description}
+                        checked={checked}
+                        onCheckedChange={(nextChecked) =>
+                          setDraft((current) => {
+                            const set = new Set(current.progress_scopes)
+                            if (nextChecked) {
+                              set.add(option.value)
+                            } else if (set.size > 1) {
+                              set.delete(option.value)
+                            }
+                            // Refuse to clear the last scope (avoids empty mind-map queue).
+                            const progress_scopes = PROGRESS_SCOPE_OPTIONS.map((item) => item.value).filter(
+                              (scope) => set.has(scope),
+                            )
+                            return {
+                              ...current,
+                              progress_scopes,
+                              include_calendar_today_due: progress_scopes.includes('calendar_today'),
+                            }
+                          })
+                        }
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+
+              <Field
+                label="到期刷完后怎么补"
+                hint="只影响是否混入练习题；宫殿翻卡仍只出上面勾选的进度。"
+                className="sm:col-span-2"
+              >
                 <select
                   className={FIELD_CLASS}
                   value={draft.due_policy}
@@ -347,9 +462,9 @@ export function FreestyleFeedSettingsDialog({
                     }))
                   }
                 >
-                  <option value="due_only">只练今天该复习的</option>
-                  <option value="due_first_then_expand">先练到期的，不够再补题</option>
-                  <option value="all_content_due_weighted">题目和到期内容混在一起刷</option>
+                  <option value="due_only">只练勾选进度，不够也不补题</option>
+                  <option value="due_first_then_expand">先练勾选进度，不够再补题</option>
+                  <option value="all_content_due_weighted">题目和勾选进度混在一起刷</option>
                 </select>
               </Field>
             </div>

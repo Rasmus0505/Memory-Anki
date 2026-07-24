@@ -59,6 +59,43 @@ export function NodeCardStatusChrome({
   )
 }
 
+const ENGLISH_WORD_SPLIT = /(\b[A-Za-z][A-Za-z'-]*\b)/g
+
+function renderEnglishInteractiveLabel(
+  label: string,
+  onEnglishWordClick: (word: string, event: MouseEvent<HTMLElement>) => void,
+) {
+  const parts = String(label || '').split(ENGLISH_WORD_SPLIT)
+  return parts.map((part, index) => {
+    if (!part) return null
+    if (/^[A-Za-z][A-Za-z'-]*$/.test(part)) {
+      return (
+        <span
+          key={`${part}-${index}`}
+          role="button"
+          tabIndex={0}
+          data-reading-word="true"
+          className="cursor-pointer rounded-sm px-0.5 text-inherit underline decoration-dotted decoration-zinc-400/70 underline-offset-2 transition hover:bg-sky-500/10 hover:decoration-sky-400"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onEnglishWordClick(part, event)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              event.stopPropagation()
+            }
+          }}
+        >
+          {part}
+        </span>
+      )
+    }
+    return <span key={`t-${index}`}>{part}</span>
+  })
+}
+
 export function NodeCardTextFace({
   textCls,
   displayHtml,
@@ -68,6 +105,8 @@ export function NodeCardTextFace({
   onClick,
   onDoubleClick,
   onContextMenu,
+  englishInteractionActive = false,
+  onEnglishWordClick,
 }: {
   textCls: string
   displayHtml: string
@@ -77,7 +116,13 @@ export function NodeCardTextFace({
   onClick: (event: MouseEvent<HTMLElement>) => void
   onDoubleClick: (event: MouseEvent<HTMLElement>) => void
   onContextMenu: (event: MouseEvent<HTMLElement>) => void
+  englishInteractionActive?: boolean
+  onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
 }) {
+  const showEnglishInteraction =
+    englishInteractionActive && !concealed && typeof onEnglishWordClick === 'function'
+  const plainLabel = label || (isRoot ? '未命名主题' : '未命名知识点')
+
   return (
     // Use role=button div (not <button>) so highlight markup can legally contain
     // block tags (div/br). Nested div inside <button> can break browser hit-testing
@@ -88,15 +133,15 @@ export function NodeCardTextFace({
       role="button"
       tabIndex={-1}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
+      onDoubleClick={showEnglishInteraction ? undefined : onDoubleClick}
+      onContextMenu={showEnglishInteraction ? (event) => event.preventDefault() : onContextMenu}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter' || event.key === ' ') event.preventDefault()
       }}
       className={[
         'mindmap-node-text nopan nodrag',
         textCls,
-        displayHtml
+        displayHtml && !showEnglishInteraction
           ? '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]'
           : '',
       ]
@@ -105,6 +150,9 @@ export function NodeCardTextFace({
     >
       {concealed ? (
         '待回忆'
+      ) : showEnglishInteraction ? (
+        // Plain interactive words: long-press drag can select across spans for AI translate.
+        <span className="block w-full">{renderEnglishInteractiveLabel(plainLabel, onEnglishWordClick)}</span>
       ) : displayHtml ? (
         // div (not span): stored markup is often <div>…</div>; span>div is invalid
         // and browsers may reparent highlight nodes outside the double-click target.
@@ -113,7 +161,7 @@ export function NodeCardTextFace({
           dangerouslySetInnerHTML={{ __html: displayHtml }}
         />
       ) : (
-        label || (isRoot ? '未命名主题' : '未命名知识点')
+        plainLabel
       )}
     </div>
   )

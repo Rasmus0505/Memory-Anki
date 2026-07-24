@@ -49,10 +49,11 @@ describe("MindMapReviewFlow session", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it("renders freestyle quick-settle grades between AI and settlement in compact chrome", async () => {
+  it("keeps freestyle quick-settle grades hidden until settle is held in compact chrome", async () => {
     const onQuickSettle = vi.fn(async (_rating, payload: { finalize: () => Promise<void> }) => {
       await payload.finalize();
     });
+    const onComplete = vi.fn();
 
     renderInRouter(
       <MindMapReviewFlow
@@ -62,22 +63,23 @@ describe("MindMapReviewFlow session", () => {
         studySessionId="review-quick-1"
         reviewEditorState={editorState}
         chromeDensity="compact"
-        onComplete={vi.fn()}
+        onComplete={onComplete}
         onQuickSettle={onQuickSettle}
       />,
     );
 
     expect(screen.getByRole("button", { name: "AI 学习" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "一键记为忘记并结算" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "一键记为困难并结算" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "一键记为记得并结算" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "一键记为轻松并结算" })).toBeTruthy();
-    // Settlement button remains (short label "完成" / "结算", not the one-tap aria labels).
+    // Grades are not always-on chrome; only the settle control remains.
+    expect(screen.queryByRole("button", { name: "一键记为忘记并结算" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "一键记为困难并结算" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "一键记为记得并结算" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "一键记为轻松并结算" })).toBeNull();
     expect(screen.getByRole("button", { name: "完成" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "一键记为记得并结算" }));
-    await waitFor(() => expect(onQuickSettle).toHaveBeenCalledTimes(1));
-    expect(onQuickSettle.mock.calls[0]?.[0]).toBe(3);
+    // Short click still uses the normal settlement path.
+    fireEvent.click(screen.getByRole("button", { name: "完成" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(onQuickSettle).not.toHaveBeenCalled();
   });
 
   it("keeps settlement and rating mode available after the first complete", async () => {

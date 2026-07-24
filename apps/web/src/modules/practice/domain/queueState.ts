@@ -183,9 +183,14 @@ export function markCompleted(state: FreestyleSkipState, cardId: string): Freest
 }
 
 /**
- * Keep already-viewed (completed) cards that are still in the local feed when a
- * refresh arrives, so swipe-back still shows the real previous card with analysis.
- * New incoming cards append after preserved ones (deduped by id).
+ * Silent rebuild after settle / answer: keep the local feed order under the
+ * viewport so completion never looks like auto-advance to the next card.
+ *
+ * Previous cards stay in place when they are completed (swipe-back history) or
+ * still present in the server feed. Completed cards that left the due set are
+ * NOT prepended — prepending used to move the settled unit to index 0 while
+ * scrollTop stayed put, so the user visually jumped to the next unit.
+ * New incoming cards that are not already local append at the tail.
  */
 export function mergeQueuePreservingHistory(
   previous: FreestyleCard[],
@@ -195,13 +200,36 @@ export function mergeQueuePreservingHistory(
   const completed = new Set(
     Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
   )
-  if (completed.size === 0) return incoming
-  const incomingIds = new Set(incoming.map((card) => card.id))
-  const preserved = previous.filter(
-    (card) => completed.has(card.id) && !incomingIds.has(card.id),
-  )
-  if (preserved.length === 0) return incoming
-  return [...preserved, ...incoming]
+  if (previous.length === 0) return incoming
+
+  const incomingById = new Map(incoming.map((card) => [card.id, card]))
+  const used = new Set<string>()
+  const result: FreestyleCard[] = []
+
+  previous.forEach((card) => {
+    const id = card.id
+    if (used.has(id)) return
+    if (completed.has(id)) {
+      // Keep settled unit where the learner finished it (payload may be gone from due feed).
+      result.push(card)
+      used.add(id)
+      return
+    }
+    const refreshed = incomingById.get(id)
+    if (refreshed) {
+      result.push(refreshed)
+      used.add(id)
+    }
+    // Incomplete card no longer in feed → drop (stale due / deferred elsewhere).
+  })
+
+  incoming.forEach((card) => {
+    if (used.has(card.id)) return
+    result.push(card)
+    used.add(card.id)
+  })
+
+  return result
 }
 
 export function mutePalace(state: FreestyleSkipState, palaceId: number): FreestyleSkipState {
@@ -222,14 +250,61 @@ export function moveCardToTail(cards: FreestyleCard[], cardId: string): Freestyl
 }
 
 /**
- * After a weak rating pass, put the unit at the end of the current queue so the
- * rest of the feed is finished first (end-of-batch restudy).
+ * Max other cards between a 忘记/困难 settle and the next appearance of that unit.
+ *
+ * Product example: after unit 1 is weak-rated, the feed may show 2 → 3 → 4, then
+ * unit 1 must reappear (at most three intervening cards). If only 2 remains, place
+ * after 2 (end of remaining queue). Not a clock delay and not full end-of-batch tail.
+ */
+export const RESTUDY_MAX_INTERVENING = 3
+
+/**
+ * @deprecated Prefer {@link placeRestudyCardWithMaxGap}. Kept for callers that still
+ * want explicit tail placement (e.g. skip-to-tail UX).
  */
 export function placeRestudyCardAtTail(
   cards: FreestyleCard[],
   cardId: string,
 ): FreestyleCard[] {
   return moveCardToTail(cards, cardId)
+}
+
+/**
+ * Re-insert a weak-rated unit so it returns after at most ``maxIntervening`` other
+ * cards (default {@link RESTUDY_MAX_INTERVENING}). If fewer cards remain after the
+ * unit, it is placed at the end of the remaining queue.
+ *
+ * When ``fromIndex`` is omitted, the card's current index is used. Never reorders
+ * when the card is missing.
+ */
+export function placeRestudyCardWithMaxGap(
+  cards: FreestyleCard[],
+  cardId: string,
+  options?: { fromIndex?: number; maxIntervening?: number },
+): FreestyleCard[] {
+  const id = String(cardId || '').trim()
+  if (!id || !cards.length) return cards
+  const found = cards.findIndex((card) => card.id === id)
+  if (found < 0) return cards
+
+  const maxIntervening = Math.max(
+    0,
+    Math.round(Number(options?.maxIntervening ?? RESTUDY_MAX_INTERVENING) || 0),
+  )
+  const fromIndex =
+    typeof options?.fromIndex === 'number' && Number.isFinite(options.fromIndex)
+      ? Math.max(0, Math.min(Math.round(options.fromIndex), cards.length - 1))
+      : found
+
+  // Anchor on the weak unit's real slot when fromIndex points elsewhere (stale leave).
+  const removeAt = cards[fromIndex]?.id === id ? fromIndex : found
+  const next = cards.slice()
+  const [card] = next.splice(removeAt, 1)
+  // After removal, cards that followed the unit start at ``removeAt``.
+  // Insert after up to maxIntervening of those (or at the end if fewer remain).
+  const insertAt = Math.min(removeAt + maxIntervening, next.length)
+  next.splice(insertAt, 0, card)
+  return next
 }
 
 /**
@@ -253,8 +328,7 @@ export function needsRestudyAfterRatings(
  * Prefer card id after a weak-rating settle.
  *
  * Always stays on the restudied unit — freestyle never auto-flips after rating.
- * (Queue tail reordering for end-of-batch restudy is handled separately when the
- * learner has already left the unit.)
+ * Gap re-insertion (max intervening cards) runs when the learner leaves the unit.
  */
 export function resolveRestudyPreferCardId(args: {
   previousCards: ReadonlyArray<{ id: string }>

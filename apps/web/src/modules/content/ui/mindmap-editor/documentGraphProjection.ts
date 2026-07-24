@@ -20,6 +20,7 @@ import {
   getMindMapNodeText,
   getMindMapNodeUid,
   getMindMapStoredTextByUid,
+  getMindMapMarkColor,
   highlightMindMapNodes,
   isMindMapQuestionCard,
   normalizeMindMapDocument,
@@ -31,6 +32,7 @@ import {
   deleteMindMapNodes,
   moveMindMapNode,
   selectMindMapNode,
+  setMindMapMarkColors,
   setMindMapQuestionCards,
   type MindMapExtractPlacement,
   type MindMapRelocateMode,
@@ -160,6 +162,8 @@ export function editorDocToGraph(
       options.segmentColorMode === 'active-only' && segment != null && !activeSegment
     const ankiBorder =
       options.ankiEditMode && ankiRole !== 'none' ? ANKI_ROLE_VISUAL[ankiRole].borderColor : null
+    // Editor-only card fill from markColor; review/practice use revealMap and skip it.
+    const markFill = options.revealMap ? null : getMindMapMarkColor(node)
     nodes.push({
       id: uid,
       type: 'peg',
@@ -173,11 +177,13 @@ export function editorDocToGraph(
         layoutRole: depth === 0 ? 'root' : depth >= 2 ? 'leaf' : 'branch',
         branchColor,
         rawNode: node,
+        markColor: markFill,
         visual: buildNodeVisual({
           revealState,
           borderColor: rangeSelected.has(uid)
             ? '#0ea5e9'
             : ankiBorder || (segmentVisible ? segment?.color : null),
+          fillColor: markFill,
           muted: segmentMuted || mutedSet.has(uid),
           secondaryMarked: false,
           highlighted: highlightedSet.has(uid),
@@ -217,6 +223,7 @@ function getRuntimeEdgeRenderStyle(data: MindMapDocNode['data']) {
 export const buildSelectionFromDoc = selectMindMapNode
 export const editEditorDocNode = editMindMapNode
 export const highlightEditorDocNodes = highlightMindMapNodes
+export const setEditorDocMarkColors = setMindMapMarkColors
 export const setEditorDocQuestionCards = setMindMapQuestionCards
 export const getEditorDocStoredText = getMindMapStoredTextByUid
 export const addEditorDocChild = addMindMapChild
@@ -274,6 +281,7 @@ function buildSegmentByNodeUid(segments: MindMapHostSegmentSummary[]) {
 function buildNodeVisual(options: {
   revealState?: RevealState
   borderColor: string | null | undefined
+  fillColor?: string | null
   muted: boolean
   secondaryMarked: boolean
   highlighted: boolean
@@ -312,6 +320,7 @@ function buildNodeVisual(options: {
     concealText: options.revealState === 'hidden',
     placeholder: options.revealState === 'placeholder',
     borderColor: options.borderColor ?? null,
+    fillColor: options.fillColor ?? null,
     outlineTones: [
       ...(options.secondaryMarked ? ['info' as const] : []),
     ],

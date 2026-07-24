@@ -186,7 +186,7 @@ describe('FlipCardMindMapPanel', () => {
     expect(muted).not.toContain('root')
   })
 
-  it('mutes out-of-scope nodes and only lets formal due nodes start a rating', async () => {
+  it('mutes out-of-scope nodes but still allows rating them in rating mode', async () => {
     const onRateNode = vi.fn()
     renderInRouter(
       <FlipCardMindMapPanel
@@ -213,8 +213,22 @@ describe('FlipCardMindMapPanel', () => {
     })
     const outOfScope =
       getLatestMindMapEditorSurfaceProps()?.buildSelectionToolbarActions?.('grandchild') ?? []
-    expect(outOfScope.map((action: { id: string }) => action.id)).toContain('out-of-scope')
-    expect(outOfScope.some((action: { id: string }) => action.id.startsWith('rate-'))).toBe(false)
+    // Soft-dim only — non-due cards still expose 忘/难/记/轻.
+    expect(outOfScope.map((action: { id: string }) => action.id)).not.toContain('out-of-scope')
+    expect(outOfScope.some((action: { id: string }) => action.id.startsWith('rate-'))).toBe(true)
+    const rateOutOfScope = outOfScope.find((action: { id: string }) => action.id === 'rate-3')
+    await act(async () => {
+      rateOutOfScope?.onClick()
+    })
+    expect(onRateNode).toHaveBeenCalledWith(
+      'grandchild',
+      3,
+      'first',
+      'single',
+      expect.any(Object),
+      'overwrite',
+      ['grandchild'],
+    )
 
     await act(async () => {
       getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: 'child', text: 'Child' }])
@@ -229,7 +243,7 @@ describe('FlipCardMindMapPanel', () => {
       remember?.onClick()
     })
     // Parent with children always opens the scope dialog first.
-    expect(onRateNode).not.toHaveBeenCalled()
+    expect(onRateNode).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: '级联评分子树' }))
     expect(onRateNode).toHaveBeenCalledWith(
       'child',

@@ -140,6 +140,61 @@ def get_completion_summary(
     }
 
 
+def _progress_scopes_from_flags(
+    *,
+    include_reinforcement: bool,
+    include_calendar_today_due: bool,
+    progress_scopes: list[str] | set[str] | tuple[str, ...] | None,
+) -> set[str]:
+    """Resolve freestyle progress scopes from explicit list or legacy flags.
+
+    When ``progress_scopes`` is provided (including empty), it is authoritative.
+    Otherwise map legacy booleans onto the default formal+optional set:
+    formal due buckets always on; reinforcement / calendar_today from flags.
+    """
+    from memory_anki.modules.memory.application.wave_policy import (
+        DEFAULT_PROGRESS_SCOPES,
+        PROGRESS_SCOPE_CALENDAR_TODAY,
+        PROGRESS_SCOPE_DUE,
+        PROGRESS_SCOPE_NEW,
+        PROGRESS_SCOPE_OVERDUE,
+        PROGRESS_SCOPE_REINFORCEMENT,
+        PROGRESS_SCOPES,
+    )
+
+    if progress_scopes is not None:
+        selected = {str(item) for item in progress_scopes if str(item) in PROGRESS_SCOPES}
+        return selected if selected else set(DEFAULT_PROGRESS_SCOPES)
+
+    scopes = {
+        PROGRESS_SCOPE_OVERDUE,
+        PROGRESS_SCOPE_DUE,
+        PROGRESS_SCOPE_NEW,
+    }
+    if include_reinforcement:
+        scopes.add(PROGRESS_SCOPE_REINFORCEMENT)
+    if include_calendar_today_due:
+        scopes.add(PROGRESS_SCOPE_CALENDAR_TODAY)
+    return scopes
+
+
+def _node_matches_progress_scopes(item: dict, scopes: set[str]) -> bool:
+    bucket = item.get("progress_bucket")
+    if bucket and bucket in scopes:
+        return True
+    # Legacy projections without progress_bucket: approximate from flags.
+    if not bucket:
+        if item.get("due") and (
+            "overdue" in scopes or "due" in scopes or "new" in scopes
+        ):
+            return True
+        if item.get("reinforcement_due") and "reinforcement" in scopes:
+            return True
+        if item.get("calendar_today_due") and "calendar_today" in scopes:
+            return True
+    return False
+
+
 def list_due_nodes(
     session: Session,
     palace_id: int,
@@ -147,25 +202,27 @@ def list_due_nodes(
     now: datetime | None = None,
     include_reinforcement: bool = False,
     include_calendar_today_due: bool = False,
+    progress_scopes: list[str] | set[str] | tuple[str, ...] | None = None,
 ) -> list[str]:
     """List currently actionable node UIDs for a palace.
 
-    By default only formal long-term due/overdue (and first-learn) nodes.
-    When ``include_reinforcement`` is True (freestyle immersive queue), also
-    include same-day reinforcement nodes that are already available.
-    When ``include_calendar_today_due`` is True, also include formal nodes
-    whose ``due_at`` falls on the local calendar day even if the clock time
-    has not arrived yet (freestyle opt-in only).
+    Prefer ``progress_scopes`` (overdue / due / calendar_today / reinforcement /
+    new). Legacy flags still work when scopes are omitted:
+
+    - default formal: overdue + due + new (via ``due`` flag)
+    - ``include_reinforcement``: same-day weak-rating restudy
+    - ``include_calendar_today_due``: formal nodes due later today (local day)
     """
     del now  # projection uses current time; kept for call-site compatibility
+    scopes = _progress_scopes_from_flags(
+        include_reinforcement=include_reinforcement,
+        include_calendar_today_due=include_calendar_today_due,
+        progress_scopes=progress_scopes,
+    )
     projection = get_palace_memory_projection(session, palace_id)
     result: list[str] = []
     for item in projection["nodes"]:
-        if item.get("due"):
-            result.append(item["node_uid"])
-        elif include_reinforcement and item.get("reinforcement_due"):
-            result.append(item["node_uid"])
-        elif include_calendar_today_due and item.get("calendar_today_due"):
+        if _node_matches_progress_scopes(item, scopes):
             result.append(item["node_uid"])
     return result
 
@@ -177,25 +234,55 @@ def due_node_uids_for_entry(
     entry_mode: str | None = None,
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
+    progress_scopes: list[str] | set[str] | tuple[str, ...] | None = None,
 ) -> list[str]:
-    """Freeze actionable UIDs; freestyle scope may include reinforcement / calendar-today."""
+    """Freeze actionable UIDs; freestyle scope follows progress_scopes when set.
+
+    Without progress_scopes and with an explicit unit scope, allow reinforcement
+    + calendar-today so card due_node_uids can still be rated after open.
+    """
+    from memory_anki.modules.memory.application.wave_policy import (
+        DEFAULT_PROGRESS_SCOPES,
+        PROGRESS_SCOPE_CALENDAR_TODAY,
+        PROGRESS_SCOPE_REINFORCEMENT,
+        PROGRESS_SCOPES,
+    )
+
     projection = get_palace_memory_projection(session, palace_id, now=_utc_now())
     mode = entry_mode or projection.get("review_entry_mode") or "none"
     if mode == "none" and not scope_node_uids:
         return []
 
-    # Freestyle passes explicit unit scope: allow reinforcement + calendar-today
-    # formal nodes so scoped freezes match the immersive card due_node_uids set.
-    allow_scope_extras = scope_node_uids is not None
-    wave = [
-        item
-        for item in projection.get("nodes") or []
-        if item.get("due")
-        or (
-            allow_scope_extras
-            and (item.get("reinforcement_due") or item.get("calendar_today_due"))
-        )
-    ]
+    if progress_scopes is not None:
+        scopes = {
+            str(item) for item in progress_scopes if str(item) in PROGRESS_SCOPES
+        } or set(DEFAULT_PROGRESS_SCOPES)
+        wave = [
+            item
+            for item in projection.get("nodes") or []
+            if _node_matches_progress_scopes(item, scopes)
+        ]
+    else:
+        # Freestyle passes explicit unit scope: allow reinforcement + calendar-today
+        # formal nodes so scoped freezes match the immersive card due_node_uids set.
+        allow_scope_extras = scope_node_uids is not None
+        wave = [
+            item
+            for item in projection.get("nodes") or []
+            if item.get("due")
+            or (
+                allow_scope_extras
+                and (
+                    item.get("reinforcement_due")
+                    or item.get("calendar_today_due")
+                    or item.get("progress_bucket")
+                    in {
+                        PROGRESS_SCOPE_REINFORCEMENT,
+                        PROGRESS_SCOPE_CALENDAR_TODAY,
+                    }
+                )
+            )
+        ]
     if not wave:
         return []
     due_by_uid = {
@@ -295,12 +382,12 @@ def rate_nodes(
         [node_uid] if rating_scope == "single" else [node_uid, *_descendants(nodes, node_uid)]
     )
     selected = [uid for uid in selected if uid != root_uid]
-    # Formal single ratings stay inside the frozen due scope so accidental leaf
-    # clicks outside this session do not mutate distant cards. Subtree ratings
-    # intentionally write the full document descendants (including non-due /
-    # unrevealed nodes) so parent scores cascade regardless of expand state.
-    # Also reopen completed formal sessions so post-settlement amendments work
-    # (subtree path would otherwise skip the active-session gate).
+    # Single and subtree ratings both write any non-root target in the palace.
+    # Frozen due scope only soft-dims non-due cards on the frontend and still
+    # drives completion / unrated-due counts — it does not block mid-session
+    # scores on context cards outside this wave.
+    # Reopen completed formal sessions so post-settlement amendments work
+    # (otherwise the active-session gate would reject the write).
     study_row = session.get(StudySession, study_session_id)
     if (
         source_scene == "formal_review"
@@ -313,23 +400,6 @@ def rate_nodes(
         )
 
         reopen_formal_review_for_amendment(session, study_row)
-    if (
-        rating_scope == "single"
-        and source_scene == "formal_review"
-        and (
-            study_session_id.startswith("review-")
-            or study_row is not None
-        )
-    ):
-        from memory_anki.modules.memory.application.formal_review_service import (
-            get_formal_review_scope,
-        )
-
-        selected = [
-            uid
-            for uid in selected
-            if uid in get_formal_review_scope(session, study_session_id, palace_id)
-        ]
     if conflict_policy == "skip_direct" and rating_scope == "subtree":
         # "避开": leave every already-scored descendant alone (direct or
         # batch_inherited). Otherwise a mid-node subtree score (hard on child +
@@ -346,7 +416,7 @@ def rate_nodes(
     if not selected:
         if node_uid == root_uid:
             raise ValueError("root node cannot be scheduled alone; rate descendants or expand scope")
-        raise ValueError("没有可评分节点（可能不在本次复习范围，或子树节点均已评分并选择避开）")
+        raise ValueError("没有可评分节点（子树节点均已评分并选择避开）")
     operation = ReviewRatingOperation(
         id=operation_id,
         study_session_id=study_session_id,

@@ -1,0 +1,1698 @@
+{
+  "batch": "ch5-six-palace-repair-20260724",
+  "now": "2026-07-24 04:40:28",
+  "palaces": {
+    "27": {
+      "title": "第一节英国近代教育",
+      "before_active": 19,
+      "after_active": 18,
+      "events": [
+        {
+          "action": "update",
+          "id": 5,
+          "palace_id": 27,
+          "sort_order": 1,
+          "stem": "简述17~18世纪英国教育发展的主要特点。",
+          "answer": {
+            "reference_answer": "①教育发展十分缓慢，学校教育主要沿袭文艺复兴和宗教改革形成的传统；②初等教育一直由国教会掌管；③中等教育主要是富家子弟的升学预备教育，以文法学校和公学为主；④高等教育始于中世纪后期牛津大学的设立，到17世纪规模扩大、经济宽裕、学术氛围浓厚；⑤科学研究成果渗入教学内容，逐渐重视自然科学和实用学科。"
+          }
+        },
+        {
+          "action": "update",
+          "id": 6,
+          "palace_id": 27,
+          "sort_order": 2,
+          "stem": "【2008年311真题23】在家庭教育和学校教育孰优孰劣问题上，认为家庭教育比学校教育优越的西方教育家是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 7,
+          "palace_id": 27,
+          "sort_order": 3,
+          "stem": "【2008年311真题26】19世纪中后期，英国全日制大学以校内或校外讲座的形式，向社会中下层及女子提供更多接受高等教育",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 8,
+          "palace_id": 27,
+          "sort_order": 4,
+          "stem": "【2011年311真题28】主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "update",
+          "id": 9,
+          "palace_id": 27,
+          "sort_order": 5,
+          "stem": "【2012年311真题28】17~18世纪英国的公学采用寄宿制，以升学为主要目标，具有大学预科的性质。这种“公学”的含义",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 10,
+          "palace_id": 27,
+          "sort_order": 6,
+          "stem": "【2013年311真题26】下列表述中，体现洛克绅士教育主张的是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 11,
+          "palace_id": 27,
+          "sort_order": 7,
+          "stem": "【2015年311真题27】在17世纪英国教育家洛克所设计的教育体系中，处于前提和基础地位的教育活动是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 12,
+          "palace_id": 27,
+          "sort_order": 8,
+          "stem": "【2015年311真题29】19世纪前半期，英国兴起的城市学院运动在较大程度上革新了英国高等教育传统，此类学院在教育实践",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 13,
+          "palace_id": 27,
+          "sort_order": 9,
+          "stem": "【2017年311真题29】17至18世纪，英国初等学校的教育对象主要是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 14,
+          "palace_id": 27,
+          "sort_order": 10,
+          "stem": "【2018年311真题27】17世纪，以爱丁堡大学为代表的苏格兰大学与牛津大学、剑桥大学相比，更重视（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "update",
+          "id": 15,
+          "palace_id": 27,
+          "sort_order": 11,
+          "stem": "【2019年311真题29】洛克的绅士教育理论认为，一位合格绅士最重要的品质是（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 16,
+          "palace_id": 27,
+          "sort_order": 12,
+          "stem": "【2019年311真题32】1870年《福斯特法案》的颁布与实施在英国教育史上具有重大意义，标志着英国（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 17,
+          "palace_id": 27,
+          "sort_order": 13,
+          "stem": "【2021年311真题29】相对于17~18世纪的牛津大学和剑桥大学而言，同一历史时期以爱丁堡大学、格拉斯哥大学等为代表",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "update",
+          "id": 18,
+          "palace_id": 27,
+          "sort_order": 14,
+          "stem": "【2022年311真题29】19世纪上半期，英国新大学运动开始的标志是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 19,
+          "palace_id": 27,
+          "sort_order": 15,
+          "stem": "【2024年311真题27】在19世纪英国高等教育的发展中，体现大学与社会加强联系、高等教育下移以及大学教学形式与课程变",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 20,
+          "palace_id": 27,
+          "sort_order": 16,
+          "stem": "重视家庭教育，否定学校教育，认为教育发挥其正面作用的场所并不在学校的是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 21,
+          "palace_id": 27,
+          "sort_order": 17,
+          "stem": "高度评价教育在人的形成中的重大作用，认为人的好坏或者有用无用，“十之八九都由他们所受的教育决定”的思想家是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 22,
+          "palace_id": 27,
+          "sort_order": 18,
+          "stem": "洛克在《教育漫话》中，第一次加以论述的问题是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        }
+      ],
+      "final": [
+        {
+          "id": 5,
+          "sort_order": 1,
+          "type": "short_answer",
+          "stem": "简述17~18世纪英国教育发展的主要特点。",
+          "answer": "{\"reference_answer\": \"①教育发展十分缓慢，学校教育主要沿袭文艺复兴和宗教改革形成的传统；②初等教育一直由国教会掌管；③中等教育主要是富家子弟的升学预备教育，以文法学校和公学为主；④高等教育始于中世纪后期牛津大学的设立，到17世纪规模扩大、经济宽裕、学术氛围浓厚；⑤科学研究成果渗入教学内容，逐渐重视自然科学和实用学科。\"}"
+        },
+        {
+          "id": 6,
+          "sort_order": 2,
+          "type": "multiple_choice",
+          "stem": "【2008年311真题23】在家庭教育和学校教育孰优孰劣问题上，认为家庭教育比学校教育优越的西方教育家是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 7,
+          "sort_order": 3,
+          "type": "multiple_choice",
+          "stem": "【2008年311真题26】19世纪中后期，英国全日制大学以校内或校外讲座的形式，向社会中下层及女子提供更多接受高等教育的机会，史称（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 8,
+          "sort_order": 4,
+          "type": "multiple_choice",
+          "stem": "【2011年311真题28】主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 9,
+          "sort_order": 5,
+          "type": "multiple_choice",
+          "stem": "【2012年311真题28】17~18世纪英国的公学采用寄宿制，以升学为主要目标，具有大学预科的性质。这种“公学”的含义是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 10,
+          "sort_order": 6,
+          "type": "multiple_choice",
+          "stem": "【2013年311真题26】下列表述中，体现洛克绅士教育主张的是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 11,
+          "sort_order": 7,
+          "type": "multiple_choice",
+          "stem": "【2015年311真题27】在17世纪英国教育家洛克所设计的教育体系中，处于前提和基础地位的教育活动是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 12,
+          "sort_order": 8,
+          "type": "multiple_choice",
+          "stem": "【2015年311真题29】19世纪前半期，英国兴起的城市学院运动在较大程度上革新了英国高等教育传统，此类学院在教育实践中强调（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 13,
+          "sort_order": 9,
+          "type": "multiple_choice",
+          "stem": "【2017年311真题29】17至18世纪，英国初等学校的教育对象主要是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 14,
+          "sort_order": 10,
+          "type": "multiple_choice",
+          "stem": "【2018年311真题27】17世纪，以爱丁堡大学为代表的苏格兰大学与牛津大学、剑桥大学相比，更重视（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 15,
+          "sort_order": 11,
+          "type": "multiple_choice",
+          "stem": "【2019年311真题29】洛克的绅士教育理论认为，一位合格绅士最重要的品质是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 16,
+          "sort_order": 12,
+          "type": "multiple_choice",
+          "stem": "【2019年311真题32】1870年《福斯特法案》的颁布与实施在英国教育史上具有重大意义，标志着英国（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 17,
+          "sort_order": 13,
+          "type": "multiple_choice",
+          "stem": "【2021年311真题29】相对于17~18世纪的牛津大学和剑桥大学而言，同一历史时期以爱丁堡大学、格拉斯哥大学等为代表的苏格兰大学更为重视",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 18,
+          "sort_order": 14,
+          "type": "multiple_choice",
+          "stem": "【2022年311真题29】19世纪上半期，英国新大学运动开始的标志是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 19,
+          "sort_order": 15,
+          "type": "multiple_choice",
+          "stem": "【2024年311真题27】在19世纪英国高等教育的发展中，体现大学与社会加强联系、高等教育下移以及大学教学形式与课程变革的教育运动是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 20,
+          "sort_order": 16,
+          "type": "multiple_choice",
+          "stem": "重视家庭教育，否定学校教育，认为教育发挥其正面作用的场所并不在学校的是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 21,
+          "sort_order": 17,
+          "type": "multiple_choice",
+          "stem": "高度评价教育在人的形成中的重大作用，认为人的好坏或者有用无用，“十之八九都由他们所受的教育决定”的思想家是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 22,
+          "sort_order": 18,
+          "type": "multiple_choice",
+          "stem": "洛克在《教育漫话》中，第一次加以论述的问题是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        }
+      ]
+    },
+    "28": {
+      "title": "第二节法国近代教育",
+      "before_active": 11,
+      "after_active": 14,
+      "events": [
+        {
+          "action": "update",
+          "id": 350,
+          "palace_id": 28,
+          "sort_order": 1,
+          "stem": "【2008年311真题24】在法国启蒙教育思想的影响下，18世纪后期德国出现了采用“适应自然”的教学方式，注重实用性和儿",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 351,
+          "palace_id": 28,
+          "sort_order": 2,
+          "stem": "【2009年311真题27】下列选项中，不属于法国大革命时期教育改革计划所体现的教育观念是（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 352,
+          "palace_id": 28,
+          "sort_order": 3,
+          "stem": "【2011年311真题29】近代法国中央集权式教育管理体制确立的标志是拿破仑第一帝国时期设立的（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 291,
+          "palace_id": 28,
+          "sort_order": 4,
+          "stem": "【2012年311真题29】拿破仑执政时期所建立的帝国大学实质上是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 353,
+          "palace_id": 28,
+          "sort_order": 5,
+          "stem": "【2014年311真题28】法国资产阶级革命时期，雷佩尔提提出的为接受所有适龄儿童入学受教而创设的教育机构是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "update",
+          "id": 354,
+          "palace_id": 28,
+          "sort_order": 6,
+          "stem": "【2015年311真题28】法兰西第一帝国时期拿破仑十分重视技术教育和专门学校的发展，曾被其喻为“能下金蛋的母鸡”的教育",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 355,
+          "palace_id": 28,
+          "sort_order": 7,
+          "stem": "【2015年311真题30】教育思想表现出鲜明的民主性，认为天才、才能和美德出自茅舍的可能要比出自宫廷的多得难以计算的法",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 292,
+          "palace_id": 28,
+          "sort_order": 8,
+          "stem": "【2019年311真题30】拿破仑第一帝国政府重视发展中等教育以培养帝国官吏和行政管理人员，其实施中等教育的主要机构是（",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "update",
+          "id": 293,
+          "palace_id": 28,
+          "sort_order": 9,
+          "stem": "【2020年311真题29】1896年法国《国立大学组织法》的颁布与实施标志着（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 445,
+          "palace_id": 28,
+          "sort_order": 10,
+          "stem": "【2025年311真题30】19世纪80年代，为促进国民教育实现义务、免费和世俗化发展，法国政府所采取的主要教育措施是（",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 446,
+          "palace_id": 28,
+          "sort_order": 11,
+          "stem": "法国大革命中哪一个法案提出建立“国家科学与艺术研究协会”，影响了拿破仑时期的帝国大学（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 447,
+          "palace_id": 28,
+          "sort_order": 12,
+          "stem": "认为人人都是通过感官获得知识，从而获得精神的发展，人人都有获取同样知识、达到同样成就的能力，人人都有享受中高等教育的权利",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 448,
+          "palace_id": 28,
+          "sort_order": 13,
+          "stem": "深刻揭露封建专制剥夺人民受教育的机会、利用教育愚弄人民、扼杀人民中大量天才的事实的思想家是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 449,
+          "palace_id": 28,
+          "sort_order": 14,
+          "stem": "设想了按照年龄划分的三级教育制度：5~10岁、10~16岁、16岁以上，提出各阶段的学习都要注重本国语和科学学科的思想家",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "soft_delete",
+          "id": 319,
+          "reason": "not_in_authoritative_ch5_set"
+        },
+        {
+          "action": "soft_delete",
+          "id": 356,
+          "reason": "not_in_authoritative_ch5_set"
+        }
+      ],
+      "final": [
+        {
+          "id": 350,
+          "sort_order": 1,
+          "type": "multiple_choice",
+          "stem": "【2008年311真题24】在法国启蒙教育思想的影响下，18世纪后期德国出现了采用“适应自然”的教学方式，注重实用性和儿童兴趣的新式学校。这",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 351,
+          "sort_order": 2,
+          "type": "multiple_choice",
+          "stem": "【2009年311真题27】下列选项中，不属于法国大革命时期教育改革计划所体现的教育观念是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 352,
+          "sort_order": 3,
+          "type": "multiple_choice",
+          "stem": "【2011年311真题29】近代法国中央集权式教育管理体制确立的标志是拿破仑第一帝国时期设立的（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 291,
+          "sort_order": 4,
+          "type": "multiple_choice",
+          "stem": "【2012年311真题29】拿破仑执政时期所建立的帝国大学实质上是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 353,
+          "sort_order": 5,
+          "type": "multiple_choice",
+          "stem": "【2014年311真题28】法国资产阶级革命时期，雷佩尔提提出的为接受所有适龄儿童入学受教而创设的教育机构是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 354,
+          "sort_order": 6,
+          "type": "multiple_choice",
+          "stem": "【2015年311真题28】法兰西第一帝国时期拿破仑十分重视技术教育和专门学校的发展，曾被其喻为“能下金蛋的母鸡”的教育机构是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 355,
+          "sort_order": 7,
+          "type": "multiple_choice",
+          "stem": "【2015年311真题30】教育思想表现出鲜明的民主性，认为天才、才能和美德出自茅舍的可能要比出自宫廷的多得难以计算的法国教育家是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 292,
+          "sort_order": 8,
+          "type": "multiple_choice",
+          "stem": "【2019年311真题30】拿破仑第一帝国政府重视发展中等教育以培养帝国官吏和行政管理人员，其实施中等教育的主要机构是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 293,
+          "sort_order": 9,
+          "type": "multiple_choice",
+          "stem": "【2020年311真题29】1896年法国《国立大学组织法》的颁布与实施标志着（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 445,
+          "sort_order": 10,
+          "type": "multiple_choice",
+          "stem": "【2025年311真题30】19世纪80年代，为促进国民教育实现义务、免费和世俗化发展，法国政府所采取的主要教育措施是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 446,
+          "sort_order": 11,
+          "type": "multiple_choice",
+          "stem": "法国大革命中哪一个法案提出建立“国家科学与艺术研究协会”，影响了拿破仑时期的帝国大学（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 447,
+          "sort_order": 12,
+          "type": "multiple_choice",
+          "stem": "认为人人都是通过感官获得知识，从而获得精神的发展，人人都有获取同样知识、达到同样成就的能力，人人都有享受中高等教育的权利，并同时提出“教育万",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 448,
+          "sort_order": 13,
+          "type": "multiple_choice",
+          "stem": "深刻揭露封建专制剥夺人民受教育的机会、利用教育愚弄人民、扼杀人民中大量天才的事实的思想家是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 449,
+          "sort_order": 14,
+          "type": "multiple_choice",
+          "stem": "设想了按照年龄划分的三级教育制度：5~10岁、10~16岁、16岁以上，提出各阶段的学习都要注重本国语和科学学科的思想家是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        }
+      ]
+    },
+    "29": {
+      "title": "第三节德国近代教育",
+      "before_active": 11,
+      "after_active": 12,
+      "events": [
+        {
+          "action": "update",
+          "id": 339,
+          "palace_id": 29,
+          "sort_order": 1,
+          "stem": "【2007年311真题27】1810年，洪堡创办的对德国高等教育具有重要影响的大学是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 340,
+          "palace_id": 29,
+          "sort_order": 2,
+          "stem": "【2013年311真题28】19世纪德国教育家洪堡推动新大学运动，创建了柏林大学办学模式，为大学增添了（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 341,
+          "palace_id": 29,
+          "sort_order": 3,
+          "stem": "【2014年311真题29】受卢梭自然主义教育思想的影响，18世纪后期在德国出现的注重教学内容的实用性、寓教学于游戏和活",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "update",
+          "id": 342,
+          "palace_id": 29,
+          "sort_order": 4,
+          "stem": "【2022年311真题28】19世纪后半期，德国中等教育改革与发展的主题是大力发展（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "update",
+          "id": 283,
+          "palace_id": 29,
+          "sort_order": 5,
+          "stem": "【2024年311真题26】18世纪的普鲁士虽然在政治经济上落后于英、法等国，但在教育发展上却独树一帜、颇具特色。其主要",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 290,
+          "palace_id": 29,
+          "sort_order": 6,
+          "stem": "【2025年311真题26】下列选项中，符合德国教育家第斯多惠关于形式教育与实质教育基本观点的是（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 450,
+          "palace_id": 29,
+          "sort_order": 7,
+          "stem": "1694年建立的欧洲第一所新式大学是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 451,
+          "palace_id": 29,
+          "sort_order": 8,
+          "stem": "提出教育的最高目的在于激发学生为真善美服务的主动性的思想家是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 452,
+          "palace_id": 29,
+          "sort_order": 9,
+          "stem": "以下关于德国17~18世纪“骑士学院”的说法错误的是（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 453,
+          "palace_id": 29,
+          "sort_order": 10,
+          "stem": "19世纪德国主要负责传授自然科学知识和历史科学知识的中等教育机构是（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "update",
+          "id": 346,
+          "palace_id": 29,
+          "sort_order": 11,
+          "stem": "较早由世俗政权掌握教育事业的国家是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 454,
+          "palace_id": 29,
+          "sort_order": 12,
+          "stem": "18世纪后期，在夸美纽斯、卢梭等人的教育思想影响下出现的德国新式学校是（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "soft_delete",
+          "id": 284,
+          "reason": "not_in_authoritative_ch5_set"
+        },
+        {
+          "action": "soft_delete",
+          "id": 343,
+          "reason": "not_in_authoritative_ch5_set"
+        },
+        {
+          "action": "soft_delete",
+          "id": 344,
+          "reason": "not_in_authoritative_ch5_set"
+        },
+        {
+          "action": "soft_delete",
+          "id": 345,
+          "reason": "not_in_authoritative_ch5_set"
+        },
+        {
+          "action": "soft_delete",
+          "id": 347,
+          "reason": "not_in_authoritative_ch5_set"
+        }
+      ],
+      "final": [
+        {
+          "id": 339,
+          "sort_order": 1,
+          "type": "multiple_choice",
+          "stem": "【2007年311真题27】1810年，洪堡创办的对德国高等教育具有重要影响的大学是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 340,
+          "sort_order": 2,
+          "type": "multiple_choice",
+          "stem": "【2013年311真题28】19世纪德国教育家洪堡推动新大学运动，创建了柏林大学办学模式，为大学增添了（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 341,
+          "sort_order": 3,
+          "type": "multiple_choice",
+          "stem": "【2014年311真题29】受卢梭自然主义教育思想的影响，18世纪后期在德国出现的注重教学内容的实用性、寓教学于游戏和活动之中的新式学校是（",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 342,
+          "sort_order": 4,
+          "type": "multiple_choice",
+          "stem": "【2022年311真题28】19世纪后半期，德国中等教育改革与发展的主题是大力发展（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 283,
+          "sort_order": 5,
+          "type": "multiple_choice",
+          "stem": "【2024年311真题26】18世纪的普鲁士虽然在政治经济上落后于英、法等国，但在教育发展上却独树一帜、颇具特色。其主要表现是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 290,
+          "sort_order": 6,
+          "type": "multiple_choice",
+          "stem": "【2025年311真题26】下列选项中，符合德国教育家第斯多惠关于形式教育与实质教育基本观点的是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 450,
+          "sort_order": 7,
+          "type": "multiple_choice",
+          "stem": "1694年建立的欧洲第一所新式大学是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 451,
+          "sort_order": 8,
+          "type": "multiple_choice",
+          "stem": "提出教育的最高目的在于激发学生为真善美服务的主动性的思想家是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 452,
+          "sort_order": 9,
+          "type": "multiple_choice",
+          "stem": "以下关于德国17~18世纪“骑士学院”的说法错误的是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 453,
+          "sort_order": 10,
+          "type": "multiple_choice",
+          "stem": "19世纪德国主要负责传授自然科学知识和历史科学知识的中等教育机构是（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 346,
+          "sort_order": 11,
+          "type": "multiple_choice",
+          "stem": "较早由世俗政权掌握教育事业的国家是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 454,
+          "sort_order": 12,
+          "type": "multiple_choice",
+          "stem": "18世纪后期，在夸美纽斯、卢梭等人的教育思想影响下出现的德国新式学校是（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        }
+      ]
+    },
+    "35": {
+      "title": "第四节 俄国近代教育",
+      "before_active": 0,
+      "after_active": 4,
+      "events": [
+        {
+          "action": "insert",
+          "id": 455,
+          "palace_id": 35,
+          "sort_order": 1,
+          "stem": "【2010年311真题32】“如果现在在大学里有医学系甚至有财经系，而没有教育系，那么这只是表明，直到现在人对他的身体和",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 456,
+          "palace_id": 35,
+          "sort_order": 2,
+          "stem": "【2022年311真题30】关于教育学的学科性质，乌申斯基的基本看法是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 457,
+          "palace_id": 35,
+          "sort_order": 3,
+          "stem": "以下哪项不属于彼得一世改革时创立的学校（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 458,
+          "palace_id": 35,
+          "sort_order": 4,
+          "stem": "以下哪项不符合乌申斯基的教育观点（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        }
+      ],
+      "final": [
+        {
+          "id": 455,
+          "sort_order": 1,
+          "type": "multiple_choice",
+          "stem": "【2010年311真题32】“如果现在在大学里有医学系甚至有财经系，而没有教育系，那么这只是表明，直到现在人对他的身体和荷包的健康的珍惜还是",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 456,
+          "sort_order": 2,
+          "type": "multiple_choice",
+          "stem": "【2022年311真题30】关于教育学的学科性质，乌申斯基的基本看法是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 457,
+          "sort_order": 3,
+          "type": "multiple_choice",
+          "stem": "以下哪项不属于彼得一世改革时创立的学校（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        },
+        {
+          "id": 458,
+          "sort_order": 4,
+          "type": "multiple_choice",
+          "stem": "以下哪项不符合乌申斯基的教育观点（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        }
+      ]
+    },
+    "37": {
+      "title": "第五节美国近代教育",
+      "before_active": 0,
+      "after_active": 9,
+      "events": [
+        {
+          "action": "insert",
+          "id": 459,
+          "palace_id": 37,
+          "sort_order": 1,
+          "stem": "【2007年311真题29】在美国公立学校发展史上做出杰出贡献，并被誉为“美国公立学校之父”的教育家是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 460,
+          "palace_id": 37,
+          "sort_order": 2,
+          "stem": "【2008年311真题25】《美国宪法修正案》第10条规定：“凡是宪法未曾给予联邦而又未曾限制给予各州的权力，都是保留给",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 461,
+          "palace_id": 37,
+          "sort_order": 3,
+          "stem": "【2008年311真题27】1862年，美国林肯总统批准了《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类学",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 462,
+          "palace_id": 37,
+          "sort_order": 4,
+          "stem": "【2011年311真题26】19世纪30年代，美国公立学校运动的主要内容之一是兴办（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 463,
+          "palace_id": 37,
+          "sort_order": 5,
+          "stem": "【2015年311真题31】下列表述中，不符合贺拉斯·曼关于美国公立学校教育目的与作用理解的是（）",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 464,
+          "palace_id": 37,
+          "sort_order": 6,
+          "stem": "【2016年311真题30】美国公立初等教育在19世纪上半叶发展与进步的主要表现是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 465,
+          "palace_id": 37,
+          "sort_order": 7,
+          "stem": "【2019年311真题31】1862年，美国总统林肯批准实施《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类",
+          "answer": {
+            "correct_option_id": "C"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 466,
+          "palace_id": 37,
+          "sort_order": 8,
+          "stem": "以下哪个属于美国18世纪中等教育的学校类型（）",
+          "answer": {
+            "correct_option_id": "A"
+          }
+        },
+        {
+          "action": "insert",
+          "id": 467,
+          "palace_id": 37,
+          "sort_order": 9,
+          "stem": "将师范教育看作提高公立学校教育的重要手段，倡议创设师范学校来培养教师的教育家是（）",
+          "answer": {
+            "correct_option_id": "B"
+          }
+        }
+      ],
+      "final": [
+        {
+          "id": 459,
+          "sort_order": 1,
+          "type": "multiple_choice",
+          "stem": "【2007年311真题29】在美国公立学校发展史上做出杰出贡献，并被誉为“美国公立学校之父”的教育家是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 460,
+          "sort_order": 2,
+          "type": "multiple_choice",
+          "stem": "【2008年311真题25】《美国宪法修正案》第10条规定：“凡是宪法未曾给予联邦而又未曾限制给予各州的权力，都是保留给各州或人民的。”在此",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 461,
+          "sort_order": 3,
+          "type": "multiple_choice",
+          "stem": "【2008年311真题27】1862年，美国林肯总统批准了《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类学院被称为（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 462,
+          "sort_order": 4,
+          "type": "multiple_choice",
+          "stem": "【2011年311真题26】19世纪30年代，美国公立学校运动的主要内容之一是兴办（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 463,
+          "sort_order": 5,
+          "type": "multiple_choice",
+          "stem": "【2015年311真题31】下列表述中，不符合贺拉斯·曼关于美国公立学校教育目的与作用理解的是（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 464,
+          "sort_order": 6,
+          "type": "multiple_choice",
+          "stem": "【2016年311真题30】美国公立初等教育在19世纪上半叶发展与进步的主要表现是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        },
+        {
+          "id": 465,
+          "sort_order": 7,
+          "type": "multiple_choice",
+          "stem": "【2019年311真题31】1862年，美国总统林肯批准实施《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类学院被称为（）",
+          "answer": "{\"correct_option_id\": \"C\"}"
+        },
+        {
+          "id": 466,
+          "sort_order": 8,
+          "type": "multiple_choice",
+          "stem": "以下哪个属于美国18世纪中等教育的学校类型（）",
+          "answer": "{\"correct_option_id\": \"A\"}"
+        },
+        {
+          "id": 467,
+          "sort_order": 9,
+          "type": "multiple_choice",
+          "stem": "将师范教育看作提高公立学校教育的重要手段，倡议创设师范学校来培养教师的教育家是（）",
+          "answer": "{\"correct_option_id\": \"B\"}"
+        }
+      ]
+    },
+    "38": {
+      "title": "第六节日本近代教育",
+      "before_active": 0,
+      "after_active": 1,
+      "events": [
+        {
+          "action": "insert",
+          "id": 468,
+          "palace_id": 38,
+          "sort_order": 1,
+          "stem": "【2009年311真题29】1886年，日本明治政府颁布的《中学校令》中，将中学分为（）",
+          "answer": {
+            "correct_option_id": "D"
+          }
+        }
+      ],
+      "final": [
+        {
+          "id": 468,
+          "sort_order": 1,
+          "type": "multiple_choice",
+          "stem": "【2009年311真题29】1886年，日本明治政府颁布的《中学校令》中，将中学分为（）",
+          "answer": "{\"correct_option_id\": \"D\"}"
+        }
+      ]
+    }
+  },
+  "events": [
+    {
+      "action": "update",
+      "id": 5,
+      "palace_id": 27,
+      "sort_order": 1,
+      "stem": "简述17~18世纪英国教育发展的主要特点。",
+      "answer": {
+        "reference_answer": "①教育发展十分缓慢，学校教育主要沿袭文艺复兴和宗教改革形成的传统；②初等教育一直由国教会掌管；③中等教育主要是富家子弟的升学预备教育，以文法学校和公学为主；④高等教育始于中世纪后期牛津大学的设立，到17世纪规模扩大、经济宽裕、学术氛围浓厚；⑤科学研究成果渗入教学内容，逐渐重视自然科学和实用学科。"
+      }
+    },
+    {
+      "action": "update",
+      "id": 6,
+      "palace_id": 27,
+      "sort_order": 2,
+      "stem": "【2008年311真题23】在家庭教育和学校教育孰优孰劣问题上，认为家庭教育比学校教育优越的西方教育家是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 7,
+      "palace_id": 27,
+      "sort_order": 3,
+      "stem": "【2008年311真题26】19世纪中后期，英国全日制大学以校内或校外讲座的形式，向社会中下层及女子提供更多接受高等教育",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 8,
+      "palace_id": 27,
+      "sort_order": 4,
+      "stem": "【2011年311真题28】主张教育目的是“为完满生活做准备”，反对英国古典主义教育传统的教育家是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "update",
+      "id": 9,
+      "palace_id": 27,
+      "sort_order": 5,
+      "stem": "【2012年311真题28】17~18世纪英国的公学采用寄宿制，以升学为主要目标，具有大学预科的性质。这种“公学”的含义",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 10,
+      "palace_id": 27,
+      "sort_order": 6,
+      "stem": "【2013年311真题26】下列表述中，体现洛克绅士教育主张的是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 11,
+      "palace_id": 27,
+      "sort_order": 7,
+      "stem": "【2015年311真题27】在17世纪英国教育家洛克所设计的教育体系中，处于前提和基础地位的教育活动是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 12,
+      "palace_id": 27,
+      "sort_order": 8,
+      "stem": "【2015年311真题29】19世纪前半期，英国兴起的城市学院运动在较大程度上革新了英国高等教育传统，此类学院在教育实践",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 13,
+      "palace_id": 27,
+      "sort_order": 9,
+      "stem": "【2017年311真题29】17至18世纪，英国初等学校的教育对象主要是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 14,
+      "palace_id": 27,
+      "sort_order": 10,
+      "stem": "【2018年311真题27】17世纪，以爱丁堡大学为代表的苏格兰大学与牛津大学、剑桥大学相比，更重视（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "update",
+      "id": 15,
+      "palace_id": 27,
+      "sort_order": 11,
+      "stem": "【2019年311真题29】洛克的绅士教育理论认为，一位合格绅士最重要的品质是（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 16,
+      "palace_id": 27,
+      "sort_order": 12,
+      "stem": "【2019年311真题32】1870年《福斯特法案》的颁布与实施在英国教育史上具有重大意义，标志着英国（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 17,
+      "palace_id": 27,
+      "sort_order": 13,
+      "stem": "【2021年311真题29】相对于17~18世纪的牛津大学和剑桥大学而言，同一历史时期以爱丁堡大学、格拉斯哥大学等为代表",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "update",
+      "id": 18,
+      "palace_id": 27,
+      "sort_order": 14,
+      "stem": "【2022年311真题29】19世纪上半期，英国新大学运动开始的标志是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 19,
+      "palace_id": 27,
+      "sort_order": 15,
+      "stem": "【2024年311真题27】在19世纪英国高等教育的发展中，体现大学与社会加强联系、高等教育下移以及大学教学形式与课程变",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 20,
+      "palace_id": 27,
+      "sort_order": 16,
+      "stem": "重视家庭教育，否定学校教育，认为教育发挥其正面作用的场所并不在学校的是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 21,
+      "palace_id": 27,
+      "sort_order": 17,
+      "stem": "高度评价教育在人的形成中的重大作用，认为人的好坏或者有用无用，“十之八九都由他们所受的教育决定”的思想家是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 22,
+      "palace_id": 27,
+      "sort_order": 18,
+      "stem": "洛克在《教育漫话》中，第一次加以论述的问题是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 350,
+      "palace_id": 28,
+      "sort_order": 1,
+      "stem": "【2008年311真题24】在法国启蒙教育思想的影响下，18世纪后期德国出现了采用“适应自然”的教学方式，注重实用性和儿",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 351,
+      "palace_id": 28,
+      "sort_order": 2,
+      "stem": "【2009年311真题27】下列选项中，不属于法国大革命时期教育改革计划所体现的教育观念是（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 352,
+      "palace_id": 28,
+      "sort_order": 3,
+      "stem": "【2011年311真题29】近代法国中央集权式教育管理体制确立的标志是拿破仑第一帝国时期设立的（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 291,
+      "palace_id": 28,
+      "sort_order": 4,
+      "stem": "【2012年311真题29】拿破仑执政时期所建立的帝国大学实质上是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 353,
+      "palace_id": 28,
+      "sort_order": 5,
+      "stem": "【2014年311真题28】法国资产阶级革命时期，雷佩尔提提出的为接受所有适龄儿童入学受教而创设的教育机构是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "update",
+      "id": 354,
+      "palace_id": 28,
+      "sort_order": 6,
+      "stem": "【2015年311真题28】法兰西第一帝国时期拿破仑十分重视技术教育和专门学校的发展，曾被其喻为“能下金蛋的母鸡”的教育",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 355,
+      "palace_id": 28,
+      "sort_order": 7,
+      "stem": "【2015年311真题30】教育思想表现出鲜明的民主性，认为天才、才能和美德出自茅舍的可能要比出自宫廷的多得难以计算的法",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 292,
+      "palace_id": 28,
+      "sort_order": 8,
+      "stem": "【2019年311真题30】拿破仑第一帝国政府重视发展中等教育以培养帝国官吏和行政管理人员，其实施中等教育的主要机构是（",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "update",
+      "id": 293,
+      "palace_id": 28,
+      "sort_order": 9,
+      "stem": "【2020年311真题29】1896年法国《国立大学组织法》的颁布与实施标志着（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 445,
+      "palace_id": 28,
+      "sort_order": 10,
+      "stem": "【2025年311真题30】19世纪80年代，为促进国民教育实现义务、免费和世俗化发展，法国政府所采取的主要教育措施是（",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 446,
+      "palace_id": 28,
+      "sort_order": 11,
+      "stem": "法国大革命中哪一个法案提出建立“国家科学与艺术研究协会”，影响了拿破仑时期的帝国大学（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 447,
+      "palace_id": 28,
+      "sort_order": 12,
+      "stem": "认为人人都是通过感官获得知识，从而获得精神的发展，人人都有获取同样知识、达到同样成就的能力，人人都有享受中高等教育的权利",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 448,
+      "palace_id": 28,
+      "sort_order": 13,
+      "stem": "深刻揭露封建专制剥夺人民受教育的机会、利用教育愚弄人民、扼杀人民中大量天才的事实的思想家是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 449,
+      "palace_id": 28,
+      "sort_order": 14,
+      "stem": "设想了按照年龄划分的三级教育制度：5~10岁、10~16岁、16岁以上，提出各阶段的学习都要注重本国语和科学学科的思想家",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "soft_delete",
+      "id": 319,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "soft_delete",
+      "id": 356,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "update",
+      "id": 339,
+      "palace_id": 29,
+      "sort_order": 1,
+      "stem": "【2007年311真题27】1810年，洪堡创办的对德国高等教育具有重要影响的大学是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 340,
+      "palace_id": 29,
+      "sort_order": 2,
+      "stem": "【2013年311真题28】19世纪德国教育家洪堡推动新大学运动，创建了柏林大学办学模式，为大学增添了（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 341,
+      "palace_id": 29,
+      "sort_order": 3,
+      "stem": "【2014年311真题29】受卢梭自然主义教育思想的影响，18世纪后期在德国出现的注重教学内容的实用性、寓教学于游戏和活",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "update",
+      "id": 342,
+      "palace_id": 29,
+      "sort_order": 4,
+      "stem": "【2022年311真题28】19世纪后半期，德国中等教育改革与发展的主题是大力发展（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "update",
+      "id": 283,
+      "palace_id": 29,
+      "sort_order": 5,
+      "stem": "【2024年311真题26】18世纪的普鲁士虽然在政治经济上落后于英、法等国，但在教育发展上却独树一帜、颇具特色。其主要",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 290,
+      "palace_id": 29,
+      "sort_order": 6,
+      "stem": "【2025年311真题26】下列选项中，符合德国教育家第斯多惠关于形式教育与实质教育基本观点的是（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 450,
+      "palace_id": 29,
+      "sort_order": 7,
+      "stem": "1694年建立的欧洲第一所新式大学是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 451,
+      "palace_id": 29,
+      "sort_order": 8,
+      "stem": "提出教育的最高目的在于激发学生为真善美服务的主动性的思想家是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 452,
+      "palace_id": 29,
+      "sort_order": 9,
+      "stem": "以下关于德国17~18世纪“骑士学院”的说法错误的是（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 453,
+      "palace_id": 29,
+      "sort_order": 10,
+      "stem": "19世纪德国主要负责传授自然科学知识和历史科学知识的中等教育机构是（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "update",
+      "id": 346,
+      "palace_id": 29,
+      "sort_order": 11,
+      "stem": "较早由世俗政权掌握教育事业的国家是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 454,
+      "palace_id": 29,
+      "sort_order": 12,
+      "stem": "18世纪后期，在夸美纽斯、卢梭等人的教育思想影响下出现的德国新式学校是（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "soft_delete",
+      "id": 284,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "soft_delete",
+      "id": 343,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "soft_delete",
+      "id": 344,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "soft_delete",
+      "id": 345,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "soft_delete",
+      "id": 347,
+      "reason": "not_in_authoritative_ch5_set"
+    },
+    {
+      "action": "insert",
+      "id": 455,
+      "palace_id": 35,
+      "sort_order": 1,
+      "stem": "【2010年311真题32】“如果现在在大学里有医学系甚至有财经系，而没有教育系，那么这只是表明，直到现在人对他的身体和",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 456,
+      "palace_id": 35,
+      "sort_order": 2,
+      "stem": "【2022年311真题30】关于教育学的学科性质，乌申斯基的基本看法是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 457,
+      "palace_id": 35,
+      "sort_order": 3,
+      "stem": "以下哪项不属于彼得一世改革时创立的学校（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 458,
+      "palace_id": 35,
+      "sort_order": 4,
+      "stem": "以下哪项不符合乌申斯基的教育观点（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 459,
+      "palace_id": 37,
+      "sort_order": 1,
+      "stem": "【2007年311真题29】在美国公立学校发展史上做出杰出贡献，并被誉为“美国公立学校之父”的教育家是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 460,
+      "palace_id": 37,
+      "sort_order": 2,
+      "stem": "【2008年311真题25】《美国宪法修正案》第10条规定：“凡是宪法未曾给予联邦而又未曾限制给予各州的权力，都是保留给",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 461,
+      "palace_id": 37,
+      "sort_order": 3,
+      "stem": "【2008年311真题27】1862年，美国林肯总统批准了《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类学",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 462,
+      "palace_id": 37,
+      "sort_order": 4,
+      "stem": "【2011年311真题26】19世纪30年代，美国公立学校运动的主要内容之一是兴办（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 463,
+      "palace_id": 37,
+      "sort_order": 5,
+      "stem": "【2015年311真题31】下列表述中，不符合贺拉斯·曼关于美国公立学校教育目的与作用理解的是（）",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 464,
+      "palace_id": 37,
+      "sort_order": 6,
+      "stem": "【2016年311真题30】美国公立初等教育在19世纪上半叶发展与进步的主要表现是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 465,
+      "palace_id": 37,
+      "sort_order": 7,
+      "stem": "【2019年311真题31】1862年，美国总统林肯批准实施《莫雷尔法案》，要求各州开办或资助农业和机械工艺类学院。这类",
+      "answer": {
+        "correct_option_id": "C"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 466,
+      "palace_id": 37,
+      "sort_order": 8,
+      "stem": "以下哪个属于美国18世纪中等教育的学校类型（）",
+      "answer": {
+        "correct_option_id": "A"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 467,
+      "palace_id": 37,
+      "sort_order": 9,
+      "stem": "将师范教育看作提高公立学校教育的重要手段，倡议创设师范学校来培养教师的教育家是（）",
+      "answer": {
+        "correct_option_id": "B"
+      }
+    },
+    {
+      "action": "insert",
+      "id": 468,
+      "palace_id": 38,
+      "sort_order": 1,
+      "stem": "【2009年311真题29】1886年，日本明治政府颁布的《中学校令》中，将中学分为（）",
+      "answer": {
+        "correct_option_id": "D"
+      }
+    }
+  ]
+}

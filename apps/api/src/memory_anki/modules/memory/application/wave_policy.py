@@ -219,3 +219,73 @@ def is_formal_queue_eligible(schedule_source: str | None, *, has_memory: bool) -
     if source == SCHEDULE_UNINITIALIZED:
         return False
     return True
+
+
+# Freestyle progress scopes (mutually exclusive buckets on a node).
+PROGRESS_SCOPE_OVERDUE = "overdue"
+PROGRESS_SCOPE_DUE = "due"
+PROGRESS_SCOPE_CALENDAR_TODAY = "calendar_today"
+PROGRESS_SCOPE_REINFORCEMENT = "reinforcement"
+PROGRESS_SCOPE_NEW = "new"
+
+PROGRESS_SCOPES = frozenset(
+    {
+        PROGRESS_SCOPE_OVERDUE,
+        PROGRESS_SCOPE_DUE,
+        PROGRESS_SCOPE_CALENDAR_TODAY,
+        PROGRESS_SCOPE_REINFORCEMENT,
+        PROGRESS_SCOPE_NEW,
+    }
+)
+
+# Default freestyle set: clock-due formal work + same-day restudy + first-learn.
+# Calendar-today (not yet clock-due) stays opt-in.
+DEFAULT_PROGRESS_SCOPES: tuple[str, ...] = (
+    PROGRESS_SCOPE_OVERDUE,
+    PROGRESS_SCOPE_DUE,
+    PROGRESS_SCOPE_REINFORCEMENT,
+    PROGRESS_SCOPE_NEW,
+)
+
+
+def resolve_progress_bucket(
+    *,
+    schedule_source: str | None,
+    has_memory: bool,
+    due_at: datetime | None,
+    now: datetime,
+    formal_due: bool,
+    reinforcement_due: bool,
+    calendar_today_due: bool,
+) -> str | None:
+    """Map a projected node into at most one freestyle progress bucket.
+
+    Buckets are mutually exclusive (priority: reinforcement > new > overdue >
+    due > calendar_today). Content-changed and not-yet-actionable nodes return
+    None and never enter freestyle mind-map units.
+    """
+    source = schedule_source or SCHEDULE_UNINITIALIZED
+    if source == SCHEDULE_CONTENT_CHANGED:
+        return None
+    if reinforcement_due or source == SCHEDULE_REINFORCEMENT:
+        return PROGRESS_SCOPE_REINFORCEMENT if reinforcement_due else None
+    if not has_memory and formal_due:
+        return PROGRESS_SCOPE_NEW
+    if not formal_due and not calendar_today_due:
+        return None
+    if due_at is not None and has_memory:
+        today = local_date_of(now)
+        due_day = local_date_of(due_at)
+        if formal_due and due_day < today:
+            return PROGRESS_SCOPE_OVERDUE
+        if formal_due and due_at <= now and due_day == today:
+            return PROGRESS_SCOPE_DUE
+        # formal_due with due_day == today but due_at slightly in the future should
+        # not happen; treat clock-due on a past second of today as due.
+        if formal_due and due_at <= now:
+            return PROGRESS_SCOPE_DUE
+    if calendar_today_due:
+        return PROGRESS_SCOPE_CALENDAR_TODAY
+    if formal_due and not has_memory:
+        return PROGRESS_SCOPE_NEW
+    return None

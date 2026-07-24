@@ -90,6 +90,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "review_queue_view_settings",
     "time_record_tags",
     "freestyle_feed_config",
+    "mark_color_labels",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

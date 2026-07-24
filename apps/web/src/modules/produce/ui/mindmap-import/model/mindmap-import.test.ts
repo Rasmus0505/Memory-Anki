@@ -88,6 +88,27 @@ describe('mindmap import helpers', () => {
     expect(text).toContain('磷脂双分子层')
   })
 
+  it('writes ankiRole from source tree into editor node data', () => {
+    const doc = buildEditorDocFromSourceTree({
+      title: '章节',
+      children: [
+        {
+          text: '正面问题',
+          ankiRole: 'front',
+          children: [{ text: '反面答案', ankiRole: 'back', children: [] }],
+        },
+      ],
+    })
+    expect(doc.root?.children?.[0]?.data).toMatchObject({
+      text: '正面问题',
+      ankiRole: 'front',
+    })
+    expect(doc.root?.children?.[0]?.children?.[0]?.data).toMatchObject({
+      text: '反面答案',
+      ankiRole: 'back',
+    })
+  })
+
   it('applies replace and creates undo snapshot', () => {
     const editorState = buildEditorState()
     const result = applyImportedEditorState({

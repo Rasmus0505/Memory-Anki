@@ -41,6 +41,12 @@ export type NodeCardData = MindMapNode & {
   ) => void
   selectionToolbarActions?: SelectionToolbarAction[]
   selectionToolbarPreferPosition?: SelectionToolbarPreferPosition
+  /**
+   * Host-owned English interaction mode: clickable words + long-press selection.
+   * Canvas stays free of dictionary/API details; host supplies the word handler.
+   */
+  englishInteractionActive?: boolean
+  onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
 }
 
 export const MEASURE_DELTA_PX = 1
@@ -92,6 +98,59 @@ export function getMouseFeedbackPoint(event?: MouseEvent) {
         y: event.clientY,
       }
     : undefined
+}
+
+/** Display/edit text classes shared by NodeCard (English-safe wrapping). */
+export function buildNodeCardTextClassNames(options: {
+  isRoot: boolean
+  depth: number
+  readonly: boolean
+  concealed: boolean
+  englishInteractionActive: boolean
+  mode: 'display' | 'edit'
+}): string {
+  const wrap = 'break-words whitespace-pre-wrap'
+  const size = options.isRoot
+    ? 'text-[14px] font-semibold leading-5'
+    : options.depth === 1
+      ? 'text-[13px] font-medium leading-[17px]'
+      : 'text-[12.5px] font-normal leading-[17px]'
+  if (options.mode === 'edit') {
+    return [options.isRoot ? 'text-center' : 'text-left', size, wrap].join(' ')
+  }
+  return [
+    'w-full appearance-none border-0 bg-transparent p-0',
+    wrap,
+    options.englishInteractionActive ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
+    options.concealed ? 'blur-[3px]' : '',
+    !options.englishInteractionActive && (options.concealed || !options.readonly) ? 'select-none' : '',
+    options.isRoot ? `${size} text-zinc-900 text-center` : `text-left ${size}`,
+    !options.isRoot && options.depth === 1 ? 'text-zinc-800' : '',
+    !options.isRoot && options.depth !== 1 ? 'text-zinc-700' : '',
+  ].filter(Boolean).join(' ')
+}
+
+export function buildNodeCardContainerClassNames(options: {
+  isRoot: boolean
+  markFill: string | null
+  selectedCls: string
+  dropHighlightCls: string
+  previewAdopt: boolean
+  placeholder: boolean
+  outlineTones: Set<string>
+}): string {
+  return [
+    'flex items-center rounded-xl border',
+    options.markFill ? '' : 'bg-white',
+    'transition-[box-shadow,opacity,transform,background-color,border-color] duration-100',
+    options.isRoot ? 'border-zinc-300 shadow-sm justify-center' : 'border-zinc-200 shadow-sm',
+    options.selectedCls,
+    options.dropHighlightCls,
+    options.previewAdopt ? 'ring-1 ring-blue-400/40' : '',
+    options.placeholder ? 'ring-2 ring-amber-400/35' : '',
+    options.outlineTones.has('danger') ? 'outline outline-2 outline-rose-400/55' : '',
+    options.outlineTones.has('info') ? 'outline outline-2 outline-sky-400/70' : '',
+  ].filter(Boolean).join(' ')
 }
 
 export function getElementFeedbackPoint(element: HTMLElement | null) {

@@ -471,7 +471,7 @@ export function ReviewSessionContainer({
           checkpointNodeUids={session.checkpointNodeUids ?? []}
           reviewScopeNodeUids={frozenDueNodeUids}
           // Classic flip for every card (hidden → 待回忆 → content), including non-due.
-          // Due scope only soft-dims + gates FSRS single ratings — same as freestyle.
+          // Due scope only soft-dims non-due cards; all cards stay rateable.
           autoRevealNonDueCards={false}
           displayMode={displayMode}
           modeSyncVersion={modeSyncVersion}

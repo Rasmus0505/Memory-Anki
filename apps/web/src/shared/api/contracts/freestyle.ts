@@ -19,6 +19,14 @@ export type FreestyleDuePolicy =
   | 'due_only'
   | 'all_content_due_weighted'
 
+/** Mutually exclusive freestyle progress buckets (multi-select). */
+export type FreestyleProgressScope =
+  | 'overdue'
+  | 'due'
+  | 'calendar_today'
+  | 'reinforcement'
+  | 'new'
+
 export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces'
 
 export type FreestyleWithinPalaceOrder = 'tree_order' | 'deterministic_shuffle'
@@ -43,7 +51,15 @@ export interface FreestyleFeedConfig {
   specific_palace_ids: number[]
   question_type: FreestyleQuestionTypeFilter
   weak_quiz_priority: boolean
-  /** When true, formal nodes due later today (local calendar) enter freestyle before clock due. */
+  /**
+   * Which memory progress buckets enter freestyle mind-map units.
+   * Multi-select: overdue / due / calendar_today / reinforcement / new.
+   */
+  progress_scopes: FreestyleProgressScope[]
+  /**
+   * Derived mirror of progress_scopes including calendar_today.
+   * Kept for older clients; prefer progress_scopes.
+   */
   include_calendar_today_due: boolean
   seed: number
 }

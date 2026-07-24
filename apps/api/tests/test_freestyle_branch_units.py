@@ -529,17 +529,41 @@ def test_sanitize_feed_config_bounds():
     assert config["node_limit"] == 50
     assert config["queue_length"] == 5
     assert config["seed"] == 1
-    # Both disabled → re-enable both
-    assert config["content"]["mindmap_branch"] is True
-    assert config["content"]["quiz_question"] is True
+    # anki_card still defaults on → do not force-re-enable the other two
+    assert config["content"]["mindmap_branch"] is False
+    assert config["content"]["anki_card"] is True
+    assert config["content"]["quiz_question"] is False
     assert config["include_calendar_today_due"] is False
+    assert config["progress_scopes"] == [
+        "overdue",
+        "due",
+        "reinforcement",
+        "new",
+    ]
 
 
-def test_sanitize_feed_config_calendar_today_opt_in():
-    assert sanitize_feed_config({}).get("include_calendar_today_due") is False
-    assert (
-        sanitize_feed_config({"include_calendar_today_due": True})[
-            "include_calendar_today_due"
-        ]
-        is True
-    )
+def test_sanitize_feed_config_progress_scopes():
+    empty = sanitize_feed_config({})
+    assert empty.get("include_calendar_today_due") is False
+    assert empty["progress_scopes"] == [
+        "overdue",
+        "due",
+        "reinforcement",
+        "new",
+    ]
+
+    with_flag = sanitize_feed_config({"include_calendar_today_due": True})
+    assert with_flag["include_calendar_today_due"] is True
+    assert "calendar_today" in with_flag["progress_scopes"]
+
+    only_calendar = sanitize_feed_config({"progress_scopes": ["calendar_today"]})
+    assert only_calendar["progress_scopes"] == ["calendar_today"]
+    assert only_calendar["include_calendar_today_due"] is True
+
+    empty_scopes = sanitize_feed_config({"progress_scopes": []})
+    assert empty_scopes["progress_scopes"] == [
+        "overdue",
+        "due",
+        "reinforcement",
+        "new",
+    ]

@@ -1,6 +1,13 @@
 ﻿import { act, renderHook, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import {
+  buildMindMapEditorDraftKey,
+  readMindMapEditorDraft,
+  resetMindMapEditorDraftStoreForTest,
+  stableMindMapEditorContentFingerprint,
+  writeMindMapEditorDraft,
+} from '@/shared/persistence/mindmapEditorDraftStore'
 import { useMindMapDocumentSession } from './useMindMapDocumentSession'
 
 interface TestMeta {
@@ -91,6 +98,16 @@ function renderPersistedEditorHook(
 }
 
 describe('useMindMapDocumentSession', () => {
+  beforeEach(async () => {
+    await resetMindMapEditorDraftStoreForTest()
+  })
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    await resetMindMapEditorDraftStoreForTest()
+  })
+
   it('classifies an initial fetch failure as a load error', async () => {
     const { result } = renderHook(() =>
       useMindMapDocumentSession<TestResponse, TestMeta>({
@@ -109,11 +126,6 @@ describe('useMindMapDocumentSession', () => {
     })
     expect(result.current.error).toContain('not found')
     expect(result.current.saveStatus).toBe('error')
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
   })
 
   it('ignores stale load responses after the entity changes', async () => {
@@ -473,6 +485,180 @@ describe('useMindMapDocumentSession', () => {
     expect(saver).toHaveBeenCalledTimes(4)
     expect(result.current.error).toBeNull()
     vi.useRealTimers()
+  })
+
+  it('saves the latest pending snapshot after an in-flight save finishes (rapid edits 1→2→3)', async () => {
+    const firstSave = createDeferred<TestResponse>()
+    let saveCalls = 0
+    const saver = vi.fn((id: number, data: MindMapEditorState) => {
+      saveCalls += 1
+      if (saveCalls === 1) {
+        return firstSave.promise.then(() => ({
+          entity: { id, title: 'saved-1' },
+          ...data,
+          editor_fingerprint: 'fp-after-1',
+        }))
+      }
+      return Promise.resolve({
+        entity: { id, title: `saved-${saveCalls}` },
+        ...data,
+        editor_fingerprint: `fp-after-${saveCalls}`,
+      })
+    })
+
+    const { result } = renderHook(() =>
+      useMindMapDocumentSession<TestResponse, TestMeta>({
+        entityId: 9,
+        fetcher: vi.fn(async () => buildResponse(9, '初始')),
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.editorState).not.toBeNull()
+    })
+
+    vi.useFakeTimers()
+    act(() => {
+      result.current.setEditorState(buildResponse(9, '修改一'))
+      vi.advanceTimersByTime(450)
+    })
+    await act(async () => {
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(1)
+    expect(
+      (saver.mock.calls[0]?.[1].editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text,
+    ).toBe('修改一')
+
+    act(() => {
+      result.current.setEditorState(buildResponse(9, '修改二'))
+      result.current.setEditorState(buildResponse(9, '修改三'))
+    })
+
+    await act(async () => {
+      firstSave.resolve({
+        entity: { id: 9, title: 'saved-1' },
+        ...buildResponse(9, '修改一'),
+        editor_fingerprint: 'fp-after-1',
+      })
+      await flushAsyncWork()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+      await flushAsyncWork()
+    })
+
+    expect(saver).toHaveBeenCalledTimes(2)
+    expect(
+      (saver.mock.calls[1]?.[1].editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text,
+    ).toBe('修改三')
+    vi.useRealTimers()
+  })
+
+  it('writes a local draft on edit and recovers it when server is older', async () => {
+    const draftKey = buildMindMapEditorDraftKey('persisted-mindmap', 11)
+    const recovered = buildResponse(11, '本地未同步的修改三')
+    await writeMindMapEditorDraft({
+      resourceKey: draftKey,
+      snapshot: recovered,
+      changeVersion: 3,
+      baseEditorFingerprint: 'fingerprint-11-初始',
+      contentFingerprint: stableMindMapEditorContentFingerprint(recovered),
+    })
+
+    const secondSave = createDeferred<TestResponse>()
+    const saver = vi.fn((id: number, data: MindMapEditorState) => {
+      return secondSave.promise.then(() => ({
+        entity: { id, title: `saved-${id}` },
+        ...data,
+        editor_fingerprint: 'fp-recovered',
+      }))
+    })
+
+    const { result } = renderHook(() =>
+      useMindMapDocumentSession<TestResponse, TestMeta>({
+        entityId: 11,
+        fetcher: vi.fn(async () => buildResponse(11, '初始')),
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(
+        (result.current.editorState?.editor_doc as { root?: { data?: { text?: string } } })?.root?.data
+          ?.text,
+      ).toBe('本地未同步的修改三')
+    })
+    await waitFor(() => {
+      expect(saver).toHaveBeenCalled()
+    })
+    // Recovery must re-save the draft to the server (not only show it in memory).
+    expect(
+      (saver.mock.calls[0]?.[1].editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text,
+    ).toBe('本地未同步的修改三')
+    expect(result.current.hasUnsavedChanges || result.current.isSaving).toBe(true)
+
+    await act(async () => {
+      secondSave.resolve({
+        entity: { id: 11, title: 'saved-11' },
+        ...recovered,
+        editor_fingerprint: 'fp-recovered',
+      })
+      await flushAsyncWork()
+    })
+  })
+
+  it('persists a draft immediately when editing so pagehide cannot lose later edits', async () => {
+    const { result } = renderHook(() =>
+      useMindMapDocumentSession<TestResponse, TestMeta>({
+        entityId: 12,
+        fetcher: vi.fn(async () => buildResponse(12, '初始')),
+        saver: vi.fn(async (id, data) => ({
+          entity: { id, title: `saved-${id}` },
+          ...data,
+        })),
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.editorState).not.toBeNull()
+    })
+
+    act(() => {
+      result.current.setEditorState(buildResponse(12, '即时草稿'))
+    })
+
+    await waitFor(async () => {
+      const draft = await readMindMapEditorDraft(buildMindMapEditorDraftKey('persisted-mindmap', 12))
+      expect(
+        (draft?.snapshot.editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text,
+      ).toBe('即时草稿')
+    })
   })
 })
 

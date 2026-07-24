@@ -12,7 +12,7 @@ import {
   moveCardToTail,
   moveRemainingPalaceToTail,
   mutePalace,
-  placeRestudyCardAtTail,
+  placeRestudyCardWithMaxGap,
   readFreestyleFeedConfig,
   readQueueState,
   resolveRebuildIndex,
@@ -48,6 +48,12 @@ export function useImmersiveQueue() {
   const queueStateRef = useRef(queueState)
   const configRef = useRef(config)
   const currentIndexRef = useRef(0)
+  /**
+   * Weak-rated units waiting for gap re-insertion. Placement runs only after the
+   * learner leaves the unit so the viewport is never reordered under them.
+   * Value is the index at settle time (anchor for max-gap insert).
+   */
+  const pendingRestudyByIdRef = useRef<Map<string, number>>(new Map())
   cardsRef.current = cards
   queueStateRef.current = queueState
   configRef.current = config
@@ -72,8 +78,9 @@ export function useImmersiveQueue() {
         /** Prefer keeping this card under the viewport after rebuild. */
         preferCardId?: string | null
         /**
-         * Weak-rated unit: leave out of completedIds (caller), then pin to the
-         * tail of the rebuilt queue for end-of-batch restudy.
+         * Weak-rated unit still due for same-session restudy: leave out of
+         * completedIds (caller). Gap re-insertion is applied when the learner
+         * leaves the unit — not here under the viewport.
          */
         restudyCardId?: string | null
       },
@@ -138,10 +145,14 @@ export function useImmersiveQueue() {
         const restudyCardId = options?.restudyCardId
           ? String(options.restudyCardId).trim()
           : ''
-        // Weak unit goes to the tail only after the learner has already left it.
-        // Never reorder under the viewport — that used to feel like auto-flip.
+        // Weak unit: keep position while still under the viewport. If the learner
+        // already left, re-insert with max intervening gap (not full queue tail).
         if (restudyCardId && userCardId && userCardId !== restudyCardId) {
-          nextCards = placeRestudyCardAtTail(nextCards, restudyCardId)
+          const anchor = pendingRestudyByIdRef.current.get(restudyCardId)
+          nextCards = placeRestudyCardWithMaxGap(nextCards, restudyCardId, {
+            fromIndex: typeof anchor === 'number' ? anchor : undefined,
+          })
+          pendingRestudyByIdRef.current.delete(restudyCardId)
         }
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
@@ -149,14 +160,16 @@ export function useImmersiveQueue() {
         cardsRef.current = nextCards
         setCards(nextCards)
         setPhaseStats(response.phase_stats || {})
-        setCurrentIndex((index) =>
-          resolveRebuildIndex({
+        setCurrentIndex((index) => {
+          const resolved = resolveRebuildIndex({
             nextCards,
             preferCardId,
             userCardId,
             fallbackIndex: index,
-          }),
-        )
+          })
+          currentIndexRef.current = resolved
+          return resolved
+        })
       } catch (err) {
         if (operationIdRef.current !== operationId) return
         // Silent rebuild failures must not blank the feed mid-session.
@@ -239,13 +252,24 @@ export function useImmersiveQueue() {
    * due projections, but keep the card under the viewport so the user can review
    * results and advance manually. Do not use for quiz — use acknowledgeCard.
    *
-   * When ``restudy`` is true (忘记/困难 still on this unit), skip completedIds.
-   * Never auto-advance — the learner must swipe / 下一题 themselves. The unit is
-   * only moved to the queue tail once they have already left it (see buildQueue).
+   * When ``restudy`` is true (忘记/困难 still on this unit), skip completedIds so
+   * the round cannot end until the unit is rated 记得/轻松. Never auto-advance.
+   * Re-insert with at most RESTUDY_MAX_INTERVENING other cards after the learner
+   * leaves (see goToIndex / skip paths).
    */
   const completeCard = useCallback(
     (cardId: string, options?: { restudy?: boolean }) => {
+      // Pin the settled unit under the viewport before the async rebuild returns.
+      // Do not bump currentIndex forward under any settle path.
+      const settledIndex = cardsRef.current.findIndex((card) => card.id === cardId)
+      if (settledIndex >= 0) {
+        setCurrentIndex(settledIndex)
+        currentIndexRef.current = settledIndex
+      }
       if (options?.restudy) {
+        // Remember settle index for gap placement when the user swipes away.
+        const anchor = settledIndex >= 0 ? settledIndex : currentIndexRef.current
+        pendingRestudyByIdRef.current.set(cardId, anchor)
         void buildQueue(configRef.current, {
           preserveCompleted: true,
           completedIds: queueStateRef.current.completedIds,
@@ -255,9 +279,11 @@ export function useImmersiveQueue() {
         })
         return
       }
+      // Graduated: clear any pending restudy bookkeeping for this unit.
+      pendingRestudyByIdRef.current.delete(cardId)
       const next = persistQueueState(markCompleted(queueStateRef.current, cardId))
       // Silent rebuild refreshes due sets so later cards never open with stale FSRS scopes.
-      // preferCardId keeps the just-finished unit in place (mergeQueuePreservingHistory).
+      // preferCardId + order-preserving merge keep the finished unit in place.
       void buildQueue(configRef.current, {
         preserveCompleted: true,
         completedIds: next.completedIds,
@@ -267,6 +293,30 @@ export function useImmersiveQueue() {
     },
     [buildQueue, persistQueueState],
   )
+
+  /**
+   * Apply pending max-gap restudy placement for units the learner just left.
+   * Safe to call on every index change; no-ops when nothing is pending or when
+   * the weak unit is still under the viewport.
+   */
+  const applyPendingRestudyPlacement = useCallback((leavingCardId: string | null | undefined) => {
+    const leftId = leavingCardId ? String(leavingCardId).trim() : ''
+    if (!leftId || !pendingRestudyByIdRef.current.has(leftId)) return
+    const anchor = pendingRestudyByIdRef.current.get(leftId)
+    const previous = cardsRef.current
+    const nextCards = placeRestudyCardWithMaxGap(previous, leftId, {
+      fromIndex: typeof anchor === 'number' ? anchor : undefined,
+    })
+    pendingRestudyByIdRef.current.delete(leftId)
+    if (nextCards === previous) return
+    // If order unchanged (already correctly placed), still drop the pending flag.
+    const sameOrder =
+      nextCards.length === previous.length &&
+      nextCards.every((card, index) => card.id === previous[index]?.id)
+    if (sameOrder) return
+    cardsRef.current = nextCards
+    setCards(nextCards)
+  }, [])
 
   /**
    * Drop a card whose formal due vanished between queue build and open.
@@ -294,18 +344,27 @@ export function useImmersiveQueue() {
   )
 
   const skipCurrent = useCallback(() => {
-    const card = cardsRef.current[currentIndex]
+    const card = cardsRef.current[currentIndexRef.current]
     if (!card) return
+    // Weak-rated units: max-gap re-insert only (do not also shove to full tail).
+    const wasRestudy = pendingRestudyByIdRef.current.has(card.id)
+    applyPendingRestudyPlacement(card.id)
     const { state, action } = applySkip(queueStateRef.current, card.id)
     persistQueueState(state)
     if (action === 'hide') {
+      // Hidden: drop restudy pending so a reshuffle/rebuild can surface it again.
+      pendingRestudyByIdRef.current.delete(card.id)
       setCards((current) => current.filter((item) => item.id !== card.id))
       setCurrentIndex((index) => Math.min(index, Math.max(0, cardsRef.current.length - 2)))
       return
     }
+    if (wasRestudy) {
+      // Already re-ordered with max intervening gap; keep index so the next unit fills the slot.
+      return
+    }
     setCards((current) => moveCardToTail(current, card.id))
     // Stay at same index so next item slides into place after tail move.
-  }, [currentIndex, persistQueueState])
+  }, [applyPendingRestudyPlacement, persistQueueState])
 
   const undoLastSkip = useCallback(() => {
     const next = undoSkip(queueStateRef.current)
@@ -336,6 +395,8 @@ export function useImmersiveQueue() {
    * (and record deferred palace) so a later rebuild cannot reinsert them at the front.
    */
   const skipToNextPalace = useCallback(() => {
+    const leaving = cardsRef.current[currentIndex]
+    applyPendingRestudyPlacement(leaving?.id)
     const result = moveRemainingPalaceToTail(cardsRef.current, currentIndex)
     if (result.deferredPalaceId != null) {
       persistQueueState(deferPalace(queueStateRef.current, result.deferredPalaceId))
@@ -343,14 +404,42 @@ export function useImmersiveQueue() {
     cardsRef.current = result.cards
     setCards(result.cards)
     setCurrentIndex(result.nextIndex)
-  }, [currentIndex, persistQueueState])
+  }, [applyPendingRestudyPlacement, currentIndex, persistQueueState])
 
-  const goToIndex = useCallback((index: number) => {
-    setCurrentIndex(() => {
-      const max = Math.max(0, cardsRef.current.length - 1)
-      return Math.max(0, Math.min(index, max))
-    })
-  }, [])
+  const goToIndex = useCallback(
+    (index: number) => {
+      const previous = cardsRef.current
+      const max = Math.max(0, previous.length - 1)
+      const next = Math.max(0, Math.min(index, max))
+      const previousIndex = currentIndexRef.current
+      if (next !== previousIndex) {
+        // Capture destination by id before restudy reorders the feed.
+        const targetId = previous[next]?.id ?? null
+        const leaving = previous[previousIndex]
+        applyPendingRestudyPlacement(leaving?.id)
+        if (targetId) {
+          const reordered = cardsRef.current
+          const resolved = reordered.findIndex((card) => card.id === targetId)
+          const resolvedIndex =
+            resolved >= 0
+              ? resolved
+              : Math.max(0, Math.min(next, Math.max(0, reordered.length - 1)))
+          currentIndexRef.current = resolvedIndex
+          setCurrentIndex(resolvedIndex)
+          return
+        }
+      }
+      currentIndexRef.current = next
+      setCurrentIndex(next)
+    },
+    [applyPendingRestudyPlacement],
+  )
+
+  /** Reshuffle clears in-memory restudy anchors (new round membership). */
+  const reshuffleQueueWithRestudyClear = useCallback(() => {
+    pendingRestudyByIdRef.current.clear()
+    reshuffleQueue()
+  }, [reshuffleQueue])
 
   return {
     config,
@@ -365,7 +454,7 @@ export function useImmersiveQueue() {
     error,
     phaseStats,
     refreshQueue,
-    reshuffleQueue,
+    reshuffleQueue: reshuffleQueueWithRestudyClear,
     completeCard,
     acknowledgeCard,
     dropStaleCard,

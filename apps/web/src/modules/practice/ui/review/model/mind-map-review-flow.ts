@@ -21,9 +21,10 @@ export interface MindMapReviewFlowProps {
   revealMode?: RevealFlowMode;
   checkpointNodeUids?: string[];
   /**
-   * Frozen formal-review due UIDs. Soft-dims non-due cards and gates single FSRS
-   * ratings / weak-retry / AI scope. Does not auto-open non-due content unless
-   * autoRevealNonDueCards is explicitly true.
+   * Frozen formal-review due UIDs. Soft-dims non-due cards (opacity only);
+   * any non-root card may still receive FSRS ratings. Also scopes weak-retry /
+   * AI focus. Does not auto-open non-due content unless autoRevealNonDueCards
+   * is explicitly true.
    */
   reviewScopeNodeUids?: string[];
   /**
@@ -44,8 +45,9 @@ export interface MindMapReviewFlowProps {
   ratingTreeEditorState?: MindMapEditorState | null;
   onComplete: (payload: CompleteFlowPayload) => void | Promise<void>;
   /**
-   * Compact freestyle chrome: one-tap bulk-rate remaining due nodes with this
-   * grade and submit settlement (skips the FSRS dialog). Settlement button stays.
+   * Compact freestyle chrome: long-press the settle button to pick 忘/难/记/轻,
+   * bulk-rate remaining due nodes with that grade, and submit (skips FSRS dialog).
+   * Short click still opens normal settlement. Slide above the floating grades to cancel.
    */
   onQuickSettle?: (
     rating: MindMapRecallRating,

@@ -8,10 +8,14 @@ export { EnglishDictionaryFloat } from './EnglishDictionaryFloat'
 export { EnglishInteractiveText } from './EnglishInteractiveText'
 export {
   LOOKUP_WORD_RE,
+  DICTIONARY_PANEL_WIDTH,
+  SENTENCE_TRANSLATION_TRIGGER_WIDTH,
+  SENTENCE_TRANSLATION_TRIGGER_HEIGHT,
   normalizeLookupWord,
   canUseSpeechSynthesis,
   hasActiveTextSelection,
   extractSentenceSelection,
+  getDictionaryPartOfSpeechLabel,
   type DictionaryPanelState,
   type SentenceSelectionPayload,
   type SentenceTranslationPanelState,

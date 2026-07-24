@@ -830,6 +830,94 @@ def test_partial_branch_among_siblings_uses_node_entry_mode(db_session):
     assert set(summary["frozen_due_node_uids"]) == {"branch", "leaf"}
 
 
+def test_formal_single_rating_updates_non_due_context_card(db_session):
+    """Rating mode may score a non-frozen context card; FSRS writes, freeze unchanged."""
+    palace = Palace(
+        title="context rate",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "root"},
+                    "children": [
+                        {"data": {"uid": "a", "text": "A"}, "children": []},
+                        {"data": {"uid": "b", "text": "B"}, "children": []},
+                    ],
+                }
+            }
+        ),
+    )
+    db_session.add(palace)
+    db_session.flush()
+    _seed_due_nodes(db_session, palace.id, ["a", "b"])
+    db_session.commit()
+    # Leave b not due so formal freeze only includes a.
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=4,
+        study_session_id="seed-b",
+        operation_id="seed-b",
+        rating_scope="single",
+        source_scene="practice",
+    )
+    b_state = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    b_state.due_at = utc_now_naive() + timedelta(days=10)
+    b_state.raw_due_at = b_state.due_at
+    b_state.schedule_source = "manual"
+    db_session.commit()
+    before = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    before_due = before.due_at
+    before_stability = before.stability
+
+    row = start_or_resume_formal_review(db_session, palace.id)
+    frozen = set(json.loads(row.summary_json)["frozen_due_node_uids"])
+    assert frozen == {"a"}
+    assert "b" not in frozen
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=2,
+        study_session_id=row.id,
+        operation_id="formal-single-context",
+        rating_scope="single",
+        source_scene="formal_review",
+    )
+    assert result["affected_node_uids"] == ["b"]
+    after = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    assert after.due_at != before_due or after.stability != before_stability
+    # Completion set stays frozen — rating context cards must not expand it.
+    still_frozen = set(json.loads(row.summary_json)["frozen_due_node_uids"])
+    assert still_frozen == {"a"}
+    summary = formal_review_completion_summary(db_session, row)
+    assert summary["unrated_due_node_count"] == 1
+    assert summary["unrated_node_uids"] == ["a"]
+    # Settlement only lists frozen-scope scores; context card is absent there.
+    assert "b" not in summary["ratings"]
+    # Session evidence still records the mid-session context rating.
+    evidence = (
+        db_session.query(MindMapRecallEvent)
+        .filter_by(study_session_id=row.id, node_uid="b", palace_id=palace.id)
+        .all()
+    )
+    assert evidence and evidence[-1].rating == 2
+
+
 def test_formal_subtree_rating_updates_non_due_descendants(db_session):
     """Parent subtree in formal review must cascade to non-due / out-of-frozen nodes."""
     palace = Palace(

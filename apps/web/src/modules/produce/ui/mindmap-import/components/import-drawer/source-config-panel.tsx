@@ -171,7 +171,7 @@ export function MindMapImportSourceConfigPanel({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                若从外部复制的节点/JSON 格式有误，可复制此提示词到 ChatGPT 等工具，把内容整理成可导入 JSON 后再粘贴回来。
+                若从外部复制的节点/JSON 格式有误，可复制此提示词到 ChatGPT 等工具，把内容整理成可导入 JSON 后再粘贴回来。节点可写 ankiRole: "front" | "back"，导入后直接带正反面。
               </p>
               <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/80 p-2 text-[11px] leading-relaxed text-muted-foreground">
                 {manualImportFormatPrompt || '提示词加载中…'}
@@ -184,7 +184,7 @@ export function MindMapImportSourceConfigPanel({
                 className="min-h-[160px] rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed"
                 value={manualImportText}
                 onChange={(event) => onManualImportTextChange(event.target.value)}
-                placeholder={`{\n  "title": "根节点标题",\n  "children": [\n    { "text": "节点文字", "children": [] }\n  ]\n}`}
+                placeholder={`{\n  "title": "根节点标题",\n  "children": [\n    {\n      "text": "正面问题",\n      "ankiRole": "front",\n      "children": [\n        { "text": "反面答案", "ankiRole": "back", "children": [] }\n      ]\n    }\n  ]\n}`}
                 spellCheck={false}
               />
             </label>
@@ -198,7 +198,7 @@ export function MindMapImportSourceConfigPanel({
                 解析为脑图草稿
               </Button>
               <span className="text-xs text-muted-foreground">
-                支持：source-tree JSON、Memory Anki 导出 JSON、编辑器文档 JSON、Markdown/缩进大纲
+                支持：source-tree JSON（可含 ankiRole）、Memory Anki 导出 JSON、编辑器文档 JSON、Markdown/缩进大纲
               </span>
             </div>
           </div>

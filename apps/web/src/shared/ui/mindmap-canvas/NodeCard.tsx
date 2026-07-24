@@ -37,6 +37,8 @@ import {
   getElementFeedbackPoint,
   getMouseFeedbackPoint,
   placeContentEditableCaret,
+  buildNodeCardContainerClassNames,
+  buildNodeCardTextClassNames,
   resolveNodeRawText,
   type EditSnapshot,
   type NodeCardData,
@@ -88,10 +90,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     onExtractSelection: nodeData.onExtractSelection,
     onExtractDropPreview: nodeData.onExtractDropPreview,
   })
+  const englishInteractionActive = Boolean(nodeData.englishInteractionActive)
   const longPress = useNodeCardLongPress({
     nodeId: id,
     // While contentEditable is open, keep native text selection; long-press is for idle cards.
-    enabled: !isEditing,
+    // English mode reuses long-press for multi-word selection + AI translation.
+    enabled: !isEditing && !englishInteractionActive,
     onTouchLongPress: nodeData.onTouchLongPress,
   })
 
@@ -541,47 +545,31 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       ? 'ring-2 ring-zinc-400/70 ring-offset-1 ring-offset-white border-zinc-300'
       : ''
 
-  const containerCls = [
-    'flex items-center rounded-xl border bg-white',
-    'transition-[box-shadow,opacity,transform,background-color,border-color] duration-100',
-    isRoot ? 'border-zinc-300 shadow-sm justify-center' : 'border-zinc-200 shadow-sm',
+  const markFill = typeof visual.fillColor === 'string' && visual.fillColor.trim()
+    ? visual.fillColor.trim()
+    : null
+  const containerCls = buildNodeCardContainerClassNames({
+    isRoot,
+    markFill,
     selectedCls,
     dropHighlightCls,
-    previewAdopt ? 'ring-1 ring-blue-400/40' : '',
-    placeholder ? 'ring-2 ring-amber-400/35' : '',
-    outlineTones.has('danger') ? 'outline outline-2 outline-rose-400/55' : '',
-    outlineTones.has('info') ? 'outline outline-2 outline-sky-400/70' : '',
-  ].filter(Boolean).join(' ')
-
+    previewAdopt,
+    placeholder,
+    outlineTones,
+  })
   const nodeMode = isEditing ? 'editing' : nodeData.selected ? 'selected' : 'idle'
-
-  // Idle cards are structure-draggable; only editing / readonly need a deliberate mode change.
   const canStructureDrag = Boolean(!isEditing && !readonly)
-  const textCls = [
-    'w-full appearance-none border-0 bg-transparent p-0 break-all whitespace-pre-wrap',
-    // Idle editable text: text cursor + select-none so yellow-emphasis double-click
-    // enters edit instead of native word-select / RF drag contention.
-    readonly ? 'cursor-default' : 'cursor-text',
-    concealed ? 'blur-[3px]' : '',
-    concealed || !readonly ? 'select-none' : '',
-    isRoot
-      ? 'text-[14px] font-semibold leading-5 text-zinc-900 text-center'
-      : depth === 1
-        ? 'text-left text-[13px] font-medium leading-[17px] text-zinc-800'
-        : 'text-left text-[12.5px] font-normal leading-[17px] text-zinc-700',
-  ].filter(Boolean).join(' ')
-
+  const textOpts = { isRoot, depth, readonly, concealed, englishInteractionActive } as const
+  const textCls = buildNodeCardTextClassNames({ ...textOpts, mode: 'display' })
   const paddingCls = isRoot ? 'px-4 py-2.5' : depth === 1 ? 'px-3 py-2' : 'px-2.5 py-1.5'
-  const editorTextCls = isRoot
-    ? 'text-center text-[14px] font-semibold leading-5 break-all whitespace-pre-wrap'
-    : depth === 1
-      ? 'text-left text-[13px] font-medium leading-[17px] break-all whitespace-pre-wrap'
-      : 'text-left text-[12.5px] font-normal leading-[17px] break-all whitespace-pre-wrap'
-  const borderStyle = visual.borderColor ? { borderColor: visual.borderColor } : undefined
-  // Edit uses a thicker border than display; keep content width equal to display getNodeSize.
-  // getNodeSize already includes a safety margin so short CJK labels do not wrap early.
-  const EDIT_BORDER_EXTRA_PX = 3
-  const shellWidth = isEditing ? nodeSize.width + EDIT_BORDER_EXTRA_PX : nodeSize.width
+  const editorTextCls = buildNodeCardTextClassNames({ ...textOpts, mode: 'edit' })
+  const shellStyle = {
+    ...(visual.borderColor ? { borderColor: visual.borderColor } : {}),
+    ...(markFill ? { backgroundColor: markFill } : {}),
+  }
+  const borderStyle = Object.keys(shellStyle).length > 0 ? shellStyle : undefined
+  // Edit border is thicker; keep content width equal to display getNodeSize.
+  const shellWidth = isEditing ? nodeSize.width + 3 : nodeSize.width
 
   return (
     <div
@@ -601,7 +589,11 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         visual.highlighted ? 'ring-4 ring-warning/45 rounded-2xl' : '',
         visual.muted && !previewGhost ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
-      style={{ width: shellWidth, WebkitTouchCallout: 'none' }}
+      style={{
+        width: shellWidth,
+        // Structure long-press: no iOS callout; English mode needs native selection.
+        WebkitTouchCallout: englishInteractionActive ? 'default' : 'none',
+      }}
     >
       {longPress.longPressPending ? (
         <span
@@ -725,11 +717,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             textCls={textCls}
             displayHtml={displayHtml}
             concealed={concealed}
-            label={nodeData.label}
+            label={plainLabel}
             isRoot={isRoot}
             onClick={longPress.handleClick}
             onDoubleClick={handleDoubleClick}
             onContextMenu={longPress.handleContextMenu}
+            englishInteractionActive={englishInteractionActive}
+            onEnglishWordClick={nodeData.onEnglishWordClick}
           />
         </div>
       )}

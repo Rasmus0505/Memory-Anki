@@ -1,6 +1,7 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
+import { QuickSettleHoldButton } from "./QuickSettleHoldButton";
 import { PalaceCalibrationDrawer } from "@/modules/practice/public";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
@@ -29,18 +30,6 @@ export type {
   CompleteFlowPayload,
   MindMapReviewFlowProps,
 } from "@/modules/practice/public";
-
-const QUICK_SETTLE_OPTIONS: Array<{
-  rating: MindMapRecallRating;
-  label: string;
-  title: string;
-  variant: "destructive" | "outline" | "default" | "secondary";
-}> = [
-  { rating: 1, label: "忘", title: "一键记为忘记并结算", variant: "destructive" },
-  { rating: 2, label: "难", title: "一键记为困难并结算", variant: "outline" },
-  { rating: 3, label: "记", title: "一键记为记得并结算", variant: "default" },
-  { rating: 4, label: "轻", title: "一键记为轻松并结算", variant: "secondary" },
-];
 
 export function MindMapReviewFlow({
   modeSyncVersion = 0,
@@ -146,8 +135,9 @@ export function MindMapReviewFlow({
       directRatedUids={review.recallRatings.directRatedUids}
       sessionRatedUids={review.recallRatings.sessionRatedUids}
       rateableNodeUids={
-        // Explicit scope (formal frozen due / freestyle unit) always gates rating.
-        // Unscoped practice keeps unrestricted rating (null).
+        // Explicit scope (formal frozen due / freestyle unit) only soft-dims
+        // non-due cards. Any non-root node remains rateable.
+        // Unscoped practice keeps full opacity (null).
         Array.isArray(props.reviewScopeNodeUids) &&
         props.reviewScopeNodeUids.length > 0
           ? review.reviewNodeUids
@@ -317,48 +307,41 @@ export function MindMapReviewFlow({
                 <Bot className="size-4" />
               </Button>
               {props.onQuickSettle ? (
-                <div className="flex shrink-0 items-center gap-0.5">
-                  {QUICK_SETTLE_OPTIONS.map((option) => (
-                    <Button
-                      key={option.rating}
-                      type="button"
-                      size="sm"
-                      variant={option.variant}
-                      title={option.title}
-                      aria-label={option.title}
-                      disabled={
-                        submitting ||
-                        review.flow.feedback.completionCeremonyActive ||
-                        false
-                      }
-                      className="h-9 min-w-8 shrink-0 px-1.5 text-[11px] font-semibold sm:h-8 sm:min-w-7 sm:px-1.5"
-                      onClick={() => {
-                        void review.flow.finishFlowWithPayload(
-                          "manual_complete",
-                          (payload) => props.onQuickSettle?.(option.rating, payload),
-                        );
-                      }}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                disabled={submitting || review.flow.feedback.completionCeremonyActive || false}
-                className={cn(
-                  "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
-                  review.completeButtonClassName,
-                )}
-                onClick={() => {
-                  void review.flow.finishFlow("manual_complete");
-                }}
-              >
-                <SquareCheckBig className="mr-1 size-3.5" />
-                {review.flow.feedback.allClearReady ? "结算" : "完成"}
-              </Button>
+                <QuickSettleHoldButton
+                  disabled={
+                    submitting ||
+                    review.flow.feedback.completionCeremonyActive ||
+                    false
+                  }
+                  allClearReady={review.flow.feedback.allClearReady}
+                  className={review.completeButtonClassName}
+                  onComplete={() => {
+                    void review.flow.finishFlow("manual_complete");
+                  }}
+                  onQuickSettle={(rating) => {
+                    void review.flow.finishFlowWithPayload(
+                      "manual_complete",
+                      (payload) => props.onQuickSettle?.(rating, payload),
+                    );
+                  }}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={submitting || review.flow.feedback.completionCeremonyActive || false}
+                  className={cn(
+                    "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
+                    review.completeButtonClassName,
+                  )}
+                  onClick={() => {
+                    void review.flow.finishFlow("manual_complete");
+                  }}
+                >
+                  <SquareCheckBig className="mr-1 size-3.5" />
+                  {review.flow.feedback.allClearReady ? "结算" : "完成"}
+                </Button>
+              )}
             </div>
           ) : null}
           <div

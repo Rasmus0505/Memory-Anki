@@ -403,7 +403,7 @@ def test_freestyle_includes_available_reinforcement_nodes(db_session):
 
 
 def test_freestyle_calendar_today_due_opt_in(db_session):
-    """Later-today formal due enters freestyle only when include_calendar_today_due."""
+    """Later-today formal due enters freestyle only when calendar_today is scoped."""
     from memory_anki.modules.memory.application.node_memory_service import (
         due_node_uids_for_entry,
         list_due_nodes,
@@ -440,6 +440,11 @@ def test_freestyle_calendar_today_due_opt_in(db_session):
         palace.id,
         include_calendar_today_due=True,
     )
+    assert "a" in list_due_nodes(
+        db_session,
+        palace.id,
+        progress_scopes=["calendar_today"],
+    )
 
     # Scoped freestyle freeze can rate the calendar-today node.
     assert due_node_uids_for_entry(
@@ -468,7 +473,7 @@ def test_freestyle_calendar_today_due_opt_in(db_session):
         config_raw={
             "specific_palace_ids": [palace.id],
             "content": {"mindmap_branch": True, "quiz_question": False},
-            "include_calendar_today_due": True,
+            "progress_scopes": ["calendar_today"],
             "queue_length": 10,
             "seed": 1,
         },
@@ -491,7 +496,94 @@ def test_freestyle_calendar_today_due_opt_in(db_session):
     assert "a" not in list_due_nodes(
         db_session,
         palace.id,
-        include_calendar_today_due=True,
+        progress_scopes=["calendar_today"],
+    )
+
+
+def test_resolve_progress_bucket_mutually_exclusive():
+    from datetime import datetime, timedelta
+
+    from memory_anki.modules.memory.application.wave_policy import (
+        PROGRESS_SCOPE_CALENDAR_TODAY,
+        PROGRESS_SCOPE_DUE,
+        PROGRESS_SCOPE_NEW,
+        PROGRESS_SCOPE_OVERDUE,
+        PROGRESS_SCOPE_REINFORCEMENT,
+        resolve_progress_bucket,
+    )
+
+    now = datetime(2026, 7, 24, 12, 0, 0)
+    assert (
+        resolve_progress_bucket(
+            schedule_source="manual",
+            has_memory=True,
+            due_at=now - timedelta(days=2),
+            now=now,
+            formal_due=True,
+            reinforcement_due=False,
+            calendar_today_due=False,
+        )
+        == PROGRESS_SCOPE_OVERDUE
+    )
+    assert (
+        resolve_progress_bucket(
+            schedule_source="manual",
+            has_memory=True,
+            due_at=now - timedelta(hours=1),
+            now=now,
+            formal_due=True,
+            reinforcement_due=False,
+            calendar_today_due=False,
+        )
+        == PROGRESS_SCOPE_DUE
+    )
+    assert (
+        resolve_progress_bucket(
+            schedule_source="manual",
+            has_memory=True,
+            due_at=now + timedelta(hours=3),
+            now=now,
+            formal_due=False,
+            reinforcement_due=False,
+            calendar_today_due=True,
+        )
+        == PROGRESS_SCOPE_CALENDAR_TODAY
+    )
+    assert (
+        resolve_progress_bucket(
+            schedule_source="reinforcement",
+            has_memory=True,
+            due_at=now - timedelta(minutes=1),
+            now=now,
+            formal_due=False,
+            reinforcement_due=True,
+            calendar_today_due=False,
+        )
+        == PROGRESS_SCOPE_REINFORCEMENT
+    )
+    assert (
+        resolve_progress_bucket(
+            schedule_source="uninitialized",
+            has_memory=False,
+            due_at=now,
+            now=now,
+            formal_due=True,
+            reinforcement_due=False,
+            calendar_today_due=False,
+        )
+        == PROGRESS_SCOPE_NEW
+    )
+    assert (
+        resolve_progress_bucket(
+            schedule_source="content_changed",
+            has_memory=True,
+            due_at=None,
+            now=now,
+            formal_due=False,
+            reinforcement_due=False,
+            calendar_today_due=False,
+        )
+        is None
     )
 
 

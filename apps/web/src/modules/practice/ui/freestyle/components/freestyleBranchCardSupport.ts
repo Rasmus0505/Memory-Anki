@@ -134,7 +134,7 @@ export function settleFlashFromResult(
   return {
     nextReviewAbsolute: formatReviewAbsolute(nextReviewAt),
     nextReviewDetail: restudy
-      ? '有忘记/困难节点 · 不会自动翻页，请手动滑到下一题后再练'
+      ? '有忘记/困难节点 · 最多隔 3 张再练 · 不会自动翻页'
       : formatNextReviewDetailLabel({
           nextReviewAt,
           nextReviewNodeCount:

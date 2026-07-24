@@ -4,6 +4,7 @@ import {
   BetweenHorizontalStart,
   CircleHelp,
   Highlighter,
+  PaintBucket,
   Pencil,
   Plus,
   Trash2,
@@ -38,6 +39,15 @@ interface BuildNodeActionsInput {
   onDeleteNodes?: (nodeIds: string[]) => void
   onDeleteNodeOnly?: (nodeId: string) => void
   onHighlightNodes?: (nodeIds: string[]) => void
+  /**
+   * Apply last-used mark color (or open palette if none).
+   * Main menu row click.
+   */
+  onApplyLastMarkColor?: (nodeIds: string[]) => void
+  /** Open mark-color flyout for the current targets. */
+  onOpenMarkColorPalette?: (nodeIds: string[], point: { x: number; y: number }) => void
+  /** Last used / current swatch for the trailing palette control. */
+  markColorSwatch?: string | null
   /** Toggle question-card flag (auto-reveal under parent in review). */
   onToggleQuestionCards?: (nodeIds: string[], enabled: boolean) => void
   isQuestionCard?: (nodeId: string) => boolean
@@ -73,6 +83,9 @@ export function buildNodeActions({
   onDeleteNodes,
   onDeleteNodeOnly,
   onHighlightNodes,
+  onApplyLastMarkColor,
+  onOpenMarkColorPalette,
+  markColorSwatch,
   onToggleQuestionCards,
   isQuestionCard,
   onStartEdit,
@@ -172,6 +185,38 @@ export function buildNodeActions({
       },
       separatorBefore: true,
     } satisfies ContextMenuAction] : []),
+    ...(onApplyLastMarkColor || onOpenMarkColorPalette ? [{
+      label: multiTarget ? `标记颜色（${targetNodeIds.length} 张）` : '标记颜色',
+      icon: PaintBucket,
+      onClick: () => {
+        dispatchGlobalFeedback('toolbar_action', {
+          point: { x: ctxMenu.x, y: ctxMenu.y },
+          origin: 'node',
+          label: 'MARK_COLOR_LAST',
+        })
+        if (onApplyLastMarkColor) {
+          onApplyLastMarkColor(targetNodeIds)
+          return
+        }
+        onOpenMarkColorPalette?.(targetNodeIds, { x: ctxMenu.x + 220, y: ctxMenu.y })
+      },
+      separatorBefore: !onHighlightNodes,
+      trailing: onOpenMarkColorPalette
+        ? {
+            ariaLabel: '打开调色板',
+            showPalette: true,
+            swatchColor: markColorSwatch ?? null,
+            onClick: () => {
+              dispatchGlobalFeedback('toolbar_action', {
+                point: { x: ctxMenu.x, y: ctxMenu.y },
+                origin: 'node',
+                label: 'MARK_COLOR_PALETTE',
+              })
+              onOpenMarkColorPalette(targetNodeIds, { x: ctxMenu.x + 220, y: ctxMenu.y })
+            },
+          }
+        : undefined,
+    } satisfies ContextMenuAction] : []),
     ...(onToggleQuestionCards && questionCardTargets.length > 0 ? [{
       label: enableQuestionCards
         ? multiTarget
@@ -189,7 +234,7 @@ export function buildNodeActions({
         })
         onToggleQuestionCards(questionCardTargets, enableQuestionCards)
       },
-      separatorBefore: !onHighlightNodes,
+      separatorBefore: !onHighlightNodes && !onApplyLastMarkColor && !onOpenMarkColorPalette,
     } satisfies ContextMenuAction] : []),
     ...(!multiTarget && !isRoot && onDeleteNodeOnly ? [{
       label: '单独删除（保留子级）',
@@ -225,7 +270,10 @@ export function buildNodeActions({
         onDelete(onlyId)
       },
       variant: 'danger' as const,
-      separatorBefore: (!onHighlightNodes && !onToggleQuestionCards) || multiTarget || isRoot,
+      separatorBefore:
+        (!onHighlightNodes && !onApplyLastMarkColor && !onOpenMarkColorPalette && !onToggleQuestionCards)
+        || multiTarget
+        || isRoot,
     } satisfies ContextMenuAction] : []),
   ]
   if (customActions.length === 0) return structuralActions

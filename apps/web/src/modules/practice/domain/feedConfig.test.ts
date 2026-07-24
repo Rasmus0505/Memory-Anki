@@ -14,6 +14,8 @@ import {
   mergeQueuePreservingHistory,
   needsRestudyAfterRatings,
   placeRestudyCardAtTail,
+  placeRestudyCardWithMaxGap,
+  RESTUDY_MAX_INTERVENING,
   resolveRebuildIndex,
   resolveRestudyPreferCardId,
   mergeRefreshQueue,
@@ -44,12 +46,23 @@ describe('freestyle feed config', () => {
     expect(sanitizeFreestyleFeedConfig(null)).toEqual(DEFAULT_FREESTYLE_FEED_CONFIG)
   })
 
-  it('defaults include_calendar_today_due to false and accepts true', () => {
-    expect(sanitizeFreestyleFeedConfig({}).include_calendar_today_due).toBe(false)
-    expect(
-      sanitizeFreestyleFeedConfig({ include_calendar_today_due: true })
-        .include_calendar_today_due,
-    ).toBe(true)
+  it('defaults progress_scopes and derives include_calendar_today_due', () => {
+    const empty = sanitizeFreestyleFeedConfig({})
+    expect(empty.progress_scopes).toEqual(['overdue', 'due', 'reinforcement', 'new'])
+    expect(empty.include_calendar_today_due).toBe(false)
+
+    const withCalendar = sanitizeFreestyleFeedConfig({ include_calendar_today_due: true })
+    expect(withCalendar.progress_scopes).toContain('calendar_today')
+    expect(withCalendar.include_calendar_today_due).toBe(true)
+
+    const onlyCalendar = sanitizeFreestyleFeedConfig({
+      progress_scopes: ['calendar_today'],
+    })
+    expect(onlyCalendar.progress_scopes).toEqual(['calendar_today'])
+    expect(onlyCalendar.include_calendar_today_due).toBe(true)
+
+    const emptyScopes = sanitizeFreestyleFeedConfig({ progress_scopes: [] })
+    expect(emptyScopes.progress_scopes).toEqual(['overdue', 'due', 'reinforcement', 'new'])
   })
 })
 
@@ -118,6 +131,36 @@ describe('freestyle queue skip rules', () => {
     ] as FreestyleCard[]
     const merged = mergeQueuePreservingHistory(previous, incoming, ['quiz:1', 'quiz:2'])
     expect(merged.map((card) => card.id)).toEqual(['quiz:1', 'quiz:2', 'quiz:3', 'quiz:4'])
+  })
+
+  it('keeps a mid-queue settled unit in place so scroll does not land on the next card', () => {
+    // User is on branch B (index 1). Completing B must not prepend it to the front:
+    // that used to leave scrollTop on index 1 while B moved to 0 → visual auto-advance.
+    const previous = [
+      { id: 'branch:a', type: 'mindmap_branch' },
+      { id: 'branch:b', type: 'mindmap_branch' },
+      { id: 'branch:c', type: 'mindmap_branch' },
+    ] as FreestyleCard[]
+    const incoming = [
+      { id: 'branch:a', type: 'mindmap_branch' },
+      { id: 'branch:c', type: 'mindmap_branch' },
+      { id: 'branch:d', type: 'mindmap_branch' },
+    ] as FreestyleCard[]
+    const merged = mergeQueuePreservingHistory(previous, incoming, ['branch:b'])
+    expect(merged.map((card) => card.id)).toEqual([
+      'branch:a',
+      'branch:b',
+      'branch:c',
+      'branch:d',
+    ])
+    expect(
+      resolveRebuildIndex({
+        nextCards: merged,
+        preferCardId: 'branch:b',
+        userCardId: 'branch:b',
+        fallbackIndex: 1,
+      }),
+    ).toBe(1)
   })
 
   it('resolveRebuildIndex follows the user when they leave a just-finished card', () => {
@@ -272,17 +315,49 @@ describe('freestyle queue skip rules', () => {
     expect(next.startedAt).toBe(1_700_000_000_000)
   })
 
-  it('places restudy cards at the queue tail and always prefers the restudied unit (no auto-flip)', () => {
+  it('places restudy cards with max intervening gap (not always full tail)', () => {
     const cards = [
-      { id: 'a', type: 'mindmap_branch' },
-      { id: 'b', type: 'mindmap_branch' },
-      { id: 'c', type: 'mindmap_branch' },
+      { id: '1', type: 'mindmap_branch' },
+      { id: '2', type: 'mindmap_branch' },
+      { id: '3', type: 'mindmap_branch' },
+      { id: '4', type: 'mindmap_branch' },
+      { id: '5', type: 'mindmap_branch' },
     ] as FreestyleCard[]
-    expect(placeRestudyCardAtTail(cards, 'b').map((card) => card.id)).toEqual([
-      'a',
-      'c',
-      'b',
+    // After weak-rating unit 1: at most 3 others (2,3,4) then 1 again.
+    expect(placeRestudyCardWithMaxGap(cards, '1').map((card) => card.id)).toEqual([
+      '2',
+      '3',
+      '4',
+      '1',
+      '5',
     ])
+    // Only one card remains after the weak unit → place right after it.
+    expect(
+      placeRestudyCardWithMaxGap(
+        [
+          { id: '1', type: 'mindmap_branch' },
+          { id: '2', type: 'mindmap_branch' },
+        ] as FreestyleCard[],
+        '1',
+      ).map((card) => card.id),
+    ).toEqual(['2', '1'])
+    // Mid-queue weak unit: gap measured from its own slot.
+    expect(placeRestudyCardWithMaxGap(cards, '2').map((card) => card.id)).toEqual([
+      '1',
+      '3',
+      '4',
+      '5',
+      '2',
+    ])
+    // Tail helper still available for skip UX.
+    expect(placeRestudyCardAtTail(cards, '2').map((card) => card.id)).toEqual([
+      '1',
+      '3',
+      '4',
+      '5',
+      '2',
+    ])
+    expect(RESTUDY_MAX_INTERVENING).toBe(3)
     expect(needsRestudyAfterRatings({ 忘记: 1, 困难: 0, 记得: 2, 轻松: 0 })).toBe(true)
     expect(needsRestudyAfterRatings({ 忘记: 0, 困难: 0, 记得: 2, 轻松: 1 })).toBe(false)
 

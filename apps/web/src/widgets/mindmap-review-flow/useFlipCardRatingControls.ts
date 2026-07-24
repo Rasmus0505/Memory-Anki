@@ -12,7 +12,6 @@ import type { RatingSubtreeDialogChoice } from './RatingSubtreeConflictOverlay'
 
 const EMPTY_DIRECT_RATED: ReadonlySet<string> = new Set()
 const EMPTY_SESSION_RATED: ReadonlySet<string> = new Set()
-const EMPTY_RATEABLE: ReadonlySet<string> | null = null
 
 type PendingSubtreeRating = {
   nodeUid: string
@@ -42,7 +41,6 @@ export function useFlipCardRatingControls({
   recallRound,
   directRatedUids,
   sessionRatedUids,
-  rateableNodeUids,
   onRateNode,
   onUndoRating,
   onNodeActive,
@@ -58,7 +56,10 @@ export function useFlipCardRatingControls({
   directRatedUids?: ReadonlySet<string>
   /** Any node with a score this round (direct or batch_inherited). Used for 避开 skip set size. */
   sessionRatedUids?: ReadonlySet<string>
-  /** When set, only these UIDs may be rated (formal due / node-review scope). */
+  /**
+   * @deprecated Soft-dim scope lives on the panel; any non-root card may be rated.
+   * Kept optional so older call sites do not break.
+   */
   rateableNodeUids?: ReadonlySet<string> | null
   onRateNode?: FlipCardRateNodeHandler
   onUndoRating?: () => { node_uid: string } | null
@@ -70,16 +71,6 @@ export function useFlipCardRatingControls({
   const nodeEnteredAtRef = useRef(0)
   const directRatedSet = directRatedUids ?? EMPTY_DIRECT_RATED
   const sessionRatedSet = sessionRatedUids ?? EMPTY_SESSION_RATED
-  const rateableSet = rateableNodeUids ?? EMPTY_RATEABLE
-
-  const isRateableNode = useCallback(
-    (nodeUid: string) => {
-      // Practice / unrestricted rating keeps root subtree cascade available.
-      if (!rateableSet) return true
-      return rateableSet.has(nodeUid)
-    },
-    [rateableSet],
-  )
 
   useEffect(() => {
     nodeEnteredAtRef.current = Date.now()
@@ -87,9 +78,8 @@ export function useFlipCardRatingControls({
 
   const getRatingScopeForNode = useCallback(
     (nodeUid: string): 'single' | 'subtree' => {
-      // rateableSet only gates *who can start* a rating. Parent ratings still
-      // cascade on the full rating tree (including unrevealed due children),
-      // matching backend formal subtree behavior.
+      // Parent ratings cascade on the full rating tree (including unrevealed
+      // due children), matching backend formal subtree behavior.
       return guidedNodes.some((node) => node.parentUid === nodeUid) ? 'subtree' : 'single'
     },
     [guidedNodes],
@@ -97,13 +87,12 @@ export function useFlipCardRatingControls({
 
   const countAffectedNodes = useCallback(
     (nodeUid: string, scope: 'single' | 'subtree') => {
-      if (!isRateableNode(nodeUid)) return 0
       if (scope === 'single') return 1
       // Count full cascade targets (revealed or not). Backend subtree updates
       // all non-root descendants, not only frozen-due / currently visible ones.
       return collectSubtreeUids(guidedNodes, nodeUid, rootUid).length
     },
-    [guidedNodes, isRateableNode, rootUid],
+    [guidedNodes, rootUid],
   )
 
   const countSubtreeConflicts = useCallback(
@@ -129,7 +118,7 @@ export function useFlipCardRatingControls({
       conflictPolicy: RatingConflictPolicy = 'overwrite',
       scopeOverride?: 'single' | 'subtree',
     ) => {
-      if (!ratingMode || !onRateNode || !isRateableNode(nodeUid)) return
+      if (!ratingMode || !onRateNode) return
       const scope = scopeOverride ?? getRatingScopeForNode(nodeUid)
       // Always walk the full rating tree for cascade targets — including deep
       // grandchildren under a single-child spine (P → C → G1/G2/G3).
@@ -165,7 +154,6 @@ export function useFlipCardRatingControls({
       byUid,
       getRatingScopeForNode,
       guidedNodes,
-      isRateableNode,
       onNodeActive,
       onRateNode,
       ratingMode,
@@ -177,7 +165,7 @@ export function useFlipCardRatingControls({
 
   const handleRateNodeUid = useCallback(
     (nodeUid: string, rating: MindMapRecallRating, source: 'manual' | 'inferred' = 'manual') => {
-      if (!ratingMode || !onRateNode || !isRateableNode(nodeUid)) return
+      if (!ratingMode || !onRateNode) return
       const scope = getRatingScopeForNode(nodeUid)
       // Any parent with children opens the scope dialog (not only when conflicts exist).
       if (scope === 'subtree') {
@@ -187,7 +175,7 @@ export function useFlipCardRatingControls({
       }
       submitRateNodeUid(nodeUid, rating, source, 'overwrite', 'single')
     },
-    [countSubtreeConflicts, getRatingScopeForNode, isRateableNode, onRateNode, ratingMode, submitRateNodeUid],
+    [countSubtreeConflicts, getRatingScopeForNode, onRateNode, ratingMode, submitRateNodeUid],
   )
 
   const handleGuidedRating = useCallback(
@@ -220,25 +208,7 @@ export function useFlipCardRatingControls({
   const buildSelectionToolbarActions = useCallback(
     (nodeId: string): SelectionToolbarAction[] => {
       if (!ratingMode || !onRateNode || isEditMode || !nodeId) return []
-      if (!isRateableNode(nodeId)) {
-        const actions: SelectionToolbarAction[] = []
-        if (onUndoRating) {
-          actions.push({
-            id: 'undo',
-            label: '撤销',
-            variant: 'ghost',
-            onClick: handleUndoRating,
-          })
-        }
-        actions.push({
-          id: 'out-of-scope',
-          label: '非本轮复习节点',
-          variant: 'ghost',
-          disabled: true,
-          onClick: () => {},
-        })
-        return actions
-      }
+      // Any card may be scored; non-due nodes are only soft-dimmed on the canvas.
       const scope = getRatingScopeForNode(nodeId)
       const count = countAffectedNodes(nodeId, scope)
       const actions: SelectionToolbarAction[] = []
@@ -274,7 +244,6 @@ export function useFlipCardRatingControls({
       handleUndoRating,
       inferredNodeUid,
       isEditMode,
-      isRateableNode,
       onRateNode,
       onUndoRating,
       ratingMode,
@@ -309,7 +278,7 @@ export function useFlipCardRatingControls({
               : key === '4' || key === ';'
                 ? 4
                 : null
-      if (!rating || !guidedCurrentNode || !isRateableNode(guidedCurrentNode.uid)) return
+      if (!rating || !guidedCurrentNode) return
       event.preventDefault()
       handleGuidedRating(rating)
     }
@@ -320,7 +289,6 @@ export function useFlipCardRatingControls({
     handleGuidedRating,
     handleUndoRating,
     isEditMode,
-    isRateableNode,
     onRateNode,
     onUndoRating,
     pendingSubtreeRating,

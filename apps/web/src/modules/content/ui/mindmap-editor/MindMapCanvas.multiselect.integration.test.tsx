@@ -147,6 +147,7 @@ describe('MindMapCanvas multi-select context menu', () => {
     reactFlowMockState.fitView.mockClear()
     reactFlowMockState.setCenter.mockClear()
     reactFlowMockState.viewport = { x: 4, y: 18, zoom: 0.99 }
+    reactFlowMockState.getViewport.mockImplementation(() => ({ ...reactFlowMockState.viewport }))
     reactFlowMockState.reactFlowProps = null
     reactFlowMockState.nodes = []
     widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
@@ -163,6 +164,7 @@ describe('MindMapCanvas multi-select context menu', () => {
   it('preserves multi-select on right-click and applies highlight/delete to all targets', () => {
     const onNodeSelect = vi.fn()
     const onHighlightNodes = vi.fn()
+    const onMarkColorNodes = vi.fn()
     const onDeleteNodes = vi.fn()
 
     render(
@@ -176,6 +178,7 @@ describe('MindMapCanvas multi-select context menu', () => {
         onDelete={vi.fn()}
         onDeleteNodes={onDeleteNodes}
         onHighlightNodes={onHighlightNodes}
+        onMarkColorNodes={onMarkColorNodes}
       />,
     )
 
@@ -187,6 +190,8 @@ describe('MindMapCanvas multi-select context menu', () => {
     // Already in multi-select → do not collapse to a single selection.
     expect(onNodeSelect).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: '标记重点（2 张）' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '标记颜色（2 张）' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '打开调色板' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '删除选中（2 处）' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑文字 (Enter / F2)' })).toBeNull()
 

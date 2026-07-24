@@ -25,7 +25,18 @@ import { useMindMapDragInteractions } from './useMindMapDragInteractions'
 import { useMindMapMenusAndEdges } from './useMindMapMenusAndEdges'
 import { useMindMapViewport } from './useMindMapViewport'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import {
+  readMarkColorLabelsSettings,
+  setLastUsedMarkColor,
+} from '@/shared/preferences/markColorLabels'
 import type { MindMapCanvasProps } from './MindMapCanvas'
+
+export interface MarkColorFlyoutState {
+  x: number
+  y: number
+  nodeIds: string[]
+  currentColor: string | null
+}
 
 type UseMindMapCanvasStateProps = MindMapCanvasProps & {
   toolbarVisible?: boolean
@@ -91,6 +102,7 @@ export interface UseMindMapCanvasStateResult {
   mobileGuidedActive: boolean
   nodeActions: ContextMenuAction[]
   edgeActions: ContextMenuAction[]
+  markColorFlyout: MarkColorFlyoutState | null
   canShowHistoryControls: boolean
   canUndo: boolean
   canRedo: boolean
@@ -102,6 +114,9 @@ export interface UseMindMapCanvasStateResult {
   refreshCanvas: () => void
   closeNodeMenu: () => void
   closeEdgeMenu: () => void
+  closeMarkColorFlyout: () => void
+  pickMarkColor: (color: string) => void
+  clearMarkColor: () => void
   onNodesChange: OnNodesChange<Node>
   onEdgesChange: OnEdgesChange<Edge>
   handleNodeClick: (event: MouseEvent, node: Node) => void
@@ -143,6 +158,7 @@ export function useMindMapCanvasState(
     onDeleteNodes,
     onDeleteNodeOnly,
     onHighlightNodes,
+    onMarkColorNodes,
     onToggleQuestionCards,
     onRelocate,
     onReparent,
@@ -166,6 +182,8 @@ export function useMindMapCanvasState(
     onNodeHover,
     buildNodeActions: buildCustomNodeActions,
     practiceModeActive = false,
+    englishInteractionActive = false,
+    onEnglishWordClick,
     mobileViewPolicy = 'auto',
     nodeClickViewportPolicy = 'preserve',
     contentChangeViewportPolicy = 'preserve',
@@ -178,6 +196,58 @@ export function useMindMapCanvasState(
   } = props
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
+  const [markColorFlyout, setMarkColorFlyout] = useState<MarkColorFlyoutState | null>(null)
+
+  const resolveCurrentMarkColor = useCallback((nodeIds: string[]) => {
+    for (const id of nodeIds) {
+      const node = graphData.nodes.find((item) => item.id === id)
+      const raw = node?.metadata?.markColor
+      if (typeof raw === 'string' && raw.trim()) return raw.trim()
+      const visual = (node?.metadata?.visual ?? {}) as { fillColor?: string | null }
+      if (typeof visual.fillColor === 'string' && visual.fillColor.trim()) {
+        return visual.fillColor.trim()
+      }
+    }
+    return readMarkColorLabelsSettings().lastUsedColor
+  }, [graphData.nodes])
+
+  const openMarkColorPalette = useCallback((nodeIds: string[], point: { x: number; y: number }) => {
+    if (!onMarkColorNodes || nodeIds.length === 0) return
+    setMarkColorFlyout({
+      x: point.x,
+      y: point.y,
+      nodeIds: [...nodeIds],
+      currentColor: resolveCurrentMarkColor(nodeIds),
+    })
+  }, [onMarkColorNodes, resolveCurrentMarkColor])
+
+  const applyLastMarkColor = useCallback((nodeIds: string[]) => {
+    if (!onMarkColorNodes || nodeIds.length === 0) return
+    const last = readMarkColorLabelsSettings().lastUsedColor
+    if (last) {
+      onMarkColorNodes(nodeIds, last)
+      return
+    }
+    // No last-used color yet — open palette near default corner.
+    openMarkColorPalette(nodeIds, { x: window.innerWidth / 2 - 120, y: window.innerHeight / 2 - 120 })
+  }, [onMarkColorNodes, openMarkColorPalette])
+
+  const pickMarkColor = useCallback((color: string) => {
+    if (!markColorFlyout || !onMarkColorNodes) return
+    onMarkColorNodes(markColorFlyout.nodeIds, color)
+    setLastUsedMarkColor(color)
+    setMarkColorFlyout(null)
+  }, [markColorFlyout, onMarkColorNodes])
+
+  const clearMarkColor = useCallback(() => {
+    if (!markColorFlyout || !onMarkColorNodes) return
+    onMarkColorNodes(markColorFlyout.nodeIds, null)
+    setMarkColorFlyout(null)
+  }, [markColorFlyout, onMarkColorNodes])
+
+  const closeMarkColorFlyout = useCallback(() => {
+    setMarkColorFlyout(null)
+  }, [])
   const isDraggingNodeRef = useRef(false)
   /** Graph/measure layout landed while a structure drag was active — apply after drag ends. */
   const pendingLayoutSyncRef = useRef(false)
@@ -265,7 +335,8 @@ export function useMindMapCanvasState(
   const { clearEdgeSelection } = menus
   const { runFitView } = viewport
   // Practice: long-press = hide branch (via contextActionOnly). Edit: long-press = desktop right-click menu.
-  const touchLongPressEnabled = practiceModeActive || !readonly
+  const touchLongPressEnabled =
+    (practiceModeActive || !readonly) && !englishInteractionActive
   const handleTouchLongPress = useCallback(
     (nodeId: string, point: { x: number; y: number }) => {
       menus.openNodeContext(nodeId, point)
@@ -378,12 +449,14 @@ export function useMindMapCanvasState(
       selectionToolbarPreferPosition: props.selectionToolbarPreferPosition,
       extractDropTargetId: extractDrop?.targetId ?? null,
       extractDropMode: extractDrop?.mode ?? null,
+      englishInteractionActive,
+      onEnglishWordClick,
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
   // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)
@@ -444,6 +517,9 @@ export function useMindMapCanvasState(
       onDeleteNodes,
       onDeleteNodeOnly,
       onHighlightNodes,
+      onApplyLastMarkColor: onMarkColorNodes ? applyLastMarkColor : undefined,
+      onOpenMarkColorPalette: onMarkColorNodes ? openMarkColorPalette : undefined,
+      markColorSwatch: readMarkColorLabelsSettings().lastUsedColor,
       onToggleQuestionCards,
       isQuestionCard: (nodeId) => {
         const node = graphData.nodes.find((item) => item.id === nodeId)
@@ -486,6 +562,9 @@ export function useMindMapCanvasState(
       onDeleteNodeOnly,
       onDeleteNodes,
       onHighlightNodes,
+      onMarkColorNodes,
+      applyLastMarkColor,
+      openMarkColorPalette,
       onToggleQuestionCards,
       onMoveDown,
       onMoveUp,
@@ -545,6 +624,7 @@ export function useMindMapCanvasState(
     mobileGuidedActive: viewport.mobileGuidedActive,
     nodeActions,
     edgeActions,
+    markColorFlyout,
     canShowHistoryControls: Boolean(onUndo || onRedo),
     canUndo,
     canRedo,
@@ -556,6 +636,9 @@ export function useMindMapCanvasState(
     refreshCanvas,
     closeNodeMenu: menus.closeNodeMenu,
     closeEdgeMenu: menus.closeEdgeMenu,
+    closeMarkColorFlyout,
+    pickMarkColor,
+    clearMarkColor,
     onNodesChange,
     onEdgesChange,
     handleNodeClick: menus.handleNodeClick,

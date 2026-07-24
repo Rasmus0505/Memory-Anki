@@ -130,6 +130,10 @@ function buildDocNodeFromSourceNode(node: MindMapImportSourceNode): MindMapDocNo
     data.richText = true
     data.text = richHtml
   }
+  const ankiRole = node.ankiRole
+  if (ankiRole === 'front' || ankiRole === 'back' || ankiRole === 'none') {
+    data.ankiRole = ankiRole
+  }
   return {
     data,
     children: (node.children || []).map(buildDocNodeFromSourceNode),

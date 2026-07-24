@@ -27,6 +27,32 @@ DUE_POLICIES = {
     DUE_POLICY_ALL_WEIGHTED,
 }
 
+# Freestyle progress buckets (must match memory projection progress_bucket values).
+PROGRESS_SCOPE_OVERDUE = "overdue"
+PROGRESS_SCOPE_DUE = "due"
+PROGRESS_SCOPE_CALENDAR_TODAY = "calendar_today"
+PROGRESS_SCOPE_REINFORCEMENT = "reinforcement"
+PROGRESS_SCOPE_NEW = "new"
+
+# Stable order for API / preference echo.
+PROGRESS_SCOPE_ORDER = (
+    PROGRESS_SCOPE_OVERDUE,
+    PROGRESS_SCOPE_DUE,
+    PROGRESS_SCOPE_CALENDAR_TODAY,
+    PROGRESS_SCOPE_REINFORCEMENT,
+    PROGRESS_SCOPE_NEW,
+)
+
+PROGRESS_SCOPES = frozenset(PROGRESS_SCOPE_ORDER)
+
+# Default: clock-due formal + same-day restudy + first-learn; calendar_today opt-in.
+DEFAULT_PROGRESS_SCOPES: tuple[str, ...] = (
+    PROGRESS_SCOPE_OVERDUE,
+    PROGRESS_SCOPE_DUE,
+    PROGRESS_SCOPE_REINFORCEMENT,
+    PROGRESS_SCOPE_NEW,
+)
+
 PALACE_ORDERS = {
     PALACE_ORDER_SEQUENTIAL,
     PALACE_ORDER_INTERLEAVE,
@@ -78,6 +104,33 @@ def _as_positive_ids(value: Any) -> list[int]:
     return result
 
 
+def _as_progress_scopes(value: Any, *, include_calendar_today_due: bool) -> list[str]:
+    """Sanitize multi-select progress scopes; empty/invalid → defaults.
+
+    Legacy ``include_calendar_today_due=True`` injects calendar_today when the
+    raw scopes list is missing or when the flag is set without that scope.
+    """
+    if isinstance(value, list):
+        selected: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            key = str(item or "").strip()
+            if key not in PROGRESS_SCOPES or key in seen:
+                continue
+            seen.add(key)
+            selected.append(key)
+        if include_calendar_today_due and PROGRESS_SCOPE_CALENDAR_TODAY not in seen:
+            selected.append(PROGRESS_SCOPE_CALENDAR_TODAY)
+        if selected:
+            # Stable canonical order for equality / storage.
+            return [key for key in PROGRESS_SCOPE_ORDER if key in set(selected)]
+    # No valid list: start from product default, then legacy calendar flag.
+    scopes = list(DEFAULT_PROGRESS_SCOPES)
+    if include_calendar_today_due and PROGRESS_SCOPE_CALENDAR_TODAY not in scopes:
+        scopes = [key for key in PROGRESS_SCOPE_ORDER if key in set(scopes) | {PROGRESS_SCOPE_CALENDAR_TODAY}]
+    return scopes
+
+
 def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
     raw_content = data.get("content")
@@ -109,6 +162,15 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     question_type = str(data.get("question_type") or "all")
     if question_type not in QUESTION_TYPES:
         question_type = "all"
+
+    # Legacy bool (default off). Kept as derived mirror of progress_scopes for
+    # older clients; progress_scopes is the source of truth after sanitize.
+    include_calendar_today_due = _as_bool(data.get("include_calendar_today_due"), False)
+    progress_scopes = _as_progress_scopes(
+        data.get("progress_scopes"),
+        include_calendar_today_due=include_calendar_today_due,
+    )
+    include_calendar_today_due = PROGRESS_SCOPE_CALENDAR_TODAY in progress_scopes
 
     return {
         "content": {
@@ -146,11 +208,9 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "specific_palace_ids": _as_positive_ids(data.get("specific_palace_ids")),
         "question_type": question_type,
         "weak_quiz_priority": _as_bool(data.get("weak_quiz_priority"), True),
-        # Default off: freestyle stays clock-due only unless user opts into
-        # local-calendar "due later today" nodes.
-        "include_calendar_today_due": _as_bool(
-            data.get("include_calendar_today_due"), False
-        ),
+        "progress_scopes": progress_scopes,
+        # Derived mirror of progress_scopes (calendar_today membership).
+        "include_calendar_today_due": include_calendar_today_due,
         "seed": _as_int(data.get("seed"), DEFAULT_SEED, minimum=1, maximum=2_147_483_647),
     }
 
@@ -169,6 +229,14 @@ __all__ = [
     "PALACE_ORDER_INTERLEAVE",
     "PALACE_ORDER_SEQUENTIAL",
     "PALACE_ORDERS",
+    "DEFAULT_PROGRESS_SCOPES",
+    "PROGRESS_SCOPE_CALENDAR_TODAY",
+    "PROGRESS_SCOPE_DUE",
+    "PROGRESS_SCOPE_NEW",
+    "PROGRESS_SCOPE_ORDER",
+    "PROGRESS_SCOPE_OVERDUE",
+    "PROGRESS_SCOPE_REINFORCEMENT",
+    "PROGRESS_SCOPES",
     "QUESTION_TYPES",
     "WITHIN_PALACE_ORDERS",
     "WITHIN_PALACE_SHUFFLE",

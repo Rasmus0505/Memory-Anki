@@ -2,11 +2,29 @@ import type {
   FreestyleDuePolicy,
   FreestyleFeedConfig,
   FreestylePalaceOrder,
+  FreestyleProgressScope,
   FreestyleQuestionTypeFilter,
   FreestyleWithinPalaceOrder,
 } from '@/shared/api/contracts'
 
 export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
+
+/** Stable order for storage / equality (matches backend PROGRESS_SCOPE_ORDER). */
+export const FREESTYLE_PROGRESS_SCOPE_ORDER: FreestyleProgressScope[] = [
+  'overdue',
+  'due',
+  'calendar_today',
+  'reinforcement',
+  'new',
+]
+
+/** Default: clock-due formal + same-day restudy + first-learn; calendar_today opt-in. */
+export const DEFAULT_FREESTYLE_PROGRESS_SCOPES: FreestyleProgressScope[] = [
+  'overdue',
+  'due',
+  'reinforcement',
+  'new',
+]
 
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   content: {
@@ -28,6 +46,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   specific_palace_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
+  progress_scopes: [...DEFAULT_FREESTYLE_PROGRESS_SCOPES],
   include_calendar_today_due: false,
   seed: 17,
 }
@@ -84,6 +103,31 @@ function asQuestionType(value: unknown): FreestyleQuestionTypeFilter {
     : 'all'
 }
 
+const PROGRESS_SCOPE_SET = new Set<string>(FREESTYLE_PROGRESS_SCOPE_ORDER)
+
+function asProgressScopes(
+  value: unknown,
+  includeCalendarTodayDue: boolean,
+): FreestyleProgressScope[] {
+  const selected = new Set<FreestyleProgressScope>()
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      const key = String(item ?? '').trim()
+      if (PROGRESS_SCOPE_SET.has(key)) {
+        selected.add(key as FreestyleProgressScope)
+      }
+    })
+  }
+  if (includeCalendarTodayDue) {
+    selected.add('calendar_today')
+  }
+  if (selected.size === 0) {
+    DEFAULT_FREESTYLE_PROGRESS_SCOPES.forEach((scope) => selected.add(scope))
+    if (includeCalendarTodayDue) selected.add('calendar_today')
+  }
+  return FREESTYLE_PROGRESS_SCOPE_ORDER.filter((scope) => selected.has(scope))
+}
+
 export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const contentRaw = raw.content && typeof raw.content === 'object' ? (raw.content as Record<string, unknown>) : {}
@@ -96,6 +140,8 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     anki = true
     quiz = true
   }
+  const legacyCalendar = asBoolean(raw.include_calendar_today_due, false)
+  const progress_scopes = asProgressScopes(raw.progress_scopes, legacyCalendar)
   return {
     content: {
       mindmap_branch: mindmap,
@@ -115,7 +161,8 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     specific_palace_ids: asIdList(raw.specific_palace_ids),
     question_type: asQuestionType(raw.question_type),
     weak_quiz_priority: asBoolean(raw.weak_quiz_priority, true),
-    include_calendar_today_due: asBoolean(raw.include_calendar_today_due, false),
+    progress_scopes,
+    include_calendar_today_due: progress_scopes.includes('calendar_today'),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
   }
 }

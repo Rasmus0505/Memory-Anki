@@ -54,7 +54,7 @@ function asEditorDoc(value: unknown): string | Record<string, unknown> | null {
 
 /**
  * Flip-card view always uses the full palace map.
- * Node mode only changes entry labeling / frozen due scope (soft-dim + FSRS rating gate).
+ * Node mode only changes entry labeling / frozen due scope (soft-dim only; ratings stay open).
  * Every card — due or not — uses classic flip: hidden → 待回忆 → content. Do not clip to
  * primary_branch_uid — other branches must remain visible context.
  */

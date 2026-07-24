@@ -2,7 +2,9 @@ export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {
   DEFAULT_FREESTYLE_FEED_CONFIG,
+  DEFAULT_FREESTYLE_PROGRESS_SCOPES,
   FREESTYLE_FEED_CONFIG_STORAGE_KEY,
+  FREESTYLE_PROGRESS_SCOPE_ORDER,
   createOperationId as createDeterministicOperationId,
   sanitizeFreestyleFeedConfig,
 } from './domain/feedConfig'
@@ -32,6 +34,8 @@ export {
   mutePalace,
   needsRestudyAfterRatings,
   placeRestudyCardAtTail,
+  placeRestudyCardWithMaxGap,
+  RESTUDY_MAX_INTERVENING,
   resolveRebuildIndex,
   resolveRestudyPreferCardId,
   sanitizeQueueState,

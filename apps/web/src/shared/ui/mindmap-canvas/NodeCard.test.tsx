@@ -92,7 +92,7 @@ describe('NodeCard', () => {
     const editShell = edit.container.querySelector('[data-mindmap-node-id]') as HTMLElement
     const editor = screen.getByRole('textbox')
     expect(Number.parseFloat(editShell.style.width)).toBeGreaterThan(displaySize.width)
-    expect(editor.className).toContain('break-all')
+    expect(editor.className).toContain('break-words')
     expect(editor.className).toContain('whitespace-pre-wrap')
   })
 
@@ -206,7 +206,7 @@ describe('NodeCard', () => {
 
     const button = screen.getByRole('button', { name: longLabel })
     expect(button.className).toContain('whitespace-pre-wrap')
-    expect(button.className).toContain('break-all')
+    expect(button.className).toContain('break-words')
     expect(button.className).not.toContain('truncate')
   })
 

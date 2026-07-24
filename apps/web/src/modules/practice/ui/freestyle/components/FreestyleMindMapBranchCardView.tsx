@@ -569,7 +569,7 @@ export function FreestyleMindMapBranchCardView({
               )}
             >
               <div className="text-[11px] font-medium tracking-wide text-zinc-400">
-                {settleFlash.restudy ? '已评分 · 稍后复练' : '下次复习'}
+                {settleFlash.restudy ? '已评分 · 稍后最多隔 3 张再练' : '下次复习'}
               </div>
               <div className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-50">
                 {settleFlash.nextReviewAbsolute}

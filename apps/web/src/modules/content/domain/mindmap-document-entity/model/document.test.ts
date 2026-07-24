@@ -8,7 +8,9 @@ import {
   deleteMindMapNodes,
   extractMindMapSelectionWithResult,
   getMindMapNodeText,
+  getMindMapMarkColor,
   highlightMindMapNodes,
+  setMindMapMarkColors,
   isMindMapQuestionCard,
   normalizeMindMapDocument,
   relocateMindMapNode,
@@ -110,6 +112,28 @@ describe('mind-map document entity', () => {
     expect(getMindMapNodeText(cell)).toBe('细胞')
     // Original document stays untouched.
     expect(document.root.children![0].data?.text).toBe('细胞')
+  })
+
+  it('sets and clears markColor on multi-select nodes including root', () => {
+    const painted = setMindMapMarkColors(document, ['cell', 'mito', 'root', 'missing'], '#FECACA')
+    expect(painted.count).toBe(3)
+    const cell = painted.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    const mito = cell.children!.find((node) => node.data?.uid === 'mito')!
+    expect(getMindMapMarkColor(cell)).toBe('#fecaca')
+    expect(getMindMapMarkColor(mito)).toBe('#fecaca')
+    expect(getMindMapMarkColor(painted.document.root)).toBe('#fecaca')
+
+    const same = setMindMapMarkColors(painted.document, ['cell'], '#fecaca')
+    expect(same.count).toBe(0)
+
+    const cleared = setMindMapMarkColors(painted.document, ['cell', 'root'], null)
+    expect(cleared.count).toBe(2)
+    const clearedCell = cleared.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    expect(getMindMapMarkColor(clearedCell)).toBeNull()
+    expect(getMindMapMarkColor(cleared.document.root)).toBeNull()
+    expect(getMindMapMarkColor(cleared.document.root.children![0].children![0])).toBe('#fecaca')
+    // Original document stays untouched.
+    expect(document.root.children![0].data?.markColor).toBeUndefined()
   })
 
   it('sets and clears question-card flags on non-root multi-select nodes', () => {

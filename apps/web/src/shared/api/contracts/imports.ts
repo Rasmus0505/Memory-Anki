@@ -10,6 +10,9 @@
 import type { AiRuntimeOptions, ResolvedAiRuntimeMeta } from './profile'
 import type { MindMapDoc } from './mindmap'
 
+/** Explicit Anki card face on an imported node. Omitted = none / infer from parent front. */
+export type MindMapImportAnkiRole = 'front' | 'back' | 'none'
+
 export interface MindMapImportSourceNode {
   text: string
   rich_text_html?: string
@@ -17,6 +20,13 @@ export interface MindMapImportSourceNode {
     kind: 'highlight' | 'underline' | 'wavy-underline'
     text: string
   }>
+  /**
+   * Optional Anki presentation role written into node data as `ankiRole`.
+   * - front: card front (question / prompt)
+   * - back: card back (answer); usually a direct child of a front
+   * - none: neutral structure node (or omit the field)
+   */
+  ankiRole?: MindMapImportAnkiRole
   children: MindMapImportSourceNode[]
 }
 export interface MindMapImportSourceTree {

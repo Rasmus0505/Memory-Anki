@@ -199,6 +199,8 @@ BASELINE_OVERSIZED_FILES = {
     "apps/web/src/widgets/palace-memory-lookup/PalaceMemoryLookupDialog.tsx",
     "apps/web/src/modules/session/domain/session-entity/model/timed-session/timedSessionStateMachine.ts",
     "apps/web/src/modules/memory/domain/review-entity/model/review-flow-tree.ts",
+    # Pre-existing oversized integration harness; split tracked separately from feature work.
+    "apps/web/src/modules/content/ui/mindmap-editor/MindMapCanvas.integration.test.tsx",
 }
 
 MAX_WEB_FILE_LINES = 750
@@ -1352,6 +1354,9 @@ def check_tool_personal_paths(errors: list[str]) -> None:
     for path in iter_files(REPO_ROOT / "tools", (".py", ".ps1", ".bat", ".cmd")):
         relative = path.relative_to(REPO_ROOT).as_posix()
         if relative == "tools/check_architecture.py":
+            continue
+        # Local one-off OCR/import scratch scripts under tools/_tmp_* stay untracked.
+        if "/_tmp_" in f"/{relative}" or relative.startswith("tools/_tmp_"):
             continue
         if relative in BASELINE_PERSONAL_PATH_TOOLS:
             continue

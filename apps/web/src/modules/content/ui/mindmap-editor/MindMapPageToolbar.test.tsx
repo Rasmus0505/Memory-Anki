@@ -51,6 +51,31 @@ describe('MindMapPageToolbar', () => {
     expect(screen.getByRole('button', { name: '更多脑图操作' })).toBeTruthy()
   })
 
+  it('places the English mode toggle immediately after the edit mode button', () => {
+    const onEnglish = vi.fn()
+    render(
+      <MindMapPageToolbar
+        ratingAction={{ label: '评分', onClick: vi.fn() }}
+        modeToggle={{ label: '编辑', onClick: vi.fn() }}
+        englishAction={{ label: '英语', active: true, onClick: onEnglish }}
+        moreActions={[{ label: '宫殿进度校准', onClick: vi.fn() }]}
+      />,
+    )
+
+    const buttons = screen.getAllByRole('button')
+    const labels = buttons.map((button) => button.textContent ?? '')
+    const editIndex = labels.findIndex((label) => label.includes('编辑'))
+    const englishIndex = labels.findIndex((label) => label.includes('英语'))
+    expect(editIndex).toBeGreaterThanOrEqual(0)
+    expect(englishIndex).toBe(editIndex + 1)
+    expect(screen.getByRole('button', { name: '英语' }).getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: '英语' }))
+    expect(onEnglish).toHaveBeenCalledTimes(1)
+    // English stays a dedicated button — not buried in the overflow menu.
+    expect(screen.queryByRole('menuitem', { name: '英语' })).toBeNull()
+  })
+
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
     const onImport = vi.fn()
     render(

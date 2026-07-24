@@ -60,6 +60,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
+  englishInteractionActive = false,
+  onEnglishWordClick,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
   externalSyncKey = null,
@@ -553,6 +555,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     handleDeleteNodes,
     handleDeleteNodeOnly,
     handleHighlightNodes,
+    handleMarkColorNodes,
     handleToggleQuestionCards,
     handleEditNode: commitEditedNodeText,
     handleRelocateNodes,
@@ -647,6 +650,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit}
         practiceModeActive={practiceModeActive}
+        englishInteractionActive={englishInteractionActive}
+        onEnglishWordClick={onEnglishWordClick}
         focusMode={nativeFullscreenActive}
         presentationMode={fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
@@ -675,6 +680,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onDeleteNodes={handleDeleteNodes}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onHighlightNodes={handleHighlightNodes}
+        onMarkColorNodes={handleMarkColorNodes}
         onToggleQuestionCards={handleToggleQuestionCards}
         onEdit={handleEditNode}
         canUndo={canUndo}

@@ -64,17 +64,13 @@ def build_freestyle_queue(
             seed=int(config["seed"]),
         )
         try:
-            # Freestyle treats formal due and available same-day reinforcement as one
-            # actionable set so weak-rated cards reappear in the immersive stream.
-            # Optional: formal nodes due later today (local calendar) when configured.
+            # Progress scopes select which memory buckets enter freestyle units
+            # (overdue / due / calendar_today / reinforcement / new).
             due_by_palace[palace_id] = set(
                 list_due_nodes(
                     session,
                     palace_id,
-                    include_reinforcement=True,
-                    include_calendar_today_due=bool(
-                        config.get("include_calendar_today_due")
-                    ),
+                    progress_scopes=list(config.get("progress_scopes") or []),
                 )
             )
         except ValueError:

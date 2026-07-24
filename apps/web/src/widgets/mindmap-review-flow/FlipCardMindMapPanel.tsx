@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, CornerUpLeft, Eye, Network } from 'lucide-react'
 import {
   MindMapEditorSurface,
-  MindMapPageToolbar,
   type MindMapEditorSurfaceHandle,
   type MindMapEditorSurfaceProps,
   type MindMapPageToolbarProps,
@@ -17,6 +16,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { resolveMindMapSceneChrome } from '@/shared/ui/mindmap-canvas'
+import { buildFlipCardToolbar } from './buildFlipCardToolbar'
 import {
   buildGuidedMindMapModel,
   getGuidedPath,
@@ -27,6 +27,7 @@ import {
   useFlipCardRatingControls,
   type FlipCardRateNodeHandler,
 } from './useFlipCardRatingControls'
+import { useMindMapEnglishMode } from './useMindMapEnglishMode'
 
 type FlipCardToolbarExtensions = Pick<
   MindMapPageToolbarProps,
@@ -124,9 +125,9 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   sessionRatedUids?: ReadonlySet<string>
   /**
    * Formal due-scope UIDs for this review round. When set:
-   * - only these nodes may *start* a rating (rating mode)
    * - non-due nodes are soft-dimmed (opacity) even while flipping,
    *   except ancestors of due nodes (path context stays full opacity)
+   * - any non-root card may still be rated (scope is visual only)
    * Parent subtree cascade still walks the full rating tree (including
    * unrevealed due children) and follows backend formal-review behavior.
    */
@@ -223,6 +224,15 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     Record<string, { masteryScore: number; status: string }>
   >({})
   const isEditMode = displayMode === 'edit'
+  const {
+    englishModeActive,
+    handleToggleEnglishMode,
+    handleEnglishWordClick,
+    readingContentRef,
+    handleReadingContentPointerDown,
+    englishChrome,
+    aiRunConfigDialog,
+  } = useMindMapEnglishMode()
   const sceneChrome = resolveMindMapSceneChrome({
     mode: isEditMode ? 'edit' : sessionKind === 'review' ? 'review' : 'practice',
     ratingMode: !isEditMode && ratingMode,
@@ -341,7 +351,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     recallRound,
     directRatedUids,
     sessionRatedUids,
-    rateableNodeUids: rateableUidSet,
     onRateNode,
     onUndoRating,
     onNodeActive,
@@ -464,12 +473,14 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }, [guidedNextNode, selectGuidedNode])
 
   const handlePanelNodeClick = useCallback((nodes: MindMapSelection[]) => {
+    // English mode: card click is not flip / reveal; words handle lookup themselves.
+    if (englishModeActive) return
     if (ratingMode && nodes[0]?.uid) {
       selectGuidedNode(String(nodes[0].uid))
       return
     }
     onNodeClick(nodes)
-  }, [onNodeClick, ratingMode, selectGuidedNode])
+  }, [englishModeActive, onNodeClick, ratingMode, selectGuidedNode])
 
   const handleNodeActive = useCallback(
     (nodes: MindMapSelection[]) => {
@@ -517,7 +528,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const compactChrome = chromeDensity === 'compact'
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}>
+    <div
+      className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}
+      data-english-mode={englishModeActive ? 'true' : 'false'}
+    >
       {!isEditMode ? (
         <div
           className={cn(
@@ -599,73 +613,43 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           <Badge className="bg-warning text-white hover:bg-warning">宿主超时</Badge>
         </div>
       ) : null}
+      <div
+        ref={readingContentRef}
+        className="flex min-h-0 flex-1 flex-col"
+        onPointerDown={englishModeActive ? handleReadingContentPointerDown : undefined}
+      >
       <MindMapEditorSurface
         ref={frameRef}
         editorState={frameEditorState}
         presentationStrategy={resolvedPresentationStrategy}
         readonly={!isEditMode}
         practiceModeActive={!isEditMode}
+        englishInteractionActive={englishModeActive}
+        onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
         sceneChrome={sceneChrome}
         sceneTransitionKey={frameSceneTransitionKey}
         viewMemoryScope={viewMemoryScope}
         immersiveModeActive={fullscreen}
-        toolbarContent={
-          <MindMapPageToolbar
-            {...toolbarExtensions}
-            embedded
-            ratingAction={onToggleRatingMode ? { label: '评分', active: ratingMode, onClick: onToggleRatingMode } : null}
-            moreActions={[
-              ...(toolbarExtensions?.moreActions ?? []),
-              ...(onOpenPalaceCalibration
-                ? [{ label: '宫殿进度校准', onClick: onOpenPalaceCalibration }]
-                : []),
-            ]}
-            modeToggle={
-              onToggleMode
-                ? {
-                    label: isEditMode
-                      ? (modeToggleLabels?.leaveEdit ?? '复习')
-                      : (modeToggleLabels?.enterEdit ?? '编辑'),
-                    onClick: onToggleMode,
-                  }
-                : null
-            }
-            quizAction={currentPalaceId ? { label: '做题', onClick: handleOpenQuizPage } : null}
-            immersiveAction={
-              hidePresentationOverflowActions || resolvedPresentationStrategy === 'viewport-only'
-                ? null
-                : {
-                    label: fullscreen ? '退出网页内全屏' : '网页内全屏',
-                    active: fullscreen,
-                    onClick: () => { void onToggleFullscreen() },
-                  }
-            }
-            nativeFullscreenAction={
-              hidePresentationOverflowActions
-                ? null
-                : {
-                    label: resolvedPresentationStrategy === 'viewport-only'
-                      ? nativeFullscreenActive ? '退出全屏' : '全屏'
-                      : nativeFullscreenActive ? '退出系统全屏' : '系统全屏',
-                    active: nativeFullscreenActive,
-                    onClick: () => {
-                      void (nativeFullscreenActive
-                        ? frameRef.current?.exitFullscreen()
-                        : frameRef.current?.enterFullscreen())
-                    },
-                  }
-            }
-            clearUiAction={
-              hidePresentationOverflowActions
-                ? null
-                : {
-                    label: '清屏',
-                    active: uiCleared,
-                    onClick: () => frameRef.current?.toggleUiCleared(),
-                  }
-            }
-          />
-        }
+        toolbarContent={buildFlipCardToolbar({
+          toolbarExtensions,
+          isEditMode,
+          ratingMode,
+          englishModeActive,
+          fullscreen,
+          uiCleared,
+          nativeFullscreenActive,
+          hidePresentationOverflowActions,
+          resolvedPresentationStrategy,
+          currentPalaceId,
+          modeToggleLabels,
+          frameRef,
+          onToggleRatingMode,
+          onToggleMode,
+          onToggleEnglishMode: handleToggleEnglishMode,
+          onOpenQuizPage: handleOpenQuizPage,
+          onToggleFullscreen,
+          onOpenPalaceCalibration,
+        })}
         syncOnPropChange
         syncIntent="soft"
         preserveViewOnSync={framePreserveViewOnSync}
@@ -723,6 +707,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           surfaceClassName,
         )}
       />
+      </div>
+      {englishChrome}
+      {aiRunConfigDialog}
     </div>
   )
 })

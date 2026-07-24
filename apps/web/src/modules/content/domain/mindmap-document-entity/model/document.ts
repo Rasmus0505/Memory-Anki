@@ -9,6 +9,11 @@ export interface MindMapNodeData {
   memoryAnkiRootKind?: string | null
   /** When true, parent reveal auto-shows this node's body during review flip. */
   memoryAnkiQuestionCard?: boolean
+  /**
+   * Editor-only card fill mark (CSS color, e.g. `#fecaca`).
+   * Not applied in review/practice projections.
+   */
+  markColor?: string | null
   /** Anki presentation role: front / back / none (explicit). Unset = infer. */
   ankiRole?: 'front' | 'back' | 'none'
   /** When ankiRole is back, optional explicit front uid (overrides parent inference). */
@@ -180,6 +185,57 @@ export function highlightMindMapNodes(
 
 export function isMindMapQuestionCard(node: MindMapNode | null | undefined): boolean {
   return node?.data?.memoryAnkiQuestionCard === true
+}
+
+/** Normalize a CSS color string for markColor storage; empty/invalid → null. */
+export function normalizeMindMapMarkColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  // Allow #rgb / #rrggbb / #rrggbbaa and common rgb()/hsl() forms used by color inputs.
+  if (/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed)) {
+    return trimmed.toLowerCase()
+  }
+  if (/^(rgb|hsl)a?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?(?:\s*,\s*[\d.]+%?\s*)?\)$/i.test(trimmed)) {
+    return trimmed.replace(/\s+/g, ' ')
+  }
+  return null
+}
+
+export function getMindMapMarkColor(node: MindMapNode | null | undefined): string | null {
+  return normalizeMindMapMarkColor(node?.data?.markColor)
+}
+
+/**
+ * Set or clear card mark color on one or more nodes.
+ * Pass `color: null` (or empty) to clear. Returns how many nodes changed.
+ */
+export function setMindMapMarkColors(
+  document: MindMapDocumentInput,
+  nodeUids: readonly string[],
+  color: string | null,
+): { document: MindMapDocumentV1; count: number } {
+  const uids = uniqueUids(nodeUids)
+  const nextColor = normalizeMindMapMarkColor(color)
+  let count = 0
+  const nextDocument = updateDocument(document, (draft) => {
+    for (const uid of uids) {
+      if (!uid) continue
+      const found = findNode(draft.root, uid)
+      if (!found) continue
+      const current = getMindMapMarkColor(found.node)
+      if (current === nextColor) continue
+      const nextData: MindMapNodeData = { ...(found.node.data ?? {}) }
+      if (nextColor) {
+        nextData.markColor = nextColor
+      } else {
+        delete nextData.markColor
+      }
+      found.node.data = nextData
+      count += 1
+    }
+  })
+  return { document: nextDocument, count }
 }
 
 /**

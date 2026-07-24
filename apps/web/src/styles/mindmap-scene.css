@@ -1,6 +1,29 @@
 /* Mind-map frame scene chrome: border + soft glow + top accent by product mode. */
 
 /*
+ * English interaction mode (PWA + desktop):
+ * - Allow native text selection for long-press multi-word AI translation
+ * - Prefer whole-word wrapping (layout also widens cards for long English tokens)
+ * - Keep touch from being stolen by map pan when interacting with node text
+ */
+[data-english-mode='true'] .mindmap-node-text {
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: auto;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+[data-english-mode='true'] .mindmap-node-text [data-reading-word='true'] {
+  -webkit-touch-callout: none;
+}
+
+.mindmap-node-text {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/*
  * Yellow knowledge emphasis — must remain visible in every mind-map surface
  * (edit / review / practice / lookup / import / rating), not only the editor chrome.
  * Markup may include inline styles; these rules are a mode-independent fallback

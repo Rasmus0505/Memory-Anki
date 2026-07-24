@@ -16,8 +16,10 @@ import {
   highlightEditorDocNodes,
   moveEditorDocNode,
   relocateEditorDocNodes,
+  setEditorDocMarkColors,
   setEditorDocQuestionCards,
 } from './documentGraphProjection'
+import { setLastUsedMarkColor } from '@/shared/preferences/markColorLabels'
 import {
   selectedInteraction,
   type MindMapInteractionState,
@@ -156,6 +158,36 @@ export function useMindMapEditorDocActions(deps: {
       if (!commitEditorDoc(nextEditorDoc)) return
       toast.success(
         count > 1 ? `已将 ${count} 张卡片全文标记为重点` : '已将全文标记为重点',
+        { action: { label: '撤销', onClick: undoEditorDoc } },
+      )
+    },
+    [canEdit, commitEditorDoc, getCurrentEditorDoc, undoEditorDoc],
+  )
+
+  const handleMarkColorNodes = useCallback(
+    (nodeIds: readonly string[], color: string | null) => {
+      if (!canEdit) return
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      if (unique.length === 0) return
+      const { document: nextEditorDoc, count } = setEditorDocMarkColors(
+        getCurrentEditorDoc(),
+        unique,
+        color,
+      )
+      if (count === 0) {
+        toast.info(color ? '所选卡片已是该颜色' : '所选卡片没有标记颜色')
+        return
+      }
+      if (!commitEditorDoc(nextEditorDoc)) return
+      if (color) setLastUsedMarkColor(color)
+      toast.success(
+        color
+          ? count > 1
+            ? `已为 ${count} 张卡片标记颜色`
+            : '已标记颜色'
+          : count > 1
+            ? `已清除 ${count} 张卡片的颜色`
+            : '已清除颜色',
         { action: { label: '撤销', onClick: undoEditorDoc } },
       )
     },
@@ -307,6 +339,7 @@ export function useMindMapEditorDocActions(deps: {
     handleDeleteNodes,
     handleDeleteNodeOnly,
     handleHighlightNodes,
+    handleMarkColorNodes,
     handleToggleQuestionCards,
     handleEditNode,
     handleRelocateNodes,

@@ -37,6 +37,9 @@ export interface MindMapEditorSurfaceProps {
   capabilities?: readonly MindMapCapability[]
   readonly?: boolean
   practiceModeActive?: boolean
+  /** Host English interaction mode: clickable words + long-press selection (no flip). */
+  englishInteractionActive?: boolean
+  onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   presentationStrategy?: MindMapPresentationStrategy

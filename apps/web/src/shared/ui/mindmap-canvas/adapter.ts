@@ -13,6 +13,8 @@ export interface MindMapNodeVisual {
   concealText?: boolean
   placeholder?: boolean
   borderColor?: string | null
+  /** Editor-only user mark fill (card background). */
+  fillColor?: string | null
   outlineTones?: Array<'danger' | 'info'>
   highlighted?: boolean
   muted?: boolean

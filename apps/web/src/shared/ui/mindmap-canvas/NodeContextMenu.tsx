@@ -9,6 +9,15 @@ import {
 } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 
+export interface ContextMenuActionTrailing {
+  ariaLabel: string
+  onClick: () => void
+  /** Optional swatch color shown as a small square. */
+  swatchColor?: string | null
+  /** Conic palette glyph when no swatch. */
+  showPalette?: boolean
+}
+
 export interface ContextMenuAction {
   label: string
   icon: ComponentType<{ className?: string }>
@@ -16,6 +25,10 @@ export interface ContextMenuAction {
   variant?: 'default' | 'danger'
   disabled?: boolean
   separatorBefore?: boolean
+  /** Keep the menu open after main click (rare). */
+  keepOpen?: boolean
+  /** Right-side control (e.g. open color palette without applying last color). */
+  trailing?: ContextMenuActionTrailing
 }
 
 interface NodeContextMenuProps {
@@ -33,7 +46,7 @@ export function NodeContextMenu({ x, y, onClose, actions, children }: NodeContex
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     },
-    [onClose]
+    [onClose],
   )
 
   useEffect(() => {
@@ -68,24 +81,65 @@ export function NodeContextMenu({ x, y, onClose, actions, children }: NodeContex
       {actions.map((action, i) => (
         <div key={`${action.label}-${i}`}>
           {action.separatorBefore ? <div className="my-1 h-px bg-border" /> : null}
-          <button
-            type="button"
-            disabled={action.disabled}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (action.disabled) return
-              action.onClick()
-              onClose()
-            }}
-            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors
+          <div
+            className={`flex w-full items-center gap-0.5 rounded-lg text-xs transition-colors
               ${action.variant === 'danger'
-                ? 'text-destructive hover:bg-destructive/10'
-                : 'hover:bg-secondary'
-              } ${action.disabled ? 'cursor-not-allowed opacity-40 hover:bg-transparent' : ''}`}
+                ? 'text-destructive'
+                : ''
+              } ${action.disabled ? 'opacity-40' : ''}`}
           >
-            <action.icon className="h-3.5 w-3.5" />
-            {action.label}
-          </button>
+            <button
+              type="button"
+              disabled={action.disabled}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (action.disabled) return
+                action.onClick()
+                if (!action.keepOpen) onClose()
+              }}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-2 transition-colors
+                ${action.variant === 'danger'
+                  ? 'hover:bg-destructive/10'
+                  : 'hover:bg-secondary'
+                } ${action.disabled ? 'cursor-not-allowed opacity-40 hover:bg-transparent' : ''}`}
+            >
+              <action.icon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{action.label}</span>
+            </button>
+            {action.trailing ? (
+              <button
+                type="button"
+                aria-label={action.trailing.ariaLabel}
+                disabled={action.disabled}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (action.disabled) return
+                  action.trailing?.onClick()
+                  // Trailing opens a secondary panel; close the main menu.
+                  onClose()
+                }}
+                className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {action.trailing.showPalette !== false ? (
+                  <span
+                    className="h-3.5 w-3.5 rounded border border-black/15"
+                    style={{
+                      background: action.trailing.swatchColor
+                        ? action.trailing.swatchColor
+                        : 'conic-gradient(#f87171, #fbbf24, #4ade80, #38bdf8, #a78bfa, #f472b6, #f87171)',
+                    }}
+                  />
+                ) : action.trailing.swatchColor ? (
+                  <span
+                    className="h-3.5 w-3.5 rounded border border-black/15"
+                    style={{ backgroundColor: action.trailing.swatchColor }}
+                  />
+                ) : (
+                  <span className="h-3.5 w-3.5 rounded border border-dashed border-muted-foreground/40" />
+                )}
+              </button>
+            ) : null}
+          </div>
         </div>
       ))}
     </div>

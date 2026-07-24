@@ -42,6 +42,25 @@ describe('mind map layout sizing', () => {
     expect(mixedText.width).toBeLessThan(twentyCharacters.width)
   })
 
+  it('widens cards so long English words are not forced mid-word', () => {
+    const short = getNodeSize('branch', 'cat')
+    const longWord = getNodeSize('branch', 'responsibility')
+    const phrase = getNodeSize('leaf', 'responsibility and accountability')
+    // ~45 Latin letters → weighted length past the soft 20-fullwidth budget.
+    const veryLongWord = getNodeSize(
+      'branch',
+      'pneumonoultramicroscopicsilicovolcanoconiosis',
+    )
+    const softMax = getNodeSize(
+      'branch',
+      '一二三四五六七八九十一二三四五六七八九十',
+    ).width
+
+    expect(longWord.width).toBeGreaterThan(short.width)
+    expect(phrase.width).toBeGreaterThanOrEqual(longWord.width)
+    expect(veryLongWord.width).toBeGreaterThan(softMax)
+  })
+
   it('grows node height for explicit line breaks', () => {
     const singleLine = getNodeSize('leaf', '第一行')
     const multiLine = getNodeSize('leaf', '第一行\n第二行\n第三行')

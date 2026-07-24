@@ -14,6 +14,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
+import { MarkColorFlyout } from './MarkColorFlyout'
 import { NodeContextMenu } from './NodeContextMenu'
 import type { ContextMenuAction } from './NodeContextMenu'
 import type { GraphData } from './adapter'
@@ -59,6 +60,11 @@ export interface MindMapCanvasProps {
   onDeleteNodeOnly?: (nodeId: string) => void
   /** Mark full card text with yellow emphasis (`data-emphasis="highlight"`). */
   onHighlightNodes?: (nodeIds: string[]) => void
+  /**
+   * Set or clear editor-only card mark color (`null` clears).
+   * Color is a CSS color string stored on node.data.markColor.
+   */
+  onMarkColorNodes?: (nodeIds: string[], color: string | null) => void
   /** Toggle question-card flag for review auto-reveal. */
   onToggleQuestionCards?: (nodeIds: string[], enabled: boolean) => void
   /** Preferred drop commit for structure moves (supports multi-source). */
@@ -101,6 +107,9 @@ export interface MindMapCanvasProps {
   buildSelectionToolbarActions?: (nodeId: string) => import('./selectionToolbar').SelectionToolbarAction[]
   selectionToolbarPreferPosition?: import('./selectionToolbar').SelectionToolbarPreferPosition
   practiceModeActive?: boolean
+  /** Host English interaction mode: clickable words + long-press selection (no flip). */
+  englishInteractionActive?: boolean
+  onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
@@ -400,6 +409,17 @@ function MindMapCanvasInner({
           y={state.edgeMenu.y}
           onClose={state.closeEdgeMenu}
           actions={state.edgeActions}
+        />
+      ) : null}
+      {state.markColorFlyout ? (
+        <MarkColorFlyout
+          x={state.markColorFlyout.x}
+          y={state.markColorFlyout.y}
+          targetCount={state.markColorFlyout.nodeIds.length}
+          currentColor={state.markColorFlyout.currentColor}
+          onPick={state.pickMarkColor}
+          onClear={state.clearMarkColor}
+          onClose={state.closeMarkColorFlyout}
         />
       ) : null}
     </div>

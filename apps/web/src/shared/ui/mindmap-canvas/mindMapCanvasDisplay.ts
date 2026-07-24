@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react'
+import type { MouseEvent } from 'react'
 import type { NodeSize, PreviewState } from './layout'
 import type { SelectionToolbarAction, SelectionToolbarPreferPosition } from './selectionToolbar'
 
@@ -43,6 +44,8 @@ interface BuildDisplayNodesInput {
   selectionToolbarPreferPosition?: SelectionToolbarPreferPosition
   extractDropTargetId?: string | null
   extractDropMode?: 'before' | 'inside' | 'after' | null
+  englishInteractionActive?: boolean
+  onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
 }
 
 export function buildDisplayNodes({
@@ -77,6 +80,8 @@ export function buildDisplayNodes({
   selectionToolbarPreferPosition = 'auto',
   extractDropTargetId = null,
   extractDropMode = null,
+  englishInteractionActive = false,
+  onEnglishWordClick,
 }: BuildDisplayNodesInput): Node[] {
   const previewNodesById = new Map(previewNodes.map((node) => [node.id, node]))
   const previousNodesById = new Map((previousDisplayNodes ?? []).map((node) => [node.id, node]))
@@ -148,10 +153,12 @@ export function buildDisplayNodes({
       onExtractSelection,
       onExtractDropPreview,
       readonly,
-      onTouchLongPress: touchLongPressEnabled ? onTouchLongPress : undefined,
+      onTouchLongPress: touchLongPressEnabled && !englishInteractionActive ? onTouchLongPress : undefined,
       selectionToolbarActions: selectionToolbarActions.length > 0 ? selectionToolbarActions : undefined,
       selectionToolbarPreferPosition:
         selectionToolbarActions.length > 0 ? selectionToolbarPreferPosition : undefined,
+      englishInteractionActive,
+      onEnglishWordClick: englishInteractionActive ? onEnglishWordClick : undefined,
     }
     const previous = previousNodesById.get(node.id)
     const dragHandle = canDrag ? '.mindmap-node-drag-surface' : undefined

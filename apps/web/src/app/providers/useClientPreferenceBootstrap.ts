@@ -57,6 +57,12 @@ import {
   initializeClientPreferences,
   migrateLocalPreferenceToBackend,
 } from '@/shared/preferences/clientPreferences'
+import {
+  DEFAULT_MARK_COLOR_LABELS_SETTINGS,
+  hydrateMarkColorLabelsFromBackend,
+  MARK_COLOR_LABELS_STORAGE_KEY,
+  sanitizeMarkColorLabelsSettings,
+} from '@/shared/preferences/markColorLabels'
 import { emitAppEvent } from '@/shared/events/appEvents'
 
 export function useClientPreferenceBootstrap() {
@@ -137,6 +143,15 @@ export async function bootstrapClientPreferences() {
       sanitizeFreestyleFeedConfig,
       FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
     ),
+    migrateLocalPreferenceToBackend(
+      'mark_color_labels',
+      MARK_COLOR_LABELS_STORAGE_KEY,
+      DEFAULT_MARK_COLOR_LABELS_SETTINGS,
+      sanitizeMarkColorLabelsSettings,
+    ).then((value) => {
+      // Keep a local mirror so canvas can read without depending on settings module graph.
+      hydrateMarkColorLabelsFromBackend(value)
+    }),
   ]
 
   const hadLegacyLocalState =
