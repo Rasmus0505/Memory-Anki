@@ -109,11 +109,18 @@ def create_completed_study_session_from_time_payload(
     client_source = _normalize_client_source(payload.get("clientSource") or payload.get("client_source"))
     if client_source is not None:
         summary_payload["client_source"] = client_source
+    completion_method = str(
+        payload.get("completionMethod") or payload.get("completion_method") or "manual_complete"
+    )
+    # Background autosave is a crash checkpoint, not a finished study record.
+    # Writing status=completed made "保存结束" ghosts appear in the time-record list
+    # whenever the client remounted with a new id before a real leave/complete.
+    status = "active" if completion_method == "saved" else "completed"
     item = create_study_session(
         session,
         {
             "id": str(payload.get("id") or uuid4()),
-            "status": "completed",
+            "status": status,
             "scene": scene,
             "target_type": target_type,
             "target_id": target_id,
@@ -122,10 +129,10 @@ def create_completed_study_session_from_time_payload(
             "english_course_id": english_course_id,
             "title": payload.get("title") or "",
             "started_at": started_at.isoformat(),
-            "ended_at": ended_at.isoformat(),
+            "ended_at": ended_at.isoformat() if status == "completed" else None,
             "effective_seconds": effective_seconds,
             "pause_count": max(0, int(payload.get("pauseCount", payload.get("pause_count", 0)) or 0)),
-            "completion_method": payload.get("completionMethod") or payload.get("completion_method") or "manual_complete",
+            "completion_method": completion_method,
             "events": payload.get("events") or [],
             "summary": summary_payload,
         },
@@ -286,6 +293,91 @@ def reclassify_ghost_formal_review_time_sessions(session: Session) -> int:
             "reclassified_from": "review_timer_ghost",
             "original_kind": "review",
         }
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        fixed += 1
+    if fixed:
+        session.flush()
+    return fixed
+
+
+def demote_autosave_checkpoint_time_records(session: Session) -> int:
+    """Hide historical autosave checkpoints from completed time-record lists.
+
+    Older clients wrote completion_method=saved as status=completed. Those rows
+    look like real study ends ("保存结束") but are only intermediate ticks.
+    """
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.completion_method == "saved",
+            StudySession.deleted_at.is_(None),
+        )
+        .all()
+    )
+    fixed = 0
+    for row in rows:
+        try:
+            summary = json.loads(row.summary_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            summary = {}
+        if not isinstance(summary, dict):
+            summary = {}
+        # Keep real manual edits / quick-adds that used "saved" only if duration was edited.
+        if summary.get("duration_edited"):
+            continue
+        row.status = "abandoned"
+        summary = {
+            **summary,
+            "demoted_from": "autosave_checkpoint",
+            "demoted_reason": "saved_completion_not_final",
+        }
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        fixed += 1
+    if fixed:
+        session.flush()
+    return fixed
+
+
+def restore_nested_freestyle_review_time_durations(session: Session) -> int:
+    """Undo a mistaken zeroing of freestyle unit-scoped review durations.
+
+    Durations belong on the study session; only the clock display was wrong
+    (midnight hour shown as 24 instead of 0). Restore from summary backup.
+    """
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+        )
+        .all()
+    )
+    fixed = 0
+    for row in rows:
+        try:
+            summary = json.loads(row.summary_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            summary = {}
+        if not isinstance(summary, dict):
+            continue
+        original = summary.get("original_effective_seconds")
+        if original is None:
+            continue
+        if not summary.get("nested_under_freestyle_timer") and not summary.get("explicit_scope"):
+            continue
+        try:
+            restored = max(0, int(original))
+        except (TypeError, ValueError):
+            continue
+        row.effective_seconds = restored
+        summary = {k: v for k, v in summary.items() if k not in {
+            "nested_under_freestyle_timer",
+            "original_effective_seconds",
+        }}
         row.summary_json = json.dumps(summary, ensure_ascii=False)
         row.updated_at = utc_now_naive()
         fixed += 1

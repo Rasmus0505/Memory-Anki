@@ -81,11 +81,13 @@ export function mergeNewDueIntoWaveApi(waveId: string, nodeUids?: string[]) {
 }
 export type ReviewCalibrationPayload = {
   operation_id: string
-  mode: 'align_wave' | 'baseline'
+  mode: 'align_wave' | 'baseline' | 'match_node'
   scope_kind?: 'palace' | 'branch' | 'nodes'
   scope?: Record<string, unknown>
   baseline_tier?: string
   target_local_date?: string
+  /** Template card whose FSRS progress is copied onto the scope (match_node). */
+  source_node_uid?: string
   palace_revision?: string
 }
 
@@ -95,6 +97,7 @@ export type ReviewCalibrationResult = {
   palace_revision?: string
   mode?: string
   baseline_tier?: string | null
+  source_node_uid?: string | null
   target_local_date?: string | null
   affected_node_count: number
   idempotent?: boolean

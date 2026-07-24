@@ -53,6 +53,8 @@ interface UseMindMapViewportInput {
   /** When this identity changes (edit/review/practice/rating), re-center the previous center card. */
   sceneTransitionKey?: string | null
   viewCommand: MindMapCanvasViewCommand | null
+  /** Host 刷新脑图 epoch — fit once after remount so blank off-screen maps recover. */
+  hostRefreshEpoch?: number
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
 
@@ -70,6 +72,7 @@ export function useMindMapViewport({
   contentChangeViewportPolicy,
   sceneTransitionKey = null,
   viewCommand,
+  hostRefreshEpoch = 0,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
   const { fitView, getViewport, setViewport, zoomIn, zoomOut, setCenter, screenToFlowPosition } =
@@ -92,6 +95,7 @@ export function useMindMapViewport({
   const sceneRecenterLockRef = useRef(false)
   const sceneRecenterLockTimeoutRef = useRef<number | null>(null)
   const previousSceneTransitionKeyRef = useRef<string | null>(null)
+  const handledHostRefreshEpochRef = useRef(0)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -298,12 +302,11 @@ export function useMindMapViewport({
     if (previousKey === nextKey) return
     previousSceneTransitionKeyRef.current = nextKey
     // Prefer the last tracked center card; fall back to a live read of the old camera.
+    // Always mark a pending re-anchor so preserve-camera cannot freeze a blank viewport
+    // when the previous center card is absent from the next document (unit ↔ palace).
     pendingSceneRecenterNodeIdRef.current =
-      lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId()
-    // Lock immediately so same-frame preserve restores cannot yank the camera.
-    if (pendingSceneRecenterNodeIdRef.current) {
-      sceneRecenterLockRef.current = true
-    }
+      lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId() ?? '__scene_root__'
+    sceneRecenterLockRef.current = true
   }, [resolveViewportCenterNodeId, sceneTransitionKey])
 
   // Track which card sits at the viewport center while the scene is stable.
@@ -316,15 +319,30 @@ export function useMindMapViewport({
 
   // Apply deferred re-center once the post-switch layout has nodes.
   useLayoutEffect(() => {
-    const anchorId = pendingSceneRecenterNodeIdRef.current
-    if (!anchorId || !isCanvasReady) return
+    const requestedAnchorId = pendingSceneRecenterNodeIdRef.current
+    if (!requestedAnchorId || !isCanvasReady) return
     if (isDraggingNodeRef.current) return
-    const exists = nodes.some((node) => node.id === anchorId)
-    if (!exists) {
-      // Center card may be hidden in the reveal tree — keep camera as-is.
-      pendingSceneRecenterNodeIdRef.current = null
-      sceneRecenterLockRef.current = false
-      return
+    const requestedExists = nodes.some((node) => node.id === requestedAnchorId)
+    // Freestyle unit ↔ full palace (and other document-identity switches) drop the
+    // previous center card. Falling back to "keep camera" leaves an empty white map
+    // because node positions re-layout while the old camera stays far away.
+    let anchorId = requestedAnchorId
+    if (!requestedExists) {
+      const rootGraphId =
+        graphNodes.find((node) => node.parentId == null)?.id
+        ?? nodes.find((node) => {
+          const graphParent = graphNodes.find((item) => item.id === node.id)?.parentId
+          return graphParent == null
+        })?.id
+        ?? null
+      if (!rootGraphId || !nodes.some((node) => node.id === rootGraphId)) {
+        pendingSceneRecenterNodeIdRef.current = null
+        sceneRecenterLockRef.current = false
+        // Last resort: fit the whole new tree so the map is never blank after mode switch.
+        runFitView(180)
+        return
+      }
+      anchorId = rootGraphId
     }
     pendingSceneRecenterNodeIdRef.current = null
     sceneRecenterLockRef.current = true
@@ -338,7 +356,15 @@ export function useMindMapViewport({
       sceneRecenterLockTimeoutRef.current = null
       lastStableCenterNodeIdRef.current = anchorId
     }, 230)
-  }, [centerNodeInCanvas, isCanvasReady, isDraggingNodeRef, layoutFingerprint, nodes])
+  }, [
+    centerNodeInCanvas,
+    graphNodes,
+    isCanvasReady,
+    isDraggingNodeRef,
+    layoutFingerprint,
+    nodes,
+    runFitView,
+  ])
 
   useLayoutEffect(() => {
     if (!preserveViewport || !isCanvasReady) return
@@ -600,6 +626,16 @@ export function useMindMapViewport({
     }
     centerNodeInCanvas(viewCommand.nodeId, 220)
   }, [centerNodeInCanvas, isCanvasReady, runFitView, viewCommand])
+
+  // Manual 刷新脑图 remounts the provider with a reset camera; fit once ready so
+  // the tree is visible even when default viewport does not cover the layout.
+  useEffect(() => {
+    if (!isCanvasReady || hostRefreshEpoch <= 0) return
+    if (handledHostRefreshEpochRef.current === hostRefreshEpoch) return
+    if (nodes.length === 0) return
+    handledHostRefreshEpochRef.current = hostRefreshEpoch
+    runFitView(0)
+  }, [hostRefreshEpoch, isCanvasReady, nodes.length, runFitView])
 
   useEffect(() => {
     return () => {

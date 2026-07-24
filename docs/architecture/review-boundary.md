@@ -87,7 +87,7 @@ Formal long-term scheduling is a **write-time wave domain** (`ReviewWave` / `Rev
 | Wave (`wave_service` / `wave_policy`) | Safety-window adsorb, freeze, merge-new-due, membership reconciliation |
 | Wave session (`wave_session_service`) | Formal/reinforcement start, pause/resume, completion |
 | StudySession | Execution slice of an active formal wave |
-| Calibration (`calibration_service`) | `align_wave` / `baseline` with audited snapshots (no recall events) |
+| Calibration (`calibration_service`) | `align_wave` / `baseline` / `match_node` (copy one card's FSRS progress onto a scope) with audited snapshots (no recall events). Diagnose returns per-node progress for UI multi-select + template pick. |
 
 `ReviewNodeState.due_at` is the **effective** formal due for legacy queue fields. Projections also expose `raw_due_at`, `schedule_source`, `reinforcement_due`, and dual-date fields. **Never-reviewed / first-learn nodes** (no `last_review_at`, including tree nodes with no `ReviewNodeState` row yet) **are formal-due immediately** so a newly built palace enters the review queue without calibration. Content-changed nodes stay out of formal due until relearned or calibrated; reinforcement membership stays on same-day reinforcement waves only.
 

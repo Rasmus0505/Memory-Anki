@@ -170,6 +170,67 @@ def _resolve_scope(
     raise ValueError("scope_kind must be palace, branch, or nodes")
 
 
+def _progress_label(node: dict[str, Any]) -> str:
+    """Human-readable memory progress label for calibration UI."""
+    schedule = str(node.get("schedule_source") or "")
+    if schedule == SCHEDULE_UNINITIALIZED:
+        return "未初始化"
+    if schedule == "content_changed":
+        return "内容变更"
+    if node.get("reinforcement_due"):
+        return "同日复练"
+    stability = node.get("stability_days")
+    try:
+        s = float(stability) if stability is not None else -1.0
+    except (TypeError, ValueError):
+        s = -1.0
+    if s < 0:
+        return "未初始化"
+    if s < 0.5:
+        return "新学"
+    if s < 2:
+        return "偏弱"
+    if s < 14:
+        return "一般"
+    if s < 45:
+        return "较熟"
+    return "很熟"
+
+
+def _node_progress_rows(projection: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for node in projection.get("nodes") or []:
+        uid = str(node.get("node_uid") or "")
+        if not uid:
+            continue
+        text = str(node.get("text") or "").strip() or uid
+        rows.append(
+            {
+                "node_uid": uid,
+                "text": text,
+                "stability_days": node.get("stability_days"),
+                "retrievability": node.get("retrievability"),
+                "due_at": node.get("due_at"),
+                "due": bool(node.get("due")),
+                "reinforcement_due": bool(node.get("reinforcement_due")),
+                "schedule_source": node.get("schedule_source"),
+                "evidence_source": node.get("evidence_source"),
+                "progress_label": _progress_label(node),
+            }
+        )
+    # Stable order: due first, then weaker (lower stability), then title.
+    def sort_key(item: dict[str, Any]) -> tuple:
+        s = item.get("stability_days")
+        try:
+            s_val = float(s) if s is not None else -1.0
+        except (TypeError, ValueError):
+            s_val = -1.0
+        return (0 if item.get("due") else 1, s_val, item.get("text") or "")
+
+    rows.sort(key=sort_key)
+    return rows
+
+
 def diagnose_palace(session: Session, palace_id: int) -> dict[str, Any]:
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None:
@@ -199,6 +260,122 @@ def diagnose_palace(session: Session, palace_id: int) -> dict[str, Any]:
         "direct_evidence_count": direct,
         "inherited_evidence_count": inherited,
         "waves": waves,
+        # Per-card progress for calibration UI (pick template / multi-select targets).
+        "nodes": _node_progress_rows(projection),
+    }
+
+
+def _apply_baseline_new(session: Session, row: ReviewNodeState) -> None:
+    remove_node_from_open_waves(session, row)
+    # First-learn shell: Learning + no S/D. Leaving Review/Relearning
+    # with stability=None makes py-fsrs review_card assert (HTTP 500).
+    row.state = int(State.Learning)
+    row.step = 0
+    row.stability = None
+    row.difficulty = None
+    row.last_review_at = None
+    row.raw_due_at = None
+    row.effective_wave_id = None
+    row.effective_local_date = None
+    row.schedule_source = SCHEDULE_UNINITIALIZED
+    row.schedule_reason = "baseline_new"
+
+
+def _apply_baseline_tier(session: Session, row: ReviewNodeState, tier_key: str) -> None:
+    tier = BASELINE_TIERS.get(tier_key)
+    if tier is None:
+        raise ValueError("invalid baseline_tier")
+    if not tier["initialized"]:
+        _apply_baseline_new(session, row)
+        return
+    row.stability = float(tier["stability"])
+    row.difficulty = float(tier["difficulty"])
+    row.state = int(State.Review)
+    row.step = None
+    now = utc_now_naive()
+    if row.last_review_at is None:
+        row.last_review_at = now
+    from datetime import timedelta
+
+    raw = row.last_review_at + timedelta(days=float(tier["stability"]))
+    assign_node_to_formal_wave(
+        session,
+        row,
+        raw_due_at=raw,
+        reason="calibrated_baseline",
+    )
+    row.schedule_source = SCHEDULE_CALIBRATED
+    row.schedule_reason = f"baseline_{tier_key}"
+
+
+def _apply_match_node(
+    session: Session,
+    row: ReviewNodeState,
+    *,
+    source_row: ReviewNodeState | None,
+    source_uid: str,
+) -> None:
+    """Copy FSRS progress from source_row onto row (same S/D/state/due horizon)."""
+    source_schedule = (
+        str(getattr(source_row, "schedule_source", None) or "")
+        if source_row is not None
+        else SCHEDULE_UNINITIALIZED
+    )
+    source_uninitialized = (
+        source_row is None
+        or source_schedule == SCHEDULE_UNINITIALIZED
+        or source_row.stability is None
+    )
+    if source_uninitialized:
+        _apply_baseline_new(session, row)
+        row.schedule_reason = f"match_node:{source_uid}:new"
+        return
+
+    remove_node_from_open_waves(session, row)
+    row.state = int(source_row.state)
+    row.step = source_row.step
+    row.stability = source_row.stability
+    row.difficulty = source_row.difficulty
+    row.last_review_at = source_row.last_review_at
+    # Keep target content fingerprint; do not inherit source's fingerprint.
+    row.desired_retention = float(source_row.desired_retention or 0.9)
+    row.maximum_interval = int(source_row.maximum_interval or 180)
+    raw = source_row.raw_due_at or source_row.due_at or utc_now_naive()
+    assign_node_to_formal_wave(
+        session,
+        row,
+        raw_due_at=raw,
+        reason="calibrated_match_node",
+    )
+    row.schedule_source = SCHEDULE_CALIBRATED
+    row.schedule_reason = f"match_node:{source_uid}"
+    row.updated_at = utc_now_naive()
+
+
+def _match_preview_after(
+    source_row: ReviewNodeState | None, source_uid: str
+) -> dict[str, Any]:
+    if source_row is None or source_row.stability is None:
+        return {
+            "stability": None,
+            "difficulty": None,
+            "schedule_source": SCHEDULE_UNINITIALIZED,
+            "schedule_reason": f"match_node:{source_uid}:new",
+        }
+    return {
+        "stability": source_row.stability,
+        "difficulty": source_row.difficulty,
+        "state": source_row.state,
+        "last_review_at": (
+            source_row.last_review_at.isoformat() if source_row.last_review_at else None
+        ),
+        "raw_due_at": (
+            source_row.raw_due_at.isoformat()
+            if source_row.raw_due_at is not None
+            else (source_row.due_at.isoformat() if source_row.due_at else None)
+        ),
+        "schedule_source": SCHEDULE_CALIBRATED,
+        "schedule_reason": f"match_node:{source_uid}",
     }
 
 
@@ -212,13 +389,14 @@ def preview_or_apply_calibration(
     scope: dict[str, Any] | None = None,
     baseline_tier: str | None = None,
     target_local_date: date | str | None = None,
+    source_node_uid: str | None = None,
     palace_revision: str | None = None,
     confirm: bool = False,
 ) -> dict[str, Any]:
     if not operation_id.strip():
         raise ValueError("operation_id is required")
-    if mode not in {"align_wave", "baseline"}:
-        raise ValueError("mode must be align_wave or baseline")
+    if mode not in {"align_wave", "baseline", "match_node"}:
+        raise ValueError("mode must be align_wave, baseline, or match_node")
     existing = session.get(ReviewCalibrationOperation, operation_id)
     if existing is not None:
         if existing.palace_id != palace_id or existing.mode != mode:
@@ -237,16 +415,41 @@ def preview_or_apply_calibration(
     if palace_revision and palace_revision != current_rev:
         raise ValueError("palace revision conflict; refresh and retry")
 
-    node_uids = _resolve_scope(session, palace, scope_kind=scope_kind, scope=scope or {})
+    scope_payload = dict(scope or {})
+    source_uid = str(
+        source_node_uid or scope_payload.get("source_node_uid") or ""
+    ).strip()
+    if mode == "match_node":
+        if not source_uid:
+            raise ValueError("source_node_uid is required for match_node")
+        root_uid, tree_nodes = _tree(palace)
+        if source_uid not in tree_nodes or source_uid == root_uid:
+            raise ValueError("source_node_uid not found")
+        scope_payload["source_node_uid"] = source_uid
+
+    node_uids = _resolve_scope(
+        session, palace, scope_kind=scope_kind, scope=scope_payload
+    )
+    if mode == "match_node":
+        # Never overwrite the template card with itself.
+        node_uids = [uid for uid in node_uids if uid != source_uid]
+        if not node_uids:
+            raise ValueError("no target nodes to calibrate (exclude the template card)")
+
+    # Load target states + optional source in one pass.
+    load_uids = list(node_uids)
+    if mode == "match_node" and source_uid and source_uid not in load_uids:
+        load_uids.append(source_uid)
     states = {
         row.node_uid: row
         for row in session.query(ReviewNodeState)
         .filter(
             ReviewNodeState.palace_id == palace_id,
-            ReviewNodeState.node_uid.in_(node_uids),
+            ReviewNodeState.node_uid.in_(load_uids),
         )
         .all()
     }
+    source_row = states.get(source_uid) if mode == "match_node" else None
     before_after: list[tuple[str, dict[str, Any] | None, dict[str, Any]]] = []
     preview_rows: list[dict[str, Any]] = []
 
@@ -276,6 +479,8 @@ def preview_or_apply_calibration(
                 after_preview["effective_local_date"] = (
                     target_day.isoformat() if target_day else None
                 )
+            elif mode == "match_node":
+                after_preview = _match_preview_after(source_row, source_uid)
             else:
                 tier = BASELINE_TIERS.get(baseline_tier or "fair")
                 if tier is None:
@@ -307,45 +512,12 @@ def preview_or_apply_calibration(
             row.schedule_source = SCHEDULE_CALIBRATED
             row.schedule_reason = "align_wave"
             # Preserve S/D
+        elif mode == "match_node":
+            _apply_match_node(
+                session, row, source_row=source_row, source_uid=source_uid
+            )
         else:
-            tier_key = baseline_tier or "fair"
-            tier = BASELINE_TIERS.get(tier_key)
-            if tier is None:
-                raise ValueError("invalid baseline_tier")
-            if not tier["initialized"]:
-                remove_node_from_open_waves(session, row)
-                # First-learn shell: Learning + no S/D. Leaving Review/Relearning
-                # with stability=None makes py-fsrs review_card assert (HTTP 500).
-                row.state = int(State.Learning)
-                row.step = 0
-                row.stability = None
-                row.difficulty = None
-                row.last_review_at = None
-                row.raw_due_at = None
-                row.effective_wave_id = None
-                row.effective_local_date = None
-                row.schedule_source = SCHEDULE_UNINITIALIZED
-                row.schedule_reason = "baseline_new"
-            else:
-                row.stability = float(tier["stability"])
-                row.difficulty = float(tier["difficulty"])
-                row.state = int(State.Review)
-                row.step = None
-                now = utc_now_naive()
-                if row.last_review_at is None:
-                    row.last_review_at = now
-                # Place due at stability horizon from last review.
-                from datetime import timedelta
-
-                raw = row.last_review_at + timedelta(days=float(tier["stability"]))
-                assign_node_to_formal_wave(
-                    session,
-                    row,
-                    raw_due_at=raw,
-                    reason="calibrated_baseline",
-                )
-                row.schedule_source = SCHEDULE_CALIBRATED
-                row.schedule_reason = f"baseline_{tier_key}"
+            _apply_baseline_tier(session, row, baseline_tier or "fair")
         after = _state_dict(row)
         before_snapshot = {"state": before, "wave_items": before_wave_items}
         before_after.append((uid, before_snapshot, after or {}))
@@ -358,6 +530,7 @@ def preview_or_apply_calibration(
             "palace_revision": current_rev,
             "mode": mode,
             "baseline_tier": baseline_tier,
+            "source_node_uid": source_uid or None,
             "target_local_date": target_day.isoformat() if target_day else None,
             "affected_node_count": len(preview_rows),
             "items": preview_rows,
@@ -368,7 +541,7 @@ def preview_or_apply_calibration(
         palace_id=palace_id,
         mode=mode,
         scope_kind=scope_kind,
-        scope_json=json.dumps(scope or {}, ensure_ascii=False),
+        scope_json=json.dumps(scope_payload, ensure_ascii=False),
         baseline_tier=baseline_tier,
         palace_revision=current_rev,
         preview_only=False,
@@ -398,6 +571,7 @@ def preview_or_apply_calibration(
         "palace_revision": current_rev,
         "mode": mode,
         "baseline_tier": baseline_tier,
+        "source_node_uid": source_uid or None,
         "target_local_date": target_day.isoformat() if target_day else None,
         "affected_node_count": len(before_after),
         "items": preview_rows,

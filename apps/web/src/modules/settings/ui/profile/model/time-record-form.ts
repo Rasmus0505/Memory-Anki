@@ -107,33 +107,42 @@ export function parseEffectiveMinutesToSeconds(value: string) {
   return Math.round(minutes * 60)
 }
 
+/**
+ * Local wall-clock HH:mm:ss using 0–23 hours.
+ *
+ * Do not use toLocaleTimeString('zh-CN') alone: some WebViews use hourCycle h24
+ * and render midnight as 24:xx (e.g. real 00:24 → "24:24"), which looks broken.
+ */
+function formatLocalH23Clock(date: Date): string {
+  if (Number.isNaN(date.getTime())) return ''
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  const second = String(date.getSeconds()).padStart(2, '0')
+  return `${hour}:${minute}:${second}`
+}
+
+function formatLocalYmd(date: Date): string {
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}/${month}/${day}`
+}
+
 export function formatTableDate(dateString: string) {
-  return parseApiDateTime(dateString).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
+  return formatLocalYmd(parseApiDateTime(dateString))
 }
 
 export function formatTableTime(dateString: string) {
-  return parseApiDateTime(dateString).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
+  return formatLocalH23Clock(parseApiDateTime(dateString))
 }
 
 export function formatTableDateTime(dateString: string) {
   const date = parseApiDateTime(dateString)
-  return `${date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })} ${date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })}`
+  const ymd = formatLocalYmd(date)
+  const clock = formatLocalH23Clock(date)
+  if (!ymd || !clock) return ''
+  return `${ymd} ${clock}`
 }
 
 export function buildTimeRecordFormState(

@@ -494,8 +494,9 @@ export default function ImmersiveFreestylePage() {
                   key={card.id}
                   className={cn(
                     'box-border flex h-full min-h-full flex-col snap-start snap-always',
-                    // Leave clear space for HUD + bottom action dock / PWA bottom nav — not map center.
-                    'px-2 pb-[5.5rem] pt-[3.75rem] sm:px-3 sm:pb-20 sm:pt-14',
+                    // HUD top inset only; dock floats over the lower-right of the card so the
+                    // mind-map can claim the vertical space that used to be empty padding.
+                    'px-2 pb-2 pt-[3.5rem] sm:px-3 sm:pb-3 sm:pt-14',
                   )}
                 >
                   {isMindMapBranchCard(card) ? (
@@ -542,12 +543,12 @@ export default function ImmersiveFreestylePage() {
           )}
         </div>
 
-        {/* One glass action dock: desktop mid-right, PWA bottom-right above nav — not scattered pills */}
+        {/* One glass action dock: desktop mid-right, PWA over map lower-right (not eating map height) */}
         <div
           className={cn(
             'pointer-events-none absolute z-20',
             'right-3 top-1/2 -translate-y-1/2',
-            'max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
+            'max-lg:bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
           )}
         >
           <div

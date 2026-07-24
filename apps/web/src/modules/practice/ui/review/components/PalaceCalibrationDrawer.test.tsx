@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PalaceCalibrationDrawer } from './PalaceCalibrationDrawer'
 
@@ -47,6 +47,44 @@ const diagnoseItem = {
       rated_count: 0,
     },
   ],
+  nodes: [
+    {
+      node_uid: 'n-a',
+      text: '卡片甲',
+      stability_days: 7,
+      retrievability: 0.9,
+      due_at: '2026-07-30T00:00:00Z',
+      due: false,
+      reinforcement_due: false,
+      schedule_source: 'manual',
+      evidence_source: 'direct',
+      progress_label: '一般',
+    },
+    {
+      node_uid: 'n-b',
+      text: '卡片乙',
+      stability_days: 1,
+      retrievability: 0.4,
+      due_at: '2026-07-23T00:00:00Z',
+      due: true,
+      reinforcement_due: false,
+      schedule_source: 'manual',
+      evidence_source: 'direct',
+      progress_label: '偏弱',
+    },
+    {
+      node_uid: 'n-c',
+      text: '卡片丙',
+      stability_days: null,
+      retrievability: 0,
+      due_at: null,
+      due: true,
+      reinforcement_due: false,
+      schedule_source: 'uninitialized',
+      evidence_source: 'none',
+      progress_label: '未初始化',
+    },
+  ],
 }
 
 describe('PalaceCalibrationDrawer', () => {
@@ -79,7 +117,7 @@ describe('PalaceCalibrationDrawer', () => {
     })
   })
 
-  it('loads diagnose summary when opened', async () => {
+  it('loads diagnose summary and per-card progress when opened', async () => {
     render(
       <PalaceCalibrationDrawer
         open
@@ -92,9 +130,14 @@ describe('PalaceCalibrationDrawer', () => {
     await waitFor(() => expect(diagnoseMock).toHaveBeenCalledWith(12))
     expect(await screen.findByText('3')).toBeTruthy()
     expect(screen.getByText(/进行中或已暂停的正式波次/)).toBeTruthy()
+    expect(await screen.findByText('各卡片进度')).toBeTruthy()
+    expect(screen.getByText('卡片甲')).toBeTruthy()
+    expect(screen.getByText('卡片乙')).toBeTruthy()
+    expect(screen.getByText('卡片丙')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '设模板' }).length).toBe(3)
   })
 
-  it('disables branch/node scopes without selection', async () => {
+  it('disables branch scope without map selection', async () => {
     render(
       <PalaceCalibrationDrawer
         open
@@ -105,7 +148,6 @@ describe('PalaceCalibrationDrawer', () => {
     await waitFor(() => expect(diagnoseMock).toHaveBeenCalled())
 
     expect(document.getElementById('cal-scope-branch')).toHaveProperty('disabled', true)
-    expect(document.getElementById('cal-scope-nodes')).toHaveProperty('disabled', true)
   })
 
   it('previews then applies baseline calibration for the whole palace', async () => {
@@ -161,6 +203,42 @@ describe('PalaceCalibrationDrawer', () => {
       scope_kind: 'branch',
       baseline_tier: 'weak',
       scope: { branch_uid: 'branch-a' },
+    })
+  })
+
+  it('matches selected cards to a template card progress', async () => {
+    render(
+      <PalaceCalibrationDrawer
+        open
+        onOpenChange={vi.fn()}
+        palaceId={12}
+      />,
+    )
+    await waitFor(() => expect(screen.findByText('卡片甲')).resolves.toBeTruthy())
+
+    // Set 卡片甲 as template
+    const rowA = screen.getByText('卡片甲').closest('li')!
+    fireEvent.click(within(rowA).getByRole('button', { name: '设模板' }))
+    expect(within(rowA).getByRole('button', { name: '模板' })).toBeTruthy()
+
+    // Switch to match mode (set template already switches mode)
+    fireEvent.click(document.getElementById('cal-mode-match')!)
+
+    // Scope to checked cards: check 卡片乙
+    const rowB = screen.getByText('卡片乙').closest('li')!
+    fireEvent.click(within(rowB).getByRole('checkbox'))
+    fireEvent.click(document.getElementById('cal-scope-nodes')!)
+
+    fireEvent.click(screen.getByRole('button', { name: '应用' }))
+    await waitFor(() => expect(applyMock).toHaveBeenCalled())
+    expect(applyMock.mock.calls[0]?.[1]).toMatchObject({
+      mode: 'match_node',
+      scope_kind: 'nodes',
+      source_node_uid: 'n-a',
+      scope: {
+        source_node_uid: 'n-a',
+        node_uids: ['n-b'],
+      },
     })
   })
 

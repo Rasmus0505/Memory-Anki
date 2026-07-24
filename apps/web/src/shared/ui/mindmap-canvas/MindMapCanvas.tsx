@@ -206,6 +206,8 @@ class MindMapCanvasErrorBoundary extends Component<
 type MindMapCanvasInnerProps = MindMapCanvasProps & {
   onAutoRecover: (reason: string, signature: string) => void
   onHostRefresh: () => void
+  /** Bumps on 刷新脑图 so the remounted host can fit the tree once ready. */
+  hostRefreshEpoch?: number
   controlledViewport: Viewport
   onControlledViewportChange: (viewport: Viewport) => void
 }
@@ -221,6 +223,7 @@ function MindMapCanvasInner({
   className,
   onAutoRecover,
   onHostRefresh,
+  hostRefreshEpoch = 0,
   ...props
 }: MindMapCanvasInnerProps) {
   const state = useMindMapCanvasState({
@@ -228,6 +231,7 @@ function MindMapCanvasInner({
     focusMode,
     toolbarVisible: showToolbar,
     onHostRefresh,
+    hostRefreshEpoch,
   })
   const expectedNodeCount = props.graphData.nodes.length
   const [canvasReadyTimedOut, setCanvasReadyTimedOut] = useState(false)
@@ -402,12 +406,27 @@ function MindMapCanvasInner({
   )
 }
 
+const DEFAULT_MINDMAP_VIEWPORT: Viewport = { x: 4, y: 18, zoom: 0.99 }
+
 export function MindMapCanvas(props: MindMapCanvasProps) {
   const [hostEpoch, setHostEpoch] = useState(0)
+  // Fit-after-ready only for manual 刷新脑图 (not silent auto-recover remounts).
+  const [manualRefreshEpoch, setManualRefreshEpoch] = useState(0)
   // 相机状态放在 Provider 外层，容器重建或短暂零尺寸时也不会丢失用户视口。
-  const [controlledViewport, setControlledViewport] = useState<Viewport>({ x: 4, y: 18, zoom: 0.99 })
+  const [controlledViewport, setControlledViewport] = useState<Viewport>(DEFAULT_MINDMAP_VIEWPORT)
   const autoRecoveredSignaturesRef = useRef<Set<string>>(new Set())
   const hostResetKey = `${String(props.recoveryKey ?? '')}:${hostEpoch}`
+  const remountHost = useCallback((options?: { resetViewport?: boolean; manual?: boolean }) => {
+    if (options?.resetViewport) {
+      // Manual 刷新脑图 / error-boundary recover: drop a far-off camera so the map
+      // is not blank after edit↔review document switches.
+      setControlledViewport(DEFAULT_MINDMAP_VIEWPORT)
+    }
+    if (options?.manual) {
+      setManualRefreshEpoch((version) => version + 1)
+    }
+    setHostEpoch((version) => version + 1)
+  }, [])
   const refreshHost = useCallback(() => {
     dispatchGlobalFeedback('toolbar_action', {
       origin: 'toolbar',
@@ -415,15 +434,16 @@ export function MindMapCanvas(props: MindMapCanvasProps) {
     })
     // Manual refresh may retry after a previous auto-recover of the same signature.
     autoRecoveredSignaturesRef.current.clear()
-    setHostEpoch((version) => version + 1)
-  }, [])
+    remountHost({ resetViewport: true, manual: true })
+  }, [remountHost])
   const handleAutoRecover = useCallback(
     (_reason: string, signature: string) => {
       if (autoRecoveredSignaturesRef.current.has(signature)) return
       autoRecoveredSignaturesRef.current.add(signature)
-      refreshHost()
+      // Keep the user's camera — blank displayNodes recover by remount alone.
+      remountHost({ resetViewport: false, manual: false })
     },
-    [refreshHost],
+    [remountHost],
   )
 
   return (
@@ -435,6 +455,7 @@ export function MindMapCanvas(props: MindMapCanvasProps) {
           onControlledViewportChange={setControlledViewport}
           onAutoRecover={handleAutoRecover}
           onHostRefresh={refreshHost}
+          hostRefreshEpoch={manualRefreshEpoch}
         />
       </ReactFlowProvider>
     </MindMapCanvasErrorBoundary>

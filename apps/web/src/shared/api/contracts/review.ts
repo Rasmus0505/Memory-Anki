@@ -62,6 +62,20 @@ export interface ReviewWaveSummary {
   palace_title?: string
 }
 
+export interface ReviewCalibrationNodeProgress {
+  node_uid: string
+  text: string
+  stability_days: number | null
+  retrievability: number | null
+  due_at: string | null
+  due: boolean
+  reinforcement_due: boolean
+  schedule_source: string | null
+  evidence_source: string | null
+  /** e.g. 未初始化 / 偏弱 / 一般 / 较熟 / 很熟 */
+  progress_label: string
+}
+
 export interface ReviewCalibrationDiagnose {
   palace_id: number
   palace_revision: string
@@ -76,6 +90,8 @@ export interface ReviewCalibrationDiagnose {
   direct_evidence_count: number
   inherited_evidence_count: number
   waves: ReviewWaveSummary[]
+  /** Per-card progress list for calibration UI (optional for older servers). */
+  nodes?: ReviewCalibrationNodeProgress[]
 }
 export interface ReviewBranchSummary {
   branch_uid: string

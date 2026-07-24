@@ -378,25 +378,27 @@ export function FreestyleMindMapBranchCardView({
         const pendingFingerprint = editorStateFingerprint(pending)
         const dirty = pendingFingerprint !== persistedFingerprintRef.current
 
+        // Always re-clip before leaving edit: review uses a synthetic unit root while
+        // edit uses the full palace. Soft canvas sync + a fresh unit doc keeps the
+        // flip surface non-blank after "返回随心".
+        setReviewEditorState(clipBranchUnit(pending, card))
         // Leave edit immediately so "返回随心" never waits on USB/API I/O.
         setDisplayMode('review')
         setModeSyncVersion((current) => current + 1)
         setEditError(null)
 
         if (!dirty) {
-          // No structural/text edits — review unit already matches last persisted palace.
+          // No structural/text edits — unit already matches last persisted palace.
           return
         }
 
-        // Apply local structure to the freestyle unit first; persist in background.
-        setReviewEditorState(clipBranchUnit(pending, card))
+        // Persist full palace in background; re-clip again if server normalizes the doc.
         setEditSaving(true)
         try {
           const saved = await persistPalaceEditor(card.palace_id, pending)
           palaceEditorCache.set(card.palace_id, Promise.resolve(saved))
           setFullEditorState(saved)
           persistedFingerprintRef.current = editorStateFingerprint(saved)
-          // Server may normalize fingerprints / local config — re-clip from saved doc.
           setReviewEditorState(clipBranchUnit(saved, card))
         } catch (error) {
           const message =

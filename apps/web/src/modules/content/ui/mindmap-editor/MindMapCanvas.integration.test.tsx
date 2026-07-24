@@ -724,7 +724,9 @@ describe('MindMapCanvas recovery', () => {
         providerBeforeRefresh,
       ),
     )
-    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual(userViewport)
+    // Manual 刷新脑图 intentionally resets the camera so off-screen maps after
+    // edit↔review document switches become visible again (not a preserve-viewport path).
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual({ x: 4, y: 18, zoom: 0.99 })
   })
 
   it('keeps the default guided mobile viewport stable across content changes', async () => {

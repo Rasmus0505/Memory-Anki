@@ -30,6 +30,7 @@ import type { MindMapCanvasProps } from './MindMapCanvas'
 type UseMindMapCanvasStateProps = MindMapCanvasProps & {
   toolbarVisible?: boolean
   onHostRefresh?: () => void
+  hostRefreshEpoch?: number
   controlledViewport: Viewport
   onControlledViewportChange: (viewport: Viewport) => void
 }
@@ -171,6 +172,7 @@ export function useMindMapCanvasState(
     sceneTransitionKey = null,
     viewCommand = null,
     onHostRefresh,
+    hostRefreshEpoch = 0,
     controlledViewport,
     onControlledViewportChange,
   } = props
@@ -208,6 +210,7 @@ export function useMindMapCanvasState(
     contentChangeViewportPolicy,
     sceneTransitionKey,
     viewCommand,
+    hostRefreshEpoch,
     setNodeSizeVersion,
   })
   const selectedNodeIds = useMemo(() => {

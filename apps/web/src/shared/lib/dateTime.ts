@@ -114,14 +114,13 @@ export function formatApiDateTime(value: string | null): string {
   if (!value) return '未记录具体时间'
   const date = parseApiDateTime(value)
   if (Number.isNaN(date.getTime())) return '未记录具体时间'
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date).replace(/\//g, '-')
+  // Manual 0–23 clock: avoid zh-CN WebView hourCycle h24 showing midnight as 24:xx.
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 export function formatApiDate(value: string | null): string {

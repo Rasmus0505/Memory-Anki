@@ -7,6 +7,8 @@ import {
   buildTimeRecordQuickAddFormState,
   calculateEndedAtFromEffectiveMinutes,
   formatEffectiveSecondsAsMinutes,
+  formatTableDateTime,
+  formatTableTime,
   parseEffectiveMinutesToSeconds,
   parseTimeRecordFormState,
   parseTimeRecordQuickAddFormState,
@@ -45,6 +47,17 @@ describe('time-record-form', () => {
     expect(formatEffectiveSecondsAsMinutes(537)).toBe('8.95')
     expect(formatEffectiveSecondsAsMinutes(3600)).toBe('60')
     expect(parseEffectiveMinutesToSeconds('8.95')).toBe(537)
+  })
+
+  it('formats table times with 0–23 hour clock (never 24:xx at midnight)', () => {
+    // 16:24:42Z → 00:24:42 in China (UTC+8). h24 environments would show 24:24:42.
+    const chinaMidnight = '2026-07-23T16:24:42.000Z'
+    const time = formatTableTime(chinaMidnight)
+    const dateTime = formatTableDateTime(chinaMidnight)
+    expect(time).toMatch(/^00:24:42$/)
+    expect(time).not.toMatch(/^24:/)
+    expect(dateTime).toContain('00:24:42')
+    expect(dateTime).not.toMatch(/\s24:/)
   })
 
   it('builds edit form state with minute duration input', () => {

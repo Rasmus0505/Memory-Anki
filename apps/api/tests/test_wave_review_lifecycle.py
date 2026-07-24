@@ -13,6 +13,7 @@ from memory_anki.infrastructure.db._tables.reviews import (
     ReviewWaveItem,
 )
 from memory_anki.modules.memory.application.calibration_service import (
+    diagnose_palace,
     preview_or_apply_calibration,
     undo_calibration,
 )
@@ -567,6 +568,76 @@ def test_baseline_calibration_undo_restores_wave_membership(db_session):
         wave_id=wave_id, node_uid="a"
     ).one()
     assert restored.status == "pending"
+
+
+def test_diagnose_includes_per_node_progress(db_session):
+    palace = _seed_palace(db_session, node_uids=["a", "b"])
+    diag = diagnose_palace(db_session, palace.id)
+    assert diag["palace_id"] == palace.id
+    nodes = diag.get("nodes") or []
+    assert {n["node_uid"] for n in nodes} == {"a", "b"}
+    for node in nodes:
+        assert "progress_label" in node
+        assert "stability_days" in node
+        assert "text" in node
+
+
+def test_match_node_calibration_copies_progress(db_session):
+    palace = _seed_palace(db_session, node_uids=["a", "b", "c"])
+    strong_due = utc_now_naive() + timedelta(days=30)
+    a = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    a.stability = 30.0
+    a.difficulty = 3.0
+    a.due_at = strong_due
+    a.raw_due_at = strong_due
+    a.last_review_at = utc_now_naive() - timedelta(days=1)
+    b = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    b.stability = 1.0
+    b.difficulty = 7.0
+    db_session.commit()
+
+    result = preview_or_apply_calibration(
+        db_session,
+        palace_id=palace.id,
+        operation_id="match-a-to-b",
+        mode="match_node",
+        scope_kind="nodes",
+        scope={"node_uids": ["b", "c"], "source_node_uid": "a"},
+        source_node_uid="a",
+        confirm=True,
+    )
+    assert result["affected_node_count"] == 2
+    assert result["source_node_uid"] == "a"
+
+    b = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="b")
+        .one()
+    )
+    c = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="c")
+        .one()
+    )
+    a = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .one()
+    )
+    assert b.stability == a.stability == 30.0
+    assert c.stability == 30.0
+    assert b.difficulty == a.difficulty
+    assert c.difficulty == a.difficulty
+    assert b.schedule_source == "calibrated"
+    assert (b.schedule_reason or "").startswith("match_node:a")
 
 
 def test_pause_wave(db_session):

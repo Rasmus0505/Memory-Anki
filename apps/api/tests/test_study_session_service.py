@@ -207,7 +207,7 @@ def test_reclassify_existing_ghost_formal_review_time_sessions():
                 "startedAt": "2026-07-19T21:00:00",
                 "endedAt": "2026-07-19T21:05:00",
                 "effectiveSeconds": 300,
-                "completionMethod": "saved",
+                "completionMethod": "left_page",
                 "events": [],
             },
         )
@@ -222,3 +222,93 @@ def test_reclassify_existing_ghost_formal_review_time_sessions():
         refreshed = session.query(StudySession).filter_by(id="legacy-ghost").one()
         assert refreshed.scene == "practice"
         assert '"reclassified_from": "review_timer_ghost"' in refreshed.summary_json
+
+
+def test_autosave_time_payload_stays_active_checkpoint_not_completed_list():
+    from memory_anki.modules.session.application.study_session_bridge import (
+        demote_autosave_checkpoint_time_records,
+    )
+
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        item = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "autosave-checkpoint",
+                "kind": "quiz",
+                "title": "随心模式",
+                "startedAt": "2026-07-23T16:24:42",
+                "endedAt": "2026-07-23T16:25:27",
+                "effectiveSeconds": 45,
+                "completionMethod": "saved",
+                "clientSource": "pwa",
+                "events": [],
+            },
+        )
+        assert item is not None
+        assert item["status"] == "active"
+        assert item["completion_method"] == "saved"
+        assert item["ended_at"] is None
+
+        completed = list_study_sessions(session, status="completed")
+        assert all(row["id"] != "autosave-checkpoint" for row in completed)
+
+        # Historical rows already written as completed+saved are demoted.
+        legacy = StudySession(
+            id="legacy-saved-complete",
+            status="completed",
+            scene="quiz",
+            title="随心模式",
+            started_at=datetime(2026, 7, 23, 16, 0, 0),
+            ended_at=datetime(2026, 7, 23, 16, 1, 0),
+            effective_seconds=30,
+            completion_method="saved",
+            summary_json='{"client_source":"pwa"}',
+        )
+        session.add(legacy)
+        session.commit()
+
+        demoted = demote_autosave_checkpoint_time_records(session)
+        session.commit()
+        assert demoted == 1
+        assert session.query(StudySession).filter_by(id="legacy-saved-complete").one().status == "abandoned"
+
+
+def test_finalize_after_autosave_checkpoint_marks_completed():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "freestyle-1",
+                "kind": "quiz",
+                "title": "随心模式",
+                "startedAt": "2026-07-23T16:50:30",
+                "endedAt": "2026-07-23T16:51:00",
+                "effectiveSeconds": 30,
+                "completionMethod": "saved",
+                "events": [],
+            },
+        )
+        final = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "freestyle-1",
+                "kind": "quiz",
+                "title": "随心模式",
+                "startedAt": "2026-07-23T16:50:30",
+                "endedAt": "2026-07-23T17:06:51",
+                "effectiveSeconds": 849,
+                "completionMethod": "left_page",
+                "events": [],
+            },
+        )
+        assert final is not None
+        assert final["status"] == "completed"
+        assert final["completion_method"] == "left_page"
+        assert final["effective_seconds"] == 849
+        persisted = session.query(StudySession).filter_by(id="freestyle-1").one()
+        assert persisted.status == "completed"
+        assert persisted.completion_method == "left_page"

@@ -190,6 +190,7 @@ def api_calibration_preview(
                 scope=data.get("scope") if isinstance(data.get("scope"), dict) else {},
                 baseline_tier=data.get("baseline_tier"),
                 target_local_date=data.get("target_local_date"),
+                source_node_uid=data.get("source_node_uid"),
                 palace_revision=data.get("palace_revision"),
                 confirm=False,
             )
@@ -213,6 +214,7 @@ def api_calibration_apply(
                 scope=data.get("scope") if isinstance(data.get("scope"), dict) else {},
                 baseline_tier=data.get("baseline_tier"),
                 target_local_date=data.get("target_local_date"),
+                source_node_uid=data.get("source_node_uid"),
                 palace_revision=data.get("palace_revision"),
                 confirm=True,
             )
