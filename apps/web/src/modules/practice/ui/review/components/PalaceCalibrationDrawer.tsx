@@ -107,7 +107,10 @@ export function PalaceCalibrationDrawer({
   const [actionError, setActionError] = useState<string | null>(null)
 
   const hasMapSelection = Boolean(selectedNodeUid)
-  const nodes: ReviewCalibrationNodeProgress[] = diagnose?.nodes ?? []
+  const nodes = useMemo<ReviewCalibrationNodeProgress[]>(
+    () => diagnose?.nodes ?? [],
+    [diagnose?.nodes],
+  )
 
   const openWaveWarning = useMemo(() => {
     const waves = diagnose?.waves ?? []

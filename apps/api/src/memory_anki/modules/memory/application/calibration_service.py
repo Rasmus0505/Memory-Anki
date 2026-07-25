@@ -326,7 +326,7 @@ def _apply_match_node(
         or source_schedule == SCHEDULE_UNINITIALIZED
         or source_row.stability is None
     )
-    if source_uninitialized:
+    if source_uninitialized or source_row is None:
         _apply_baseline_new(session, row)
         row.schedule_reason = f"match_node:{source_uid}:new"
         return
