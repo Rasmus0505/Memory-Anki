@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
 import { setApiToken } from '@/shared/api/apiToken'
-import * as sessionRecordModel from '@/modules/session/public'
+// Spy the leaf module timedSessionRecordBuilder imports — public barrel spies do not
+// intercept that binding under Vite ESM.
+import * as sessionRecordsStore from '@/modules/session/domain/session-entity/model/session-records-store'
 import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
 import { readQueuedMutations, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
@@ -18,7 +20,7 @@ import {
 } from '@/shared/hooks/useTimedSession.test-support'
 
 describe('useTimedSession automation config', () => {
-  const persistStudySessionRecordSpy = vi.spyOn(sessionRecordModel, 'persistStudySessionRecord')
+  const persistStudySessionRecordSpy = vi.spyOn(sessionRecordsStore, 'persistStudySessionRecord')
 
   beforeEach(async () => {
     vi.useFakeTimers()
@@ -513,7 +515,14 @@ describe('useTimedSession automation config', () => {
         effectiveSeconds: 2,
       }),
     ])
-    expect(persistStudySessionRecordSpy).not.toHaveBeenCalled()
+    // Route leave must write a completed left_page record (PWA has no desktop flush).
+    await vi.waitFor(() => {
+      expect(persistStudySessionRecordSpy).toHaveBeenCalled()
+    })
+    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+    })
 
     act(() => {
       vi.advanceTimersByTime(10_000)
@@ -732,8 +741,15 @@ describe('useTimedSession automation config', () => {
       await thirdScene.result.current.complete('manual_complete', { source: 'test_complete' })
     })
 
-    expect(persistStudySessionRecordSpy).toHaveBeenCalledTimes(1)
-    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+    // Each scene leave now writes left_page (so PWA/route residency is durable);
+    // the final complete is the authoritative multi-segment record.
+    expect(persistStudySessionRecordSpy.mock.calls.length).toBeGreaterThanOrEqual(1)
+    const finalRecord =
+      persistStudySessionRecordSpy.mock.calls[
+        persistStudySessionRecordSpy.mock.calls.length - 1
+      ]?.[0]
+    expect(finalRecord).toMatchObject({
+      completionMethod: 'manual_complete',
       effectiveSeconds: 6,
       sceneSegments: [
         expect.objectContaining({ scene: 'practice', title: '场景 A', effectiveSeconds: 2 }),
@@ -741,6 +757,54 @@ describe('useTimedSession automation config', () => {
         expect.objectContaining({ scene: 'practice', title: '场景 C', effectiveSeconds: 1 }),
       ],
     })
+  })
+
+  it('persists left_page when the document is hidden and resumes on return within the window', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'quiz',
+        title: 'PWA 做题',
+        palaceId: null,
+        autoPauseMs: 60_000,
+        hiddenPauseMs: 0,
+        persistKey: 'quiz:pwa-visibility',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_100)
+    })
+
+    visibility.mockReturnValue('hidden')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      // hiddenPauseMs=0 schedules leaveScene on the next timer tick.
+      vi.advanceTimersByTime(0)
+      await Promise.resolve()
+    })
+
+    expect(result.current.status).toBe('paused')
+    await vi.waitFor(() => {
+      expect(persistStudySessionRecordSpy).toHaveBeenCalled()
+    })
+    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+      completionMethod: 'left_page',
+      effectiveSeconds: 2,
+      title: 'PWA 做题',
+    })
+
+    visibility.mockReturnValue('visible')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(2)
+    visibility.mockRestore()
   })
 
   it('does not auto resume on focus when window return is disabled', () => {

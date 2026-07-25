@@ -18,6 +18,7 @@ export function FreestyleHudBar({
   timerStatus,
   effectiveSeconds,
   onSwitchMode,
+  onTimerToggle,
 }: {
   mode: FreestyleMode
   queueLength: number
@@ -29,6 +30,8 @@ export function FreestyleHudBar({
   timerStatus: TimerStatus
   effectiveSeconds: number
   onSwitchMode: (mode: FreestyleMode) => void
+  /** Tap the clock to start / pause / resume when the floating timer is hard to reach. */
+  onTimerToggle?: () => void
 }) {
   return (
     <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 flex w-full max-w-[100vw] flex-wrap items-start justify-between gap-2 px-3 py-3 sm:w-auto sm:flex-nowrap sm:px-4 sm:py-4">
@@ -79,14 +82,43 @@ export function FreestyleHudBar({
           </>
         )}
         <span className="text-zinc-600">·</span>
-        <Clock3 className="size-3.5 shrink-0 text-zinc-400" />
-        <span className="tabular-nums text-zinc-300">
-          {timerStatus === 'running'
-            ? formatTimer(effectiveSeconds)
-            : timerStatus === 'paused'
-              ? '暂停'
-              : '--:--'}
-        </span>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full px-1 py-0.5 tabular-nums',
+            timerStatus === 'running'
+              ? 'text-emerald-300'
+              : timerStatus === 'paused'
+                ? 'text-amber-200'
+                : 'text-zinc-300',
+            onTimerToggle && 'hover:bg-white/10 active:bg-white/15',
+          )}
+          disabled={!onTimerToggle}
+          title={
+            timerStatus === 'running'
+              ? '暂停计时'
+              : timerStatus === 'paused'
+                ? '继续计时'
+                : '开始计时'
+          }
+          aria-label={
+            timerStatus === 'running'
+              ? '暂停计时'
+              : timerStatus === 'paused'
+                ? '继续计时'
+                : '开始计时'
+          }
+          onClick={onTimerToggle}
+        >
+          <Clock3 className="size-3.5 shrink-0" />
+          <span>
+            {timerStatus === 'running'
+              ? formatTimer(effectiveSeconds)
+              : timerStatus === 'paused'
+                ? `暂停 ${formatTimer(effectiveSeconds)}`
+                : '开始'}
+          </span>
+        </button>
       </div>
     </div>
   )

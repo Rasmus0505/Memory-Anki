@@ -330,6 +330,17 @@ export default function FreestylePage() {
           timerStatus={timer.status}
           effectiveSeconds={timer.effectiveSeconds}
           onSwitchMode={switchMode}
+          onTimerToggle={() => {
+            if (timer.status === 'running') {
+              timer.pause({ source: 'freestyle_hud' })
+              return
+            }
+            if (timer.status === 'paused') {
+              timer.resume({ source: 'freestyle_hud' })
+              return
+            }
+            timer.start({ source: 'freestyle_hud' })
+          }}
         />
 
         <FreestyleCardScroller

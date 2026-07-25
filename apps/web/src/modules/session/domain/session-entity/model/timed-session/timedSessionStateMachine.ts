@@ -50,10 +50,7 @@ import {
 } from '@/shared/hooks/timedSessionBrowserEffects'
 import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
 import { useTimedSessionSnapshotRestore } from '@/shared/hooks/timedSessionRestore'
-import {
-  buildSuspendedSceneLeaveState,
-  useTimedSessionSceneLeave,
-} from './timedSessionSceneLeave'
+import { useTimedSessionSceneLeave } from './timedSessionSceneLeave'
 import { useTimedSessionActivityActions } from './useTimedSessionActivityActions'
 import { useTimedSessionFocusActions } from './useTimedSessionFocusActions'
 import {
@@ -523,51 +520,49 @@ export function useTimedSession({
 
   const setSceneActive = React.useCallback(
     (active: boolean, meta?: TimedSessionMeta) => {
-      if (sceneActiveRef.current === active) {
-        return
-      }
-      sceneActiveRef.current = active
-
-      if (!active) {
-        if (!startedAtRef.current || statusRef.current === 'completed') {
+      if (active) {
+        if (sceneActiveRef.current === true) {
           return
         }
-        const currentMs = Date.now()
-        const { suspendedAt, resumeDeadlineAt } = buildSuspendedSceneLeaveState({
-          currentMs,
-          resumeWindowMs: resolvedAutomation.resumeWindowMs,
-          meta,
-        })
-        stopTicker(currentMs)
-        clearTimedSessionTimeout(autoPauseRef)
-        autoPauseDeadlineAtRef.current = null
-        clearTimedSessionTimeout(hiddenPauseRef)
-        statusRef.current = 'paused'
-        setStatus('paused')
-        setGlowState('idle')
-        idleSecondsRef.current = 0
-        setIdleSeconds(0)
-        closeActiveSceneSegment(suspendedAt)
-        pushEvent('leave_scene', { source: 'scene_inactive', ...(meta ?? {}) }, { persist: false })
-        suspendedAtRef.current = suspendedAt
-        resumeDeadlineAtRef.current = resumeDeadlineAt
-        leaveMetaRef.current = meta ?? null
-        persistSnapshot({
-          statusOverride: 'paused',
-          suspended: true,
-          suspendedAt,
-          resumeDeadlineAt,
-          leaveMeta: meta ?? null,
-        })
-        markDirty(timedSessionAutoSaveKey, 'scene_inactive')
+        sceneActiveRef.current = true
+        // Route residency / PWA foreground: resume a still-valid suspended leave.
+        if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
+          resumeSuspendedScene(meta)
+        }
         return
       }
 
-      if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
-        resumeSuspendedScene(meta)
+      // Deactivate: always clear scene activity. If a timed session is running,
+      // finish it as left_page so PWA (no desktop flush bridge) still gets a
+      // completed time record in the dashboard list (status=completed only).
+      if (sceneActiveRef.current === false && leaveHandledRef.current) {
+        return
       }
+      if (!startedAtRef.current || statusRef.current === 'completed') {
+        sceneActiveRef.current = false
+        return
+      }
+      void leaveScene({ source: 'scene_inactive', ...(meta ?? {}) })
     },
-    [autoPauseRef, closeActiveSceneSegment, hiddenPauseRef, persistSnapshot, pushEvent, resolvedAutomation.resumeWindowMs, resumeSuspendedScene, stopTicker, timedSessionAutoSaveKey],
+    [leaveScene, resumeSuspendedScene],
+  )
+
+  /**
+   * After document_hidden leaveScene, sceneActive is false while the freestyle
+   * route may still be resident (isActive never flipped). Re-arm and resume.
+   */
+  const resumeAfterVisibilityReturn = React.useCallback(
+    (meta?: TimedSessionMeta) => {
+      if (statusRef.current === 'completed') return
+      if (!startedAtRef.current) return
+      if (!suspendedAtRef.current || !resumeDeadlineAtRef.current) {
+        // Soft pause (blur-only) without a leave: keep paused until user activity.
+        return
+      }
+      sceneActiveRef.current = true
+      resumeSuspendedScene(meta)
+    },
+    [resumeSuspendedScene],
   )
 
   const { logEvent, registerActivity } = useTimedSessionActivityActions({
@@ -714,7 +709,8 @@ export function useTimedSession({
     tickerRef,
     hiddenPauseMs: resolvedAutomation.hiddenPauseMs,
     pause,
-    registerActivity,
+    leaveScene,
+    resumeAfterVisibilityReturn,
     clearTimer: clearTimedSessionTimeout,
     clearIntervalTimer: clearTimedSessionInterval,
   })

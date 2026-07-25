@@ -8,7 +8,6 @@ import {
 import {
   getNavigationSectionRoot,
   isNavigationSectionRootPath,
-  readNavigationPathname,
   type NavigationSectionKey,
 } from './navigationSection'
 import {

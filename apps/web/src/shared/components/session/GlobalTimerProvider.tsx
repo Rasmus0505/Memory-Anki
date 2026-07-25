@@ -21,7 +21,6 @@ import {
   hasDesktopTimerBridge,
   type UnifiedTimerCommand,
 } from '@/shared/components/session/desktopTimerBridge'
-import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   resetBreakGuardConfig,
   saveBreakGuardConfig,
@@ -49,9 +48,10 @@ export function GlobalTimerProvider({
   children,
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
-  const [showInPageTimerOverlay] = React.useState(
-    () => !hasDesktopTimerBridge() && detectClientSource() !== 'pwa',
-  )
+  // Desktop Electron uses the separate timer overlay window. Browser desktop and
+  // PWA share the in-page floating timer (compact capsule on narrow viewports).
+  // Hiding it on PWA left phones with no start/pause control and silent zero time.
+  const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>

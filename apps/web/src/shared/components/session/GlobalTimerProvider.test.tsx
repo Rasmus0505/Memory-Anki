@@ -345,13 +345,16 @@ describe('GlobalTimerProvider', () => {
     )
   })
 
-  it('does not render the floating timer overlay on PWA clients', () => {
+  it('renders the floating timer overlay on PWA clients so phones can start and pause', () => {
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
       value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     })
     window.matchMedia = vi.fn((query: string) => ({
-      matches: query === '(display-mode: standalone)',
+      matches:
+        query === '(display-mode: standalone)' ||
+        query === '(max-width: 767px)' ||
+        query === '(pointer: coarse)',
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -376,9 +379,12 @@ describe('GlobalTimerProvider', () => {
       />,
     )
 
-    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
-    expect(document.querySelector('.memory-anki-global-timer-capsule')).toBeNull()
-    expect(screen.queryByText('当前复习')).toBeNull()
+    // PWA must get the in-page overlay (desktop Electron uses the separate window).
+    expect(
+      document.querySelector('.memory-anki-global-timer-capsule') ||
+        document.querySelector('.memory-anki-global-timer-panel') ||
+        document.querySelector('[data-timer-overlay-root="true"]'),
+    ).toBeTruthy()
   })
 
   it('cancels a pending break prompt when the desktop main window returns to an active study route', () => {

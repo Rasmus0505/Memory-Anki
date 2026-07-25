@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -8,6 +9,8 @@ import {
   type UIEvent,
 } from 'react'
 import {
+  ChevronDown,
+  ChevronUp,
   EyeOff,
   History,
   RefreshCw,
@@ -55,6 +58,11 @@ export default function ImmersiveFreestylePage() {
    * Finger/wheel scroll only updates index and leaves this null so we never fight the gesture.
    */
   const requestedScrollIndexRef = useRef<number | null>(null)
+  /** Index updates from the scroller itself — layout realign must not fight the gesture. */
+  const indexChangeFromScrollRef = useRef(false)
+  /** True while the user is actively dragging/wheeling the feed. */
+  const userScrollingRef = useRef(false)
+  const scrollIdleTimerRef = useRef<number | null>(null)
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -69,6 +77,7 @@ export default function ImmersiveFreestylePage() {
     cards,
     currentIndex,
     goToIndex,
+    flushDeferredRestudy,
     loading,
     error,
     refreshQueue,
@@ -149,33 +158,51 @@ export default function ImmersiveFreestylePage() {
       programmaticScrollRef.current = true
       node.scrollTo({
         top: index * node.clientHeight,
-        behavior: behavior ?? (reducedMotion ? 'auto' : 'smooth'),
+        // Prefer instant snap for feed paging; smooth fights CSS scroll-snap and feels laggy.
+        behavior: behavior ?? 'auto',
       })
       window.setTimeout(() => {
         programmaticScrollRef.current = false
-      }, reducedMotion ? 50 : 420)
+      }, behavior === 'smooth' ? 420 : 50)
     },
-    [reducedMotion],
+    [],
   )
 
   /**
    * Navigate the feed index. Programmatic scroll only when `scroll` is true
-   * (keyboard / 下一题). Finger/wheel scroll only updates index — never fights
-   * the gesture with a second scrollTo / snap takeover.
+   * (keyboard / 上一张 / 下一张 / 下个宫殿). Finger/wheel scroll only updates index —
+   * never fights the gesture with a second scrollTo / snap takeover.
    */
   const navigateToIndex = useCallback(
-    (index: number, options?: { scroll?: boolean }) => {
+    (
+      index: number,
+      options?: {
+        scroll?: boolean
+        /** Default true for buttons; false while the scroller owns the gesture. */
+        reorderRestudy?: boolean
+      },
+    ) => {
       const max = Math.max(0, cards.length - 1)
       const next = Math.max(0, Math.min(index, max))
-      if (options?.scroll !== false) {
-        // Same index: React may bail out of setState; still align the viewport.
-        if (next === currentIndex) {
-          scrollToIndex(next)
-          return
-        }
-        requestedScrollIndexRef.current = next
+      const fromScroll = options?.scroll === false
+      if (fromScroll) {
+        indexChangeFromScrollRef.current = true
+        goToIndex(next, { reorderRestudy: options?.reorderRestudy === true ? true : false })
+        return
       }
-      goToIndex(next)
+      // Same index: React may bail out of setState; still align the viewport.
+      if (next === currentIndex) {
+        scrollToIndex(next)
+        return
+      }
+      requestedScrollIndexRef.current = next
+      const applied = goToIndex(next, {
+        reorderRestudy: options?.reorderRestudy !== false,
+      })
+      // Restudy reordering can shift the target index; keep scroll request in sync.
+      if (typeof applied === 'number') {
+        requestedScrollIndexRef.current = applied
+      }
     },
     [cards.length, currentIndex, goToIndex, scrollToIndex],
   )
@@ -185,6 +212,76 @@ export default function ImmersiveFreestylePage() {
     requestedScrollIndexRef.current = null
     scrollToIndex(currentIndex)
   }, [currentIndex, scrollToIndex])
+
+  /**
+   * After finger/wheel inertia ends: apply deferred restudy placement, then pin
+   * the card still under the viewport by id. Never advances past that card.
+   */
+  const flushScrollSettled = useCallback(() => {
+    userScrollingRef.current = false
+    if (programmaticScrollRef.current) return
+    const pinned = flushDeferredRestudy()
+    const node = scrollRef.current
+    if (!node?.clientHeight) return
+    const expectedTop = pinned * node.clientHeight
+    if (Math.abs(node.scrollTop - expectedTop) > 2) {
+      scrollToIndex(pinned, 'auto')
+    }
+  }, [flushDeferredRestudy, scrollToIndex])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const onScrollEnd = () => {
+      if (scrollIdleTimerRef.current != null) {
+        window.clearTimeout(scrollIdleTimerRef.current)
+        scrollIdleTimerRef.current = null
+      }
+      flushScrollSettled()
+    }
+    node.addEventListener('scrollend', onScrollEnd)
+    return () => {
+      node.removeEventListener('scrollend', onScrollEnd)
+    }
+  }, [flushScrollSettled, cards.length, loading])
+
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current != null) {
+        window.clearTimeout(scrollIdleTimerRef.current)
+      }
+    }
+  }, [])
+
+  /**
+   * Route residency hides inactive pages with `display: none`, which often resets
+   * scrollTop to 0. Remounts also start the scroller at the top even when
+   * `currentIndex` was restored from queue state. Re-align only for those cases —
+   * never while the user is scrolling (that used to fight snap and look like
+   * auto page-turn after settle rebuilds).
+   */
+  const currentCardId = cards[currentIndex]?.id
+  useLayoutEffect(() => {
+    if (!isActive || loading || cards.length === 0) return
+    if (userScrollingRef.current || programmaticScrollRef.current) return
+    if (indexChangeFromScrollRef.current) {
+      indexChangeFromScrollRef.current = false
+      return
+    }
+    const node = scrollRef.current
+    if (!node?.clientHeight) return
+    const expectedTop = currentIndex * node.clientHeight
+    if (Math.abs(node.scrollTop - expectedTop) < 2) return
+    scrollToIndex(currentIndex, 'auto')
+  }, [
+    isActive,
+    becameActiveAt,
+    loading,
+    cards.length,
+    currentIndex,
+    currentCardId,
+    scrollToIndex,
+  ])
 
   const acknowledgeQuizCard = useCallback(
     (card: FreestyleQuizCard) => {
@@ -200,11 +297,13 @@ export default function ImmersiveFreestylePage() {
   const handleBranchComplete = useCallback(
     (cardId: string, options?: { restudy?: boolean }) => {
       if (saveError) return
+      // Mind-map settles often stopPropagation; register here so idle timers start.
+      timer.registerActivity('practice_interaction', { source: 'freestyle_branch_complete' })
       // Successful FSRS only: marks completedIds + silent rebuild; stay on card.
       // Weak ratings (restudy) skip completedIds; never auto-flip to the next unit.
       completeCard(cardId, options)
     },
-    [completeCard, saveError],
+    [completeCard, saveError, timer],
   )
 
   const handleStaleDrop = useCallback(
@@ -269,6 +368,7 @@ export default function ImmersiveFreestylePage() {
       if (programmaticScrollRef.current) return
       const element = event.currentTarget
       if (!element.clientHeight || cards.length === 0) return
+      userScrollingRef.current = true
       const nextIndex = Math.max(
         0,
         Math.min(cards.length - 1, Math.round(element.scrollTop / element.clientHeight)),
@@ -276,11 +376,37 @@ export default function ImmersiveFreestylePage() {
       timer.registerActivity('practice_interaction', { source: 'freestyle_scroll' })
       if (nextIndex !== currentIndex) {
         // Index only — do not call scrollTo; CSS snap + the user's gesture own the viewport.
-        navigateToIndex(nextIndex, { scroll: false })
+        // Defer restudy reordering until the gesture settles (see flushScrollSettled).
+        navigateToIndex(nextIndex, { scroll: false, reorderRestudy: false })
       }
+      if (scrollIdleTimerRef.current != null) {
+        window.clearTimeout(scrollIdleTimerRef.current)
+      }
+      // Fallback when `scrollend` is unavailable (older WebViews).
+      scrollIdleTimerRef.current = window.setTimeout(() => {
+        scrollIdleTimerRef.current = null
+        flushScrollSettled()
+      }, 120)
     },
-    [cards.length, currentIndex, navigateToIndex, timer],
+    [cards.length, currentIndex, flushScrollSettled, navigateToIndex, timer],
   )
+
+  /**
+   * 「下个宫殿」reorders the feed under the current slot (nextIndex often equals
+   * currentIndex). Force an auto scroll after paint so snap / scroll-anchoring
+   * cannot keep the previous card in view — that looked like「下一题」.
+   */
+  const handleSkipToNextPalace = useCallback(() => {
+    const nextIndex = skipToNextPalace()
+    requestedScrollIndexRef.current = nextIndex
+    // Double-rAF: wait until React commits the reordered children, then snap.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToIndex(nextIndex, 'auto')
+        requestedScrollIndexRef.current = null
+      })
+    })
+  }, [scrollToIndex, skipToNextPalace])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -363,9 +489,49 @@ export default function ImmersiveFreestylePage() {
                 导图 {mindmapCount} · 题 {quizCount}
                 {resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''}
               </span>
-              <span className="ml-auto shrink-0 tabular-nums text-xs text-zinc-400 sm:text-sm">
-                {formatTimer(timer.effectiveSeconds)}
-              </span>
+              <button
+                type="button"
+                className={cn(
+                  'ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 tabular-nums text-xs sm:text-sm',
+                  timer.status === 'running'
+                    ? 'text-emerald-300'
+                    : timer.status === 'paused'
+                      ? 'text-amber-200'
+                      : 'text-zinc-400',
+                  'hover:bg-white/10 active:bg-white/15',
+                )}
+                title={
+                  timer.status === 'running'
+                    ? '暂停计时'
+                    : timer.status === 'paused'
+                      ? '继续计时'
+                      : '开始计时'
+                }
+                aria-label={
+                  timer.status === 'running'
+                    ? '暂停计时'
+                    : timer.status === 'paused'
+                      ? '继续计时'
+                      : '开始计时'
+                }
+                onClick={() => {
+                  if (timer.status === 'running') {
+                    timer.pause({ source: 'freestyle_hud' })
+                    return
+                  }
+                  if (timer.status === 'paused') {
+                    timer.resume({ source: 'freestyle_hud' })
+                    return
+                  }
+                  timer.start({ source: 'freestyle_hud' })
+                }}
+              >
+                {timer.status === 'running'
+                  ? formatTimer(timer.effectiveSeconds)
+                  : timer.status === 'paused'
+                    ? `暂停 ${formatTimer(timer.effectiveSeconds)}`
+                    : '计时 开始'}
+              </button>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1 sm:gap-1 sm:pl-1.5">
               <button
@@ -427,7 +593,9 @@ export default function ImmersiveFreestylePage() {
         <div
           ref={scrollRef}
           data-page-history-scroll-key="freestyle-immersive"
-          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-contain"
+          // overflow-anchor-none: reordering cards for「下个宫殿」must not let the
+          // browser keep the old card glued to the viewport (looks like no jump).
+          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-y"
           onScroll={handleScroll}
         >
           {loading ? (
@@ -512,6 +680,7 @@ export default function ImmersiveFreestylePage() {
                         toast.error(message)
                       }}
                       reducedMotion={reducedMotion}
+                      onQueueInvalidate={refreshQueue}
                     />
                   ) : isQuizCard(card) ? (
                     <FreestyleQuizCardView
@@ -559,6 +728,26 @@ export default function ImmersiveFreestylePage() {
           >
             <button
               type="button"
+              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"
+              title="上一张"
+              aria-label="上一张"
+              disabled={currentIndex <= 0 || cards.length === 0}
+              onClick={() => navigateToIndex(currentIndex - 1)}
+            >
+              <ChevronUp className="size-5 sm:size-4" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"
+              title="下一张"
+              aria-label="下一张"
+              disabled={cards.length === 0 || currentIndex >= cards.length - 1}
+              onClick={() => navigateToIndex(currentIndex + 1)}
+            >
+              <ChevronDown className="size-5 sm:size-4" />
+            </button>
+            <button
+              type="button"
               className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-10"
               title="跳过当前"
               aria-label="跳过当前"
@@ -571,7 +760,7 @@ export default function ImmersiveFreestylePage() {
               className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
               title="下个宫殿：本宫殿剩余内容移到队尾"
               aria-label="下个宫殿"
-              onClick={skipToNextPalace}
+              onClick={handleSkipToNextPalace}
             >
               <Waypoints className="size-4 shrink-0" />
               <span className="leading-none">下个</span>

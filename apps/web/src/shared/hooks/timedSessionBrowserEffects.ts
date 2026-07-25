@@ -3,7 +3,6 @@ import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerB
 import {
   readTimerAutomationConfig,
   TIMER_AUTOMATION_UPDATED_EVENT,
-  type TimerAutomationActivityKind,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
@@ -30,11 +29,23 @@ interface TimedSessionBrowserPauseOptions {
   autoPauseRef: React.MutableRefObject<number | null>
   tickerRef: React.MutableRefObject<number | null>
   hiddenPauseMs: number
+  /**
+   * Soft pause while the window is blurred but still visible (desktop alt-tab,
+   * keyboard, sheets). Does not write a completed time record.
+   */
   pause: (meta?: TimedSessionMeta) => void
-  registerActivity: (
-    activityKind: TimerAutomationActivityKind,
-    meta?: TimedSessionMeta,
-  ) => void
+  /**
+   * Persist + suspend when the page is truly backgrounded. Critical for PWA:
+   * pagehide is unreliable, and without a desktop flush bridge backgrounding
+   * would otherwise leave only status=active autosave checkpoints (hidden from
+   * the completed time-record list).
+   */
+  leaveScene: (meta?: TimedSessionMeta) => Promise<unknown>
+  /**
+   * Re-activate after a visibility-hidden leave while the study route is still
+   * the resident page (isActive stayed true, so setSceneActive(true) never re-ran).
+   */
+  resumeAfterVisibilityReturn: (meta?: TimedSessionMeta) => void
   clearTimer: (ref: React.MutableRefObject<number | null>) => void
   clearIntervalTimer: (ref: React.MutableRefObject<number | null>) => void
 }
@@ -47,24 +58,36 @@ export function useTimedSessionBrowserPauseEffects({
   tickerRef,
   hiddenPauseMs,
   pause,
-  registerActivity,
+  leaveScene,
+  resumeAfterVisibilityReturn,
   clearTimer,
   clearIntervalTimer,
 }: TimedSessionBrowserPauseOptions) {
+  // Only auto-resume after a visibility leave if the study route was active when
+  // the page hid. Route leave already clears sceneActive; do not revive that session.
+  const shouldResumeAfterVisibilityRef = React.useRef(false)
+
   React.useEffect(() => {
     const handleVisibility = () => {
-      if (!sceneActiveRef.current) {
-        clearTimer(hiddenPauseRef)
-        return
-      }
       if (document.visibilityState === 'hidden') {
+        if (!sceneActiveRef.current) {
+          clearTimer(hiddenPauseRef)
+          shouldResumeAfterVisibilityRef.current = false
+          return
+        }
+        shouldResumeAfterVisibilityRef.current = true
         clearTimer(hiddenPauseRef)
         hiddenPauseRef.current = window.setTimeout(() => {
-          pause({ reason: 'document_hidden' })
+          void leaveScene({ reason: 'document_hidden' })
         }, hiddenPauseMs)
         return
       }
+      // Foreground: cancel pending leave and resume only if we hid while active.
       clearTimer(hiddenPauseRef)
+      if (shouldResumeAfterVisibilityRef.current) {
+        shouldResumeAfterVisibilityRef.current = false
+        resumeAfterVisibilityReturn({ source: 'document_visible' })
+      }
     }
 
     const handleBlur = () => {
@@ -74,15 +97,20 @@ export function useTimedSessionBrowserPauseEffects({
       }
       clearTimer(hiddenPauseRef)
       hiddenPauseRef.current = window.setTimeout(() => {
+        // True background (tab/app hidden): durable leave. Soft blur only: pause.
+        if (document.visibilityState === 'hidden') {
+          shouldResumeAfterVisibilityRef.current = true
+          void leaveScene({ reason: 'window_blur_hidden' })
+          return
+        }
         pause({ reason: 'window_blur' })
       }, hiddenPauseMs)
     }
 
     const handleFocus = () => {
       clearTimer(hiddenPauseRef)
-      if (!sceneActiveRef.current) {
-        return
-      }
+      // Soft pause stays paused (autoResumeOnWindowReturn is separate). Visibility
+      // leave recovery is handled by visibilitychange → document_visible.
     }
 
     document.addEventListener('visibilitychange', handleVisibility)
@@ -103,8 +131,9 @@ export function useTimedSessionBrowserPauseEffects({
     clearTimer,
     hiddenPauseMs,
     hiddenPauseRef,
+    leaveScene,
     pause,
-    registerActivity,
+    resumeAfterVisibilityReturn,
     sceneActiveRef,
     statusRef,
     tickerRef,
