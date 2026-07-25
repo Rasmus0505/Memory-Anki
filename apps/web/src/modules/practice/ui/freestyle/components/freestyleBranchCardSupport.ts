@@ -16,10 +16,7 @@ import {
 } from '@/modules/memory/public'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
-import {
-  clipEditorStateToBranchUnit,
-  foldedParentUidsForBranch,
-} from '@/modules/practice/ui/freestyle/model/clipBranchUnitEditor'
+import { clipEditorStateToBranchUnit } from '@/modules/practice/ui/freestyle/model/clipBranchUnitEditor'
 import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
 
 /** Compact settle receipt shown as a floating bubble (not a full-screen takeover). */
@@ -70,18 +67,9 @@ export function clipBranchUnit(
   fullState: MindMapEditorState,
   card: FreestyleMindMapBranchCard,
 ) {
-  const contextText = plainContextLabel(
-    card.context_path,
-    card.palace_title,
-    card.palace_id,
-  )
-  return clipEditorStateToBranchUnit(fullState, card.branch_uid, contextText, {
-    includeAncestorUids: foldedParentUidsForBranch(
-      fullState,
-      card.branch_uid,
-      card.ratable_node_uids,
-    ),
-  })
+  // Real palace-root → unit spine (original node titles). Context path stays in
+  // the card header only — never concatenated onto a synthetic flip root.
+  return clipEditorStateToBranchUnit(fullState, card.branch_uid)
 }
 
 export function loadBranchSession(card: FreestyleMindMapBranchCard) {

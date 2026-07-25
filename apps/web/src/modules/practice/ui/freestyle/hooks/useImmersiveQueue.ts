@@ -66,6 +66,32 @@ export function useImmersiveQueue() {
     return sanitized
   }, [])
 
+  /** Remember the card under the viewport across route leave / remount. */
+  const persistCurrentCardId = useCallback(
+    (cardId: string | null | undefined) => {
+      const nextId = cardId ? String(cardId).trim() : ''
+      const normalized = nextId || null
+      if (queueStateRef.current.currentCardId === normalized) return
+      persistQueueState({
+        ...queueStateRef.current,
+        currentCardId: normalized,
+      })
+    },
+    [persistQueueState],
+  )
+
+  const applyCurrentIndex = useCallback(
+    (index: number, cardsForIndex: FreestyleCard[] = cardsRef.current) => {
+      const max = Math.max(0, cardsForIndex.length - 1)
+      const next = cardsForIndex.length === 0 ? 0 : Math.max(0, Math.min(index, max))
+      currentIndexRef.current = next
+      setCurrentIndex(next)
+      persistCurrentCardId(cardsForIndex[next]?.id ?? null)
+      return next
+    },
+    [persistCurrentCardId],
+  )
+
   const buildQueue = useCallback(
     async (
       nextConfig: FreestyleFeedConfig,
@@ -125,7 +151,11 @@ export function useImmersiveQueue() {
           0,
           Math.min(currentIndexRef.current, Math.max(0, previousCards.length - 1)),
         )
-        const userCardId = previousCards[clampedUserIndex]?.id ?? null
+        // Live viewport wins; fall back to persisted id after remount / cold start.
+        const userCardId =
+          previousCards[clampedUserIndex]?.id ??
+          queueStateRef.current.currentCardId ??
+          null
         let nextCards =
           options?.preserveCompleted === false
             ? deferred
@@ -156,20 +186,19 @@ export function useImmersiveQueue() {
         }
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
-        const preferCardId = options?.preferCardId ?? userCardId
+        // Cold start / remount: preferCardId falls through to persisted currentCardId.
+        const preferCardId =
+          options?.preferCardId ?? userCardId ?? queueStateRef.current.currentCardId
         cardsRef.current = nextCards
         setCards(nextCards)
         setPhaseStats(response.phase_stats || {})
-        setCurrentIndex((index) => {
-          const resolved = resolveRebuildIndex({
-            nextCards,
-            preferCardId,
-            userCardId,
-            fallbackIndex: index,
-          })
-          currentIndexRef.current = resolved
-          return resolved
+        const resolved = resolveRebuildIndex({
+          nextCards,
+          preferCardId,
+          userCardId,
+          fallbackIndex: currentIndexRef.current,
         })
+        applyCurrentIndex(resolved, nextCards)
       } catch (err) {
         if (operationIdRef.current !== operationId) return
         // Silent rebuild failures must not blank the feed mid-session.
@@ -182,7 +211,7 @@ export function useImmersiveQueue() {
         }
       }
     },
-    [],
+    [applyCurrentIndex],
   )
 
   useEffect(() => {
@@ -228,13 +257,13 @@ export function useImmersiveQueue() {
     configRef.current = nextConfig
     setConfig(nextConfig)
     const nextState = persistQueueState(startNewRound(queueStateRef.current, nextSeed))
-    setCurrentIndex(0)
+    applyCurrentIndex(0, [])
     void buildQueue(nextConfig, {
       preserveCompleted: false,
       completedIds: nextState.completedIds,
       hiddenIds: nextState.hiddenIds,
     })
-  }, [buildQueue, config, persistQueueState])
+  }, [applyCurrentIndex, buildQueue, config, persistQueueState])
 
   /**
    * Mark a card done for this round without removing it from the local feed.
@@ -263,8 +292,7 @@ export function useImmersiveQueue() {
       // Do not bump currentIndex forward under any settle path.
       const settledIndex = cardsRef.current.findIndex((card) => card.id === cardId)
       if (settledIndex >= 0) {
-        setCurrentIndex(settledIndex)
-        currentIndexRef.current = settledIndex
+        applyCurrentIndex(settledIndex)
       }
       if (options?.restudy) {
         // Remember settle index for gap placement when the user swipes away.
@@ -291,7 +319,7 @@ export function useImmersiveQueue() {
         preferCardId: cardId,
       })
     },
-    [buildQueue, persistQueueState],
+    [applyCurrentIndex, buildQueue, persistQueueState],
   )
 
   /**
@@ -333,14 +361,17 @@ export function useImmersiveQueue() {
           : (filtered[currentIndexRef.current]?.id ?? filtered[0]?.id ?? null)
       cardsRef.current = filtered
       setCards(filtered)
-      setCurrentIndex((current) => Math.min(current, Math.max(0, filtered.length - 1)))
+      applyCurrentIndex(
+        Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)),
+        filtered,
+      )
       void buildQueue(configRef.current, {
         preserveCompleted: true,
         silent: true,
         preferCardId,
       })
     },
-    [buildQueue],
+    [applyCurrentIndex, buildQueue],
   )
 
   const skipCurrent = useCallback(() => {
@@ -354,17 +385,26 @@ export function useImmersiveQueue() {
     if (action === 'hide') {
       // Hidden: drop restudy pending so a reshuffle/rebuild can surface it again.
       pendingRestudyByIdRef.current.delete(card.id)
-      setCards((current) => current.filter((item) => item.id !== card.id))
-      setCurrentIndex((index) => Math.min(index, Math.max(0, cardsRef.current.length - 2)))
+      const filtered = cardsRef.current.filter((item) => item.id !== card.id)
+      cardsRef.current = filtered
+      setCards(filtered)
+      applyCurrentIndex(
+        Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)),
+        filtered,
+      )
       return
     }
     if (wasRestudy) {
       // Already re-ordered with max intervening gap; keep index so the next unit fills the slot.
+      persistCurrentCardId(cardsRef.current[currentIndexRef.current]?.id)
       return
     }
-    setCards((current) => moveCardToTail(current, card.id))
+    const nextCards = moveCardToTail(cardsRef.current, card.id)
+    cardsRef.current = nextCards
+    setCards(nextCards)
     // Stay at same index so next item slides into place after tail move.
-  }, [applyPendingRestudyPlacement, persistQueueState])
+    persistCurrentCardId(nextCards[currentIndexRef.current]?.id)
+  }, [applyCurrentIndex, applyPendingRestudyPlacement, persistCurrentCardId, persistQueueState])
 
   const undoLastSkip = useCallback(() => {
     const next = undoSkip(queueStateRef.current)
@@ -377,7 +417,7 @@ export function useImmersiveQueue() {
   }, [buildQueue, config, persistQueueState])
 
   const muteCurrentPalace = useCallback(() => {
-    const card = cardsRef.current[currentIndex]
+    const card = cardsRef.current[currentIndexRef.current]
     if (!card) return
     const palaceId =
       card.type === 'mindmap_branch' || card.type === 'anki_card'
@@ -387,36 +427,59 @@ export function useImmersiveQueue() {
           : card.palace_context?.id
     if (!palaceId) return
     const next = persistQueueState(mutePalace(queueStateRef.current, palaceId))
-    setCards((current) => filterMutedPalaces(current, next.mutedPalaceIds))
-  }, [currentIndex, persistQueueState])
+    const filtered = filterMutedPalaces(cardsRef.current, next.mutedPalaceIds)
+    cardsRef.current = filtered
+    setCards(filtered)
+    applyCurrentIndex(
+      Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)),
+      filtered,
+    )
+  }, [applyCurrentIndex, persistQueueState])
 
   /**
    * Jump past the rest of the current palace: move remaining cards to the tail
    * (and record deferred palace) so a later rebuild cannot reinsert them at the front.
+   *
+   * Returns the landing index so the page can force the scroll viewport — React may
+   * bail out of setState when nextIndex === currentIndex after reorder, and CSS
+   * scroll-snap can keep the old card snapped without an explicit scrollTo.
    */
-  const skipToNextPalace = useCallback(() => {
-    const leaving = cardsRef.current[currentIndex]
+  const skipToNextPalace = useCallback((): number => {
+    const index = currentIndexRef.current
+    const leaving = cardsRef.current[index]
     applyPendingRestudyPlacement(leaving?.id)
-    const result = moveRemainingPalaceToTail(cardsRef.current, currentIndex)
+    // Restudy placement may reorder; re-resolve the card we intended to leave.
+    let workingIndex = index
+    if (leaving) {
+      const found = cardsRef.current.findIndex((card) => card.id === leaving.id)
+      if (found >= 0) workingIndex = found
+    }
+    const result = moveRemainingPalaceToTail(cardsRef.current, workingIndex)
     if (result.deferredPalaceId != null) {
       persistQueueState(deferPalace(queueStateRef.current, result.deferredPalaceId))
     }
     cardsRef.current = result.cards
     setCards(result.cards)
-    setCurrentIndex(result.nextIndex)
-  }, [applyPendingRestudyPlacement, currentIndex, persistQueueState])
+    return applyCurrentIndex(result.nextIndex, result.cards)
+  }, [applyCurrentIndex, applyPendingRestudyPlacement, persistQueueState])
 
   const goToIndex = useCallback(
-    (index: number) => {
+    (index: number, options?: { reorderRestudy?: boolean }) => {
       const previous = cardsRef.current
       const max = Math.max(0, previous.length - 1)
       const next = Math.max(0, Math.min(index, max))
       const previousIndex = currentIndexRef.current
+      const reorderRestudy = options?.reorderRestudy !== false
       if (next !== previousIndex) {
         // Capture destination by id before restudy reorders the feed.
         const targetId = previous[next]?.id ?? null
         const leaving = previous[previousIndex]
-        applyPendingRestudyPlacement(leaving?.id)
+        // Finger/wheel scroll must NOT reorder under the gesture — that shifts
+        // indices while scrollTop stays put and makes swipe-back show the wrong card.
+        // Button/keyboard paths may reorder immediately; scroll defers via flush.
+        if (reorderRestudy) {
+          applyPendingRestudyPlacement(leaving?.id)
+        }
         if (targetId) {
           const reordered = cardsRef.current
           const resolved = reordered.findIndex((card) => card.id === targetId)
@@ -424,16 +487,34 @@ export function useImmersiveQueue() {
             resolved >= 0
               ? resolved
               : Math.max(0, Math.min(next, Math.max(0, reordered.length - 1)))
-          currentIndexRef.current = resolvedIndex
-          setCurrentIndex(resolvedIndex)
-          return
+          return applyCurrentIndex(resolvedIndex, reordered)
         }
       }
-      currentIndexRef.current = next
-      setCurrentIndex(next)
+      return applyCurrentIndex(next, previous)
     },
-    [applyPendingRestudyPlacement],
+    [applyCurrentIndex, applyPendingRestudyPlacement],
   )
+
+  /**
+   * After a finger/wheel swipe settles: place any weak-rated units the learner
+   * already left, then re-pin the card still under the viewport by id.
+   * Returns the index that should stay on screen (never auto-advances).
+   */
+  const flushDeferredRestudy = useCallback((): number => {
+    const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
+    const pendingIds = [...pendingRestudyByIdRef.current.keys()]
+    for (const cardId of pendingIds) {
+      if (viewingId && cardId === viewingId) continue
+      applyPendingRestudyPlacement(cardId)
+    }
+    if (viewingId) {
+      const resolved = cardsRef.current.findIndex((card) => card.id === viewingId)
+      if (resolved >= 0) {
+        return applyCurrentIndex(resolved, cardsRef.current)
+      }
+    }
+    return currentIndexRef.current
+  }, [applyCurrentIndex, applyPendingRestudyPlacement])
 
   /** Reshuffle clears in-memory restudy anchors (new round membership). */
   const reshuffleQueueWithRestudyClear = useCallback(() => {
@@ -450,6 +531,7 @@ export function useImmersiveQueue() {
     currentIndex,
     setCurrentIndex,
     goToIndex,
+    flushDeferredRestudy,
     loading,
     error,
     phaseStats,

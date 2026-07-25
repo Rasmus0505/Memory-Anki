@@ -15,6 +15,11 @@ export type FreestyleSkipState = {
   deferredPalaceIds: number[]
   lastSkippedId: string | null
   lastSkippedAt: number | null
+  /**
+   * Last card under the freestyle viewport. Survives route leave / remount so
+   * returning from palace edit (or other pages) resumes the same unit.
+   */
+  currentCardId: string | null
 }
 
 export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
@@ -28,6 +33,7 @@ export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
   deferredPalaceIds: [],
   lastSkippedId: null,
   lastSkippedAt: null,
+  currentCardId: null,
 }
 
 export const FREESTYLE_QUEUE_STATE_STORAGE_KEY = 'memory-anki.freestyle.queue-state.v1'
@@ -114,14 +120,36 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
       typeof raw.lastSkippedAt === 'number' && Number.isFinite(raw.lastSkippedAt)
         ? raw.lastSkippedAt
         : null,
+    currentCardId:
+      typeof raw.currentCardId === 'string' && raw.currentCardId.trim()
+        ? raw.currentCardId.trim()
+        : null,
   }
 }
 
+function positivePalaceId(value: unknown): number | null {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : null
+}
+
+/**
+ * Stable palace identity for freestyle feed cards.
+ * Mind-map / Anki cards prefer ``palace_id``; quiz/action fall back to
+ * ``palace_context.id``. Coerces numeric strings so same-palace grouping never
+ * fails a ``===`` check (which would make「下个宫殿」look like「下一题」).
+ */
 export function cardPalaceId(card: FreestyleCard | null | undefined): number | null {
   if (!card) return null
-  if (card.type === 'mindmap_branch' || card.type === 'anki_card') return card.palace_id
-  if (card.type === 'quiz_question') return card.palace_context?.id ?? null
-  return card.palace_context?.id ?? null
+  if (card.type === 'mindmap_branch' || card.type === 'anki_card') {
+    return (
+      positivePalaceId(card.palace_id) ??
+      positivePalaceId(card.palace_context?.id)
+    )
+  }
+  if (card.type === 'quiz_question') {
+    return positivePalaceId(card.palace_context?.id)
+  }
+  return positivePalaceId(card.palace_context?.id)
 }
 
 export function applySkip(
@@ -486,9 +514,10 @@ export function mergeRefreshQueue(
 }
 
 export function visibleMountIndices(currentIndex: number, total: number) {
-  // current, previous, and next two for preload
+  // Keep two neighbors on each side mounted so swipe-back/forward stays warm
+  // (unmounted placeholders used to flash blank content when scrolling up).
   const indices = new Set<number>()
-  for (const offset of [-1, 0, 1, 2]) {
+  for (const offset of [-2, -1, 0, 1, 2]) {
     const index = currentIndex + offset
     if (index >= 0 && index < total) indices.add(index)
   }

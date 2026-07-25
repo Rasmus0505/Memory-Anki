@@ -7,6 +7,7 @@ import {
   DEFAULT_QUEUE_STATE,
   applyDeferredPalaceOrder,
   applySkip,
+  cardPalaceId,
   deferPalace,
   findNextPalaceIndex,
   moveRemainingPalaceToTail,
@@ -20,6 +21,7 @@ import {
   resolveRestudyPreferCardId,
   mergeRefreshQueue,
   mutePalace,
+  sanitizeQueueState,
   startNewRound,
   undoSkip,
   visibleMountIndices,
@@ -163,6 +165,31 @@ describe('freestyle queue skip rules', () => {
     ).toBe(1)
   })
 
+  it('persists and sanitizes currentCardId for resume after route leave', () => {
+    const sanitized = sanitizeQueueState({
+      ...DEFAULT_QUEUE_STATE,
+      currentCardId: '  quiz:42  ',
+    })
+    expect(sanitized.currentCardId).toBe('quiz:42')
+    expect(sanitizeQueueState({ ...DEFAULT_QUEUE_STATE, currentCardId: '' }).currentCardId).toBeNull()
+    expect(sanitizeQueueState({ ...DEFAULT_QUEUE_STATE }).currentCardId).toBeNull()
+    // New round clears resume cursor so reshuffle starts at the front.
+    expect(startNewRound({ ...sanitized, completedIds: ['a'] }).currentCardId).toBeNull()
+  })
+
+  it('resolveRebuildIndex resumes the persisted card after remount (no live viewport)', () => {
+    const nextCards = [{ id: 'a' }, { id: 'b' }, { id: 'resume-me' }, { id: 'd' }]
+    // Cold start / remount: no in-memory user card, only the saved currentCardId.
+    expect(
+      resolveRebuildIndex({
+        nextCards,
+        preferCardId: 'resume-me',
+        userCardId: 'resume-me',
+        fallbackIndex: 0,
+      }),
+    ).toBe(2)
+  })
+
   it('resolveRebuildIndex follows the user when they leave a just-finished card', () => {
     const nextCards = [
       { id: 'done' },
@@ -229,7 +256,7 @@ describe('freestyle queue skip rules', () => {
       2,
     )
     expect(filterMutedPalaces(cards, muted.mutedPalaceIds).map((c) => c.id)).toEqual(['1'])
-    expect([...visibleMountIndices(2, 6)].sort()).toEqual([1, 2, 3, 4])
+    expect([...visibleMountIndices(2, 6)].sort()).toEqual([0, 1, 2, 3, 4])
   })
 
   it('finds the first card of the next palace and moves remaining same-palace cards to the tail', () => {
@@ -249,6 +276,64 @@ describe('freestyle queue skip rules', () => {
     expect(skipped.nextIndex).toBe(1)
     expect(skipped.cards[skipped.nextIndex]?.id).toBe('b1')
     expect(skipped.deferredPalaceId).toBe(1)
+  })
+
+  it('normalizes palace ids so string and number forms compare equal', () => {
+    expect(
+      cardPalaceId({
+        id: 'x',
+        type: 'mindmap_branch',
+        palace_id: '12' as unknown as number,
+      } as FreestyleCard),
+    ).toBe(12)
+    expect(
+      cardPalaceId({
+        id: 'q',
+        type: 'quiz_question',
+        palace_context: { id: '12' as unknown as number, title: 'P' },
+      } as FreestyleCard),
+    ).toBe(12)
+  })
+
+  it('groups same palace even when palace_id arrives as a numeric string (JSON edge)', () => {
+    // If string "1" !== number 1,「下个宫殿」would only move the current card
+    // and look identical to「跳过当前 / 下一题」.
+    const cards = [
+      { id: 'a1', type: 'mindmap_branch', palace_id: 1 },
+      { id: 'a2', type: 'mindmap_branch', palace_id: '1' as unknown as number },
+      { id: 'a3', type: 'mindmap_branch', palace_id: 1 },
+      { id: 'b1', type: 'mindmap_branch', palace_id: 2 },
+    ] as FreestyleCard[]
+    const skipped = moveRemainingPalaceToTail(cards, 0)
+    expect(skipped.cards.map((card) => card.id)).toEqual(['b1', 'a1', 'a2', 'a3'])
+    expect(skipped.cards[skipped.nextIndex]?.id).toBe('b1')
+    expect(skipped.deferredPalaceId).toBe(1)
+  })
+
+  it('uses palace_context.id when mind-map palace_id is missing', () => {
+    const cards = [
+      {
+        id: 'a1',
+        type: 'mindmap_branch',
+        palace_id: undefined as unknown as number,
+        palace_context: { id: 7, title: 'A' },
+      },
+      {
+        id: 'a2',
+        type: 'mindmap_branch',
+        palace_id: 7,
+        palace_context: { id: 7, title: 'A' },
+      },
+      {
+        id: 'b1',
+        type: 'mindmap_branch',
+        palace_id: 8,
+        palace_context: { id: 8, title: 'B' },
+      },
+    ] as FreestyleCard[]
+    const skipped = moveRemainingPalaceToTail(cards, 0)
+    expect(skipped.cards.map((card) => card.id)).toEqual(['b1', 'a1', 'a2'])
+    expect(skipped.deferredPalaceId).toBe(7)
   })
 
   it('drops remaining cards when the current palace is the last remaining', () => {

@@ -26,6 +26,11 @@ interface Props {
   error?: string | null
   submissionFailed?: boolean
   bulkRating?: boolean
+  /**
+   * Freestyle: bulk-rate buttons also finish settlement in this same dialog
+   * (no separate confirm step after scoring unrated nodes).
+   */
+  settleOnBulkRate?: boolean
   onRetry?: () => void
   onRetrySubmission?: () => void
   /** One-tap rate every still-unrated node in this session's frozen due scope. */
@@ -45,6 +50,7 @@ export function FsrsCompletionDialog({
   error = null,
   submissionFailed = false,
   bulkRating = false,
+  settleOnBulkRate = false,
   onRetry,
   onRetrySubmission,
   onBulkRateUnrated,
@@ -148,7 +154,11 @@ export function FsrsCompletionDialog({
                   </div>
                   {onBulkRateUnrated ? (
                     <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">一键评分本次未评分到期节点</div>
+                      <div className="text-xs text-muted-foreground">
+                        {settleOnBulkRate
+                          ? '一键评分未评分到期节点并在此结束（无需再确认）'
+                          : '一键评分本次未评分到期节点'}
+                      </div>
                       <div className="grid grid-cols-4 gap-2">
                         {BULK_RATING_OPTIONS.map((option) => (
                           <Button
@@ -161,7 +171,11 @@ export function FsrsCompletionDialog({
                               void onBulkRateUnrated(option.rating)
                             }}
                           >
-                            {bulkRating ? '…' : option.label}
+                            {bulkRating
+                              ? '…'
+                              : settleOnBulkRate
+                                ? `${option.label}并结束`
+                                : option.label}
                           </Button>
                         ))}
                       </div>

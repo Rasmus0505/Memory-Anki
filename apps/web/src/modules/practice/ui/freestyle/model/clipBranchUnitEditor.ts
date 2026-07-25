@@ -1,32 +1,34 @@
 import { getMindMapNodeUid, normalizeMindMapDocument, type MindMapNode } from '@/modules/content/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 
-function findNodeByUid(root: MindMapNode | undefined, uid: string): MindMapNode | null {
+/**
+ * Path of mind-map nodes from document root down to ``targetUid`` (inclusive).
+ * Returns null when the target is missing.
+ */
+function pathNodesTo(root: MindMapNode | undefined, targetUid: string): MindMapNode[] | null {
   if (!root) return null
   const own = getMindMapNodeUid(root, '')
-  if (own === uid) return root
+  if (own === targetUid) return [root]
   for (const child of root.children ?? []) {
-    const found = findNodeByUid(child, uid)
-    if (found) return found
+    const sub = pathNodesTo(child, targetUid)
+    if (sub) return [root, ...sub]
   }
   return null
 }
 
 /** Path of node uids from document root down to ``targetUid`` (inclusive). */
 function pathUidsTo(root: MindMapNode | undefined, targetUid: string): string[] | null {
-  if (!root) return null
-  const own = getMindMapNodeUid(root, '')
-  if (own === targetUid) return [own]
-  for (const child of root.children ?? []) {
-    const sub = pathUidsTo(child, targetUid)
-    if (sub) return [own, ...sub]
-  }
-  return null
+  const nodes = pathNodesTo(root, targetUid)
+  if (!nodes) return null
+  return nodes.map((node, index) => getMindMapNodeUid(node, index === 0 ? 'root' : `n${index}`))
 }
 
 /**
  * Ancestors of ``branchUid`` that are also ratable (folded into this unit).
  * Ordered rootward → leafward, excluding the palace root and the branch itself.
+ *
+ * Kept for callers that need the ratable fold set; clip itself always builds the
+ * full single-child spine so flip order matches the original mind map.
  */
 export function foldedParentUidsForBranch(
   editorState: MindMapEditorState,
@@ -48,60 +50,58 @@ export function foldedParentUidsForBranch(
 }
 
 export type ClipBranchUnitOptions = {
-  /** Rootward → leafward ancestors folded into this unit (single-child spine). */
+  /**
+   * @deprecated Full path spine is always built. Kept so older call sites type-check.
+   * Rootward → leafward ancestors that used to be optionally folded.
+   */
   includeAncestorUids?: string[]
 }
 
 /**
- * Clip a full-palace editor state to one freestyle branch unit.
+ * Clip a full-palace editor state to one freestyle branch unit for flip review.
  *
- * Synthetic root holds context label only (not ratable / not counted).
- * The unit is a complete subtree under ``branchUid``. Optional folded parents
- * appear as a single-child spine above the unit root (no sibling branches).
+ * Progressive-flip invariant (logical root of this module):
+ * - The clipped document is a **single-child spine** from the real palace root
+ *   down to ``branchUid``, then the complete unit subtree under the branch.
+ * - Sibling branches are stripped so the unit stays focused.
+ * - Each spine node keeps its **original** title. Never mash ancestor titles into
+ *   one synthetic root string like ``A / B / C`` — that made the first card show
+ *   the whole path at once and broke step-by-step flip.
+ * - Reveal still starts as root-only; the learner clicks to open the next level.
+ *
+ * Rating / due scope stays on ``ratable_node_uids`` / unit due freeze (call site).
+ * Context path in the card header remains display-only orientation.
  */
 export function clipEditorStateToBranchUnit(
   editorState: MindMapEditorState,
   branchUid: string,
-  contextLabel: string,
-  options?: ClipBranchUnitOptions,
+  _contextLabel?: string,
+  _options?: ClipBranchUnitOptions,
 ): MindMapEditorState {
   const target = String(branchUid || '').trim()
   if (!target) return editorState
 
   const document = normalizeMindMapDocument(editorState.editor_doc)
-  const branchNode = findNodeByUid(document.root, target)
-  if (!branchNode) return editorState
+  const path = pathNodesTo(document.root, target)
+  if (!path || path.length === 0) return editorState
 
-  let unitTree: MindMapNode = structuredClone(branchNode)
-  const spine = (options?.includeAncestorUids || [])
-    .map((uid) => String(uid || '').trim())
-    .filter(Boolean)
-  // Wrap nearest parent last so order is rootward → … → branch.
-  for (let index = spine.length - 1; index >= 0; index -= 1) {
-    const uid = spine[index]
-    const source = findNodeByUid(document.root, uid)
-    if (!source) continue
+  // Last path node is the unit root — keep its full descendant subtree.
+  // Every earlier node becomes a single-child wrapper (no siblings).
+  let unitTree: MindMapNode = structuredClone(path[path.length - 1])
+  for (let index = path.length - 2; index >= 0; index -= 1) {
+    const ancestor = path[index]
+    const data = structuredClone(ancestor.data ?? {})
     unitTree = {
-      data: structuredClone(source.data ?? { uid, text: uid }),
+      data,
       children: [unitTree],
     }
-  }
-
-  const label = String(contextLabel || '').trim() || '本支复习'
-  const syntheticRoot: MindMapNode = {
-    data: {
-      text: label,
-      uid: `__freestyle_unit_root__:${target}`,
-      memoryAnkiRootKind: 'freestyle_unit',
-    },
-    children: [unitTree],
   }
 
   return {
     ...editorState,
     editor_doc: {
       ...document,
-      root: syntheticRoot,
+      root: unitTree,
     },
     editor_fingerprint: `${editorState.editor_fingerprint || 'doc'}:unit:${target}`,
   }
