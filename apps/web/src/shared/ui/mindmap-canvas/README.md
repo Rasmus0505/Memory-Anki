@@ -12,5 +12,5 @@ Generic React Flow renderer.
 
 - Branch collapse is canvas-local (not persisted on the document). Nodes with children show a fold control; collapsed cards keep a descendant count badge.
 - Maps with >= 36 nodes auto-collapse branches at depth >= 1 on open (root + first level stay expanded). Practice/review (practiceModeActive) forces fully expanded.
-- Toolbar: fit whole tree, fit current branch, expand all, collapse deep. Min zoom is 0.12 for bird-eye pan; React Flow onlyRenderVisibleElements turns on for medium/large graphs.
+- Toolbar: refresh, fit whole tree, fit current branch, expand selected subtree, expand all, collapse deep. Double-click a node fold control expands that whole subtree. Min zoom is 0.12; onlyRenderVisibleElements for medium/large graphs.
 - Intentionally not in this canvas: MiniMap, search jump, outline dual-pane (hosts may compose those separately).
