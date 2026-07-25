@@ -37,6 +37,14 @@ import {
   parseMindMapDocument,
   type MindMapSelection,
 } from '@/modules/content/public'
+import {
+  buildEditorParentMap,
+  collectPermanentMarkUids,
+  colorForPermanentLevel,
+  derivePermanentMarkLevels,
+  togglePermanentMarkInDoc,
+  type EditorDoc,
+} from '@/shared/lib/mindmap-split-marks/splitMarks'
 
 function SaveStatusBadge({
   status,
@@ -93,6 +101,7 @@ export default function PalaceEdit() {
   const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
   const [templateSaving, setTemplateSaving] = useState(false)
   /** Session-only: default palace mode each entry; Anki is temporary. */
+  const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [ankiEditMode, setAnkiEditMode] = useState(false)
   /** When true in Anki mode, click cycles front/back/none instead of normal select. */
   const [ankiRolePen, setAnkiRolePen] = useState(false)
@@ -145,7 +154,50 @@ export default function PalaceEdit() {
     setAnkiRolePen(false)
   }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
 
+  const permanentMarkChips = useMemo(() => {
+    const doc = page.editorState?.editor_doc as EditorDoc | null | undefined
+    const marked = collectPermanentMarkUids(doc)
+    const parentMap = buildEditorParentMap(doc)
+    const rootData =
+      doc?.root?.data && typeof doc.root.data === 'object'
+        ? (doc.root.data as Record<string, unknown>)
+        : {}
+    const rootUid = String(rootData.uid || rootData.memoryAnkiId || 'root')
+    const levels = derivePermanentMarkLevels(marked, parentMap, rootUid)
+    const chips: Record<
+      string,
+      Array<{ text: string; tone: 'warning' | 'info' | 'success' | 'danger' | 'neutral'; style: 'filled' }>
+    > = {}
+    for (const [uid, level] of levels.entries()) {
+      const color = colorForPermanentLevel(level)
+      chips[uid] = [{ text: color.label, tone: level === 1 ? 'warning' : level === 2 ? 'info' : 'success', style: 'filled' }]
+    }
+    return chips
+  }, [page.editorState])
+
+  const permanentMarkHighlights = useMemo(
+    () => Object.keys(permanentMarkChips),
+    [permanentMarkChips],
+  )
+
+  const handlePermanentMarkClick = useCallback(
+    (nodes: MindMapSelection[]) => {
+      const uid = nodes[0]?.uid
+      if (!uid || !page.editorState) return
+      const doc = page.editorState.editor_doc as EditorDoc
+      const result = togglePermanentMarkInDoc(doc, String(uid))
+      if (result.doc === doc) return
+      page.handleMindMapEditorStateChange({
+        ...page.editorState,
+        editor_doc: result.doc,
+      })
+      toast.success(result.marked ? '已添加永久标记（层级自动）' : '已取消永久标记')
+    },
+    [page],
+  )
+
   const handleAnkiRoleCycleClick = useCallback(
+
     (nodes: MindMapSelection[]) => {
       const uid = nodes[0]?.uid
       if (!uid || !page.editorState) return
@@ -281,6 +333,20 @@ export default function PalaceEdit() {
         }
       : null,
     moreActions: [
+      {
+        label: permanentMarkMode ? '退出永久标记' : '永久标记',
+        onClick: () => {
+          setPermanentMarkMode((current) => {
+            const next = !current
+            toast.success(
+              next
+                ? '永久标记：点击卡片标记/取消；层级按祖先自动推导并分色'
+                : '已退出永久标记',
+            )
+            return next
+          })
+        },
+      },
       {
         label: ankiEditMode ? '切换到记忆宫殿模式' : '切换到 Anki 正反面模式',
         onClick: () => {
@@ -563,7 +629,16 @@ export default function PalaceEdit() {
                     currentPalaceId={page.palaceId}
                     reviewFxSignal={page.reviewFxSignal}
                     feedbackFxSignal={page.feedbackFxSignal}
-                    highlightedNodeUids={mindMapExperience.highlightedNodeUids}
+                    statusChipsByNodeUid={
+                      permanentMarkMode || permanentMarkHighlights.length
+                        ? permanentMarkChips
+                        : undefined
+                    }
+                    highlightedNodeUids={
+                      permanentMarkHighlights.length
+                        ? permanentMarkHighlights
+                        : mindMapExperience.highlightedNodeUids
+                    }
                     ankiEditMode={ankiEditMode && !recallModeActive}
                     masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
@@ -585,11 +660,13 @@ export default function PalaceEdit() {
                     onNodeClick={page.handleInlinePracticeNodeClick}
                     onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
                     onEditNodeClick={
-                      ankiEditMode && ankiRolePen && !recallModeActive
-                        ? handleAnkiRoleCycleClick
-                        : page.isSegmentRangeMode
-                          ? page.handleSegmentRangeNodeClick
-                          : undefined
+                      permanentMarkMode && !recallModeActive
+                        ? handlePermanentMarkClick
+                        : ankiEditMode && ankiRolePen && !recallModeActive
+                          ? handleAnkiRoleCycleClick
+                          : page.isSegmentRangeMode
+                            ? page.handleSegmentRangeNodeClick
+                            : undefined
                     }
                     onAiSplitRequest={page.handleAiSplitRequest}
                     onQuizBreakOpen={handleOpenQuizPage}

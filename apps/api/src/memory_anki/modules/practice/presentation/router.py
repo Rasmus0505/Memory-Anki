@@ -16,10 +16,16 @@ from memory_anki.modules.practice.application.history_service import (
     list_question_explanations,
 )
 from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
+from memory_anki.modules.practice.application.temporary_marks import (
+    clear_palace_temporary_marks,
+    get_palace_temporary_marks,
+    replace_palace_temporary_marks,
+)
 from memory_anki.modules.practice.domain.schemas import (
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
     FreestyleQueueBuildRequest,
+    FreestyleTemporaryMarksReplaceRequest,
 )
 
 router = APIRouter(tags=["freestyle"])
@@ -134,3 +140,37 @@ def api_list_freestyle_question_explanations(
 @router.get("/freestyle/history-summary")
 def api_freestyle_history_summary(session: Session = Depends(session_dep)):
     return build_history_summary(session)
+
+
+@router.get("/freestyle/temporary-marks/{palace_id}")
+def api_get_temporary_marks(palace_id: int, session: Session = Depends(session_dep)):
+    try:
+        return get_palace_temporary_marks(session, palace_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/freestyle/temporary-marks/{palace_id}")
+def api_replace_temporary_marks(
+    palace_id: int,
+    data: FreestyleTemporaryMarksReplaceRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return replace_palace_temporary_marks(
+            session,
+            palace_id=palace_id,
+            node_uids=list(data.node_uids or []),
+            unify_progress=bool(data.unify_progress),
+            operation_id=data.operation_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/freestyle/temporary-marks/{palace_id}")
+def api_clear_temporary_marks(palace_id: int, session: Session = Depends(session_dep)):
+    try:
+        return clear_palace_temporary_marks(session, palace_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

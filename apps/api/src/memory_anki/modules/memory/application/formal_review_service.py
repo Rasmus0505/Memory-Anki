@@ -641,6 +641,11 @@ def start_or_resume_formal_review(
                         if resolved_mode == "node"
                         else None
                     ),
+                    "branch_uid": (
+                        branch_uid or projection.get("primary_branch_uid")
+                        if resolved_mode == "node"
+                        else None
+                    ),
                     "primary_branch_title": (
                         projection.get("primary_branch_title") if resolved_mode == "node" else None
                     ),

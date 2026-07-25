@@ -67,6 +67,53 @@ def ancestor_path(
     return path
 
 
+def derive_permanent_mark_levels(
+    nodes: Mapping[str, Mapping[str, Any]],
+    marked_uids: Sequence[str] | set[str],
+    *,
+    root_uid: str | None = None,
+) -> dict[str, int]:
+    """Auto levels: no marked ancestor -> 1; else 1 + count of marked ancestors."""
+    marked = {str(uid) for uid in marked_uids if str(uid) in nodes}
+    if root_uid is not None:
+        marked.discard(str(root_uid))
+    levels: dict[str, int] = {}
+    for uid in marked:
+        count = 0
+        current = nodes.get(uid, {}).get("parent_uid")
+        while current and current in nodes:
+            if current in marked:
+                count += 1
+            current = nodes[current].get("parent_uid")
+        levels[uid] = 1 + count
+    return levels
+
+
+def filter_outermost_roots(
+    nodes: Mapping[str, Mapping[str, Any]],
+    root_uids: Sequence[str],
+) -> list[str]:
+    """Keep roots that are not descendants of another root in the same set."""
+    roots = [str(uid) for uid in root_uids if str(uid) in nodes]
+    root_set = set(roots)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for uid in roots:
+        if uid in seen:
+            continue
+        current = nodes.get(uid, {}).get("parent_uid")
+        dominated = False
+        while current and current in nodes:
+            if current in root_set:
+                dominated = True
+                break
+            current = nodes[current].get("parent_uid")
+        if not dominated:
+            ordered.append(uid)
+            seen.add(uid)
+    return ordered
+
+
 def _independent_children(
     nodes: Mapping[str, Mapping[str, Any]], branch_uid: str
 ) -> list[str]:
@@ -89,16 +136,6 @@ def _should_split_for_best_fit(
     branch_uid: str,
     node_limit: int,
 ) -> bool:
-    """Whether to recurse into children for a closer fit to ``node_limit``.
-
-    Rules:
-    - Never truncate siblings: units are always complete single-rooted subtrees.
-    - Wide flat branches (only leaf children) stay as one over-limit unit.
-    - If any child subtree is still over limit, must drill down.
-    - If all child subtrees fit, split only when a child is closer to the limit
-      than keeping the parent whole (slightly over-limit parents are preferred
-      over many tiny children).
-    """
     if branch_uid not in nodes:
         return False
     unit_size = _subtree_size(nodes, branch_uid)
@@ -106,7 +143,6 @@ def _should_split_for_best_fit(
         return False
     independent = _independent_children(nodes, branch_uid)
     if not independent:
-        # Leaf-only children: keep complete parent (no partial sibling display).
         return False
     child_sizes = [_subtree_size(nodes, child) for child in independent]
     if any(size > node_limit for size in child_sizes):
@@ -116,12 +152,44 @@ def _should_split_for_best_fit(
     return child_best_dist < parent_dist
 
 
+def _marks_in_proper_descendants(
+    nodes: Mapping[str, Mapping[str, Any]],
+    branch_uid: str,
+    permanent_marks: set[str],
+) -> bool:
+    if not permanent_marks or branch_uid not in nodes:
+        return False
+    for uid in subtree_uids(nodes, branch_uid, include_self=False):
+        if uid in permanent_marks:
+            return True
+    return False
+
+
+def _resolve_reason(
+    *,
+    base: str,
+    folded: bool,
+    over: bool,
+) -> str:
+    if base == "temporary_mark":
+        return "temporary_mark_over_limit" if over else "temporary_mark"
+    if base == "permanent_mark":
+        if folded:
+            return "permanent_mark_folded_over_limit" if over else "permanent_mark_folded"
+        return "permanent_mark_over_limit" if over else "permanent_mark"
+    if folded:
+        return "folded_ancestors_over_limit" if over else "folded_ancestors"
+    return "over_limit_kept" if over else "within_limit"
+
+
 def split_branch_units(
     *,
     palace_id: int,
     nodes: Mapping[str, Mapping[str, Any]],
     root_uid: str | None,
     node_limit: int,
+    permanent_mark_uids: Sequence[str] | set[str] | None = None,
+    temporary_root_uids: Sequence[str] | None = None,
 ) -> list[BranchUnit]:
     """Split from first-level branches into complete subtrees closest to node_limit.
 
@@ -130,55 +198,134 @@ def split_branch_units(
     **folded into the first descendant unit** (not emitted as a size-1 residual
     card). Sibling branches after the first do not re-include the parent.
 
+    Optional marks:
+    - ``temporary_root_uids``: outermost roots each emit one full-subtree unit
+      first (selection_reason ``temporary_mark``); those uids are claimed.
+    - ``permanent_mark_uids``: force split so mark nodes become unit roots
+      (selection_reason ``permanent_mark`` / folded variants). Only freestyle.
+
     Context path is ancestors above the highest folded / unit root node; those
     ancestors are display-only. The palace root itself is never ratable.
     """
     if not root_uid or root_uid not in nodes:
         return []
     limit = max(1, int(node_limit))
-    first_level = [uid for uid in (nodes[root_uid].get("children") or []) if uid in nodes]
+    permanent_marks = {
+        str(uid)
+        for uid in (permanent_mark_uids or [])
+        if str(uid) in nodes and str(uid) != str(root_uid)
+    }
+    claimed: set[str] = set()
     units: list[BranchUnit] = []
 
-    def emit(branch_uid: str, folded_parents: tuple[str, ...] = ()) -> None:
-        if not branch_uid or branch_uid not in nodes:
+    def append_unit(
+        branch_uid: str,
+        ratable: Sequence[str],
+        *,
+        folded_parents: tuple[str, ...] = (),
+        base_reason: str,
+    ) -> None:
+        filtered = tuple(uid for uid in ratable if uid not in claimed and uid in nodes)
+        if not filtered:
             return
-        # Skip nodes without a stable uid placeholder only when empty string.
-        if not str(branch_uid).strip():
-            return
-        subtree = tuple(subtree_uids(nodes, branch_uid, include_self=True))
+        node_count = len(filtered)
+        over = max(0, node_count - limit)
+        context_anchor = folded_parents[0] if folded_parents else branch_uid
+        reason = _resolve_reason(
+            base=base_reason,
+            folded=bool(folded_parents),
+            over=over > 0,
+        )
+        units.append(
+            BranchUnit(
+                palace_id=palace_id,
+                branch_uid=branch_uid,
+                context_path=tuple(ancestor_path(nodes, context_anchor)),
+                ratable_node_uids=filtered,
+                node_count=node_count,
+                over_limit_delta=over,
+                selection_reason=reason,
+            )
+        )
+        claimed.update(filtered)
+
+    for temp_root in filter_outermost_roots(nodes, list(temporary_root_uids or [])):
+        if temp_root == str(root_uid) or temp_root in claimed:
+            continue
+        subtree = tuple(subtree_uids(nodes, temp_root, include_self=True))
         if not subtree:
+            continue
+        append_unit(temp_root, subtree, base_reason="temporary_mark")
+
+    def emit(branch_uid: str, folded_parents: tuple[str, ...] = ()) -> None:
+        if not branch_uid or branch_uid not in nodes or not str(branch_uid).strip():
             return
-        if _should_split_for_best_fit(nodes, branch_uid, limit):
-            # Drill children; claim this parent on the first child lineage only.
-            children = [str(child) for child in (nodes[branch_uid].get("children") or [])]
+        if branch_uid in claimed:
+            return
+        subtree_all = subtree_uids(nodes, branch_uid, include_self=True)
+        if not subtree_all or all(uid in claimed for uid in subtree_all):
+            return
+
+        if _marks_in_proper_descendants(nodes, branch_uid, permanent_marks):
+            children = [
+                str(child)
+                for child in (nodes[branch_uid].get("children") or [])
+                if child in nodes and child not in claimed
+            ]
             for index, child in enumerate(children):
                 if index == 0:
                     emit(child, folded_parents + (branch_uid,))
                 else:
                     emit(child, ())
             return
-        ratable = folded_parents + subtree
-        node_count = len(ratable)
-        over = max(0, node_count - limit)
-        # Context starts above the highest folded parent (or the unit root).
-        context_anchor = folded_parents[0] if folded_parents else branch_uid
-        reason = "over_limit_kept" if over else "within_limit"
-        if folded_parents:
-            reason = "folded_ancestors" if not over else "folded_ancestors_over_limit"
-        units.append(
-            BranchUnit(
-                palace_id=palace_id,
-                branch_uid=branch_uid,
-                context_path=tuple(ancestor_path(nodes, context_anchor)),
-                ratable_node_uids=ratable,
-                node_count=node_count,
-                over_limit_delta=over,
-                selection_reason=reason,
-            )
+
+        if _should_split_for_best_fit(nodes, branch_uid, limit):
+            children = [
+                str(child)
+                for child in (nodes[branch_uid].get("children") or [])
+                if child in nodes and child not in claimed
+            ]
+            for index, child in enumerate(children):
+                if index == 0:
+                    emit(child, folded_parents + (branch_uid,))
+                else:
+                    emit(child, ())
+            return
+
+        available_subtree = tuple(uid for uid in subtree_all if uid not in claimed)
+        if not available_subtree:
+            return
+        folded_live = tuple(uid for uid in folded_parents if uid not in claimed)
+        ratable = folded_live + available_subtree
+        base = "permanent_mark" if branch_uid in permanent_marks else "within_limit"
+        append_unit(
+            branch_uid,
+            ratable,
+            folded_parents=folded_live,
+            base_reason=base,
         )
 
+    first_level = [
+        str(uid)
+        for uid in (nodes[root_uid].get("children") or [])
+        if uid in nodes and str(uid) not in claimed
+    ]
     for branch_uid in first_level:
-        emit(str(branch_uid))
+        emit(branch_uid)
+
+    # Residual non-root nodes not covered (should be rare with mark/temp claims).
+    for uid in list(nodes.keys()):
+        if uid == root_uid or uid in claimed:
+            continue
+        parent = nodes[uid].get("parent_uid")
+        if parent == root_uid or parent in claimed or parent not in nodes:
+            subtree = tuple(
+                x for x in subtree_uids(nodes, uid, include_self=True) if x not in claimed
+            )
+            if subtree:
+                base = "permanent_mark" if uid in permanent_marks else "within_limit"
+                append_unit(uid, subtree, base_reason=base)
+
     return units
 
 
@@ -223,7 +370,6 @@ def order_units_within_palace(
                 unit.branch_uid,
             ),
         )
-    # Deterministic shuffle keyed by seed + palace + branch.
     return sorted(
         units,
         key=lambda unit: (
@@ -247,7 +393,6 @@ def _dfs_order(nodes: Mapping[str, Mapping[str, Any]], root_uid: str) -> list[st
 
 
 def _stable_hash(seed: int, palace_id: int, branch_uid: str) -> int:
-    # FNV-1a style mix for deterministic, seedable ordering without RNG state.
     value = (seed * 1_000_003) ^ (palace_id * 97)
     for char in branch_uid:
         value = (value ^ ord(char)) * 16_777_619
@@ -258,6 +403,8 @@ def _stable_hash(seed: int, palace_id: int, branch_uid: str) -> int:
 __all__ = [
     "BranchUnit",
     "ancestor_path",
+    "derive_permanent_mark_levels",
+    "filter_outermost_roots",
     "order_units_within_palace",
     "sort_units_by_node_policy",
     "split_branch_units",

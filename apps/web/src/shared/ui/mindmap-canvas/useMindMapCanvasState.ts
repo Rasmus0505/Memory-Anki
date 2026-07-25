@@ -341,7 +341,7 @@ export function useMindMapCanvasState(
     (nodeId: string, point: { x: number; y: number }) => {
       menus.openNodeContext(nodeId, point)
     },
-    [menus.openNodeContext],
+    [menus],
   )
   const handleStartEdit = useCallback(
     (nodeId: string) => {
@@ -609,7 +609,7 @@ export function useMindMapCanvasState(
     const root = graphData.nodes.find((node) => node.parentId == null)
     if (!root) return
     viewport.centerNodeInCanvas(root.id, 240)
-  }, [graphData.nodes, viewport.centerNodeInCanvas])
+  }, [graphData.nodes, viewport])
 
   return {
     frameRef,

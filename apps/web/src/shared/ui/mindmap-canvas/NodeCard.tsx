@@ -634,12 +634,14 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         <div className={`relative ${showDropChrome ? dropHighlightCls : ''}`}>
           <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
           {extract.textSelection ? (
-            <div className="nodrag nopan absolute -top-10 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-amber-300 bg-white px-1.5 py-1 shadow-md">
+            // w-max + nowrap: absolute shrink-to-fit on a narrow card would otherwise
+            // use CJK min-content (1 char wide), wrapping「黄色底色」into a tall oval.
+            <div className="nodrag nopan absolute -top-10 left-1/2 z-40 flex w-max max-w-none -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border border-amber-300 bg-white px-1.5 py-1 shadow-md">
               <button
                 type="button"
                 aria-label="黄色底色"
                 title="黄色底色（再点取消）"
-                className="inline-flex h-7 items-center gap-1 rounded-full bg-amber-100 px-2.5 text-xs font-medium text-amber-900 hover:bg-amber-200"
+                className="inline-flex h-7 min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2.5 text-xs font-medium text-amber-900 hover:bg-amber-200"
                 onMouseDown={(event) => {
                   // Keep contentEditable focused.
                   event.preventDefault()
@@ -651,7 +653,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
                   handleToggleHighlight()
                 }}
               >
-                <Highlighter className="size-3.5" />
+                <Highlighter className="size-3.5 shrink-0" />
                 黄色底色
               </button>
             </div>

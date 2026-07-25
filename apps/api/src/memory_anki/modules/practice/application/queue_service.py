@@ -20,6 +20,7 @@ from ..domain.queue_builder import (
     assemble_queue,
     build_palace_units,
 )
+from .temporary_marks import list_active_temporary_roots
 
 
 def build_freestyle_queue(
@@ -50,18 +51,28 @@ def build_freestyle_queue(
     mastery_by_palace: dict[int, float] = {}
     recent_practice_rank: dict[int, int] = {}
 
+    temporary_by_palace = list_active_temporary_roots(session)
+
     for tree in trees:
         palace_id = int(tree["palace_id"])
         palace_meta[palace_id] = {
             "title": str(tree.get("title") or ""),
         }
+        nodes = tree["nodes"]
+        permanent_marks = [
+            str(uid)
+            for uid, node in nodes.items()
+            if isinstance(node, dict) and node.get("permanent_split_mark")
+        ]
         units_by_palace[palace_id] = build_palace_units(
             palace_id=palace_id,
-            nodes=tree["nodes"],
+            nodes=nodes,
             root_uid=tree.get("root_uid"),
             node_limit=int(config["node_limit"]),
             within_palace_order=str(config["within_palace_order"]),
             seed=int(config["seed"]),
+            permanent_mark_uids=permanent_marks,
+            temporary_root_uids=list(temporary_by_palace.get(palace_id) or []),
         )
         try:
             # Progress scopes select which memory buckets enter freestyle units

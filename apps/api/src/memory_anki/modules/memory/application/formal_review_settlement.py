@@ -118,7 +118,7 @@ def formal_review_completion_summary(session: Session, row: StudySession) -> dic
     scope = set(_scope(row)) & projection_uids
     # Legacy sessions (migrated progress, healed receipts) may lack a frozen due
     # set even though MindMapRecallEvent rows were written for this session id.
-    # Fall back to "nodes scored in this session ∩ projection" so settlement
+    # Fall back to "nodes scored in this session - projection" so settlement
     # never reports 0/0 after the user already rated.
     if not scope:
         scope = set(_effective_ratings(session, row, projection_uids))
@@ -293,7 +293,7 @@ def rate_out_of_scope_due_formal_review_nodes(
         commit=True,
     )
     # Keep expanded scope so completion counts include the extra ratings.
-    # Do not shrink back — otherwise settlement would report unrated ghosts.
+    # Do not shrink back - otherwise settlement would report unrated ghosts.
 
     refreshed = formal_review_completion_summary(session, row)
     return {
@@ -328,7 +328,7 @@ def complete_formal_review(
         raise ValueError("palace not found")
     summary = formal_review_completion_summary(session, row)
     # Palace-wave rule: only complete when every frozen item was rated (direct or inherited).
-    # Unrated items must use pause — never implicit advance.
+    # Unrated items must use pause - never implicit advance.
     if int(summary.get("unrated_due_node_count") or 0) > 0 and completion_mode not in {
         "force_complete_unrated",  # reserved; not exposed as default UI
     }:
@@ -415,6 +415,53 @@ def complete_formal_review(
     pending_reinforcement = find_available_reinforcement_for_palace(
         session, int(palace.id)
     )
+
+    # Temporary freestyle marks: clear a root when this unit settled with Good/Easy.
+    temporary_completed: list[str] = []
+    try:
+        from memory_anki.modules.practice.application.temporary_marks import (
+            mark_temporary_roots_completed_on_settlement,
+        )
+
+        # `ratings` was popped earlier for score; still in local scope.
+        good_or_easy = any(int(v) >= 3 for v in (ratings or {}).values())
+        if not good_or_easy and isinstance(summary, dict):
+            rating_counts = summary.get("rating_counts")
+            if isinstance(rating_counts, dict):
+                for key, value in rating_counts.items():
+                    label = str(key)
+                    if label in {"记得", "轻松", "good", "easy", "3", "4"} and int(value or 0) > 0:
+                        good_or_easy = True
+                        break
+        scope_uids = set(_scope(row) or [])
+        # Prefer explicit freeze/scope; also include branch_uid from session summary if present.
+        if isinstance(summary, dict):
+            for key in ("scope_node_uids", "due_node_uids", "ratable_node_uids"):
+                vals = summary.get(key)
+                if isinstance(vals, list):
+                    scope_uids.update(str(v) for v in vals)
+            branch_uid = summary.get("branch_uid") or summary.get("primary_branch_uid") or existing.get("branch_uid") or existing.get("primary_branch_uid")
+            if branch_uid:
+                scope_uids.add(str(branch_uid))
+        branch_from_session = existing.get("branch_uid") or existing.get("scope_branch_uid")
+        if branch_from_session:
+            scope_uids.add(str(branch_from_session))
+        # Freestyle unit branch_uid is the temporary root even when not due-frozen.
+        progress = existing if isinstance(existing, dict) else {}
+        for key in ("branch_uid", "scope_branch_uid", "unit_branch_uid", "primary_branch_uid"):
+            value = progress.get(key)
+            if value:
+                scope_uids.add(str(value))
+        temporary_completed = mark_temporary_roots_completed_on_settlement(
+            session,
+            palace_id=int(palace.id),
+            branch_or_scope_uids=scope_uids,
+            had_good_or_easy=good_or_easy,
+        )
+    except Exception:
+        # Settlement must not fail because of temporary-mark bookkeeping.
+        temporary_completed = []
+
     receipt = {
         "ok": True,
         "completion_mode": completion_mode,
@@ -426,6 +473,7 @@ def complete_formal_review(
         "duration_seconds": duration,
         "today_review_count": today_review_count,
         "pending_reinforcement": pending_reinforcement,
+        "temporary_marks_completed": temporary_completed,
         **summary,
     }
     row.status = "completed"

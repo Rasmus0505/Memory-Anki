@@ -422,15 +422,39 @@ describe('NodeCard', () => {
     act(() => {
       selectEditorText(editor, 0, 3)
     })
-    expect(screen.getByRole('button', { name: '黄色底色' })).toBeTruthy()
+    const toolbarButton = screen.getByRole('button', { name: '黄色底色' })
+    expect(toolbarButton).toBeTruthy()
+    // Narrow cards must not wrap CJK label into a tall oval (min-content = 1 char).
+    expect(toolbarButton.className).toContain('whitespace-nowrap')
+    expect(toolbarButton.className).toContain('shrink-0')
+    const toolbar = toolbarButton.parentElement
+    expect(toolbar?.className).toContain('w-max')
+    expect(toolbar?.className).toContain('whitespace-nowrap')
 
-    fireEvent.click(screen.getByRole('button', { name: '黄色底色' }))
+    fireEvent.click(toolbarButton)
     fireEvent.keyDown(editor, { key: 'Enter' })
 
     expect(onFinishEdit).toHaveBeenCalled()
     const committed = String(onFinishEdit.mock.calls.at(-1)?.[1] || '')
     expect(committed).toContain('data-emphasis="highlight"')
     expect(committed).toContain('细胞膜')
+  })
+
+  it('keeps yellow highlight toolbar on one line for short CJK cards', () => {
+    renderNodeCard({
+      label: '现实性',
+      editing: true,
+      editText: '现实性',
+      metadata: { depth: 1, layoutRole: 'branch', text: '现实性' },
+    })
+
+    const editor = screen.getByRole('textbox')
+    act(() => {
+      selectEditorText(editor, 0, 2)
+    })
+    const toolbarButton = screen.getByRole('button', { name: '黄色底色' })
+    expect(toolbarButton.className).toMatch(/whitespace-nowrap/)
+    expect(toolbarButton.parentElement?.className).toMatch(/w-max/)
   })
 
   it('double-clicks into edit on cards that already have yellow emphasis markup', () => {

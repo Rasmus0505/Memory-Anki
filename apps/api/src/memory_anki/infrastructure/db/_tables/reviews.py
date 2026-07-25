@@ -54,7 +54,7 @@ class ReviewNodeState(Base):
     # new | manual | practice | batch_inherited | calibrated | legacy_estimate | content_changed | uninitialized
     schedule_source: Mapped[str] = mapped_column(String(32), nullable=False, default="new")
     evidence_source: Mapped[str] = mapped_column(String(24), nullable=False, default="none")
-    # Soft reference to review_waves.id (no FK — avoids create_all ordering issues).
+    # Soft reference to review_waves.id (no FK - avoids create_all ordering issues).
     effective_wave_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     effective_local_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     schedule_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -195,3 +195,25 @@ class ReviewCalibrationOperationItem(Base):
     before_state_json: Mapped[str] = mapped_column(Text, nullable=False)
     after_state_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class FreestyleTemporaryMark(Base):
+    """Active temporary freestyle split roots until Good/Easy settlement."""
+
+    __tablename__ = "freestyle_temporary_marks"
+    __table_args__ = (
+        UniqueConstraint("palace_id", "node_uid", name="uq_freestyle_temp_marks_palace_node"),
+        Index("ix_freestyle_temp_marks_palace", "palace_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=False
+    )
+    node_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive
+    )
+

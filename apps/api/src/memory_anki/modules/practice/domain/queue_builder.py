@@ -71,12 +71,16 @@ def build_palace_units(
     node_limit: int,
     within_palace_order: str,
     seed: int,
+    permanent_mark_uids: Sequence[str] | None = None,
+    temporary_root_uids: Sequence[str] | None = None,
 ) -> list[BranchUnit]:
     units = split_branch_units(
         palace_id=palace_id,
         nodes=nodes,
         root_uid=root_uid,
         node_limit=node_limit,
+        permanent_mark_uids=permanent_mark_uids,
+        temporary_root_uids=temporary_root_uids,
     )
     ordered = order_units_within_palace(
         units,

@@ -36,6 +36,10 @@
   background-color: #fef08c !important;
   color: inherit;
   border-radius: 0.125rem;
+  /* Each wrapped line keeps its own rounded highlight box (not a sliced strip). */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding: 0 0.1em;
 }
 
 .memory-anki-mindmap-scene {

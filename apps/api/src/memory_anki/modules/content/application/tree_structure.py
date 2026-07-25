@@ -33,6 +33,9 @@ def _node_anki_fields(raw: dict[str, Any]) -> dict[str, Any]:
         fields["anki_role"] = safe_role
     if front_uid:
         fields["anki_front_uid"] = front_uid
+    # Permanent freestyle split anchor (palace edit mark mode).
+    if data.get("permanentSplitMark") is True or data.get("permanent_split_mark") is True:
+        fields["permanent_split_mark"] = True
     return fields
 
 

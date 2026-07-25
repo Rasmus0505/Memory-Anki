@@ -567,3 +567,152 @@ def test_sanitize_feed_config_progress_scopes():
         "reinforcement",
         "new",
     ]
+
+def test_permanent_marks_force_sibling_split():
+    """L1 marks on education purpose/effect force separate freestyle units."""
+    nodes = {
+        "root": _node("root", "Palace"),
+        "purpose": _node("purpose", "教育目的", parent="root"),
+        "purpose_child": _node("purpose_child", "棕威平", parent="purpose"),
+        "effect": _node("effect", "教育作用", parent="root"),
+        "society": _node("society", "社会作用", parent="effect"),
+        "person": _node("person", "人的作用", parent="effect"),
+        "society_leaf": _node("society_leaf", "改造社会", parent="society"),
+        "person_leaf": _node("person_leaf", "天赋", parent="person"),
+    }
+    nodes["root"]["children"] = ["purpose", "effect"]
+    nodes["purpose"]["children"] = ["purpose_child"]
+    nodes["effect"]["children"] = ["society", "person"]
+    nodes["society"]["children"] = ["society_leaf"]
+    nodes["person"]["children"] = ["person_leaf"]
+
+    # Without marks: effect subtree (effect+society+person+2 leaves=5) may stay together under high limit.
+    plain = split_branch_units(palace_id=1, nodes=nodes, root_uid="root", node_limit=20)
+    assert {u.branch_uid for u in plain} == {"purpose", "effect"}
+
+    # L1 permanent marks on purpose + effect: still separate (already first-level).
+    marked = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        permanent_mark_uids=["purpose", "effect"],
+    )
+    assert [u.branch_uid for u in marked] == ["purpose", "effect"]
+    assert all(u.selection_reason.startswith("permanent_mark") for u in marked)
+
+    # L2 permanent marks under effect force society vs person split.
+    deep = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        permanent_mark_uids=["purpose", "effect", "society", "person"],
+    )
+    branch_uids = [u.branch_uid for u in deep]
+    assert "purpose" in branch_uids
+    assert "society" in branch_uids
+    assert "person" in branch_uids
+    assert "effect" not in branch_uids  # folded into first child lineage
+    # effect should be folded into first marked child unit
+    society_unit = next(u for u in deep if u.branch_uid == "society")
+    assert "effect" in society_unit.ratable_node_uids
+    person_unit = next(u for u in deep if u.branch_uid == "person")
+    assert "effect" not in person_unit.ratable_node_uids
+
+
+def test_temporary_roots_claim_full_subtrees():
+    nodes = {
+        "root": _node("root", "殖民地时期的教育"),
+        "north": _node("north", "北部", parent="root"),
+        "south": _node("south", "南部", parent="root"),
+        "mid": _node("mid", "中部", parent="root"),
+        "n1": _node("n1", "宗教", parent="north"),
+        "s1": _node("s1", "庄园", parent="south"),
+        "m1": _node("m1", "教堂", parent="mid"),
+        "other": _node("other", "其他", parent="root"),
+        "o1": _node("o1", "其他子", parent="other"),
+    }
+    nodes["root"]["children"] = ["north", "south", "mid", "other"]
+    nodes["north"]["children"] = ["n1"]
+    nodes["south"]["children"] = ["s1"]
+    nodes["mid"]["children"] = ["m1"]
+    nodes["other"]["children"] = ["o1"]
+
+    units = split_branch_units(
+        palace_id=9,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=["north", "south", "mid"],
+    )
+    by_branch = {u.branch_uid: u for u in units}
+    assert set(by_branch) == {"north", "south", "mid", "other"}
+    assert by_branch["north"].selection_reason == "temporary_mark"
+    assert set(by_branch["north"].ratable_node_uids) == {"north", "n1"}
+    assert by_branch["other"].selection_reason == "within_limit"
+
+
+def test_temporary_nested_root_keeps_outermost_only():
+    nodes = {
+        "root": _node("root", "P"),
+        "a": _node("a", "A", parent="root"),
+        "a1": _node("a1", "A1", parent="a"),
+        "a1x": _node("a1x", "A1X", parent="a1"),
+    }
+    nodes["root"]["children"] = ["a"]
+    nodes["a"]["children"] = ["a1"]
+    nodes["a1"]["children"] = ["a1x"]
+    units = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=["a", "a1"],
+    )
+    assert len(units) == 1
+    assert units[0].branch_uid == "a"
+    assert set(units[0].ratable_node_uids) == {"a", "a1", "a1x"}
+
+
+def test_derive_permanent_mark_levels_auto():
+    from memory_anki.modules.practice.domain.branch_units import derive_permanent_mark_levels
+
+    nodes = {
+        "root": _node("root", "P"),
+        "a": _node("a", "A", parent="root"),
+        "b": _node("b", "B", parent="a"),
+        "c": _node("c", "C", parent="b"),
+    }
+    nodes["root"]["children"] = ["a"]
+    nodes["a"]["children"] = ["b"]
+    nodes["b"]["children"] = ["c"]
+    levels = derive_permanent_mark_levels(nodes, ["a", "c"], root_uid="root")
+    assert levels == {"a": 1, "c": 2}
+
+
+def test_mark_coverage_no_duplicate_uids():
+    nodes = {
+        "root": _node("root", "P"),
+        "a": _node("a", "A", parent="root"),
+        "a1": _node("a1", "A1", parent="a"),
+        "b": _node("b", "B", parent="root"),
+        "b1": _node("b1", "B1", parent="b"),
+    }
+    nodes["root"]["children"] = ["a", "b"]
+    nodes["a"]["children"] = ["a1"]
+    nodes["b"]["children"] = ["b1"]
+    units = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        permanent_mark_uids=["a", "b"],
+        temporary_root_uids=["a"],
+    )
+    seen: list[str] = []
+    for unit in units:
+        seen.extend(unit.ratable_node_uids)
+    assert len(seen) == len(set(seen))
+    assert set(seen) == {"a", "a1", "b", "b1"}
+

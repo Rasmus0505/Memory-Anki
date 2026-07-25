@@ -217,16 +217,17 @@ describe('FreestyleMindMapBranchCardView', () => {
     expect(capturedFlowProps?.chromeDensity).toBe('compact')
     expect(capturedFlowProps?.chromeFrame).toBe('host')
     expect(capturedFlowProps?.checkpointNodeUids).toEqual(['branch', 'child'])
-    // Clipped unit tree under synthetic freestyle root — not the whole palace.
+    // Clipped unit is a single-child spine from the real palace root — not the whole palace.
     const editor = capturedFlowProps?.reviewEditorState as {
       editor_doc?: {
         root?: {
-          data?: { uid?: string }
+          data?: { uid?: string; text?: string }
           children?: Array<{ data?: { uid?: string }; children?: unknown[] }>
         }
       }
     }
-    expect(editor?.editor_doc?.root?.data?.uid).toContain('freestyle_unit_root')
+    expect(editor?.editor_doc?.root?.data?.uid).toBe('root')
+    expect(String(editor?.editor_doc?.root?.data?.text || '')).not.toContain(' / ')
     expect(editor?.editor_doc?.root?.children?.[0]?.data?.uid).toBe('branch')
     expect(editor?.editor_doc?.root?.children?.[0]?.children).toHaveLength(1)
     // Cascade walks the unit clip (same as flip view), not the whole palace —
@@ -259,7 +260,50 @@ describe('FreestyleMindMapBranchCardView', () => {
     expect(screen.queryByText('本支完成')).toBeNull()
   })
 
-  it('quick-settles by bulk-rating unrated nodes then submitting without the dialog', async () => {
+    it('bulk-rates unrated nodes and finishes in the same FSRS dialog', async () => {
+    const onBranchComplete = vi.fn()
+    apiMocks.getReviewSessionCompletionSummaryApi
+      .mockResolvedValueOnce({
+        item: { ...fullSummary, rated_node_count: 0, unrated_due_node_count: 1 },
+      })
+      .mockResolvedValue({ item: fullSummary })
+
+    render(
+      <FreestyleMindMapBranchCardView
+        card={{ ...card, id: 'mindmap_branch:1:branch:bulk-finish' }}
+        active
+        ratingMode
+        onToggleRatingMode={vi.fn()}
+        onBranchComplete={onBranchComplete}
+        onStaleDrop={vi.fn()}
+        onSaveFailed={vi.fn()}
+        reducedMotion
+      />,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '完成模拟' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '完成模拟' }))
+    await waitFor(() => expect(screen.getByText('完成 FSRS 复习')).toBeTruthy())
+
+    // Same dialog: pick a grade and settle without a second confirm step.
+    fireEvent.click(screen.getByRole('button', { name: '记得并结束' }))
+    await waitFor(() =>
+      expect(apiMocks.rateUnratedReviewSessionNodesApi).toHaveBeenCalledWith(
+        'formal-session-1',
+        expect.objectContaining({ rating: 3 }),
+      ),
+    )
+    await waitFor(() => expect(apiMocks.submitReviewSessionApi).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(onBranchComplete).toHaveBeenCalledWith('mindmap_branch:1:branch:bulk-finish', {
+        restudy: false,
+      }),
+    )
+    // Receipt stays on the card — no auto page-turn.
+    await waitFor(() => expect(screen.getByText('下次复习')).toBeTruthy())
+  })
+
+it('quick-settles by bulk-rating unrated nodes then submitting without the dialog', async () => {
     const onBranchComplete = vi.fn()
     render(
       <FreestyleMindMapBranchCardView
@@ -331,13 +375,13 @@ describe('FreestyleMindMapBranchCardView', () => {
     // No edits → no palace save (previously blocked UI on USB I/O every leave-edit).
     expect(apiMocks.savePalaceEditorApi).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
-    // Freestyle unit remains clipped after return.
+    // Freestyle unit remains a real-root spine after return (no path-string synthetic root).
     const reviewState = capturedFlowProps?.reviewEditorState as {
       editor_doc?: {
         root?: { data?: { uid?: string }; children?: Array<{ data?: { uid?: string } }> }
       }
     }
-    expect(reviewState?.editor_doc?.root?.data?.uid).toContain('freestyle_unit_root')
+    expect(reviewState?.editor_doc?.root?.data?.uid).toBe('root')
     expect(reviewState?.editor_doc?.root?.children?.[0]?.data?.uid).toBe('branch')
   })
 
@@ -422,7 +466,7 @@ describe('FreestyleMindMapBranchCardView', () => {
     expect(confirm.disabled).toBe(true)
     expect(apiMocks.submitReviewSessionApi).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '记得' }))
+    fireEvent.click(screen.getByRole('button', { name: '记得并结束' }))
     await waitFor(() =>
       expect(apiMocks.rateUnratedReviewSessionNodesApi).toHaveBeenCalledWith(
         'formal-session-1',

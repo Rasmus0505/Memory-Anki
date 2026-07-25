@@ -38,6 +38,7 @@ import {
   settleFlashFromResult,
 } from '@/modules/practice/ui/freestyle/components/freestyleBranchCardSupport'
 import { cn } from '@/shared/lib/utils'
+import { TemporaryMarkDialog } from '@/modules/practice/ui/freestyle/components/TemporaryMarkDialog'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
 
@@ -50,6 +51,7 @@ export function FreestyleMindMapBranchCardView({
   onStaleDrop,
   onSaveFailed,
   reducedMotion,
+  onQueueInvalidate,
 }: {
   card: FreestyleMindMapBranchCard
   active: boolean
@@ -67,6 +69,8 @@ export function FreestyleMindMapBranchCardView({
   onStaleDrop: (cardId: string) => void
   onSaveFailed: (message: string) => void
   reducedMotion: boolean
+  /** After temporary marks confirm: silent freestyle queue rebuild. */
+  onQueueInvalidate?: () => void
 }) {
   /** Full palace document — used for inline edit + rating subtree cascade. */
   const [fullEditorState, setFullEditorState] = useState<MindMapEditorState | null>(null)
@@ -81,6 +85,7 @@ export function FreestyleMindMapBranchCardView({
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  const [tempMarkOpen, setTempMarkOpen] = useState(false)
   const completedRef = useRef(false)
   /** Survives silent queue rebuilds so we do not reload/drop a just-settled unit. */
   const settledCardIdRef = useRef<string | null>(null)
@@ -219,7 +224,13 @@ export function FreestyleMindMapBranchCardView({
           rating,
           operation_id: operationId,
         })
+        // Refresh summary inside the same dialog, then finish immediately.
+        // Freestyle: one dialog for rate + settle — no second confirm popup/step.
+        const summary = await getReviewSessionCompletionSummaryApi(target.sessionId)
         await completion.retryPreparation()
+        if ((summary.item.unrated_due_node_count ?? 0) <= 0) {
+          await completion.confirmCompletion({ note: '' })
+        }
       } catch (error) {
         onSaveFailed(error instanceof Error && error.message ? error.message : '一键评分失败')
       } finally {
@@ -378,9 +389,9 @@ export function FreestyleMindMapBranchCardView({
         const pendingFingerprint = editorStateFingerprint(pending)
         const dirty = pendingFingerprint !== persistedFingerprintRef.current
 
-        // Always re-clip before leaving edit: review uses a synthetic unit root while
-        // edit uses the full palace. Soft canvas sync + a fresh unit doc keeps the
-        // flip surface non-blank after "返回随心".
+        // Always re-clip before leaving edit: review uses a single-child unit spine
+        // while edit uses the full palace. Soft canvas sync + a fresh unit doc keeps
+        // the flip surface non-blank after "返回随心".
         setReviewEditorState(clipBranchUnit(pending, card))
         // Leave edit immediately so "返回随心" never waits on USB/API I/O.
         setDisplayMode('review')
@@ -526,9 +537,9 @@ export function FreestyleMindMapBranchCardView({
               viewMemoryScope={`freestyle-branch:${card.id}:${displayMode}`}
               reviewEditorState={reviewEditorState}
               editEditorState={fullEditorState}
-              // Cascade on the unit document (synthetic root + folded spine + full unit
-              // subtree), not the whole palace. Reveal filtering is separate — the unit
-              // clip already includes every descendant under the branch, so single-child
+              // Cascade on the unit document (palace-root spine + full unit subtree),
+              // not the whole palace. Reveal filtering is separate — the unit clip
+              // already includes every descendant under the branch, so single-child
               // spines still cascade into multi-grandchild branches.
               ratingTreeEditorState={reviewEditorState}
               // FSRS / rating limited to unit formal due freeze.
@@ -548,6 +559,13 @@ export function FreestyleMindMapBranchCardView({
               chromeDensity="compact"
               chromeFrame="host"
               persistProgress={false}
+              extraMoreActions={[
+                {
+                  label: '临时标记',
+                  onClick: () => setTempMarkOpen(true),
+                  opensOverlay: true,
+                },
+              ]}
               submitting={completion.submitting || bulkRating}
               onComplete={(payload) => {
                 void handleComplete(payload)
@@ -582,6 +600,16 @@ export function FreestyleMindMapBranchCardView({
         ) : null}
       </div>
 
+      <TemporaryMarkDialog
+        open={tempMarkOpen}
+        palaceId={card.palace_id}
+        palaceTitle={palaceTitleLabel}
+        onClose={() => setTempMarkOpen(false)}
+        onConfirmed={() => {
+          onQueueInvalidate?.()
+        }}
+      />
+
       <FsrsCompletionDialog
         open={completion.open}
         summary={completion.target?.summary ?? null}
@@ -590,6 +618,7 @@ export function FreestyleMindMapBranchCardView({
         preparing={completion.preparing}
         submissionFailed={completion.submissionFailed}
         bulkRating={bulkRating}
+        settleOnBulkRate
         error={completion.error}
         onRetry={() => void completion.retryPreparation()}
         onRetrySubmission={() => void completion.retrySubmission()}
