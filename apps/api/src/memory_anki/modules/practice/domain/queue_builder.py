@@ -14,9 +14,16 @@ from .branch_units import (
     split_branch_units,
 )
 from .feed_config import (
+    BOUND_QUIZ_FOLLOW_UNIT,
     DUE_POLICY_ALL_WEIGHTED,
     DUE_POLICY_DUE_FIRST,
     DUE_POLICY_DUE_ONLY,
+    MIX_MODE_MINDMAP_ONLY,
+    MIX_MODE_QUIZ_ONLY,
+    MIX_MODE_RANDOM,
+    MIX_MODE_RATIO,
+    MIX_MODE_SEQUENTIAL_MAP_QUIZ,
+    MIX_MODE_SEQUENTIAL_QUIZ_MAP,
     PALACE_ORDER_INTERLEAVE,
     PALACE_ORDER_SEQUENTIAL,
     WITHIN_PALACE_SHUFFLE,
@@ -269,6 +276,76 @@ def interleave_by_weights(
     return result
 
 
+def deterministic_random_merge(
+    mindmap_cards: Sequence[dict[str, Any]],
+    quiz_cards: Sequence[dict[str, Any]],
+    *,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Seed-stable merge of two streams (same inputs → same order)."""
+    items: list[tuple[int, int, int, dict[str, Any]]] = []
+    for index, card in enumerate(mindmap_cards):
+        items.append(
+            (
+                _stable_mix(seed, "rand", "m", index, card.get("id")),
+                0,
+                index,
+                card,
+            )
+        )
+    for index, card in enumerate(quiz_cards):
+        items.append(
+            (
+                _stable_mix(seed, "rand", "q", index, card.get("id")),
+                1,
+                index,
+                card,
+            )
+        )
+    items.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [item[3] for item in items]
+
+
+def merge_streams_by_mix_mode(
+    mindmap_cards: Sequence[dict[str, Any]],
+    quiz_cards: Sequence[dict[str, Any]],
+    *,
+    mix_mode: str,
+    mix_ratio_mindmap: int,
+    mix_ratio_quiz: int,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Apply explicit map-vs-quiz mix_mode to two ordered streams."""
+    maps = list(mindmap_cards)
+    quizzes = list(quiz_cards)
+    if mix_mode == MIX_MODE_MINDMAP_ONLY:
+        return maps
+    if mix_mode == MIX_MODE_QUIZ_ONLY:
+        return quizzes
+    if mix_mode == MIX_MODE_SEQUENTIAL_MAP_QUIZ:
+        return maps + quizzes
+    if mix_mode == MIX_MODE_SEQUENTIAL_QUIZ_MAP:
+        return quizzes + maps
+    if mix_mode == MIX_MODE_RANDOM:
+        return deterministic_random_merge(maps, quizzes, seed=seed)
+    # Default / ratio
+    return interleave_by_weights(
+        maps,
+        quizzes,
+        mindmap_weight=max(1, mix_ratio_mindmap),
+        quiz_weight=max(1, mix_ratio_quiz),
+        seed=seed,
+    )
+
+
+def _is_map_side_card(card: Mapping[str, Any]) -> bool:
+    return str(card.get("type") or "") in {"mindmap_branch", "anki_card"}
+
+
+def _is_quiz_side_card(card: Mapping[str, Any]) -> bool:
+    return str(card.get("type") or "") == "quiz_question"
+
+
 def mindmap_card_payload(
     unit: BranchUnit,
     *,
@@ -395,10 +472,34 @@ def assemble_queue(
     mindmap_weight = int(weights.get("mindmap_branch", 2))
     anki_weight = int(weights.get("anki_card", 2))
     quiz_weight = int(weights.get("quiz_question", 1))
-    # Combine mindmap streams for interleave against quiz.
+    mix_mode = str(config.get("mix_mode") or MIX_MODE_RATIO)
+    raw_mix_ratio = config.get("mix_ratio") or {}
+    if not isinstance(raw_mix_ratio, Mapping):
+        raw_mix_ratio = {}
+    mix_ratio_mindmap = int(
+        raw_mix_ratio.get("mindmap")
+        or max(1, max(0, mindmap_weight) + max(0, anki_weight))
+        or 2
+    )
+    mix_ratio_quiz = int(raw_mix_ratio.get("quiz") or max(1, quiz_weight) or 1)
+    bound_quiz_placement = str(
+        config.get("bound_quiz_placement") or BOUND_QUIZ_FOLLOW_UNIT
+    )
+    # Combine mindmap streams for interleave against quiz (legacy fallback).
     map_stream_weight = max(mindmap_weight, 0) + max(anki_weight, 0)
+    if map_stream_weight <= 0:
+        map_stream_weight = mix_ratio_mindmap
+    if quiz_weight <= 0:
+        quiz_weight = mix_ratio_quiz
     weak_priority = bool(config.get("weak_quiz_priority", True))
     nodes_by_palace = nodes_by_palace or {}
+
+    # mix_mode can force-disable a stream even if content toggles are on.
+    if mix_mode == MIX_MODE_MINDMAP_ONLY:
+        quiz_enabled = False
+    elif mix_mode == MIX_MODE_QUIZ_ONLY:
+        mindmap_enabled = False
+        anki_enabled = False
 
     palace_ids = list(palace_meta.keys())
     if palace_order == PALACE_ORDER_INTERLEAVE:
@@ -507,58 +608,124 @@ def assemble_queue(
             cards.append(quiz_card_payload(quiz, palace_title=title, phase=phase))
         return cards
 
-    def palace_stream(
-        palace_id: int,
+    def palace_map_stream(
         units: Sequence[BranchUnit],
-        palace_quizzes: Sequence[QuizCandidate],
         phase: str,
     ) -> list[dict[str, Any]]:
-        unit_questions, unbound = attach_questions_to_units(units, palace_quizzes)
+        """Palace-side cards only (mindmap / anki)."""
         stream: list[dict[str, Any]] = []
         for unit in units:
             stream.extend(unit_cards([unit], phase))
-            stream.extend(
-                quiz_cards(
-                    sort_quiz_candidates(
-                        unit_questions.get(unit_key(unit), ()),
-                        weak_priority=weak_priority,
-                    ),
-                    phase,
-                )
-            )
-        if unbound:
-            stream = interleave_by_weights(
-                stream,
-                quiz_cards(sort_quiz_candidates(unbound, weak_priority=weak_priority), phase),
-                mindmap_weight=map_stream_weight or mindmap_weight,
-                quiz_weight=quiz_weight,
-                seed=seed + palace_id,
-            )
         return stream
+
+    def collect_palace_streams(
+        units: Sequence[BranchUnit],
+        palace_quizzes: Sequence[QuizCandidate],
+        phase: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+        """Return pure map cards, bound quizzes keyed by map card id, and free quiz cards.
+
+        When bound_quiz_placement is follow_unit, bound quizzes are re-attached after
+        their unit's map card post-mix so ratio/random cannot split them apart.
+        Otherwise every quiz goes into the free quiz stream for global mix_mode.
+        """
+        unit_questions, unbound = attach_questions_to_units(units, palace_quizzes)
+        map_cards = palace_map_stream(units, phase)
+        if bound_quiz_placement != BOUND_QUIZ_FOLLOW_UNIT:
+            return (
+                map_cards,
+                {},
+                quiz_cards(
+                    sort_quiz_candidates(list(palace_quizzes), weak_priority=weak_priority),
+                    phase,
+                ),
+            )
+
+        bound_after: dict[str, list[dict[str, Any]]] = {}
+        # Attach bound quizzes to the last map card emitted for each unit.
+        for unit in units:
+            unit_map = unit_cards([unit], phase)
+            if not unit_map:
+                # No map card (e.g. disabled); bound quizzes fall into free stream.
+                unbound = list(unbound) + list(unit_questions.get(unit_key(unit), ()))
+                continue
+            anchor_id = str(unit_map[-1].get("id") or "")
+            bound = quiz_cards(
+                sort_quiz_candidates(
+                    unit_questions.get(unit_key(unit), ()),
+                    weak_priority=weak_priority,
+                ),
+                phase,
+            )
+            if anchor_id and bound:
+                bound_after.setdefault(anchor_id, []).extend(bound)
+        return (
+            map_cards,
+            bound_after,
+            quiz_cards(sort_quiz_candidates(unbound, weak_priority=weak_priority), phase),
+        )
 
     def compose_phase(
         units_map: Mapping[int, Sequence[BranchUnit]],
         quizzes_map: Mapping[int, Sequence[QuizCandidate]],
         phase: str,
     ) -> list[dict[str, Any]]:
-        streams = {
-            palace_id: palace_stream(
-                palace_id,
+        map_by_palace: dict[int, list[dict[str, Any]]] = {}
+        quiz_by_palace: dict[int, list[dict[str, Any]]] = {}
+        bound_after: dict[str, list[dict[str, Any]]] = {}
+        for palace_id in palace_ids:
+            map_cards, palace_bound, quiz_cards_list = collect_palace_streams(
                 units_map.get(palace_id, ()),
                 quizzes_map.get(palace_id, ()),
                 phase,
             )
-            for palace_id in palace_ids
-        }
-        if palace_order == PALACE_ORDER_SEQUENTIAL:
-            return [card for palace_id in palace_ids for card in streams[palace_id]]
-        result: list[dict[str, Any]] = []
-        queues = {palace_id: list(streams[palace_id]) for palace_id in palace_ids}
-        while any(queues.values()):
-            for palace_id in palace_ids:
-                if queues[palace_id]:
-                    result.append(queues[palace_id].pop(0))
-        return result
+            map_by_palace[palace_id] = map_cards
+            quiz_by_palace[palace_id] = quiz_cards_list
+            for card_id, items in palace_bound.items():
+                bound_after.setdefault(card_id, []).extend(items)
+
+        def order_palace_cards(
+            by_palace: Mapping[int, Sequence[dict[str, Any]]],
+        ) -> list[dict[str, Any]]:
+            if palace_order == PALACE_ORDER_SEQUENTIAL:
+                return [
+                    card
+                    for palace_id in palace_ids
+                    for card in by_palace.get(palace_id, ())
+                ]
+            result: list[dict[str, Any]] = []
+            queues = {
+                palace_id: list(by_palace.get(palace_id, ())) for palace_id in palace_ids
+            }
+            while any(queues.values()):
+                for palace_id in palace_ids:
+                    if queues[palace_id]:
+                        result.append(queues[palace_id].pop(0))
+            return result
+
+        map_side = order_palace_cards(map_by_palace)
+        quiz_side = order_palace_cards(quiz_by_palace)
+        mixed = merge_streams_by_mix_mode(
+            map_side,
+            quiz_side,
+            mix_mode=mix_mode,
+            mix_ratio_mindmap=mix_ratio_mindmap,
+            mix_ratio_quiz=mix_ratio_quiz,
+            seed=seed + (0 if phase == "due" else 1),
+        )
+        if not bound_after:
+            return mixed
+        # Re-attach bound quizzes immediately after their anchor map/anki card.
+        final: list[dict[str, Any]] = []
+        for card in mixed:
+            final.append(card)
+            card_id = str(card.get("id") or "")
+            if card_id in bound_after:
+                final.extend(bound_after.pop(card_id))
+        # Any anchors missing from mixed (filtered/disabled) append remaining bounds.
+        for leftovers in bound_after.values():
+            final.extend(leftovers)
+        return final
 
     phase1 = compose_phase(due_units_by_palace, priority_quizzes_by_palace, "due")
     phase2 = (
@@ -567,6 +734,8 @@ def assemble_queue(
         else compose_phase(later_units_by_palace, fill_quizzes_by_palace, "fill")
     )
     if due_policy == DUE_POLICY_ALL_WEIGHTED:
+        # Expand pool: fold fill into due phase with a fixed secondary interleave.
+        # mix_mode already ordered each phase; here we only combine priority vs fill pools.
         phase1 = interleave_by_weights(
             phase1,
             phase2,
@@ -593,6 +762,8 @@ def assemble_queue(
             "completed_excluded": len(completed),
             "hidden_excluded": len(hidden),
             "due_policy": due_policy,
+            "mix_mode": mix_mode,
+            "bound_quiz_placement": bound_quiz_placement,
         },
         operation_id=operation_id,
     )
@@ -604,8 +775,10 @@ __all__ = [
     "assemble_queue",
     "attach_questions_to_units",
     "build_palace_units",
+    "deterministic_random_merge",
     "filter_completed",
     "interleave_by_weights",
+    "merge_streams_by_mix_mode",
     "mindmap_card_payload",
     "order_palace_batches",
     "partition_units_by_due",

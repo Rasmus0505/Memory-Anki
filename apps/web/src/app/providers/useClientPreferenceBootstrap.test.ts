@@ -112,7 +112,8 @@ describe('bootstrapClientPreferences', () => {
           node_limit: 8,
           queue_length: 15,
           seed: 42,
-          content: { mindmap_branch: true, quiz_question: false },
+          content: expect.objectContaining({ mindmap_branch: true, quiz_question: false }),
+          mix_mode: 'mindmap_only',
         }),
       }),
     )

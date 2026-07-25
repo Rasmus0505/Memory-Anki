@@ -31,6 +31,28 @@ export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palac
 
 export type FreestyleWithinPalaceOrder = 'tree_order' | 'deterministic_shuffle'
 
+/** How palace-side cards and quiz cards are ordered relative to each other. */
+export type FreestyleMixMode =
+  | 'mindmap_only'
+  | 'quiz_only'
+  | 'sequential_map_quiz'
+  | 'sequential_quiz_map'
+  | 'ratio'
+  | 'random'
+
+/** Where node-bound quizzes sit relative to their mind-map units. */
+export type FreestyleBoundQuizPlacement =
+  | 'follow_unit'
+  | 'into_mix'
+  | 'quiz_stream'
+
+export interface FreestyleMixRatio {
+  /** Palace-side cards per cycle (mindmap + anki stream). */
+  mindmap: number
+  /** Quiz cards per cycle. */
+  quiz: number
+}
+
 export interface FreestyleFeedConfig {
   content: {
     mindmap_branch: boolean
@@ -38,13 +60,30 @@ export interface FreestyleFeedConfig {
     anki_card: boolean
     quiz_question: boolean
   }
+  /**
+   * Legacy relative weights. Prefer mix_ratio for map-vs-quiz interleave.
+   * Still kept so older clients / stored prefs remain valid.
+   */
   weights: {
     mindmap_branch: number
     anki_card: number
     quiz_question: number
   }
+  /**
+   * Primary control for palace vs quiz appearance.
+   * Default ratio ≈ previous weight-based interleave.
+   */
+  mix_mode: FreestyleMixMode
+  /** Used when mix_mode is ratio (N palace-side : M quiz). */
+  mix_ratio: FreestyleMixRatio
+  /** How quizzes bound to nodes are placed relative to units. */
+  bound_quiz_placement: FreestyleBoundQuizPlacement
   palace_order: FreestylePalaceOrder
   within_palace_order: FreestyleWithinPalaceOrder
+  /**
+   * Which quiz pool fills the queue after priority/due selection.
+   * No longer controls map-vs-quiz interleave (see mix_mode).
+   */
   due_policy: FreestyleDuePolicy
   node_limit: number
   queue_length: number

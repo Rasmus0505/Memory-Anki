@@ -716,3 +716,179 @@ def test_mark_coverage_no_duplicate_uids():
     assert len(seen) == len(set(seen))
     assert set(seen) == {"a", "a1", "b", "b1"}
 
+
+def test_mix_mode_ratio_and_random():
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
+    from memory_anki.modules.practice.domain.queue_builder import (
+        deterministic_random_merge,
+        merge_streams_by_mix_mode,
+    )
+
+    units = [
+        BranchUnit(1, "a", (), ("a1",), 1, 0),
+        BranchUnit(1, "b", (), ("b1",), 1, 0),
+        BranchUnit(1, "c", (), ("c1",), 1, 0),
+        BranchUnit(1, "d", (), ("d1",), 1, 0),
+    ]
+    quizzes = [
+        QuizCandidate(1, 1, (), 0.1, "weak", {"id": 1, "palace_id": 1}),
+        QuizCandidate(2, 1, (), 0.2, "weak", {"id": 2, "palace_id": 1}),
+    ]
+    common = {
+        "palace_meta": {1: {"title": "P"}},
+        "units_by_palace": {1: units},
+        "due_by_palace": {1: {"a1", "b1", "c1", "d1"}},
+        "mastery_by_palace": {1: 0.3},
+        "recent_practice_rank": {},
+        "quizzes": quizzes,
+    }
+
+    ratio = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "ratio",
+                "mix_ratio": {"mindmap": 2, "quiz": 1},
+                "bound_quiz_placement": "into_mix",
+                "due_policy": "due_only",
+                "queue_length": 20,
+            }
+        ),
+        **common,
+    )
+    types = [card["type"] for card in ratio.cards]
+    assert types.count("mindmap_branch") == 4
+    assert types.count("quiz_question") == 2
+    # 2 map : 1 quiz cadence at the start
+    assert types[:3] in (
+        ["mindmap_branch", "mindmap_branch", "quiz_question"],
+        ["quiz_question", "mindmap_branch", "mindmap_branch"],
+    )
+
+    only_map = assemble_queue(
+        config=sanitize_feed_config({"mix_mode": "mindmap_only", "queue_length": 20}),
+        **common,
+    )
+    assert all(card["type"] == "mindmap_branch" for card in only_map.cards)
+    assert len(only_map.cards) == 4
+
+    only_quiz = assemble_queue(
+        config=sanitize_feed_config({"mix_mode": "quiz_only", "queue_length": 20}),
+        **common,
+    )
+    assert all(card["type"] == "quiz_question" for card in only_quiz.cards)
+    assert len(only_quiz.cards) == 2
+
+    seq = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "sequential_map_quiz",
+                "bound_quiz_placement": "into_mix",
+                "queue_length": 20,
+            }
+        ),
+        **common,
+    )
+    seq_types = [card["type"] for card in seq.cards]
+    assert seq_types[:4] == ["mindmap_branch"] * 4
+    assert seq_types[4:] == ["quiz_question"] * 2
+
+    random_a = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "random",
+                "bound_quiz_placement": "into_mix",
+                "seed": 11,
+                "queue_length": 20,
+            }
+        ),
+        **common,
+    )
+    random_b = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "random",
+                "bound_quiz_placement": "into_mix",
+                "seed": 11,
+                "queue_length": 20,
+            }
+        ),
+        **common,
+    )
+    random_c = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "random",
+                "bound_quiz_placement": "into_mix",
+                "seed": 12,
+                "queue_length": 20,
+            }
+        ),
+        **common,
+    )
+    assert [c["id"] for c in random_a.cards] == [c["id"] for c in random_b.cards]
+    assert [c["id"] for c in random_a.cards] != [c["id"] for c in random_c.cards]
+
+    merged = merge_streams_by_mix_mode(
+        [{"id": "m1"}, {"id": "m2"}],
+        [{"id": "q1"}],
+        mix_mode="sequential_quiz_map",
+        mix_ratio_mindmap=2,
+        mix_ratio_quiz=1,
+        seed=1,
+    )
+    assert [c["id"] for c in merged] == ["q1", "m1", "m2"]
+    rand = deterministic_random_merge(
+        [{"id": "m1"}, {"id": "m2"}],
+        [{"id": "q1"}],
+        seed=5,
+    )
+    assert {c["id"] for c in rand} == {"m1", "m2", "q1"}
+
+
+def test_bound_quiz_into_mix_does_not_force_follow():
+    from memory_anki.modules.practice.domain.branch_units import BranchUnit
+
+    first = BranchUnit(1, "a", (), ("a1",), 1, 0)
+    second = BranchUnit(1, "b", (), ("b1",), 1, 0)
+    result = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "mix_mode": "sequential_map_quiz",
+                "bound_quiz_placement": "into_mix",
+                "due_policy": "due_only",
+                "queue_length": 20,
+            }
+        ),
+        palace_meta={1: {"title": "P"}},
+        units_by_palace={1: [first, second]},
+        due_by_palace={1: {"a1", "b1"}},
+        mastery_by_palace={1: 0.4},
+        recent_practice_rank={},
+        quizzes=[
+            QuizCandidate(21, 1, ("a1",), 0.1, "weak", {"id": 21, "palace_id": 1}),
+            QuizCandidate(22, 1, ("b1",), 0.1, "weak", {"id": 22, "palace_id": 1}),
+        ],
+    )
+    assert [card["id"] for card in result.cards] == [
+        "mindmap_branch:1:a",
+        "mindmap_branch:1:b",
+        "quiz_question:21",
+        "quiz_question:22",
+    ]
+
+
+def test_sanitize_feed_config_mix_mode_defaults():
+    legacy = sanitize_feed_config(
+        {
+            "content": {"mindmap_branch": True, "quiz_question": True},
+            "weights": {"mindmap_branch": 2, "anki_card": 0, "quiz_question": 1},
+        }
+    )
+    assert legacy["mix_mode"] == "ratio"
+    assert legacy["mix_ratio"] == {"mindmap": 2, "quiz": 1}
+    assert legacy["bound_quiz_placement"] == "follow_unit"
+
+    only_quiz = sanitize_feed_config(
+        {"content": {"mindmap_branch": False, "anki_card": False, "quiz_question": True}}
+    )
+    assert only_quiz["mix_mode"] == "quiz_only"

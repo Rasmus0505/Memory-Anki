@@ -10,6 +10,8 @@ DEFAULT_QUIZ_WEIGHT = 1
 DEFAULT_NODE_LIMIT = 12
 DEFAULT_QUEUE_LENGTH = 20
 DEFAULT_SEED = 17
+DEFAULT_MIX_RATIO_MINDMAP = 2
+DEFAULT_MIX_RATIO_QUIZ = 1
 
 DUE_POLICY_DUE_FIRST = "due_first_then_expand"
 DUE_POLICY_DUE_ONLY = "due_only"
@@ -21,10 +23,36 @@ PALACE_ORDER_INTERLEAVE = "interleave_palaces"
 WITHIN_PALACE_TREE = "tree_order"
 WITHIN_PALACE_SHUFFLE = "deterministic_shuffle"
 
+MIX_MODE_MINDMAP_ONLY = "mindmap_only"
+MIX_MODE_QUIZ_ONLY = "quiz_only"
+MIX_MODE_SEQUENTIAL_MAP_QUIZ = "sequential_map_quiz"
+MIX_MODE_SEQUENTIAL_QUIZ_MAP = "sequential_quiz_map"
+MIX_MODE_RATIO = "ratio"
+MIX_MODE_RANDOM = "random"
+
+BOUND_QUIZ_FOLLOW_UNIT = "follow_unit"
+BOUND_QUIZ_INTO_MIX = "into_mix"
+BOUND_QUIZ_STREAM = "quiz_stream"
+
 DUE_POLICIES = {
     DUE_POLICY_DUE_FIRST,
     DUE_POLICY_DUE_ONLY,
     DUE_POLICY_ALL_WEIGHTED,
+}
+
+MIX_MODES = {
+    MIX_MODE_MINDMAP_ONLY,
+    MIX_MODE_QUIZ_ONLY,
+    MIX_MODE_SEQUENTIAL_MAP_QUIZ,
+    MIX_MODE_SEQUENTIAL_QUIZ_MAP,
+    MIX_MODE_RATIO,
+    MIX_MODE_RANDOM,
+}
+
+BOUND_QUIZ_PLACEMENTS = {
+    BOUND_QUIZ_FOLLOW_UNIT,
+    BOUND_QUIZ_INTO_MIX,
+    BOUND_QUIZ_STREAM,
 }
 
 # Freestyle progress buckets (must match memory projection progress_bucket values).
@@ -127,8 +155,73 @@ def _as_progress_scopes(value: Any, *, include_calendar_today_due: bool) -> list
     # No valid list: start from product default, then legacy calendar flag.
     scopes = list(DEFAULT_PROGRESS_SCOPES)
     if include_calendar_today_due and PROGRESS_SCOPE_CALENDAR_TODAY not in scopes:
-        scopes = [key for key in PROGRESS_SCOPE_ORDER if key in set(scopes) | {PROGRESS_SCOPE_CALENDAR_TODAY}]
+        scopes = [
+            key
+            for key in PROGRESS_SCOPE_ORDER
+            if key in set(scopes) | {PROGRESS_SCOPE_CALENDAR_TODAY}
+        ]
     return scopes
+
+
+def _infer_mix_mode(
+    raw_mode: Any,
+    *,
+    mindmap_enabled: bool,
+    anki_enabled: bool,
+    quiz_enabled: bool,
+) -> str:
+    mode = str(raw_mode or "").strip()
+    if mode in MIX_MODES:
+        return mode
+    map_on = mindmap_enabled or anki_enabled
+    if map_on and not quiz_enabled:
+        return MIX_MODE_MINDMAP_ONLY
+    if not map_on and quiz_enabled:
+        return MIX_MODE_QUIZ_ONLY
+    # Previous default: weighted interleave ≈ ratio.
+    return MIX_MODE_RATIO
+
+
+def _as_mix_ratio(
+    value: Any,
+    *,
+    mindmap_weight: int,
+    anki_weight: int,
+    quiz_weight: int,
+    has_explicit_weights: bool,
+) -> dict[str, int]:
+    if isinstance(value, dict):
+        return {
+            "mindmap": _as_int(
+                value.get("mindmap"),
+                DEFAULT_MIX_RATIO_MINDMAP,
+                minimum=1,
+                maximum=10,
+            ),
+            "quiz": _as_int(
+                value.get("quiz"),
+                DEFAULT_MIX_RATIO_QUIZ,
+                minimum=1,
+                maximum=10,
+            ),
+        }
+    if has_explicit_weights:
+        map_weight = max(0, mindmap_weight) + max(0, anki_weight)
+        return {
+            "mindmap": min(10, max(1, map_weight or DEFAULT_MIX_RATIO_MINDMAP)),
+            "quiz": min(10, max(1, max(0, quiz_weight) or DEFAULT_MIX_RATIO_QUIZ)),
+        }
+    return {
+        "mindmap": DEFAULT_MIX_RATIO_MINDMAP,
+        "quiz": DEFAULT_MIX_RATIO_QUIZ,
+    }
+
+
+def _as_bound_placement(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in BOUND_QUIZ_PLACEMENTS:
+        return key
+    return BOUND_QUIZ_FOLLOW_UNIT
 
 
 def sanitize_feed_config(raw: Any) -> dict[str, Any]:
@@ -144,6 +237,25 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         mindmap_enabled = True
         anki_enabled = True
         quiz_enabled = True
+
+    mindmap_weight = _as_int(
+        weights.get("mindmap_branch"),
+        DEFAULT_MINDMAP_WEIGHT,
+        minimum=0,
+        maximum=20,
+    )
+    anki_weight = _as_int(
+        weights.get("anki_card"),
+        DEFAULT_ANKI_WEIGHT,
+        minimum=0,
+        maximum=20,
+    )
+    quiz_weight = _as_int(
+        weights.get("quiz_question"),
+        DEFAULT_QUIZ_WEIGHT,
+        minimum=0,
+        maximum=20,
+    )
 
     palace_order = str(data.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
     if palace_order not in PALACE_ORDERS:
@@ -163,6 +275,27 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     if question_type not in QUESTION_TYPES:
         question_type = "all"
 
+    mix_mode = _infer_mix_mode(
+        data.get("mix_mode"),
+        mindmap_enabled=mindmap_enabled,
+        anki_enabled=anki_enabled,
+        quiz_enabled=quiz_enabled,
+    )
+    mix_ratio = _as_mix_ratio(
+        data.get("mix_ratio"),
+        mindmap_weight=mindmap_weight,
+        anki_weight=anki_weight,
+        quiz_weight=quiz_weight,
+        has_explicit_weights=isinstance(raw_weights, dict) and bool(raw_weights),
+    )
+    bound_quiz_placement = _as_bound_placement(data.get("bound_quiz_placement"))
+
+    # Legacy weights stay independent; mix_ratio is the interleave source of truth.
+    # Zero out disabled content streams for older weight readers.
+    synced_mindmap = mindmap_weight if mindmap_enabled else 0
+    synced_anki = anki_weight if anki_enabled else 0
+    synced_quiz = quiz_weight if quiz_enabled else 0
+
     # Legacy bool (default off). Kept as derived mirror of progress_scopes for
     # older clients; progress_scopes is the source of truth after sanitize.
     include_calendar_today_due = _as_bool(data.get("include_calendar_today_due"), False)
@@ -179,25 +312,13 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             "quiz_question": quiz_enabled,
         },
         "weights": {
-            "mindmap_branch": _as_int(
-                weights.get("mindmap_branch"),
-                DEFAULT_MINDMAP_WEIGHT,
-                minimum=0,
-                maximum=20,
-            ),
-            "anki_card": _as_int(
-                weights.get("anki_card"),
-                DEFAULT_ANKI_WEIGHT,
-                minimum=0,
-                maximum=20,
-            ),
-            "quiz_question": _as_int(
-                weights.get("quiz_question"),
-                DEFAULT_QUIZ_WEIGHT,
-                minimum=0,
-                maximum=20,
-            ),
+            "mindmap_branch": synced_mindmap if mindmap_enabled else 0,
+            "anki_card": synced_anki if anki_enabled else 0,
+            "quiz_question": synced_quiz if quiz_enabled else 0,
         },
+        "mix_mode": mix_mode,
+        "mix_ratio": mix_ratio,
+        "bound_quiz_placement": bound_quiz_placement,
         "palace_order": palace_order,
         "within_palace_order": within_palace_order,
         "due_policy": due_policy,
@@ -216,8 +337,14 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
 
 
 __all__ = [
+    "BOUND_QUIZ_FOLLOW_UNIT",
+    "BOUND_QUIZ_INTO_MIX",
+    "BOUND_QUIZ_PLACEMENTS",
+    "BOUND_QUIZ_STREAM",
     "DEFAULT_ANKI_WEIGHT",
     "DEFAULT_MINDMAP_WEIGHT",
+    "DEFAULT_MIX_RATIO_MINDMAP",
+    "DEFAULT_MIX_RATIO_QUIZ",
     "DEFAULT_NODE_LIMIT",
     "DEFAULT_QUEUE_LENGTH",
     "DEFAULT_QUIZ_WEIGHT",
@@ -226,6 +353,13 @@ __all__ = [
     "DUE_POLICY_ALL_WEIGHTED",
     "DUE_POLICY_DUE_FIRST",
     "DUE_POLICY_DUE_ONLY",
+    "MIX_MODE_MINDMAP_ONLY",
+    "MIX_MODE_QUIZ_ONLY",
+    "MIX_MODE_RANDOM",
+    "MIX_MODE_RATIO",
+    "MIX_MODE_SEQUENTIAL_MAP_QUIZ",
+    "MIX_MODE_SEQUENTIAL_QUIZ_MAP",
+    "MIX_MODES",
     "PALACE_ORDER_INTERLEAVE",
     "PALACE_ORDER_SEQUENTIAL",
     "PALACE_ORDERS",

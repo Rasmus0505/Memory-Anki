@@ -1,4 +1,4 @@
-﻿# Freestyle Immersive Feed Boundary
+# Freestyle Immersive Feed Boundary
 
 ## Product surface
 
@@ -56,3 +56,10 @@ Consumers must import freestyle domain/persistence helpers only from `@/modules/
 - **Temporary marks** are freestyle-only overrides stored in `freestyle_temporary_marks`. Confirming marks can permanently unify FSRS progress across all marked roots' subtrees (average of nodes that already have FSRS; write back to the whole group). Queue units use temporary roots as complete subtrees until each root's unit settles with 记得/轻松.
 - Coverage invariant unchanged: every non-root node still appears in exactly one unit's `ratable_node_uids`.
 
+## Mix mode (palace vs quiz)
+
+- mix_mode is the primary control for how palace-side cards (mindmap + anki) and quiz cards interleave: mindmap_only | quiz_only | sequential_map_quiz | sequential_quiz_map | atio | andom.
+- mix_ratio (mindmap : quiz, 1–10) applies when mix_mode=ratio (default 2:1).
+- ound_quiz_placement: ollow_unit (default, bound quizzes stick after their branch), into_mix, or quiz_stream.
+- Legacy weights remain for compatibility and are derived from mix_ratio when missing; due_policy only selects the quiz pool depth, not map-vs-quiz interleave.
+- Random mode is seed-deterministic; bump seed (换一批) to reshuffle.

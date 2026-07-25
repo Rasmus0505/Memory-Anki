@@ -66,6 +66,40 @@ describe('freestyle feed config', () => {
     const emptyScopes = sanitizeFreestyleFeedConfig({ progress_scopes: [] })
     expect(emptyScopes.progress_scopes).toEqual(['overdue', 'due', 'reinforcement', 'new'])
   })
+
+  it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {
+    const config = sanitizeFreestyleFeedConfig({
+      weights: { mindmap_branch: 3, anki_card: 1, quiz_question: 2 },
+    })
+    expect(config.mix_mode).toBe('ratio')
+    expect(config.mix_ratio).toEqual({ mindmap: 4, quiz: 2 })
+    expect(config.bound_quiz_placement).toBe('follow_unit')
+  })
+
+  it('infers mindmap_only / quiz_only from content when mix_mode missing', () => {
+    expect(
+      sanitizeFreestyleFeedConfig({
+        content: { mindmap_branch: true, anki_card: false, quiz_question: false },
+      }).mix_mode,
+    ).toBe('mindmap_only')
+    expect(
+      sanitizeFreestyleFeedConfig({
+        content: { mindmap_branch: false, anki_card: false, quiz_question: true },
+      }).mix_mode,
+    ).toBe('quiz_only')
+  })
+
+  it('keeps explicit mix_mode and clamps mix_ratio', () => {
+    const config = sanitizeFreestyleFeedConfig({
+      mix_mode: 'random',
+      mix_ratio: { mindmap: 99, quiz: 0 },
+      bound_quiz_placement: 'into_mix',
+    })
+    expect(config.mix_mode).toBe('random')
+    expect(config.mix_ratio.mindmap).toBe(10)
+    expect(config.mix_ratio.quiz).toBe(1)
+    expect(config.bound_quiz_placement).toBe('into_mix')
+  })
 })
 
 describe('freestyle queue skip rules', () => {
