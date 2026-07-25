@@ -5,7 +5,6 @@ import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 describe('MindMapCanvasToolbar', () => {
   it('renders page and canvas actions in one scrolling row without retired controls', () => {
     const onRefreshHost = vi.fn()
-    const onCenterRootView = vi.fn()
     render(
       <MindMapCanvasToolbar
         focusMode={false}
@@ -14,7 +13,6 @@ describe('MindMapCanvasToolbar', () => {
         showHistoryControls
         leadingContent={<button type="button">学习组</button>}
         onRefreshHost={onRefreshHost}
-        onCenterRootView={onCenterRootView}
         onToggleFocusMode={vi.fn()}
         onUndo={vi.fn()}
         onRedo={vi.fn()}
@@ -25,10 +23,10 @@ describe('MindMapCanvasToolbar', () => {
     expect(toolbar?.className).toContain('flex-nowrap')
     expect(toolbar?.className).toContain('overflow-x-auto')
     expect(screen.getByTitle('刷新脑图')).toBeTruthy()
-    expect(screen.getByTitle('根节点归位')).toBeTruthy()
     expect(screen.getByTitle('进入全屏')).toBeTruthy()
     expect(screen.queryByTitle('进入系统全屏')).toBeNull()
     expect(screen.getByTitle('撤销')).toBeTruthy()
+    expect(screen.queryByTitle('根节点归位')).toBeNull()
     expect(screen.queryByTitle('手动整理画布')).toBeNull()
     expect(screen.queryByRole('button', { name: '整理画布' })).toBeNull()
     expect(screen.queryByTitle('放大')).toBeNull()
@@ -37,14 +35,12 @@ describe('MindMapCanvasToolbar', () => {
 
     fireEvent.click(screen.getByTitle('刷新脑图'))
     expect(onRefreshHost).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByTitle('根节点归位'))
-    expect(onCenterRootView).toHaveBeenCalledTimes(1)
-    expect(screen.queryByTitle('适应整树')).toBeNull()
   })
 
-  it('renders large-map navigation controls when provided', () => {
+  it('renders fit and expand-subtree controls when provided', () => {
     const onFitWholeTree = vi.fn()
     const onFitSelectionBranch = vi.fn()
+    const onExpandSelectionSubtree = vi.fn()
     const onExpandAllBranches = vi.fn()
     const onCollapseDeepBranches = vi.fn()
     render(
@@ -54,9 +50,9 @@ describe('MindMapCanvasToolbar', () => {
         canRedo={false}
         showHistoryControls={false}
         onRefreshHost={vi.fn()}
-        onCenterRootView={vi.fn()}
         onFitWholeTree={onFitWholeTree}
         onFitSelectionBranch={onFitSelectionBranch}
+        onExpandSelectionSubtree={onExpandSelectionSubtree}
         onExpandAllBranches={onExpandAllBranches}
         onCollapseDeepBranches={onCollapseDeepBranches}
         onToggleFocusMode={vi.fn()}
@@ -65,10 +61,12 @@ describe('MindMapCanvasToolbar', () => {
 
     fireEvent.click(screen.getByTitle('适应整树'))
     fireEvent.click(screen.getByTitle('适应当前分支'))
+    fireEvent.click(screen.getByTitle('展开本支整树'))
     fireEvent.click(screen.getByTitle('展开全部'))
     fireEvent.click(screen.getByTitle('折叠深层'))
     expect(onFitWholeTree).toHaveBeenCalledTimes(1)
     expect(onFitSelectionBranch).toHaveBeenCalledTimes(1)
+    expect(onExpandSelectionSubtree).toHaveBeenCalledTimes(1)
     expect(onExpandAllBranches).toHaveBeenCalledTimes(1)
     expect(onCollapseDeepBranches).toHaveBeenCalledTimes(1)
   })

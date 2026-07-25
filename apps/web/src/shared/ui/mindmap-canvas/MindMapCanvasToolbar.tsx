@@ -1,14 +1,14 @@
 import {
   ChevronsDownUp,
   ChevronsUpDown,
-  Crosshair,
   Expand,
   Focus,
-  Scan,
+  GitBranchPlus,
   Maximize2,
   Minimize2,
   Redo2,
   RefreshCw,
+  Scan,
   Shrink,
   Undo2,
 } from 'lucide-react'
@@ -28,13 +28,14 @@ interface MindMapCanvasToolbarProps {
   canRedo: boolean
   showHistoryControls: boolean
   leadingContent?: ReactNode
+  /** Remount host and fit the tree after ready. */
   onRefreshHost: () => void
-  /** Center the graph root node in the viewport without reloading the host. */
-  onCenterRootView?: () => void
-  /** Fit the whole currently visible (collapse-aware) tree. */
+  /** Fit the whole currently visible (collapse-aware) tree into the viewport. */
   onFitWholeTree?: () => void
-  /** Fit the selected branch (or root). */
+  /** Fit the selected branch (or root) into the viewport. */
   onFitSelectionBranch?: () => void
+  /** Expand selected node and all of its descendants; leave other branches alone. */
+  onExpandSelectionSubtree?: () => void
   onExpandAllBranches?: () => void
   onCollapseDeepBranches?: () => void
   onToggleSystemFullscreen?: () => void
@@ -62,9 +63,9 @@ export function MindMapCanvasToolbar({
   showHistoryControls,
   leadingContent,
   onRefreshHost,
-  onCenterRootView,
   onFitWholeTree,
   onFitSelectionBranch,
+  onExpandSelectionSubtree,
   onExpandAllBranches,
   onCollapseDeepBranches,
   onToggleSystemFullscreen,
@@ -90,16 +91,6 @@ export function MindMapCanvasToolbar({
       >
         <RefreshCw className="size-4" />
       </button>
-      {onCenterRootView ? (
-        <button
-          type="button"
-          onClick={onCenterRootView}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
-          title="根节点归位"
-        >
-          <Crosshair className="size-4" />
-        </button>
-      ) : null}
       {onFitWholeTree ? (
         <button
           type="button"
@@ -118,6 +109,16 @@ export function MindMapCanvasToolbar({
           title="适应当前分支"
         >
           <Focus className="size-4" />
+        </button>
+      ) : null}
+      {onExpandSelectionSubtree ? (
+        <button
+          type="button"
+          onClick={onExpandSelectionSubtree}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="展开本支整树"
+        >
+          <GitBranchPlus className="size-4" />
         </button>
       ) : null}
       {onExpandAllBranches ? (
