@@ -40,11 +40,6 @@ interface PalaceEditorDocumentOptions {
   setReplaceSyncVersion: Dispatch<SetStateAction<number>>
 }
 
-interface PalaceAuthoritativeSnapshot {
-  fingerprint: string
-  nodeCount: number
-}
-
 export function usePalaceEditorDocument({
   palaceId,
   setReplaceSyncVersion,
@@ -52,7 +47,6 @@ export function usePalaceEditorDocument({
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
   const importApplyGuardRef = useRef<ImportApplyGuardState | null>(null)
   const importApplyGuardTimerRef = useRef<number | null>(null)
-  const authoritativeSnapshotRef = useRef<PalaceAuthoritativeSnapshot | null>(null)
 
   const {
     meta,
@@ -83,22 +77,6 @@ export function usePalaceEditorDocument({
       await reload()
       setReplaceSyncVersion((value) => value + 1)
       return true
-    },
-    beforeAutoSave: (nextState) => {
-      const authoritativeSnapshot = authoritativeSnapshotRef.current
-      if (!authoritativeSnapshot) return null
-      const nextNodeCount = countEditorDocNodes(nextState.editor_doc)
-      const nextFingerprint = fingerprintEditorDoc(nextState.editor_doc)
-      const nodeDrop = authoritativeSnapshot.nodeCount - nextNodeCount
-      if (
-        authoritativeSnapshot.nodeCount >= 8 &&
-        nextNodeCount < authoritativeSnapshot.nodeCount &&
-        nodeDrop >= Math.max(3, Math.floor(authoritativeSnapshot.nodeCount * 0.25)) &&
-        nextFingerprint !== authoritativeSnapshot.fingerprint
-      ) {
-        return '已阻止旧态覆盖当前宫殿：自动保存内容明显少于最近一次服务端加载结果。'
-      }
-      return null
     },
   })
   const effectivePalaceTitle = (meta as PalaceMeta | null)?.title || '未命名宫殿'
@@ -205,17 +183,6 @@ export function usePalaceEditorDocument({
     [],
   )
 
-  const syncAuthoritativeSnapshot = useCallback((nextState: MindMapEditorState | null) => {
-    if (!nextState) {
-      authoritativeSnapshotRef.current = null
-      return
-    }
-    authoritativeSnapshotRef.current = {
-      fingerprint: fingerprintEditorDoc(nextState.editor_doc),
-      nodeCount: countEditorDocNodes(nextState.editor_doc),
-    }
-  }, [])
-
   const applyImportedPalaceEditorState = useCallback(
     async (nextState: MindMapEditorState, context?: ImportApplyContext) => {
       if (!palaceId) {
@@ -248,7 +215,6 @@ export function usePalaceEditorDocument({
         optimisticApply: replaceEditorState,
         rollback: replaceEditorState,
         adoptSavedState: (savedState) => {
-          syncAuthoritativeSnapshot(savedState)
           adoptExternalState(savedState, { protectFromStaleLoads: true, releaseAfterMs: 4000 })
         },
         save: async () => {
@@ -303,7 +269,6 @@ export function usePalaceEditorDocument({
       savePalaceEditorAfterDangerousConfirm,
       setMeta,
       syncImportApplyGuardWithSavedState,
-      syncAuthoritativeSnapshot,
       effectivePalaceTitle,
     ],
   )
@@ -331,10 +296,6 @@ export function usePalaceEditorDocument({
     },
     [releaseImportApplyGuard, setEditorState],
   )
-
-  useEffect(() => {
-    syncAuthoritativeSnapshot(editorState)
-  }, [editorState, syncAuthoritativeSnapshot])
 
   useEffect(() => {
     return () => {

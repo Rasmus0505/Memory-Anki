@@ -34,7 +34,6 @@ SAFE_EXPLICIT_OVERWRITE_SOURCES = {
     "backup_restore",
     "import_apply",
 }
-DANGEROUS_AUTOSAVE_SOURCES = {"palace_edit_autosave", "host_bootstrap_sync"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 
 
@@ -86,8 +85,11 @@ def save_palace_editor_state(
         doc = sanitize_palace_editor_doc(palace, doc)
         next_node_count = count_editor_doc_nodes(doc)
         node_drop = existing_node_count - next_node_count
+        # Only block bootstrap/hydration echoes that replay a much smaller tree.
+        # Normal palace_edit_autosave must accept intentional branch deletes; near-wipes
+        # still go through is_dangerous_structure_change + confirm_dangerous_change.
         stale_bootstrap_like_write = (
-            editor_source in DANGEROUS_AUTOSAVE_SOURCES
+            editor_source == "host_bootstrap_sync"
             and existing_node_count >= MIN_DANGEROUS_NODE_COUNT
             and next_node_count < existing_node_count
             and node_drop >= max(3, existing_node_count // 4)

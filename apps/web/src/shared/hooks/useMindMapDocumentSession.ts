@@ -145,6 +145,8 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const activeSaveOperationRef = useRef<SaveOperation | null>(null)
   const retryPersistRef = useRef<(operation: SaveOperation) => void>(() => {})
   const flushCurrentSaveRef = useRef<() => void>(() => {})
+  /** When beforeAutoSave blocks a version, keep local UI but skip network for that version. */
+  const networkSaveBlockedVersionRef = useRef<number | null>(null)
 
   editorStateRef.current = editorState
   entityIdRef.current = entityId
@@ -309,7 +311,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       }
       let retryScheduled = false
       let completedSuccessfully = false
-      let hasNewerChanges = false
       try {
         const savePayload: PersistedMindMapSavePayload = {
           ...operation.snapshot,
@@ -321,7 +322,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
           const nextEditorState = operation.selectEditorState(response)
           if (!shouldIgnoreIncomingState(nextEditorState)) {
             lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
-            hasNewerChanges = changeVersionRef.current !== operation.saveVersion
+            const hasNewerChanges = changeVersionRef.current !== operation.saveVersion
             if (!hasNewerChanges) {
               lastStateFingerprintRef.current = stableSerialize(nextEditorState)
               dirtyRef.current = false
@@ -356,7 +357,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
           }
           if (isActiveSaveOperation(operation)) {
             operation.retryCount += 1
-            hasNewerChanges = changeVersionRef.current !== operation.saveVersion
+            const hasNewerChanges = changeVersionRef.current !== operation.saveVersion
             const remainsDirty = hasNewerChanges || !handled
             dirtyRef.current = remainsDirty
             dirtyOwnerIdRef.current = remainsDirty ? operation.ownerId : null
@@ -549,6 +550,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     saveVersion: number,
   ) => {
     if (activeSaveOperationRef.current?.ownerId === targetEntityId) return false
+    if (networkSaveBlockedVersionRef.current === saveVersion) return false
     const operation = createSaveOperation(targetEntityId, snapshot, saveVersion)
     activeSaveOperationRef.current = operation
     void persistOperation(operation)
@@ -568,6 +570,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     const saveVersion = pendingSnapshot?.ownerId === saveEntityId
       ? pendingSnapshot.saveVersion
       : changeVersionRef.current
+    if (networkSaveBlockedVersionRef.current === saveVersion) return
     // Ensure the latest snapshot is durable before the network round-trip.
     persistLocalDraft(saveEntityId, snapshot, saveVersion)
     const operation = createSaveOperation(saveEntityId, snapshot, saveVersion)
@@ -604,11 +607,10 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     if (nextFingerprint === lastStateFingerprintRef.current) {
       return
     }
-    const autoSaveBlockReason = beforeAutoSaveRef.current?.(nextState, editorStateRef.current) || null
-    if (autoSaveBlockReason) {
-      if (isMountedRef.current) dispatch({ type: 'operation-blocked', error: autoSaveBlockReason })
-      return
-    }
+    // Capture pre-apply state for guards. Local UI/history must still accept the edit so
+    // the canvas never desyncs from useMindMapEditHistory after a blocked network save.
+    const previousState = editorStateRef.current
+    const autoSaveBlockReason = beforeAutoSaveRef.current?.(nextState, previousState) || null
     changeVersionRef.current += 1
     lastStateFingerprintRef.current = nextFingerprint
     dispatch({ type: 'editor-changed', editorState: nextState })
@@ -623,6 +625,12 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       // Write-ahead local draft (single slot per document) so closing mid-flight cannot lose edits.
       persistLocalDraft(entityIdRef.current, nextState, changeVersionRef.current)
     }
+    if (autoSaveBlockReason) {
+      networkSaveBlockedVersionRef.current = changeVersionRef.current
+      if (isMountedRef.current) dispatch({ type: 'operation-blocked', error: autoSaveBlockReason })
+      return
+    }
+    networkSaveBlockedVersionRef.current = null
     clearTimer()
     timerRef.current = window.setTimeout(() => {
       void flushSave()

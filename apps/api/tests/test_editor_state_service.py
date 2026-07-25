@@ -155,6 +155,48 @@ class SubjectEditorStateSyncTests(RouterTestCase):
                     },
                 )
 
+    def test_save_palace_editor_state_allows_intentional_autosave_branch_delete(self):
+        """Normal editor autosave must accept intentional multi-node deletes."""
+        with self.SessionLocal() as session:
+            palace = Palace(title="古罗马教育", description="")
+            session.add(palace)
+            session.flush()
+
+            fresh_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                        for i in range(1, 9)
+                    ],
+                }
+            }
+            after_delete_doc = {
+                "root": {
+                    "data": {"text": "古罗马教育", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                        for i in range(1, 5)
+                    ],
+                }
+            }
+            palace.editor_doc = str(fresh_doc).replace("'", '"')
+            session.commit()
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": after_delete_doc,
+                    "editor_source": "palace_edit_autosave",
+                },
+            )
+
+            self.assertEqual(len(result["editor_doc"]["root"]["children"]), 4)
+            self.assertEqual(
+                result["editor_doc"]["root"]["children"][0]["data"]["text"], "节点1"
+            )
+
     def test_save_palace_editor_state_allows_import_apply_explicit_overwrite(self):
         with self.SessionLocal() as session:
             palace = Palace(title="古罗马教育", description="")

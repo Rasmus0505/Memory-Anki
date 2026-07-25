@@ -253,7 +253,7 @@ describe('useMindMapDocumentSession', () => {
     )
   })
 
-  it('blocks autosave when beforeAutoSave detects a stale smaller writeback', async () => {
+  it('blocks network autosave when beforeAutoSave detects a stale smaller writeback but still updates local state', async () => {
     vi.useFakeTimers()
     const saver = vi.fn(async (id: number, data: MindMapEditorState) => ({
       entity: { id, title: `saved-${id}` },
@@ -291,7 +291,18 @@ describe('useMindMapDocumentSession', () => {
       result.current.setEditorState(buildResponseWithChildren(7, '旧版本', 3))
     })
 
+    // Local canvas/history must accept the edit; only the network save is blocked.
+    expect(
+      ((result.current.editorState?.editor_doc as { root?: { children?: unknown[] } })?.root?.children
+        ?.length ?? 0),
+    ).toBe(3)
     expect(result.current.error).toBe('blocked stale writeback')
+    expect(result.current.hasUnsavedChanges).toBe(true)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+      await Promise.resolve()
+    })
     expect(saver).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
