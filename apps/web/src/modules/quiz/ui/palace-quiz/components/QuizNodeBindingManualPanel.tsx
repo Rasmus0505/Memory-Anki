@@ -4,7 +4,9 @@ import {
   getPalaceQuizQuestionsApi,
   listPalaceQuizNodeBindingsApi,
   mutatePalaceQuizNodeBindingsApi,
+  searchQuizMindmapNodesApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
+import type { QuizMindmapNodeSearchHit } from '@/shared/api/contracts'
 import {
   getMindMapNodeUid,
   normalizeMindMapDocument,
@@ -47,7 +49,11 @@ export function QuizNodeBindingManualPanel({
   const [filter, setFilter] = useState('')
   const [addQuestionId, setAddQuestionId] = useState<string>('')
   const [addNodeUid, setAddNodeUid] = useState<string>('')
+  const [addTargetPalaceId, setAddTargetPalaceId] = useState<number | null>(palaceId)
   const [addReason, setAddReason] = useState('手动绑定')
+  const [nodeSearch, setNodeSearch] = useState('')
+  const [nodeHits, setNodeHits] = useState<QuizMindmapNodeSearchHit[]>([])
+  const [searchingNodes, setSearchingNodes] = useState(false)
 
   const nodes = useMemo(() => flattenNodes(editorDoc), [editorDoc])
   const nodeLabelByUid = useMemo(() => {
@@ -99,11 +105,36 @@ export function QuizNodeBindingManualPanel({
     })
   }, [bindings, filter, nodeLabelByUid, questionById])
 
+  const handleSearchNodes = async () => {
+    const q = nodeSearch.trim()
+    if (!q) {
+      toast.message('输入宫殿名或节点文案关键词。')
+      return
+    }
+    setSearchingNodes(true)
+    try {
+      const response = await searchQuizMindmapNodesApi(q, { limit: 40 })
+      setNodeHits(response.items)
+      if (response.items.length === 0) toast.message('没有匹配的节点。')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '搜索节点失败。')
+    } finally {
+      setSearchingNodes(false)
+    }
+  }
+
   const handleRemove = async (edge: QuizNodeBindingEdge) => {
     setSaving(true)
     try {
+      const target = edge.target_palace_id ?? edge.palace_id ?? palaceId
       const result = await mutatePalaceQuizNodeBindingsApi(palaceId, {
-        remove: [{ question_id: edge.question_id, node_uid: edge.node_uid }],
+        remove: [
+          {
+            question_id: edge.question_id,
+            node_uid: edge.node_uid,
+            target_palace_id: target,
+          },
+        ],
       })
       setBindings(result.items)
       onChanged?.(result.items)
@@ -118,6 +149,7 @@ export function QuizNodeBindingManualPanel({
   const handleAdd = async () => {
     const questionId = Number(addQuestionId)
     const nodeUid = addNodeUid.trim()
+    const targetPalaceId = addTargetPalaceId ?? palaceId
     if (!Number.isFinite(questionId) || questionId <= 0 || !nodeUid) {
       toast.message('请选择题目和知识点卡片。')
       return
@@ -125,11 +157,20 @@ export function QuizNodeBindingManualPanel({
     setSaving(true)
     try {
       const result = await mutatePalaceQuizNodeBindingsApi(palaceId, {
-        add: [{ question_id: questionId, node_uid: nodeUid, reason: addReason.trim() || '手动绑定' }],
+        add: [
+          {
+            question_id: questionId,
+            node_uid: nodeUid,
+            target_palace_id: targetPalaceId,
+            reason: addReason.trim() || '手动绑定',
+          },
+        ],
       })
       setBindings(result.items)
       onChanged?.(result.items)
-      toast.success('已添加手动绑定')
+      toast.success(
+        targetPalaceId === palaceId ? '已添加手动绑定' : '已添加跨宫手动绑定',
+      )
       setAddReason('手动绑定')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '添加绑定失败。')
@@ -150,16 +191,15 @@ export function QuizNodeBindingManualPanel({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        手改绑定用于纠正 AI 结果：给题目增加/删除知识点卡片关联。写入来源标记为
-        <span className="font-medium text-foreground"> manual</span>
-        ，AI 全量替换时会保留手动边。
+        手改绑定：可绑本宫节点，也可全局搜索他宫节点。边的目标宫殿可以与题目归属不同；AI
+        全量替换只清本宫 AI 边，手动边保留。
       </p>
 
       <div className="rounded-lg border p-3 space-y-2">
         <div className="text-sm font-medium">新增绑定</div>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">题目</span>
+            <span className="text-muted-foreground">题目（本宫题库）</span>
             <select
               className="min-h-9 w-full rounded-md border bg-background px-2 text-sm"
               value={addQuestionId}
@@ -174,13 +214,16 @@ export function QuizNodeBindingManualPanel({
             </select>
           </label>
           <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">知识点卡片</span>
+            <span className="text-muted-foreground">本宫节点（快捷）</span>
             <select
               className="min-h-9 w-full rounded-md border bg-background px-2 text-sm"
-              value={addNodeUid}
-              onChange={(event) => setAddNodeUid(event.target.value)}
+              value={addTargetPalaceId === palaceId ? addNodeUid : ''}
+              onChange={(event) => {
+                setAddNodeUid(event.target.value)
+                setAddTargetPalaceId(palaceId)
+              }}
             >
-              <option value="">选择节点…</option>
+              <option value="">选择本宫节点…</option>
               {nodes.map((node) => (
                 <option key={node.uid} value={node.uid}>
                   {'·'.repeat(Math.min(node.depth, 4))} {node.text.slice(0, 40)}
@@ -188,6 +231,57 @@ export function QuizNodeBindingManualPanel({
               ))}
             </select>
           </label>
+        </div>
+        <div className="space-y-2 rounded-md border border-dashed p-2">
+          <div className="text-xs font-medium text-muted-foreground">全局搜索节点（可跨宫）</div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={nodeSearch}
+              onChange={(event) => setNodeSearch(event.target.value)}
+              placeholder="搜节点文案 / uid…"
+              className="h-9 min-w-[12rem] flex-1"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={searchingNodes}
+              onClick={() => void handleSearchNodes()}
+            >
+              {searchingNodes ? '搜索中…' : '搜索'}
+            </Button>
+          </div>
+          {nodeHits.length > 0 ? (
+            <select
+              className="min-h-9 w-full rounded-md border bg-background px-2 text-sm"
+              value={
+                addNodeUid && addTargetPalaceId != null
+                  ? `${addTargetPalaceId}::${addNodeUid}`
+                  : ''
+              }
+              onChange={(event) => {
+                const [rawPalace, ...rest] = event.target.value.split('::')
+                const target = Number(rawPalace)
+                const uid = rest.join('::')
+                if (Number.isFinite(target) && uid) {
+                  setAddTargetPalaceId(target)
+                  setAddNodeUid(uid)
+                }
+              }}
+            >
+              <option value="">从搜索结果选择…</option>
+              {nodeHits.map((hit) => (
+                <option key={`${hit.palace_id}:${hit.node_uid}`} value={`${hit.palace_id}::${hit.node_uid}`}>
+                  [{hit.palace_title}] {hit.node_text.slice(0, 48)}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {addNodeUid ? (
+            <div className="text-xs text-muted-foreground">
+              当前选中：宫 {addTargetPalaceId ?? palaceId} · {addNodeUid}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-[12rem] flex-1 space-y-1 text-xs">

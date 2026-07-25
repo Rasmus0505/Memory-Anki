@@ -48,10 +48,18 @@ def list_node_bindings_for_palaces(
     *,
     palace_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
-    query = session.query(PalaceQuizQuestionNodeBinding).order_by(
-        PalaceQuizQuestionNodeBinding.palace_id.asc(),
-        PalaceQuizQuestionNodeBinding.question_id.asc(),
-        PalaceQuizQuestionNodeBinding.node_uid.asc(),
+    query = (
+        session.query(PalaceQuizQuestionNodeBinding, PalaceQuizQuestion)
+        .join(
+            PalaceQuizQuestion,
+            PalaceQuizQuestion.id == PalaceQuizQuestionNodeBinding.question_id,
+        )
+        .filter(PalaceQuizQuestion.deleted_at.is_(None))
+        .order_by(
+            PalaceQuizQuestionNodeBinding.palace_id.asc(),
+            PalaceQuizQuestionNodeBinding.question_id.asc(),
+            PalaceQuizQuestionNodeBinding.node_uid.asc(),
+        )
     )
     if palace_ids is not None:
         if not palace_ids:
@@ -60,10 +68,12 @@ def list_node_bindings_for_palaces(
     return [
         {
             "palace_id": int(row.palace_id),
+            "target_palace_id": int(row.palace_id),
             "question_id": int(row.question_id),
+            "question_owner_palace_id": int(question.palace_id) if question.palace_id else None,
             "node_uid": str(row.node_uid),
         }
-        for row in query.all()
+        for row, question in query.all()
         if row.palace_id and row.question_id and row.node_uid
     ]
 

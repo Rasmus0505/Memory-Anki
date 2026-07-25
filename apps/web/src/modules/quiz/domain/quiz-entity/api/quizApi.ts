@@ -395,6 +395,55 @@ export function listPalaceQuizNodeBindingsApi(palaceId: number) {
   )
 }
 
+export function listQuestionNodeBindingsApi(questionId: number) {
+  return request<{ question_id: number; items: QuizNodeBindingEdge[]; item_count: number }>(
+    `/palace-quiz-questions/${questionId}/node-bindings`,
+  )
+}
+
+export function searchQuizMindmapNodesApi(query: string, options?: { palaceId?: number; limit?: number }) {
+  const params = new URLSearchParams()
+  params.set('q', query)
+  if (options?.palaceId != null) params.set('palace_id', String(options.palaceId))
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  return request<{ query: string; items: import('@/shared/api/contracts').QuizMindmapNodeSearchHit[]; item_count: number }>(
+    `/quiz-node-search?${params.toString()}`,
+  )
+}
+
+export function getPalaceQuizQuestionsByIdsApi(questionIds: number[]) {
+  return request<{ items: import('@/shared/api/contracts').PalaceQuizQuestion[]; item_count: number }>(
+    `/palace-quiz-questions/by-ids`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ question_ids: questionIds }),
+    },
+  )
+}
+
+export function autoBindPalaceQuizNodeBindingsApi(
+  palaceId: number,
+  data?: { fill_unbound_only?: boolean; max_nodes_per_question?: number },
+) {
+  return request<{
+    palace_id: number
+    created_count: number
+    updated_count: number
+    removed_count: number
+    items: QuizNodeBindingEdge[]
+    item_count: number
+    proposed_count?: number
+  }>(`/palaces/${palaceId}/quiz-node-bindings/auto-bind-text`, {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+    persistence: {
+      resourceKey: `palace:${palaceId}:quiz-node-bindings:auto-bind-text`,
+      description: '文本重合自动绑定知识点',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function previewPalaceQuizNodeBindingsApi(
   palaceId: number,
   data: {
@@ -440,8 +489,19 @@ export function applyPalaceQuizNodeBindingsApi(
 export function mutatePalaceQuizNodeBindingsApi(
   palaceId: number,
   data: {
-    add?: Array<{ question_id: number; node_uid: string; reason?: string }>
-    remove?: Array<{ question_id: number; node_uid: string }>
+    add?: Array<{
+      question_id: number
+      node_uid: string
+      reason?: string
+      target_palace_id?: number
+      palace_id?: number
+    }>
+    remove?: Array<{
+      question_id: number
+      node_uid: string
+      target_palace_id?: number
+      palace_id?: number
+    }>
   },
 ) {
   return request<{

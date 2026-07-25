@@ -63,7 +63,7 @@ export function usePalaceQuizNodeBindings({
       map[uid] = {
         text: String(count),
         tone: 'success',
-        title: `${count} 道关联题未完成（本会话）`,
+        title: `${count} 道关联题（含子树；本会话完成会扣减）`,
       }
     }
     return map

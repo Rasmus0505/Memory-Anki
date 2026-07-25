@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from memory_anki.core.concurrency_limits import concurrency_slot
@@ -33,9 +33,12 @@ from memory_anki.modules.quiz.application.learning_loop import (
 )
 from memory_anki.modules.quiz.application.node_binding import (
     apply_quiz_node_binding_preview,
+    auto_bind_palace_questions_by_text,
     list_palace_node_bindings,
+    list_question_node_bindings,
     mutate_quiz_node_bindings,
     preview_quiz_node_binding,
+    search_mindmap_nodes,
 )
 from memory_anki.modules.quiz.application.question_mutation_commands import (
     batch_create_chapter_questions_command,
@@ -43,6 +46,8 @@ from memory_anki.modules.quiz.application.question_mutation_commands import (
     create_question_command,
     record_choice_attempt_command,
 )
+from memory_anki.modules.quiz.application.question_schema import serialize_question_rows
+from memory_anki.modules.quiz.application.questions.queries import list_question_rows_by_ids
 from memory_anki.modules.quiz.application.service import (
     PalaceQuizNotFoundError,
     PalaceQuizValidationError,
@@ -125,6 +130,26 @@ def api_list_palace_quiz_questions(
             "limit": limit,
             "offset": offset,
         }
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-questions/by-ids")
+def api_list_palace_quiz_questions_by_ids(
+    data: dict | None = Body(default=None),
+    s: Session = Depends(session_dep),
+):
+    payload = data or {}
+    raw_ids = payload.get("question_ids") if isinstance(payload, dict) else None
+    if not isinstance(raw_ids, list):
+        raise HTTPException(status_code=400, detail="question_ids 必须是列表。")
+    try:
+        ids = [int(value) for value in raw_ids]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="question_ids 必须是整数列表。") from None
+    try:
+        rows = list_question_rows_by_ids(s, question_ids=ids)
+        return {"items": serialize_question_rows(rows), "item_count": len(rows)}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 
@@ -592,6 +617,51 @@ def api_list_palace_quiz_node_bindings(
     try:
         items = list_palace_node_bindings(s, palace_id)
         return {"items": items, "item_count": len(items)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.get("/palace-quiz-questions/{question_id}/node-bindings")
+def api_list_question_node_bindings(
+    question_id: int,
+    s: Session = Depends(session_dep),
+):
+    try:
+        items = list_question_node_bindings(s, question_id)
+        return {"question_id": question_id, "items": items, "item_count": len(items)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.get("/quiz-node-search")
+def api_search_quiz_mindmap_nodes(
+    q: str = "",
+    palace_id: int | None = None,
+    limit: int = 30,
+    s: Session = Depends(session_dep),
+):
+    try:
+        items = search_mindmap_nodes(s, query=q, palace_id=palace_id, limit=limit)
+        return {"query": q, "items": items, "item_count": len(items)}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palaces/{palace_id}/quiz-node-bindings/auto-bind-text")
+def api_auto_bind_palace_quiz_node_bindings(
+    palace_id: int,
+    data: dict | None = None,
+    s: Session = Depends(session_dep),
+):
+    """Deterministic text-overlap binder for bulk fill (used by data backfill)."""
+    payload = data or {}
+    try:
+        return auto_bind_palace_questions_by_text(
+            s,
+            palace_id=palace_id,
+            fill_unbound_only=bool(payload.get("fill_unbound_only", True)),
+            max_nodes_per_question=int(payload.get("max_nodes_per_question") or 3),
+        )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 

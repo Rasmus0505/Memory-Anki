@@ -19,6 +19,34 @@ export function buildDirectBindingMap(bindings: QuizNodeBindingEdge[]): Map<stri
   return map
 }
 
+/** Owner-palace label for a question edge (本宫 / 来自·他宫). */
+export function ownerPalaceLabel(
+  edge: QuizNodeBindingEdge,
+  currentPalaceId: number | null | undefined,
+): string {
+  const ownerId = edge.question_owner_palace_id
+  const ownerTitle = String(edge.question_owner_palace_title || '').trim()
+  if (ownerId == null) return ownerTitle || '未知归属'
+  if (currentPalaceId != null && Number(ownerId) === Number(currentPalaceId)) {
+    return '本宫'
+  }
+  return ownerTitle ? `来自·${ownerTitle}` : `来自·宫殿${ownerId}`
+}
+
+export function groupEdgesByQuestion(
+  bindings: QuizNodeBindingEdge[],
+): Map<number, QuizNodeBindingEdge[]> {
+  const map = new Map<number, QuizNodeBindingEdge[]>()
+  for (const edge of bindings) {
+    const qid = Number(edge.question_id)
+    if (!Number.isFinite(qid)) continue
+    const list = map.get(qid) ?? []
+    list.push(edge)
+    map.set(qid, list)
+  }
+  return map
+}
+
 /** For each node, union of own + all descendant question ids. */
 export function buildSubtreeQuestionMap(
   editorDoc: MindMapDocumentInput,

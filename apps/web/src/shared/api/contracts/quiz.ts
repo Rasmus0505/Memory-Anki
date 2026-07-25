@@ -182,15 +182,30 @@ export type QuizNodeBindingMergeMode = 'replace_all' | 'fill_unbound'
 
 export interface QuizNodeBindingEdge {
   id?: number
+  /** Target mindmap palace (node lives here). */
   palace_id?: number
+  target_palace_id?: number
+  target_palace_title?: string
   question_id: number
+  question_owner_palace_id?: number | null
+  question_owner_palace_title?: string
+  is_cross_palace?: boolean
   node_uid: string
+  node_text?: string
   confidence?: number | null
   reason?: string
   source?: string
   run_id?: string | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+export interface QuizMindmapNodeSearchHit {
+  palace_id: number
+  palace_title: string
+  node_uid: string
+  node_text: string
+  depth: number
 }
 
 export interface QuizNodeBindingPreview {

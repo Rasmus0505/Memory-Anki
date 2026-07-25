@@ -534,11 +534,20 @@ class PalaceQuizQuestion(Base):
 
 
 class PalaceQuizQuestionNodeBinding(Base):
-    """Maps a palace quiz question to one or more mind-map knowledge nodes."""
+    """Maps a quiz question to mind-map nodes.
+
+    ``palace_id`` is the **target** mind-map palace (the node lives there).
+    The question itself may be owned by a different palace (cross-palace edge).
+    """
 
     __tablename__ = "palace_quiz_question_node_bindings"
     __table_args__ = (
-        UniqueConstraint("question_id", "node_uid", name="uq_quiz_question_node_binding"),
+        UniqueConstraint(
+            "question_id",
+            "palace_id",
+            "node_uid",
+            name="uq_quiz_question_node_binding_target",
+        ),
         Index("ix_quiz_question_node_bindings_palace_node", "palace_id", "node_uid"),
         Index("ix_quiz_question_node_bindings_question", "question_id"),
     )

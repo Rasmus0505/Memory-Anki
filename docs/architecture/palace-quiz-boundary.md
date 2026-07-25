@@ -21,13 +21,19 @@ The four idempotent question mutations are composed by `palace_quiz.application.
 
 Low-level question and OCR write helpers may flush for command composition but must not commit when invoked by a mutation command. The command owns the single commit, so a failure while storing the mutation response rolls back every business write. Palace Quiz must not import the transitional `memory_anki.modules.persistence` context.
 
-## Quiz–Mindmap Node Binding（题库结合）
+## Quiz–Mindmap Node Binding（题库结合 / 双向关联）
 
-`palace_quiz.application.node_binding` binds palace-owned questions to mind-map node UIDs via AI analysis or manual edits.
+`quiz.application.node_binding` binds questions to mind-map node UIDs. A question keeps a **single owner palace**; each edge points at a **target** mind-map palace + `node_uid` (cross-palace allowed).
 
-- Storage: `palace_quiz_question_node_bindings` (question_id + node_uid unique; `source` = `ai` | `manual`).
-- API: `GET .../quiz-node-bindings`, `POST .../preview`, `POST .../apply`, `POST .../mutate` (manual add/remove).
-- Preview is AI-only and non-destructive; apply writes after user confirmation.
-- Merge modes: `replace_all` (clear AI edges then write accepted; manual edges kept) and `fill_unbound` (keep existing, only bind unbound questions).
-- Manual panel (`mutate`) upserts edges with `source=manual` and can delete any edge.
-- Frontend: palace editor overflow「题库结合」; green count badges also on formal review (`MindMapReviewFlow`) and palace learn/edit. Counts = subtree union of bound questions minus session-completed IDs.
+- Storage: `palace_quiz_question_node_bindings`
+  - `palace_id` on the edge = **target** mindmap palace (node lives there)
+  - Unique: `(question_id, palace_id, node_uid)` so the same string uid on two palaces cannot collide
+  - `source` = `ai` | `manual`
+- Reverse list: `GET /palaces/{id}/quiz-node-bindings` returns every edge whose **target** is this palace, including foreign-owner questions, with `question_owner_palace_id` / titles / `is_cross_palace`.
+- Per-question list: `GET /palace-quiz-questions/{id}/node-bindings` for quiz → 知识点 digression.
+- Node search: `GET /quiz-node-search?q=` (global or scoped) for authoring.
+- Write paths: `POST .../preview` + `.../apply` (AI, human confirm), `POST .../mutate` (manual; optional `target_palace_id` on each add/remove), `POST .../auto-bind-text` (deterministic text-overlap backfill).
+- Merge modes (AI apply): `replace_all` (clear **this target palace’s AI edges**; manual kept) and `fill_unbound`.
+- Bidirectional UI:
+  - Map/review → `NodeBoundQuizDialog` overlay (owner labels 本宫 / 来自·他宫); green badges = subtree union of remaining bound questions, including cross-owner edges.
+  - Quiz → multi-edge picker → `QuizKnowledgeDigressionDialog` full readonly target map + sticky **返回做题** (overlay; attempt draft stays in parent memory; PWA back closes digression first).

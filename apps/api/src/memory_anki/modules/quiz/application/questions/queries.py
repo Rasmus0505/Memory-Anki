@@ -194,6 +194,26 @@ def list_root_question_rows(
     ).all()
 
 
+def list_question_rows_by_ids(
+    session: Session,
+    *,
+    question_ids: list[int],
+) -> list[PalaceQuizQuestion]:
+    ids = sorted({int(value) for value in question_ids if value is not None})
+    if not ids:
+        return []
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter(
+            PalaceQuizQuestion.deleted_at.is_(None),
+            PalaceQuizQuestion.id.in_(ids),
+        )
+        .all()
+    )
+    by_id = {int(row.id): row for row in rows}
+    return [by_id[qid] for qid in ids if qid in by_id]
+
+
 def list_chapter_question_rows(
     session: Session,
     *,
