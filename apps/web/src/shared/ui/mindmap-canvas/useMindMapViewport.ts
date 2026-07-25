@@ -171,9 +171,14 @@ export function useMindMapViewport({
   }, [preserveViewport])
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
-    // Programmatic restore / fit / center: ignore intermediate RF reports so they
-    // cannot corrupt the locked camera that we are trying to re-assert.
-    if (explicitViewportChangeRef.current) return
+    // Explicit programmatic camera (fit / center / zoom): must still write into
+    // controlled viewport. Dropping these reports leaves getViewport() stuck on
+    // the old camera under React Flow controlled mode, so toolbar fit appears dead.
+    if (explicitViewportChangeRef.current) {
+      preservedViewportRef.current = viewport
+      onControlledViewportChange(viewport)
+      return
+    }
     if (!preserveViewport || manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
       onControlledViewportChange(viewport)
@@ -266,11 +271,11 @@ export function useMindMapViewport({
       let ids = nodeIds ? [...nodeIds] : []
       if (options?.includeDescendants && ids.length > 0) {
         const expanded = new Set<string>()
-        // Use currently laid-out nodes (already collapse-filtered) as the branch universe.
-        const layoutIds = new Set(nodes.map((node) => node.id))
+        // Walk the full graph so branch membership is correct even when deeper
+        // cards are currently collapsed/hidden from the RF node list.
         const childrenByParent = new Map<string, string[]>()
         for (const node of graphNodes) {
-          if (!node.parentId || !layoutIds.has(node.id)) continue
+          if (!node.parentId) continue
           const list = childrenByParent.get(node.parentId) ?? []
           list.push(node.id)
           childrenByParent.set(node.parentId, list)
@@ -279,15 +284,17 @@ export function useMindMapViewport({
           const stack = [seed]
           while (stack.length > 0) {
             const current = stack.pop()!
-            if (!layoutIds.has(current) || expanded.has(current)) continue
+            if (expanded.has(current)) continue
             expanded.add(current)
             stack.push(...(childrenByParent.get(current) ?? []))
           }
         }
         ids = [...expanded]
       }
+      // Only currently laid-out (visible) RF nodes can be fitted.
+      const idSet = new Set(ids)
       const targets = ids.length > 0
-        ? nodes.filter((node) => ids.includes(node.id))
+        ? nodes.filter((node) => idSet.has(node.id))
         : nodes
       if (targets.length === 0) {
         runFitView(duration)
