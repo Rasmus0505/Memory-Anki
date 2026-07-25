@@ -18,6 +18,13 @@
 | 复习揭示、评分、掌握度 | `widgets/mindmap-review-flow` 宿主和 capability 输入 |
 | 知识体系导图 | `pages/library/KnowledgeLibraryPage` 宿主 |
 
+## 大图导航（canvas 本地）
+
+- 通用画布支持分支折叠：节点右侧折叠按钮、工具栏「展开全部 / 折叠深层 / 适应整树 / 适应当前分支」。
+- 折叠状态不写回 editor_doc，仅 canvas 本地；节点数 >= 36 时默认折叠 depth>=1 的有子节点分支；practiceModeActive（复习/练习）强制全展开。
+- 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
+- **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
+
 ## 展示策略
 
 - `MindMapPresentationMachine` 明确区分 `nativeFullscreen` 与 `viewportFullscreen`，原生 Fullscreen API 被拒绝时只能进入 viewport 模式，不得继续上报为系统全屏。
