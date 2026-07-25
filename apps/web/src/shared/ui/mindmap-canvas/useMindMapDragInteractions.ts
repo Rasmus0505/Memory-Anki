@@ -13,6 +13,7 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 interface UseMindMapDragInteractionsInput {
   readonly: boolean
   graphData: GraphData
+  collapsedNodeIds?: ReadonlySet<string>
   nodeSizeVersion: number
   measuredNodeSizesRef: RefObject<Map<string, NodeSize>>
   isDraggingNodeRef: RefObject<boolean>
@@ -86,6 +87,7 @@ export function resolveDragSourceIds(
 export function useMindMapDragInteractions({
   readonly,
   graphData,
+  collapsedNodeIds,
   nodeSizeVersion,
   measuredNodeSizesRef,
   isDraggingNodeRef,
@@ -371,7 +373,11 @@ export function useMindMapDragInteractions({
       }
       flushPendingMeasuredNodeSizes()
       if (!appliedDrop) {
-        const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+        const nextLayout = applyMindMapLayout(
+          graphData,
+          measuredNodeSizesRef.current,
+          collapsedNodeIds,
+        )
         setNodes(nextLayout.nodes)
         setEdges(nextLayout.edges)
       }
@@ -389,6 +395,7 @@ export function useMindMapDragInteractions({
     [
       applyDrop,
       checkOverlap,
+      collapsedNodeIds,
       commitPreviewState,
       flushPendingMeasuredNodeSizes,
       graphData,

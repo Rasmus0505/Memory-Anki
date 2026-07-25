@@ -1,6 +1,10 @@
 import {
+  ChevronsDownUp,
+  ChevronsUpDown,
   Crosshair,
   Expand,
+  Focus,
+  Scan,
   Maximize2,
   Minimize2,
   Redo2,
@@ -27,6 +31,12 @@ interface MindMapCanvasToolbarProps {
   onRefreshHost: () => void
   /** Center the graph root node in the viewport without reloading the host. */
   onCenterRootView?: () => void
+  /** Fit the whole currently visible (collapse-aware) tree. */
+  onFitWholeTree?: () => void
+  /** Fit the selected branch (or root). */
+  onFitSelectionBranch?: () => void
+  onExpandAllBranches?: () => void
+  onCollapseDeepBranches?: () => void
   onToggleSystemFullscreen?: () => void
   onToggleWebpageFullscreen?: () => void
   /** @deprecated Prefer dual toggles; kept for single-control callers. */
@@ -53,6 +63,10 @@ export function MindMapCanvasToolbar({
   leadingContent,
   onRefreshHost,
   onCenterRootView,
+  onFitWholeTree,
+  onFitSelectionBranch,
+  onExpandAllBranches,
+  onCollapseDeepBranches,
   onToggleSystemFullscreen,
   onToggleWebpageFullscreen,
   onToggleFocusMode,
@@ -84,6 +98,46 @@ export function MindMapCanvasToolbar({
           title="根节点归位"
         >
           <Crosshair className="size-4" />
+        </button>
+      ) : null}
+      {onFitWholeTree ? (
+        <button
+          type="button"
+          onClick={onFitWholeTree}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="适应整树"
+        >
+          <Scan className="size-4" />
+        </button>
+      ) : null}
+      {onFitSelectionBranch ? (
+        <button
+          type="button"
+          onClick={onFitSelectionBranch}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="适应当前分支"
+        >
+          <Focus className="size-4" />
+        </button>
+      ) : null}
+      {onExpandAllBranches ? (
+        <button
+          type="button"
+          onClick={onExpandAllBranches}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="展开全部"
+        >
+          <ChevronsUpDown className="size-4" />
+        </button>
+      ) : null}
+      {onCollapseDeepBranches ? (
+        <button
+          type="button"
+          onClick={onCollapseDeepBranches}
+          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          title="折叠深层"
+        >
+          <ChevronsDownUp className="size-4" />
         </button>
       ) : null}
       {showSystemFullscreenControl ? (

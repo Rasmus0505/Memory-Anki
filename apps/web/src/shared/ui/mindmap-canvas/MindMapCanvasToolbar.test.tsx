@@ -39,6 +39,38 @@ describe('MindMapCanvasToolbar', () => {
     expect(onRefreshHost).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByTitle('根节点归位'))
     expect(onCenterRootView).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTitle('适应整树')).toBeNull()
+  })
+
+  it('renders large-map navigation controls when provided', () => {
+    const onFitWholeTree = vi.fn()
+    const onFitSelectionBranch = vi.fn()
+    const onExpandAllBranches = vi.fn()
+    const onCollapseDeepBranches = vi.fn()
+    render(
+      <MindMapCanvasToolbar
+        focusMode={false}
+        canUndo={false}
+        canRedo={false}
+        showHistoryControls={false}
+        onRefreshHost={vi.fn()}
+        onCenterRootView={vi.fn()}
+        onFitWholeTree={onFitWholeTree}
+        onFitSelectionBranch={onFitSelectionBranch}
+        onExpandAllBranches={onExpandAllBranches}
+        onCollapseDeepBranches={onCollapseDeepBranches}
+        onToggleFocusMode={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByTitle('适应整树'))
+    fireEvent.click(screen.getByTitle('适应当前分支'))
+    fireEvent.click(screen.getByTitle('展开全部'))
+    fireEvent.click(screen.getByTitle('折叠深层'))
+    expect(onFitWholeTree).toHaveBeenCalledTimes(1)
+    expect(onFitSelectionBranch).toHaveBeenCalledTimes(1)
+    expect(onExpandAllBranches).toHaveBeenCalledTimes(1)
+    expect(onCollapseDeepBranches).toHaveBeenCalledTimes(1)
   })
 
   it('places webpage fullscreen to the right of system fullscreen with distinct icons', () => {

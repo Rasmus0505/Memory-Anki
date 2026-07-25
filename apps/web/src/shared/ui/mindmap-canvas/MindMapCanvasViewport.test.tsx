@@ -10,7 +10,7 @@ vi.mock('@xyflow/react', () => ({
     Dots: 'dots',
   },
   Controls: () => <div data-testid="controls" />,
-  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport }: {
+  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport, minZoom, onlyRenderVisibleElements }: {
     children: React.ReactNode
     nodesDraggable: boolean
     nodesFocusable: boolean
@@ -21,6 +21,8 @@ vi.mock('@xyflow/react', () => ({
     autoPanOnNodeDrag: boolean
     autoPanOnConnect: boolean
     viewport: { x: number; y: number; zoom: number }
+    minZoom?: number
+    onlyRenderVisibleElements?: boolean
   }) => (
     <div
       data-testid="react-flow"
@@ -32,6 +34,8 @@ vi.mock('@xyflow/react', () => ({
       data-zoom-on-double-click={String(zoomOnDoubleClick)}
       data-auto-pan-on-node-drag={String(autoPanOnNodeDrag)}
       data-auto-pan-on-connect={String(autoPanOnConnect)}
+      data-min-zoom={String(minZoom)}
+      data-only-render-visible={String(Boolean(onlyRenderVisibleElements))}
       data-viewport={`${viewport.x},${viewport.y},${viewport.zoom}`}
     >
       {children}
@@ -111,5 +115,13 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('react-flow').dataset.panOnScroll).toBe('false')
     expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('false')
     expect(screen.queryByTestId('background')).toBeNull()
+  })
+
+  it('lowers min zoom and virtualizes medium/large maps', () => {
+    renderViewport({ nodes: buildNodes(48) })
+
+    const flow = screen.getByTestId('react-flow')
+    expect(flow.dataset.minZoom).toBe('0.12')
+    expect(flow.dataset.onlyRenderVisible).toBe('true')
   })
 })

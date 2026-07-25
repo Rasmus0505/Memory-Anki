@@ -334,6 +334,10 @@ function MindMapCanvasInner({
           leadingContent={props.toolbarContent}
           onRefreshHost={onHostRefresh}
           onCenterRootView={state.centerRootInView}
+          onFitWholeTree={() => state.runFitView(240)}
+          onFitSelectionBranch={state.fitSelectionBranch}
+          onExpandAllBranches={props.practiceModeActive ? undefined : state.expandAllBranches}
+          onCollapseDeepBranches={props.practiceModeActive ? undefined : state.collapseDeepBranches}
           onToggleSystemFullscreen={handleToggleSystemFullscreen}
           onToggleWebpageFullscreen={handleToggleWebpageFullscreen}
           onUndo={props.onUndo}

@@ -12,7 +12,7 @@ import {
   type NodeProps,
   useUpdateNodeInternals,
 } from '@xyflow/react'
-import { Highlighter, Scissors } from 'lucide-react'
+import { ChevronDown, ChevronRight, Highlighter, Scissors } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
   hasHighlightMarkup,
@@ -715,6 +715,37 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             nodeId={id}
             onCountBadgeClick={nodeData.onCountBadgeClick}
           />
+          {Number(metadata.childCount ?? 0) > 0 && nodeData.onToggleCollapse ? (
+            <button
+              type="button"
+              data-mindmap-collapse-toggle="true"
+              aria-label={metadata.collapsed ? '展开分支' : '折叠分支'}
+              title={
+                metadata.collapsed
+                  ? `展开分支（${Number(metadata.collapsedDescendantCount ?? 0)} 个节点）`
+                  : '折叠分支'
+              }
+              className="nodrag nopan absolute -right-2 top-1/2 z-30 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border border-zinc-300 bg-white px-1 text-[10px] font-semibold text-zinc-600 shadow-sm hover:border-sky-400 hover:text-sky-700"
+              onClick={(event) => {
+                event.stopPropagation()
+                event.preventDefault()
+                nodeData.onToggleCollapse?.(id)
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
+            >
+              {metadata.collapsed ? (
+                <>
+                  <ChevronRight className="size-3" />
+                  {Number(metadata.collapsedDescendantCount ?? 0) > 0 ? (
+                    <span>{Number(metadata.collapsedDescendantCount)}</span>
+                  ) : null}
+                </>
+              ) : (
+                <ChevronDown className="size-3" />
+              )}
+            </button>
+          ) : null}
           <NodeCardTextFace
             textCls={textCls}
             displayHtml={displayHtml}

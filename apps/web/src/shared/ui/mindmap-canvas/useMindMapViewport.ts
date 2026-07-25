@@ -36,6 +36,12 @@ import type {
   MindMapContentChangeViewportPolicy,
   MindMapMobileViewPolicy,
 } from './MindMapCanvas'
+import {
+  MINDMAP_FIT_MAX_ZOOM,
+  MINDMAP_FIT_MIN_ZOOM,
+  MINDMAP_MOBILE_FIT_MAX_ZOOM,
+  MINDMAP_MOBILE_FIT_MIN_ZOOM,
+} from './mindMapViewportConfig'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 interface UseMindMapViewportInput {
@@ -240,14 +246,73 @@ export function useMindMapViewport({
       requestAnimationFrame(() => {
         runExplicitViewportChange(() => void fitView({
           duration,
-          padding: mobileGuidedActive ? 0.18 : focusMode ? 0.03 : 0.06,
-          includeHiddenNodes: true,
-          minZoom: mobileGuidedActive ? 0.34 : 0.42,
-          maxZoom: mobileGuidedActive ? 1.02 : 1.15,
+          padding: mobileGuidedActive ? 0.18 : focusMode ? 0.03 : 0.08,
+          includeHiddenNodes: false,
+          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }), duration)
       })
     },
     [fitView, focusMode, isCanvasReady, mobileGuidedActive, runExplicitViewportChange],
+  )
+
+  const fitNodesInView = useCallback(
+    (
+      nodeIds: readonly string[] | null | undefined,
+      options?: { includeDescendants?: boolean; duration?: number },
+    ) => {
+      if (!isCanvasReady) return
+      const duration = options?.duration ?? 240
+      let ids = nodeIds ? [...nodeIds] : []
+      if (options?.includeDescendants && ids.length > 0) {
+        const expanded = new Set<string>()
+        // Use currently laid-out nodes (already collapse-filtered) as the branch universe.
+        const layoutIds = new Set(nodes.map((node) => node.id))
+        const childrenByParent = new Map<string, string[]>()
+        for (const node of graphNodes) {
+          if (!node.parentId || !layoutIds.has(node.id)) continue
+          const list = childrenByParent.get(node.parentId) ?? []
+          list.push(node.id)
+          childrenByParent.set(node.parentId, list)
+        }
+        for (const seed of ids) {
+          const stack = [seed]
+          while (stack.length > 0) {
+            const current = stack.pop()!
+            if (!layoutIds.has(current) || expanded.has(current)) continue
+            expanded.add(current)
+            stack.push(...(childrenByParent.get(current) ?? []))
+          }
+        }
+        ids = [...expanded]
+      }
+      const targets = ids.length > 0
+        ? nodes.filter((node) => ids.includes(node.id))
+        : nodes
+      if (targets.length === 0) {
+        runFitView(duration)
+        return
+      }
+      requestAnimationFrame(() => {
+        runExplicitViewportChange(() => void fitView({
+          nodes: targets,
+          duration,
+          padding: mobileGuidedActive ? 0.16 : 0.12,
+          includeHiddenNodes: false,
+          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
+        }), duration)
+      })
+    },
+    [
+      fitView,
+      graphNodes,
+      isCanvasReady,
+      mobileGuidedActive,
+      nodes,
+      runExplicitViewportChange,
+      runFitView,
+    ],
   )
 
   const centerNodeInCanvas = useCallback(
@@ -665,6 +730,7 @@ export function useMindMapViewport({
     handleMoveEnd,
     handleViewportChange,
     runFitView,
+    fitNodesInView,
     centerNodeInCanvas,
     checkOverlap,
     handleNodeMeasure,

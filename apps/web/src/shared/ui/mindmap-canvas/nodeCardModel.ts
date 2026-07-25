@@ -27,6 +27,7 @@ export type NodeCardData = MindMapNode & {
   onDelete?: (nodeId: string) => void
   onMeasure?: (nodeId: string, size: NodeSize) => void
   onCountBadgeClick?: (nodeId: string) => void
+  onToggleCollapse?: (nodeId: string) => void
   onReadonlyDoubleClick?: (nodeId: string) => void
   onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
   onExtractSelection?: (payload: {

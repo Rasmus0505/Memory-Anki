@@ -309,19 +309,23 @@ function measureTree(
   node: LayoutTreeNode,
   measuredSizes: NodeSizeMap | undefined,
   boundsByNodeId: Map<string, LayoutBounds>,
+  collapsedNodeIds: ReadonlySet<string>,
 ): LayoutBounds {
   const cached = boundsByNodeId.get(node.node.id)
   if (cached) return cached
 
   const size = getTreeNodeSize(node, measuredSizes)
+  const isCollapsed = collapsedNodeIds.has(node.node.id)
 
-  if (node.children.length === 0) {
+  if (node.children.length === 0 || isCollapsed) {
     const bounds = { width: size.width, height: size.height, subtreeHeight: size.height }
     boundsByNodeId.set(node.node.id, bounds)
     return bounds
   }
 
-  const childBounds = node.children.map((child) => measureTree(child, measuredSizes, boundsByNodeId))
+  const childBounds = node.children.map((child) =>
+    measureTree(child, measuredSizes, boundsByNodeId, collapsedNodeIds),
+  )
   const childrenHeight =
     childBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
     CHILD_GAP_Y * Math.max(0, node.children.length - 1)
@@ -345,7 +349,8 @@ function layoutTreeNodes(
   positions: Map<string, Node>,
   edgeColors: Map<string, string>,
   boundsByNodeId: LayoutBoundsMap,
-  measuredSizes?: NodeSizeMap,
+  measuredSizes: NodeSizeMap | undefined,
+  collapsedNodeIds: ReadonlySet<string>,
 ): LayoutBounds {
   const size = getTreeNodeSize(node, measuredSizes)
   const ownBounds = boundsByNodeId.get(node.node.id) ?? {
@@ -354,6 +359,17 @@ function layoutTreeNodes(
     subtreeHeight: size.height,
   }
   const y = top + ownBounds.subtreeHeight / 2 - size.height / 2
+  const childCount = node.children.length
+  const isCollapsed = childCount > 0 && collapsedNodeIds.has(node.node.id)
+  let collapsedDescendantCount = 0
+  if (isCollapsed) {
+    const stack = [...node.children]
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      collapsedDescendantCount += 1
+      stack.push(...current.children)
+    }
+  }
 
   positions.set(node.node.id, {
     id: node.node.id,
@@ -370,11 +386,14 @@ function layoutTreeNodes(
         depth: node.depth,
         branchColor: node.branchColor,
         layoutRole: node.layoutRole,
+        childCount,
+        collapsed: isCollapsed,
+        collapsedDescendantCount: isCollapsed ? collapsedDescendantCount : 0,
       },
     },
   })
 
-  if (node.children.length === 0) return ownBounds
+  if (childCount === 0 || isCollapsed) return ownBounds
 
   const childBounds = node.children.map((child) => boundsByNodeId.get(child.node.id) ?? {
     width: getTreeNodeSize(child, measuredSizes).width,
@@ -399,6 +418,7 @@ function layoutTreeNodes(
       edgeColors,
       boundsByNodeId,
       measuredSizes,
+      collapsedNodeIds,
     )
     edgeColors.set(`${node.node.id}->${child.node.id}`, child.branchColor)
     currentTop += childBound.subtreeHeight + CHILD_GAP_Y
@@ -551,12 +571,16 @@ function resolveOverlaps(
 export function applyMindMapLayout(
   graphData: GraphData,
   measuredSizes?: NodeSizeMap,
+  collapsedNodeIds?: ReadonlySet<string>,
 ): PositionedGraph {
+  const collapsed = collapsedNodeIds ?? new Set<string>()
   const forest = buildLayoutForest(graphData)
   const positions = new Map<string, Node>()
   const edgeColors = new Map<string, string>()
   const boundsByNodeId = new Map<string, LayoutBounds>()
-  const rootBounds = forest.map((root) => measureTree(root, measuredSizes, boundsByNodeId))
+  const rootBounds = forest.map((root) =>
+    measureTree(root, measuredSizes, boundsByNodeId, collapsed),
+  )
 
   const totalHeight =
     rootBounds.reduce((sum, bound) => sum + bound.subtreeHeight, 0) +
@@ -564,7 +588,16 @@ export function applyMindMapLayout(
   let currentTop = ROOT_Y - totalHeight / 2
 
   forest.forEach((root, index) => {
-    layoutTreeNodes(root, ROOT_X, currentTop, positions, edgeColors, boundsByNodeId, measuredSizes)
+    layoutTreeNodes(
+      root,
+      ROOT_X,
+      currentTop,
+      positions,
+      edgeColors,
+      boundsByNodeId,
+      measuredSizes,
+      collapsed,
+    )
     currentTop += rootBounds[index].subtreeHeight + ROOT_STACK_GAP
   })
 
@@ -573,30 +606,32 @@ export function applyMindMapLayout(
     .filter((node): node is Node => Boolean(node))
   const nodes = resolveOverlaps(rawNodes, measuredSizes)
 
-  const edges = graphData.edges.map((edge) => {
-    const edgeColor = edgeColors.get(edge.id) ?? '#89a89e'
-    const runtimeStyle = edge.renderStyle
-    return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: 'default',
-      animated: false,
-      interactionWidth: 28,
-      sourceHandle: undefined,
-      targetHandle: undefined,
-      pathOptions: { curvature: 0.32 },
-      style: {
-        stroke: edge.style === 'dashed' ? '#a0aab3' : runtimeStyle?.stroke ?? edgeColor,
-        strokeWidth: edge.style === 'dashed' ? 1.3 : runtimeStyle?.strokeWidth ?? 1.5,
-        strokeDasharray: edge.style === 'dashed' ? '4 4' : undefined,
-        strokeLinecap: 'round',
-        strokeLinejoin: 'round',
-        opacity: 0.92,
-      },
-      label: edge.label,
-    } as Edge
-  })
+  const edges = graphData.edges
+    .filter((edge) => positions.has(edge.source) && positions.has(edge.target))
+    .map((edge) => {
+      const edgeColor = edgeColors.get(edge.id) ?? '#89a89e'
+      const runtimeStyle = edge.renderStyle
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: 'default',
+        animated: false,
+        interactionWidth: 28,
+        sourceHandle: undefined,
+        targetHandle: undefined,
+        pathOptions: { curvature: 0.32 },
+        style: {
+          stroke: edge.style === 'dashed' ? '#a0aab3' : runtimeStyle?.stroke ?? edgeColor,
+          strokeWidth: edge.style === 'dashed' ? 1.3 : runtimeStyle?.strokeWidth ?? 1.5,
+          strokeDasharray: edge.style === 'dashed' ? '4 4' : undefined,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          opacity: 0.92,
+        },
+        label: edge.label,
+      } as Edge
+    })
 
   return { nodes, edges }
 }

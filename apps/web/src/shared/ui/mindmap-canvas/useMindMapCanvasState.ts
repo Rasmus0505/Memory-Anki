@@ -21,6 +21,11 @@ import type { ContextMenuAction } from './NodeContextMenu'
 import { applyMindMapLayout, type NodeSize } from './layout'
 import { buildEdgeActions, buildNodeActions } from './mindMapCanvasActions'
 import { buildDisplayEdges, buildDisplayNodes } from './mindMapCanvasDisplay'
+import {
+  expandAncestorsForNode,
+  reconcileCollapsedNodeIds,
+  toggleCollapsedNodeId,
+} from './mindMapCollapse'
 import { useMindMapDragInteractions } from './useMindMapDragInteractions'
 import { useMindMapMenusAndEdges } from './useMindMapMenusAndEdges'
 import { useMindMapViewport } from './useMindMapViewport'
@@ -107,7 +112,10 @@ export interface UseMindMapCanvasStateResult {
   canUndo: boolean
   canRedo: boolean
   runFitView: (duration?: number) => void
+  fitSelectionBranch: () => void
   centerRootInView: () => void
+  expandAllBranches: () => void
+  collapseDeepBranches: () => void
   zoomInCanvas: () => void
   zoomOutCanvas: () => void
   resetLayout: () => void
@@ -197,6 +205,13 @@ export function useMindMapCanvasState(
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const [markColorFlyout, setMarkColorFlyout] = useState<MarkColorFlyoutState | null>(null)
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() =>
+    reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
+      practiceModeActive,
+      forceDefault: true,
+    }),
+  )
+  const collapsedSignatureRef = useRef('')
 
   const resolveCurrentMarkColor = useCallback((nodeIds: string[]) => {
     for (const id of nodeIds) {
@@ -259,9 +274,9 @@ export function useMindMapCanvasState(
   const layouted = useMemo(
     () => {
       void nodeSizeVersion
-      return applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+      return applyMindMapLayout(graphData, measuredNodeSizesRef.current, collapsedNodeIds)
     },
-    [graphData, nodeSizeVersion],
+    [collapsedNodeIds, graphData, nodeSizeVersion],
   )
   const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layouted.edges)
@@ -288,6 +303,79 @@ export function useMindMapCanvasState(
     return selectedNodeId ? [selectedNodeId] : []
   }, [selectedNodeId, selectedNodeIdsProp])
 
+  // Reconcile collapse when the node-id set or practice mode changes.
+  // Practice/review keep fully expanded so flip reveal is not fighting folds.
+  // Editing keeps user folds for surviving parents; only brand-new deep parents
+  // auto-fold on large maps. Mode switches re-seed defaults.
+  useEffect(() => {
+    const modeKey = practiceModeActive ? 'p' : 'e'
+    const idSignature = graphData.nodes.map((node) => node.id).join(',')
+    const signature = `${modeKey}:${idSignature}`
+    const previousSignature = collapsedSignatureRef.current
+    collapsedSignatureRef.current = signature
+    if (!previousSignature) {
+      setCollapsedNodeIds(
+        reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
+          practiceModeActive,
+          forceDefault: true,
+        }),
+      )
+      return
+    }
+    const previousMode = previousSignature.startsWith('p:') ? 'p' : 'e'
+    const modeChanged = previousMode !== modeKey
+    setCollapsedNodeIds((previous) =>
+      reconcileCollapsedNodeIds(previous, graphData.nodes, {
+        practiceModeActive,
+        forceDefault: modeChanged,
+      }),
+    )
+  }, [graphData.nodes, practiceModeActive])
+
+  // Expand ancestors when host selects a node that would otherwise be hidden.
+  useEffect(() => {
+    if (!selectedNodeId) return
+    setCollapsedNodeIds((previous) => {
+      const next = expandAncestorsForNode(graphData.nodes, previous, selectedNodeId)
+      if (next.size === previous.size) {
+        let same = true
+        for (const id of previous) {
+          if (!next.has(id)) {
+            same = false
+            break
+          }
+        }
+        if (same) return previous
+      }
+      return next
+    })
+  }, [graphData.nodes, selectedNodeId])
+
+  const handleToggleCollapse = useCallback((nodeId: string) => {
+    setCollapsedNodeIds((previous) => toggleCollapsedNodeId(previous, nodeId))
+  }, [])
+
+  const expandAllBranches = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'EXPAND_ALL',
+    })
+    setCollapsedNodeIds(new Set())
+  }, [])
+
+  const collapseDeepBranches = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'COLLAPSE_DEEP',
+    })
+    setCollapsedNodeIds(
+      reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
+        practiceModeActive: false,
+        forceDefault: true,
+      }),
+    )
+  }, [graphData.nodes])
+
   const menus = useMindMapMenusAndEdges({
     onNodeSelect,
     onNodeActivate,
@@ -305,6 +393,7 @@ export function useMindMapCanvasState(
   const drag = useMindMapDragInteractions({
     readonly,
     graphData,
+    collapsedNodeIds,
     nodeSizeVersion,
     measuredNodeSizesRef,
     isDraggingNodeRef,
@@ -440,6 +529,7 @@ export function useMindMapCanvasState(
       onFinishEdit: handleFinishEditAndClose,
       onMeasure: viewport.handleNodeMeasure,
       onCountBadgeClick: props.onCountBadgeClick,
+      onToggleCollapse: practiceModeActive ? undefined : handleToggleCollapse,
       onExtractSelection: onExtractSelection ? handleExtractSelection : undefined,
       onExtractDropPreview: onExtractSelection ? handleExtractDropPreview : undefined,
       readonly,
@@ -456,7 +546,7 @@ export function useMindMapCanvasState(
     return nextDisplayNodes
   // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)
@@ -466,7 +556,11 @@ export function useMindMapCanvasState(
 
   const applyGraphLayout = useCallback(
     (options?: { resetDrag?: boolean }) => {
-      const nextLayout = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+      const nextLayout = applyMindMapLayout(
+        graphData,
+        measuredNodeSizesRef.current,
+        collapsedNodeIds,
+      )
       // Skip identical layouts so timer/parent re-renders with a new graphData identity
       // but the same structure do not force React Flow node replacement (review flicker).
       setNodes((current) => (isSameMindMapLayout(current, nextLayout.nodes) ? current : nextLayout.nodes))
@@ -476,7 +570,7 @@ export function useMindMapCanvasState(
         resetDragState()
       }
     },
-    [clearEdgeSelection, graphData, resetDragState, setEdges, setNodes],
+    [clearEdgeSelection, collapsedNodeIds, graphData, resetDragState, setEdges, setNodes],
   )
 
   useEffect(() => {
@@ -585,13 +679,17 @@ export function useMindMapCanvasState(
       origin: 'toolbar',
       label: 'LAYOUT',
     })
-    const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(graphData, measuredNodeSizesRef.current)
+    const { nodes: newNodes, edges: newEdges } = applyMindMapLayout(
+      graphData,
+      measuredNodeSizesRef.current,
+      collapsedNodeIds,
+    )
     setNodes(newNodes)
     setEdges(newEdges)
     clearEdgeSelection()
     resetDragState()
     runFitView()
-  }, [clearEdgeSelection, graphData, resetDragState, runFitView, setEdges, setNodes])
+  }, [clearEdgeSelection, collapsedNodeIds, graphData, resetDragState, runFitView, setEdges, setNodes])
 
   const refreshCanvas = useCallback(() => {
     if (onHostRefresh) {
@@ -611,6 +709,22 @@ export function useMindMapCanvasState(
     viewport.centerNodeInCanvas(root.id, 240)
   }, [graphData.nodes, viewport])
 
+  const fitSelectionBranch = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'FIT_BRANCH',
+    })
+    const focusId =
+      selectedNodeId
+      ?? selectedNodeIds[0]
+      ?? graphData.nodes.find((node) => node.parentId == null)?.id
+      ?? null
+    viewport.fitNodesInView(focusId ? [focusId] : null, {
+      includeDescendants: true,
+      duration: 240,
+    })
+  }, [graphData.nodes, selectedNodeId, selectedNodeIds, viewport.fitNodesInView])
+
   return {
     frameRef,
     canvasRef,
@@ -629,7 +743,10 @@ export function useMindMapCanvasState(
     canUndo,
     canRedo,
     runFitView,
+    fitSelectionBranch,
     centerRootInView,
+    expandAllBranches,
+    collapseDeepBranches,
     zoomInCanvas: viewport.zoomInCanvas,
     zoomOutCanvas: viewport.zoomOutCanvas,
     resetLayout,

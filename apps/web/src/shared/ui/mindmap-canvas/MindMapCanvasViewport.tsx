@@ -12,6 +12,10 @@ import {
   type Viewport,
 } from '@xyflow/react'
 import { nodeTypes } from './nodeTypes'
+import {
+  MINDMAP_MANUAL_MAX_ZOOM,
+  MINDMAP_MANUAL_MIN_ZOOM,
+} from './mindMapViewportConfig'
 
 interface MindMapCanvasViewportProps {
   width: number
@@ -69,8 +73,11 @@ export function MindMapCanvasViewport({
   readonly = false,
   mobileGuided = false,
 }: MindMapCanvasViewportProps) {
-  const largeGraph = nodes.length >= 240
+  // Large-graph mode: skip dots earlier once collapse still leaves a wide map.
+  const largeGraph = nodes.length >= 120
   const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
+  // Virtualize node DOM once the visible set is non-trivial.
+  const onlyRenderVisible = nodes.length >= 48 || largeGraph
 
   return (
     <div className="relative" style={{ width, height }}>
@@ -105,8 +112,9 @@ export function MindMapCanvasViewport({
         // a structure drag and can swallow enter-edit. Shell padding remains draggable.
         nodeDragThreshold={5}
         nodeTypes={nodeTypes}
-        minZoom={0.38}
-        maxZoom={1.4}
+        minZoom={MINDMAP_MANUAL_MIN_ZOOM}
+        maxZoom={MINDMAP_MANUAL_MAX_ZOOM}
+        onlyRenderVisibleElements={onlyRenderVisible}
         proOptions={{ hideAttribution: true }}
         panOnScroll={!mobileGuided}
         panOnDrag
