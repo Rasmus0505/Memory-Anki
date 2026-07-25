@@ -20,7 +20,7 @@ import {
 import { getPalaceEditorApi, getPalacesGroupedApi } from '@/modules/content/public'
 import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
 import { useRevealSession } from '@/modules/memory/public'
-import { buildAllRevealedState } from '@/modules/memory/public'
+import { buildInitialRevealState } from '@/modules/memory/public'
 import { useReviewFeedback } from '@/modules/memory/public'
 import type {
   MindMapEditorState,
@@ -137,7 +137,9 @@ export function PalaceMemoryLookupDialog({
   const flipEditorState = revealSession.visibleEditorState
   const enterFlipMode = useCallback(() => {
     setPreviewMode('flip')
-    setRevealMap(buildAllRevealedState(revealRoot))
+    // Progressive flip only: root revealed, descendants hidden → 待回忆 → content.
+    // Never open the whole tree on entry (that showed every path at once).
+    setRevealMap(buildInitialRevealState(revealRoot))
     setRedNodeIds(new Set<string>())
   }, [revealRoot, setRedNodeIds, setRevealMap])
 

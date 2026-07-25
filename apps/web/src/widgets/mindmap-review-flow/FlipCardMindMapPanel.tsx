@@ -51,6 +51,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'segmentColorMode'
   | 'segmentRangeDraft'
   | 'highlightedNodeUids'
+  | 'statusChipsByNodeUid'
   | 'ankiEditMode'
   | 'mutedNodeUids'
   | 'masteryByNodeUid'
@@ -205,6 +206,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   segmentColorMode,
   segmentRangeDraft,
   highlightedNodeUids,
+  statusChipsByNodeUid: hostStatusChipsByNodeUid,
   ankiEditMode = false,
   mutedNodeUids: mutedNodeUidsProp,
 }: FlipCardMindMapPanelProps, forwardedRef) {
@@ -385,7 +387,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }, [guidedModel.nodes, guidedModel.rootUid, rateableUidSet, recallRound, weakNodeUids])
 
   const statusChipsByNodeUid = useMemo(() => {
-    if (!ratingMode || isEditMode) return undefined
+    if (!ratingMode || isEditMode) return hostStatusChipsByNodeUid
     const chips: Record<
       string,
       Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
@@ -417,8 +419,13 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       }
       if (nodeChips.length) chips[node.uid] = nodeChips
     })
+    if (hostStatusChipsByNodeUid) {
+      for (const [uid, hostChips] of Object.entries(hostStatusChipsByNodeUid)) {
+        chips[uid] = [...(chips[uid] ?? []), ...hostChips]
+      }
+    }
     return Object.keys(chips).length ? chips : undefined
-  }, [guidedModel.nodes, isEditMode, longTermMasteryByUid, masteryByNodeUid, ratingMode, recallRatings])
+  }, [hostStatusChipsByNodeUid, guidedModel.nodes, isEditMode, longTermMasteryByUid, masteryByNodeUid, ratingMode, recallRatings])
 
   useEffect(() => {
     if (!ratingMode || isEditMode || !currentPalaceId) {

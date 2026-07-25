@@ -60,8 +60,18 @@ export function MindMapReviewFlow({
   const [calibrationOpen, setCalibrationOpen] = React.useState(false);
   const flipShortcutScene =
     props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
+  // Badge counts must use the full palace mindmap (not the flip-reveal visible
+  // subtree). Otherwise parent badges grow as children are revealed.
+  // Full palace doc for badges (editEditorState). Never use flip-reveal visible
+  // tree, or parent counts grow as children are revealed.
   const editorDocForBindings =
-    (review.mapEditorState ?? review.flow.visibleEditorState ?? props.reviewEditorState)?.editor_doc;
+    (
+      props.editEditorState ??
+      props.ratingTreeEditorState ??
+      props.reviewEditorState ??
+      review.mapEditorState ??
+      review.flow.visibleEditorState
+    )?.editor_doc;
   const quizNodeBindings = usePalaceQuizNodeBindings({
     palaceId: props.palaceId,
     editorDoc: editorDocForBindings,
