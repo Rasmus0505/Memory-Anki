@@ -61,6 +61,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const [editText, setEditText] = useState(rawNodeText)
   const shellRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLDivElement>(null)
+  /** Delay single-click fold so double-click can expand subtree without a toggle race. */
+  const collapseClickTimerRef = useRef<number | null>(null)
   const lastMeasuredRef = useRef<NodeSize | null>(null)
   const updateNodeInternals = useUpdateNodeInternals()
   const editingIsControlled = typeof nodeData.editing === 'boolean'
@@ -722,17 +724,38 @@ function MindMapNodeCard({ data, id }: NodeProps) {
               aria-label={metadata.collapsed ? '展开分支' : '折叠分支'}
               title={
                 metadata.collapsed
-                  ? `展开分支（${Number(metadata.collapsedDescendantCount ?? 0)} 个节点）`
-                  : '折叠分支'
+                  ? `展开分支（${Number(metadata.collapsedDescendantCount ?? 0)} 个节点）；双击展开整棵子树`
+                  : '折叠分支；双击展开整棵子树'
               }
               className="nodrag nopan absolute -right-2 top-1/2 z-30 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border border-zinc-300 bg-white px-1 text-[10px] font-semibold text-zinc-600 shadow-sm hover:border-sky-400 hover:text-sky-700"
               onClick={(event) => {
                 event.stopPropagation()
                 event.preventDefault()
-                nodeData.onToggleCollapse?.(id)
+                // Defer toggle: a double-click fires click+click+dblclick; only the
+                // single-click path should flip one level after a short delay.
+                if (collapseClickTimerRef.current !== null) {
+                  window.clearTimeout(collapseClickTimerRef.current)
+                }
+                collapseClickTimerRef.current = window.setTimeout(() => {
+                  collapseClickTimerRef.current = null
+                  nodeData.onToggleCollapse?.(id)
+                }, 220)
               }}
               onPointerDown={(event) => event.stopPropagation()}
-              onDoubleClick={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => {
+                // Double-click fold control = expand whole subtree under this node.
+                event.stopPropagation()
+                event.preventDefault()
+                if (collapseClickTimerRef.current !== null) {
+                  window.clearTimeout(collapseClickTimerRef.current)
+                  collapseClickTimerRef.current = null
+                }
+                if (nodeData.onExpandSubtree) {
+                  nodeData.onExpandSubtree(id)
+                } else {
+                  nodeData.onToggleCollapse?.(id)
+                }
+              }}
             >
               {metadata.collapsed ? (
                 <>

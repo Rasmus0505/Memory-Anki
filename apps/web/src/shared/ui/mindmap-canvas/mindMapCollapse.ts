@@ -207,3 +207,28 @@ export function collectBranchNodeIds(
   }
   return ids
 }
+
+/**
+ * Expand `rootId` and every descendant: remove them from the collapsed set.
+ * Other collapsed branches stay collapsed.
+ */
+export function expandSubtreeCollapsedIds(
+  nodes: readonly MindMapNode[],
+  collapsedNodeIds: ReadonlySet<string>,
+  rootId: string,
+): Set<string> {
+  if (!rootId) return new Set(collapsedNodeIds)
+  const { childrenByParent, byId } = buildCollapseTreeIndex(nodes)
+  if (!byId.has(rootId)) return new Set(collapsedNodeIds)
+
+  const next = new Set(collapsedNodeIds)
+  next.delete(rootId)
+  const stack = [...(childrenByParent.get(rootId) ?? [])]
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    next.delete(current)
+    stack.push(...(childrenByParent.get(current) ?? []))
+  }
+  return next
+}
+

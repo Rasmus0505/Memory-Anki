@@ -25,6 +25,7 @@ import {
   expandAncestorsForNode,
   reconcileCollapsedNodeIds,
   toggleCollapsedNodeId,
+  expandSubtreeCollapsedIds,
 } from './mindMapCollapse'
 import { useMindMapDragInteractions } from './useMindMapDragInteractions'
 import { useMindMapMenusAndEdges } from './useMindMapMenusAndEdges'
@@ -113,7 +114,8 @@ export interface UseMindMapCanvasStateResult {
   canRedo: boolean
   runFitView: (duration?: number) => void
   fitSelectionBranch: () => void
-  centerRootInView: () => void
+  expandSelectionSubtree: () => void
+  expandSubtree: (nodeId: string) => void
   expandAllBranches: () => void
   collapseDeepBranches: () => void
   zoomInCanvas: () => void
@@ -376,6 +378,46 @@ export function useMindMapCanvasState(
     )
   }, [graphData.nodes])
 
+  const expandSubtree = useCallback(
+    (nodeId: string) => {
+      if (!nodeId || practiceModeActive) return
+      dispatchGlobalFeedback('toolbar_action', {
+        origin: 'toolbar',
+        label: 'EXPAND_SUBTREE',
+      })
+      setCollapsedNodeIds((previous) =>
+        expandSubtreeCollapsedIds(graphData.nodes, previous, nodeId),
+      )
+    },
+    [graphData.nodes, practiceModeActive],
+  )
+
+  const expandSelectionSubtree = useCallback(() => {
+    const focusId =
+      selectedNodeId
+      ?? selectedNodeIds[0]
+      ?? null
+    if (!focusId) return
+    expandSubtree(focusId)
+  }, [expandSubtree, selectedNodeId, selectedNodeIds])
+
+  const fitSelectionBranch = useCallback(() => {
+    dispatchGlobalFeedback('toolbar_action', {
+      origin: 'toolbar',
+      label: 'FIT_BRANCH',
+    })
+    const focusId =
+      selectedNodeId
+      ?? selectedNodeIds[0]
+      ?? graphData.nodes.find((node) => node.parentId == null)?.id
+      ?? null
+    viewport.fitNodesInView(focusId ? [focusId] : null, {
+      includeDescendants: true,
+      duration: 240,
+    })
+  }, [graphData.nodes, selectedNodeId, selectedNodeIds, viewport])
+
+
   const menus = useMindMapMenusAndEdges({
     onNodeSelect,
     onNodeActivate,
@@ -530,6 +572,7 @@ export function useMindMapCanvasState(
       onMeasure: viewport.handleNodeMeasure,
       onCountBadgeClick: props.onCountBadgeClick,
       onToggleCollapse: practiceModeActive ? undefined : handleToggleCollapse,
+      onExpandSubtree: practiceModeActive ? undefined : expandSubtree,
       onExtractSelection: onExtractSelection ? handleExtractSelection : undefined,
       onExtractDropPreview: onExtractSelection ? handleExtractDropPreview : undefined,
       readonly,
@@ -546,7 +589,7 @@ export function useMindMapCanvasState(
     return nextDisplayNodes
   // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, expandSubtree, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)
@@ -699,32 +742,6 @@ export function useMindMapCanvasState(
     resetLayout()
   }, [onHostRefresh, resetLayout])
 
-  const centerRootInView = useCallback(() => {
-    dispatchGlobalFeedback('toolbar_action', {
-      origin: 'toolbar',
-      label: 'CENTER_ROOT',
-    })
-    const root = graphData.nodes.find((node) => node.parentId == null)
-    if (!root) return
-    viewport.centerNodeInCanvas(root.id, 240)
-  }, [graphData.nodes, viewport])
-
-  const fitSelectionBranch = useCallback(() => {
-    dispatchGlobalFeedback('toolbar_action', {
-      origin: 'toolbar',
-      label: 'FIT_BRANCH',
-    })
-    const focusId =
-      selectedNodeId
-      ?? selectedNodeIds[0]
-      ?? graphData.nodes.find((node) => node.parentId == null)?.id
-      ?? null
-    viewport.fitNodesInView(focusId ? [focusId] : null, {
-      includeDescendants: true,
-      duration: 240,
-    })
-  }, [graphData.nodes, selectedNodeId, selectedNodeIds, viewport.fitNodesInView])
-
   return {
     frameRef,
     canvasRef,
@@ -744,7 +761,8 @@ export function useMindMapCanvasState(
     canRedo,
     runFitView,
     fitSelectionBranch,
-    centerRootInView,
+    expandSelectionSubtree,
+    expandSubtree,
     expandAllBranches,
     collapseDeepBranches,
     zoomInCanvas: viewport.zoomInCanvas,

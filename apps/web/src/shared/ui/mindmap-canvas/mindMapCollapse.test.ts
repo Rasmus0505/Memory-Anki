@@ -6,6 +6,7 @@ import {
   collectHiddenNodeIds,
   computeDefaultCollapsedNodeIds,
   expandAncestorsForNode,
+  expandSubtreeCollapsedIds,
   reconcileCollapsedNodeIds,
   toggleCollapsedNodeId,
 } from './mindMapCollapse'
@@ -122,3 +123,13 @@ describe('applyMindMapLayout collapse', () => {
     expect(meta.collapsedDescendantCount).toBe(2)
   })
 })
+
+  it('expands only the selected subtree and leaves other collapses alone', () => {
+    const nodes = sampleTree()
+    // Collapse both branches and a deeper parent.
+    const previous = new Set(['l1a', 'l1b', 'l2a'])
+    const next = expandSubtreeCollapsedIds(nodes, previous, 'l1a')
+    expect(next.has('l1a')).toBe(false)
+    expect(next.has('l2a')).toBe(false)
+    expect(next.has('l1b')).toBe(true)
+  })

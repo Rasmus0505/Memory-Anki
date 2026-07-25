@@ -28,6 +28,8 @@ export type NodeCardData = MindMapNode & {
   onMeasure?: (nodeId: string, size: NodeSize) => void
   onCountBadgeClick?: (nodeId: string) => void
   onToggleCollapse?: (nodeId: string) => void
+  /** Expand this node and all descendants (multi-level). */
+  onExpandSubtree?: (nodeId: string) => void
   onReadonlyDoubleClick?: (nodeId: string) => void
   onTouchLongPress?: (nodeId: string, point: { x: number; y: number }) => void
   onExtractSelection?: (payload: {
