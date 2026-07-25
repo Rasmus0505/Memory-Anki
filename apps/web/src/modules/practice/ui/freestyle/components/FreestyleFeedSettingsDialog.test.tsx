@@ -20,6 +20,9 @@ const baseConfig: FreestyleFeedConfig = {
     anki_card: 2,
     quiz_question: 1,
   },
+  mix_mode: 'ratio',
+  mix_ratio: { mindmap: 2, quiz: 1 },
+  bound_quiz_placement: 'follow_unit',
   palace_order: 'finish_palace_then_next',
   within_palace_order: 'tree_order',
   due_policy: 'due_only',
@@ -127,5 +130,29 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
     const selectAll = screen.getByRole('button', { name: '全选' })
     expect(selectAll.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText('已选 2 个宫殿')).toBeTruthy()
+  })
+
+  it('saves mix_mode and mix_ratio from the new controls', async () => {
+    const onSave = vi.fn()
+    render(
+      <FreestyleFeedSettingsDialog
+        open
+        config={buildConfig()}
+        onOpenChange={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    expect(await screen.findByText('宫殿和题怎么混')).toBeTruthy()
+    const mixSelect = screen.getByDisplayValue('按比例穿插')
+    fireEvent.change(mixSelect, { target: { value: 'random' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存并重排剩余队列' }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mix_mode: 'random',
+        mix_ratio: { mindmap: 2, quiz: 1 },
+        bound_quiz_placement: 'follow_unit',
+      }),
+    )
   })
 })

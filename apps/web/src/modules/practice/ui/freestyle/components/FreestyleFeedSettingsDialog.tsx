@@ -3,7 +3,9 @@ import { getPalacesGroupedApi } from '@/modules/content/public'
 import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import type {
+  FreestyleBoundQuizPlacement,
   FreestyleFeedConfig,
+  FreestyleMixMode,
   FreestylePalaceContext,
   FreestyleProgressScope,
 } from '@/shared/api/contracts'
@@ -53,6 +55,65 @@ const PROGRESS_SCOPE_OPTIONS: Array<{
     value: 'new',
     label: '新学',
     description: '还没评过分的节点（新建宫殿也能进队列）。',
+  },
+]
+
+const MIX_MODE_OPTIONS: Array<{
+  value: FreestyleMixMode
+  label: string
+  description: string
+}> = [
+  {
+    value: 'ratio',
+    label: '按比例穿插',
+    description: '每刷 N 张宫殿类卡，穿插 M 道题。',
+  },
+  {
+    value: 'random',
+    label: '随机混刷',
+    description: '宫殿与题打乱混排；同一轮顺序固定，可点换一批。',
+  },
+  {
+    value: 'sequential_map_quiz',
+    label: '先宫殿后题',
+    description: '先刷完宫殿类卡，再刷练习题。',
+  },
+  {
+    value: 'sequential_quiz_map',
+    label: '先题后宫殿',
+    description: '先刷练习题，再刷宫殿类卡。',
+  },
+  {
+    value: 'mindmap_only',
+    label: '只刷宫殿',
+    description: '本轮不出练习题。',
+  },
+  {
+    value: 'quiz_only',
+    label: '只刷练习题',
+    description: '本轮不出宫殿/正反面卡。',
+  },
+]
+
+const BOUND_PLACEMENT_OPTIONS: Array<{
+  value: FreestyleBoundQuizPlacement
+  label: string
+  description: string
+}> = [
+  {
+    value: 'follow_unit',
+    label: '绑定题跟在对应分支后',
+    description: '学完这一支立刻做相关题（默认）。',
+  },
+  {
+    value: 'into_mix',
+    label: '绑定题也参与混排',
+    description: '相关题进入混排池，不强制紧跟分支。',
+  },
+  {
+    value: 'quiz_stream',
+    label: '绑定题全部进题目流',
+    description: '与无绑定题一样，按混合模式统一排。',
   },
 ]
 
@@ -134,13 +195,13 @@ export function FreestyleFeedSettingsDialog({
   onOpenChange: (open: boolean) => void
   onSave: (config: FreestyleFeedConfig) => void
 }) {
-  const [draft, setDraft] = useState(config)
+  const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
   const allPalacesSelected =
     palaces.length > 0 && palaces.every((palace) => draft.specific_palace_ids.includes(palace.id))
 
   useEffect(() => {
-    if (open) setDraft(config)
+    if (open) setDraft(sanitizeFreestyleFeedConfig(config))
   }, [config, open])
 
   useEffect(() => {
@@ -218,6 +279,120 @@ export function FreestyleFeedSettingsDialog({
                   setDraft((current) => ({ ...current, weak_quiz_priority: checked }))
                 }
               />
+            </div>
+          </Section>
+
+          <Section
+            title="宫殿和题怎么混"
+            description="决定宫殿类卡与练习题如何交错出现。正反面卡算宫殿侧。"
+          >
+            <div className="space-y-3">
+              <Field label="混合模式">
+                <select
+                  className={FIELD_CLASS}
+                  value={draft.mix_mode}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      mix_mode: event.target.value as FreestyleMixMode,
+                    }))
+                  }
+                >
+                  {MIX_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs leading-5 text-muted-foreground">
+                  {MIX_MODE_OPTIONS.find((item) => item.value === draft.mix_mode)?.description}
+                </span>
+              </Field>
+
+              {draft.mix_mode === 'ratio' ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="宫殿类卡（每轮）"
+                    hint="记忆宫殿 + 正反面卡合计。"
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      className="h-10"
+                      value={draft.mix_ratio.mindmap}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          mix_ratio: {
+                            ...current.mix_ratio,
+                            mindmap: Number(event.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="练习题（每轮）" hint="穿插的题目张数。">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      className="h-10"
+                      value={draft.mix_ratio.quiz}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          mix_ratio: {
+                            ...current.mix_ratio,
+                            quiz: Number(event.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </Field>
+                  <p className="text-xs leading-5 text-muted-foreground sm:col-span-2">
+                    例如 2 : 1 = 两张宫殿类卡后穿插一道题。某一侧刷完后只出另一侧。
+                  </p>
+                </div>
+              ) : null}
+
+              {draft.mix_mode === 'random' ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  同一配置与同一「换一批」种子下顺序固定；点页面上的换一批会重排。
+                </p>
+              ) : null}
+
+              {draft.mix_mode !== 'mindmap_only' && draft.mix_mode !== 'quiz_only' ? (
+                <Field
+                  label="绑定到知识点的题放哪"
+                  hint="有节点绑定的练习题如何相对宫殿分支出现。"
+                >
+                  <select
+                    className={FIELD_CLASS}
+                    value={draft.bound_quiz_placement}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        bound_quiz_placement: event.target
+                          .value as FreestyleBoundQuizPlacement,
+                      }))
+                    }
+                  >
+                    {BOUND_PLACEMENT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs leading-5 text-muted-foreground">
+                    {
+                      BOUND_PLACEMENT_OPTIONS.find(
+                        (item) => item.value === draft.bound_quiz_placement,
+                      )?.description
+                    }
+                  </span>
+                </Field>
+              ) : null}
             </div>
           </Section>
 
@@ -316,63 +491,8 @@ export function FreestyleFeedSettingsDialog({
             </div>
           </Section>
 
-          <Section title="出现顺序与多少" description="数字越大，这一类在混排里越容易先出现。">
+          <Section title="顺序与进度范围" description="宫殿之间、宫内怎么排，以及今天练哪些记忆进度。">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="宫殿卡多一点 / 少一点" hint="0 = 尽量不出（若开关仍开则权重为 0）">
-                <Input
-                  type="number"
-                  min={0}
-                  max={20}
-                  className="h-10"
-                  value={draft.weights.mindmap_branch}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      weights: {
-                        ...current.weights,
-                        mindmap_branch: Number(event.target.value),
-                      },
-                    }))
-                  }
-                />
-              </Field>
-              <Field label="正反面卡多一点 / 少一点">
-                <Input
-                  type="number"
-                  min={0}
-                  max={20}
-                  className="h-10"
-                  value={draft.weights.anki_card}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      weights: {
-                        ...current.weights,
-                        anki_card: Number(event.target.value),
-                      },
-                    }))
-                  }
-                />
-              </Field>
-              <Field label="练习题多一点 / 少一点" className="sm:col-span-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={20}
-                  className="h-10"
-                  value={draft.weights.quiz_question}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      weights: {
-                        ...current.weights,
-                        quiz_question: Number(event.target.value),
-                      },
-                    }))
-                  }
-                />
-              </Field>
-
               <Field label="多个宫殿时怎么排" className="sm:col-span-2">
                 <select
                   className={FIELD_CLASS}
@@ -448,8 +568,8 @@ export function FreestyleFeedSettingsDialog({
               </div>
 
               <Field
-                label="到期刷完后怎么补"
-                hint="只影响是否混入练习题；宫殿翻卡仍只出上面勾选的进度。"
+                label="题目从哪一层池子来"
+                hint="不再控制是否与宫殿混排（见上方混合模式）；只决定优先题还是扩大到更多题。"
                 className="sm:col-span-2"
               >
                 <select
@@ -462,9 +582,9 @@ export function FreestyleFeedSettingsDialog({
                     }))
                   }
                 >
-                  <option value="due_only">只练勾选进度，不够也不补题</option>
-                  <option value="due_first_then_expand">先练勾选进度，不够再补题</option>
-                  <option value="all_content_due_weighted">题目和勾选进度混在一起刷</option>
+                  <option value="due_only">只出优先题（薄弱/相关）</option>
+                  <option value="due_first_then_expand">优先题刷完再补其它题</option>
+                  <option value="all_content_due_weighted">优先题与补充题一起进池</option>
                 </select>
               </Field>
             </div>
