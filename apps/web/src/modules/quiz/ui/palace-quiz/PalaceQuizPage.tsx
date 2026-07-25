@@ -6,9 +6,17 @@ import { getPalaceEditorApi } from '@/modules/content/public'
 import { QuizGenerationWorkspace } from '@/modules/quiz/ui/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
 import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
+import {
+  QuizKnowledgeDigressionDialog,
+  QuizKnowledgeEdgePicker,
+} from '@/widgets/quiz-knowledge-digression'
 import { PalaceQuizPracticePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizPracticePanel'
 import { PalaceQuizRangeDialog } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizRangeDialog'
-import { resetPalaceQuizQuestionAttemptsApi } from '@/modules/quiz/domain/quiz-entity/api'
+import {
+  listQuestionNodeBindingsApi,
+  resetPalaceQuizQuestionAttemptsApi,
+} from '@/modules/quiz/domain/quiz-entity/api'
+import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizGeneration } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizPractice'
@@ -36,6 +44,12 @@ export default function PalaceQuizPage() {
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
   const [mindMapPromptContext, setMindMapPromptContext] = useState('')
+  const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
+  const [knowledgePickerEdges, setKnowledgePickerEdges] = useState<QuizNodeBindingEdge[]>([])
+  const [knowledgeDigressionOpen, setKnowledgeDigressionOpen] = useState(false)
+  const [knowledgeDigressionEdge, setKnowledgeDigressionEdge] = useState<QuizNodeBindingEdge | null>(
+    null,
+  )
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
@@ -223,6 +237,30 @@ export default function PalaceQuizPage() {
     }
   }
 
+  const openKnowledgeEdge = (edge: QuizNodeBindingEdge) => {
+    setKnowledgeDigressionEdge(edge)
+    setKnowledgeDigressionOpen(true)
+  }
+
+  const handleViewKnowledge = async (question: PalaceQuizQuestion) => {
+    try {
+      const response = await listQuestionNodeBindingsApi(question.id)
+      const edges = response.items || []
+      if (edges.length === 0) {
+        toast.message('该题还没有绑定知识点节点。可在宫殿编辑「题库结合」或手改绑定中关联。')
+        return
+      }
+      if (edges.length === 1) {
+        openKnowledgeEdge(edges[0])
+        return
+      }
+      setKnowledgePickerEdges(edges)
+      setKnowledgePickerOpen(true)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '加载知识点绑定失败。')
+    }
+  }
+
   const handleResetVisibleAttempts = async () => {
     const questionIds = browser.filteredQuestions.map((question) => question.id)
     if (questionIds.length === 0) return
@@ -274,6 +312,17 @@ export default function PalaceQuizPage() {
           currentPalaceId={palaceId}
         />
       ) : null}
+      <QuizKnowledgeEdgePicker
+        open={knowledgePickerOpen}
+        onOpenChange={setKnowledgePickerOpen}
+        edges={knowledgePickerEdges}
+        onSelect={openKnowledgeEdge}
+      />
+      <QuizKnowledgeDigressionDialog
+        open={knowledgeDigressionOpen}
+        onOpenChange={setKnowledgeDigressionOpen}
+        edge={knowledgeDigressionEdge}
+      />
       <PageIntro
         eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
@@ -345,6 +394,9 @@ export default function PalaceQuizPage() {
           onViewFeedback={handleViewModeChange}
           onNavigateFeedback={handleQuestionNavigate}
           resetAttemptsLoading={resetAttemptsLoading}
+          onViewKnowledge={(question) => {
+            void handleViewKnowledge(question)
+          }}
         />
       ) : null}
 

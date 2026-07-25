@@ -27,6 +27,7 @@ export function PalaceQuizPracticePanel({
   onViewFeedback,
   onNavigateFeedback,
   resetAttemptsLoading,
+  onViewKnowledge,
 }: {
   questions: PalaceQuizQuestion[]
   miniPalaces: PalaceSegmentSummary[]
@@ -48,6 +49,7 @@ export function PalaceQuizPracticePanel({
   onViewFeedback: (viewMode: PalaceQuizViewMode, label: string) => void
   onNavigateFeedback: (direction: 'prev' | 'next') => void
   resetAttemptsLoading: boolean
+  onViewKnowledge?: (question: PalaceQuizQuestion) => void
 }) {
   return (
     <div className="space-y-4">
@@ -129,7 +131,17 @@ export function PalaceQuizPracticePanel({
             <div>
               第 {currentQuestionIndex + 1} / {filteredQuestions.length} 题
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {onViewKnowledge ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onViewKnowledge(currentQuestion)}
+                >
+                  查看知识点
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -164,18 +176,26 @@ export function PalaceQuizPracticePanel({
       ) : (
         <div className="grid gap-4">
           {filteredQuestions.map((question) => (
-            <QuizQuestionCard
-              key={question.id}
-              question={question}
-              state={questionStates[question.id]}
-              compact
-              onChoiceSelect={onChoiceSelect}
-              onStateChange={onStateChange}
-              onShortAnswerSubmit={onShortAnswerSubmit}
-              onShortAnswerFeedback={onShortAnswerFeedback}
-              onReset={onReset}
-              onEdit={onEdit}
-            />
+            <div key={question.id} className="space-y-2">
+              {onViewKnowledge ? (
+                <div className="flex justify-end">
+                  <Button type="button" size="sm" variant="outline" onClick={() => onViewKnowledge(question)}>
+                    查看知识点
+                  </Button>
+                </div>
+              ) : null}
+              <QuizQuestionCard
+                question={question}
+                state={questionStates[question.id]}
+                compact
+                onChoiceSelect={onChoiceSelect}
+                onStateChange={onStateChange}
+                onShortAnswerSubmit={onShortAnswerSubmit}
+                onShortAnswerFeedback={onShortAnswerFeedback}
+                onReset={onReset}
+                onEdit={onEdit}
+              />
+            </div>
           ))}
         </div>
       )}

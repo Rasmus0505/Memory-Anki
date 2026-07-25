@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
-import { getPalaceQuizQuestionsApi } from '@/modules/quiz/public'
+import {
+  getPalaceQuizQuestionsApi,
+  getPalaceQuizQuestionsByIdsApi,
+  listPalaceQuizNodeBindingsApi,
+} from '@/modules/quiz/domain/quiz-entity/api'
 import {
   QuizQuestionInteraction,
   useQuizAttemptOrchestration,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
-import type { PalaceQuizQuestion } from '@/shared/api/contracts'
+import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
+import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -36,7 +41,11 @@ export function NodeBoundQuizDialog({
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
+  const [bindingByQuestion, setBindingByQuestion] = useState<Map<number, QuizNodeBindingEdge>>(
+    () => new Map(),
+  )
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
 
@@ -45,29 +54,52 @@ export function NodeBoundQuizDialog({
   useEffect(() => {
     if (!open || !palaceId || questionIds.length === 0) {
       setQuestions([])
+      setBindingByQuestion(new Map())
       setIndex(0)
       setQuestionStates({})
+      setLoadError('')
       return
     }
     let cancelled = false
     setLoading(true)
-    void getPalaceQuizQuestionsApi(palaceId)
-      .then((response) => {
+    setLoadError('')
+    void Promise.all([
+      getPalaceQuizQuestionsByIdsApi(questionIds).catch(() => ({ items: [] as PalaceQuizQuestion[] })),
+      listPalaceQuizNodeBindingsApi(palaceId),
+      getPalaceQuizQuestionsApi(palaceId).catch(() => ({ items: [] as PalaceQuizQuestion[] })),
+    ])
+      .then(([questionResponse, bindingResponse, palaceQuestions]) => {
         if (cancelled) return
-        const idSet = new Set(questionIds)
+        const byId = new Map<number, PalaceQuizQuestion>()
+        for (const item of palaceQuestions.items || []) byId.set(item.id, item)
+        for (const item of questionResponse.items || []) byId.set(item.id, item)
         const ordered = questionIds
-          .map((id) => response.items.find((item) => item.id === id))
+          .map((id) => byId.get(id))
           .filter((item): item is PalaceQuizQuestion => Boolean(item))
-        // Keep order from questionIds; drop missing
-        const filtered = ordered.length
-          ? ordered
-          : response.items.filter((item) => idSet.has(item.id))
-        setQuestions(filtered)
+        setQuestions(ordered)
+        if (ordered.length === 0) {
+          setLoadError('绑定题目未能加载，可能已删除。')
+        }
+        const map = new Map<number, QuizNodeBindingEdge>()
+        for (const edge of bindingResponse.items || []) {
+          const qid = Number(edge.question_id)
+          if (!Number.isFinite(qid)) continue
+          if (nodeUid && edge.node_uid === nodeUid) {
+            map.set(qid, edge)
+            continue
+          }
+          if (!map.has(qid)) map.set(qid, edge)
+        }
+        setBindingByQuestion(map)
         setIndex(0)
         setQuestionStates({})
       })
       .catch((error) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : '加载题目失败。')
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : '加载题目失败。'
+          setLoadError(message)
+          toast.error(message)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -75,9 +107,8 @@ export function NodeBoundQuizDialog({
     return () => {
       cancelled = true
     }
-    // questionIdsKey tracks content; questionIds is read for ordering within the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable key for id list
-  }, [open, palaceId, questionIdsKey])
+  }, [open, palaceId, questionIdsKey, nodeUid])
 
   const current = questions[index] ?? null
 
@@ -121,36 +152,44 @@ export function NodeBoundQuizDialog({
     },
   })
 
+  const ownerLabel =
+    current && bindingByQuestion.get(current.id)
+      ? ownerPalaceLabel(bindingByQuestion.get(current.id)!, palaceId)
+      : null
+
+  const headerDetail = loading
+    ? '加载中…'
+    : questions.length > 0
+      ? `第 ${index + 1} / ${questions.length} 题` + (ownerLabel ? ` · ${ownerLabel}` : '')
+      : '关闭后继续翻卡'
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] max-w-xl overflow-hidden sm:max-w-xl">
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-hidden p-0 sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between gap-2 pr-8">
-              <span>知识点练习</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {nodeUid ? `节点 ${nodeUid.slice(0, 8)}…` : ''}
-              </span>
-            </DialogTitle>
-            <DialogDescription>
-              仅包含绑定到该卡片（含子树）且本会话尚未完成的题目。答过即从绿点计数中扣除。
+            <DialogTitle className="text-base">关联题目</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
+              {headerDetail}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+          <div className="space-y-3 overflow-y-auto px-4 py-3" style={{ maxHeight: '70vh' }}>
             {loading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">加载题目…</div>
-            ) : !current ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                当前没有可练习的题目。
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                加载题目…
               </div>
+            ) : loadError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-4 text-sm text-destructive">
+                {loadError}
+              </div>
+            ) : !current ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">暂无题目</div>
             ) : (
               <>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    第 {index + 1} / {questions.length} 题
-                  </span>
-                  <div className="flex gap-1">
+                {questions.length > 1 ? (
+                  <div className="flex items-center justify-end gap-1">
                     <Button
                       type="button"
                       size="sm"
@@ -165,12 +204,14 @@ export function NodeBoundQuizDialog({
                       size="sm"
                       variant="outline"
                       disabled={index >= questions.length - 1}
-                      onClick={() => setIndex((value) => Math.min(questions.length - 1, value + 1))}
+                      onClick={() =>
+                        setIndex((value) => Math.min(questions.length - 1, value + 1))
+                      }
                     >
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
-                </div>
+                ) : null}
                 <QuizQuestionInteraction
                   question={current}
                   state={questionStates[current.id] ?? {}}
@@ -189,13 +230,6 @@ export function NodeBoundQuizDialog({
                 />
               </>
             )}
-          </div>
-
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              <X className="mr-1 size-4" />
-              关闭
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
