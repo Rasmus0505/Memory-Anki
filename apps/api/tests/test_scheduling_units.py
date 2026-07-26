@@ -5,18 +5,18 @@ from __future__ import annotations
 import json
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.modules.memory.application.scheduling.units import (
+    default_unit_root_uid,
+    invalidate_units_cache,
+    resolve_units,
+    unit_of_node,
+)
 from memory_anki.modules.mindmap_document.api import (
     UNIT_KIND_MARK,
     UNIT_KIND_PALACE,
     UNIT_KIND_RESIDUAL,
     permanent_mark_uids_from_nodes,
     split_scheduling_units,
-)
-from memory_anki.modules.memory.application.scheduling.units import (
-    default_unit_root_uid,
-    invalidate_units_cache,
-    resolve_units,
-    unit_of_node,
 )
 
 
