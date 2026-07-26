@@ -23,12 +23,16 @@ class TestSettings:
     def test_put_persists_known_key(self, client):
         response = client.put(
             "/api/v1/settings",
-            json={"daily_review_limit": "120"},
+            json={"daily_new_limit": "35"},
         )
 
         assert response.status_code == 200
-        assert response.json()["daily_review_limit"] == "120"
-        assert client.get("/api/v1/settings").json()["daily_review_limit"] == "120"
+        assert response.json()["daily_new_limit"] == "35"
+        assert client.get("/api/v1/settings").json()["daily_new_limit"] == "35"
+
+    def test_review_quota_key_is_gone(self, client):
+        """每日复习额度已删除，不应再出现在设置里。"""
+        assert "daily_review_limit" not in client.get("/api/v1/settings").json()
 
     def test_put_ignores_unknown_key(self, client):
         response = client.put("/api/v1/settings", json={"not_a_real_key": "1"})

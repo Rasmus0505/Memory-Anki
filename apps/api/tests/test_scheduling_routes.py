@@ -42,7 +42,9 @@ def test_today_plan_and_preview_and_detail(client, session_factory):
     assert plan.status_code == 200
     item = plan.json()["item"]
     assert item["new_pending"] == 2
-    assert item["review_quota"] > 0
+    assert item["new_quota"] > 0
+    assert "review_quota" not in item  # 复习额度已删除
+    assert item["consolidate_pending"] == 0
     assert isinstance(item["palaces"], list)
 
     preview = client.post(

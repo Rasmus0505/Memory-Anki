@@ -21,21 +21,21 @@ from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
 )
 from memory_anki.modules.memory.application.wave_policy import (
+    SCHEDULE_CONSOLIDATE,
     SCHEDULE_CONTENT_CHANGED,
     SCHEDULE_REINFORCEMENT,
     local_date_of,
 )
 
 DEFAULT_DAILY_NEW_LIMIT = 20
-DEFAULT_DAILY_REVIEW_LIMIT = 200
 
 PLAN_SCOPE_PALACE = "palace"
 ITEM_KIND_REVIEW = "review"
 ITEM_KIND_NEW = "new"
+ITEM_KIND_CONSOLIDATE = "consolidate"
 ITEM_PENDING = "pending"
 ITEM_DONE = "done"
 ITEM_DEFERRED = "deferred"
-DEFER_OVER_REVIEW_QUOTA = "over_review_quota"
 
 # 新卡放出时的 schedule_source：可进入正式队列（is_formal_queue_eligible
 # 对 has_memory=False 一律 True），且能与"从未放出"区分。
@@ -44,7 +44,14 @@ SCHEDULE_DAILY_RELEASE = "new"
 
 @dataclass(frozen=True)
 class DailyQuota:
-    review_limit: int
+    """只剩新学额度。
+
+    每日**复习**额度已删除：调度单位是宫殿整批，按卡片数截断会把刚拉齐的
+    批次重新切碎（20 卡单元遇上剩余额度 5 → 被切成 3–4 天），正是碎片化的
+    来源之一。到期就该复习；负载控制改为在**排期时**由 ``load_balance``
+    避开拥挤的日子，而不是在当天截断。
+    """
+
     new_limit: int
     source: str
 
@@ -60,9 +67,6 @@ def _read_int_config(session: Session, key: str, fallback: int) -> int:
 
 
 def get_daily_quota(session: Session, *, palace_id: int | None = None) -> DailyQuota:
-    review_limit = _read_int_config(
-        session, "daily_review_limit", DEFAULT_DAILY_REVIEW_LIMIT
-    )
     new_limit = _read_int_config(session, "daily_new_limit", DEFAULT_DAILY_NEW_LIMIT)
     source = "global"
     if palace_id is not None:
@@ -71,14 +75,10 @@ def get_daily_quota(session: Session, *, palace_id: int | None = None) -> DailyQ
         )
 
         settings = get_palace_review_settings(session, palace_id)
-        if settings is not None:
-            if settings.daily_review_limit_override is not None:
-                review_limit = max(0, int(settings.daily_review_limit_override))
-                source = "palace_override"
-            if settings.daily_new_limit_override is not None:
-                new_limit = max(0, int(settings.daily_new_limit_override))
-                source = "palace_override"
-    return DailyQuota(review_limit=review_limit, new_limit=new_limit, source=source)
+        if settings is not None and settings.daily_new_limit_override is not None:
+            new_limit = max(0, int(settings.daily_new_limit_override))
+            source = "palace_override"
+    return DailyQuota(new_limit=new_limit, source=source)
 
 
 def _item_key(palace_id: int, node_uid: str) -> str:
@@ -113,26 +113,23 @@ def _get_or_create_plan(
             local_date=local_day,
             scope=PLAN_SCOPE_PALACE,
             palace_id=None,
-            review_quota=quota.review_limit,
+            review_quota=0,  # 复习额度已删除；列保留为历史兼容
             new_quota=quota.new_limit,
             generated_at=now,
         )
         session.add(plan)
         session.flush()
     else:
-        # 额度配置可能被用户改过：计划快照跟随最新配置。
-        if plan.review_quota != quota.review_limit or plan.new_quota != quota.new_limit:
-            plan.review_quota = quota.review_limit
+        # 新学额度配置可能被用户改过：计划快照跟随最新配置。
+        if plan.new_quota != quota.new_limit:
             plan.new_quota = quota.new_limit
         plan.regenerated_at = now
     return plan
 
 
-def _review_candidates(
-    session: Session, *, day_end: datetime
-) -> list[ReviewNodeState]:
-    """今天（本地日）到期或逾期、可进正式队列、已有记忆的卡，按 due 升序。"""
-    rows = (
+def _due_today_rows(session: Session, *, day_end: datetime) -> list[ReviewNodeState]:
+    """今天（本地日）到期或逾期、已有记忆的卡，按 due 升序。"""
+    return (
         session.query(ReviewNodeState)
         .join(Palace, Palace.id == ReviewNodeState.palace_id)
         .filter(
@@ -144,10 +141,28 @@ def _review_candidates(
         .order_by(ReviewNodeState.due_at.asc(), ReviewNodeState.id.asc())
         .all()
     )
+
+
+def _review_candidates(
+    session: Session, *, day_end: datetime
+) -> list[ReviewNodeState]:
+    """进正式宫殿队列的到期卡（补刷/内容变更/巩固卡各走各的路）。"""
     return [
         row
-        for row in rows
-        if row.schedule_source not in {SCHEDULE_REINFORCEMENT, SCHEDULE_CONTENT_CHANGED}
+        for row in _due_today_rows(session, day_end=day_end)
+        if row.schedule_source
+        not in {SCHEDULE_REINFORCEMENT, SCHEDULE_CONTENT_CHANGED, SCHEDULE_CONSOLIDATE}
+    ]
+
+
+def _consolidate_candidates(
+    session: Session, *, day_end: datetime
+) -> list[ReviewNodeState]:
+    """今天到期的巩固卡：跨宫殿汇总，不唤醒任何宫殿会话。"""
+    return [
+        row
+        for row in _due_today_rows(session, day_end=day_end)
+        if row.schedule_source == SCHEDULE_CONSOLIDATE
     ]
 
 
@@ -257,10 +272,11 @@ def ensure_daily_plan(
     now: datetime | None = None,
     palace_id: int | None = None,
 ) -> dict[str, Any]:
-    """幂等生成/刷新今天的任务计划，返回摘要视图。
+    """幂等生成/刷新今天的任务账本，返回摘要视图。
 
-    - 复习项：今天到期+逾期的卡按 due 升序取前 review_limit，其余 deferred；
-      已 done 的项永不降级；quota 因完成释放时 deferred 自动补位。
+    - 复习项：今天到期+逾期的卡**全部** pending，**不再有额度截断与顺延**。
+      账本的价值是给进度条一个稳定的分母（到期数会随着复习被重排走而变化）。
+    - 巩固项：今天到期的短间隔/掉队卡，跨宫殿汇总，不唤醒宫殿会话。
     - 新学项：backlog 按（宫殿序, 文档序）放出，受全局与宫殿覆盖额度约束。
     - palace_id 仅约束"本次放出哪个宫殿的新卡"，复习账本始终是全局的。
     """
@@ -280,42 +296,34 @@ def ensure_daily_plan(
         session, plan, items, quota=quota, palace_id=palace_id, now=now_naive
     )
 
-    candidates = _review_candidates(session, day_end=day_end)
-    done_review = sum(
-        1
-        for item in items.values()
-        if item.kind == ITEM_KIND_REVIEW and item.status == ITEM_DONE
-    )
-    budget = max(0, quota.review_limit - done_review)
     position = 0
     now_ts = utc_now_naive()
-    for row in candidates:
-        key = _item_key(int(row.palace_id), row.node_uid)
-        item = items.get(key)
-        target = ITEM_PENDING if budget > 0 else ITEM_DEFERRED
-        if item is None:
-            item = ReviewDailyPlanItem(
-                plan_id=plan.id,
-                palace_id=int(row.palace_id),
-                item_key=key,
-                kind=ITEM_KIND_REVIEW,
-                status=target,
-                defer_reason=DEFER_OVER_REVIEW_QUOTA if target == ITEM_DEFERRED else None,
-                position=position,
-            )
-            session.add(item)
-            items[key] = item
-        elif item.status != ITEM_DONE and item.status != target:
-            item.status = target
-            item.defer_reason = (
-                DEFER_OVER_REVIEW_QUOTA if target == ITEM_DEFERRED else None
-            )
-            item.updated_at = now_ts
-        if item.status != ITEM_DONE:
-            item.position = position
-        if target == ITEM_PENDING and item.status != ITEM_DONE:
-            budget -= 1
-        position += 1
+    for kind, rows in (
+        (ITEM_KIND_CONSOLIDATE, _consolidate_candidates(session, day_end=day_end)),
+        (ITEM_KIND_REVIEW, _review_candidates(session, day_end=day_end)),
+    ):
+        for row in rows:
+            key = _item_key(int(row.palace_id), row.node_uid)
+            item = items.get(key)
+            if item is None:
+                item = ReviewDailyPlanItem(
+                    plan_id=plan.id,
+                    palace_id=int(row.palace_id),
+                    item_key=key,
+                    kind=kind,
+                    status=ITEM_PENDING,
+                    position=position,
+                )
+                session.add(item)
+                items[key] = item
+            elif item.status != ITEM_DONE:
+                # 卡可能在两类之间迁移（差卡进巩固、恢复后并回宫殿波次）。
+                item.kind = kind
+                item.status = ITEM_PENDING
+                item.defer_reason = None
+                item.position = position
+                item.updated_at = now_ts
+            position += 1
     session.flush()
     return summarize_plan(
         plan, items.values(), backlog_remaining=backlog_remaining
@@ -328,41 +336,27 @@ def summarize_plan(
     *,
     backlog_remaining: int = 0,
 ) -> dict[str, Any]:
-    review_pending = review_done = review_deferred = 0
-    new_pending = new_done = 0
-    deferred: list[dict[str, Any]] = []
+    counts = {
+        kind: {"pending": 0, "done": 0}
+        for kind in (ITEM_KIND_REVIEW, ITEM_KIND_NEW, ITEM_KIND_CONSOLIDATE)
+    }
     for item in items:
-        if item.kind == ITEM_KIND_REVIEW:
-            if item.status == ITEM_DONE:
-                review_done += 1
-            elif item.status == ITEM_DEFERRED:
-                review_deferred += 1
-                deferred.append(
-                    {
-                        "item_key": item.item_key,
-                        "palace_id": item.palace_id,
-                        "defer_reason": item.defer_reason,
-                    }
-                )
-            else:
-                review_pending += 1
-        else:
-            if item.status == ITEM_DONE:
-                new_done += 1
-            else:
-                new_pending += 1
+        bucket = counts.get(item.kind)
+        if bucket is None:
+            continue
+        bucket["done" if item.status == ITEM_DONE else "pending"] += 1
+    pending_total = sum(bucket["pending"] for bucket in counts.values())
     return {
         "local_date": plan.local_date.isoformat(),
-        "review_quota": plan.review_quota,
         "new_quota": plan.new_quota,
-        "review_pending": review_pending,
-        "review_done": review_done,
-        "review_deferred": review_deferred,
-        "new_pending": new_pending,
-        "new_done": new_done,
-        "deferred": deferred,
+        "review_pending": counts[ITEM_KIND_REVIEW]["pending"],
+        "review_done": counts[ITEM_KIND_REVIEW]["done"],
+        "new_pending": counts[ITEM_KIND_NEW]["pending"],
+        "new_done": counts[ITEM_KIND_NEW]["done"],
+        "consolidate_pending": counts[ITEM_KIND_CONSOLIDATE]["pending"],
+        "consolidate_done": counts[ITEM_KIND_CONSOLIDATE]["done"],
         "backlog_new": backlog_remaining,
-        "completed": review_pending == 0 and new_pending == 0,
+        "completed": pending_total == 0,
     }
 
 

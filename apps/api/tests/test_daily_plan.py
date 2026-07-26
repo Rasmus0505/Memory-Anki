@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.memory.application.node_memory_service import rate_nodes
@@ -57,44 +56,53 @@ def _make_reviewed_overdue(session, palace, uids):
     session.commit()
 
 
-def test_default_quota_values(db_session):
+def test_only_new_card_quota_remains(db_session):
+    """每日**复习**额度已删除——按卡片数截断会把整批切碎。"""
     quota = get_daily_quota(db_session)
-    assert quota.review_limit == 200
     assert quota.new_limit == 20
+    assert not hasattr(quota, "review_limit")
 
 
-def test_review_quota_defers_excess_and_promotes_after_done(db_session):
-    palace = _palace(db_session, count=4)
-    # 4 张历史成熟卡逾期 → 复习候选。
-    _make_reviewed_overdue(db_session, palace, [f"n{i}" for i in range(4)])
-    db_session.add(Config(key="daily_review_limit", value="2"))
+def test_all_due_cards_stay_pending_regardless_of_count(db_session):
+    """到期就该复习：不论多少张都全部 pending，不再有顺延。"""
+    palace = _palace(db_session, count=40, title="Big batch")
+    _make_reviewed_overdue(db_session, palace, [f"n{i}" for i in range(40)])
+
+    summary = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert summary["review_pending"] == 40
+    assert summary["review_done"] == 0
+    assert "review_deferred" not in summary
+    assert "deferred" not in summary
+
+    # 完成若干张后，其余仍是 pending（不会被"额度"顶掉）。
+    for index in range(3):
+        record_plan_progress(db_session, palace_id=palace.id, node_uid=f"n{index}")
+    db_session.commit()
+    after = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert after["review_done"] == 3
+    assert after["review_pending"] == 37
+    assert after["completed"] is False
+
+
+def test_consolidate_cards_are_counted_separately(db_session):
+    """巩固卡进独立的 kind，不混进宫殿复习账本。"""
+    palace = _palace(db_session, count=3)
+    _make_reviewed_overdue(db_session, palace, ["n0", "n1", "n2"])
+    row = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="n2")
+        .one()
+    )
+    row.schedule_source = "consolidate"
     db_session.commit()
 
     summary = ensure_daily_plan(db_session)
     db_session.commit()
     assert summary["review_pending"] == 2
-    assert summary["review_deferred"] == 2
-    assert all(d["defer_reason"] == "over_review_quota" for d in summary["deferred"])
-
-    # 完成一张 → 消耗额度（今日总量恒为 2：1 done + 1 pending），顺延不回流。
-    pending_uid = "n0"
-    record_plan_progress(db_session, palace_id=palace.id, node_uid=pending_uid)
-    db_session.commit()
-    after = ensure_daily_plan(db_session)
-    db_session.commit()
-    assert after["review_done"] == 1
-    assert after["review_pending"] == 1
-    assert after["review_deferred"] == 2
-
-    # 上调额度 → 顺延项自动补位。
-    db_session.query(Config).filter_by(key="daily_review_limit").update(
-        {Config.value: "10"}
-    )
-    db_session.commit()
-    raised = ensure_daily_plan(db_session)
-    db_session.commit()
-    assert raised["review_pending"] == 3
-    assert raised["review_deferred"] == 0
+    assert summary["consolidate_pending"] == 1
+    assert summary["completed"] is False
 
 
 def test_rating_marks_plan_item_done(db_session):

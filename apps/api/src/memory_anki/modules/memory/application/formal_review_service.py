@@ -195,15 +195,13 @@ def get_fsrs_queue_payload(
     sort_by: str = "due_asc",
 ) -> dict[str, Any]:
     from memory_anki.modules.memory.application.scheduling.daily_plan import (
-        deferred_item_keys_for_today,
         ensure_daily_plan,
     )
 
     now = datetime.now(UTC)
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
-    # 每日任务层：放出今天的新学额度、标注超额顺延（幂等）。
+    # 每日任务层：放出今天的新学额度、记账（幂等）。复习不再有额度截断。
     plan_summary = ensure_daily_plan(session)
-    deferred_keys = deferred_item_keys_for_today(session)
     palaces = _palaces(session, chapter_id)
     palace_ids = [palace.id for palace in palaces]
     today_counts = today_review_counts_by_palace(session, palace_ids)
@@ -215,18 +213,10 @@ def get_fsrs_queue_payload(
         include_nodes=True,
     )
     due, later = [], []
-    deferred_node_count = 0
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
         nodes = list(projection.get("nodes") or [])
-        due_nodes = []
-        for item in nodes:
-            if not item.get("due"):
-                continue
-            if f"{palace.id}:{item.get('node_uid')}" in deferred_keys:
-                deferred_node_count += 1
-                continue
-            due_nodes.append(item)
+        due_nodes = [item for item in nodes if item.get("due")]
         later_nodes = [
             item
             for item in nodes
@@ -322,7 +312,7 @@ def get_fsrs_queue_payload(
         "due_count": sum(item["due_node_count"] for item in due),
         "later_today_count": sum(item["due_node_count"] for item in later),
         "overdue_count": overdue_count,
-        "deferred_count": deferred_node_count,
+        "consolidate_count": int(plan_summary.get("consolidate_pending") or 0),
         "plan_summary": plan_summary,
         "smoothed_count": 0,
         "stats": stats,

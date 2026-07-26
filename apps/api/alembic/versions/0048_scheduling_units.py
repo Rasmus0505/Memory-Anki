@@ -32,7 +32,12 @@ NEW_CONFIG_DEFAULTS = {
     "unit_fuzz_max_days": "2",
     "consolidate_enabled": "true",
     "consolidate_floor_days": "3",
+    "large_batch_hint_size": "60",
 }
+
+# 每日**复习**额度与整批调度冲突：按卡片数截断会把刚拉齐的批次重新切碎。
+# 到期就该复习；负载控制改为排期时的 load_balance。
+DEAD_CONFIG_KEYS = ("daily_review_limit",)
 
 
 def _root_uid(editor_doc: str | None) -> str | None:
@@ -121,6 +126,8 @@ def upgrade() -> None:
         )
     )
 
+    for key in DEAD_CONFIG_KEYS:
+        conn.execute(sa.text("DELETE FROM config WHERE key = :key"), {"key": key})
     for key, value in NEW_CONFIG_DEFAULTS.items():
         exists = conn.execute(
             sa.text("SELECT 1 FROM config WHERE key = :key"), {"key": key}

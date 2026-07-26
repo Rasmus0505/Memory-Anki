@@ -138,11 +138,11 @@ def formal_due_node_uids(
     """Nodes eligible for a new formal freeze (due/overdue + released first-learn).
 
     Backlog 语义：没有 ``ReviewNodeState`` 行的节点是未放出的新卡，不进冻结集；
-    每日任务层放出（建行）后才可冻结。当日被顺延的卡同样排除。
+    每日任务层放出（建行）后才可冻结。巩固卡由 ``is_formal_queue_eligible``
+    挡在外面——一张短间隔卡不该唤醒整个宫殿会话。
     """
     from memory_anki.infrastructure.db._tables.palaces import Palace
     from memory_anki.modules.memory.application.scheduling.daily_plan import (
-        deferred_item_keys_for_today,
         ensure_daily_plan,
     )
 
@@ -153,7 +153,6 @@ def formal_due_node_uids(
         return []
     # 进入宫殿复习前确保今天的新学额度已放出（幂等）。
     ensure_daily_plan(session, now=now, palace_id=palace_id)
-    deferred_keys = deferred_item_keys_for_today(session, now=now)
     from memory_anki.modules.memory.application.node_memory_projection import _tree
 
     root_uid, nodes = _tree(palace)
@@ -166,8 +165,6 @@ def formal_due_node_uids(
     result: list[str] = []
     for uid, row in states.items():
         if uid not in nodes or (root_uid is not None and uid == root_uid):
-            continue
-        if f"{palace_id}:{uid}" in deferred_keys:
             continue
         has_memory = row.last_review_at is not None
         if not is_formal_queue_eligible(row.schedule_source, has_memory=has_memory):

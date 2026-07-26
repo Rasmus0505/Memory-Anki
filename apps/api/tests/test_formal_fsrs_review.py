@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.memory.application.formal_review_service import (
@@ -698,8 +698,8 @@ def test_queue_reports_later_today_and_forecast_from_node_due_at(db_session):
     assert sum(item["due_count"] for item in forecast["items"]) == 2
 
 
-def test_queue_chapter_filter_and_daily_review_card_limit(db_session):
-    """每日复习上限按卡片数生效：超额卡标注顺延并从队列排除。"""
+def test_queue_chapter_filter_and_no_review_truncation(db_session):
+    """复习额度已删除：到期卡全部进队列，章节过滤照常工作。"""
     first = _palace(db_session)
     second = _palace(db_session)
     second.title = "FSRS second"
@@ -709,17 +709,15 @@ def test_queue_chapter_filter_and_daily_review_card_limit(db_session):
     overdue_at = datetime.now(UTC) - timedelta(hours=1)
     _set_all_due_at(db_session, first.id, overdue_at)
     _set_all_due_at(db_session, second.id, overdue_at)
-    db_session.add(Config(key="daily_review_limit", value="3"))
     db_session.commit()
 
-    limited = get_fsrs_queue_payload(db_session)
+    queue = get_fsrs_queue_payload(db_session)
     chapter_queue = get_fsrs_queue_payload(db_session, chapter.id)
 
-    # 4 张到期卡、额度 3：队列 3 张，1 张顺延可见。
-    assert limited["due_count"] == 3
-    assert limited["deferred_count"] == 1
-    assert limited["plan_summary"]["review_deferred"] == 1
-    assert limited["plan_summary"]["review_quota"] == 3
+    # 两个宫殿各 2 张到期卡，一张都不截断。
+    assert queue["due_count"] == 4
+    assert "deferred_count" not in queue
+    assert queue["plan_summary"]["review_pending"] == 4
     assert [item["palace_id"] for item in chapter_queue["reviews"]] == [first.id]
     assert chapter_queue["chapter"]["id"] == chapter.id
     assert chapter_queue["chapter"]["subject"]["name"] == subject.name

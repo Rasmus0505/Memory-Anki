@@ -50,7 +50,6 @@ def today_plan_payload(session: Session) -> dict[str, Any]:
         .first()
     )
     palaces: list[dict[str, Any]] = []
-    deferred_details: list[dict[str, Any]] = []
     if plan is not None:
         items = (
             session.query(ReviewDailyPlanItem)
@@ -62,34 +61,18 @@ def today_plan_payload(session: Session) -> dict[str, Any]:
             lambda: {
                 "review_pending": 0,
                 "review_done": 0,
-                "review_deferred": 0,
                 "new_pending": 0,
                 "new_done": 0,
+                "consolidate_pending": 0,
+                "consolidate_done": 0,
             }
         )
         for item in items:
             pid = int(item.palace_id or 0)
             bucket = grouped[pid]
-            if item.kind == "review":
-                if item.status == "done":
-                    bucket["review_done"] += 1
-                elif item.status == "deferred":
-                    bucket["review_deferred"] += 1
-                    node_uid = item.item_key.split(":", 1)[1] if ":" in item.item_key else item.item_key
-                    deferred_details.append(
-                        {
-                            "palace_id": pid,
-                            "node_uid": node_uid,
-                            "defer_reason": item.defer_reason,
-                        }
-                    )
-                else:
-                    bucket["review_pending"] += 1
-            else:
-                if item.status == "done":
-                    bucket["new_done"] += 1
-                else:
-                    bucket["new_pending"] += 1
+            key = f"{item.kind}_{'done' if item.status == 'done' else 'pending'}"
+            if key in bucket:
+                bucket[key] += 1
         titles = _palace_titles(session, set(grouped))
         for pid, bucket in sorted(grouped.items()):
             palaces.append(
@@ -99,9 +82,7 @@ def today_plan_payload(session: Session) -> dict[str, Any]:
                     **bucket,
                 }
             )
-        for detail in deferred_details:
-            detail["palace_title"] = titles.get(int(detail["palace_id"]), "未命名宫殿")
-    return {**summary, "palaces": palaces, "deferred_details": deferred_details}
+    return {**summary, "palaces": palaces}
 
 
 def preview_intervals_payload(
