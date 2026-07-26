@@ -82,6 +82,181 @@ def api_load_forecast(days: int = 7, session: Session = Depends(session_dep)):
     return get_fsrs_load_forecast(session, days)
 
 
+@router.get("/review/today-plan")
+def api_today_plan(session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.insight_service import (
+        today_plan_payload,
+    )
+
+    payload = today_plan_payload(session)
+    session.commit()  # 幂等放出的新学卡需要落库
+    return {"item": payload}
+
+
+@router.post("/review/preview-intervals")
+def api_preview_intervals(data: dict, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.insight_service import (
+        preview_intervals_payload,
+    )
+
+    items = data.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="items must be a list")
+    return {"items": preview_intervals_payload(session, items=items)}
+
+
+@router.get("/review/palaces/{palace_id}/nodes/{node_uid}/schedule-detail")
+def api_schedule_detail(
+    palace_id: int, node_uid: str, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.insight_service import (
+        schedule_detail_payload,
+    )
+
+    return {"item": schedule_detail_payload(session, palace_id=palace_id, node_uid=node_uid)}
+
+
+@router.post("/review/simulate-load")
+def api_simulate_load(data: dict, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.insight_service import (
+        simulate_load_payload,
+    )
+
+    try:
+        retention = float(data.get("desired_retention"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="desired_retention required") from exc
+    days = int(data.get("days") or 30)
+    return {"item": simulate_load_payload(session, desired_retention=retention, days=days)}
+
+
+@router.get("/review/palaces/{palace_id}/settings")
+def api_get_palace_review_settings(
+    palace_id: int, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        get_palace_review_settings,
+    )
+
+    row = get_palace_review_settings(session, palace_id)
+    return {
+        "item": {
+            "palace_id": palace_id,
+            "aggregation_enabled": bool(row.aggregation_enabled) if row else False,
+            "aggregation_max_pull_days": row.aggregation_max_pull_days if row else None,
+            "aggregation_max_push_days": row.aggregation_max_push_days if row else None,
+            "daily_new_limit_override": row.daily_new_limit_override if row else None,
+            "daily_review_limit_override": row.daily_review_limit_override if row else None,
+        }
+    }
+
+
+@router.put("/review/palaces/{palace_id}/settings")
+def api_put_palace_review_settings(
+    palace_id: int, data: dict, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        clear_aggregation,
+        upsert_palace_review_settings,
+    )
+
+    def _opt_int(key: str):
+        if key not in data:
+            return ...
+        value = data.get(key)
+        return None if value is None else int(value)
+
+    row = upsert_palace_review_settings(
+        session,
+        palace_id,
+        aggregation_enabled=(
+            bool(data["aggregation_enabled"]) if "aggregation_enabled" in data else None
+        ),
+        aggregation_max_pull_days=_opt_int("aggregation_max_pull_days"),
+        aggregation_max_push_days=_opt_int("aggregation_max_push_days"),
+        daily_new_limit_override=_opt_int("daily_new_limit_override"),
+        daily_review_limit_override=_opt_int("daily_review_limit_override"),
+    )
+    cleared = 0
+    if data.get("aggregation_enabled") is False:
+        cleared = clear_aggregation(session, palace_id=palace_id)
+    session.commit()
+    return {
+        "item": {
+            "palace_id": palace_id,
+            "aggregation_enabled": bool(row.aggregation_enabled),
+            "aggregation_max_pull_days": row.aggregation_max_pull_days,
+            "aggregation_max_push_days": row.aggregation_max_push_days,
+            "daily_new_limit_override": row.daily_new_limit_override,
+            "daily_review_limit_override": row.daily_review_limit_override,
+            "aggregation_cleared_count": cleared,
+        }
+    }
+
+
+def _aggregation_move_payload(move) -> dict:
+    return {
+        "node_uid": move.node_uid,
+        "raw_due_local": move.raw_due_local.isoformat(),
+        "target_local": move.target_local.isoformat(),
+        "retention_drop_pp": move.retention_drop_pp,
+    }
+
+
+@router.post("/review/palaces/{palace_id}/aggregation/preview")
+def api_aggregation_preview(
+    palace_id: int, data: dict | None = None, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        compute_aggregation,
+    )
+
+    horizon = int((data or {}).get("horizon_days") or 30)
+    preview = compute_aggregation(session, palace_id=palace_id, horizon_days=horizon)
+    return {
+        "item": {
+            "palace_id": palace_id,
+            "horizon_days": preview.horizon_days,
+            "moves": [_aggregation_move_payload(m) for m in preview.moves],
+            "day_counts_before": preview.day_counts_before,
+            "day_counts_after": preview.day_counts_after,
+        }
+    }
+
+
+@router.post("/review/palaces/{palace_id}/aggregation/apply")
+def api_aggregation_apply(
+    palace_id: int, data: dict | None = None, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        apply_aggregation,
+        compute_aggregation,
+    )
+
+    horizon = int((data or {}).get("horizon_days") or 30)
+    preview = compute_aggregation(session, palace_id=palace_id, horizon_days=horizon)
+    applied = apply_aggregation(session, palace_id=palace_id, preview=preview)
+    session.commit()
+    return {
+        "item": {
+            "palace_id": palace_id,
+            "applied_count": applied,
+            "moves": [_aggregation_move_payload(m) for m in preview.moves],
+        }
+    }
+
+
+@router.post("/review/palaces/{palace_id}/aggregation/clear")
+def api_aggregation_clear(palace_id: int, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        clear_aggregation,
+    )
+
+    cleared = clear_aggregation(session, palace_id=palace_id)
+    session.commit()
+    return {"item": {"palace_id": palace_id, "cleared_count": cleared}}
+
+
 @router.get("/review/palaces/{palace_id}/memory")
 def api_palace_memory(palace_id: int, session: Session = Depends(session_dep)):
     try:
