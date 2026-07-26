@@ -261,20 +261,73 @@ def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):
     assert restored.stability and restored.stability > 0
 
 
-def test_projection_excludes_root_and_reports_due_nodes(db_session):
+def test_projection_backlog_until_daily_release_then_due(db_session):
+    """新卡先进 backlog（不到期）；每日放出后按额度成为到期新学。"""
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ensure_daily_plan,
+    )
+
     palace = _palace(db_session)
     projection = get_palace_memory_projection(db_session, palace.id)
     assert projection["node_count"] == 3
-    # First-learn: unlearned tree nodes are formal-due so new palaces enter review.
-    assert projection["due_node_count"] == 3
-    assert projection.get("uninitialized_node_count", 0) == 3
+    assert projection["due_node_count"] == 0
+    assert projection.get("backlog_new_node_count", 0) == 3
     assert projection["mastery_percent"] == 0
-    assert projection["has_due_review"] is True
-    assert projection["review_entry_mode"] in {"node", "palace"}
-    assert isinstance(projection["review_branch_summaries"], list)
-    assert len(projection["review_branch_summaries"]) >= 2
-    assert all("branch_uid" in row for row in projection["review_branch_summaries"])
-    assert all("status" in row for row in projection["review_branch_summaries"])
+    assert projection["has_due_review"] is False
+
+    summary = ensure_daily_plan(db_session)
+    assert summary["new_pending"] == 3
+    assert summary["backlog_new"] == 0
+    db_session.commit()
+
+    released = get_palace_memory_projection(db_session, palace.id)
+    assert released["due_node_count"] == 3
+    assert released.get("backlog_new_node_count", 0) == 0
+    assert released["has_due_review"] is True
+    assert released["review_entry_mode"] in {"node", "palace"}
+    assert isinstance(released["review_branch_summaries"], list)
+    assert len(released["review_branch_summaries"]) >= 2
+    assert all("branch_uid" in row for row in released["review_branch_summaries"])
+    assert all("status" in row for row in released["review_branch_summaries"])
+
+
+def test_daily_new_limit_releases_incrementally(db_session):
+    """大宫殿新卡按每日新学额度逐日放出，而不是当天全部到期。"""
+    from memory_anki.infrastructure.db._tables.misc import Config
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ensure_daily_plan,
+    )
+
+    document = {
+        "root": {
+            "data": {"uid": "root", "text": "root"},
+            "children": [
+                {"data": {"uid": f"n{i}", "text": f"N{i}"}, "children": []}
+                for i in range(30)
+            ],
+        }
+    }
+    palace = Palace(
+        title="Big", description="", difficulty=0, review_mode="review",
+        editor_doc=json.dumps(document),
+    )
+    db_session.add(palace)
+    db_session.add(Config(key="daily_new_limit", value="5"))
+    db_session.commit()
+
+    summary = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert summary["new_pending"] == 5
+    assert summary["backlog_new"] == 25
+    projection = get_palace_memory_projection(db_session, palace.id)
+    assert projection["due_node_count"] == 5
+    assert projection["backlog_new_node_count"] == 25
+
+    # 同日重复调用幂等：不重复放出。
+    again = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert again["new_pending"] == 5
+    assert again["backlog_new"] == 25
 
 
 def test_due_rollup_skips_ratings_and_is_request_cached(db_session):

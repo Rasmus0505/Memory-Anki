@@ -881,7 +881,7 @@ def test_temporary_multi_level_same_topology_as_permanent():
         temporary_root_uids=marks,
     )
     assert [u.branch_uid for u in temporary] == [u.branch_uid for u in permanent]
-    for p_unit, t_unit in zip(permanent, temporary):
+    for p_unit, t_unit in zip(permanent, temporary, strict=False):
         assert list(p_unit.ratable_node_uids) == list(t_unit.ratable_node_uids)
         assert p_unit.selection_reason.replace("permanent_mark", "temporary_mark") == t_unit.selection_reason
 

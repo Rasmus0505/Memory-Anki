@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.memory.application.formal_review_amendment import (
     reopen_formal_review_for_amendment,
@@ -194,8 +194,16 @@ def get_fsrs_queue_payload(
     include_items: bool = True,
     sort_by: str = "due_asc",
 ) -> dict[str, Any]:
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        deferred_item_keys_for_today,
+        ensure_daily_plan,
+    )
+
     now = datetime.now(UTC)
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
+    # 每日任务层：放出今天的新学额度、标注超额顺延（幂等）。
+    plan_summary = ensure_daily_plan(session)
+    deferred_keys = deferred_item_keys_for_today(session)
     palaces = _palaces(session, chapter_id)
     palace_ids = [palace.id for palace in palaces]
     today_counts = today_review_counts_by_palace(session, palace_ids)
@@ -207,10 +215,18 @@ def get_fsrs_queue_payload(
         include_nodes=True,
     )
     due, later = [], []
+    deferred_node_count = 0
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
         nodes = list(projection.get("nodes") or [])
-        due_nodes = [item for item in nodes if item.get("due")]
+        due_nodes = []
+        for item in nodes:
+            if not item.get("due"):
+                continue
+            if f"{palace.id}:{item.get('node_uid')}" in deferred_keys:
+                deferred_node_count += 1
+                continue
+            due_nodes.append(item)
         later_nodes = [
             item
             for item in nodes
@@ -239,18 +255,9 @@ def get_fsrs_queue_payload(
                     today_review_count=today_count,
                 )
             )
-    # Always earliest-due first before daily limit so overdue work is not dropped.
     due = sort_queue_items(due, "due_asc")
     later = sort_queue_items(later, "due_asc")
     overdue_count = sum(item["overdue_node_count"] for item in due)
-    if chapter_id is None:
-        config = session.query(Config).filter_by(key="daily_max_reviews").first()
-        try:
-            daily_limit = int(config.value) if config and config.value else 0
-        except (TypeError, ValueError):
-            daily_limit = 0
-        if daily_limit > 0:
-            due = due[:daily_limit]
     # Optional display sort after limit (next-due / dashboard still default due_asc).
     if sort_by != "due_asc":
         due = sort_queue_items(due, sort_by)
@@ -315,6 +322,8 @@ def get_fsrs_queue_payload(
         "due_count": sum(item["due_node_count"] for item in due),
         "later_today_count": sum(item["due_node_count"] for item in later),
         "overdue_count": overdue_count,
+        "deferred_count": deferred_node_count,
+        "plan_summary": plan_summary,
         "smoothed_count": 0,
         "stats": stats,
         "chapter": chapter,

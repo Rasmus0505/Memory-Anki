@@ -135,19 +135,27 @@ def formal_due_node_uids(
     now: datetime | None = None,
     include_overdue: bool = True,
 ) -> list[str]:
-    """Nodes eligible for a new formal freeze (due/overdue + first-learn).
+    """Nodes eligible for a new formal freeze (due/overdue + released first-learn).
 
-    Walks the palace tree so brand-new palaces without ``ReviewNodeState`` rows
-    still freeze every non-root card for first learning.
+    Backlog 语义：没有 ``ReviewNodeState`` 行的节点是未放出的新卡，不进冻结集；
+    每日任务层放出（建行）后才可冻结。当日被顺延的卡同样排除。
     """
     from memory_anki.infrastructure.db._tables.palaces import Palace
-    from memory_anki.modules.memory.application.node_memory_projection import _tree
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        deferred_item_keys_for_today,
+        ensure_daily_plan,
+    )
 
     now = now or utc_now_naive()
     today = local_date_of(now)
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None:
         return []
+    # 进入宫殿复习前确保今天的新学额度已放出（幂等）。
+    ensure_daily_plan(session, now=now, palace_id=palace_id)
+    deferred_keys = deferred_item_keys_for_today(session, now=now)
+    from memory_anki.modules.memory.application.node_memory_projection import _tree
+
     root_uid, nodes = _tree(palace)
     states = {
         row.node_uid: row
@@ -156,19 +164,17 @@ def formal_due_node_uids(
         .all()
     }
     result: list[str] = []
-    for uid in nodes:
-        if root_uid is not None and uid == root_uid:
+    for uid, row in states.items():
+        if uid not in nodes or (root_uid is not None and uid == root_uid):
             continue
-        row = states.get(uid)
-        if row is None:
-            result.append(uid)
+        if f"{palace_id}:{uid}" in deferred_keys:
             continue
         has_memory = row.last_review_at is not None
         if not is_formal_queue_eligible(row.schedule_source, has_memory=has_memory):
             continue
         if row.schedule_source == SCHEDULE_REINFORCEMENT:
             continue
-        # Never-reviewed nodes: always due for first learning.
+        # Released-but-never-reviewed nodes: due for first learning.
         if not has_memory:
             result.append(uid)
             continue

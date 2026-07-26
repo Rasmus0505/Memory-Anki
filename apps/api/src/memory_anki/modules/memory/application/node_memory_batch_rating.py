@@ -115,6 +115,9 @@ def rate_nodes_batch_single(
     from memory_anki.modules.memory.application.legacy_fsrs_repair import (
         normalize_legacy_card_clock,
     )
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        record_plan_progress,
+    )
     from memory_anki.modules.memory.application.wave_service import (
         apply_rating_to_schedule,
         mark_wave_item_rated,
@@ -249,6 +252,12 @@ def rate_nodes_batch_single(
             raw_due_at=raw_due,
             evidence_origin=evidence_origin,
             source_scene=source_scene,
+        )
+        record_plan_progress(
+            session,
+            palace_id=palace_id,
+            node_uid=node_uid,
+            reviewed_at=_naive(reviewed_now),
         )
         event_id = _event_id(operation_id, node_uid)
         events.append(

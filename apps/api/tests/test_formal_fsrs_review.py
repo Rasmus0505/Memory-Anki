@@ -693,7 +693,8 @@ def test_queue_reports_later_today_and_forecast_from_node_due_at(db_session):
     assert sum(item["due_count"] for item in forecast["items"]) == 2
 
 
-def test_queue_chapter_filter_and_daily_palace_limit(db_session):
+def test_queue_chapter_filter_and_daily_review_card_limit(db_session):
+    """每日复习上限按卡片数生效：超额卡标注顺延并从队列排除。"""
     first = _palace(db_session)
     second = _palace(db_session)
     second.title = "FSRS second"
@@ -703,15 +704,17 @@ def test_queue_chapter_filter_and_daily_palace_limit(db_session):
     overdue_at = datetime.now(UTC) - timedelta(hours=1)
     _set_all_due_at(db_session, first.id, overdue_at)
     _set_all_due_at(db_session, second.id, overdue_at)
-    db_session.add(Config(key="daily_max_reviews", value="1"))
+    db_session.add(Config(key="daily_review_limit", value="3"))
     db_session.commit()
 
     limited = get_fsrs_queue_payload(db_session)
     chapter_queue = get_fsrs_queue_payload(db_session, chapter.id)
 
-    assert len(limited["reviews"]) == 1
-    assert limited["due_count"] == 2
-    assert limited["overdue_count"] == 4
+    # 4 张到期卡、额度 3：队列 3 张，1 张顺延可见。
+    assert limited["due_count"] == 3
+    assert limited["deferred_count"] == 1
+    assert limited["plan_summary"]["review_deferred"] == 1
+    assert limited["plan_summary"]["review_quota"] == 3
     assert [item["palace_id"] for item in chapter_queue["reviews"]] == [first.id]
     assert chapter_queue["chapter"]["id"] == chapter.id
     assert chapter_queue["chapter"]["subject"]["name"] == subject.name

@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.infrastructure.db._tables.reviews import FreestyleTemporaryMark, ReviewNodeState
+from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.memory.application.temporary_mark_unify import (
     unify_fsrs_progress_for_node_groups,
 )

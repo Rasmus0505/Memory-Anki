@@ -457,6 +457,9 @@ def rate_nodes(
     from memory_anki.modules.memory.application.legacy_fsrs_repair import (
         normalize_legacy_card_clock,
     )
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        record_plan_progress,
+    )
     from memory_anki.modules.memory.application.wave_service import (
         apply_rating_to_schedule,
         mark_wave_item_rated,
@@ -573,6 +576,12 @@ def rate_nodes(
             raw_due_at=raw_due,
             evidence_origin=evidence_origin,
             source_scene=source_scene,
+        )
+        record_plan_progress(
+            session,
+            palace_id=palace_id,
+            node_uid=uid,
+            reviewed_at=_naive(reviewed_now),
         )
         event_id = _event_id(operation_id, uid)
         events.append(

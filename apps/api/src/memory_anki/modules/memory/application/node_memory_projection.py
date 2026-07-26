@@ -500,6 +500,7 @@ def _projection_from_tree(
     overdue_count = 0
     reinforcement_count = 0
     uninitialized_count = 0
+    backlog_count = 0
     content_changed_count = 0
     severe = 0
     next_due: str | None = None
@@ -515,11 +516,13 @@ def _projection_from_tree(
         if row is None:
             stability = 0.0
             retrievability = 0.0
-            # First-learn: new palace nodes have no FSRS row yet — treat as due now.
-            due_at = now
+            # Backlog：未放出的新卡没有 state 行，不进入任何到期队列。
+            # 每日任务层（daily_plan.release）按新学额度逐日放出并建行。
+            due_at = None
             state_source = "new"
             schedule_source = SCHEDULE_UNINITIALIZED
-            formal_due = True
+            formal_due = False
+            backlog_count += 1
         elif (
             row.content_fingerprint
             and row.content_fingerprint != nodes[uid]["content_fingerprint"]
@@ -681,6 +684,7 @@ def _projection_from_tree(
         "overdue_node_count": overdue_count,
         "reinforcement_due_count": reinforcement_count,
         "uninitialized_node_count": uninitialized_count,
+        "backlog_new_node_count": backlog_count,
         "content_changed_node_count": content_changed_count,
         "next_review_at": next_due,
         "mastered": total > 0 and mastered_count / total >= 0.9 and severe == 0,
