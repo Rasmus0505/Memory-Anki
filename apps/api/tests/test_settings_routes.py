@@ -23,12 +23,12 @@ class TestSettings:
     def test_put_persists_known_key(self, client):
         response = client.put(
             "/api/v1/settings",
-            json={"daily_max_reviews": "12"},
+            json={"daily_review_limit": "120"},
         )
 
         assert response.status_code == 200
-        assert response.json()["daily_max_reviews"] == "12"
-        assert client.get("/api/v1/settings").json()["daily_max_reviews"] == "12"
+        assert response.json()["daily_review_limit"] == "120"
+        assert client.get("/api/v1/settings").json()["daily_review_limit"] == "120"
 
     def test_put_ignores_unknown_key(self, client):
         response = client.put("/api/v1/settings", json={"not_a_real_key": "1"})
@@ -50,23 +50,34 @@ class TestReviewSettings:
         # FSRS settings apply immediately; legacy stage rebuild was removed.
         response = client.put(
             "/api/v1/settings/review",
-            json={"sleep_review_time": "23:45", "apply_to_pending": "all"},
+            json={"desired_retention": "0.85", "apply_to_pending": "all"},
         )
         assert response.status_code == 200
-        assert response.json()["sleep_review_time"] == "23:45"
+        assert response.json()["desired_retention"] == "0.85"
         with session_factory() as session:
-            row = session.query(Config).filter_by(key="sleep_review_time").first()
+            row = session.query(Config).filter_by(key="desired_retention").first()
             assert row is not None
-            assert row.value == "23:45"
+            assert row.value == "0.85"
 
     def test_review_aliases_share_config(self, client):
         response = client.put(
             "/api/v1/settings/review",
-            json={"sleep_review_time": "21:30"},
+            json={"daily_new_limit": "30"},
         )
 
         assert response.status_code == 200
-        assert client.get("/api/v1/settings/review").json()["sleep_review_time"] == "21:30"
+        assert client.get("/api/v1/settings/review").json()["daily_new_limit"] == "30"
+
+    def test_dead_legacy_keys_are_rejected(self, client):
+        """死配置键（艾宾浩斯间隔、逾期平滑等）不再被接受或返回。"""
+        response = client.put(
+            "/api/v1/settings/review",
+            json={"ebbinghaus_intervals": "1,2,4", "sleep_review_time": "22:00"},
+        )
+        assert response.status_code == 200
+        body = client.get("/api/v1/settings/review").json()
+        assert "ebbinghaus_intervals" not in body
+        assert "sleep_review_time" not in body
 
 
 class TestClientPreferences:

@@ -34,13 +34,22 @@ SCHEDULE_WAVE_ADSORB = "wave_adsorb"
 SCHEDULE_CALIBRATED = "calibrated"
 SCHEDULE_REINFORCEMENT = "reinforcement"
 
-# Safety window: pull earlier ≤ 20% of interval and ≤ 3 days;
-# push later ≤ 10% of interval and ≤ 1 day; retention drop ≤ 3pp.
-MAX_PULL_EARLIER_RATIO = 0.20
-MAX_PULL_EARLIER_DAYS = 3
-MAX_PUSH_LATER_RATIO = 0.10
-MAX_PUSH_LATER_DAYS = 1
-MAX_RETENTION_DROP = 0.03
+@dataclass(frozen=True)
+class AggregationPolicy:
+    """可选聚合层的对称容忍窗：提前/推后同样受限，且都有硬上限。
+
+    - 双向天数上限（max_pull_days / max_push_days）
+    - 双向占间隔比例上限（max_shift_ratio）——提前复习同样是浪费，需受约束
+    - 推后额外受保持率损失上限（max_retention_drop）
+    """
+
+    max_pull_days: int = 2
+    max_push_days: int = 2
+    max_shift_ratio: float = 0.15
+    max_retention_drop: float = 0.03
+
+
+DEFAULT_AGGREGATION_POLICY = AggregationPolicy()
 
 # Legacy defaults (clock delay removed). Weak ratings use end-of-batch restudy.
 DEFAULT_AGAIN_REINFORCEMENT_MINUTES = 0
@@ -84,10 +93,11 @@ def safety_window_bounds(
     *,
     anchor: date,
     interval_days_value: float,
+    policy: AggregationPolicy = DEFAULT_AGGREGATION_POLICY,
 ) -> tuple[date, date]:
-    """Return [earliest, latest] local dates within the adaptive safety window."""
-    pull_days = min(MAX_PULL_EARLIER_DAYS, interval_days_value * MAX_PULL_EARLIER_RATIO)
-    push_days = min(MAX_PUSH_LATER_DAYS, interval_days_value * MAX_PUSH_LATER_RATIO)
+    """Return [earliest, latest] local dates within the symmetric safety window."""
+    pull_days = min(policy.max_pull_days, interval_days_value * policy.max_shift_ratio)
+    push_days = min(policy.max_push_days, interval_days_value * policy.max_shift_ratio)
     earliest = anchor - timedelta(days=math.floor(pull_days))
     latest = anchor + timedelta(days=math.floor(push_days))
     return earliest, latest
@@ -128,8 +138,9 @@ def retention_ok_for_later(
     raw_due_local: date,
     candidate_local: date,
     last_review_at: datetime | None,
+    policy: AggregationPolicy = DEFAULT_AGGREGATION_POLICY,
 ) -> bool:
-    """Later wave is allowed only if projected R stays within 3pp of target."""
+    """Later wave is allowed only if projected R stays within the drop budget."""
     if candidate_local <= raw_due_local:
         return True
     if last_review_at is None or stability_days is None or stability_days <= 0:
@@ -140,7 +151,29 @@ def retention_ok_for_later(
     r_at_candidate = fsrs_retrievability(
         stability_days, elapsed_days=float(base_elapsed + delay_days)
     )
-    return r_at_candidate >= (desired_retention - MAX_RETENTION_DROP)
+    return r_at_candidate >= (desired_retention - policy.max_retention_drop)
+
+
+def retention_drop_pp(
+    *,
+    stability_days: float | None,
+    raw_due_local: date,
+    candidate_local: date,
+    last_review_at: datetime | None,
+) -> float:
+    """Percentage-point R drop (positive = worse) when moving raw→candidate day.
+
+    提前（candidate 早于 raw）返回负值（R 更高），推后返回正值。
+    """
+    if last_review_at is None or stability_days is None or stability_days <= 0:
+        return 0.0
+    base_elapsed = max((raw_due_local - local_date_of(last_review_at)).days, 0)
+    shift_days = (candidate_local - raw_due_local).days
+    r_raw = fsrs_retrievability(stability_days, elapsed_days=float(base_elapsed))
+    r_candidate = fsrs_retrievability(
+        stability_days, elapsed_days=float(max(base_elapsed + shift_days, 0))
+    )
+    return r_raw - r_candidate
 
 
 def pick_adsorb_wave(
@@ -151,23 +184,25 @@ def pick_adsorb_wave(
     stability_days: float | None,
     desired_retention: float,
     last_review_at: datetime | None,
+    policy: AggregationPolicy = DEFAULT_AGGREGATION_POLICY,
+    today: date | None = None,
 ) -> WaveCandidate | None:
-    """Choose the nearest existing formal wave inside the safety window.
+    """Choose the nearest existing scheduled formal wave inside the safety window.
 
+    只吸附到未来的 SCHEDULED 波次：进行中/暂停的会话冻结波次不接收新卡，
+    否则学习步的当日短到期会把已冻结的会话撑出新的未评分项。
     Prefer earlier wave when distances tie. Returns None when none fit.
     """
     earliest, latest = safety_window_bounds(
-        anchor=raw_due_local, interval_days_value=interval_days_value
+        anchor=raw_due_local, interval_days_value=interval_days_value, policy=policy
     )
     eligible: list[tuple[int, date, WaveCandidate]] = []
     for wave in candidates:
-        if wave.status not in {
-            WAVE_STATUS_SCHEDULED,
-            WAVE_STATUS_ACTIVE,
-            WAVE_STATUS_PAUSED,
-        }:
+        if wave.status != WAVE_STATUS_SCHEDULED:
             continue
         day = wave.local_date
+        if today is not None and day <= today:
+            continue
         if day < earliest or day > latest:
             continue
         if not retention_ok_for_later(
@@ -176,6 +211,7 @@ def pick_adsorb_wave(
             raw_due_local=raw_due_local,
             candidate_local=day,
             last_review_at=last_review_at,
+            policy=policy,
         ):
             continue
         distance = abs((day - raw_due_local).days)

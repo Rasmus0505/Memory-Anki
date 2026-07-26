@@ -286,8 +286,16 @@ def _restore_state(
 
 
 def _apply_card(
-    row: ReviewNodeState, card: Card, *, fingerprint: str, source: str = "manual"
+    row: ReviewNodeState,
+    card: Card,
+    *,
+    fingerprint: str,
+    source: str = "manual",
+    session: Session | None = None,
 ) -> None:
+    # 快照记录实际调度所用的参数，而非模块默认值——否则用户改过
+    # desired_retention 后，历史审计与重算会拿到错误的参数。
+    settings = load_fsrs_settings(session)
     row.state = int(card.state)
     row.step = card.step
     row.stability = card.stability
@@ -296,12 +304,12 @@ def _apply_card(
     row.due_at = due
     row.raw_due_at = due
     row.last_review_at = _naive(card.last_review)
-    row.desired_retention = DEFAULT_RETENTION
-    row.maximum_interval = DEFAULT_MAXIMUM_INTERVAL
+    row.desired_retention = float(settings["desired_retention"])
+    row.maximum_interval = int(settings["maximum_interval"])
     row.content_fingerprint = fingerprint
     row.state_source = source
     row.scheduler_version = SCHEDULER_VERSION
-    row.parameter_version = PARAMETER_VERSION
+    row.parameter_version = str(settings.get("parameter_version") or PARAMETER_VERSION)
     row.updated_at = utc_now_naive()
 
 

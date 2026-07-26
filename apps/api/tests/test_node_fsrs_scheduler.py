@@ -127,15 +127,18 @@ def test_again_and_hard_schedule_immediate_restudy_not_days(db_session):
     assert again_delta <= timedelta(minutes=1, seconds=5)
 
 
-def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
-    """记得/轻松 must not bounce back in 10m/1h learning or relearning steps."""
-    from datetime import timedelta
+def test_learning_steps_apply_verbatim_no_strong_rating_floor(db_session):
+    """FSRS 直出：学习步（10m/1h）真实生效，记得/轻松不再被强制抬到多日。
+
+    新卡第一次记得 → 进入下一学习步（~1小时，仍在 Learning）；
+    到期后再记得 → 毕业进 Review（多日间隔）。
+    """
+    from datetime import UTC, datetime, timedelta
 
     from fsrs import State
 
     palace = _palace(db_session)
 
-    # First Good on a brand-new card would otherwise be ~1h (learning step).
     rate_nodes(
         db_session,
         palace_id=palace.id,
@@ -148,35 +151,35 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
     first = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     first_raw = first.raw_due_at or first.due_at
     first_delta = first_raw - (first.last_review_at or first_raw)
-    assert first_delta >= timedelta(days=1) - timedelta(seconds=5)
-    assert int(first.state) == int(State.Review)
+    assert timedelta(minutes=5) <= first_delta <= timedelta(hours=2)
+    assert int(first.state) == int(State.Learning)
 
-    # Hard puts the card into a short relearning window…
-    rate_nodes(
-        db_session,
-        palace_id=palace.id,
-        node_uid="b",
-        rating=2,
-        study_session_id="s-relearn",
-        operation_id="op-relearn-hard",
-        rating_scope="single",
-    )
-    # …then Good must still floor to ≥1 day, not the 1h relearning step.
+    # Simulate the 1h step elapsing, then Good again → graduate to Review.
+    first.due_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
+    db_session.commit()
     rate_nodes(
         db_session,
         palace_id=palace.id,
         node_uid="b",
         rating=3,
-        study_session_id="s-relearn",
-        operation_id="op-relearn-good",
+        study_session_id="s-graduate",
+        operation_id="op-graduate",
         rating_scope="single",
     )
-    recovered = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
-    recovered_raw = recovered.raw_due_at or recovered.due_at
-    recovered_delta = recovered_raw - (recovered.last_review_at or recovered_raw)
-    assert recovered_delta >= timedelta(days=1) - timedelta(seconds=5)
-    assert int(recovered.state) == int(State.Review)
+    graduated = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    graduated_raw = graduated.raw_due_at or graduated.due_at
+    graduated_delta = graduated_raw - (graduated.last_review_at or graduated_raw)
+    assert graduated_delta >= timedelta(hours=12)
+    assert int(graduated.state) == int(State.Review)
 
+
+def test_easy_on_new_card_graduates_immediately_with_fsrs_interval(db_session):
+    """轻松跳过学习步直接毕业，间隔由 FSRS 给出（不再有人为 3 天下限）。"""
+    from datetime import timedelta
+
+    from fsrs import State
+
+    palace = _palace(db_session)
     rate_nodes(
         db_session,
         palace_id=palace.id,
@@ -189,7 +192,61 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
     easy = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a").one()
     easy_raw = easy.raw_due_at or easy.due_at
     easy_delta = easy_raw - (easy.last_review_at or easy_raw)
-    assert easy_delta >= timedelta(days=3) - timedelta(seconds=5)
+    assert easy_delta >= timedelta(hours=12)
+    assert int(easy.state) == int(State.Review)
+
+
+def test_fuzzing_config_respected_and_preview_deterministic(db_session):
+    """enable_fuzzing 配置生效；间隔预览强制关 fuzz 保证按钮显示稳定。"""
+    from fsrs import Card, Rating, State
+
+    from memory_anki.modules.memory.application.fsrs_runtime import build_scheduler
+    from memory_anki.modules.memory.application.scheduling.kernel import preview_intervals
+
+    # conftest 里测试库 enable_fuzzing=false → session scheduler 不 fuzz。
+    scheduler = build_scheduler(db_session)
+    assert scheduler.enable_fuzzing is False
+    fuzzed = build_scheduler(enable_fuzzing=True)
+    assert fuzzed.enable_fuzzing is True
+
+    # Mature review card: preview must be identical across calls (no fuzz).
+    card = Card(card_id=1)
+    scheduler_plain = build_scheduler(enable_fuzzing=False)
+    for _ in range(3):
+        card, _log = scheduler_plain.review_card(card, Rating(3))
+    assert int(card.state) == int(State.Review)
+    p1 = preview_intervals(None, card=card)
+    p2 = preview_intervals(None, card=card)
+    assert {r: p.interval_seconds for r, p in p1.items()} == {
+        r: p.interval_seconds for r, p in p2.items()
+    }
+    # 四键间隔单调：忘记 < 困难 ≤ 记得 ≤ 轻松。
+    assert p1[1].interval_seconds < p1[2].interval_seconds
+    assert p1[2].interval_seconds <= p1[3].interval_seconds
+    assert p1[3].interval_seconds <= p1[4].interval_seconds
+
+
+def test_parameter_snapshot_records_actual_settings(db_session):
+    """行内参数快照必须等于实际调度配置，而非模块默认值。"""
+    from memory_anki.infrastructure.db._tables.misc import Config
+
+    db_session.add(Config(key="desired_retention", value="0.85"))
+    db_session.add(Config(key="maximum_interval", value="500"))
+    db_session.commit()
+
+    palace = _palace(db_session)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id="s-snap",
+        operation_id="op-snap",
+        rating_scope="single",
+    )
+    row = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    assert row.desired_retention == 0.85
+    assert row.maximum_interval == 500
 
 
 def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):

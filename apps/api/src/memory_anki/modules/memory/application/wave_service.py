@@ -353,6 +353,11 @@ def assign_node_to_formal_wave(
     force_new_day: date | None = None,
 ) -> ReviewWave:
     """Adsorb a node into the nearest safe formal wave or create one for raw_due's day."""
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        aggregation_policy_for,
+        get_palace_review_settings,
+    )
+
     remove_node_from_open_waves(session, row)
     raw_local = local_date_of(raw_due_at)
     target_day = force_new_day or raw_local
@@ -367,6 +372,8 @@ def assign_node_to_formal_wave(
             stability_days=row.stability,
             desired_retention=float(desired_retention or row.desired_retention or 0.9),
             last_review_at=row.last_review_at,
+            policy=aggregation_policy_for(get_palace_review_settings(session, row.palace_id)),
+            today=local_date_of(_now()),
         )
     if picked is not None:
         wave = session.get(ReviewWave, picked.wave_id)
@@ -493,17 +500,46 @@ def apply_rating_to_schedule(
             "schedule_reason": row.schedule_reason,
         }
 
-    reason = "practice" if source_scene in {"practice", "local_practice"} else "manual"
-    wave = assign_node_to_formal_wave(
-        session,
-        row,
-        raw_due_at=raw_due_at,
-        reason=reason,
-        desired_retention=desired_retention,
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        aggregation_enabled,
     )
+
+    reason = "practice" if source_scene in {"practice", "local_practice"} else "manual"
+    raw_local = local_date_of(raw_due_at)
+    today = local_date_of(_now())
+    # 聚合只处理未来日期：当天短到期（学习步）永远直出，否则会把
+    # 已冻结的会话波次撑出新的未评分项。
+    if aggregation_enabled(session, row.palace_id) and raw_local > today:
+        wave = assign_node_to_formal_wave(
+            session,
+            row,
+            raw_due_at=raw_due_at,
+            reason=reason,
+            desired_retention=desired_retention,
+        )
+        return {
+            "wave_id": wave.id,
+            "wave_type": wave.wave_type,
+            "schedule_source": row.schedule_source,
+            "raw_due_at": to_api_datetime(row.raw_due_at),
+            "due_at": to_api_datetime(row.due_at),
+            "schedule_reason": row.schedule_reason,
+        }
+
+    # 默认：FSRS 直出。due_at 即 raw_due_at，不进任何波次。
+    remove_node_from_open_waves(session, row)
+    row.raw_due_at = raw_due_at
+    row.due_at = raw_due_at
+    row.effective_wave_id = None
+    row.effective_local_date = None
+    row.schedule_source = (
+        SCHEDULE_PRACTICE if source_scene in {"practice", "local_practice"} else SCHEDULE_MANUAL
+    )
+    row.schedule_reason = "fsrs_direct"
+    row.updated_at = _now()
     return {
-        "wave_id": wave.id,
-        "wave_type": wave.wave_type,
+        "wave_id": None,
+        "wave_type": None,
         "schedule_source": row.schedule_source,
         "raw_due_at": to_api_datetime(row.raw_due_at),
         "due_at": to_api_datetime(row.due_at),

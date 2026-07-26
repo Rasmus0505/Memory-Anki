@@ -22,7 +22,6 @@ from memory_anki.infrastructure.db._tables.reviews import (
 from memory_anki.modules.memory.application.fsrs_runtime import (
     RATING_LABELS,
     VALID_RATINGS,
-    ensure_strong_rating_due,
 )
 from memory_anki.modules.memory.application.node_due_rollup_batch import (
     project_due_rollups_batch,
@@ -393,13 +392,13 @@ def rate_nodes(
         source_scene == "formal_review"
         and study_row is not None
         and study_row.scene in {"review", "reinforcement_review"}
-        and study_row.status == "completed"
+        and study_row.status in {"completed", "recovered"}
     ):
         from memory_anki.modules.memory.application.formal_review_service import (
-            reopen_formal_review_for_amendment,
+            ensure_formal_review_session_active,
         )
 
-        reopen_formal_review_for_amendment(session, study_row)
+        ensure_formal_review_session_active(study_row, session)
     if conflict_policy == "skip_direct" and rating_scope == "subtree":
         # "避开": leave every already-scored descendant alone (direct or
         # batch_inherited). Otherwise a mid-node subtree score (hard on child +
@@ -479,14 +478,12 @@ def rate_nodes(
         ):
             card = normalize_legacy_card_clock(card)
         card, _log = scheduler.review_card(card, Rating(rating), review_datetime=reviewed_now)
-        # 记得/轻松至少多日（学习步不回 1h）。忘记/困难走本轮补刷 wave，不再写入正式短 due。
-        card = ensure_strong_rating_due(card, rating, now=reviewed_now)
         if row is None:
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
             session.add(row)
             states[uid] = row
         evidence_origin = "direct" if uid == node_uid else "batch_inherited"
-        _apply_card(row, card, fingerprint=fingerprint, source="manual")
+        _apply_card(row, card, fingerprint=fingerprint, source="manual", session=session)
 
         # Mark frozen formal-wave item before schedule reassignment (weak → reinforcement).
         if formal_wave_id:

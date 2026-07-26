@@ -29,6 +29,18 @@ def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(_TEST_APP_HOME, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def _deterministic_fsrs(monkeypatch):
+    """生产默认开启 fuzzing；测试需要确定性的 due 断言，统一关闭默认值。
+
+    专门验证 fuzzing 的测试自行写 Config 行或传 enable_fuzzing=True。
+    """
+    monkeypatch.setattr(
+        "memory_anki.modules.memory.application.fsrs_runtime.DEFAULT_ENABLE_FUZZING",
+        False,
+    )
+
+
 @pytest.fixture()
 def test_engine():
     from memory_anki.infrastructure.db._tables import Base

@@ -213,7 +213,8 @@ def test_reinforcement_nodes_still_expose_next_review_at(db_session):
     )
 
 
-def test_strong_rating_leaves_future_wave_item_pending(db_session):
+def test_strong_rating_marks_wave_item_and_schedules_direct(db_session):
+    """聚合默认关闭：记得后 due 直出（不进新波次），当前会话波次项已标评分。"""
     palace = _seed_palace(db_session, node_uids=["a"])
     session_row = start_or_resume_formal_review(db_session, palace.id)
     source_wave_id = formal_review_session_payload(db_session, session_row)["wave_id"]
@@ -232,13 +233,10 @@ def test_strong_rating_leaves_future_wave_item_pending(db_session):
     source_item = db_session.query(ReviewWaveItem).filter_by(
         wave_id=source_wave_id, node_uid="a"
     ).one()
-    target_item = db_session.query(ReviewWaveItem).filter_by(
-        wave_id=state.effective_wave_id, node_uid="a"
-    ).one()
     assert source_item.status == "rated_direct"
-    if state.effective_wave_id != source_wave_id:
-        assert target_item.status == "pending"
-        assert target_item.rating is None
+    assert state.effective_wave_id is None
+    assert state.due_at == state.raw_due_at
+    assert state.schedule_reason == "fsrs_direct"
 
 
 def test_rating_undo_restores_source_and_removes_target_membership(db_session):

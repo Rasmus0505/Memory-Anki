@@ -1,15 +1,22 @@
-"""Shared FSRS scheduler configuration for palace nodes and vocabulary notes."""
+"""Shared FSRS scheduler configuration for palace nodes and vocabulary notes.
+
+调度内核契约（review-boundary.md 已同步）：FSRS 的输出即调度真相——
+本模块不再对任何评分档做间隔上/下限改写。忘记/困难的"当日重刷"由
+波次层的 same_day_reinforcement 负责（队列级行为，不改 FSRS due）。
+"""
 
 from __future__ import annotations
 
-from datetime import UTC, timedelta
+from datetime import timedelta
 from typing import Any
 
 from fsrs import Scheduler
 from sqlalchemy.orm import Session
 
 DEFAULT_RETENTION = 0.9
-DEFAULT_MAXIMUM_INTERVAL = 180
+# FSRS 官方默认（100 年）。旧值 180 天会强制高稳定卡每半年重刷。
+DEFAULT_MAXIMUM_INTERVAL = 36500
+DEFAULT_ENABLE_FUZZING = True
 MASTERY_HORIZON_DAYS = 60
 SCHEDULER_VERSION = "fsrs-6.3.1"
 PARAMETER_VERSION = "default"
@@ -21,17 +28,6 @@ DEFAULT_RELEARNING_STEPS: tuple[timedelta, ...] = (
     timedelta(minutes=10),
     timedelta(hours=1),
 )
-# 忘记 / 困难 must re-enter the queue soon. Multi-day intervals only after 记得/轻松.
-# (py-fsrs Hard on mature Review cards can otherwise jump ~10 days.)
-WEAK_AGAIN_MAX_INTERVAL = timedelta(minutes=10)
-WEAK_HARD_MAX_INTERVAL = timedelta(minutes=30)
-# Learning / relearning steps (default 10m, 1h) would otherwise put 记得 back within
-# an hour — product policy is multi-day only for Good/Easy (see review-boundary.md).
-STRONG_GOOD_MIN_INTERVAL = timedelta(days=1)
-STRONG_EASY_MIN_INTERVAL = timedelta(days=3)
-# When freezing a formal session, also pull in cards that become due during typical
-# short weak-rating windows so they are not left outside the frozen scope.
-FORMAL_ENTRY_NEAR_DUE_LOOKAHEAD = timedelta(hours=1)
 
 RATING_LABELS = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
 VALID_RATINGS = frozenset(RATING_LABELS)
@@ -74,6 +70,17 @@ def _parse_steps(raw: str | None, fallback: tuple[timedelta, ...]) -> tuple[time
     return steps or fallback
 
 
+def _parse_bool(raw: Any, fallback: bool) -> bool:
+    if raw is None:
+        return fallback
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return fallback
+
+
 def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
     """Load FSRS config; cache on the SQLAlchemy session for the request lifetime."""
     if session is not None:
@@ -86,6 +93,7 @@ def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
     horizon = MASTERY_HORIZON_DAYS
     learning_steps = DEFAULT_LEARNING_STEPS
     relearning_steps = DEFAULT_RELEARNING_STEPS
+    enable_fuzzing = DEFAULT_ENABLE_FUZZING
     if session is not None:
         from memory_anki.infrastructure.db._tables.misc import Config
 
@@ -95,6 +103,7 @@ def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
             "mastery_horizon_days",
             "learning_steps",
             "relearning_steps",
+            "enable_fuzzing",
         ]
         values = {
             row.key: row.value
@@ -114,14 +123,29 @@ def load_fsrs_settings(session: Session | None = None) -> dict[str, Any]:
             pass
         learning_steps = _parse_steps(values.get("learning_steps"), learning_steps)
         relearning_steps = _parse_steps(values.get("relearning_steps"), relearning_steps)
+        enable_fuzzing = _parse_bool(values.get("enable_fuzzing"), enable_fuzzing)
     result = {
         "desired_retention": retention,
         "maximum_interval": maximum_interval,
         "mastery_horizon_days": horizon,
         "learning_steps": learning_steps,
         "relearning_steps": relearning_steps,
+        "enable_fuzzing": enable_fuzzing,
+        "parameter_version": PARAMETER_VERSION,
+        "parameters": None,
     }
     if session is not None:
+        try:
+            from memory_anki.modules.memory.application.scheduling.parameter_sets import (
+                load_active_parameter_set,
+            )
+
+            active = load_active_parameter_set(session)
+        except Exception:
+            active = None
+        if active is not None:
+            result["parameter_version"] = active.set_id
+            result["parameters"] = active.weights
         session.info["_fsrs_settings"] = result
     return result
 
@@ -131,10 +155,14 @@ def build_scheduler(
     *,
     retention: float | None = None,
     maximum_interval: int | None = None,
+    enable_fuzzing: bool | None = None,
 ) -> Scheduler:
     """Build FSRS scheduler; reuse one instance per session when defaults apply."""
     use_cache = (
-        session is not None and retention is None and maximum_interval is None
+        session is not None
+        and retention is None
+        and maximum_interval is None
+        and enable_fuzzing is None
     )
     if use_cache and session is not None:
         cached = session.info.get("_fsrs_scheduler")
@@ -142,6 +170,9 @@ def build_scheduler(
             return cached
 
     settings = load_fsrs_settings(session)
+    kwargs: dict[str, Any] = {}
+    if settings.get("parameters"):
+        kwargs["parameters"] = tuple(settings["parameters"])
     scheduler = Scheduler(
         desired_retention=settings["desired_retention"] if retention is None else retention,
         maximum_interval=(
@@ -149,75 +180,14 @@ def build_scheduler(
         ),
         learning_steps=settings["learning_steps"],
         relearning_steps=settings["relearning_steps"],
-        enable_fuzzing=False,
+        enable_fuzzing=(
+            settings["enable_fuzzing"] if enable_fuzzing is None else enable_fuzzing
+        ),
+        **kwargs,
     )
     if use_cache and session is not None:
         session.info["_fsrs_scheduler"] = scheduler
     return scheduler
-
-
-def _review_now_aware(now: Any | None = None) -> Any:
-    from datetime import datetime
-
-    review_now = now or datetime.now(UTC)
-    if getattr(review_now, "tzinfo", None) is None:
-        review_now = review_now.replace(tzinfo=UTC)
-    return review_now
-
-
-def _due_aware(due: Any) -> Any | None:
-
-    if due is None:
-        return None
-    return due if getattr(due, "tzinfo", None) is not None else due.replace(tzinfo=UTC)
-
-
-def cap_weak_rating_due(card: Any, rating: int, *, now: Any | None = None) -> Any:
-    """Keep 忘记/困难 inside a short same-day re-study window.
-
-    Multi-day FSRS intervals are allowed only after 记得 (3) / 轻松 (4). Without
-    this cap, Hard on a mature Review card can schedule ~10 days out even though
-    the learner still needs the card soon.
-    """
-    if rating not in (1, 2):
-        return card
-    review_now = _review_now_aware(now)
-    max_interval = WEAK_AGAIN_MAX_INTERVAL if rating == 1 else WEAK_HARD_MAX_INTERVAL
-    max_due = review_now + max_interval
-    due_aware = _due_aware(getattr(card, "due", None))
-    if due_aware is None:
-        return card
-    if due_aware > max_due:
-        card.due = max_due
-    return card
-
-
-def ensure_strong_rating_due(card: Any, rating: int, *, now: Any | None = None) -> Any:
-    """Floor 记得/轻松 so learning/relearning steps cannot reschedule same-day.
-
-    py-fsrs with default steps (10m, 1h) schedules the first Good on a New or
-    Relearning card for ~1 hour later. Formal palace review treats 记得 as
-    "remembered — multi-day interval", matching the weak-rating policy docs.
-    When FSRS still leaves the card in Learning/Relearning after Good/Easy,
-    promote to Review so the next rating uses the review path, not short steps.
-    """
-    if rating not in (3, 4):
-        return card
-    from fsrs import State
-
-    review_now = _review_now_aware(now)
-    min_interval = STRONG_EASY_MIN_INTERVAL if rating == 4 else STRONG_GOOD_MIN_INTERVAL
-    min_due = review_now + min_interval
-    due_aware = _due_aware(getattr(card, "due", None))
-    if due_aware is None or due_aware < min_due:
-        card.due = min_due
-
-    state = getattr(card, "state", None)
-    state_value = int(state) if state is not None else None
-    if state_value in {int(State.Learning), int(State.Relearning)}:
-        card.state = State.Review
-        card.step = None
-    return card
 
 
 def normalize_rating(value: int | str) -> int:

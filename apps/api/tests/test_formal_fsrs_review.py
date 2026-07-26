@@ -996,7 +996,8 @@ def test_formal_subtree_rating_updates_non_due_descendants(db_session):
     assert after.due_at != before_due or after.stability != before_stability
 
 
-def test_good_rating_floors_interval_to_at_least_one_day(db_session):
+def test_good_rating_schedules_fsrs_direct_learning_step(db_session):
+    """FSRS 直出：新卡记得 → 学习步短间隔，due_at 就是 raw_due_at（无吸附）。"""
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
     before = utc_now_naive()
@@ -1006,7 +1007,7 @@ def test_good_rating_floors_interval_to_at_least_one_day(db_session):
         node_uid="a",
         rating=3,
         study_session_id=row.id,
-        operation_id="good-floor",
+        operation_id="good-direct",
         rating_scope="single",
         source_scene="formal_review",
     )
@@ -1017,9 +1018,12 @@ def test_good_rating_floors_interval_to_at_least_one_day(db_session):
     )
     assert state.last_review_at is not None
     assert state.raw_due_at is not None
-    # FSRS floor lives on raw_due_at; due_at is wave-effective local day.
-    assert state.raw_due_at - state.last_review_at >= timedelta(days=1) - timedelta(seconds=2)
-    assert state.raw_due_at >= before + timedelta(days=1) - timedelta(seconds=5)
+    assert state.due_at == state.raw_due_at
+    assert state.schedule_reason == "fsrs_direct"
+    assert state.effective_wave_id is None
+    # 新卡第一次记得落在学习步窗口（分钟到小时级），不再强制抬到多日。
+    assert timedelta(minutes=5) <= state.raw_due_at - state.last_review_at <= timedelta(hours=2)
+    assert state.raw_due_at >= before
 
 
 def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):
