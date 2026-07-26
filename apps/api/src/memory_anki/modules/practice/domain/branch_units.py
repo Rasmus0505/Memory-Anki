@@ -31,6 +31,25 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+# 倒水模型的纯拓扑实现放在零依赖的 mindmap_document 上下文（memory 与
+# practice 共用）。此处 re-export 保持既有导入路径稳定。
+from memory_anki.modules.mindmap_document.api import (
+    ancestor_path,
+    iter_mark_regions,
+    subtree_uids,
+)
+
+__all__ = [
+    "BranchUnit",
+    "ancestor_path",
+    "derive_permanent_mark_levels",
+    "filter_outermost_roots",
+    "order_units_within_palace",
+    "sort_units_by_node_policy",
+    "split_branch_units",
+    "subtree_uids",
+]
+
 
 @dataclass(frozen=True)
 class BranchUnit:
@@ -52,44 +71,6 @@ class BranchUnit:
             "over_limit_delta": self.over_limit_delta,
             "selection_reason": self.selection_reason,
         }
-
-
-def subtree_uids(
-    nodes: Mapping[str, Mapping[str, Any]],
-    branch_uid: str,
-    *,
-    include_self: bool = True,
-) -> list[str]:
-    if branch_uid not in nodes:
-        return []
-    result: list[str] = [branch_uid] if include_self else []
-    stack = list(nodes[branch_uid].get("children") or [])
-    while stack:
-        current = stack.pop(0)
-        if current not in nodes:
-            continue
-        result.append(current)
-        stack[0:0] = list(nodes[current].get("children") or [])
-    return result
-
-
-def ancestor_path(
-    nodes: Mapping[str, Mapping[str, Any]],
-    uid: str,
-    *,
-    include_root: bool = True,
-) -> list[dict[str, str]]:
-    path: list[dict[str, str]] = []
-    current = nodes.get(uid, {}).get("parent_uid")
-    while current and current in nodes:
-        path.append({"uid": str(current), "text": str(nodes[current].get("text") or "")})
-        parent = nodes[current].get("parent_uid")
-        if parent is None and not include_root:
-            path.pop()
-            break
-        current = parent
-    path.reverse()
-    return path
 
 
 def derive_permanent_mark_levels(
@@ -194,67 +175,6 @@ def _marks_in_proper_descendants(
         if uid in mark_anchors:
             return True
     return False
-
-
-def _is_descendant(
-    nodes: Mapping[str, Mapping[str, Any]],
-    uid: str,
-    ancestor: str,
-) -> bool:
-    """True when ``uid`` is a proper descendant of ``ancestor``."""
-    if uid == ancestor or uid not in nodes or ancestor not in nodes:
-        return False
-    current = nodes[uid].get("parent_uid")
-    while current and current in nodes:
-        if current == ancestor:
-            return True
-        current = nodes[current].get("parent_uid")
-    return False
-
-
-def _node_depth(
-    nodes: Mapping[str, Mapping[str, Any]],
-    uid: str,
-    *,
-    root_uid: str | None,
-) -> int:
-    depth = 0
-    current = uid
-    seen: set[str] = set()
-    while current and current in nodes and current != root_uid:
-        if current in seen:
-            break
-        seen.add(current)
-        parent = nodes[current].get("parent_uid")
-        if parent is None:
-            break
-        depth += 1
-        current = parent
-    return depth
-
-
-def _mark_region_uids(
-    nodes: Mapping[str, Mapping[str, Any]],
-    mark_uid: str,
-    mark_anchors: set[str],
-) -> list[str]:
-    """Nodes owned by mark ``mark_uid`` under the water-pour model.
-
-    Pour from the mark downward: keep every descendant until (but not into) a
-    deeper mark. Deeper mark subtrees are carved out as their own units.
-    """
-    full = subtree_uids(nodes, mark_uid, include_self=True)
-    if not full:
-        return []
-    exclude: set[str] = set()
-    full_set = set(full)
-    for other in mark_anchors:
-        if other == mark_uid or other not in full_set:
-            continue
-        if not _is_descendant(nodes, other, mark_uid):
-            continue
-        exclude.update(subtree_uids(nodes, other, include_self=True))
-    return [uid for uid in full if uid not in exclude]
 
 
 def _resolve_reason(
@@ -367,42 +287,10 @@ def split_branch_units(
         )
         claimed.update(filtered)
 
-    def path_ancestors(uid: str) -> list[str]:
-        """Rootward → leafward ancestors excluding palace root and ``uid``."""
-        path: list[str] = []
-        current = nodes.get(uid, {}).get("parent_uid")
-        while current and current in nodes:
-            path.append(str(current))
-            if current == root_uid:
-                break
-            current = nodes[current].get("parent_uid")
-        path.reverse()
-        # drop palace root from fold list
-        return [p for p in path if p != root_uid]
-
-    # --- Phase 1: mark regions (shallow marks first so outer residual claims first)
-    marks_ordered = sorted(
-        split_anchors,
-        key=lambda uid: (_node_depth(nodes, uid, root_uid=root_uid), uid),
-    )
-    for mark_uid in marks_ordered:
-        region = [
-            uid
-            for uid in _mark_region_uids(nodes, mark_uid, split_anchors)
-            if uid not in claimed and uid in nodes
-        ]
-        if not region:
-            continue
-        folded = tuple(
-            uid for uid in path_ancestors(mark_uid) if uid not in claimed and uid in nodes
-        )
-        # Prefer tree order inside the region (DFS from mark)
-        region_set = set(region)
-        ordered_region = [
-            uid for uid in subtree_uids(nodes, mark_uid, include_self=True) if uid in region_set
-        ]
-        # Any region nodes missed by DFS (should not happen) append at end
-        ordered_region.extend(uid for uid in region if uid not in set(ordered_region))
+    # --- Phase 1: mark regions (shared water-pour topology, see content.domain.split_units)
+    for mark_uid, ordered_region, folded in iter_mark_regions(
+        nodes, root_uid=str(root_uid), mark_uids=split_anchors, claimed=set(claimed)
+    ):
         base = _unit_base_reason(
             mark_uid,
             temporary_marks=temporary_marks,

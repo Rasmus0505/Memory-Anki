@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReviewLoadSimulation } from '@/shared/api/contracts'
-import { simulateReviewLoadApi } from '@/modules/practice/ui/review/api/scheduleInsightApi'
+import { simulateReviewLoadApi } from '@/modules/practice/public'
 import { cn } from '@/shared/lib/utils'
 
 const SIMULATE_DEBOUNCE_MS = 500

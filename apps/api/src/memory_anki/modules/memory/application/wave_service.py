@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.core.time import to_api_datetime
 from memory_anki.infrastructure.db._tables.reviews import (
     ReviewNodeState,
     ReviewWave,
@@ -30,7 +26,6 @@ from memory_anki.modules.memory.application.wave_policy import (
     SCHEDULE_UNINITIALIZED,
     SCHEDULE_WAVE_ADSORB,
     WAVE_STATUS_ACTIVE,
-    WAVE_STATUS_CANCELLED,
     WAVE_STATUS_PAUSED,
     WAVE_STATUS_SCHEDULED,
     WAVE_TYPE_FORMAL,
@@ -50,6 +45,25 @@ from memory_anki.modules.memory.application.wave_queries import (
     list_palace_waves,
     wave_progress,
 )
+from memory_anki.modules.memory.application.wave_registry import (
+    close_empty_open_wave,
+    formal_candidates,
+    get_or_create_formal_wave,
+    get_or_create_reinforcement_wave,
+    load_reinforcement_settings,
+)
+from memory_anki.modules.memory.application.wave_registry import (
+    ensure_item as _ensure_item,
+)
+from memory_anki.modules.memory.application.wave_registry import (
+    now_naive as _now,
+)
+from memory_anki.modules.memory.application.wave_registry import (
+    recount_wave as _recount_wave,
+)
+from memory_anki.modules.memory.application.wave_registry import (
+    sync_active_session_scope as _sync_active_session_scope,
+)
 from memory_anki.modules.memory.application.wave_session_service import (
     complete_formal_wave,
     pause_formal_wave,
@@ -65,9 +79,11 @@ __all__ = [
     "close_empty_open_wave",
     "complete_formal_wave",
     "find_active_formal_wave",
+    "formal_candidates",
     "formal_due_node_uids",
     "frozen_node_uids",
     "get_or_create_formal_wave",
+    "get_or_create_reinforcement_wave",
     "get_wave_detail",
     "list_palace_waves",
     "load_reinforcement_settings",
@@ -85,262 +101,16 @@ __all__ = [
 ]
 
 
-def _now() -> datetime:
-    return utc_now_naive()
-
-
-def _new_wave_id(prefix: str = "wave") -> str:
-    return f"{prefix}-{uuid.uuid4()}"
-
-
-def _recount_wave(session: Session, wave: ReviewWave) -> None:
-    wave.item_count = (
-        session.query(ReviewWaveItem).filter(ReviewWaveItem.wave_id == wave.id).count()
+def resolve_unit_root_uid(session: Session, palace_id: int, node_uid: str) -> str | None:
+    """该节点所属调度单元的键（无标记时即宫殿根 uid）。"""
+    from memory_anki.modules.memory.application.scheduling.units import (
+        default_unit_root_uid,
+        unit_root_uid_of_node,
     )
-    wave.rated_count = (
-        session.query(ReviewWaveItem)
-        .filter(
-            ReviewWaveItem.wave_id == wave.id,
-            ReviewWaveItem.status.in_(
-                [ITEM_RATED_DIRECT, ITEM_RATED_INHERITED, ITEM_DONE]
-            ),
-        )
-        .count()
+
+    return unit_root_uid_of_node(session, palace_id, node_uid) or default_unit_root_uid(
+        session, palace_id
     )
-    wave.updated_at = _now()
-
-
-def close_empty_open_wave(session: Session, wave: ReviewWave) -> bool:
-    """Remove or cancel open waves that have no remaining items.
-
-    Scheduled empty shells are deleted. Active/paused empty shells (often left
-    after abandoned sessions or node reassignment) are cancelled so they stop
-    appearing in the insights reinforcement list.
-    """
-    if wave.status not in {
-        WAVE_STATUS_SCHEDULED,
-        WAVE_STATUS_ACTIVE,
-        WAVE_STATUS_PAUSED,
-    }:
-        return False
-    _recount_wave(session, wave)
-    if int(wave.item_count or 0) > 0:
-        return False
-    now = _now()
-    if wave.status == WAVE_STATUS_SCHEDULED:
-        session.delete(wave)
-        return True
-    wave.status = WAVE_STATUS_CANCELLED
-    wave.completed_at = now
-    wave.active_session_id = None
-    wave.paused_at = None
-    wave.updated_at = now
-    return True
-
-
-def _sync_active_session_scope(session: Session, wave: ReviewWave) -> None:
-    if not wave.active_session_id:
-        return
-    study_session = session.get(StudySession, wave.active_session_id)
-    if study_session is None or study_session.scene != "review":
-        return
-    try:
-        summary = json.loads(study_session.summary_json or "{}")
-    except (TypeError, ValueError):
-        summary = {}
-    summary["wave_id"] = wave.id
-    summary["frozen_due_node_uids"] = frozen_node_uids(session, wave.id)
-    study_session.summary_json = json.dumps(summary, ensure_ascii=False)
-    study_session.updated_at = _now()
-
-
-def load_reinforcement_settings(session: Session) -> tuple[int, int]:
-    """Legacy settings accessor; batch restudy always uses zero delay."""
-    del session
-    return (0, 0)
-
-
-def formal_candidates(session: Session, palace_id: int) -> list[WaveCandidate]:
-    cache = session.info.setdefault("_formal_wave_candidates", {})
-    cached = cache.get(palace_id)
-    if cached is not None:
-        return list(cached)
-    rows = (
-        session.query(ReviewWave)
-        .filter(
-            ReviewWave.palace_id == palace_id,
-            ReviewWave.wave_type == WAVE_TYPE_FORMAL,
-            ReviewWave.status.in_(
-                [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
-            ),
-            ReviewWave.local_date.is_not(None),
-        )
-        .all()
-    )
-    result = [
-        WaveCandidate(wave_id=row.id, local_date=row.local_date, status=row.status)
-        for row in rows
-        if row.local_date is not None
-    ]
-    cache[palace_id] = list(result)
-    return list(result)
-
-
-def _invalidate_formal_candidates(session: Session, palace_id: int) -> None:
-    cache = session.info.get("_formal_wave_candidates")
-    if cache is not None:
-        cache.pop(palace_id, None)
-
-
-def get_or_create_formal_wave(
-    session: Session,
-    palace_id: int,
-    local_day: date,
-    *,
-    status: str = WAVE_STATUS_SCHEDULED,
-) -> ReviewWave:
-    existing = (
-        session.query(ReviewWave)
-        .filter(
-            ReviewWave.palace_id == palace_id,
-            ReviewWave.wave_type == WAVE_TYPE_FORMAL,
-            ReviewWave.local_date == local_day,
-            ReviewWave.status.in_(
-                [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
-            ),
-        )
-        .first()
-    )
-    if existing is not None:
-        return existing
-    wave = ReviewWave(
-        id=_new_wave_id("fw"),
-        palace_id=palace_id,
-        wave_type=WAVE_TYPE_FORMAL,
-        status=status,
-        local_date=local_day,
-        created_at=_now(),
-        updated_at=_now(),
-    )
-    _invalidate_formal_candidates(session, palace_id)
-    try:
-        with session.begin_nested():
-            session.add(wave)
-            session.flush()
-    except IntegrityError:
-        existing = (
-            session.query(ReviewWave)
-            .filter(
-                ReviewWave.palace_id == palace_id,
-                ReviewWave.wave_type == WAVE_TYPE_FORMAL,
-                ReviewWave.local_date == local_day,
-                ReviewWave.status.in_(
-                    [WAVE_STATUS_SCHEDULED, WAVE_STATUS_ACTIVE, WAVE_STATUS_PAUSED]
-                ),
-            )
-            .first()
-        )
-        if existing is None:
-            raise
-        return existing
-    return wave
-
-
-def get_or_create_reinforcement_wave(
-    session: Session,
-    palace_id: int,
-    available_at: datetime,
-) -> ReviewWave:
-    """Merge reinforcement into a non-active same-palace restudy bucket.
-
-    Never merge into an ACTIVE wave: weak re-ratings during a pass must land on
-    the *next* batch so the current freeze can complete, then auto-chain.
-    """
-    # Prefer any already-available scheduled/paused shell (end-of-batch restudy).
-    mature = (
-        session.query(ReviewWave)
-        .filter(
-            ReviewWave.palace_id == palace_id,
-            ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
-            ReviewWave.status.in_([WAVE_STATUS_SCHEDULED, WAVE_STATUS_PAUSED]),
-            ReviewWave.available_at.is_not(None),
-            ReviewWave.available_at <= _now(),
-        )
-        .order_by(ReviewWave.available_at.asc())
-        .first()
-    )
-    if mature is not None:
-        return mature
-    window_start = available_at - timedelta(minutes=5)
-    window_end = available_at + timedelta(minutes=5)
-    existing = (
-        session.query(ReviewWave)
-        .filter(
-            ReviewWave.palace_id == palace_id,
-            ReviewWave.wave_type == WAVE_TYPE_REINFORCEMENT,
-            ReviewWave.status.in_([WAVE_STATUS_SCHEDULED, WAVE_STATUS_PAUSED]),
-            ReviewWave.available_at.is_not(None),
-            ReviewWave.available_at >= window_start,
-            ReviewWave.available_at <= window_end,
-        )
-        .order_by(ReviewWave.available_at.asc())
-        .first()
-    )
-    if existing is not None:
-        return existing
-    wave = ReviewWave(
-        id=_new_wave_id("rw"),
-        palace_id=palace_id,
-        wave_type=WAVE_TYPE_REINFORCEMENT,
-        status=WAVE_STATUS_SCHEDULED,
-        available_at=available_at,
-        created_at=_now(),
-        updated_at=_now(),
-    )
-    session.add(wave)
-    session.flush()
-    return wave
-
-
-def _ensure_item(
-    session: Session,
-    wave: ReviewWave,
-    *,
-    palace_id: int,
-    node_uid: str,
-    status: str = ITEM_PENDING,
-    raw_due_at: datetime | None = None,
-    effective_due_at: datetime | None = None,
-) -> ReviewWaveItem:
-    item = (
-        session.query(ReviewWaveItem)
-        .filter(ReviewWaveItem.wave_id == wave.id, ReviewWaveItem.node_uid == node_uid)
-        .first()
-    )
-    now = _now()
-    if item is None:
-        item = ReviewWaveItem(
-            wave_id=wave.id,
-            palace_id=palace_id,
-            node_uid=node_uid,
-            status=status,
-            frozen_raw_due_at=raw_due_at,
-            frozen_effective_due_at=effective_due_at,
-            included_at=now,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(item)
-        wave.item_count = int(wave.item_count or 0) + 1
-    else:
-        item.status = status
-        item.updated_at = now
-        if raw_due_at is not None:
-            item.frozen_raw_due_at = raw_due_at
-        if effective_due_at is not None:
-            item.frozen_effective_due_at = effective_due_at
-    wave.updated_at = now
-    return item
 
 
 def assign_node_to_formal_wave(
@@ -351,17 +121,25 @@ def assign_node_to_formal_wave(
     reason: str,
     desired_retention: float | None = None,
     force_new_day: date | None = None,
+    unit_root_uid: str | None = None,
 ) -> ReviewWave:
-    """Adsorb a node into the nearest safe formal wave or create one for raw_due's day."""
+    """Adsorb a node into the nearest safe wave **of its own unit**.
+
+    吸附只在同一调度单元内发生——单元是"一次复习安排"的原子，跨单元吸附会
+    把本该独立的两批卡搅在一起。
+    """
     from memory_anki.modules.memory.application.scheduling.aggregation import (
         aggregation_policy_for,
         get_palace_review_settings,
     )
 
+    unit_uid = unit_root_uid or resolve_unit_root_uid(
+        session, row.palace_id, row.node_uid
+    )
     remove_node_from_open_waves(session, row)
     raw_local = local_date_of(raw_due_at)
     target_day = force_new_day or raw_local
-    candidates = formal_candidates(session, row.palace_id)
+    candidates = formal_candidates(session, row.palace_id, unit_root_uid=unit_uid)
     picked: WaveCandidate | None = None
     if force_new_day is None:
         iv = interval_days(row.last_review_at, raw_due_at)
@@ -378,11 +156,15 @@ def assign_node_to_formal_wave(
     if picked is not None:
         wave = session.get(ReviewWave, picked.wave_id)
         if wave is None:
-            wave = get_or_create_formal_wave(session, row.palace_id, target_day)
+            wave = get_or_create_formal_wave(
+                session, row.palace_id, target_day, unit_root_uid=unit_uid
+            )
         schedule_reason = f"adsorb_existing:{reason}"
         schedule_source = SCHEDULE_WAVE_ADSORB
     else:
-        wave = get_or_create_formal_wave(session, row.palace_id, target_day)
+        wave = get_or_create_formal_wave(
+            session, row.palace_id, target_day, unit_root_uid=unit_uid
+        )
         schedule_reason = f"new_wave:{reason}"
         schedule_source = SCHEDULE_WAVE_ADSORB if reason != "manual" else SCHEDULE_MANUAL
 
@@ -610,8 +392,13 @@ def start_formal_wave(
     *,
     node_uids: list[str] | None = None,
     session_id: str | None = None,
+    unit_root_uid: str | None = None,
 ) -> ReviewWave:
-    """Freeze due+overdue nodes into an active formal wave (no auto-expand later)."""
+    """Freeze due+overdue nodes into an active formal wave (no auto-expand later).
+
+    冻结集可以跨单元（同一宫殿同一天到期的多个单元合并为一次会话），此时
+    ``unit_root_uid`` 记的是首个单元——它只是波次的归属标签，不约束成员。
+    """
     existing = find_active_formal_wave(session, palace_id)
     if existing is not None:
         if session_id:
@@ -627,8 +414,13 @@ def start_formal_wave(
         raise ValueError("palace has no due formal wave nodes")
 
     today = local_date_of(_now())
+    unit_uid = unit_root_uid or resolve_unit_root_uid(session, palace_id, uids[0])
     wave = get_or_create_formal_wave(
-        session, palace_id, today, status=WAVE_STATUS_ACTIVE
+        session,
+        palace_id,
+        today,
+        unit_root_uid=unit_uid,
+        status=WAVE_STATUS_ACTIVE,
     )
     now = _now()
     wave.status = WAVE_STATUS_ACTIVE

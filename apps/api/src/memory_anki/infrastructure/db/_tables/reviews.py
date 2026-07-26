@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -108,13 +109,44 @@ class ReviewWave(Base):
         Index("ix_review_waves_palace_status", "palace_id", "status"),
         Index("ix_review_waves_palace_type_date", "palace_id", "wave_type", "local_date"),
         Index("ix_review_waves_palace_available", "palace_id", "wave_type", "available_at"),
-        # At most one active/paused formal wave per palace (partial unique via migration index).
+        Index(
+            "ix_review_waves_palace_unit_date",
+            "palace_id",
+            "unit_root_uid",
+            "wave_type",
+            "local_date",
+        ),
+        # Partial uniques keyed by (palace, unit): 全新安装走 create_all 不执行
+        # 迁移体，所以这两条必须在 ORM 里声明，否则只有升级上来的库有约束。
+        Index(
+            "uq_review_waves_palace_active_formal",
+            "palace_id",
+            "unit_root_uid",
+            unique=True,
+            sqlite_where=text(
+                "wave_type = 'formal_long_term' AND status IN ('active', 'paused')"
+            ),
+        ),
+        Index(
+            "uq_review_waves_palace_formal_day",
+            "palace_id",
+            "unit_root_uid",
+            "local_date",
+            unique=True,
+            sqlite_where=text(
+                "wave_type = 'formal_long_term' AND local_date IS NOT NULL"
+                " AND status IN ('scheduled', 'active', 'paused')"
+            ),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     palace_id: Mapped[int] = mapped_column(Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=False)
     # formal_long_term | same_day_reinforcement
     wave_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 调度单元键（永久标记 uid，或整宫殿/残余单元的宫殿根 uid）。
+    # 正式波次非空；同日补刷波次是宫殿级的，保持 NULL。
+    unit_root_uid: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # scheduled | active | paused | completed | cancelled
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
     # Local calendar day for formal waves (stored as date).
@@ -227,9 +259,15 @@ class PalaceReviewSettings(Base):
     palace_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("palaces.id", ondelete="CASCADE"), primary_key=True
     )
+    # 旧字段：整批调度已成为默认，是否整批由 scheduling_unit_mode_override 表达。
+    # 保留是为了兼容既有行与旧的宫殿设置端点。
     aggregation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     aggregation_max_pull_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     aggregation_max_push_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 三态：None = 未表态（跟随全局 scheduling_unit_mode，默认整批）；
+    # 'unit' = 显式整批；'card' = 显式逐卡直出（逃生舱）。
+    scheduling_unit_mode_override: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    unit_min_wave_cards_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     daily_new_limit_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     daily_review_limit_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
@@ -276,8 +314,8 @@ class ReviewDailyPlanItem(Base):
     palace_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # palace scope: "{palace_id}:{node_uid}"; english scopes: row id.
     item_key: Mapped[str] = mapped_column(String(192), nullable=False)
-    # review | new
-    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    # review | new | consolidate
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
     # pending | done | deferred
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
     # over_review_quota | over_new_quota

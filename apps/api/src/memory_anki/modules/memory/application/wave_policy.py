@@ -107,6 +107,8 @@ class WaveCandidate:
     wave_id: str
     local_date: date
     status: str
+    # 调度单元键：永久标记 uid，或整宫殿/残余单元的宫殿根 uid。
+    unit_root_uid: str | None = None
 
 
 def interval_days(last_review_at: datetime | None, raw_due_at: datetime) -> float:

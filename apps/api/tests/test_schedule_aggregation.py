@@ -72,9 +72,28 @@ def _seed_state(session, palace_id, uid, *, due_in_days, stability=30.0):
     return row
 
 
-def test_aggregation_disabled_by_default(db_session):
+def test_unit_scheduling_is_the_default(db_session):
+    """默认按宫殿整批调度；用户可显式切回逐卡（逃生舱）。"""
+    from memory_anki.infrastructure.db._tables.misc import Config
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        unit_mode_for,
+    )
+
     palace = _palace(db_session, ["a"])
+    assert unit_mode_for(db_session, palace.id) == "unit"
+    assert aggregation_enabled(db_session, palace.id) is True
+
+    # 宫殿级显式关闭。
+    upsert_palace_review_settings(db_session, palace.id, aggregation_enabled=False)
+    db_session.commit()
+    assert unit_mode_for(db_session, palace.id) == "card"
     assert aggregation_enabled(db_session, palace.id) is False
+
+    # 全局切回逐卡；未表态的宫殿跟随全局。
+    other = _palace(db_session, ["b"])
+    db_session.add(Config(key="scheduling_unit_mode", value="card"))
+    db_session.commit()
+    assert unit_mode_for(db_session, other.id) == "card"
 
 
 def test_compute_and_apply_aggregation_clusters_within_asymmetric_window(db_session):

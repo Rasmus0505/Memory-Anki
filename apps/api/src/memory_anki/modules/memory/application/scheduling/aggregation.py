@@ -40,9 +40,39 @@ def get_palace_review_settings(
         return None
 
 
-def aggregation_enabled(session: Session, palace_id: int) -> bool:
+DEFAULT_SCHEDULING_UNIT_MODE = "unit"
+
+
+def _global_unit_mode(session: Session) -> str:
+    from memory_anki.infrastructure.db._tables.misc import Config
+
+    try:
+        row = session.query(Config).filter_by(key="scheduling_unit_mode").first()
+    except Exception:
+        return DEFAULT_SCHEDULING_UNIT_MODE
+    value = str(row.value).strip().lower() if row is not None and row.value else ""
+    return value if value in {"unit", "card"} else DEFAULT_SCHEDULING_UNIT_MODE
+
+
+def unit_mode_for(session: Session, palace_id: int) -> str:
+    """'unit'（宫殿整批调度，默认）| 'card'（逐卡 FSRS 直出，逃生舱）。
+
+    优先级：宫殿显式覆盖（``scheduling_unit_mode_override``）> 全局配置 >
+    默认整批。旧的 ``aggregation_enabled`` 只在为真时视为"显式整批"——
+    它的历史默认值 0 表示"从未表态"，应当跟随全局而不是强制逐卡。
+    """
     settings = get_palace_review_settings(session, palace_id)
-    return bool(settings.aggregation_enabled) if settings is not None else False
+    if settings is not None:
+        override = str(settings.scheduling_unit_mode_override or "").strip().lower()
+        if override in {"unit", "card"}:
+            return override
+        if settings.aggregation_enabled:
+            return "unit"
+    return _global_unit_mode(session)
+
+
+def aggregation_enabled(session: Session, palace_id: int) -> bool:
+    return unit_mode_for(session, palace_id) == "unit"
 
 
 def aggregation_policy_for(settings: PalaceReviewSettings | None) -> AggregationPolicy:
@@ -70,8 +100,10 @@ def upsert_palace_review_settings(
     palace_id: int,
     *,
     aggregation_enabled: bool | None = None,
+    scheduling_unit_mode_override: str | None | object = ...,
     aggregation_max_pull_days: int | None | object = ...,
     aggregation_max_push_days: int | None | object = ...,
+    unit_min_wave_cards_override: int | None | object = ...,
     daily_new_limit_override: int | None | object = ...,
     daily_review_limit_override: int | None | object = ...,
 ) -> PalaceReviewSettings:
@@ -80,7 +112,16 @@ def upsert_palace_review_settings(
         row = PalaceReviewSettings(palace_id=palace_id)
         session.add(row)
     if aggregation_enabled is not None:
+        # 兼容旧端点：布尔开关映射到显式的单元模式覆盖。
         row.aggregation_enabled = bool(aggregation_enabled)
+        row.scheduling_unit_mode_override = "unit" if aggregation_enabled else "card"
+    if scheduling_unit_mode_override is not ...:
+        value = scheduling_unit_mode_override
+        row.scheduling_unit_mode_override = (
+            str(value) if value in {"unit", "card"} else None
+        )
+    if unit_min_wave_cards_override is not ...:
+        row.unit_min_wave_cards_override = unit_min_wave_cards_override  # type: ignore[assignment]
     if aggregation_max_pull_days is not ...:
         row.aggregation_max_pull_days = aggregation_max_pull_days  # type: ignore[assignment]
     if aggregation_max_push_days is not ...:

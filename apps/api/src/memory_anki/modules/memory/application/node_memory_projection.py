@@ -142,12 +142,17 @@ def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
             for index, child in enumerate(children_raw)
             if isinstance(child, dict)
         ]
+        data = raw.get("data")
+        node_data = data if isinstance(data, dict) else {}
         result[uid] = {
             "uid": uid,
             "parent_uid": parent_uid,
             "children": children,
             "text": _node_text(raw),
             "content_fingerprint": _content_fingerprint(raw),
+            # 永久标记 = 调度单元边界（scheduling/units.py 的输入）。
+            "permanent_split_mark": node_data.get("permanentSplitMark") is True
+            or node_data.get("permanent_split_mark") is True,
         }
         return uid
 
