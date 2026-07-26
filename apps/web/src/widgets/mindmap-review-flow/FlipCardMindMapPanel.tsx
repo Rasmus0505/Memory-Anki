@@ -23,6 +23,8 @@ import {
   toGuidedSelection,
 } from './flipCardGuidedModel'
 import { RatingSubtreeConflictOverlay } from './RatingSubtreeConflictOverlay'
+import { CardScheduleExplain } from '@/modules/practice/ui/review/components/CardScheduleExplain'
+import { useIntervalPreviews } from '@/modules/practice/ui/review/hooks/useIntervalPreviews'
 import {
   useFlipCardRatingControls,
   type FlipCardRateNodeHandler,
@@ -343,6 +345,24 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     return [...new Set([...mutedNodeUidsProp, ...ratingScopeMutedUids])]
   }, [mutedNodeUidsProp, ratingScopeMutedUids])
 
+  // 四键间隔预览：当前卡进入时请求，顺带批量预取队列中接下来的几张。
+  // 预览加载失败/未返回时按钮照常显示（没有小字），绝不阻塞评分。
+  const upcomingPreviewUids = useMemo(() => {
+    if (!ratingMode || isEditMode || !onRateNode) return [] as string[]
+    const ordered = guidedModel.nodes
+      .map((node) => node.uid)
+      .filter((uid) => uid !== guidedModel.rootUid && (!rateableUidSet || rateableUidSet.has(uid)))
+    const currentIndex = guidedCurrentUid ? ordered.indexOf(guidedCurrentUid) : -1
+    return ordered.slice(currentIndex + 1, currentIndex + 1 + 6)
+  }, [guidedCurrentUid, guidedModel.nodes, guidedModel.rootUid, isEditMode, onRateNode, rateableUidSet, ratingMode])
+
+  const intervalPreviews = useIntervalPreviews({
+    palaceId: currentPalaceId,
+    nodeUid: guidedCurrentUid,
+    upcomingNodeUids: upcomingPreviewUids,
+    enabled: ratingMode && !isEditMode && Boolean(onRateNode && currentPalaceId),
+  })
+
   const ratingControls = useFlipCardRatingControls({
     ratingMode,
     isEditMode,
@@ -357,6 +377,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     onUndoRating,
     onNodeActive,
     selectGuidedNode,
+    getIntervalPreviewDisplay: intervalPreviews.getPreviewDisplay,
   })
 
   const ratingMasteryByNodeUid = useMemo(() => {
@@ -618,6 +639,12 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           <span>脑图宿主初始化偏慢，已继续等待。若长时间不显示，可先返回后重新进入。</span>
           <Badge className="bg-warning text-white hover:bg-warning">宿主超时</Badge>
+        </div>
+      ) : null}
+      {!isEditMode && sessionKind === 'review' && currentPalaceId && guidedCurrentUid ? (
+        <div className="mb-1 flex shrink-0 justify-end">
+          {/* "为什么是今天"：懒加载调度解释（展开时才请求 schedule-detail）。 */}
+          <CardScheduleExplain palaceId={currentPalaceId} nodeUid={guidedCurrentUid} />
         </div>
       ) : null}
       <div

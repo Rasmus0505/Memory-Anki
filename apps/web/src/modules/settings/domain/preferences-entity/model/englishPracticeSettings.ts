@@ -89,10 +89,15 @@ export const DEFAULT_ENGLISH_PRACTICE_SETTINGS: EnglishPracticeSettings = {
 }
 
 export function captureShortcutFromKeyboardEvent(event: KeyboardEvent) {
-  return captureKeyboardShortcut(event, {
-    reservedKey: (label) => `${label} 会影响输入，不建议设置为学习快捷键。`,
-    barePrintable: (key) => `「${key.toUpperCase()}」是答题输入键，容易误触。请改用 Shift、Ctrl、Alt 或 Meta 组合。`,
-  })
+  return captureKeyboardShortcut(
+    event,
+    {
+      reservedKey: (label) => `${label} 会影响输入，不建议设置为学习快捷键。`,
+      barePrintable: (key) => `「${key.toUpperCase()}」是答题输入键，容易误触。请改用 Shift、Ctrl、Alt 或 Meta 组合。`,
+    },
+    // 英语练习是打字场景：裸字母是答题输入键，必须拒绝（翻卡场景才允许）。
+    { allowBareLetters: false },
+  )
 }
 
 export function sanitizeEnglishShortcutMap(rawShortcutMap: unknown): EnglishPracticeShortcutMap {
@@ -105,7 +110,7 @@ export function sanitizeEnglishShortcutMap(rawShortcutMap: unknown): EnglishPrac
 
   for (const action of ENGLISH_SHORTCUT_ACTIONS) {
     const requested = normalizeShortcutBindingValue(raw[action.id] ?? DEFAULT_ENGLISH_SHORTCUTS[action.id])
-    if (!requested || !isShortcutBindingAllowed(requested)) {
+    if (!requested || !isShortcutBindingAllowed(requested, { allowBareLetters: false })) {
       nextShortcutMap[action.id] = null
       continue
     }

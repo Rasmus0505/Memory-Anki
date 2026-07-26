@@ -164,7 +164,7 @@ export function MindMapReviewFlow({
               nodeUid: string,
               rating: MindMapRecallRating,
               round: MindMapRecallRound,
-              scope?: 'single' | 'subtree',
+              scope?: 'single' | 'subtree' | 'bulk_mark',
               evidence?: {
                 source?: 'manual' | 'inferred'
                 confidence?: number | null

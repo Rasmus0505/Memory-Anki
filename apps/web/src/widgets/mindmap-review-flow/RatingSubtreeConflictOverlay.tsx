@@ -1,7 +1,7 @@
 import { Button } from '@/shared/components/ui/button'
 import type { RatingConflictPolicy } from '@/modules/practice/public'
 
-export type RatingSubtreeDialogChoice = RatingConflictPolicy | 'single' | 'cancel'
+export type RatingSubtreeDialogChoice = RatingConflictPolicy | 'single' | 'bulk_mark' | 'cancel'
 
 export function RatingSubtreeConflictOverlay({
   conflictCount,
@@ -27,7 +27,10 @@ export function RatingSubtreeConflictOverlay({
         <p className="mt-2 text-sm text-muted-foreground">
           {hasConflicts
             ? `当前节点有子节点，且子树中有 ${conflictCount} 个节点已在本轮被评分（含直接评分与父/子节点级联写入的分数）。可只给选中父节点单独评分；或选择「避开」只更新尚未评分的节点；或「覆盖」用当前分数替换整棵子树。`
-            : '当前节点有子节点。可只给选中的父节点单独评分，或将分数级联到整棵子树。'}
+            : '当前节点有子节点。可只给选中的父节点单独评分，或将分数级联到整棵子树（视为整枝真实回忆）。'}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          「带过整枝」用于没有真实逐卡回忆、只想批量带过的场景：只留记录，带过不影响复习计划。
         </p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onResolve('cancel')}>
@@ -35,6 +38,9 @@ export function RatingSubtreeConflictOverlay({
           </Button>
           <Button type="button" variant="outline" onClick={() => onResolve('single')}>
             单独评分选中的父节点
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => onResolve('bulk_mark')}>
+            带过整枝（不影响计划）
           </Button>
           {hasConflicts ? (
             <Button type="button" variant="secondary" onClick={() => onResolve('skip_direct')}>

@@ -11,3 +11,13 @@
  * 后恢复；不依赖 React 渲染的纯函数/集成测试照常工作。
  */
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+// jsdom 没有 ResizeObserver；radix 的 Slider/useSize 等组件在挂载时需要它。
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub
+}

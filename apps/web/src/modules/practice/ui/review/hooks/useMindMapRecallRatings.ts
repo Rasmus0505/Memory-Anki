@@ -3,6 +3,16 @@ import { listMindMapSessionEventsApi } from '@/modules/content/public'
 import { ratePalaceNodesApi, undoPalaceRatingApi, type RatingConflictPolicy } from '@/modules/practice/ui/review/api'
 import type { MindMapRecallEvent, MindMapRecallRating, MindMapRecallRatingSource, MindMapRecallRound } from '@/shared/api/contracts'
 
+/**
+ * UI-level rating scope:
+ * - single: only the selected node was recalled
+ * - subtree: the whole expanded branch was truly recalled (sent as "branch_recall")
+ * - bulk_mark: batch pass-through without real recall — zero scheduling impact
+ */
+export type RecallRatingUiScope = 'single' | 'subtree' | 'bulk_mark'
+
+export type ReviewSourceScene = 'formal_review' | 'practice' | 'local_practice'
+
 function effectiveEvents(events: MindMapRecallEvent[]) {
   const superseded = new Set(events.map((event) => event.supersedes_event_id).filter(Boolean))
   return events.filter((event) => !superseded.has(event.id))
@@ -59,7 +69,7 @@ export interface RateNodeEvidence {
 }
 
 export interface RateNodeOptions {
-  scope?: 'single' | 'subtree'
+  scope?: RecallRatingUiScope
   conflictPolicy?: RatingConflictPolicy
   evidence?: RateNodeEvidence
 }
@@ -73,7 +83,7 @@ export function useMindMapRecallRatings({
   palaceId: number | null
   studySessionId: string | null
   enabled: boolean
-  sourceScene?: string
+  sourceScene?: ReviewSourceScene
 }) {
   const [events, setEvents] = useState<MindMapRecallEvent[]>([])
   const [round, setRound] = useState<MindMapRecallRound>('first')
@@ -164,7 +174,7 @@ export function useMindMapRecallRatings({
       nodeUid: string,
       rating: MindMapRecallRating,
       targetRound: MindMapRecallRound = round,
-      scope: 'single' | 'subtree' = 'subtree',
+      scope: RecallRatingUiScope = 'subtree',
       evidence: RateNodeEvidence = {},
       conflictPolicy: RatingConflictPolicy = 'overwrite',
       /**
@@ -177,6 +187,10 @@ export function useMindMapRecallRatings({
       if (!enabled || !palaceId || !studySessionId) return
       const previous = byKey.get(`${nodeUid}:${targetRound}`) ?? null
       const operationId = makeOperationId()
+      // Real branch recall goes out as the new backend name; the UI keeps the
+      // legacy "subtree" label internally so cascade plumbing stays untouched.
+      const apiRatingScope = scope === 'subtree' ? ('branch_recall' as const) : scope
+      const cascadeOrigin = scope === 'bulk_mark' ? ('bulk_mark' as const) : ('batch_inherited' as const)
       const optimisticBase = {
         study_session_id: studySessionId,
         palace_id: palaceId,
@@ -194,7 +208,7 @@ export function useMindMapRecallRatings({
       } as const
       const makeEvent = (
         uid: string,
-        origin: 'direct' | 'batch_inherited',
+        origin: 'direct' | 'batch_inherited' | 'bulk_mark',
         supersedes: string | null,
       ): MindMapRecallEvent => ({
         ...optimisticBase,
@@ -203,16 +217,17 @@ export function useMindMapRecallRatings({
         evidence_origin: origin,
         supersedes_event_id: supersedes,
       })
-      const optimistic = makeEvent(nodeUid, 'direct', previous?.id ?? null)
-      // Subtree: optimistically mark every known descendant (not only the parent).
-      // Critical for P→single-child→multi-grandchildren: chips must follow all branches.
+      const directOrigin = scope === 'bulk_mark' ? ('bulk_mark' as const) : ('direct' as const)
+      const optimistic = makeEvent(nodeUid, directOrigin, previous?.id ?? null)
+      // Subtree / bulk_mark: optimistically mark every known descendant (not only the
+      // parent). Critical for P→single-child→multi-grandchildren: chips must follow all branches.
       const optimisticCascade =
-        scope === 'subtree' && cascadeNodeUids && cascadeNodeUids.length > 0
+        scope !== 'single' && cascadeNodeUids && cascadeNodeUids.length > 0
           ? cascadeNodeUids
               .filter((uid) => uid !== nodeUid)
               .map((uid) => {
                 const prior = byKey.get(`${uid}:${targetRound}`)
-                return makeEvent(uid, 'batch_inherited', prior?.id ?? null)
+                return makeEvent(uid, cascadeOrigin, prior?.id ?? null)
               })
           : []
       setEvents((current) => [...current, optimistic, ...optimisticCascade])
@@ -222,7 +237,7 @@ export function useMindMapRecallRatings({
           rating,
           study_session_id: studySessionId,
           operation_id: operationId,
-          rating_scope: scope,
+          rating_scope: apiRatingScope,
           conflict_policy: conflictPolicy,
           source_scene: sourceScene,
           recall_round: targetRound,
@@ -235,7 +250,7 @@ export function useMindMapRecallRatings({
         // Prefer server list; fall back to client cascade UIDs so deep spines still paint.
         const affected =
           response.item.affected_node_uids ??
-          (scope === 'subtree' && cascadeNodeUids?.length
+          (scope !== 'single' && cascadeNodeUids?.length
             ? cascadeNodeUids
             : [nodeUid])
         setEvents((current) => {
@@ -249,7 +264,7 @@ export function useMindMapRecallRatings({
               prior && prior.operation_id !== operationId ? prior.id : prior?.supersedes_event_id ?? null
             return makeEvent(
               uid,
-              uid === nodeUid ? 'direct' : 'batch_inherited',
+              uid === nodeUid ? directOrigin : cascadeOrigin,
               supersedeId,
             )
           })

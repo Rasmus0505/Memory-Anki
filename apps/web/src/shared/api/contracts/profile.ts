@@ -17,19 +17,17 @@ export interface BackupListResponse {
 }
 export interface ReviewSettings {
   default_review_mode: string
-  sleep_review_time: string
-  early_review_anchor: string
-  ebbinghaus_intervals: string
   desired_retention?: string
   mastery_horizon_days?: string
   maximum_interval?: string
   learning_steps?: string
   relearning_steps?: string
-  daily_max_reviews: string
-  mastered_interval: string
-  auto_smooth_overdue: string
-  overdue_smoothing_days: string
-  overdue_smoothing_threshold: string
+  /** "true" / "false" — interval fuzzing on real rating writes. */
+  enable_fuzzing?: string
+  /** Daily new-card release limit (string number). */
+  daily_new_limit?: string
+  /** Daily review quota (string number); overflow defers to tomorrow. */
+  daily_review_limit?: string
   mindmap_ai_split_api_key: string
   mindmap_ai_split_base_url: string
   mindmap_ai_split_model: string

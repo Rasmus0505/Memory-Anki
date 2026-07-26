@@ -9,7 +9,19 @@ import { emitAppEvent, onAppEvent } from '@/shared/events/appEvents'
 
 type PreferenceKey = keyof ClientPreferences
 type PreferenceValidator<T> = (value: unknown) => value is T
-const bridgedPreferenceEvents = new Set<string>()
+
+/**
+ * Lazily created: several preference models call createPersistentPreferenceStore
+ * during module evaluation, and circular imports can reach this module before a
+ * top-level `const` initializer has run (TDZ crash). A function-scoped getter is
+ * immune to evaluation order.
+ */
+// eslint-disable-next-line no-var -- var is hoisted (no TDZ) unlike let/const
+var bridgedPreferenceEventsSet: Set<string> | undefined
+function bridgedPreferenceEvents(): Set<string> {
+  if (!bridgedPreferenceEventsSet) bridgedPreferenceEventsSet = new Set<string>()
+  return bridgedPreferenceEventsSet
+}
 
 export interface PersistentPreferenceStore<T> {
   read(): T
@@ -38,9 +50,18 @@ export function createPersistentPreferenceStore<T>({
     emitAppEvent(updatedEvent, value)
   }
 
-  const bridgeKey = `${String(cacheKey)}:${updatedEvent}`
-  if (typeof window !== 'undefined' && !bridgedPreferenceEvents.has(bridgeKey)) {
-    bridgedPreferenceEvents.add(bridgeKey)
+  /**
+   * Registered lazily on first store access instead of at module evaluation:
+   * preference models create stores at module scope, and the import cycle
+   * settings/public → model → this file → clientPreferences → settings/public
+   * means sibling bindings (onAppEvent / CLIENT_PREFERENCES_UPDATED_EVENT) can
+   * still be in their temporal dead zone during a circular first evaluation.
+   */
+  const ensureBridge = () => {
+    if (typeof window === 'undefined') return
+    const bridgeKey = `${String(cacheKey)}:${updatedEvent}`
+    if (bridgedPreferenceEvents().has(bridgeKey)) return
+    bridgedPreferenceEvents().add(bridgeKey)
     onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (eventDetail) => {
       const detail = detailIsClientPreferencePatch(eventDetail) ? eventDetail : null
       if (!detail || !Object.prototype.hasOwnProperty.call(detail, cacheKey)) return
@@ -54,6 +75,7 @@ export function createPersistentPreferenceStore<T>({
   }
 
   const read = () => {
+    ensureBridge()
     const cached = getClientPreferenceCacheStatus(cacheKey, isValidCache)
     if (cached.value) {
       return sanitize(cached.value)
@@ -77,12 +99,14 @@ export function createPersistentPreferenceStore<T>({
   }
 
   const write = (value: T) => {
+    ensureBridge()
     const sanitized = sanitize(value)
     syncBackend(sanitized)
     return sanitized
   }
 
   const reset = () => {
+    ensureBridge()
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(localStorageKey)
     }

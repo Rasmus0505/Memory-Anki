@@ -9,7 +9,8 @@ vi.mock('@/modules/practice/ui/review/api', () => ({
   getReviewSessionApi: vi.fn(), getReviewSessionProgressApi: vi.fn(),
 }))
 vi.mock('@/shared/api/studySessionWarmup', () => ({ prefetchStudySession: vi.fn() }))
-vi.mock('@/modules/practice/ui/review/components/ReviewLoadForecastCard', () => ({ ReviewLoadForecastCard: () => <div>负荷预测</div> }))
+vi.mock('@/modules/practice/ui/review/components/ReviewLoadCalendar', () => ({ ReviewLoadCalendar: () => <div>负荷预测</div> }))
+vi.mock('@/modules/practice/ui/review/components/TodayPlanCard', () => ({ TodayPlanCard: () => <div>今日任务</div>, formatDeferReason: () => '' }))
 
 function palaceRow(
   id: number,

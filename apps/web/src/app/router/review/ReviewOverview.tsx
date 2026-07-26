@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
-import { ReviewLoadForecastCard } from '@/modules/practice/public'
+import { ReviewLoadCalendar, TodayPlanCard } from '@/modules/practice/public'
 import { ReviewEntryTooltip } from '@/modules/memory/public'
 import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
@@ -128,6 +128,7 @@ export default function ReviewOverview() {
         description="默认按最早到期排列（拖最久的优先）；可在队列标题旁切换节点数、逾期数或名称排序。"
         compact
       />
+      {!chapterId ? <TodayPlanCard /> : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">当前到期节点</div><b className="text-2xl">{queue.due_count}</b></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">逾期节点</div><b className="text-2xl">{queue.overdue_count}</b></CardContent></Card>
@@ -269,7 +270,7 @@ export default function ReviewOverview() {
           </CardContent>
         </Card>
       ) : null}
-      {!chapterId ? <ReviewLoadForecastCard /> : null}
+      {!chapterId ? <ReviewLoadCalendar /> : null}
     </div>
   )
 }
