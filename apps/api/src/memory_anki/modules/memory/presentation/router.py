@@ -1,6 +1,6 @@
 from typing import NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
@@ -255,6 +255,63 @@ def api_aggregation_clear(palace_id: int, session: Session = Depends(session_dep
     cleared = clear_aggregation(session, palace_id=palace_id)
     session.commit()
     return {"item": {"palace_id": palace_id, "cleared_count": cleared}}
+
+
+@router.post("/review/fsrs/optimize")
+def api_fsrs_optimize(
+    background_tasks: BackgroundTasks, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.optimizer_service import (
+        run_optimization,
+        start_optimization,
+    )
+
+    try:
+        result = start_optimization(session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    background_tasks.add_task(run_optimization, result["parameter_set_id"])
+    return {"item": result}
+
+
+@router.get("/review/fsrs/optimize/status")
+def api_fsrs_optimize_status(session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.optimizer_service import (
+        optimization_status,
+    )
+
+    return {"item": optimization_status(session)}
+
+
+@router.post("/review/fsrs/parameter-sets/{set_id}/activate")
+def api_fsrs_activate_parameter_set(
+    set_id: str, session: Session = Depends(session_dep)
+):
+    from memory_anki.modules.memory.application.scheduling.optimizer_service import (
+        activate_parameter_set,
+    )
+
+    try:
+        payload = activate_parameter_set(session, set_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return {"item": payload}
+
+
+@router.post("/review/fsrs/parameter-sets/rollback")
+def api_fsrs_rollback_parameter_set(session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.optimizer_service import (
+        rollback_active_parameter_set,
+    )
+
+    try:
+        payload = rollback_active_parameter_set(session)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return {"item": payload}
 
 
 @router.get("/review/palaces/{palace_id}/memory")

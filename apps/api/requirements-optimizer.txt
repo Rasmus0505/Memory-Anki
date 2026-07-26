@@ -1,0 +1,3 @@
+# FSRS 参数优化器可选依赖（torch/pandas 体积大，不进主 requirements）。
+# 安装：pip install -r requirements-optimizer.txt
+fsrs[optimizer]==6.3.1
