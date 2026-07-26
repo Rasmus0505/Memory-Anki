@@ -84,6 +84,11 @@ export function computeDefaultCollapsedNodeIds(
 /**
  * Keep user collapse choices for surviving nodes; seed defaults for brand-new
  * branch parents when the map is large enough to need auto-collapse.
+ *
+ * An empty `previous` is a valid expand-all choice — never treat it as
+ * "uninitialized". Only `forceDefault: true` re-applies full defaults.
+ * Pass `knownNodeIds` (ids from the prior tree) so brand-new deep parents can
+ * still auto-collapse after the user expanded everything.
  */
 export function reconcileCollapsedNodeIds(
   previous: ReadonlySet<string>,
@@ -93,6 +98,8 @@ export function reconcileCollapsedNodeIds(
     minNodes?: number
     maxExpandedDepth?: number
     forceDefault?: boolean
+    /** Node ids present on the previous tree; used to detect brand-new parents. */
+    knownNodeIds?: ReadonlySet<string>
   },
 ): Set<string> {
   if (options?.practiceModeActive) return new Set()
@@ -101,10 +108,12 @@ export function reconcileCollapsedNodeIds(
   const maxExpandedDepth = options?.maxExpandedDepth ?? AUTO_COLLAPSE_MAX_EXPANDED_DEPTH
   const { childrenByParent, depthById, byId } = buildCollapseTreeIndex(nodes)
 
-  if (options?.forceDefault || previous.size === 0) {
+  if (options?.forceDefault) {
     return computeDefaultCollapsedNodeIds(nodes, { minNodes, maxExpandedDepth })
   }
 
+  // Preserve collapse choices for surviving branch parents. Empty `previous`
+  // (expand-all) stays empty for those parents.
   const next = new Set<string>()
   for (const id of previous) {
     if (!byId.has(id)) continue
@@ -114,8 +123,14 @@ export function reconcileCollapsedNodeIds(
 
   if (nodes.length < minNodes) return next
 
+  const knownNodeIds = options?.knownNodeIds
   for (const node of nodes) {
     if (previous.has(node.id) || next.has(node.id)) continue
+    // Already-known nodes keep the user's expand/collapse decision.
+    if (knownNodeIds?.has(node.id)) continue
+    // Without a known set, empty previous means expand-all: do not re-seed
+    // every deep parent (that was the auto-collapse-after-expand-all bug).
+    if (!knownNodeIds && previous.size === 0) continue
     const children = childrenByParent.get(node.id)
     if (!children?.length) continue
     const depth = depthById.get(node.id) ?? 0
@@ -153,15 +168,39 @@ export function isNodeCollapsed(
   return collapsedNodeIds.has(nodeId)
 }
 
+/**
+ * Single-click fold toggle: collapse adds only `nodeId`; expand removes it and
+ * re-collapses any direct child that itself has children.
+ *
+ * Why re-fold children on expand: double-click uses `expandSubtreeCollapsedIds`,
+ * which clears descendant folds so the whole branch can open. After that, a
+ * plain toggle that only deleted the parent would dump the entire subtree open
+ * again on the next expand. Re-collapsing branch children keeps single-click
+ * expansion to one level (direct children visible; grandchildren stay folded).
+ * Leaves (no children) stay expanded.
+ */
 export function toggleCollapsedNodeId(
+  nodes: readonly MindMapNode[],
   collapsedNodeIds: ReadonlySet<string>,
   nodeId: string,
 ): Set<string> {
   const next = new Set(collapsedNodeIds)
-  if (next.has(nodeId)) next.delete(nodeId)
-  else next.add(nodeId)
+  if (next.has(nodeId)) {
+    // Expanding one level: show direct children, keep grandchildren folded.
+    next.delete(nodeId)
+    const { childrenByParent, byId } = buildCollapseTreeIndex(nodes)
+    if (!byId.has(nodeId)) return next
+    for (const childId of childrenByParent.get(nodeId) ?? []) {
+      if ((childrenByParent.get(childId) ?? []).length > 0) {
+        next.add(childId)
+      }
+    }
+    return next
+  }
+  next.add(nodeId)
   return next
 }
+
 
 /** Expand every ancestor so `nodeId` becomes visible. */
 export function expandAncestorsForNode(
@@ -231,4 +270,3 @@ export function expandSubtreeCollapsedIds(
   }
   return next
 }
-

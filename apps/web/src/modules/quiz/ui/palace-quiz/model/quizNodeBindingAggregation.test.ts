@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildCountBadgeByNodeUid,
   buildDirectBindingMap,
   buildRemainingCountByNodeUid,
   buildSubtreeQuestionMap,
+  firstIncompleteQuestionIndex,
   getQuestionIdsForNode,
   ownerPalaceLabel,
 } from './quizNodeBindingAggregation'
@@ -39,6 +41,29 @@ describe('quizNodeBindingAggregation', () => {
     expect(remaining['child-b']).toBe(1)
 
     expect(getQuestionIdsForNode(subtree, 'parent', new Set([1]))).toEqual([2])
+    expect(
+      getQuestionIdsForNode(subtree, 'parent', new Set([1]), { includeCompleted: true }),
+    ).toEqual([1, 2])
+  })
+
+  it('keeps a gray total badge when every bound question is session-completed', () => {
+    const direct = buildDirectBindingMap([
+      { question_id: 1, node_uid: 'child-a' },
+      { question_id: 2, node_uid: 'child-b' },
+    ])
+    const subtree = buildSubtreeQuestionMap(doc, direct)
+    const badges = buildCountBadgeByNodeUid(subtree, new Set([1, 2]))
+    expect(badges['parent']).toEqual({
+      text: '2',
+      tone: 'neutral',
+      title: '2 道关联题本会话已完成（点开可回顾答题）',
+    })
+    expect(badges['child-a']?.tone).toBe('neutral')
+    const partial = buildCountBadgeByNodeUid(subtree, new Set([1]))
+    expect(partial['parent']?.tone).toBe('success')
+    expect(partial['parent']?.text).toBe('1')
+    expect(firstIncompleteQuestionIndex([1, 2, 3], new Set([1]))).toBe(1)
+    expect(firstIncompleteQuestionIndex([1, 2], new Set([1, 2]))).toBe(0)
   })
 
   it('counts foreign-owner edges on a local node in subtree unions', () => {

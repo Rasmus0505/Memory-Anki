@@ -82,14 +82,94 @@ describe('mindMapCollapse', () => {
     expect(next.size).toBe(0)
   })
 
+  it('expand-all empty previous keeps surviving parents expanded on reconcile', () => {
+    const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 10)
+    const defaults = computeDefaultCollapsedNodeIds(nodes)
+    expect(defaults.size).toBeGreaterThan(0)
+
+    // Simulate expand-all: empty collapsed set.
+    const afterExpandAll = new Set<string>()
+    const knownNodeIds = new Set(nodes.map((n) => n.id))
+    const next = reconcileCollapsedNodeIds(afterExpandAll, nodes, { knownNodeIds })
+    expect(next.size).toBe(0)
+
+    // Without knownNodeIds, empty previous must still not re-default-collapse.
+    const nextWithoutKnown = reconcileCollapsedNodeIds(afterExpandAll, nodes)
+    expect(nextWithoutKnown.size).toBe(0)
+  })
+
+  it('forceDefault re-applies auto-collapse defaults even after expand-all', () => {
+    const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 10)
+    const defaults = computeDefaultCollapsedNodeIds(nodes)
+    expect(defaults.size).toBeGreaterThan(0)
+
+    const next = reconcileCollapsedNodeIds(new Set(), nodes, { forceDefault: true })
+    expect([...next].sort()).toEqual([...defaults].sort())
+  })
+
+  it('after expand-all, only brand-new deep parents auto-collapse on large maps', () => {
+    const base = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 5)
+    const knownNodeIds = new Set(base.map((n) => n.id))
+    // User expanded everything.
+    const previous = new Set<string>()
+
+    // Attach a brand-new deep branch under an existing deep parent.
+    const deepParent = base.find(
+      (n) => n.id !== 'root' && n.parentId !== 'root' && base.some((c) => c.parentId === n.id),
+    )
+    expect(deepParent).toBeTruthy()
+    const anchor = deepParent!.id
+    const extended = [
+      ...base,
+      node('new-a', anchor),
+      node('new-b', 'new-a'),
+      node('new-c', 'new-b'),
+    ]
+
+    const next = reconcileCollapsedNodeIds(previous, extended, { knownNodeIds })
+    // Surviving parents stay expanded (expand-all).
+    for (const id of knownNodeIds) {
+      expect(next.has(id)).toBe(false)
+    }
+    // Brand-new deep parents that have children get auto-collapsed.
+    expect(next.has('new-a')).toBe(true)
+    expect(next.has('new-b')).toBe(true)
+    // Leaf has no children — must not be collapsed.
+    expect(next.has('new-c')).toBe(false)
+  })
+
   it('toggle and expand-ancestors work together', () => {
     const nodes = sampleTree()
     let collapsed = new Set(['l1a', 'l2a'])
-    collapsed = toggleCollapsedNodeId(collapsed, 'l1a')
+    collapsed = toggleCollapsedNodeId(nodes, collapsed, 'l1a')
     expect(collapsed.has('l1a')).toBe(false)
+    // One-level expand re-folds direct children that still have kids.
+    expect(collapsed.has('l2a')).toBe(true)
     collapsed = expandAncestorsForNode(nodes, new Set(['l1a', 'l2a']), 'l3a')
     expect(collapsed.has('l1a')).toBe(false)
     expect(collapsed.has('l2a')).toBe(false)
+  })
+
+  it('single expand after full-subtree expand only reveals one level', () => {
+    // root -> l1a -> l2a -> l3a
+    const nodes = sampleTree()
+    // Double-click expanded whole branch under l1a (cleared l1a + l2a folds).
+    let collapsed = expandSubtreeCollapsedIds(nodes, new Set(['l1a', 'l2a']), 'l1a')
+    expect(collapsed.has('l1a')).toBe(false)
+    expect(collapsed.has('l2a')).toBe(false)
+
+    // Single-click collapse parent.
+    collapsed = toggleCollapsedNodeId(nodes, collapsed, 'l1a')
+    expect(collapsed.has('l1a')).toBe(true)
+
+    // Single-click expand again: only direct children, not grandchildren.
+    collapsed = toggleCollapsedNodeId(nodes, collapsed, 'l1a')
+    expect(collapsed.has('l1a')).toBe(false)
+    expect(collapsed.has('l2a')).toBe(true)
+
+    const hidden = collectHiddenNodeIds(nodes, collapsed)
+    expect(hidden.has('l2a')).toBe(false) // direct child visible
+    expect(hidden.has('l3a')).toBe(true)  // grandchild still hidden
   })
 })
 

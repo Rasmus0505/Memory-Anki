@@ -42,6 +42,10 @@ export {
   startNewRound,
   undoSkip,
   visibleMountIndices,
+  VIEW_HISTORY_MAX,
+  pushViewHistory,
+  popViewHistory,
+  canPopViewHistory,
   type FreestyleSkipState,
 } from './domain/queueState'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'

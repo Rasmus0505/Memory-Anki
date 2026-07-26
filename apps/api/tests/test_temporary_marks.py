@@ -126,14 +126,14 @@ def test_replace_temporary_marks_and_queue_units(db_session):
     payload = replace_palace_temporary_marks(
         db_session,
         palace_id=palace.id,
-        node_uids=["north", "south", "n1"],  # n1 nested under north -> outermost only
+        node_uids=["north", "south", "n1"],  # nested n1 kept (no outermost filter)
         unify_progress=True,
     )
-    assert payload["active_root_uids"] == ["north", "south"]
+    assert payload["active_root_uids"] == ["north", "south", "n1"]
     assert payload["unify"]["skipped"] is False
 
     roots = list_active_temporary_roots(db_session, palace_id=palace.id)
-    assert roots[palace.id] == ["north", "south"]
+    assert roots[palace.id] == ["north", "south", "n1"]
 
     nodes = {
         "root": {"uid": "root", "parent_uid": None, "children": ["north", "south"], "text": "R"},
@@ -142,6 +142,7 @@ def test_replace_temporary_marks_and_queue_units(db_session):
         "south": {"uid": "south", "parent_uid": "root", "children": ["s1"], "text": "S"},
         "s1": {"uid": "s1", "parent_uid": "south", "children": [], "text": "S1"},
     }
+    # Nested temp marks force-split: north has deeper mark n1 -> unit at n1 with north folded
     units = build_palace_units(
         palace_id=palace.id,
         nodes=nodes,
@@ -149,21 +150,61 @@ def test_replace_temporary_marks_and_queue_units(db_session):
         node_limit=20,
         within_palace_order="tree",
         seed=1,
-        temporary_root_uids=["north", "south"],
+        temporary_root_uids=["north", "south", "n1"],
     )
-    assert [u.branch_uid for u in units] == ["north", "south"]
+    assert {u.branch_uid for u in units} == {"north", "n1", "south"}  # water-pour: north residual + n1 + south
     assert all(u.selection_reason.startswith("temporary_mark") for u in units)
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in units}
+    assert by["north"] == {"north"}
+    assert by["n1"] == {"n1"}
+    assert by["south"] == {"south", "s1"}
 
     completed = mark_temporary_roots_completed_on_settlement(
         db_session,
         palace_id=palace.id,
-        branch_or_scope_uids=["north", "n1"],
+        branch_or_scope_uids=["n1", "north"],
         had_good_or_easy=True,
     )
-    assert completed == ["north"]
+    assert set(completed) == {"north", "n1"}
     marks = get_palace_temporary_marks(db_session, palace.id)
     assert "north" not in marks["active_root_uids"]
+    assert "n1" not in marks["active_root_uids"]
     assert "south" in marks["active_root_uids"]
+
+
+def test_nested_temporary_marks_all_saved_and_queue_nest_splits(db_session):
+    """All nested temp marks are persisted; queue units nest-split like permanent."""
+    palace = _seed_palace(db_session)
+    payload = replace_palace_temporary_marks(
+        db_session,
+        palace_id=palace.id,
+        node_uids=["north", "n1"],
+        unify_progress=False,
+    )
+    assert payload["active_root_uids"] == ["north", "n1"]
+    marks = get_palace_temporary_marks(db_session, palace.id)
+    assert [m["node_uid"] for m in marks["marks"]] == ["north", "n1"]
+
+    nodes = {
+        "root": {"uid": "root", "parent_uid": None, "children": ["north", "south"], "text": "R"},
+        "north": {"uid": "north", "parent_uid": "root", "children": ["n1"], "text": "N"},
+        "n1": {"uid": "n1", "parent_uid": "north", "children": [], "text": "N1"},
+        "south": {"uid": "south", "parent_uid": "root", "children": ["s1"], "text": "S"},
+        "s1": {"uid": "s1", "parent_uid": "south", "children": [], "text": "S1"},
+    }
+    units = split_branch_units(
+        palace_id=palace.id,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=["north", "n1"],
+    )
+    assert {u.branch_uid for u in units} == {"north", "n1", "south"}  # water-pour
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in units}
+    assert by["north"] == {"north"}
+    assert by["n1"] == {"n1"}
+    assert by["south"] == {"south", "s1"}
+    assert all(u.selection_reason.startswith("temporary_mark") for u in units if u.branch_uid in {"north", "n1"})
 
 
 def test_temporary_marks_api(make_client, db_session, session_factory):
@@ -222,6 +263,9 @@ def test_permanent_mark_field_forces_split():
         node_limit=20,
         permanent_mark_uids=["a", "a1", "a2"],
     )
-    assert {u.branch_uid for u in units} == {"a1", "a2", "b"}
-    a1 = next(u for u in units if u.branch_uid == "a1")
-    assert "a" in a1.ratable_node_uids
+    assert {u.branch_uid for u in units} == {"a", "a1", "a2", "b"}  # water-pour: a residual + a1 + a2 + b
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in units}
+    assert by["a"] == {"a"}
+    assert by["a1"] == {"a1", "a1x"}
+    assert by["a2"] == {"a2", "a2x"}
+    assert by["b"] == {"b", "b1"}

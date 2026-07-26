@@ -513,6 +513,59 @@ export function mergeRefreshQueue(
   return incoming
 }
 
+/** Max cards remembered for freestyle 「上一张」/swipe-back after reorders. */
+export const VIEW_HISTORY_MAX = 40
+
+/**
+ * Remember a card the learner just left so 「上一张」can return even when skip /
+ * restudy reorders the feed and the previous unit is no longer at index-1
+ * (or when the next unit slides into index 0 and index-based back is disabled).
+ */
+export function pushViewHistory(
+  history: readonly string[],
+  leavingCardId: string | null | undefined,
+  options?: { max?: number },
+): string[] {
+  const id = leavingCardId ? String(leavingCardId).trim() : ''
+  if (!id) return history.slice()
+  if (history[history.length - 1] === id) return history.slice()
+  const max = Math.max(1, Math.round(Number(options?.max ?? VIEW_HISTORY_MAX) || VIEW_HISTORY_MAX))
+  const next = [...history, id]
+  return next.length > max ? next.slice(next.length - max) : next
+}
+
+/**
+ * Pop the most recent still-present card from view history (skip missing / current).
+ * Returns null when nothing remains to go back to.
+ */
+export function popViewHistory(
+  history: readonly string[],
+  cards: ReadonlyArray<{ id: string }>,
+  currentCardId?: string | null,
+): { history: string[]; targetId: string } | null {
+  if (!history.length) return null
+  const present = new Set(cards.map((card) => card.id))
+  const current = currentCardId ? String(currentCardId).trim() : ''
+  const next = history.slice()
+  while (next.length > 0) {
+    const id = next.pop()
+    if (!id) continue
+    if (!present.has(id)) continue
+    if (current && id === current) continue
+    return { history: next, targetId: id }
+  }
+  return null
+}
+
+/** True when history still points at a different card present in the feed. */
+export function canPopViewHistory(
+  history: readonly string[],
+  cards: ReadonlyArray<{ id: string }>,
+  currentCardId?: string | null,
+): boolean {
+  return popViewHistory(history, cards, currentCardId) != null
+}
+
 export function visibleMountIndices(currentIndex: number, total: number) {
   // Keep two neighbors on each side mounted so swipe-back/forward stays warm
   // (unmounted placeholders used to flash blank content when scrolling up).

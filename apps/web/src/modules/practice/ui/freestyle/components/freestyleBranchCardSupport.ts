@@ -18,6 +18,7 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { clipEditorStateToBranchUnit } from '@/modules/practice/ui/freestyle/model/clipBranchUnitEditor'
 import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
+import type { ReviewFlowSnapshot } from '@/modules/memory/public'
 
 /** Compact settle receipt shown as a floating bubble (not a full-screen takeover). */
 export type BranchSettleFlash = {
@@ -29,6 +30,31 @@ export type BranchSettleFlash = {
 export type BranchSession = {
   id: string
   reviewScopeNodeUids: string[]
+}
+
+/**
+ * Freestyle swipe remounts cards outside the mount window. Cache flip/reveal
+ * so going back to a previous unit restores the full revealed map instead of
+ * root-only initial state.
+ */
+export const branchRevealSnapshotCache = new Map<string, ReviewFlowSnapshot>()
+
+export function readBranchRevealSnapshot(cardId: string): ReviewFlowSnapshot | null {
+  const snapshot = branchRevealSnapshotCache.get(cardId)
+  if (!snapshot) return null
+  return {
+    revealMap: { ...snapshot.revealMap },
+    redNodeIds: [...snapshot.redNodeIds],
+    completed: snapshot.completed,
+  }
+}
+
+export function writeBranchRevealSnapshot(cardId: string, snapshot: ReviewFlowSnapshot) {
+  branchRevealSnapshotCache.set(cardId, {
+    revealMap: { ...snapshot.revealMap },
+    redNodeIds: [...snapshot.redNodeIds],
+    completed: snapshot.completed,
+  })
 }
 
 export function plainContextLabel(

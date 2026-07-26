@@ -1,4 +1,29 @@
-"""Pure branch-unit splitting and ordering for freestyle mind-map cards."""
+"""Pure branch-unit splitting and ordering for freestyle mind-map cards.
+
+Product semantics — mark points are freestyle split anchors
+============================================================
+Temporary and permanent marks use **the same topology**; only lifecycle differs.
+
+1. **Water-pour model**: pour from the root downward. Water flows through
+   unmarked nodes without cutting. Hitting a mark **stops** the stream and
+   starts a unit. From that mark down until the next deeper mark, everything
+   stays **one unit** (including unmarked sibling branches under the mark).
+2. Nested marks L1/L2/L3: level = 1 + count of marked ancestors
+   (see ``derive_permanent_mark_levels``). Deeper marks carve their subtrees
+   out of the outer mark's unit.
+3. Unmarked ancestors above a mark fold into that mark's unit (first claim).
+   ``node_limit`` best-fit applies only in fully unmarked residual regions.
+4. Permanent: ``permanentSplitMark`` on the editor doc; never cleared by rating.
+5. Temporary: ``freestyle_temporary_marks``; cleared after Good/Easy settlement;
+   must persist until then.
+6. Only difference is **time** (lifecycle), not split geometry.
+
+Examples:
+- L1 hub + four unmarked children + one L2 child → **2 units** (L1+four together;
+  L2 subtree alone).
+- L1 only (no deeper marks) → 1 unit for the whole branch under L1.
+- L1 + unmarked mid + 3 L2 children → L1 residual unit {L1,mid} + 3 L2 units.
+"""
 
 from __future__ import annotations
 
@@ -93,7 +118,12 @@ def filter_outermost_roots(
     nodes: Mapping[str, Mapping[str, Any]],
     root_uids: Sequence[str],
 ) -> list[str]:
-    """Keep roots that are not descendants of another root in the same set."""
+    """Keep roots that are not descendants of another root in the same set.
+
+    Retained as a pure helper for callers that still need outermost-only
+    selection. Freestyle split / temporary mark persistence no longer filters
+    nested marks away — nested L2/L3 marks are first-class split anchors.
+    """
     roots = [str(uid) for uid in root_uids if str(uid) in nodes]
     root_set = set(roots)
     ordered: list[str] = []
@@ -155,14 +185,76 @@ def _should_split_for_best_fit(
 def _marks_in_proper_descendants(
     nodes: Mapping[str, Mapping[str, Any]],
     branch_uid: str,
-    permanent_marks: set[str],
+    mark_anchors: set[str],
 ) -> bool:
-    if not permanent_marks or branch_uid not in nodes:
+    """True when any unified split anchor sits strictly under ``branch_uid``."""
+    if not mark_anchors or branch_uid not in nodes:
         return False
     for uid in subtree_uids(nodes, branch_uid, include_self=False):
-        if uid in permanent_marks:
+        if uid in mark_anchors:
             return True
     return False
+
+
+def _is_descendant(
+    nodes: Mapping[str, Mapping[str, Any]],
+    uid: str,
+    ancestor: str,
+) -> bool:
+    """True when ``uid`` is a proper descendant of ``ancestor``."""
+    if uid == ancestor or uid not in nodes or ancestor not in nodes:
+        return False
+    current = nodes[uid].get("parent_uid")
+    while current and current in nodes:
+        if current == ancestor:
+            return True
+        current = nodes[current].get("parent_uid")
+    return False
+
+
+def _node_depth(
+    nodes: Mapping[str, Mapping[str, Any]],
+    uid: str,
+    *,
+    root_uid: str | None,
+) -> int:
+    depth = 0
+    current = uid
+    seen: set[str] = set()
+    while current and current in nodes and current != root_uid:
+        if current in seen:
+            break
+        seen.add(current)
+        parent = nodes[current].get("parent_uid")
+        if parent is None:
+            break
+        depth += 1
+        current = parent
+    return depth
+
+
+def _mark_region_uids(
+    nodes: Mapping[str, Mapping[str, Any]],
+    mark_uid: str,
+    mark_anchors: set[str],
+) -> list[str]:
+    """Nodes owned by mark ``mark_uid`` under the water-pour model.
+
+    Pour from the mark downward: keep every descendant until (but not into) a
+    deeper mark. Deeper mark subtrees are carved out as their own units.
+    """
+    full = subtree_uids(nodes, mark_uid, include_self=True)
+    if not full:
+        return []
+    exclude: set[str] = set()
+    full_set = set(full)
+    for other in mark_anchors:
+        if other == mark_uid or other not in full_set:
+            continue
+        if not _is_descendant(nodes, other, mark_uid):
+            continue
+        exclude.update(subtree_uids(nodes, other, include_self=True))
+    return [uid for uid in full if uid not in exclude]
 
 
 def _resolve_reason(
@@ -172,6 +264,8 @@ def _resolve_reason(
     over: bool,
 ) -> str:
     if base == "temporary_mark":
+        if folded:
+            return "temporary_mark_folded_over_limit" if over else "temporary_mark_folded"
         return "temporary_mark_over_limit" if over else "temporary_mark"
     if base == "permanent_mark":
         if folded:
@@ -180,6 +274,20 @@ def _resolve_reason(
     if folded:
         return "folded_ancestors_over_limit" if over else "folded_ancestors"
     return "over_limit_kept" if over else "within_limit"
+
+
+def _unit_base_reason(
+    branch_uid: str,
+    *,
+    temporary_marks: set[str],
+    permanent_marks: set[str],
+) -> str:
+    """Temp wins when a unit root is in both temporary and permanent sets."""
+    if branch_uid in temporary_marks:
+        return "temporary_mark"
+    if branch_uid in permanent_marks:
+        return "permanent_mark"
+    return "within_limit"
 
 
 def split_branch_units(
@@ -191,21 +299,25 @@ def split_branch_units(
     permanent_mark_uids: Sequence[str] | set[str] | None = None,
     temporary_root_uids: Sequence[str] | None = None,
 ) -> list[BranchUnit]:
-    """Split from first-level branches into complete subtrees closest to node_limit.
+    """Split freestyle units: mark water-pour first, then unmarked best-fit.
 
-    Coverage invariant: every non-root node appears in exactly one unit's
-    ``ratable_node_uids``. When best-fit drills past a parent, that parent is
-    **folded into the first descendant unit** (not emitted as a size-1 residual
-    card). Sibling branches after the first do not re-include the parent.
+    **Mark points = freestyle split anchors** (temp and permanent share topology).
 
-    Optional marks:
-    - ``temporary_root_uids``: outermost roots each emit one full-subtree unit
-      first (selection_reason ``temporary_mark``); those uids are claimed.
-    - ``permanent_mark_uids``: force split so mark nodes become unit roots
-      (selection_reason ``permanent_mark`` / folded variants). Only freestyle.
+    Water-pour model
+    ----------------
+    Imagine pouring water from the palace root downward. Water flows through
+    unmarked nodes without cutting. Hitting a mark anchor **stops** that stream
+    and starts a unit at the mark. The unit owns the mark plus every descendant
+    until the next deeper mark (deeper mark subtrees are separate units).
 
-    Context path is ancestors above the highest folded / unit root node; those
-    ancestors are display-only. The palace root itself is never ratable.
+    Example: L1 hub with four unmarked children + one L2 child → **2 units**
+    (L1 + four siblings together; L2 + its subtree alone) — not five.
+
+    ``node_limit`` best-fit applies only in **fully unmarked** residual regions
+    after all mark regions are claimed.
+
+    Coverage: every non-root node appears in exactly one unit. Unclaimed
+    ancestors on the path to a mark fold into that mark unit (first claim wins).
     """
     if not root_uid or root_uid not in nodes:
         return []
@@ -215,6 +327,12 @@ def split_branch_units(
         for uid in (permanent_mark_uids or [])
         if str(uid) in nodes and str(uid) != str(root_uid)
     }
+    temporary_marks = {
+        str(uid)
+        for uid in (temporary_root_uids or [])
+        if str(uid) in nodes and str(uid) != str(root_uid)
+    }
+    split_anchors = permanent_marks | temporary_marks
     claimed: set[str] = set()
     units: list[BranchUnit] = []
 
@@ -249,24 +367,73 @@ def split_branch_units(
         )
         claimed.update(filtered)
 
-    for temp_root in filter_outermost_roots(nodes, list(temporary_root_uids or [])):
-        if temp_root == str(root_uid) or temp_root in claimed:
-            continue
-        subtree = tuple(subtree_uids(nodes, temp_root, include_self=True))
-        if not subtree:
-            continue
-        append_unit(temp_root, subtree, base_reason="temporary_mark")
+    def path_ancestors(uid: str) -> list[str]:
+        """Rootward → leafward ancestors excluding palace root and ``uid``."""
+        path: list[str] = []
+        current = nodes.get(uid, {}).get("parent_uid")
+        while current and current in nodes:
+            path.append(str(current))
+            if current == root_uid:
+                break
+            current = nodes[current].get("parent_uid")
+        path.reverse()
+        # drop palace root from fold list
+        return [p for p in path if p != root_uid]
 
-    def emit(branch_uid: str, folded_parents: tuple[str, ...] = ()) -> None:
+    # --- Phase 1: mark regions (shallow marks first so outer residual claims first)
+    marks_ordered = sorted(
+        split_anchors,
+        key=lambda uid: (_node_depth(nodes, uid, root_uid=root_uid), uid),
+    )
+    for mark_uid in marks_ordered:
+        region = [
+            uid
+            for uid in _mark_region_uids(nodes, mark_uid, split_anchors)
+            if uid not in claimed and uid in nodes
+        ]
+        if not region:
+            continue
+        folded = tuple(
+            uid for uid in path_ancestors(mark_uid) if uid not in claimed and uid in nodes
+        )
+        # Prefer tree order inside the region (DFS from mark)
+        region_set = set(region)
+        ordered_region = [
+            uid for uid in subtree_uids(nodes, mark_uid, include_self=True) if uid in region_set
+        ]
+        # Any region nodes missed by DFS (should not happen) append at end
+        ordered_region.extend(uid for uid in region if uid not in set(ordered_region))
+        base = _unit_base_reason(
+            mark_uid,
+            temporary_marks=temporary_marks,
+            permanent_marks=permanent_marks,
+        )
+        append_unit(
+            mark_uid,
+            folded + tuple(ordered_region),
+            folded_parents=folded,
+            base_reason=base,
+        )
+
+    # --- Phase 2: unmarked residual (no mark anchors in play) via best-fit / whole
+    def emit_unmarked(branch_uid: str, folded_parents: tuple[str, ...] = ()) -> None:
         if not branch_uid or branch_uid not in nodes or not str(branch_uid).strip():
             return
         if branch_uid in claimed:
             return
-        subtree_all = subtree_uids(nodes, branch_uid, include_self=True)
-        if not subtree_all or all(uid in claimed for uid in subtree_all):
+        subtree_all = [
+            uid
+            for uid in subtree_uids(nodes, branch_uid, include_self=True)
+            if uid not in claimed and uid in nodes
+        ]
+        if not subtree_all:
             return
 
-        if _marks_in_proper_descendants(nodes, branch_uid, permanent_marks):
+        # Should not meet marks here (already claimed); still guard.
+        live_marks = {m for m in split_anchors if m in subtree_all}
+        if live_marks:
+            # Residual pockets between claimed mark regions — take contiguous
+            # unclaimed children without re-entering claimed mark subtrees.
             children = [
                 str(child)
                 for child in (nodes[branch_uid].get("children") or [])
@@ -274,35 +441,49 @@ def split_branch_units(
             ]
             for index, child in enumerate(children):
                 if index == 0:
-                    emit(child, folded_parents + (branch_uid,))
+                    emit_unmarked(child, folded_parents + (branch_uid,))
                 else:
-                    emit(child, ())
+                    emit_unmarked(child, ())
+            # branch_uid itself if still free and has no unclaimed children handled
+            if branch_uid not in claimed and branch_uid != root_uid:
+                # only emit self if nothing below left unclaimed under us
+                if not any(
+                    c not in claimed
+                    for c in (nodes[branch_uid].get("children") or [])
+                    if c in nodes
+                ):
+                    folded_live = tuple(u for u in folded_parents if u not in claimed)
+                    append_unit(
+                        branch_uid,
+                        folded_live + (branch_uid,),
+                        folded_parents=folded_live,
+                        base_reason="within_limit",
+                    )
             return
 
+        # Best-fit only in fully unmarked residual.
         if _should_split_for_best_fit(nodes, branch_uid, limit):
+            # best-fit uses full tree sizes; only walk unclaimed children
             children = [
                 str(child)
                 for child in (nodes[branch_uid].get("children") or [])
                 if child in nodes and child not in claimed
             ]
-            for index, child in enumerate(children):
-                if index == 0:
-                    emit(child, folded_parents + (branch_uid,))
-                else:
-                    emit(child, ())
-            return
+            if children:
+                for index, child in enumerate(children):
+                    if index == 0:
+                        emit_unmarked(child, folded_parents + (branch_uid,))
+                    else:
+                        emit_unmarked(child, ())
+                return
 
-        available_subtree = tuple(uid for uid in subtree_all if uid not in claimed)
-        if not available_subtree:
-            return
         folded_live = tuple(uid for uid in folded_parents if uid not in claimed)
-        ratable = folded_live + available_subtree
-        base = "permanent_mark" if branch_uid in permanent_marks else "within_limit"
+        ratable = folded_live + tuple(subtree_all)
         append_unit(
             branch_uid,
             ratable,
             folded_parents=folded_live,
-            base_reason=base,
+            base_reason="within_limit",
         )
 
     first_level = [
@@ -311,9 +492,9 @@ def split_branch_units(
         if uid in nodes and str(uid) not in claimed
     ]
     for branch_uid in first_level:
-        emit(branch_uid)
+        emit_unmarked(branch_uid)
 
-    # Residual non-root nodes not covered (should be rare with mark/temp claims).
+    # Residual non-root nodes not covered.
     for uid in list(nodes.keys()):
         if uid == root_uid or uid in claimed:
             continue
@@ -323,10 +504,15 @@ def split_branch_units(
                 x for x in subtree_uids(nodes, uid, include_self=True) if x not in claimed
             )
             if subtree:
-                base = "permanent_mark" if uid in permanent_marks else "within_limit"
+                base = _unit_base_reason(
+                    uid,
+                    temporary_marks=temporary_marks,
+                    permanent_marks=permanent_marks,
+                )
                 append_unit(uid, subtree, base_reason=base)
 
     return units
+
 
 
 def sort_units_by_node_policy(units: Sequence[BranchUnit]) -> list[BranchUnit]:

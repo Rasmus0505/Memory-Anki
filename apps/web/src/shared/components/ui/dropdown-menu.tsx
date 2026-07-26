@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/shared/lib/utils'
+import { resolveOverlayPortalContainer } from '@/shared/lib/overlayPortal'
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
@@ -31,17 +32,37 @@ function useDropdownMenuActionCoordinator() {
   return { open, setOpen, runAction }
 }
 
+type DropdownMenuContentProps = React.ComponentPropsWithoutRef<
+  typeof DropdownMenuPrimitive.Content
+> & {
+  /**
+   * Optional portal host. Defaults to the active native fullscreen element
+   * (so menus remain visible while the mind-map frame is system-fullscreen)
+   * and otherwise document.body.
+   */
+  container?: Element | null
+}
+
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(function DropdownMenuContent({ className, sideOffset = 4, ...props }, ref) {
+  DropdownMenuContentProps
+>(function DropdownMenuContent(
+  { className, sideOffset = 4, container, ...props },
+  ref,
+) {
+  // Re-resolve when the content mounts/opens so native fullscreen transitions
+  // after the toolbar first rendered still pick the correct host.
+  const portalContainer = resolveOverlayPortalContainer(container)
+
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={portalContainer}>
       <DropdownMenuPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}
         className={cn(
-          'z-[150] min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+          // Above mind-map CSS fullscreen host (z-index 230) so webpage-fullscreen
+          // overflow menus stay interactive and visible over the fixed frame.
+          'z-[250] min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
           'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
           'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
           className,

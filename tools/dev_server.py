@@ -57,7 +57,13 @@ def _creation_flags() -> int:
 
 
 def hidden_process_kwargs() -> dict:
-    """Windows 下隐藏子进程窗口，避免弹出黑框。"""
+    """Windows 下隐藏子进程窗口，避免弹出黑框。
+
+    Includes DETACHED_PROCESS for long-lived service children. Do **not** use this
+    for synchronous commands that must capture stdout/stderr (especially npm.cmd):
+    detached + redirected logs often produce empty logs and spurious non-zero
+    exit codes. Prefer :func:`hidden_console_kwargs` for those.
+    """
     kwargs: dict = {}
     flags = _creation_flags()
     if flags:
@@ -69,6 +75,29 @@ def hidden_process_kwargs() -> dict:
             si.dwFlags |= int(getattr(subprocess, "STARTF_USESHOWWINDOW", 0))
             si.wShowWindow = int(getattr(subprocess, "SW_HIDE", 0))
             kwargs["startupinfo"] = si
+    return kwargs
+
+
+def hidden_console_kwargs() -> dict:
+    """Hide the console window but keep the process attached to the parent.
+
+    Use for synchronous builds / repairs that redirect stdout to a log file.
+    Unlike :func:`hidden_process_kwargs`, this omits DETACHED_PROCESS so npm.cmd
+    (and other batch wrappers) still inherit the redirected handles and report
+    a real exit code.
+    """
+    kwargs: dict = {}
+    if os.name != "nt":
+        return kwargs
+    flags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if flags:
+        kwargs["creationflags"] = flags
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is not None:
+        si = startupinfo_cls()
+        si.dwFlags |= int(getattr(subprocess, "STARTF_USESHOWWINDOW", 0))
+        si.wShowWindow = int(getattr(subprocess, "SW_HIDE", 0))
+        kwargs["startupinfo"] = si
     return kwargs
 
 

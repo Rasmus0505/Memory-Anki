@@ -12,7 +12,9 @@ import {
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
+import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
+import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -23,6 +25,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
+import { cn } from '@/shared/lib/utils'
 
 export function NodeBoundQuizDialog({
   open,
@@ -30,6 +33,9 @@ export function NodeBoundQuizDialog({
   palaceId,
   nodeUid,
   questionIds,
+  initialIndex = 0,
+  initialQuestionStates,
+  onQuestionStateChange,
   onQuestionCompleted,
 }: {
   open: boolean
@@ -37,6 +43,11 @@ export function NodeBoundQuizDialog({
   palaceId: number | null
   nodeUid: string | null
   questionIds: number[]
+  /** Prefer first unfinished when reopening a mixed done/todo list. */
+  initialIndex?: number
+  /** Session drafts so previous answers remain visible when switching questions. */
+  initialQuestionStates?: Record<number, QuizRuntimeState>
+  onQuestionStateChange?: (questionId: number, next: QuizRuntimeState) => void
   onQuestionCompleted: (questionId: number) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
@@ -91,8 +102,15 @@ export function NodeBoundQuizDialog({
           if (!map.has(qid)) map.set(qid, edge)
         }
         setBindingByQuestion(map)
-        setIndex(0)
-        setQuestionStates({})
+        const safeIndex = Math.max(0, Math.min(initialIndex, Math.max(ordered.length - 1, 0)))
+        setIndex(safeIndex)
+        // Keep prior session answers so prev/next can review 答题情况.
+        const restored: Record<number, QuizRuntimeState> = {}
+        for (const question of ordered) {
+          const existing = initialQuestionStates?.[question.id]
+          if (existing) restored[question.id] = existing
+        }
+        setQuestionStates(restored)
       })
       .catch((error) => {
         if (!cancelled) {
@@ -107,8 +125,8 @@ export function NodeBoundQuizDialog({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable key for id list
-  }, [open, palaceId, questionIdsKey, nodeUid])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable key for id list; seed states once per open
+  }, [open, palaceId, questionIdsKey, nodeUid, initialIndex])
 
   const current = questions[index] ?? null
 
@@ -119,6 +137,18 @@ export function NodeBoundQuizDialog({
     [onQuestionCompleted],
   )
 
+  const updateLocalState = useCallback(
+    (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
+      setQuestionStates((current) => {
+        const prev = current[questionId] ?? {}
+        const next = updater(prev)
+        onQuestionStateChange?.(questionId, next)
+        return { ...current, [questionId]: next }
+      })
+    },
+    [onQuestionStateChange],
+  )
+
   const adapter = useMemo(
     () => ({
       readQuestionState: (questionId: number) => questionStates[questionId] ?? {},
@@ -126,11 +156,7 @@ export function NodeBoundQuizDialog({
         questionId: number,
         updater: (current: QuizRuntimeState) => QuizRuntimeState,
       ) => {
-        setQuestionStates((current) => {
-          const prev = current[questionId] ?? {}
-          const next = updater(prev)
-          return { ...current, [questionId]: next }
-        })
+        updateLocalState(questionId, updater)
       },
       applyUpdatedQuestion: (question: PalaceQuizQuestion) => {
         setQuestions((current) =>
@@ -138,7 +164,7 @@ export function NodeBoundQuizDialog({
         )
       },
     }),
-    [questionStates],
+    [questionStates, updateLocalState],
   )
 
   const orchestration = useQuizAttemptOrchestration({
@@ -157,10 +183,15 @@ export function NodeBoundQuizDialog({
       ? ownerPalaceLabel(bindingByQuestion.get(current.id)!, palaceId)
       : null
 
+  const currentState = current ? questionStates[current.id] ?? {} : {}
+  const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+
   const headerDetail = loading
     ? '加载中…'
     : questions.length > 0
-      ? `第 ${index + 1} / ${questions.length} 题` + (ownerLabel ? ` · ${ownerLabel}` : '')
+      ? `第 ${index + 1} / ${questions.length} 题` +
+        (answeredCount > 0 ? ` · 已答 ${answeredCount}` : '') +
+        (ownerLabel ? ` · ${ownerLabel}` : '')
       : '关闭后继续翻卡'
 
   return (
@@ -189,33 +220,72 @@ export function NodeBoundQuizDialog({
             ) : (
               <>
                 {questions.length > 1 ? (
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={index <= 0}
-                      onClick={() => setIndex((value) => Math.max(0, value - 1))}
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={index >= questions.length - 1}
-                      onClick={() =>
-                        setIndex((value) => Math.min(questions.length - 1, value + 1))
-                      }
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      {questions.map((item, itemIndex) => {
+                        const done = Boolean(questionStates[item.id]?.resolved)
+                        const active = itemIndex === index
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            title={`第 ${itemIndex + 1} 题${done ? '（已答）' : ''}`}
+                            className={cn(
+                              'flex size-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
+                              active
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : done
+                                  ? 'border-muted-foreground/40 bg-muted text-muted-foreground'
+                                  : 'border-border bg-background text-foreground hover:bg-muted',
+                            )}
+                            onClick={() => setIndex(itemIndex)}
+                          >
+                            {itemIndex + 1}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={index <= 0}
+                        onClick={() => setIndex((value) => Math.max(0, value - 1))}
+                      >
+                        <ChevronLeft className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={index >= questions.length - 1}
+                        onClick={() =>
+                          setIndex((value) => Math.min(questions.length - 1, value + 1))
+                        }
+                      >
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    {currentState.resolved ? (
+                      <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
+                        {currentState.correct ? '已答对' : '已作答'}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="whitespace-pre-wrap text-base font-semibold leading-7 text-foreground">
+                    {current.stem || '（题干为空）'}
+                  </div>
+                </div>
                 <QuizQuestionInteraction
                   question={current}
-                  state={questionStates[current.id] ?? {}}
-                  onStateChange={(updater) => adapter.updateQuestionState(current.id, updater)}
+                  state={currentState}
+                  onStateChange={(updater) => updateLocalState(current.id, updater)}
                   onChoiceResolve={(optionId, isCorrect) => {
                     orchestration.handleChoiceSelect(current, optionId, isCorrect)
                     markCompleted(current.id)

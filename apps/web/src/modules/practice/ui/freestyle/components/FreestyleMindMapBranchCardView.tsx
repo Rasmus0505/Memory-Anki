@@ -35,10 +35,13 @@ import {
   palaceEditorCache,
   persistPalaceEditor,
   plainContextLabel,
+  readBranchRevealSnapshot,
   settleFlashFromResult,
+  writeBranchRevealSnapshot,
 } from '@/modules/practice/ui/freestyle/components/freestyleBranchCardSupport'
+import type { ReviewFlowSnapshot } from '@/modules/memory/public'
 import { cn } from '@/shared/lib/utils'
-import { TemporaryMarkDialog } from '@/modules/practice/ui/freestyle/components/TemporaryMarkDialog'
+import { PermanentMarkDialog, TemporaryMarkDialog } from '@/modules/practice/ui/freestyle/components/TemporaryMarkDialog'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
 
@@ -86,14 +89,20 @@ export function FreestyleMindMapBranchCardView({
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [tempMarkOpen, setTempMarkOpen] = useState(false)
+  const [permMarkOpen, setPermMarkOpen] = useState(false)
   const completedRef = useRef(false)
   /** Survives silent queue rebuilds so we do not reload/drop a just-settled unit. */
   const settledCardIdRef = useRef<string | null>(null)
   const branchSessionRef = useRef<BranchSession | null>(null)
   const modeTransitioningRef = useRef(false)
   const fullEditorStateRef = useRef<MindMapEditorState | null>(null)
+  /** Avoid hard-reset when silent rebuild replaces the card object with the same unit. */
+  const loadedCardIdRef = useRef<string | null>(null)
   /** Last successfully loaded/saved full-palace fingerprint; leave-edit skips save when equal. */
   const persistedFingerprintRef = useRef('')
+  const [revealSnapshot, setRevealSnapshot] = useState<ReviewFlowSnapshot | null>(() =>
+    readBranchRevealSnapshot(card.id),
+  )
 
   const contextLabel = useMemo(
     () => plainContextLabel(card.context_path, card.palace_title, card.palace_id),
@@ -113,10 +122,23 @@ export function FreestyleMindMapBranchCardView({
   }, [fullEditorState])
 
   useEffect(() => {
+    setRevealSnapshot(readBranchRevealSnapshot(card.id))
+  }, [card.id])
+
+  useEffect(() => {
     let cancelled = false
     // Silent rebuild after settle may replace the card object. Keep the settled
     // surface (and next-review bubble) — never auto-drop or reload under the user.
     if (settledCardIdRef.current === card.id || completedRef.current) {
+      return
+    }
+    // Same unit already warm (e.g. silent rebuild with a new card object): keep
+    // flip/reveal mounted so swipe-back never collapses to root-only.
+    if (
+      loadedCardIdRef.current === card.id &&
+      fullEditorStateRef.current &&
+      branchSessionRef.current
+    ) {
       return
     }
     setLoading(true)
@@ -128,6 +150,7 @@ export function FreestyleMindMapBranchCardView({
     setModeSyncVersion(0)
     setEditError(null)
     setSettleFlash(null)
+    setRevealSnapshot(readBranchRevealSnapshot(card.id))
     void Promise.all([loadPalaceEditor(card.palace_id), loadBranchSession(card)])
       .then(([state, session]) => {
         if (cancelled) return
@@ -137,6 +160,7 @@ export function FreestyleMindMapBranchCardView({
         persistedFingerprintRef.current = editorStateFingerprint(state)
         setReviewEditorState(clipBranchUnit(state, card))
         setBranchSession(session)
+        loadedCardIdRef.current = card.id
       })
       .catch((error) => {
         if (cancelled) return
@@ -559,10 +583,21 @@ export function FreestyleMindMapBranchCardView({
               chromeDensity="compact"
               chromeFrame="host"
               persistProgress={false}
+              // Restore flip progress when the feed remounts this unit after swipe-away.
+              initialSnapshot={revealSnapshot}
+              onSnapshotChange={(snapshot) => {
+                writeBranchRevealSnapshot(card.id, snapshot)
+                setRevealSnapshot(snapshot)
+              }}
               extraMoreActions={[
                 {
                   label: '临时标记',
                   onClick: () => setTempMarkOpen(true),
+                  opensOverlay: true,
+                },
+                {
+                  label: '永久标记',
+                  onClick: () => setPermMarkOpen(true),
                   opensOverlay: true,
                 },
               ]}
@@ -605,6 +640,16 @@ export function FreestyleMindMapBranchCardView({
         palaceId={card.palace_id}
         palaceTitle={palaceTitleLabel}
         onClose={() => setTempMarkOpen(false)}
+        onConfirmed={() => {
+          onQueueInvalidate?.()
+        }}
+      />
+
+      <PermanentMarkDialog
+        open={permMarkOpen}
+        palaceId={card.palace_id}
+        palaceTitle={palaceTitleLabel}
+        onClose={() => setPermMarkOpen(false)}
         onConfirmed={() => {
           onQueueInvalidate?.()
         }}

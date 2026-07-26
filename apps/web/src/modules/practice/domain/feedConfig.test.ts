@@ -25,6 +25,9 @@ import {
   startNewRound,
   undoSkip,
   visibleMountIndices,
+  pushViewHistory,
+  popViewHistory,
+  canPopViewHistory,
 } from './queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
@@ -291,6 +294,27 @@ describe('freestyle queue skip rules', () => {
     )
     expect(filterMutedPalaces(cards, muted.mutedPalaceIds).map((c) => c.id)).toEqual(['1'])
     expect([...visibleMountIndices(2, 6)].sort()).toEqual([0, 1, 2, 3, 4])
+  })
+
+  it('push/pop view history supports previous unit after restudy reorder (index-0 next unit)', () => {
+    // After skip/restudy, next unit can sit at index 0 while the left unit is still in the feed.
+    let history: string[] = []
+    history = pushViewHistory(history, 'unit-a')
+    history = pushViewHistory(history, 'unit-a') // dedupe consecutive
+    expect(history).toEqual(['unit-a'])
+    history = pushViewHistory(history, 'unit-b')
+    expect(history).toEqual(['unit-a', 'unit-b'])
+
+    const cards = [{ id: 'unit-b' }, { id: 'unit-c' }, { id: 'unit-a' }]
+    // Viewing unit-b (index 0); back should return unit-a even though it is not at index-1.
+    expect(canPopViewHistory(history, cards, 'unit-b')).toBe(true)
+    const popped = popViewHistory(history, cards, 'unit-b')
+    expect(popped?.targetId).toBe('unit-a')
+    expect(popped?.history).toEqual([])
+
+    // Missing / current ids are skipped.
+    expect(popViewHistory(['gone', 'unit-b'], cards, 'unit-b')).toBeNull()
+    expect(canPopViewHistory([], cards, 'unit-b')).toBe(false)
   })
 
   it('finds the first card of the next palace and moves remaining same-palace cards to the tail', () => {

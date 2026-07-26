@@ -24,14 +24,17 @@ export function usePalaceEditorQuizBindings({
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = useState<string | null>(null)
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = useState<number[]>([])
 
+  const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
+
   const openNodeQuiz = (nodeUid: string) => {
     const ids = quizNodeBindings.getOpenQuestionIds(nodeUid)
     if (!ids.length) {
-      toast.message('该卡片没有未完成的关联题目。')
+      toast.message('该卡片没有关联题目。')
       return
     }
     setNodeQuizNodeUid(nodeUid)
     setNodeQuizQuestionIds(ids)
+    setNodeQuizInitialIndex(quizNodeBindings.getInitialQuestionIndex(ids))
     setNodeQuizOpen(true)
   }
 
@@ -61,6 +64,9 @@ export function usePalaceEditorQuizBindings({
         palaceId={palaceId ?? null}
         nodeUid={nodeQuizNodeUid}
         questionIds={nodeQuizQuestionIds}
+        initialIndex={nodeQuizInitialIndex}
+        initialQuestionStates={quizNodeBindings.questionStates}
+        onQuestionStateChange={quizNodeBindings.updateQuestionState}
         onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
       />
     </>

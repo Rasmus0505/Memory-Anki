@@ -11,12 +11,9 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  EyeOff,
   History,
   RefreshCw,
   Settings2,
-  SkipForward,
-  Undo2,
   Waypoints,
 } from 'lucide-react'
 import { FreestyleFeedSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleFeedSettingsDialog'
@@ -37,7 +34,12 @@ import {
   isQuizCard,
 } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
-import { UNDO_SKIP_WINDOW_MS, visibleMountIndices } from '@/modules/practice/public'
+import {
+  canPopViewHistory,
+  popViewHistory,
+  pushViewHistory,
+  visibleMountIndices,
+} from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
@@ -58,6 +60,9 @@ export default function ImmersiveFreestylePage() {
    * Finger/wheel scroll only updates index and leaves this null so we never fight the gesture.
    */
   const requestedScrollIndexRef = useRef<number | null>(null)
+  /** Cards left by button/keyboard/skip — used by 「上一张」 after restudy reorders. */
+  const viewHistoryRef = useRef<string[]>([])
+  const [canGoPrevious, setCanGoPrevious] = useState(false)
   /** Index updates from the scroller itself — layout realign must not fight the gesture. */
   const indexChangeFromScrollRef = useRef(false)
   /** True while the user is actively dragging/wheeling the feed. */
@@ -85,14 +90,25 @@ export default function ImmersiveFreestylePage() {
     completeCard,
     acknowledgeCard,
     dropStaleCard,
-    skipCurrent,
     skipToNextPalace,
-    undoLastSkip,
-    muteCurrentPalace,
   } = useImmersiveQueue()
 
   queueRef.current = cards
   const currentCard = cards[currentIndex] ?? null
+
+  const refreshCanGoPrevious = useCallback(
+    (index = currentIndex, list = cards) => {
+      const currentId = list[index]?.id ?? null
+      const hasHistory = canPopViewHistory(viewHistoryRef.current, list, currentId)
+      const hasIndexPrev = index > 0 && list.length > 0
+      setCanGoPrevious(hasHistory || hasIndexPrev)
+    },
+    [cards, currentIndex],
+  )
+
+  useEffect(() => {
+    refreshCanGoPrevious()
+  }, [refreshCanGoPrevious, cards, currentIndex])
 
   const timer = useTimedSession({
     kind: 'quiz',
@@ -180,6 +196,8 @@ export default function ImmersiveFreestylePage() {
         scroll?: boolean
         /** Default true for buttons; false while the scroller owns the gesture. */
         reorderRestudy?: boolean
+        /** When true, do not push the leaving card into view history (used by 上一张). */
+        skipHistory?: boolean
       },
     ) => {
       const max = Math.max(0, cards.length - 1)
@@ -187,13 +205,28 @@ export default function ImmersiveFreestylePage() {
       const fromScroll = options?.scroll === false
       if (fromScroll) {
         indexChangeFromScrollRef.current = true
+        // Finger/wheel leave still needs history so 「上一张」works after restudy
+        // reorders the feed (next unit can land at index 0).
+        if (!options?.skipHistory && next > currentIndex) {
+          const leavingId = cards[currentIndex]?.id
+          if (leavingId) {
+            viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
+          }
+        }
         goToIndex(next, { reorderRestudy: options?.reorderRestudy === true ? true : false })
+        refreshCanGoPrevious(next)
         return
       }
       // Same index: React may bail out of setState; still align the viewport.
       if (next === currentIndex) {
         scrollToIndex(next)
         return
+      }
+      if (!options?.skipHistory && next > currentIndex) {
+        const leavingId = cards[currentIndex]?.id
+        if (leavingId) {
+          viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
+        }
       }
       requestedScrollIndexRef.current = next
       const applied = goToIndex(next, {
@@ -203,9 +236,32 @@ export default function ImmersiveFreestylePage() {
       if (typeof applied === 'number') {
         requestedScrollIndexRef.current = applied
       }
+      refreshCanGoPrevious(typeof applied === 'number' ? applied : next)
     },
-    [cards.length, currentIndex, goToIndex, scrollToIndex],
+    [cards, currentIndex, goToIndex, refreshCanGoPrevious, scrollToIndex],
   )
+
+  /**
+   * 「上一张」: prefer view history so restudy/skip reorders still return to the
+   * unit just left (even when that unit is no longer at index-1, or when the next
+   * unit slid into index 0 and index-based back would stay disabled).
+   */
+  const navigatePrevious = useCallback(() => {
+    const list = cards
+    const currentId = list[currentIndex]?.id ?? null
+    const popped = popViewHistory(viewHistoryRef.current, list, currentId)
+    if (popped) {
+      viewHistoryRef.current = popped.history
+      const targetIndex = list.findIndex((card) => card.id === popped.targetId)
+      if (targetIndex >= 0) {
+        navigateToIndex(targetIndex, { skipHistory: true })
+        return
+      }
+    }
+    if (currentIndex > 0) {
+      navigateToIndex(currentIndex - 1, { skipHistory: true })
+    }
+  }, [cards, currentIndex, navigateToIndex])
 
   useEffect(() => {
     if (requestedScrollIndexRef.current !== currentIndex) return
@@ -352,17 +408,6 @@ export default function ImmersiveFreestylePage() {
     [cards.length, currentIndex],
   )
 
-  const [canUndoSkip, setCanUndoSkip] = useState(false)
-  useEffect(() => {
-    if (!queueState.lastSkippedId || !queueState.lastSkippedAt) {
-      setCanUndoSkip(false)
-      return
-    }
-    setCanUndoSkip(true)
-    const timerId = window.setTimeout(() => setCanUndoSkip(false), UNDO_SKIP_WINDOW_MS)
-    return () => window.clearTimeout(timerId)
-  }, [queueState.lastSkippedAt, queueState.lastSkippedId])
-
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       if (programmaticScrollRef.current) return
@@ -397,8 +442,13 @@ export default function ImmersiveFreestylePage() {
    * cannot keep the previous card in view — that looked like「下一题」.
    */
   const handleSkipToNextPalace = useCallback(() => {
+    const leavingId = cards[currentIndex]?.id
+    if (leavingId) {
+      viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
+    }
     const nextIndex = skipToNextPalace()
     requestedScrollIndexRef.current = nextIndex
+    refreshCanGoPrevious(nextIndex)
     // Double-rAF: wait until React commits the reordered children, then snap.
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -406,7 +456,7 @@ export default function ImmersiveFreestylePage() {
         requestedScrollIndexRef.current = null
       })
     })
-  }, [scrollToIndex, skipToNextPalace])
+  }, [cards, currentIndex, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -423,14 +473,10 @@ export default function ImmersiveFreestylePage() {
       }
       if (event.key === 'ArrowUp' || event.key === 'PageUp') {
         event.preventDefault()
-        navigateToIndex(currentIndex - 1)
-      }
-      if (event.key === 's' || event.key === 'S') {
-        event.preventDefault()
-        skipCurrent()
+        navigatePrevious()
       }
     },
-    [currentIndex, navigateToIndex, skipCurrent],
+    [currentIndex, navigatePrevious, navigateToIndex],
   )
 
   const mindmapCount = cards.filter(isMindMapBranchCard).length
@@ -729,10 +775,10 @@ export default function ImmersiveFreestylePage() {
             <button
               type="button"
               className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"
-              title="上一张"
+              title="上一张：返回上一个单元"
               aria-label="上一张"
-              disabled={currentIndex <= 0 || cards.length === 0}
-              onClick={() => navigateToIndex(currentIndex - 1)}
+              disabled={!canGoPrevious || cards.length === 0}
+              onClick={navigatePrevious}
             >
               <ChevronUp className="size-5 sm:size-4" />
             </button>
@@ -748,15 +794,6 @@ export default function ImmersiveFreestylePage() {
             </button>
             <button
               type="button"
-              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-10"
-              title="跳过当前"
-              aria-label="跳过当前"
-              onClick={skipCurrent}
-            >
-              <SkipForward className="size-5 sm:size-4" />
-            </button>
-            <button
-              type="button"
               className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
               title="下个宫殿：本宫殿剩余内容移到队尾"
               aria-label="下个宫殿"
@@ -765,29 +802,6 @@ export default function ImmersiveFreestylePage() {
               <Waypoints className="size-4 shrink-0" />
               <span className="leading-none">下个</span>
             </button>
-            {canUndoSkip ? (
-              <button
-                type="button"
-                className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:size-10"
-                title="撤销跳过"
-                aria-label="撤销跳过"
-                onClick={undoLastSkip}
-              >
-                <Undo2 className="size-5 sm:size-4" />
-              </button>
-            ) : null}
-            {currentCard ? (
-              <button
-                type="button"
-                className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 hover:text-zinc-100 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
-                title="少看此宫殿"
-                aria-label="少看此宫殿"
-                onClick={muteCurrentPalace}
-              >
-                <EyeOff className="size-4 shrink-0" />
-                <span className="leading-none">少看</span>
-              </button>
-            ) : null}
           </div>
         </div>
       </div>

@@ -378,7 +378,8 @@ def _ensure_desktop_runtime() -> bool:
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             check=False,
-            **dev_server.hidden_process_kwargs(),
+            # Attached + CREATE_NO_WINDOW: DETACHED_PROCESS breaks npm.cmd log capture.
+            **dev_server.hidden_console_kwargs(),
         )
     if result.returncode != 0 or not _desktop_runtime_ready():
         print(f"[!] Electron runtime repair failed. See {log_path}")
@@ -406,7 +407,8 @@ def _run_frontend_build() -> bool:
             stdin=subprocess.DEVNULL,
             env=_backend_env(),
             check=False,
-            **dev_server.hidden_process_kwargs(),
+            # Attached + CREATE_NO_WINDOW: DETACHED_PROCESS breaks npm.cmd log capture.
+            **dev_server.hidden_console_kwargs(),
         )
     if result.returncode != 0:
         print(f"[!] PWA frontend build failed ({result.returncode}). See {log_path}")

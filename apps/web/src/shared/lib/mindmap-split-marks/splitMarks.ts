@@ -1,4 +1,18 @@
-/** Permanent split-mark helpers for palace editor / freestyle mark UI. */
+/**
+ * Split-mark helpers for freestyle / palace editor.
+ *
+ * Mark points are freestyle split anchors: nodes the user designates so a palace
+ * can be practiced in smaller branches. Temporary and permanent marks share the
+ * same topology (same parent/child structure, same auto level derivation from
+ * marked ancestors). Only lifecycle differs:
+ * - temporary: freestyle session marks stored via temporary-marks API; cleared
+ *   after the marked branch is rated successfully (记得/轻松 settlement).
+ * - permanent: `permanentSplitMark` flags on editor_doc nodes; persist with the
+ *   palace editor and remain until the user removes them.
+ *
+ * Levels (L1/L2/…) are derived automatically: a marked node's level = 1 + count
+ * of marked ancestors. Colors come from PERMANENT_MARK_COLORS by level.
+ */
 
 export const PERMANENT_MARK_COLORS = [
   { level: 1, border: '#f59e0b', fill: 'rgba(245, 158, 11, 0.18)', label: 'L1' },
@@ -24,6 +38,8 @@ export type EditorDoc = {
   root?: EditorDocNode | null
   [key: string]: unknown
 }
+
+export type SplitMarkChipTone = 'warning' | 'info' | 'success' | 'danger' | 'neutral'
 
 function nodeUid(node: EditorDocNode, fallback: string): string {
   const data = node.data && typeof node.data === 'object' ? node.data : {}
@@ -62,6 +78,10 @@ export function buildEditorParentMap(doc: EditorDoc | null | undefined): Map<str
   return map
 }
 
+/**
+ * Derive mark levels from marked uids + parent map.
+ * Level = 1 + number of marked ancestors (root is never a mark point).
+ */
 export function derivePermanentMarkLevels(
   markedUids: Iterable<string>,
   parentByUid: Map<string, string | null>,
@@ -83,9 +103,35 @@ export function derivePermanentMarkLevels(
   return levels
 }
 
+/** Alias: levels are topology-only; same for temporary and permanent marks. */
+export const deriveSplitMarkLevels = derivePermanentMarkLevels
+
 export function colorForPermanentLevel(level: number) {
   const idx = Math.max(0, Math.min(PERMANENT_MARK_COLORS.length - 1, level - 1))
   return PERMANENT_MARK_COLORS[idx]
+}
+
+export function chipToneForMarkLevel(level: number): SplitMarkChipTone {
+  if (level === 1) return 'warning'
+  if (level === 2) return 'info'
+  if (level === 3) return 'success'
+  if (level === 4) return 'danger'
+  return 'neutral'
+}
+
+/** Build L1/L2/… status chips for marked nodes (shared by temp + permanent UI). */
+export function buildSplitMarkStatusChips(
+  markedUids: Iterable<string>,
+  parentByUid: Map<string, string | null>,
+  rootUid?: string | null,
+): Record<string, Array<{ text: string; tone: SplitMarkChipTone; style: 'filled' }>> {
+  const levels = deriveSplitMarkLevels(markedUids, parentByUid, rootUid)
+  const chips: Record<string, Array<{ text: string; tone: SplitMarkChipTone; style: 'filled' }>> = {}
+  for (const [uid, level] of levels.entries()) {
+    const color = colorForPermanentLevel(level)
+    chips[uid] = [{ text: color.label, tone: chipToneForMarkLevel(level), style: 'filled' }]
+  }
+  return chips
 }
 
 /** Toggle permanentSplitMark on a node by uid; returns new doc clone. */
@@ -118,4 +164,28 @@ export function togglePermanentMarkInDoc(
   if (clone.root) walk(clone.root, 'root')
   if (!found) return { doc, marked: false }
   return { doc: clone, marked }
+}
+
+/** Clear all permanentSplitMark flags; returns new doc clone. */
+export function clearPermanentMarksInDoc(doc: EditorDoc): EditorDoc {
+  const clone = structuredClone(doc) as EditorDoc
+  const walk = (node: EditorDocNode) => {
+    if (node.data && typeof node.data === 'object' && node.data.permanentSplitMark === true) {
+      const data = { ...node.data }
+      delete data.permanentSplitMark
+      node.data = data
+    }
+    const children = Array.isArray(node.children) ? node.children : []
+    children.forEach((child) => {
+      if (child && typeof child === 'object') walk(child)
+    })
+  }
+  if (clone.root) walk(clone.root)
+  return clone
+}
+
+export function collectRootUid(doc: EditorDoc | null | undefined): string | null {
+  if (!doc?.root?.data || typeof doc.root.data !== 'object') return null
+  const data = doc.root.data as Record<string, unknown>
+  return String(data.uid || data.memoryAnkiId || 'root')
 }

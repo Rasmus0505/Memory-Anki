@@ -85,12 +85,66 @@ export function buildRemainingCountByNodeUid(
   return counts
 }
 
+export type NodeQuizCountBadge = {
+  text: string
+  tone: 'success' | 'neutral'
+  title: string
+}
+
+/**
+ * Green badge = still has unfinished bound questions this session.
+ * Gray badge = all bound questions already done this session (keep visible for review).
+ * Never hide a node that still has bound questions just because they were answered.
+ */
+export function buildCountBadgeByNodeUid(
+  subtreeQuestions: Map<string, Set<number>>,
+  completedQuestionIds: ReadonlySet<number>,
+): Record<string, NodeQuizCountBadge> {
+  const map: Record<string, NodeQuizCountBadge> = {}
+  for (const [uid, questionIds] of subtreeQuestions) {
+    if (questionIds.size === 0) continue
+    let remaining = 0
+    for (const qid of questionIds) {
+      if (!completedQuestionIds.has(qid)) remaining += 1
+    }
+    const total = questionIds.size
+    if (remaining > 0) {
+      map[uid] = {
+        text: String(remaining),
+        tone: 'success',
+        title: `${remaining}/${total} 道未做关联题（含子树；点开可做题，完成变灰）`,
+      }
+    } else {
+      map[uid] = {
+        text: String(total),
+        tone: 'neutral',
+        title: `${total} 道关联题本会话已完成（点开可回顾答题）`,
+      }
+    }
+  }
+  return map
+}
+
 export function getQuestionIdsForNode(
   subtreeQuestions: Map<string, Set<number>>,
   nodeUid: string,
   completedQuestionIds: ReadonlySet<number> = new Set(),
+  options?: { includeCompleted?: boolean },
 ): number[] {
   const all = subtreeQuestions.get(nodeUid)
   if (!all) return []
-  return [...all].filter((qid) => !completedQuestionIds.has(qid)).sort((a, b) => a - b)
+  const includeCompleted = options?.includeCompleted === true
+  const ids = includeCompleted
+    ? [...all]
+    : [...all].filter((qid) => !completedQuestionIds.has(qid))
+  return ids.sort((a, b) => a - b)
+}
+
+/** First unfinished id in the ordered list, or 0 when all are done / list empty. */
+export function firstIncompleteQuestionIndex(
+  questionIds: readonly number[],
+  completedQuestionIds: ReadonlySet<number>,
+): number {
+  const index = questionIds.findIndex((qid) => !completedQuestionIds.has(qid))
+  return index >= 0 ? index : 0
 }

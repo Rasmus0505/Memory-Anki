@@ -10,7 +10,7 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import FreestyleTemporaryMark
 from memory_anki.modules.content.application.tree_structure import get_palace_tree_structure
-from memory_anki.modules.practice.domain.branch_units import filter_outermost_roots, subtree_uids
+from memory_anki.modules.practice.domain.branch_units import subtree_uids
 
 
 def list_active_temporary_roots(
@@ -63,8 +63,13 @@ def replace_palace_temporary_marks(
 ) -> dict[str, Any]:
     """Replace active temporary marks for a palace and optionally unify FSRS.
 
+    Stores **all** valid node_uids (excluding palace root). Nested L2/L3 marks
+    are kept — do **not** filter_outermost_roots when saving. Temporary and
+    permanent marks share freestyle split topology; temporary is lifecycle-only.
+
     Confirmation is destructive for FSRS when unify_progress is True: averages
-    existing FSRS states across all marked roots' subtrees and writes back.
+    existing FSRS states across the union of all marked uids' subtrees
+    (deduped) and writes back to the whole group.
     """
     palace = session.get(Palace, int(palace_id))
     if palace is None or palace.deleted_at is not None:
@@ -74,8 +79,13 @@ def replace_palace_temporary_marks(
     nodes = tree["nodes"]
     root_uid = tree.get("root_uid")
     requested = [str(uid) for uid in node_uids if str(uid).strip()]
-    valid = [uid for uid in requested if uid in nodes and uid != root_uid]
-    outermost = filter_outermost_roots(nodes, valid)
+    # Preserve request order; dedupe; keep nested marks (no outermost filter).
+    valid: list[str] = []
+    seen_valid: set[str] = set()
+    for uid in requested:
+        if uid in nodes and uid != root_uid and uid not in seen_valid:
+            valid.append(uid)
+            seen_valid.add(uid)
 
     # Replace all marks for this palace (completed or not).
     session.query(FreestyleTemporaryMark).filter(
@@ -84,7 +94,7 @@ def replace_palace_temporary_marks(
     session.flush()
 
     now = utc_now_naive()
-    for uid in outermost:
+    for uid in valid:
         session.add(
             FreestyleTemporaryMark(
                 palace_id=int(palace_id),
@@ -97,15 +107,15 @@ def replace_palace_temporary_marks(
     session.flush()
 
     unify_result: dict[str, Any] | None = None
-    if unify_progress and outermost:
+    if unify_progress and valid:
         from memory_anki.modules.memory.application.temporary_mark_unify import (
             unify_fsrs_progress_for_node_groups,
         )
 
         group_uids: list[str] = []
         seen: set[str] = set()
-        for root in outermost:
-            for uid in subtree_uids(nodes, root, include_self=True):
+        for mark_uid in valid:
+            for uid in subtree_uids(nodes, mark_uid, include_self=True):
                 if uid == root_uid or uid in seen:
                     continue
                 seen.add(uid)
@@ -121,8 +131,8 @@ def replace_palace_temporary_marks(
     session.commit()
     return {
         "palace_id": int(palace_id),
-        "active_root_uids": outermost,
-        "marks": [{"node_uid": uid, "completed": False} for uid in outermost],
+        "active_root_uids": valid,
+        "marks": [{"node_uid": uid, "completed": False} for uid in valid],
         "unify": unify_result,
     }
 
@@ -146,7 +156,9 @@ def mark_temporary_roots_completed_on_settlement(
 ) -> list[str]:
     """Mark matching temporary roots completed when settlement includes Good/Easy.
 
-    Returns newly completed root uids. Does not reset on forget/hard.
+    Nested marks complete when their unit root (or any mark uid) is in the
+    settlement scope. Returns newly completed root uids. Does not reset on
+    forget/hard.
     """
     if not had_good_or_easy:
         return []

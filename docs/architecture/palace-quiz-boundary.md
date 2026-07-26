@@ -35,5 +35,5 @@ Low-level question and OCR write helpers may flush for command composition but m
 - Write paths: `POST .../preview` + `.../apply` (AI, human confirm), `POST .../mutate` (manual; optional `target_palace_id` on each add/remove), `POST .../auto-bind-text` (deterministic text-overlap backfill).
 - Merge modes (AI apply): `replace_all` (clear **this target palace’s AI edges**; manual kept) and `fill_unbound`.
 - Bidirectional UI:
-  - Map/review → `NodeBoundQuizDialog` overlay (owner labels 本宫 / 来自·他宫); green badges = subtree union of remaining bound questions, including cross-owner edges.
+  - Map/review → `NodeBoundQuizDialog` overlay (owner labels 本宫 / 来自·他宫); green badges = subtree union of **remaining** bound questions (including cross-owner edges); when all session-completed, badge stays with **total count in gray** so the learner can reopen and review prior answers (prev/next keeps resolved states).
   - Quiz → multi-edge picker → `QuizKnowledgeDigressionDialog` full readonly target map + sticky **返回做题** (overlay; attempt draft stays in parent memory; PWA back closes digression first).

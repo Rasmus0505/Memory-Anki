@@ -214,6 +214,8 @@ export function useMindMapCanvasState(
     }),
   )
   const collapsedSignatureRef = useRef('')
+  /** Node ids from the last reconciled tree; used to seed only brand-new deep parents. */
+  const knownCollapseNodeIdsRef = useRef<Set<string>>(new Set(graphData.nodes.map((n) => n.id)))
 
   const resolveCurrentMarkColor = useCallback((nodeIds: string[]) => {
     for (const id of nodeIds) {
@@ -311,10 +313,12 @@ export function useMindMapCanvasState(
   // auto-fold on large maps. Mode switches re-seed defaults.
   useEffect(() => {
     const modeKey = practiceModeActive ? 'p' : 'e'
-    const idSignature = graphData.nodes.map((node) => node.id).join(',')
+    const currentIds = graphData.nodes.map((node) => node.id)
+    const idSignature = currentIds.join(',')
     const signature = `${modeKey}:${idSignature}`
     const previousSignature = collapsedSignatureRef.current
     collapsedSignatureRef.current = signature
+    const knownNodeIds = knownCollapseNodeIdsRef.current
     if (!previousSignature) {
       setCollapsedNodeIds(
         reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
@@ -322,6 +326,7 @@ export function useMindMapCanvasState(
           forceDefault: true,
         }),
       )
+      knownCollapseNodeIdsRef.current = new Set(currentIds)
       return
     }
     const previousMode = previousSignature.startsWith('p:') ? 'p' : 'e'
@@ -330,8 +335,10 @@ export function useMindMapCanvasState(
       reconcileCollapsedNodeIds(previous, graphData.nodes, {
         practiceModeActive,
         forceDefault: modeChanged,
+        knownNodeIds,
       }),
     )
+    knownCollapseNodeIdsRef.current = new Set(currentIds)
   }, [graphData.nodes, practiceModeActive])
 
   // Expand ancestors when host selects a node that would otherwise be hidden.
@@ -354,8 +361,8 @@ export function useMindMapCanvasState(
   }, [graphData.nodes, selectedNodeId])
 
   const handleToggleCollapse = useCallback((nodeId: string) => {
-    setCollapsedNodeIds((previous) => toggleCollapsedNodeId(previous, nodeId))
-  }, [])
+    setCollapsedNodeIds((previous) => toggleCollapsedNodeId(graphData.nodes, previous, nodeId))
+  }, [graphData.nodes])
 
   const expandAllBranches = useCallback(() => {
     dispatchGlobalFeedback('toolbar_action', {

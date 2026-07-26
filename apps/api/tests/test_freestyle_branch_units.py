@@ -598,10 +598,10 @@ def test_permanent_marks_force_sibling_split():
         node_limit=20,
         permanent_mark_uids=["purpose", "effect"],
     )
-    assert [u.branch_uid for u in marked] == ["purpose", "effect"]
+    assert {u.branch_uid for u in marked} == {"purpose", "effect"}
     assert all(u.selection_reason.startswith("permanent_mark") for u in marked)
 
-    # L2 permanent marks under effect force society vs person split.
+    # L2 under effect: water-pour → purpose | effect residual | society | person
     deep = split_branch_units(
         palace_id=1,
         nodes=nodes,
@@ -609,16 +609,13 @@ def test_permanent_marks_force_sibling_split():
         node_limit=20,
         permanent_mark_uids=["purpose", "effect", "society", "person"],
     )
-    branch_uids = [u.branch_uid for u in deep]
-    assert "purpose" in branch_uids
-    assert "society" in branch_uids
-    assert "person" in branch_uids
-    assert "effect" not in branch_uids  # folded into first child lineage
-    # effect should be folded into first marked child unit
-    society_unit = next(u for u in deep if u.branch_uid == "society")
-    assert "effect" in society_unit.ratable_node_uids
-    person_unit = next(u for u in deep if u.branch_uid == "person")
-    assert "effect" not in person_unit.ratable_node_uids
+    by = {u.branch_uid: u for u in deep}
+    assert set(by) == {"purpose", "effect", "society", "person"}
+    assert set(by["effect"].ratable_node_uids) == {"effect"}
+    assert "society_leaf" in by["society"].ratable_node_uids
+    assert "person_leaf" in by["person"].ratable_node_uids
+    assert "effect" not in by["society"].ratable_node_uids
+    assert "effect" not in by["person"].ratable_node_uids
 
 
 def test_temporary_roots_claim_full_subtrees():
@@ -653,7 +650,7 @@ def test_temporary_roots_claim_full_subtrees():
     assert by_branch["other"].selection_reason == "within_limit"
 
 
-def test_temporary_nested_root_keeps_outermost_only():
+def test_temporary_nested_marks_force_split_like_permanent():
     nodes = {
         "root": _node("root", "P"),
         "a": _node("a", "A", parent="root"),
@@ -670,9 +667,223 @@ def test_temporary_nested_root_keeps_outermost_only():
         node_limit=20,
         temporary_root_uids=["a", "a1"],
     )
-    assert len(units) == 1
-    assert units[0].branch_uid == "a"
-    assert set(units[0].ratable_node_uids) == {"a", "a1", "a1x"}
+    # Water-pour: unit at a = {a}; unit at a1 = {a1, a1x}
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in units}
+    assert by == {"a": {"a"}, "a1": {"a1", "a1x"}}
+    assert all(u.selection_reason.startswith("temporary_mark") for u in units)
+
+
+
+
+
+def test_mark_anchor_keeps_full_subtree_despite_node_limit():
+    """L2 on 高等教育 must keep all unmarked siblings in one unit.
+
+    Regression: node_limit best-fit used to drill past a mark and emit separate
+    units for 赠地法案 / 变化 / 三大职能 — so freestyle flip only showed one
+    branch under 赠地变化职能.
+    """
+    nodes = {
+        "root": _node("root", "P"),
+        "sec": _node("sec", "第五节", parent="root"),
+        "c19": _node("c19", "19世纪", parent="sec"),
+        "move": _node("move", "高等运动", parent="c19"),
+        "he": _node("he", "高等教育", parent="move"),
+        "land": _node("land", "赠地变化职能", parent="he"),
+        "bill": _node("bill", "赠地法案", parent="land"),
+        "bill1": _node("bill1", "b1", parent="bill"),
+        "change": _node("change", "高等教育的变化", parent="land"),
+        "change1": _node("change1", "c1", parent="change"),
+        "func": _node("func", "三大职能", parent="land"),
+        "func1": _node("func1", "高等教育史上", parent="func"),
+        "func2": _node("func2", "中世纪大学", parent="func"),
+    }
+    nodes["root"]["children"] = ["sec"]
+    nodes["sec"]["children"] = ["c19"]
+    nodes["c19"]["children"] = ["move"]
+    nodes["move"]["children"] = ["he"]
+    nodes["he"]["children"] = ["land"]
+    nodes["land"]["children"] = ["bill", "change", "func"]
+    nodes["bill"]["children"] = ["bill1"]
+    nodes["change"]["children"] = ["change1"]
+    nodes["func"]["children"] = ["func1", "func2"]
+
+    # Without marks, low limit still best-fit splits the three siblings.
+    plain = split_branch_units(
+        palace_id=1, nodes=nodes, root_uid="root", node_limit=4
+    )
+    assert {u.branch_uid for u in plain} == {"bill", "change", "func"}
+
+    # With L2 only on 高等教育: one unit containing all three sibling trees.
+    marked = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=4,
+        permanent_mark_uids=["he"],
+    )
+    assert len(marked) == 1
+    unit = marked[0]
+    assert unit.branch_uid == "he"
+    assert unit.selection_reason.startswith("permanent_mark")
+    ratable = set(unit.ratable_node_uids)
+    assert {"he", "land", "bill", "bill1", "change", "change1", "func", "func1", "func2"} <= ratable
+    # Folded single-child spine ancestors may also be ratable.
+    assert "bill" in ratable and "change" in ratable and "func" in ratable
+
+    # Temporary mark same topology.
+    temp = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=4,
+        temporary_root_uids=["he"],
+    )
+    assert len(temp) == 1
+    assert temp[0].branch_uid == "he"
+    assert set(temp[0].ratable_node_uids) == set(unit.ratable_node_uids)
+    assert temp[0].selection_reason.startswith("temporary_mark")
+
+
+
+def test_water_pour_l1_hub_four_unmarked_plus_one_l2():
+    """User model: L1 hub + 4 unmarked siblings + 1 L2 → exactly 2 units.
+
+    上面四个为一个复习单元，下面论教育学与师范教育是一个单元。
+    """
+    nodes = {
+        "root": _node("root", "P"),
+        "thought": _node("thought", "教育思想", parent="root"),
+        "hub": _node("hub", "L1枢纽", parent="thought"),
+        "ushinsky": _node("ushinsky", "乌申斯基", parent="hub"),
+        "u1": _node("u1", "u-leaf", parent="ushinsky"),
+        "essence": _node("essence", "本质与目的", parent="hub"),
+        "e1": _node("e1", "e-leaf", parent="essence"),
+        "curriculum": _node("curriculum", "课程教学观", parent="hub"),
+        "c1": _node("c1", "c-leaf", parent="curriculum"),
+        "moral": _node("moral", "论道德教育", parent="hub"),
+        "m1": _node("m1", "m-leaf", parent="moral"),
+        "normal": _node("normal", "论教育学及师范教育", parent="hub"),
+        "n1": _node("n1", "广义目的", parent="normal"),
+        "n2": _node("n2", "n-leaf", parent="n1"),
+    }
+    nodes["root"]["children"] = ["thought"]
+    nodes["thought"]["children"] = ["hub"]
+    nodes["hub"]["children"] = ["ushinsky", "essence", "curriculum", "moral", "normal"]
+    nodes["ushinsky"]["children"] = ["u1"]
+    nodes["essence"]["children"] = ["e1"]
+    nodes["curriculum"]["children"] = ["c1"]
+    nodes["moral"]["children"] = ["m1"]
+    nodes["normal"]["children"] = ["n1"]
+    nodes["n1"]["children"] = ["n2"]
+
+    units = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=4,  # would otherwise shatter if best-fit ran under hub
+        permanent_mark_uids=["hub", "normal"],
+    )
+    assert len(units) == 2
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in units}
+    assert set(by) == {"hub", "normal"}
+    # L1 unit: hub + four unmarked branches (+ folded 教育思想)
+    assert {"hub", "ushinsky", "u1", "essence", "e1", "curriculum", "c1", "moral", "m1"} <= by["hub"]
+    assert "thought" in by["hub"]
+    assert "normal" not in by["hub"]
+    assert "n1" not in by["hub"]
+    # L2 unit: normal subtree only
+    assert by["normal"] == {"normal", "n1", "n2"}
+    assert all(u.selection_reason.startswith("permanent_mark") for u in units)
+
+
+def test_temporary_legend_l1_with_three_l2_marks():
+    """L1 + 3 L2 temp marks => 3 units; L1 only => 1 whole branch."""
+    nodes = {
+        "root": _node("root", "P"),
+        "l1": _node("l1", "17-18", parent="root"),
+        "mid": _node("mid", "mid", parent="l1"),
+        "l2a": _node("l2a", "L2A", parent="mid"),
+        "l2b": _node("l2b", "L2B", parent="mid"),
+        "l2c": _node("l2c", "L2C", parent="mid"),
+        "l2a_leaf": _node("l2a_leaf", "a-leaf", parent="l2a"),
+        "l2b_leaf": _node("l2b_leaf", "b-leaf", parent="l2b"),
+        "l2c_leaf": _node("l2c_leaf", "c-leaf", parent="l2c"),
+    }
+    nodes["root"]["children"] = ["l1"]
+    nodes["l1"]["children"] = ["mid"]
+    nodes["mid"]["children"] = ["l2a", "l2b", "l2c"]
+    nodes["l2a"]["children"] = ["l2a_leaf"]
+    nodes["l2b"]["children"] = ["l2b_leaf"]
+    nodes["l2c"]["children"] = ["l2c_leaf"]
+
+    three = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=["l1", "l2a", "l2b", "l2c"],
+    )
+    by = {u.branch_uid: set(u.ratable_node_uids) for u in three}
+    # L1 residual {l1, mid} + each L2 subtree
+    assert set(by) == {"l1", "l2a", "l2b", "l2c"}
+    assert by["l1"] == {"l1", "mid"}
+    assert by["l2a"] == {"l2a", "l2a_leaf"}
+    assert by["l2b"] == {"l2b", "l2b_leaf"}
+    assert by["l2c"] == {"l2c", "l2c_leaf"}
+    assert all(u.selection_reason.startswith("temporary_mark") for u in three)
+
+    whole = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=["l1"],
+    )
+    assert len(whole) == 1
+    assert whole[0].branch_uid == "l1"
+    assert set(whole[0].ratable_node_uids) == {
+        "l1", "mid", "l2a", "l2b", "l2c", "l2a_leaf", "l2b_leaf", "l2c_leaf"
+    }
+    assert whole[0].selection_reason == "temporary_mark"
+
+
+def test_temporary_multi_level_same_topology_as_permanent():
+    """Temporary multi-level marks produce the same unit topology as permanent."""
+    nodes = {
+        "root": _node("root", "Palace"),
+        "purpose": _node("purpose", "purpose", parent="root"),
+        "purpose_child": _node("purpose_child", "purpose_child", parent="purpose"),
+        "effect": _node("effect", "effect", parent="root"),
+        "society": _node("society", "society", parent="effect"),
+        "person": _node("person", "person", parent="effect"),
+        "society_leaf": _node("society_leaf", "society_leaf", parent="society"),
+        "person_leaf": _node("person_leaf", "person_leaf", parent="person"),
+    }
+    nodes["root"]["children"] = ["purpose", "effect"]
+    nodes["purpose"]["children"] = ["purpose_child"]
+    nodes["effect"]["children"] = ["society", "person"]
+    nodes["society"]["children"] = ["society_leaf"]
+    nodes["person"]["children"] = ["person_leaf"]
+    marks = ["purpose", "effect", "society", "person"]
+    permanent = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        permanent_mark_uids=marks,
+    )
+    temporary = split_branch_units(
+        palace_id=1,
+        nodes=nodes,
+        root_uid="root",
+        node_limit=20,
+        temporary_root_uids=marks,
+    )
+    assert [u.branch_uid for u in temporary] == [u.branch_uid for u in permanent]
+    for p_unit, t_unit in zip(permanent, temporary):
+        assert list(p_unit.ratable_node_uids) == list(t_unit.ratable_node_uids)
+        assert p_unit.selection_reason.replace("permanent_mark", "temporary_mark") == t_unit.selection_reason
 
 
 def test_derive_permanent_mark_levels_auto():

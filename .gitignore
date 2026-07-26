@@ -97,3 +97,5 @@ _DEBUG_FALLBACK.json
 /germany-palace-completed.png
 
 .superpowers/
+*.jpg
+*.png
