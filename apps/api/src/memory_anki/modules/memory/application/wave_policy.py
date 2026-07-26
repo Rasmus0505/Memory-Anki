@@ -5,6 +5,7 @@ No SQLAlchemy / FastAPI imports — unit-testable domain rules.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -33,23 +34,61 @@ SCHEDULE_PRACTICE = "practice"
 SCHEDULE_WAVE_ADSORB = "wave_adsorb"
 SCHEDULE_CALIBRATED = "calibrated"
 SCHEDULE_REINFORCEMENT = "reinforcement"
+# 够不到任何单元波次的短间隔卡：不建宫殿波次，进跨宫殿「今日巩固」清单。
+SCHEDULE_CONSOLIDATE = "consolidate"
+
 
 @dataclass(frozen=True)
 class AggregationPolicy:
-    """可选聚合层的对称容忍窗：提前/推后同样受限，且都有硬上限。
+    """单元聚合的**非对称**容忍窗。
 
-    - 双向天数上限（max_pull_days / max_push_days）
-    - 双向占间隔比例上限（max_shift_ratio）——提前复习同样是浪费，需受约束
-    - 推后额外受保持率损失上限（max_retention_drop）
+    提前与推后的代价完全不同，不能用同一个比例约束：
+
+    - 提前复习昂贵：R 更高 → 稳定度增益项 (e^{w10(1−R)} − 1) 缩水。按 FSRS-6
+      默认 w10≈0.796，提前 20% 永久损失约 18% 的间隔增长（复利），提前 35%
+      损失约 33%。所以 ``max_pull_ratio`` 收紧到 0.20。
+    - 推后便宜：只付一次性的失误概率。推后 30% 约 −2.6pp 保持率、推后 40%
+      约 −3.5pp，而复习成功时反而多赚 16–22% 的稳定度增益。所以
+      ``max_push_ratio`` 放宽到 0.40，与 ``max_retention_drop`` 互为冗余闸门。
+
+    ``max_push_ratio`` 取 0.40 的依据是 FSRS 的自然分歧带宽：同日复习对齐
+    last_review 后，全 Good 时对数分歧每次按 S^(−w9) 压缩约 17%，但 Hard(×0.6)
+    / Easy(×1.9) 持续注入，稳态是 ±30% 左右的间隔带。把窗口对齐到这条带宽，
+    单元的稳态就是 1–2 个复习日。
+
+    ``min_window_days`` 修掉旧实现的致命缺陷：floor(interval × ratio) 让 6 天
+    间隔的卡窗口宽度为 0，永远无法与任何波次合并——聚合开不开都拉不齐。
     """
 
-    max_pull_days: int = 2
-    max_push_days: int = 2
-    max_shift_ratio: float = 0.15
-    max_retention_drop: float = 0.03
+    max_pull_ratio: float = 0.20
+    max_push_ratio: float = 0.40
+    max_retention_drop: float = 0.04
+    # 窗口宽度下限：短间隔卡也要有合并机会。
+    min_window_days: int = 1
+    # 绝对兜底，实际由 ratio 主导。
+    max_pull_days: int = 30
+    max_push_days: int = 30
+    # 聚类后低于此张数的簇解散，卡落入巩固清单（避免一张卡撑起一次会话）。
+    min_wave_cards: int = 3
+    # 间隔低于此的卡永不建单元波次。
+    consolidate_floor_days: int = 3
 
 
 DEFAULT_AGGREGATION_POLICY = AggregationPolicy()
+
+# 单元复习日的排布策略。
+UNIT_DAY_POLICY_LOAD_BALANCE = "load_balance"
+UNIT_DAY_POLICY_FUZZ = "fuzz"
+UNIT_DAY_POLICY_NONE = "none"
+DEFAULT_UNIT_DAY_POLICY = UNIT_DAY_POLICY_LOAD_BALANCE
+
+# fuzz 模式下的偏移幅度按单元中位间隔分档（天）。
+UNIT_FUZZ_SPREAD_TIERS: tuple[tuple[float, int], ...] = (
+    (7.0, 0),
+    (20.0, 1),
+    (60.0, 2),
+)
+UNIT_FUZZ_SPREAD_MAX = 3
 
 # Legacy defaults (clock delay removed). Weak ratings use end-of-batch restudy.
 DEFAULT_AGAIN_REINFORCEMENT_MINUTES = 0
@@ -95,12 +134,50 @@ def safety_window_bounds(
     interval_days_value: float,
     policy: AggregationPolicy = DEFAULT_AGGREGATION_POLICY,
 ) -> tuple[date, date]:
-    """Return [earliest, latest] local dates within the symmetric safety window."""
-    pull_days = min(policy.max_pull_days, interval_days_value * policy.max_shift_ratio)
-    push_days = min(policy.max_push_days, interval_days_value * policy.max_shift_ratio)
-    earliest = anchor - timedelta(days=math.floor(pull_days))
-    latest = anchor + timedelta(days=math.floor(push_days))
+    """Return [earliest, latest] local dates within the asymmetric safety window.
+
+    推后侧比提前侧宽（见 AggregationPolicy 的代价分析）；两侧都有
+    ``min_window_days`` 下限，否则短间隔卡的窗口会被 floor 抹成 0 天。
+    """
+    pull_days = min(policy.max_pull_days, interval_days_value * policy.max_pull_ratio)
+    push_days = min(policy.max_push_days, interval_days_value * policy.max_push_ratio)
+    pull = max(policy.min_window_days, math.floor(pull_days))
+    push = max(policy.min_window_days, math.floor(push_days))
+    earliest = anchor - timedelta(days=pull)
+    latest = anchor + timedelta(days=push)
     return earliest, latest
+
+
+def unit_fuzz_spread_days(median_interval_days: float) -> int:
+    """fuzz 模式下单元复习日的偏移幅度（按中位间隔分档）。"""
+    for threshold, spread in UNIT_FUZZ_SPREAD_TIERS:
+        if median_interval_days < threshold:
+            return spread
+    return UNIT_FUZZ_SPREAD_MAX
+
+
+def unit_day_offset(
+    *,
+    palace_id: int,
+    unit_root_uid: str,
+    anchor: date,
+    spread_days: int,
+    lo: int = 0,
+    hi: int = 0,
+) -> int:
+    """整单元一起偏移的确定性天数，钳制到可行区间 [lo, hi]。
+
+    种子含未偏移质心的序数：同单元同质心恒得同偏移（幂等重算不抖动），
+    质心变了则重新掷（不产生系统性偏置）。lo/hi 由簇内每张卡的安全窗交集
+    给出——质心按构造落在所有窗内，所以 0 永远可行，用钳制而非重掷即可
+    保持确定性。
+    """
+    if spread_days <= 0 or hi < lo:
+        return min(max(0, lo), hi) if hi >= lo else 0
+    seed = f"{palace_id}:{unit_root_uid}:{anchor.toordinal()}".encode()
+    digest = hashlib.blake2b(seed, digest_size=8).digest()
+    raw = int.from_bytes(digest, "big") % (2 * spread_days + 1) - spread_days
+    return min(max(raw, lo), hi)
 
 
 def local_date_of(value: datetime, *, tz_offset_minutes: int | None = None) -> date:
@@ -242,11 +319,17 @@ def is_formal_queue_eligible(schedule_source: str | None, *, has_memory: bool) -
 
     Product rule: brand-new / never-reviewed nodes (no memory yet) enter the
     formal learn queue immediately so a newly built palace is reviewable without
-    a separate calibration step. Content-changed and same-day reinforcement stay
-    out of the formal queue.
+    a separate calibration step. Content-changed, same-day reinforcement and
+    consolidation-list cards stay out of the formal queue — consolidation cards
+    are reviewed from the cross-palace 今日巩固 list so a single short-interval
+    card never wakes a whole palace session.
     """
     source = schedule_source or SCHEDULE_UNINITIALIZED
-    if source in {SCHEDULE_CONTENT_CHANGED, SCHEDULE_REINFORCEMENT}:
+    if source in {
+        SCHEDULE_CONTENT_CHANGED,
+        SCHEDULE_REINFORCEMENT,
+        SCHEDULE_CONSOLIDATE,
+    }:
         return False
     # First-learn: unlearned tree nodes are formal-due now.
     if not has_memory:
@@ -262,6 +345,7 @@ PROGRESS_SCOPE_OVERDUE = "overdue"
 PROGRESS_SCOPE_DUE = "due"
 PROGRESS_SCOPE_CALENDAR_TODAY = "calendar_today"
 PROGRESS_SCOPE_REINFORCEMENT = "reinforcement"
+PROGRESS_SCOPE_CONSOLIDATE = "consolidate"
 PROGRESS_SCOPE_NEW = "new"
 
 PROGRESS_SCOPES = frozenset(
@@ -270,6 +354,7 @@ PROGRESS_SCOPES = frozenset(
         PROGRESS_SCOPE_DUE,
         PROGRESS_SCOPE_CALENDAR_TODAY,
         PROGRESS_SCOPE_REINFORCEMENT,
+        PROGRESS_SCOPE_CONSOLIDATE,
         PROGRESS_SCOPE_NEW,
     }
 )
@@ -280,6 +365,7 @@ DEFAULT_PROGRESS_SCOPES: tuple[str, ...] = (
     PROGRESS_SCOPE_OVERDUE,
     PROGRESS_SCOPE_DUE,
     PROGRESS_SCOPE_REINFORCEMENT,
+    PROGRESS_SCOPE_CONSOLIDATE,
     PROGRESS_SCOPE_NEW,
 )
 
@@ -296,15 +382,22 @@ def resolve_progress_bucket(
 ) -> str | None:
     """Map a projected node into at most one freestyle progress bucket.
 
-    Buckets are mutually exclusive (priority: reinforcement > new > overdue >
-    due > calendar_today). Content-changed and not-yet-actionable nodes return
-    None and never enter freestyle mind-map units.
+    Buckets are mutually exclusive (priority: reinforcement > consolidate > new >
+    overdue > due > calendar_today). Content-changed and not-yet-actionable nodes
+    return None and never enter freestyle mind-map units.
     """
     source = schedule_source or SCHEDULE_UNINITIALIZED
     if source == SCHEDULE_CONTENT_CHANGED:
         return None
     if reinforcement_due or source == SCHEDULE_REINFORCEMENT:
         return PROGRESS_SCOPE_REINFORCEMENT if reinforcement_due else None
+    if source == SCHEDULE_CONSOLIDATE:
+        # 到期的巩固卡仍可在随心队列出现；未到期则不可行动。
+        return (
+            PROGRESS_SCOPE_CONSOLIDATE
+            if due_at is not None and due_at <= now
+            else None
+        )
     if not has_memory and formal_due:
         return PROGRESS_SCOPE_NEW
     if not formal_due and not calendar_today_due:

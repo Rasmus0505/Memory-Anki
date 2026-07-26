@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -46,10 +46,12 @@ def aggregation_enabled(session: Session, palace_id: int) -> bool:
 
 
 def aggregation_policy_for(settings: PalaceReviewSettings | None) -> AggregationPolicy:
+    """宫殿级覆盖只调绝对天数兜底；比例与保持率预算是全局策略。"""
     if settings is None:
         return DEFAULT_AGGREGATION_POLICY
     base = DEFAULT_AGGREGATION_POLICY
-    return AggregationPolicy(
+    return replace(
+        base,
         max_pull_days=(
             int(settings.aggregation_max_pull_days)
             if settings.aggregation_max_pull_days is not None
@@ -60,8 +62,6 @@ def aggregation_policy_for(settings: PalaceReviewSettings | None) -> Aggregation
             if settings.aggregation_max_push_days is not None
             else base.max_push_days
         ),
-        max_shift_ratio=base.max_shift_ratio,
-        max_retention_drop=base.max_retention_drop,
     )
 
 
@@ -185,9 +185,17 @@ def compute_aggregation(
                 day += timedelta(days=1)
         if not coverage:
             break
-        centroid, members = max(
-            coverage.items(), key=lambda kv: (len(kv[1]), -kv[0].toordinal())
-        )
+
+        def _score(item: tuple[date, list[str]]) -> tuple[int, int, int]:
+            day, members = item
+            # 打平时选"总提前天数最少"的日子：提前复习永久削弱稳定度增益
+            # （约 −18%/20%），推后只付一次性的保持率损失，两个方向不等价。
+            total_pull = sum(
+                max(0, (windows[uid][0] - day).days) for uid in members
+            )
+            return (len(members), -total_pull, day.toordinal())
+
+        centroid, members = max(coverage.items(), key=_score)
         for uid in members:
             assignment[uid] = centroid
             unassigned.pop(uid, None)

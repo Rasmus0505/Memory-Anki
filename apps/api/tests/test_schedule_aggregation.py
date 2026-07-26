@@ -38,24 +38,36 @@ def _palace(session, node_uids):
     return palace
 
 
+def _node_fingerprint(session, palace_id, uid):
+    """真实内容指纹——用假值会让 rate_nodes 把已有状态当成全新卡丢弃。"""
+    from memory_anki.infrastructure.db._tables.palaces import Palace as _Palace
+    from memory_anki.modules.memory.application.node_memory_projection import _tree
+
+    _root, nodes = _tree(session.get(_Palace, palace_id))
+    return nodes[uid]["content_fingerprint"]
+
+
 def _seed_state(session, palace_id, uid, *, due_in_days, stability=30.0):
     now = utc_now_naive()
-    row = ReviewNodeState(
-        palace_id=palace_id,
-        node_uid=uid,
-        state=2,
-        stability=stability,
-        difficulty=5.0,
-        due_at=now + timedelta(days=due_in_days),
-        raw_due_at=now + timedelta(days=due_in_days),
-        last_review_at=now - timedelta(days=max(1, int(stability))),
-        desired_retention=0.9,
-        maximum_interval=36500,
-        content_fingerprint="fp",
-        state_source="manual",
-        schedule_source="manual",
+    row = (
+        session.query(ReviewNodeState)
+        .filter_by(palace_id=palace_id, node_uid=uid)
+        .first()
     )
-    session.add(row)
+    if row is None:
+        row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
+        session.add(row)
+    row.state = 2  # fsrs.State.Review
+    row.stability = stability
+    row.difficulty = 5.0
+    row.due_at = now + timedelta(days=due_in_days)
+    row.raw_due_at = now + timedelta(days=due_in_days)
+    row.last_review_at = now - timedelta(days=max(1, int(stability)))
+    row.desired_retention = 0.9
+    row.maximum_interval = 36500
+    row.content_fingerprint = _node_fingerprint(session, palace_id, uid)
+    row.state_source = "manual"
+    row.schedule_source = "manual"
     session.commit()
     return row
 
@@ -65,7 +77,7 @@ def test_aggregation_disabled_by_default(db_session):
     assert aggregation_enabled(db_session, palace.id) is False
 
 
-def test_compute_and_apply_aggregation_clusters_within_symmetric_window(db_session):
+def test_compute_and_apply_aggregation_clusters_within_asymmetric_window(db_session):
     palace = _palace(db_session, ["a", "b", "c"])
     _seed_state(db_session, palace.id, "a", due_in_days=3)
     _seed_state(db_session, palace.id, "b", due_in_days=4)
@@ -74,12 +86,13 @@ def test_compute_and_apply_aggregation_clusters_within_symmetric_window(db_sessi
     db_session.commit()
 
     preview = compute_aggregation(db_session, palace_id=palace.id, horizon_days=30)
-    # 三张卡窗口互相覆盖，应聚到同一天：至少挪动两张。
+    # 三张卡窗口互相覆盖，应全部聚到同一天。
     assert len(preview.moves) >= 2
     target_days = {m.target_local for m in preview.moves}
     assert len(target_days) == 1
-    for move in preview.moves:
-        assert abs((move.target_local - move.raw_due_local).days) <= 2
+    # 打平时偏向"总提前最少"：质心不该落在最早那张卡之前。
+    earliest_raw = min(m.raw_due_local for m in preview.moves)
+    assert next(iter(target_days)) >= earliest_raw
 
     applied = apply_aggregation(db_session, palace_id=palace.id, preview=preview)
     db_session.commit()
@@ -135,8 +148,12 @@ def test_clear_aggregation_restores_raw_due(db_session):
         assert row.effective_wave_id is None
 
 
-def test_rating_with_aggregation_enabled_adsorbs_future_due_only(db_session):
-    """开启聚合后：成熟卡的未来 due 可吸附；学习步当日 due 仍直出。"""
+def test_rating_with_aggregation_enabled_adsorbs_long_interval_only(db_session):
+    """开启聚合后：成熟卡的长间隔 due 可吸附；学习步的短间隔 due 永不吸附。
+
+    短间隔判据按**间隔**而非日期——临近午夜时 +1 小时的学习步卡日期上是
+    "明天"，但它属于巩固范畴，绝不能唤醒宫殿波次。
+    """
     palace = _palace(db_session, ["mature", "fresh"])
     upsert_palace_review_settings(db_session, palace.id, aggregation_enabled=True)
     db_session.commit()
@@ -160,33 +177,26 @@ def test_rating_with_aggregation_enabled_adsorbs_future_due_only(db_session):
     assert fresh.schedule_reason == "fsrs_direct"
     assert fresh.effective_wave_id is None
 
-    # 反复记得把卡养成熟（多日间隔），最后一次评分应进入聚合波次。
-    for index in range(4):
-        rate_nodes(
-            db_session,
-            palace_id=palace.id,
-            node_uid="mature",
-            rating=3,
-            study_session_id="s-agg-mature",
-            operation_id=f"op-agg-mature-{index}",
-            rating_scope="single",
-            source_scene="practice",
-        )
-        row = (
-            db_session.query(ReviewNodeState)
-            .filter_by(palace_id=palace.id, node_uid="mature")
-            .one()
-        )
-        row.due_at = utc_now_naive() - timedelta(minutes=1)
-        db_session.commit()
+    # 成熟卡（稳定度 30 天）评分后是长间隔，必须进单元波次。
+    _seed_state(db_session, palace.id, "mature", due_in_days=0, stability=30.0)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="mature",
+        rating=3,
+        study_session_id="s-agg-mature",
+        operation_id="op-agg-mature",
+        rating_scope="single",
+        source_scene="practice",
+    )
     mature = (
         db_session.query(ReviewNodeState)
         .filter_by(palace_id=palace.id, node_uid="mature")
         .one()
     )
     assert mature.raw_due_at is not None
-    if local_date_of(mature.raw_due_at) > local_date_of(utc_now_naive()):
-        assert mature.effective_wave_id is not None
-        # practice 场景的 schedule_source 标记为 practice，波次归属仍生效。
-        assert mature.schedule_source in {"wave_adsorb", "practice"}
-        assert (mature.schedule_reason or "").startswith(("adsorb_existing", "new_wave"))
+    assert (mature.raw_due_at - utc_now_naive()) > timedelta(days=3)
+    assert mature.effective_wave_id is not None
+    # practice 场景的 schedule_source 标记为 practice，波次归属仍生效。
+    assert mature.schedule_source in {"wave_adsorb", "practice"}
+    assert (mature.schedule_reason or "").startswith(("adsorb_existing", "new_wave"))

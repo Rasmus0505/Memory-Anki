@@ -502,14 +502,25 @@ def apply_rating_to_schedule(
 
     from memory_anki.modules.memory.application.scheduling.aggregation import (
         aggregation_enabled,
+        aggregation_policy_for,
+        get_palace_review_settings,
     )
 
     reason = "practice" if source_scene in {"practice", "local_practice"} else "manual"
     raw_local = local_date_of(raw_due_at)
     today = local_date_of(_now())
-    # 聚合只处理未来日期：当天短到期（学习步）永远直出，否则会把
-    # 已冻结的会话波次撑出新的未评分项。
-    if aggregation_enabled(session, row.palace_id) and raw_local > today:
+    policy = aggregation_policy_for(get_palace_review_settings(session, row.palace_id))
+    # 短间隔卡永不进单元波次：学习步（10m/1h）与刚恢复的差卡属于「今日巩固」
+    # 的范畴，一张这样的卡不该唤醒整个宫殿会话。按**间隔**判断而不是按日期——
+    # 日期判断会在临近午夜时把 +1 小时的学习步卡误判成"未来某天"。
+    is_short_interval = (
+        raw_due_at - _now()
+    ).total_seconds() < policy.consolidate_floor_days * 86400
+    if (
+        aggregation_enabled(session, row.palace_id)
+        and raw_local > today
+        and not is_short_interval
+    ):
         wave = assign_node_to_formal_wave(
             session,
             row,
