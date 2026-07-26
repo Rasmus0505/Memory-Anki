@@ -52,10 +52,13 @@ export function GlobalTimerFloatingOverlay({
   entries,
   snapshot,
   onCommand,
+  showChrome = true,
 }: {
   entries: GlobalTimerRegistration[]
   snapshot: UnifiedTimerSnapshot
   onCommand: (command: UnifiedTimerCommand) => void
+  /** When false, keep celebration / break side-effects but hide the floating UI. */
+  showChrome?: boolean
 }) {
   const [layout, setLayout] = React.useState<TimerOverlayLayout>(() =>
     resolveFloatingTimerLayout(readTimerOverlayLayout()),
@@ -633,6 +636,11 @@ data-timer-overlay-root="true"
       />
     </>
   )
+
+  // PWA keeps this component mounted for feedback effects only; skip chrome.
+  if (!showChrome) {
+    return null
+  }
 
   if (typeof document === 'undefined') {
     return overlay

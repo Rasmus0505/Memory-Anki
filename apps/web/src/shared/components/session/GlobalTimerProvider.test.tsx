@@ -345,7 +345,7 @@ describe('GlobalTimerProvider', () => {
     )
   })
 
-  it('renders the floating timer overlay on PWA clients so phones can start and pause', () => {
+  it('hides floating timer chrome on PWA but still runs headless celebration effects', () => {
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
       value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
@@ -364,27 +364,53 @@ describe('GlobalTimerProvider', () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia
 
-    renderOverlay(
-      <RegistrationProbe
-        timer={createTimer({
-          sessionId: 'pwa-review-running',
-          effectiveSeconds: 10,
-          status: 'running',
-          startedAt: '2026-06-17T10:00:00',
-        })}
-        scene="review"
-        title="当前复习"
-        isRouteActive
-        becameActiveAt={100}
-      />,
+    const acknowledgeFocusInterval = vi.fn()
+    const { rerender } = render(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={createTimer({
+            sessionId: 'pwa-review-running',
+            effectiveSeconds: 299,
+            status: 'running',
+            startedAt: '2026-06-17T10:00:00',
+            acknowledgeFocusInterval,
+          })}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
     )
 
-    // PWA must get the in-page overlay (desktop Electron uses the separate window).
-    expect(
-      document.querySelector('.memory-anki-global-timer-capsule') ||
-        document.querySelector('.memory-anki-global-timer-panel') ||
-        document.querySelector('[data-timer-overlay-root="true"]'),
-    ).toBeTruthy()
+    expect(document.querySelector('.memory-anki-global-timer-panel')).toBeNull()
+    expect(document.querySelector('.memory-anki-global-timer-capsule')).toBeNull()
+    expect(document.querySelector('[data-timer-overlay-root="true"]')).toBeNull()
+    expect(screen.queryByText('当前复习')).toBeNull()
+
+    rerender(
+      <GlobalTimerProvider>
+        <RegistrationProbe
+          timer={createTimer({
+            sessionId: 'pwa-review-running',
+            effectiveSeconds: 300,
+            status: 'running',
+            startedAt: '2026-06-17T10:00:00',
+            acknowledgeFocusInterval,
+          })}
+          scene="review"
+          title="当前复习"
+          isRouteActive
+          becameActiveAt={100}
+        />
+      </GlobalTimerProvider>,
+    )
+
+    expect(emitTimerCelebration).toHaveBeenCalledTimes(1)
+    expect(acknowledgeFocusInterval).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ source: 'focus_cycle' }),
+    )
   })
 
   it('cancels a pending break prompt when the desktop main window returns to an active study route', () => {

@@ -30,7 +30,7 @@ export function FreestyleHudBar({
   timerStatus: TimerStatus
   effectiveSeconds: number
   onSwitchMode: (mode: FreestyleMode) => void
-  /** Tap the clock to start / pause / resume when the floating timer is hard to reach. */
+  /** Tap the clock to start / pause / resume (PWA has no floating timer chrome). */
   onTimerToggle?: () => void
 }) {
   return (

@@ -28,6 +28,7 @@ interface BuildDisplayNodesInput {
   onMeasure: (nodeId: string, size: NodeSize) => void
   onCountBadgeClick?: (nodeId: string) => void
   onToggleCollapse?: (nodeId: string) => void
+  onExpandSubtree?: (nodeId: string) => void
   onExtractSelection?: (payload: {
     sourceId: string
     liveText: string
@@ -73,6 +74,7 @@ export function buildDisplayNodes({
   onMeasure,
   onCountBadgeClick,
   onToggleCollapse,
+  onExpandSubtree,
   onExtractSelection,
   onExtractDropPreview,
   readonly,
@@ -153,6 +155,7 @@ export function buildDisplayNodes({
       onMeasure,
       onCountBadgeClick,
       onToggleCollapse,
+      onExpandSubtree,
       onExtractSelection,
       onExtractDropPreview,
       readonly,
