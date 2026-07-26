@@ -322,6 +322,16 @@ def _formal_session_wave_id(session: Session, study_session_id: str) -> str | No
     return str(wave_id) if wave_id else None
 
 
+VALID_SOURCE_SCENES = frozenset({"formal_review", "practice", "local_practice"})
+
+# 评分作用域语义：
+#   single        只回忆了这个节点 → 仅该节点真实 FSRS 更新
+#   branch_recall 整枝真实展开回忆 → 节点+后代都真实 FSRS 更新（旧名 subtree）
+#   bulk_mark     批量带过（未真实回忆）→ 零 FSRS 写入，仅留事件痕迹
+VALID_RATING_SCOPES = frozenset({"single", "branch_recall", "bulk_mark"})
+_SCOPE_ALIASES = {"subtree": "branch_recall"}
+
+
 def rate_nodes(
     session: Session,
     *,
@@ -330,7 +340,7 @@ def rate_nodes(
     rating: int,
     study_session_id: str,
     operation_id: str,
-    rating_scope: str = "subtree",
+    rating_scope: str = "branch_recall",
     conflict_policy: str = "overwrite",
     source_scene: str = "formal_review",
     recall_round: str = "first",
@@ -343,10 +353,14 @@ def rate_nodes(
 ) -> dict[str, Any]:
     if rating not in VALID_RATINGS:
         raise ValueError("rating must be between 1 and 4")
-    if rating_scope not in {"single", "subtree"}:
-        raise ValueError("rating_scope must be single or subtree")
+    rating_scope = _SCOPE_ALIASES.get(rating_scope, rating_scope)
+    if rating_scope not in VALID_RATING_SCOPES:
+        raise ValueError("rating_scope must be single, branch_recall or bulk_mark")
     if conflict_policy not in {"overwrite", "skip_direct"}:
         raise ValueError("conflict_policy must be overwrite or skip_direct")
+    # quiz 等场景已退出评分体系：评分只能来自导图复习/练习。
+    if source_scene not in VALID_SOURCE_SCENES:
+        raise ValueError(f"source_scene {source_scene!r} may not write memory ratings")
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None:
         raise ValueError("palace not found")
@@ -399,9 +413,9 @@ def rate_nodes(
         )
 
         ensure_formal_review_session_active(study_row, session)
-    if conflict_policy == "skip_direct" and rating_scope == "subtree":
+    if conflict_policy == "skip_direct" and rating_scope in {"branch_recall", "bulk_mark"}:
         # "避开": leave every already-scored descendant alone (direct or
-        # batch_inherited). Otherwise a mid-node subtree score (hard on child +
+        # inherited). Otherwise a mid-node branch score (hard on child +
         # grandchildren) is half-overwritten when the parent later chooses 避开 —
         # only the direct child was skipped, grandchildren got the parent score.
         already_rated_uids = _session_rated_uids(
@@ -462,6 +476,59 @@ def rate_nodes(
         before = _state_dict(row)
         before_rating = before_ratings.get(uid)
         fingerprint = nodes[uid]["content_fingerprint"]
+
+        if rating_scope == "bulk_mark":
+            # 批量带过：没有真实回忆发生 → 零 FSRS 写入（S/D/due 全部不动，
+            # 未学过的节点也不建 state 行）。只留事件痕迹 + 关闭波次项。
+            evidence_origin = "bulk_mark"
+            if formal_wave_id:
+                mark_wave_item_rated(
+                    session,
+                    palace_id=palace_id,
+                    node_uid=uid,
+                    wave_id=formal_wave_id,
+                    rating=rating,
+                    evidence_origin=evidence_origin,
+                    operation_id=operation_id,
+                    wave=formal_wave,
+                )
+            event_id = _event_id(operation_id, uid)
+            events.append(
+                MindMapRecallEvent(
+                    id=event_id,
+                    study_session_id=study_session_id,
+                    palace_id=palace_id,
+                    node_uid=uid,
+                    source_scene=source_scene,
+                    recall_round=recall_round,
+                    rating=rating,
+                    rating_source="bulk_mark",
+                    rating_scope=rating_scope,
+                    evidence_origin=evidence_origin,
+                    inference_confidence=inference_confidence,
+                    operation_id=operation_id,
+                    response_ms=response_ms,
+                    hint_count=max(0, hint_count),
+                    retry_count=max(0, retry_count),
+                )
+            )
+            items.append(
+                ReviewRatingOperationItem(
+                    operation_id=operation_id,
+                    palace_id=palace_id,
+                    node_uid=uid,
+                    event_id=event_id,
+                    before_state_json=(
+                        json.dumps(before, ensure_ascii=False) if before else None
+                    ),
+                    after_state_json=json.dumps(
+                        before if before else {}, ensure_ascii=False
+                    ),
+                    before_rating=before_rating,
+                )
+            )
+            continue
+
         # Content edit invalidates prior schedule, but the unique key is still
         # (palace_id, node_uid). Keep the existing row and start a fresh card
         # instead of INSERT (which raised IntegrityError → HTTP 500).
@@ -482,7 +549,7 @@ def rate_nodes(
             row = ReviewNodeState(palace_id=palace_id, node_uid=uid)
             session.add(row)
             states[uid] = row
-        evidence_origin = "direct" if uid == node_uid else "batch_inherited"
+        evidence_origin = "direct" if uid == node_uid else "branch_recall"
         _apply_card(row, card, fingerprint=fingerprint, source="manual", session=session)
 
         # Mark frozen formal-wave item before schedule reassignment (weak → reinforcement).

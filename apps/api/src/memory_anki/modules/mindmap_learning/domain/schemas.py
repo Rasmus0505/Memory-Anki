@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 RecallRating = Literal[1, 2, 3, 4, 5]
 RecallRound = Literal["first", "weak_retry"]
 RecallRatingSource = Literal["manual", "inferred"]
-RecallRatingScope = Literal["single", "subtree"]
-RecallEvidenceOrigin = Literal["direct", "batch_inherited"]
+RecallRatingScope = Literal["single", "subtree", "branch_recall", "bulk_mark"]
+RecallEvidenceOrigin = Literal["direct", "branch_recall", "batch_inherited", "bulk_mark"]
 
 
 class RecallEventCreate(BaseModel):

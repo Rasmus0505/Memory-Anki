@@ -488,7 +488,7 @@ def test_subtree_skip_direct_preserves_batch_inherited_grandchildren(db_session)
         .all()
     }
     assert origins["c"] == "direct"
-    assert origins["g"] == "batch_inherited"
+    assert origins["g"] == "branch_recall"
 
     before_g = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="g").one()
     before_c = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="c").one()
@@ -617,6 +617,76 @@ def test_content_fingerprint_change_reuses_existing_node_state(db_session):
         assert row.id == old_ids[row.node_uid]
         assert row.content_fingerprint  # refreshed after content edit
         assert row.state_source == "manual"
+
+def test_bulk_mark_writes_zero_fsrs_state(db_session):
+    """批量带过：不建 state 行、不动 S/D/due，只留 bulk_mark 事件痕迹。"""
+    from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
+
+    palace = _palace(db_session)
+    # 先真实评分 a1，再对整枝 bulk_mark：a1 的状态必须原样。
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a1",
+        rating=2,
+        study_session_id="s-bulk",
+        operation_id="op-bulk-direct",
+        rating_scope="single",
+        source_scene="practice",
+    )
+    before = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a1").one()
+    before_stability = before.stability
+    before_due = before.due_at
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id="s-bulk",
+        operation_id="op-bulk-mark",
+        rating_scope="bulk_mark",
+        source_scene="practice",
+    )
+    assert set(result["affected_node_uids"]) == {"a", "a1"}
+    # a 从未真实回忆过 → 不建 state 行（仍是新卡）。
+    assert (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .first()
+        is None
+    )
+    after = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a1").one()
+    assert after.stability == before_stability
+    assert after.due_at == before_due
+    events = {
+        row.node_uid: row
+        for row in db_session.query(MindMapRecallEvent)
+        .filter_by(operation_id="op-bulk-mark")
+        .all()
+    }
+    assert events["a"].evidence_origin == "bulk_mark"
+    assert events["a1"].evidence_origin == "bulk_mark"
+    assert events["a"].rating_source == "bulk_mark"
+
+
+def test_quiz_source_scene_rejected(db_session):
+    """quiz 已退出评分体系：非白名单 source_scene 一律拒绝。"""
+    import pytest
+
+    palace = _palace(db_session)
+    with pytest.raises(ValueError, match="source_scene"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid="b",
+            rating=3,
+            study_session_id="s-quiz",
+            operation_id="op-quiz",
+            rating_scope="single",
+            source_scene="quiz",
+        )
+
 
 def test_rate_nodes_returns_slim_payload_without_full_node_details(db_session):
     """Rating hot path must not ship full per-node projection arrays."""

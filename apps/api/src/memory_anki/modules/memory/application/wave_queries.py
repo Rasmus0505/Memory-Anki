@@ -221,7 +221,8 @@ def wave_progress(session: Session, wave_id: str) -> dict[str, Any]:
     inherited = sum(
         1
         for item in rated
-        if item.evidence_origin == "batch_inherited" or item.status == ITEM_RATED_INHERITED
+        if item.evidence_origin in {"branch_recall", "batch_inherited"}
+        or item.status == ITEM_RATED_INHERITED
     )
     return {
         "item_count": len(items),

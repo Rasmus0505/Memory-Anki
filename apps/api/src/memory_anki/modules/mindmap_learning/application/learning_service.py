@@ -55,7 +55,7 @@ def create_recall_event(session: Session, payload: dict[str, Any]) -> dict[str, 
     rating_source = str(payload.get("rating_source") or "manual")
     rating_scope = str(payload.get("rating_scope") or "single")
     evidence_origin = str(payload.get("evidence_origin") or "direct")
-    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS or rating_source not in VALID_RATING_SOURCES or rating_scope not in {"single", "subtree"} or evidence_origin not in {"direct", "batch_inherited"}:
+    if rating not in VALID_RATINGS or recall_round not in VALID_ROUNDS or rating_source not in VALID_RATING_SOURCES or rating_scope not in {"single", "subtree", "branch_recall", "bulk_mark"} or evidence_origin not in {"direct", "branch_recall", "batch_inherited", "bulk_mark"}:
         raise ValueError("invalid recall rating or round")
     inference_confidence = payload.get("inference_confidence")
     if rating_source == "inferred" and inference_confidence is None:

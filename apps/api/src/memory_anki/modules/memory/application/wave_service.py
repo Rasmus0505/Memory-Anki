@@ -484,8 +484,8 @@ def apply_rating_to_schedule(
     if evidence_origin == "direct":
         row.last_direct_review_at = _now()
         row.evidence_source = "direct"
-    elif evidence_origin == "batch_inherited":
-        row.evidence_source = "batch_inherited"
+    elif evidence_origin in {"branch_recall", "batch_inherited"}:
+        row.evidence_source = evidence_origin
     if source_scene in {"practice", "local_practice"}:
         row.last_practice_at = _now()
 
@@ -577,9 +577,13 @@ def mark_wave_item_rated(
     item.rated_at = now
     item.rating_operation_id = operation_id
     item.evidence_origin = evidence_origin
-    item.status = (
-        ITEM_RATED_DIRECT if evidence_origin == "direct" else ITEM_RATED_INHERITED
-    )
+    if evidence_origin == "direct":
+        item.status = ITEM_RATED_DIRECT
+    elif evidence_origin == "bulk_mark":
+        # 批量带过：波次项直接完结，不伪装成已评分证据。
+        item.status = ITEM_DONE
+    else:
+        item.status = ITEM_RATED_INHERITED
     item.updated_at = now
     wave_row = wave if wave is not None and wave.id == wave_id else session.get(ReviewWave, wave_id)
     if wave_row is not None:
