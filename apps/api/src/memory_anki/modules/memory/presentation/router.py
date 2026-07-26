@@ -300,6 +300,44 @@ def api_fsrs_activate_parameter_set(
     return {"item": payload}
 
 
+@router.post("/review/rebuild/preview")
+def api_rebuild_preview(data: dict | None = None, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.history_rebuild import (
+        preview_rebuild,
+    )
+
+    raw_ids = (data or {}).get("palace_ids")
+    palace_ids = [int(v) for v in raw_ids] if isinstance(raw_ids, list) else None
+    return {"item": preview_rebuild(session, palace_ids=palace_ids)}
+
+
+@router.post("/review/rebuild/execute")
+def api_rebuild_execute(data: dict | None = None, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.history_rebuild import (
+        execute_rebuild,
+    )
+
+    raw_ids = (data or {}).get("palace_ids")
+    palace_ids = [int(v) for v in raw_ids] if isinstance(raw_ids, list) else None
+    result = execute_rebuild(session, palace_ids=palace_ids)
+    session.commit()
+    return {"item": result}
+
+
+@router.post("/review/rebuild/{operation_id}/rollback")
+def api_rebuild_rollback(operation_id: str, session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.history_rebuild import (
+        rollback_rebuild,
+    )
+
+    try:
+        result = rollback_rebuild(session, operation_id=operation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    session.commit()
+    return {"item": result}
+
+
 @router.post("/review/fsrs/parameter-sets/rollback")
 def api_fsrs_rollback_parameter_set(session: Session = Depends(session_dep)):
     from memory_anki.modules.memory.application.scheduling.optimizer_service import (
