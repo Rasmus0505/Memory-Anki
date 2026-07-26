@@ -145,6 +145,129 @@ def test_compute_and_apply_aggregation_clusters_within_asymmetric_window(db_sess
     assert raw_days["c"] == now_local + timedelta(days=5)
 
 
+def test_unit_aggregation_converges_twenty_cards_into_at_most_two_waves(db_session):
+    """核心断言：6–15 天散开的一批卡，单元聚类后应收敛到 ≤2 个波次日。
+
+    6 天与 15 天的卡不可能合并（把 6 天推到 13 天是 +117%），这是 FSRS 固有
+    几何——所以断言的是 2 而不是 1。
+    """
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        compute_unit_aggregation,
+    )
+
+    spread = [6, 6, 7, 7, 8, 8, 8, 9, 9, 11, 11, 12, 13, 13, 14, 15, 15, 15, 10, 10]
+    uids = [f"n{i}" for i in range(len(spread))]
+    palace = _palace(db_session, uids)
+    for uid, days in zip(uids, spread, strict=True):
+        _seed_state(db_session, palace.id, uid, due_in_days=days, stability=float(days))
+    db_session.commit()
+
+    preview = compute_unit_aggregation(
+        db_session, palace_id=palace.id, unit_root_uid="root"
+    )
+    assert len(preview.waves) <= 2, [
+        (w.local_date.isoformat(), len(w.node_uids)) for w in preview.waves
+    ]
+    assert len(preview.waves) >= 1
+    # 每个保留的波次都必须够 min_wave_cards，小簇解散进巩固清单。
+    for wave in preview.waves:
+        assert len(wave.node_uids) >= 3
+    covered = sum(len(w.node_uids) for w in preview.waves) + len(
+        preview.consolidate_node_uids
+    )
+    assert covered == len(spread)
+
+
+def test_unit_aggregation_never_rewrites_raw_due(db_session):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        apply_unit_aggregation,
+        compute_unit_aggregation,
+    )
+
+    uids = [f"n{i}" for i in range(6)]
+    palace = _palace(db_session, uids)
+    for index, uid in enumerate(uids):
+        _seed_state(db_session, palace.id, uid, due_in_days=8 + index, stability=20.0)
+    db_session.commit()
+    before_raw = {
+        row.node_uid: row.raw_due_at
+        for row in db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id)
+        .all()
+    }
+
+    preview = compute_unit_aggregation(
+        db_session, palace_id=palace.id, unit_root_uid="root"
+    )
+    apply_unit_aggregation(db_session, palace_id=palace.id, preview=preview)
+    db_session.commit()
+
+    for row in (
+        db_session.query(ReviewNodeState).filter_by(palace_id=palace.id).all()
+    ):
+        assert row.raw_due_at == before_raw[row.node_uid], "raw_due_at 是 FSRS 真值，永不改写"
+        if row.schedule_source == "wave_adsorb":
+            assert "unit_wave raw=" in (row.schedule_reason or "")
+            assert f"unit={preview.unit_root_uid}" in (row.schedule_reason or "")
+
+
+def test_small_cluster_dissolves_into_consolidation(db_session):
+    """孤立的卡不建宫殿波次——一张卡撑起一次会话正是碎片化的原型。"""
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        apply_unit_aggregation,
+        compute_unit_aggregation,
+    )
+
+    uids = ["a", "b", "c", "lonely"]
+    palace = _palace(db_session, uids)
+    for uid in ("a", "b", "c"):
+        _seed_state(db_session, palace.id, uid, due_in_days=10, stability=10.0)
+    # 60 天间隔的孤卡：窗口再宽也够不到 10 天那一簇。
+    _seed_state(db_session, palace.id, "lonely", due_in_days=60, stability=60.0)
+    db_session.commit()
+
+    preview = compute_unit_aggregation(
+        db_session, palace_id=palace.id, unit_root_uid="root"
+    )
+    assert "lonely" in preview.consolidate_node_uids
+    assert len(preview.waves) == 1
+    assert set(preview.waves[0].node_uids) == {"a", "b", "c"}
+
+    apply_unit_aggregation(db_session, palace_id=palace.id, preview=preview)
+    db_session.commit()
+    lonely = (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="lonely")
+        .one()
+    )
+    assert lonely.schedule_source == "consolidate"
+    assert lonely.effective_wave_id is None
+    assert lonely.due_at == lonely.raw_due_at  # 巩固卡不挪到期日
+
+
+def test_learning_and_short_interval_cards_excluded_from_unit_waves(db_session):
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        compute_unit_aggregation,
+    )
+
+    palace = _palace(db_session, ["mature1", "mature2", "mature3", "learning", "short"])
+    for uid in ("mature1", "mature2", "mature3"):
+        _seed_state(db_session, palace.id, uid, due_in_days=12, stability=12.0)
+    learning = _seed_state(db_session, palace.id, "learning", due_in_days=12, stability=12.0)
+    learning.state = 1  # fsrs.State.Learning
+    short = _seed_state(db_session, palace.id, "short", due_in_days=1, stability=1.0)
+    short.state = 2
+    db_session.commit()
+
+    preview = compute_unit_aggregation(
+        db_session, palace_id=palace.id, unit_root_uid="root"
+    )
+    placed = {uid for wave in preview.waves for uid in wave.node_uids}
+    assert placed == {"mature1", "mature2", "mature3"}
+    assert "learning" not in placed and "learning" not in preview.consolidate_node_uids
+    assert "short" not in placed
+
+
 def test_clear_aggregation_restores_raw_due(db_session):
     palace = _palace(db_session, ["a", "b", "c"])
     _seed_state(db_session, palace.id, "a", due_in_days=3)

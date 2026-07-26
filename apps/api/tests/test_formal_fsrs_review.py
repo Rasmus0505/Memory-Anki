@@ -321,7 +321,12 @@ def test_post_settlement_can_undo_rerate_and_recomplete(db_session):
     assert second["duration_seconds"] == 45
 
 
-def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
+def test_completion_reanchors_whole_batch_to_finish_time(db_session):
+    """整批的间隔起点统一到"完成"时刻，保证同批下次也齐整。
+
+    长会话里先评分与后评分的卡本来会错开几十分钟，下次到期就散了——这正是
+    碎片化的一个来源。波次路径以前跳过重锚，现在一律执行。
+    """
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
 
@@ -364,8 +369,7 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
     # Immediate restudy batch (no multi-hour wait).
     assert hard_interval <= timedelta(minutes=1, seconds=5)
 
-    # Simulate a long session: move clocks into the past before complete so we
-    # can assert completion does not re-anchor already-written schedules.
+    # 模拟长会话：两张卡的时钟错开 40 分钟。
     past = utc_now_naive() - timedelta(minutes=90)
     hard.last_review_at = past
     hard.due_at = past + hard_interval
@@ -375,13 +379,11 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
         good.raw_due_at = good.last_review_at + good_interval
     db_session.commit()
 
-    # Without finalization, Hard would already be overdue at complete time.
+    # 不重锚的话，Hard 在点"完成"时就已经逾期了。
     assert hard.due_at < utc_now_naive()
+    assert hard.last_review_at != good.last_review_at
 
-    hard_last_review_at = hard.last_review_at
-    hard_due_at = hard.due_at
-    good_last_review_at = good.last_review_at
-    good_due_at = good.due_at
+    before_complete = utc_now_naive()
     result = complete_formal_review(
         db_session,
         row,
@@ -402,10 +404,13 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
         .one()
     )
 
-    assert hard.last_review_at == hard_last_review_at
-    assert hard.due_at == hard_due_at
-    assert good.last_review_at == good_last_review_at
-    assert good.due_at == good_due_at
+    # 两张卡的起点被拉到同一个"完成"时刻，各自间隔长度不变。
+    assert hard.last_review_at == good.last_review_at
+    assert hard.last_review_at >= before_complete
+    assert hard.due_at - hard.last_review_at == hard_interval
+    assert good.due_at - good.last_review_at == good_interval
+    # 重锚后 Hard 不再是"完成即逾期"。
+    assert hard.due_at >= hard.last_review_at
     assert result["unrated_due_node_count"] == 0
 
 
