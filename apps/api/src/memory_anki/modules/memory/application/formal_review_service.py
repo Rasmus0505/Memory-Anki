@@ -23,14 +23,21 @@ from memory_anki.modules.memory.application.node_memory_service import (
     due_node_uids_for_entry,
     get_palace_memory_projection,
 )
+from memory_anki.modules.memory.application.review_queue_batching import (
+    build_queue_item,
+    group_nodes_by_local_due_date,
+    large_batch_hint_size,
+)
 from memory_anki.modules.memory.application.review_queue_extras import (
     today_review_counts_by_palace,
 )
-from memory_anki.modules.memory.application.wave_policy import local_date_of
 
 # Align with general study-session active set so recovered formal rows stay ratable.
 ACTIVE_REVIEW_STATUSES = ("active", "paused", "recovered")
 INACTIVE_REVIEW_MESSAGE = "本轮正式复习已结束，请返回复习队列重新开始"
+QUEUE_SORT_MODES = frozenset({"due_asc", "due_desc", "due_nodes_desc", "overdue_desc", "title_asc"})
+_QUEUE_SORT_FAR_FUTURE = datetime(9999, 1, 1, tzinfo=UTC)
+_QUEUE_SORT_FAR_PAST = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _json(raw: str | None) -> dict[str, Any]:
@@ -74,121 +81,6 @@ def _palace_payload(palace: Palace, *, include_editor_doc: bool = True) -> dict[
         "attachments": [],
         "chapters": [],
     }
-
-
-def _large_batch_hint_size(session: Session) -> int:
-    from memory_anki.infrastructure.db._tables.misc import Config
-
-    row = session.query(Config).filter_by(key="large_batch_hint_size").first()
-    try:
-        return max(1, int(row.value)) if row is not None and row.value else 60
-    except (TypeError, ValueError):
-        return 60
-
-
-def _unit_labels(
-    session: Session, palace: Palace, node_uids: list[str]
-) -> dict[str, Any]:
-    """本批涉及的调度单元标签。
-
-    同宫殿同一天到期的多个单元合并成一行、一次会话（切分只决定"什么时候
-    复习"，不增加会话次数）。整宫殿单元只显示宫殿名，视觉与切分前一致。
-    """
-    from memory_anki.modules.memory.application.scheduling.units import resolve_units
-
-    try:
-        units = resolve_units(session, int(palace.id))
-    except Exception:
-        return {"unit_root_uids": [], "unit_titles": [], "unit_kinds": []}
-    touched = [
-        unit
-        for unit in units.values()
-        if any(uid in unit.node_uids for uid in node_uids)
-    ]
-    return {
-        "unit_root_uids": [unit.unit_root_uid for unit in touched],
-        "unit_titles": [
-            unit.title for unit in touched if unit.kind == "mark" and unit.title
-        ],
-        "unit_kinds": [unit.kind for unit in touched],
-    }
-
-
-def _queue_item(
-    session: Session,
-    palace: Palace,
-    nodes: list[dict[str, Any]],
-    now: datetime,
-    projection: dict[str, Any] | None = None,
-    *,
-    today_review_count: int = 0,
-    large_batch_hint_size: int = 60,
-) -> dict[str, Any]:
-    times = [parsed for item in nodes if (parsed := _dt(item.get("due_at"))) is not None]
-    next_due = to_api_datetime(min(times)) if times else None
-    overdue = sum(1 for item in times if item < now)
-    projection = projection or {}
-    node_uids = [str(item["node_uid"]) for item in nodes if item.get("node_uid")]
-    units = _unit_labels(session, palace, node_uids)
-    return {
-        "batch_key": f"{palace.id}:{local_date_of(min(times).replace(tzinfo=None)).isoformat()}" if times else f"{palace.id}:unscheduled",
-        "batch_local_date": local_date_of(min(times).replace(tzinfo=None)).isoformat() if times else None,
-        # 本批的冻结范围：前端用它直接开会话（合并同日的多个单元）。
-        "batch_due_node_uids": node_uids,
-        "batch_node_count": len(node_uids),
-        # 取消复习额度后，唯一能防止巨大批次的手段是永久标记 → 超阈值时提示。
-        "oversized": len(node_uids) > max(1, large_batch_hint_size),
-        **units,
-        "id": palace.id,
-        "palace_id": palace.id,
-        "session_id": None,
-        "algorithm_used": "FSRS",
-        "scheduled_date": next_due[:10] if next_due else now.date().isoformat(),
-        "due_at": next_due,
-        "next_due_at": next_due,
-        "completed": False,
-        "review_number": 0,
-        "review_type": "fsrs",
-        "interval_days": None,
-        "due_node_count": len(nodes),
-        "overdue_node_count": overdue,
-        "schedule_count": len(nodes),
-        "overdue_schedule_count": overdue,
-        "next_due_date": next_due[:10] if next_due else now.date().isoformat(),
-        "review_entry_mode": projection.get("review_entry_mode") or "palace",
-        "review_entry_label": projection.get("review_entry_label"),
-        "primary_branch_uid": projection.get("primary_branch_uid"),
-        "primary_branch_title": projection.get("primary_branch_title"),
-        "due_branch_count": projection.get("due_branch_count") or 0,
-        "review_branch_summaries": list(
-            projection.get("review_branch_summaries") or []
-        ),
-        # Completed formal sessions today (node + full palace each +1).
-        "today_review_count": max(0, int(today_review_count)),
-        "palace": _palace_payload(palace, include_editor_doc=False),
-    }
-
-
-# Default: earliest next_due first so long-overdue palaces surface first.
-# String ISO sort is unsafe when naive/aware formats mix; always parse to datetime.
-QUEUE_SORT_MODES = frozenset(
-    {"due_asc", "due_desc", "due_nodes_desc", "overdue_desc", "title_asc"}
-)
-_QUEUE_SORT_FAR_FUTURE = datetime(9999, 1, 1, tzinfo=UTC)
-_QUEUE_SORT_FAR_PAST = datetime(1970, 1, 1, tzinfo=UTC)
-
-
-def _group_nodes_by_local_due_date(nodes: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for item in nodes:
-        due_at = _dt(item.get("due_at"))
-        key = (
-            local_date_of(due_at.replace(tzinfo=None)).isoformat()
-            if due_at is not None
-            else "unscheduled"
-        )
-        grouped.setdefault(key, []).append(item)
-    return [grouped[key] for key in sorted(grouped)]
 
 
 def _queue_item_due_at(item: dict[str, Any]) -> datetime | None:
@@ -265,7 +157,7 @@ def get_fsrs_queue_payload(
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
     # 每日任务层：放出今天的新学额度、记账（幂等）。复习不再有额度截断。
     plan_summary = ensure_daily_plan(session)
-    hint_size = _large_batch_hint_size(session)
+    hint_size = large_batch_hint_size(session)
     palaces = _palaces(session, chapter_id)
     palace_ids = [palace.id for palace in palaces]
     today_counts = today_review_counts_by_palace(session, palace_ids)
@@ -289,21 +181,21 @@ def get_fsrs_queue_payload(
         today_count = today_counts.get(int(palace.id), 0)
         if due_nodes:
             due.extend(
-                _queue_item(
-                    session, palace, batch, now, projection,
+                build_queue_item(
+                    session, palace, batch, now, projection, parse_due=_dt,
                     today_review_count=today_count,
                     large_batch_hint_size=hint_size,
                 )
-                for batch in _group_nodes_by_local_due_date(due_nodes)
+                for batch in group_nodes_by_local_due_date(due_nodes, _dt)
             )
         elif later_nodes:
             later.extend(
-                _queue_item(
-                    session, palace, batch, now, projection,
+                build_queue_item(
+                    session, palace, batch, now, projection, parse_due=_dt,
                     today_review_count=today_count,
                     large_batch_hint_size=hint_size,
                 )
-                for batch in _group_nodes_by_local_due_date(later_nodes)
+                for batch in group_nodes_by_local_due_date(later_nodes, _dt)
             )
     due = sort_queue_items(due, "due_asc")
     later = sort_queue_items(later, "due_asc")

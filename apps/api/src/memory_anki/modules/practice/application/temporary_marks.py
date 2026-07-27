@@ -58,7 +58,7 @@ def replace_palace_temporary_marks(
     *,
     palace_id: int,
     node_uids: list[str],
-    unify_progress: bool = True,
+    unify_progress: bool = False,
     operation_id: str | None = None,
 ) -> dict[str, Any]:
     """Replace active temporary marks for a palace and optionally unify FSRS.

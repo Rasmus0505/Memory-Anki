@@ -49,6 +49,9 @@ from memory_anki.modules.memory.presentation.response_models import (
     ReviewQueueResponse,
     SubmitReviewResponse,
 )
+from memory_anki.modules.memory.presentation.unit_regroup_routes import (
+    router as unit_regroup_router,
+)
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -56,6 +59,8 @@ from memory_anki.platform.persistence import (
 )
 
 router = APIRouter(tags=["review"])
+
+router.include_router(unit_regroup_router)
 
 
 def raise_not_found(message: str = "not found") -> NoReturn:
