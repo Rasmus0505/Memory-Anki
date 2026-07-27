@@ -81,7 +81,10 @@ export function registerServiceWorker() {
       })
       const runCheck = () => void checkRelease(registration)
       runCheck()
-      window.setInterval(runCheck, RELEASE_CHECK_MS)
+      // 后台标签页跳过轮询（省电省流量）；回到前台时 visibilitychange 会立即补查。
+      window.setInterval(() => {
+        if (document.visibilityState === 'visible') runCheck()
+      }, RELEASE_CHECK_MS)
       window.addEventListener('online', runCheck)
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') { runCheck(); applyReadyUpdateWhenIdle() }

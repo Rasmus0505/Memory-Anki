@@ -123,6 +123,44 @@ describe('PWA service worker contract', () => {
     expect(sw).not.toContain('caches.match(request)')
   })
 
+  it('precaches install icons and the release entry assets placeholder', () => {
+    const sw = readFileSync(publicSwPath, 'utf8')
+
+    expect(sw).toContain("'/icons/icon-192.png'")
+    expect(sw).toContain("'/icons/icon-512.png'")
+    expect(sw).toContain("'/icons/maskable-512.png'")
+    expect(sw).toContain("'/icons/apple-touch-icon.png'")
+    // 构建时被 releaseArtifactsPlugin 替换为 JSON 数组；源文件保持字符串占位。
+    expect(sw).toContain("const PRECACHE_RELEASE_ASSETS = '__MEMORY_ANKI_PRECACHE_ASSETS__'")
+    expect(sw).toContain('Array.isArray(PRECACHE_RELEASE_ASSETS)')
+  })
+
+  it('focuses an existing window when a break notification is clicked', () => {
+    const sw = readFileSync(publicSwPath, 'utf8')
+
+    expect(sw).toContain("self.addEventListener('notificationclick'")
+    expect(sw).toContain('event.notification.close()')
+    // includeUncontrolled matters: a freshly activated worker has not claimed
+    // the open study tab yet, and without it a second window would be opened.
+    expect(sw).toContain("self.clients.matchAll({ type: 'window', includeUncontrolled: true })")
+    expect(sw).toContain('client.focus()')
+    expect(sw).toContain('self.clients.openWindow')
+  })
+
+  it('limits offline API fallback to the allowlist and navigation cache to entry paths', () => {
+    const sw = readFileSync(publicSwPath, 'utf8')
+
+    expect(sw).toContain("const OFFLINE_API_ALLOWLIST = ['/api/v1/freestyle/feed']")
+    expect(sw).toContain("const NAVIGATION_CACHE_PATHS = ['/', '/freestyle']")
+    expect(sw).toContain('NAVIGATION_CACHE_PATHS.includes(new URL(request.url).pathname)')
+  })
+
+  it('skips release polling while the tab is hidden', () => {
+    const registration = readFileSync(registerServiceWorkerPath, 'utf8')
+
+    expect(registration).toContain("if (document.visibilityState === 'visible') runCheck()")
+  })
+
   it('lets newly installed PWA workers take control without interrupting an active session', () => {
     const sw = readFileSync(publicSwPath, 'utf8')
     const registration = readFileSync(registerServiceWorkerPath, 'utf8')

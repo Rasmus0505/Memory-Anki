@@ -1,21 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPalaceMasteryTrendApi } from '@/modules/memory/public'
 import { PalaceMemoryProgress } from './PalaceMemoryProgress'
 
 vi.mock('@/modules/memory/public', () => ({
   getPalaceMasteryTrendApi: vi.fn(),
-}))
-
-vi.mock('recharts', () => ({
-  ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  LineChart: ({ children }: { children: ReactNode }) => <div data-testid="trend-chart">{children}</div>,
-  Line: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  CartesianGrid: () => null,
-  Tooltip: () => null,
 }))
 
 const getTrendMock = vi.mocked(getPalaceMasteryTrendApi)

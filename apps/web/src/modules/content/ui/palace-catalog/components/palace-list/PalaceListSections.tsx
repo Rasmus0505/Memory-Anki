@@ -67,7 +67,8 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                 return (
                   <div
                     key={chapterId ?? 'no-chapter'}
-                    className={getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)}
+                    // content-visibility 让视口外章节组跳过渲染，长列表零依赖提速。
+                    className={`${getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)} [content-visibility:auto] [contain-intrinsic-size:auto_240px]`}
                   >
                     {group.source_chapter ? (
                       <button

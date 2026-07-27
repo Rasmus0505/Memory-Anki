@@ -1,13 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import type { MasteryTrendPoint, PalaceListItem } from '@/shared/api/contracts'
 import { getPalaceMasteryTrendApi } from '@/modules/memory/public'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
@@ -89,23 +80,96 @@ function summarizeTrend(points: MasteryTrendPoint[], currentMastery: number): {
   }
 }
 
-function TrendPointTooltip({ active, payload }: {
-  active?: boolean
-  payload?: Array<{ payload?: MasteryTrendPoint & { stepDelta?: number | null } }>
+// 卡片处于 pointer-events-none 的悬浮层里，图表不承担交互，用静态 SVG 折线即可。
+function TrendSparkline({ points }: {
+  points: Array<MasteryTrendPoint & { stepDelta: number | null }>
 }) {
-  const point = payload?.[0]?.payload
-  if (!active || !point) return null
-  const step = point.stepDelta
+  const width = 320
+  const height = 152
+  const pad = { top: 12, right: 14, bottom: 22, left: 30 }
+  const innerWidth = width - pad.left - pad.right
+  const innerHeight = height - pad.top - pad.bottom
+  const pointX = (index: number) =>
+    pad.left + (points.length === 1 ? innerWidth / 2 : (index * innerWidth) / (points.length - 1))
+  const pointY = (percent: number) => pad.top + innerHeight * (1 - percent / 100)
+  const linePath = points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${pointX(index).toFixed(1)},${pointY(point.mastery_percent).toFixed(1)}`)
+    .join(' ')
+
   return (
-    <div className="rounded-lg border border-border/70 bg-popover px-3 py-2 text-xs shadow-lg">
-      <div className="text-muted-foreground">{formatTrendDate(point.at)}</div>
-      <div className="mt-1 font-semibold text-foreground">掌握度 {point.mastery_percent}%</div>
-      {step !== null && step !== undefined ? (
-        <div className="mt-0.5 text-muted-foreground">较上次 {formatDelta(step)}</div>
-      ) : (
-        <div className="mt-0.5 text-muted-foreground">首次记录</div>
-      )}
-    </div>
+    <svg
+      data-testid="trend-chart"
+      viewBox={`0 0 ${width} ${height}`}
+      className="h-full w-full text-primary"
+      role="img"
+      aria-label="掌握度趋势折线图"
+    >
+      {[0, 50, 100].map((tick) => (
+        <g key={tick}>
+          <line
+            x1={pad.left}
+            x2={width - pad.right}
+            y1={pointY(tick)}
+            y2={pointY(tick)}
+            className="stroke-border"
+            strokeDasharray="3 3"
+            strokeWidth={1}
+          />
+          <text
+            x={pad.left - 6}
+            y={pointY(tick) + 3}
+            textAnchor="end"
+            className="fill-muted-foreground"
+            fontSize={9}
+          >
+            {tick}
+          </text>
+        </g>
+      ))}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {points.map((point, index) => (
+        <circle
+          key={`${point.at}-${index}`}
+          cx={pointX(index)}
+          cy={pointY(point.mastery_percent)}
+          r={index === points.length - 1 ? 4.5 : 3}
+          fill="currentColor"
+        >
+          <title>
+            {`${formatTrendDate(point.at)} 掌握度 ${point.mastery_percent}%${
+              point.stepDelta === null ? '（首次记录）' : `，较上次 ${formatDelta(point.stepDelta)}`
+            }`}
+          </title>
+        </circle>
+      ))}
+      <text
+        x={pointX(0)}
+        y={height - 6}
+        textAnchor={points.length === 1 ? 'middle' : 'start'}
+        className="fill-muted-foreground"
+        fontSize={9}
+      >
+        {formatTrendDate(points[0]!.at).slice(5)}
+      </text>
+      {points.length > 1 ? (
+        <text
+          x={pointX(points.length - 1)}
+          y={height - 6}
+          textAnchor="end"
+          className="fill-muted-foreground"
+          fontSize={9}
+        >
+          {formatTrendDate(points.at(-1)!.at).slice(5)}
+        </text>
+      ) : null}
+    </svg>
   )
 }
 
@@ -153,38 +217,7 @@ function TrendCard({ points, currentMastery }: {
       <p className="px-5 pb-3 text-[11px] leading-5 text-muted-foreground">{summary.narrative}</p>
 
       <div className="h-40 px-2 pb-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.7} />
-            <XAxis
-              dataKey="at"
-              tickFormatter={(value) => formatTrendDate(String(value)).slice(5)}
-              tick={{ fontSize: 10, fill: 'currentColor' }}
-              tickLine={false}
-              axisLine={false}
-              minTickGap={28}
-            />
-            <YAxis
-              domain={[0, 100]}
-              ticks={[0, 50, 100]}
-              width={28}
-              tick={{ fontSize: 10, fill: 'currentColor' }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `${value}`}
-            />
-            <RechartsTooltip content={<TrendPointTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="mastery_percent"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2.5}
-              dot={{ r: 3.5, fill: 'hsl(var(--primary))', strokeWidth: 0 }}
-              activeDot={{ r: 5.5, fill: 'hsl(var(--primary))', strokeWidth: 0 }}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <TrendSparkline points={chartData} />
       </div>
 
       <div className="border-t border-border/60 px-5 py-3">

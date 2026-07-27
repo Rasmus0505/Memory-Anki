@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { visualizer } from 'rollup-plugin-visualizer'
 import { promises as fs } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
@@ -103,6 +104,10 @@ const manualRefreshGuardScript = String.raw`
   })()
 `
 
+// 本次构建写出的兼容别名文件（assets/ 相对路径），并入 release 清单，
+// 供 tools/clean_web_dist.py 判断保留范围。
+const compatAliasFiles: string[] = []
+
 function stableChunkCompatPlugin() {
   let outDir = ''
   let previousAssetNames = new Set<string>()
@@ -144,6 +149,7 @@ function stableChunkCompatPlugin() {
           `export { default } from './${stableFileName}';\n` +
           `export * from './${stableFileName}';\n`
         await fs.writeFile(aliasFilePath, aliasSource, 'utf8')
+        compatAliasFiles.push(`assets/${oldAssetName}`)
       }
     },
   }
@@ -151,6 +157,7 @@ function stableChunkCompatPlugin() {
 
 function releaseArtifactsPlugin() {
   let outDir = ''
+  let bundleAssetFiles: string[] = []
 
   return {
     name: 'memory-anki-release-artifacts',
@@ -164,15 +171,43 @@ function releaseArtifactsPlugin() {
         `    <meta name="memory-anki-release" content="${releaseId}" />\n  </head>`,
       )
     },
+    writeBundle(_options: unknown, bundle: Record<string, unknown>) {
+      bundleAssetFiles = Object.keys(bundle).filter((fileName) => fileName.startsWith('assets/'))
+    },
     async closeBundle() {
       if (!outDir) return
       const release = { releaseId, builtAt: new Date().toISOString() }
       await fs.writeFile(path.join(outDir, 'release.json'), `${JSON.stringify(release, null, 2)}\n`, 'utf8')
+
+      // 入口链路资产（index.html 实际引用的 JS/CSS）注入 sw.js 预缓存清单，
+      // 让 PWA 离线冷启动不依赖“曾经运行时缓存过”。
+      const indexHtml = await fs.readFile(path.join(outDir, 'index.html'), 'utf8')
+      const entryAssets = Array.from(
+        new Set(indexHtml.match(/assets\/[^"']+/g) ?? []),
+        (assetPath) => `/${assetPath}`,
+      )
       const serviceWorkerPath = path.join(outDir, 'sw.js')
       const serviceWorker = await fs.readFile(serviceWorkerPath, 'utf8')
       await fs.writeFile(
         serviceWorkerPath,
-        serviceWorker.replaceAll('__MEMORY_ANKI_RELEASE_ID__', releaseId),
+        serviceWorker
+          .replaceAll("'__MEMORY_ANKI_PRECACHE_ASSETS__'", JSON.stringify(entryAssets))
+          .replaceAll('__MEMORY_ANKI_RELEASE_ID__', releaseId),
+        'utf8',
+      )
+
+      // 每次发布的全量 assets 清单：tools/clean_web_dist.py 按“最近 N 份清单
+      // 的并集”决定 dist/assets 里哪些历史文件可以删除。
+      const releasesDir = path.join(outDir, 'releases')
+      await fs.mkdir(releasesDir, { recursive: true })
+      const releaseManifest = {
+        releaseId,
+        builtAt: release.builtAt,
+        files: Array.from(new Set([...bundleAssetFiles, ...compatAliasFiles])).sort(),
+      }
+      await fs.writeFile(
+        path.join(releasesDir, `${releaseId}.json`),
+        `${JSON.stringify(releaseManifest, null, 2)}\n`,
         'utf8',
       )
     },
@@ -204,12 +239,16 @@ export default defineConfig({
     tailwindcss(),
     stableChunkCompatPlugin(),
     releaseArtifactsPlugin(),
+    ...(process.env.ANALYZE
+      ? [visualizer({ filename: 'stats.html', gzipSize: true, brotliSize: true })]
+      : []),
   ],
   define: {
     __MEMORY_ANKI_RELEASE_ID__: JSON.stringify(releaseId),
   },
   build: {
     emptyOutDir: false,
+    target: ['es2022', 'safari16'],
     rollupOptions: {
       output: {
         chunkFileNames(chunkInfo) {
@@ -219,19 +258,38 @@ export default defineConfig({
           return 'assets/[name]-[hash].js'
         },
         manualChunks(id) {
-          if (id.includes('node_modules/@xyflow/react')) {
-            return 'mindmap-vendor'
-          }
-          if (id.includes('node_modules/recharts')) {
-            return 'chart-vendor'
-          }
+          // React 核心必须最先匹配：否则 react/react-dom 的 CJS 产物会被
+          // 后续 vendor 规则（如 chart-vendor）吸走，导致入口静态依赖该 vendor。
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/scheduler/') ||
+            id.includes('node_modules/react-router/') ||
             id.includes('node_modules/react-router-dom/')
           ) {
             return 'react-vendor'
           }
+          if (
+            id.includes('node_modules/@radix-ui/') ||
+            id.includes('node_modules/react-remove-scroll') ||
+            id.includes('node_modules/react-style-singleton/') ||
+            id.includes('node_modules/use-callback-ref/') ||
+            id.includes('node_modules/use-sidecar/') ||
+            id.includes('node_modules/aria-hidden/') ||
+            id.includes('node_modules/get-nonce/')
+          ) {
+            return 'radix-vendor'
+          }
+          if (id.includes('node_modules/lucide-react/')) {
+            return 'icons-vendor'
+          }
+          if (id.includes('node_modules/sonner/') || id.includes('node_modules/cmdk/')) {
+            return 'ui-vendor'
+          }
+          // @xyflow 与 recharts 不做强制分组：它们只被懒加载边界
+          // （MindMapCanvasLazy / *.view.tsx）引用，跟随动态导入自然成为
+          // 异步块；强制分组会把 react 的 CJS interop 模块一并吸进 vendor
+          // 组（manualChunks 对这些模块不生效），导致入口静态依赖整个 vendor。
           return undefined
         },
       },

@@ -577,7 +577,7 @@ export default function Knowledge() {
                           <Link
                             key={palace.id}
                             to={`/palaces/${palace.id}`}
-                            className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground"
+                            className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground [content-visibility:auto] [contain-intrinsic-size:auto_48px]"
                           >
                             <span>{palace.title}</span>
                             <span className="flex flex-wrap items-center justify-end gap-2">

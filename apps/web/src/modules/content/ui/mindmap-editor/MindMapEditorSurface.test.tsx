@@ -167,6 +167,8 @@ describe('MindMapEditorSurface native host', () => {
     )
 
     const frame = screen.getByTestId('mindmap-frame-native')
+    // 画布懒加载：等工具栏出现后再取 canvasRoot，跳过 Suspense 骨架。
+    await screen.findByTitle('进入系统全屏')
     const canvasRoot = frame.firstElementChild
     await act(async () => {
       fireEvent.click(screen.getByTitle('进入系统全屏'))
@@ -202,7 +204,7 @@ describe('MindMapEditorSurface native host', () => {
     )
 
     const frame = screen.getByTestId('mindmap-frame-native')
-    expect(screen.getByTitle('进入系统全屏')).toBeTruthy()
+    expect(await screen.findByTitle('进入系统全屏')).toBeTruthy()
     expect(screen.getByTitle('进入网页全屏')).toBeTruthy()
 
     await act(async () => {
@@ -239,6 +241,7 @@ describe('MindMapEditorSurface native host', () => {
       />,
     )
 
+    await screen.findByTitle('进入系统全屏')
     await act(async () => {
       fireEvent.click(screen.getByTitle('进入系统全屏'))
     })
@@ -318,6 +321,7 @@ describe('MindMapEditorSurface native host', () => {
       />,
     )
 
+    await screen.findByTitle('进入全屏')
     await act(async () => {
       fireEvent.click(screen.getByTitle('进入全屏'))
     })

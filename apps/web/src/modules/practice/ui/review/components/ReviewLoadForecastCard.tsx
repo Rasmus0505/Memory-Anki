@@ -1,35 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { getReviewLoadForecastApi } from '@/modules/practice/ui/review/api'
 import type { ReviewLoadForecastResponse } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { ChartContainer, ChartTooltipContent } from '@/shared/components/ui/chart'
+import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
+import type { ReviewLoadForecastChartItem } from './ReviewLoadForecastChart.view'
+
+// recharts 只在卡片实际出现时加载，避免经 practice/public 桶进入首屏静态依赖图。
+const ReviewLoadForecastChartView = lazyWithRetry(
+  () => import('./ReviewLoadForecastChart.view'),
+)
 
 type ForecastDays = 7 | 30
-
-interface ReviewLoadForecastChartItem {
-  date: string
-  due_count: number
-  is_today: boolean
-  overdue: boolean
-}
-
-const forecastChartConfig = {
-  due_count: {
-    label: '到期复习',
-    color: '#6366f1',
-  },
-}
 
 export function ReviewLoadForecastCard() {
   const [days, setDays] = useState<ForecastDays>(7)
@@ -104,66 +86,9 @@ export function ReviewLoadForecastCard() {
         </div>
       </CardHeader>
       <CardContent className="min-w-0 pt-2">
-        <ChartContainer
-          config={forecastChartConfig}
-          className="h-48 min-h-48 min-w-0"
-        >
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-            minWidth={0}
-            initialDimension={{ width: 1, height: 1 }}
-          >
-            <BarChart
-              data={chartData}
-              margin={{ left: 4, right: 12, top: 12, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="rgba(148,163,184,0.18)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                fontSize={11}
-                tick={{ fill: 'var(--color-muted-foreground)' }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                allowDecimals={false}
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                width={28}
-                fontSize={11}
-                tick={{ fill: 'var(--color-muted-foreground)' }}
-              />
-              <Tooltip
-                cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => `${value} 项`}
-                  />
-                }
-              />
-              <Bar
-                dataKey="due_count"
-                name="到期复习"
-                radius={[4, 4, 0, 0]}
-              >
-                {chartData.map((entry) => (
-                  <Cell
-                    key={`${entry.date}-${entry.overdue ? 'overdue' : 'due'}`}
-                    fill={entry.overdue ? '#ef4444' : entry.is_today ? '#f59e0b' : '#6366f1'}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartContainer>
+        <Suspense fallback={<div className="h-48 min-h-48 w-full animate-pulse rounded-xl bg-muted/50" />}>
+          <ReviewLoadForecastChartView chartData={chartData} />
+        </Suspense>
       </CardContent>
     </Card>
   )
