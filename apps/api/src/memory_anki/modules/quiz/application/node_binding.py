@@ -20,7 +20,8 @@ from .generation.shared import node_children, node_text
 from .questions.queries import get_palace_or_raise, get_question_or_raise
 
 DEFAULT_BATCH_SIZE = 30
-MAX_NODES_FOR_PROMPT = 200
+# 超出上限的节点会被静默丢弃、永远绑不上题；现存宫殿最大 219 节点，留足余量。
+MAX_NODES_FOR_PROMPT = 800
 MAX_BINDINGS_PER_QUESTION = 8
 MergeMode = Literal["replace_all", "fill_unbound"]
 

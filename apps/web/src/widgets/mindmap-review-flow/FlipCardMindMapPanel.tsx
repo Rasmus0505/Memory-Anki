@@ -57,6 +57,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'masteryByNodeUid'
   | 'countBadgeByNodeUid'
   | 'onCountBadgeClick'
+  | 'confirmDeleteNodes'
   | 'focusRequestNodeUid'
   | 'focusRequestNonce'
   | 'feedbackFxSignal'
@@ -179,6 +180,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   masteryByNodeUid,
   countBadgeByNodeUid,
   onCountBadgeClick,
+  confirmDeleteNodes,
   focusRequestNodeUid,
   focusRequestNonce,
   feedbackFxSignal,
@@ -687,6 +689,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         focusRequestNodeUid={focusRequestNodeUid}
         focusRequestNonce={focusRequestNonce}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
+        confirmDeleteNodes={isEditMode ? confirmDeleteNodes : undefined}
         onNodeActive={handleNodeActive}
         onNodeClick={isEditMode ? onEditNodeClick : handlePanelNodeClick}
         onNodeContextMenu={

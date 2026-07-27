@@ -99,6 +99,12 @@ export interface MindMapEditorSurfaceProps {
   /** Rendered inside the fullscreen frame root so overlays remain visible under native fullscreen. */
   frameOverlay?: ReactNode
   onEditorStateChange: (nextState: MindMapEditorState) => void
+  /**
+   * Asked before cards are deleted, with every uid that goes away. Hosts that own
+   * quiz bindings use it to let the user re-home or drop the affected questions.
+   * Resolve false to abort the delete.
+   */
+  confirmDeleteNodes?: (removedNodeUids: readonly string[]) => Promise<boolean>
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void

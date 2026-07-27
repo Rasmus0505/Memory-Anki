@@ -643,6 +643,7 @@ export default function PalaceEdit() {
                     masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
                     onCountBadgeClick={quizBindingsHost.openNodeQuiz}
+                    confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
                     aiSplitBusy={page.aiSplitBusy}
                     segments={mindMapSegments}
                     activeSegmentId={page.activeSegmentId}

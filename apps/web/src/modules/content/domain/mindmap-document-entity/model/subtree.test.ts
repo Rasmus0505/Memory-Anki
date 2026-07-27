@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSubtreeUidMap } from './subtree'
+import { buildSubtreeUidMap, collectMindMapSubtreeUids } from './subtree'
 
 describe('buildSubtreeUidMap', () => {
   it('indexes each identified node with its identified descendants', () => {
@@ -22,5 +22,27 @@ describe('buildSubtreeUidMap', () => {
   it('ignores missing documents and nodes without stable uids', () => {
     expect(buildSubtreeUidMap(null)).toEqual(new Map())
     expect(buildSubtreeUidMap({ root: { data: { text: 'root' } } })).toEqual(new Map())
+  })
+})
+
+describe('collectMindMapSubtreeUids', () => {
+  const doc = {
+    root: {
+      data: { uid: 'root' },
+      children: [
+        { data: { uid: 'branch' }, children: [{ data: { uid: 'leaf' } }] },
+        { data: { uid: 'other' } },
+      ],
+    },
+  }
+
+  it('returns the node plus every descendant that would vanish with it', () => {
+    expect(collectMindMapSubtreeUids(doc, 'branch')).toEqual(['branch', 'leaf'])
+    expect(collectMindMapSubtreeUids(doc, 'leaf')).toEqual(['leaf'])
+    expect(collectMindMapSubtreeUids(doc, 'root')).toEqual(['root', 'branch', 'leaf', 'other'])
+  })
+
+  it('returns nothing for a uid that is not in the document', () => {
+    expect(collectMindMapSubtreeUids(doc, 'missing')).toEqual([])
   })
 })

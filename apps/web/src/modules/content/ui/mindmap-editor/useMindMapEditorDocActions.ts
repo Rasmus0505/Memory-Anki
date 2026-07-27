@@ -7,6 +7,7 @@ import {
   addEditorDocSiblingWithResult,
   buildSelectionFromDoc,
   canMoveEditorDocNode,
+  collectEditorDocSubtreeUids,
   countEditorDocSubtree,
   deleteEditorDocNode,
   deleteEditorDocNodeOnly,
@@ -36,6 +37,12 @@ export function useMindMapEditorDocActions(deps: {
   replaceInteraction: (next: MindMapInteractionState) => void
   onNodeActive?: (nodes: ReturnType<typeof buildSelectionFromDoc>) => void
   undoEditorDoc: () => void
+  /**
+   * Asked before cards disappear, with every uid that goes away. Hosts that own
+   * quiz bindings use it to let the user re-home or drop the affected questions.
+   * Resolve false to abort the delete. Absent host = delete straight through.
+   */
+  confirmDeleteNodes?: (removedNodeUids: readonly string[]) => Promise<boolean>
 }) {
   const {
     canEdit,
@@ -46,6 +53,7 @@ export function useMindMapEditorDocActions(deps: {
     replaceInteraction,
     onNodeActive,
     undoEditorDoc,
+    confirmDeleteNodes,
   } = deps
 
   const handleAddChild = useCallback(
@@ -101,11 +109,15 @@ export function useMindMapEditorDocActions(deps: {
   )
 
   const handleDeleteNode = useCallback(
-    (nodeId: string) => {
+    async (nodeId: string) => {
       const currentEditorDoc = getCurrentEditorDoc()
       const removedCount = countEditorDocSubtree(currentEditorDoc, nodeId)
       if (removedCount === 0) return
-      const nextEditorDoc = deleteEditorDocNode(currentEditorDoc, nodeId)
+      if (confirmDeleteNodes) {
+        const removedUids = collectEditorDocSubtreeUids(currentEditorDoc, nodeId)
+        if (!(await confirmDeleteNodes(removedUids))) return
+      }
+      const nextEditorDoc = deleteEditorDocNode(getCurrentEditorDoc(), nodeId)
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
@@ -114,15 +126,15 @@ export function useMindMapEditorDocActions(deps: {
         { action: { label: '撤销', onClick: undoEditorDoc } },
       )
     },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
+    [commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleDeleteNodes = useCallback(
-    (nodeIds: readonly string[]) => {
+    async (nodeIds: readonly string[]) => {
       const unique = [...new Set(nodeIds.filter(Boolean))]
       if (unique.length === 0) return
       if (unique.length === 1) {
-        handleDeleteNode(unique[0]!)
+        await handleDeleteNode(unique[0]!)
         return
       }
       const currentEditorDoc = getCurrentEditorDoc()
@@ -131,7 +143,13 @@ export function useMindMapEditorDocActions(deps: {
         removedCount += countEditorDocSubtree(currentEditorDoc, nodeId)
       }
       if (removedCount === 0) return
-      const nextEditorDoc = deleteEditorDocNodes(currentEditorDoc, unique)
+      if (confirmDeleteNodes) {
+        const removedUids = [
+          ...new Set(unique.flatMap((nodeId) => collectEditorDocSubtreeUids(currentEditorDoc, nodeId))),
+        ]
+        if (!(await confirmDeleteNodes(removedUids))) return
+      }
+      const nextEditorDoc = deleteEditorDocNodes(getCurrentEditorDoc(), unique)
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
@@ -139,7 +157,7 @@ export function useMindMapEditorDocActions(deps: {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
-    [commitEditorDoc, getCurrentEditorDoc, handleDeleteNode, onNodeActive, replaceInteraction, undoEditorDoc],
+    [commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNode, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleHighlightNodes = useCallback(
@@ -224,7 +242,9 @@ export function useMindMapEditorDocActions(deps: {
   )
 
   const handleDeleteNodeOnly = useCallback(
-    (nodeId: string) => {
+    async (nodeId: string) => {
+      // Children are promoted, so only this one card's uid goes away.
+      if (confirmDeleteNodes && !(await confirmDeleteNodes([nodeId]))) return
       const nextEditorDoc = deleteEditorDocNodeOnly(getCurrentEditorDoc(), nodeId)
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
@@ -233,7 +253,7 @@ export function useMindMapEditorDocActions(deps: {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
-    [commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
+    [commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleEditNode = useCallback(

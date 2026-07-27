@@ -1,4 +1,9 @@
-import type { MindMapNode } from './document'
+import {
+  getMindMapNodeUid,
+  normalizeMindMapDocument,
+  type MindMapDocumentInput,
+  type MindMapNode,
+} from './document'
 
 export interface MindMapSubtreeDocument {
   root?: MindMapNode
@@ -18,4 +23,22 @@ export function buildSubtreeUidMap(document: MindMapSubtreeDocument | null | und
 
   walk(document?.root)
   return subtreeMap
+}
+
+/** Every uid that disappears when `nodeUid` is deleted together with its branch. */
+export function collectMindMapSubtreeUids(
+  document: MindMapDocumentInput,
+  nodeUid: string,
+): string[] {
+  const collected: string[] = []
+  const walk = (node: MindMapNode, indexPath: number[], inside: boolean) => {
+    const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
+    const within = inside || uid === nodeUid
+    if (within && uid) collected.push(uid)
+    ;(Array.isArray(node.children) ? node.children : []).forEach((child, index) =>
+      walk(child, [...indexPath, index], within),
+    )
+  }
+  walk(normalizeMindMapDocument(document).root, [], false)
+  return collected
 }

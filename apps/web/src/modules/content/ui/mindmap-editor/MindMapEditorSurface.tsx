@@ -93,6 +93,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   selectionToolbarPreferPosition = 'auto',
   frameOverlay = null,
   onEditorStateChange,
+  confirmDeleteNodes,
   onNodeActive,
   onNodeClick,
   onNodeContextMenu,
@@ -574,6 +575,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     replaceInteraction,
     onNodeActive,
     undoEditorDoc,
+    confirmDeleteNodes,
   })
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
