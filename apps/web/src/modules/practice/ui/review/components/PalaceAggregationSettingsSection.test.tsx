@@ -28,7 +28,6 @@ function settingsItem(enabled: boolean) {
       aggregation_max_pull_days: 3,
       aggregation_max_push_days: 1,
       daily_new_limit_override: null,
-      daily_review_limit_override: null,
     },
   }
 }

@@ -6,6 +6,8 @@ import type {
   ReviewNodeIntervalPreviews,
   ReviewNodeScheduleDetail,
   ReviewTodayPlan,
+  ReviewConsolidateToday,
+  UnitRegroupPreview,
 } from '@/shared/api/contracts'
 
 /**
@@ -72,4 +74,20 @@ export function clearPalaceAggregationApi(palaceId: number) {
     `/review/palaces/${palaceId}/aggregation/clear`,
     { method: 'POST', body: '{}' },
   )
+}
+
+export function getConsolidateTodayApi() {
+  return request<{ item: ReviewConsolidateToday }>('/review/consolidate/today')
+}
+export function previewUnitRegroupApi(palaceId: number) {
+  return request<{ item: UnitRegroupPreview }>('/review/units/regroup/preview', { method: 'POST', body: JSON.stringify({ palace_id: palaceId }) })
+}
+export function executeUnitRegroupApi(palaceId: number, palaceRevision: string, operationId: string) {
+  return request<{ item: { operation_id: string; affected_node_count: number } }>('/review/units/regroup/execute', { method: 'POST', body: JSON.stringify({ palace_id: palaceId, palace_revision: palaceRevision, operation_id: operationId }) })
+}
+export function rollbackUnitRegroupApi(operationId: string) {
+  return request<{ item: { operation_id: string; restored_node_count: number } }>('/review/units/regroup/rollback', { method: 'POST', body: JSON.stringify({ operation_id: operationId }) })
+}
+export function simulateUnitCohesionApi(palaceId: number) {
+  return request<{ item: UnitRegroupPreview }>('/review/units/simulate-cohesion', { method: 'POST', body: JSON.stringify({ palace_id: palaceId }) })
 }

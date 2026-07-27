@@ -117,6 +117,14 @@ export interface ReviewScheduleSummary {
   due_node_count: number
   overdue_node_count: number
   frozen_due_node_uids?: string[]
+  batch_key?: string
+  batch_local_date?: string | null
+  batch_due_node_uids?: string[]
+  batch_node_count?: number
+  oversized?: boolean
+  unit_root_uids?: string[]
+  unit_titles?: string[]
+  unit_kinds?: string[]
   wave_id?: string | null
   wave_progress?: {
     item_count: number
@@ -158,6 +166,36 @@ export interface ReviewQueueResponse {
   reinforcement_waves?: ReviewWaveSummary[]
 }
 
+
+export interface ReviewConsolidateItem {
+  palace_id: number
+  palace_title: string
+  unit_title: string
+  node_uid: string
+  text: string
+  context_path: string[]
+  state: number
+  interval_days: number | null
+  raw_due_at: string | null
+  schedule_reason: string | null
+  previews: ReviewIntervalPreview[]
+}
+export interface ReviewConsolidateToday {
+  local_date: string
+  total: number
+  pending: number
+  done: number
+  items: ReviewConsolidateItem[]
+}
+export interface UnitRegroupPreview {
+  palace_id: number
+  palace_revision: string
+  unit_count: number
+  move_count: number
+  wave_count: number
+  consolidate_count: number
+  units: Array<{ unit_root_uid: string; wave_count: number; move_count: number; consolidate_count: number; day_counts_before: Record<string, number>; day_counts_after: Record<string, number> }>
+}
 /** One of the four rating buttons' projected next interval. */
 export interface ReviewIntervalPreview {
   rating: 1 | 2 | 3 | 4
@@ -182,11 +220,11 @@ export interface ReviewTodayPlanDeferredItem {
 
 export interface ReviewTodayPlanSummary {
   local_date: string
-  review_quota: number
   new_quota: number
   review_pending: number
   review_done: number
-  review_deferred: number
+  consolidate_pending: number
+  consolidate_done: number
   new_pending: number
   new_done: number
   deferred: ReviewTodayPlanDeferredItem[]
@@ -200,7 +238,8 @@ export interface ReviewTodayPlanPalace {
   title: string
   review_pending: number
   review_done: number
-  review_deferred: number
+  consolidate_pending: number
+  consolidate_done: number
   new_pending: number
   new_done: number
 }
@@ -255,7 +294,6 @@ export interface PalaceReviewScheduleSettings {
   aggregation_max_pull_days: number | null
   aggregation_max_push_days: number | null
   daily_new_limit_override: number | null
-  daily_review_limit_override: number | null
 }
 
 export interface PalaceAggregationMove {

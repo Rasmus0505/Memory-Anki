@@ -467,6 +467,7 @@ def start_or_resume_formal_review(
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
     client_source: str | None = None,
+    consolidate: bool = False,
 ) -> StudySession:
     from memory_anki.modules.memory.application.wave_service import (
         find_active_formal_wave,
@@ -530,7 +531,7 @@ def start_or_resume_formal_review(
     projection = get_palace_memory_projection(session, palace_id)
     resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
     if requested_scope is not None:
-        # Unit-scoped start (freestyle): force node mode and exact due intersection.
+        # Unit-scoped or consolidation start (freestyle): force node mode and exact due intersection.
         resolved_mode = "node"
     if resolved_mode == "none":
         raise ValueError("palace has no due FSRS nodes")
@@ -540,6 +541,7 @@ def start_or_resume_formal_review(
         entry_mode=resolved_mode if resolved_mode in {"node", "palace"} else "palace",
         branch_uid=branch_uid or projection.get("primary_branch_uid"),
         scope_node_uids=requested_scope,
+        allow_consolidate=consolidate,
     )
     if not frozen:
         raise ValueError("palace has no due FSRS nodes")
@@ -586,7 +588,7 @@ def start_or_resume_formal_review(
                     "frozen_due_node_uids": frozen,
                     "wave_id": wave_id,
                     "chapter_id": chapter_id,
-                    "review_entry_mode": resolved_mode,
+                    "review_entry_mode": "consolidate" if consolidate else resolved_mode,
                     "primary_branch_uid": (
                         branch_uid or projection.get("primary_branch_uid")
                         if resolved_mode == "node"
@@ -602,6 +604,7 @@ def start_or_resume_formal_review(
                     ),
                     "review_entry_label": projection.get("review_entry_label"),
                     "explicit_scope": bool(requested_scope is not None),
+                    "consolidate": consolidate,
                     "editor_fingerprint": hashlib.sha256(
                         (palace.editor_doc or "").encode("utf-8")
                     ).hexdigest(),

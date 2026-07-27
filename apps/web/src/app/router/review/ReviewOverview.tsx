@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowDownUp, ArrowRight, Brain, CalendarClock, Zap } from 'lucide-react'
 import type { ReviewQueueResponse } from '@/shared/api/contracts'
-import { getChapterReviewQueueApi, getReviewQueueApi, getReviewSessionApi, getReviewSessionProgressApi, startReviewWaveSessionApi } from '@/modules/practice/public'
+import { getChapterReviewQueueApi, getReviewQueueApi, startReviewSessionApi, startReviewWaveSessionApi } from '@/modules/practice/public'
+import { ConsolidateCard } from '@/modules/practice/ui/review/components/ConsolidateCard'
 import {
   DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
   isReviewQueueSortMode,
@@ -15,7 +16,6 @@ import {
 } from '@/modules/practice/public'
 import { buildReviewSessionPath } from '@/modules/memory/public'
 import { formatDuration } from '@/modules/session/public'
-import { prefetchStudySession } from '@/shared/api/studySessionWarmup'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -60,6 +60,7 @@ export default function ReviewOverview() {
   const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [startingWaveId, setStartingWaveId] = useState<string | null>(null)
+  const [startingBatchKey, setStartingBatchKey] = useState<string | null>(null)
   const [viewSettings, setViewSettings] = useLocalStorageState<ReviewQueueViewSettings>(
     REVIEW_QUEUE_VIEW_SETTINGS_KEY,
     DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
@@ -100,11 +101,26 @@ export default function ReviewOverview() {
       </div>
     )
   }
-  const warm = (id: string | number) => prefetchStudySession('review-session', Number(id), () => Promise.all([getReviewSessionApi(id), getReviewSessionProgressApi(id)]).then(([session, progress]) => ({ session, progress })))
 
   const handleSortChange = (value: string) => {
     if (!isReviewQueueSortMode(value)) return
     setViewSettings({ sortMode: value as ReviewQueueSortMode })
+  }
+
+  const handleStartBatch = async (review: ReviewQueueResponse['reviews'][number]) => {
+    const batchKey = review.batch_key ?? String(review.palace_id)
+    setStartingBatchKey(batchKey)
+    try {
+      const session = await startReviewSessionApi(review.palace_id, {
+        entry_mode: review.review_entry_mode === 'node' ? 'node' : 'palace',
+        scope_node_uids: review.batch_due_node_uids,
+      })
+      navigate(buildReviewSessionPath(session.id, chapterId))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法开始本批复习')
+    } finally {
+      setStartingBatchKey(null)
+    }
   }
 
   const handleStartReinforcement = async (waveId: string) => {
@@ -128,7 +144,7 @@ export default function ReviewOverview() {
         description="默认按最早到期排列（拖最久的优先）；可在队列标题旁切换节点数、逾期数或名称排序。"
         compact
       />
-      {!chapterId ? <TodayPlanCard /> : null}
+      {!chapterId ? <><TodayPlanCard /><ConsolidateCard /></> : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">当前到期节点</div><b className="text-2xl">{queue.due_count}</b></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">逾期节点</div><b className="text-2xl">{queue.overdue_count}</b></CardContent></Card>
@@ -198,12 +214,7 @@ export default function ReviewOverview() {
             const mode = review.review_entry_mode
             const label = entryButtonLabel(mode, review.review_entry_label ?? '开始复习')
             return (
-              <Link
-                key={review.palace_id}
-                to={buildReviewSessionPath(review.palace_id, chapterId)}
-                onFocus={() => warm(review.palace_id)}
-                onMouseEnter={() => warm(review.palace_id)}
-              >
+              <div key={review.batch_key ?? `${review.palace_id}:${review.next_due_at ?? review.due_at}`}>
                 <div className="flex items-center justify-between gap-4 rounded-2xl border bg-background/80 px-4 py-4 transition hover:border-primary/35">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -222,13 +233,13 @@ export default function ReviewOverview() {
                     dueNodeCount={review.due_node_count}
                     entryMode={mode === 'none' ? null : mode}
                   >
-                    <Button size="sm" className={cn(entryButtonClass(mode))}>
-                      {label}
+                    <Button size="sm" className={cn(entryButtonClass(mode))} disabled={startingBatchKey === (review.batch_key ?? String(review.palace_id))} onClick={() => void handleStartBatch(review)}>
+                      {startingBatchKey === (review.batch_key ?? String(review.palace_id)) ? '正在进入…' : label}
                       <ArrowRight className="ml-2 size-4" />
                     </Button>
                   </ReviewEntryTooltip>
                 </div>
-              </Link>
+              </div>
             )
           }) : <EmptyState variant="review" title="今天没有到期的正式复习" description="有节点到期时，FSRS 会自动将宫殿加入这里。" />}
         </CardContent>
@@ -243,7 +254,7 @@ export default function ReviewOverview() {
           </CardHeader>
           <CardContent className="space-y-3">
             {sortedLaterToday.map((review) => (
-              <Link key={review.palace_id} to={buildReviewSessionPath(review.palace_id, chapterId)}>
+              <div key={review.batch_key ?? `${review.palace_id}:${review.next_due_at ?? review.due_at}`}>
                 <div className="flex items-center justify-between rounded-2xl border border-warning/25 bg-warning/5 px-4 py-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -262,10 +273,10 @@ export default function ReviewOverview() {
                     dueNodeCount={0}
                     entryMode={review.review_entry_mode === 'none' ? null : review.review_entry_mode}
                   >
-                    <Button size="sm" variant="outline">提前复习</Button>
+                    <Button size="sm" variant="outline" disabled={startingBatchKey === (review.batch_key ?? String(review.palace_id))} onClick={() => void handleStartBatch(review)}>提前复习</Button>
                   </ReviewEntryTooltip>
                 </div>
-              </Link>
+              </div>
             ))}
           </CardContent>
         </Card>

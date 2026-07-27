@@ -6,6 +6,10 @@ import {
   getPalaceReviewScheduleSettingsApi,
   previewPalaceAggregationApi,
   updatePalaceReviewScheduleSettingsApi,
+  simulateUnitCohesionApi,
+  previewUnitRegroupApi,
+  executeUnitRegroupApi,
+  rollbackUnitRegroupApi,
 } from '@/modules/practice/ui/review/api/scheduleInsightApi'
 import { Button } from '@/shared/components/ui/button'
 import { Switch } from '@/shared/components/ui/switch'
@@ -38,6 +42,8 @@ export function PalaceAggregationSettingsSection({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [moves, setMoves] = useState<PalaceAggregationMove[] | null>(null)
+  const [cohesion, setCohesion] = useState<{ revision: string; units: number; moves: number; waves: number; consolidate: number } | null>(null)
+  const [lastOperationId, setLastOperationId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -109,6 +115,37 @@ export function PalaceAggregationSettingsSection({
     }
   }, [onChanged, palaceId])
 
+  const handleCohesionPreview = useCallback(async () => {
+    setBusy(true)
+    try {
+      const response = await simulateUnitCohesionApi(palaceId)
+      setCohesion({ revision: response.item.palace_revision, units: response.item.unit_count, moves: response.item.move_count, waves: response.item.wave_count, consolidate: response.item.consolidate_count })
+    } catch (error) { toast.error(errorMessage(error, '模拟单元凝聚失败')) } finally { setBusy(false) }
+  }, [palaceId])
+
+  const handleRegroup = useCallback(async () => {
+    setBusy(true)
+    try {
+      const preview = await previewUnitRegroupApi(palaceId)
+      const operationId = `unit-regroup-${palaceId}-${Date.now()}`
+      const response = await executeUnitRegroupApi(palaceId, preview.item.palace_revision, operationId)
+      setLastOperationId(response.item.operation_id)
+      toast.success(`已重排 ${response.item.affected_node_count} 张卡片`)
+      onChanged?.()
+    } catch (error) { toast.error(errorMessage(error, '执行单元重排失败')) } finally { setBusy(false) }
+  }, [onChanged, palaceId])
+
+  const handleRollbackRegroup = useCallback(async () => {
+    if (!lastOperationId) return
+    setBusy(true)
+    try {
+      const response = await rollbackUnitRegroupApi(lastOperationId)
+      toast.success(`已恢复 ${response.item.restored_node_count} 张卡片的排期`)
+      setLastOperationId(null)
+      onChanged?.()
+    } catch (error) { toast.error(errorMessage(error, '回滚单元重排失败')) } finally { setBusy(false) }
+  }, [lastOperationId, onChanged])
+
   const handleClear = useCallback(async () => {
     setBusy(true)
     try {
@@ -146,6 +183,16 @@ export function PalaceAggregationSettingsSection({
               aria-label="聚合复习日开关"
             />
           </label>
+          <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="text-sm font-medium">宫殿整批复习</div>
+            <p className="text-xs text-muted-foreground">永久标记只决定调度单元；同宫殿同一天的多个单元仍合并为一次会话。</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void handleCohesionPreview()}>模拟凝聚</Button>
+              <Button type="button" size="sm" disabled={busy} onClick={() => void handleRegroup()}>按当前标记重排</Button>
+              <Button type="button" size="sm" variant="secondary" disabled={busy || !lastOperationId} onClick={() => void handleRollbackRegroup()}>回滚最近重排</Button>
+            </div>
+            {cohesion ? <p className="text-xs text-muted-foreground">{cohesion.units} 个单元 · 预计 {cohesion.waves} 个波次 · 移动 {cohesion.moves} 张 · 巩固 {cohesion.consolidate} 张</p> : null}
+          </div>
           {settings.aggregation_enabled ? (
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">

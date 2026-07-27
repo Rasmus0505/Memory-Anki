@@ -237,6 +237,7 @@ def due_node_uids_for_entry(
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
     unit_root_uid: str | None = None,
+    allow_consolidate: bool = False,
     progress_scopes: list[str] | set[str] | tuple[str, ...] | None = None,
 ) -> list[str]:
     """Freeze actionable UIDs; freestyle scope follows progress_scopes when set.
@@ -279,6 +280,8 @@ def due_node_uids_for_entry(
         # Freestyle passes explicit unit scope: allow reinforcement + calendar-today
         # formal nodes so scoped freezes match the immersive card due_node_uids set.
         allow_scope_extras = scope_node_uids is not None
+        if allow_consolidate:
+            from memory_anki.modules.memory.application.wave_policy import SCHEDULE_CONSOLIDATE
         wave = [
             item
             for item in projection.get("nodes") or []
@@ -287,6 +290,7 @@ def due_node_uids_for_entry(
                 allow_scope_extras
                 and (
                     item.get("reinforcement_due")
+                    or (allow_consolidate and item.get("schedule_source") == SCHEDULE_CONSOLIDATE)
                     or item.get("calendar_today_due")
                     or item.get("progress_bucket")
                     in {
@@ -301,6 +305,21 @@ def due_node_uids_for_entry(
     due_by_uid = {
         str(item["node_uid"]): item for item in wave if item.get("node_uid")
     }
+    if allow_consolidate and scope_node_uids:
+        from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+        from memory_anki.modules.memory.application.wave_policy import SCHEDULE_CONSOLIDATE
+
+        requested = {str(uid) for uid in scope_node_uids}
+        consolidate_rows = (
+            session.query(ReviewNodeState)
+            .filter(
+                ReviewNodeState.palace_id == palace_id,
+                ReviewNodeState.node_uid.in_(requested),
+                ReviewNodeState.schedule_source == SCHEDULE_CONSOLIDATE,
+            )
+            .all()
+        )
+        due_by_uid.update({row.node_uid: {"node_uid": row.node_uid} for row in consolidate_rows})
     if scope_node_uids is not None:
         ordered: list[str] = []
         seen: set[str] = set()

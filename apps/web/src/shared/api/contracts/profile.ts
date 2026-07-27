@@ -26,8 +26,6 @@ export interface ReviewSettings {
   enable_fuzzing?: string
   /** Daily new-card release limit (string number). */
   daily_new_limit?: string
-  /** Daily review quota (string number); overflow defers to tomorrow. */
-  daily_review_limit?: string
   mindmap_ai_split_api_key: string
   mindmap_ai_split_base_url: string
   mindmap_ai_split_model: string

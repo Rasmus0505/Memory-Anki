@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { CalendarCheck2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
+import { CalendarCheck2, CheckCircle2 } from 'lucide-react'
 import type { ReviewTodayPlan } from '@/shared/api/contracts'
 import { getReviewTodayPlanApi } from '@/modules/practice/ui/review/api/scheduleInsightApi'
 import {
@@ -9,13 +8,11 @@ import {
   useReviewInsightQueryClient,
 } from '@/modules/practice/ui/review/hooks/reviewInsightQueries'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 
 export function formatDeferReason(reason: string | null | undefined): string {
   if (!reason) return '已顺延'
-  if (reason === 'over_review_quota') return '今日复习额度已满'
   if (reason === 'over_new_quota') return '今日新学额度已满'
   return reason
 }
@@ -33,13 +30,12 @@ function ProgressBar({ done, total, className }: { done: number; total: number; 
 }
 
 /**
- * 今日任务卡：复习/新学双额度进度、打卡完成态、顺延明细与 backlog 提示。
+ * 今日任务卡：正式复习批次、新学额度、巩固进度与 backlog 提示。
  * 放在复习队列页顶部。
  */
 export function TodayPlanCard() {
   const queryClient = useReviewInsightQueryClient()
   useReviewInsightInvalidation(queryClient)
-  const [deferredOpen, setDeferredOpen] = useState(false)
   const query = useQuery(
     {
       queryKey: reviewInsightQueryKeys.todayPlan,
@@ -55,8 +51,6 @@ export function TodayPlanCard() {
 
   const reviewTotal = plan.review_done + plan.review_pending
   const newTotal = plan.new_done + plan.new_pending
-  const deferredDetails = plan.deferred_details ?? []
-  const deferredCount = plan.review_deferred || deferredDetails.length
 
   return (
     <Card data-testid="today-plan-card" className="border-border/70 bg-card/95">
@@ -64,7 +58,7 @@ export function TodayPlanCard() {
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span className="flex items-center gap-2">
             <CalendarCheck2 className="size-5 text-primary" />
-            今日任务：复习 {reviewTotal} 张 + 新学 {newTotal} 张
+            今日任务：正式复习 {reviewTotal} 张 + 新学 {newTotal} 张
           </span>
           {plan.completed ? (
             <Badge className="bg-success text-white hover:bg-success">
@@ -82,7 +76,7 @@ export function TodayPlanCard() {
             <div className="mb-1 flex justify-between text-xs text-muted-foreground">
               <span>复习进度</span>
               <span className="tabular-nums">
-                {plan.review_done}/{reviewTotal}（额度 {plan.review_quota}）
+                {plan.review_done}/{reviewTotal}（按到期批次全部完成）
               </span>
             </div>
             <ProgressBar done={plan.review_done} total={reviewTotal} />
@@ -104,34 +98,6 @@ export function TodayPlanCard() {
           </div>
         ) : null}
 
-        {deferredCount > 0 ? (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-full justify-between px-1 text-xs font-normal text-muted-foreground hover:text-foreground"
-              onClick={() => setDeferredOpen((value) => !value)}
-              aria-expanded={deferredOpen}
-            >
-              <span>因今日复习额度已满，{deferredCount} 张顺延至明天</span>
-              {deferredOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            </Button>
-            {deferredOpen && deferredDetails.length > 0 ? (
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-muted-foreground">
-                {deferredDetails.map((detail) => (
-                  <li
-                    key={`${detail.palace_id}:${detail.node_uid}`}
-                    className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background/70 px-2 py-1"
-                  >
-                    <span className="truncate">{detail.palace_title}</span>
-                    <span className="shrink-0">{formatDeferReason(detail.defer_reason)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
 
         {plan.palaces.length > 0 ? (
           <div className="grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-2">
@@ -146,7 +112,7 @@ export function TodayPlanCard() {
                   {palace.new_done + palace.new_pending > 0
                     ? ` · 新学 ${palace.new_done}/${palace.new_done + palace.new_pending}`
                     : ''}
-                  {palace.review_deferred > 0 ? ` · 顺延 ${palace.review_deferred}` : ''}
+                  {palace.consolidate_done + palace.consolidate_pending > 0 ? ` · 巩固 ${palace.consolidate_done}/${palace.consolidate_done + palace.consolidate_pending}` : ''}
                 </span>
               </div>
             ))}

@@ -224,17 +224,6 @@ export default function ProfileSettingsPage({
                     />
                     <p className="text-xs text-muted-foreground">每天最多放出这么多张新卡；剩余新卡进入待放出队列逐日释放。</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="daily-review-limit">每日复习上限</Label>
-                    <Input
-                      id="daily-review-limit"
-                      name="daily_review_limit"
-                      defaultValue={config.daily_review_limit || '200'}
-                      type="number"
-                      min="0"
-                    />
-                    <p className="text-xs text-muted-foreground">超出额度的到期卡自动顺延到明天，避免单日被压垮。</p>
-                  </div>
                 </div>
 
                 <div className="rounded-lg border p-4">
@@ -242,11 +231,11 @@ export default function ProfileSettingsPage({
                     <input
                       type="checkbox"
                       name="enable_fuzzing"
-                      defaultChecked={config.enable_fuzzing !== 'false'}
+                      defaultChecked={config.enable_fuzzing === 'true'}
                       className="mt-0.5"
                     />
                     <div>
-                      <div className="text-sm font-medium">间隔随机化（fuzzing）</div>
+                      <div className="text-sm font-medium">逐卡间隔随机化（默认关闭）</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         给复习间隔加入小幅随机抖动，避免同一天学的卡永远挤在同一天到期。
                       </div>

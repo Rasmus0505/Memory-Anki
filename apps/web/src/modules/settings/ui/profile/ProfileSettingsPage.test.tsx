@@ -23,9 +23,8 @@ function mockSettings() {
     maximum_interval: '36500',
     learning_steps: '10m,1h',
     relearning_steps: '10m,1h',
-    enable_fuzzing: 'true',
+    enable_fuzzing: 'false',
     daily_new_limit: '20',
-    daily_review_limit: '200',
     mindmap_ai_split_api_key: '',
     mindmap_ai_split_base_url: '',
     mindmap_ai_split_model: '',
@@ -93,8 +92,8 @@ describe('ProfileSettingsPage', () => {
     expect(screen.getByLabelText('首次学习短期步骤')).toBeTruthy()
     expect(screen.getByLabelText('遗忘后短期步骤')).toBeTruthy()
     expect(screen.getByLabelText('每日新学上限')).toBeTruthy()
-    expect(screen.getByLabelText('每日复习上限')).toBeTruthy()
-    expect(screen.getByText('间隔随机化（fuzzing）')).toBeTruthy()
+    expect(screen.queryByLabelText('每日复习上限')).toBeNull()
+    expect(screen.getByText('逐卡间隔随机化（默认关闭）')).toBeTruthy()
     expect(screen.getByText(/目标保持率越高复习越频繁/)).toBeTruthy()
 
     // 已删除的死配置不再渲染

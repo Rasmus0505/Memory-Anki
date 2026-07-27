@@ -132,7 +132,7 @@ export function replaceFreestyleTemporaryMarksApi(
     method: 'PUT',
     body: JSON.stringify({
       node_uids: payload.node_uids,
-      unify_progress: payload.unify_progress ?? true,
+      unify_progress: payload.unify_progress ?? false,
       operation_id: payload.operation_id ?? null,
     }),
   })

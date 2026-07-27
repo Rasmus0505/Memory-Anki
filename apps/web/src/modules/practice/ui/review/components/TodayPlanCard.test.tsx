@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TodayPlanCard, formatDeferReason } from './TodayPlanCard'
 
@@ -22,16 +22,12 @@ function planItem(overrides: Record<string, unknown> = {}) {
   return {
     item: {
       local_date: '2026-07-26',
-      review_quota: 200,
       new_quota: 20,
       review_pending: 4,
       review_done: 6,
-      review_deferred: 2,
       new_pending: 1,
       new_done: 2,
-      deferred: [
-        { item_key: 'review:n1', palace_id: 1, defer_reason: 'over_review_quota' },
-      ],
+      deferred: [],
       backlog_new: 15,
       completed: false,
       palaces: [
@@ -40,25 +36,13 @@ function planItem(overrides: Record<string, unknown> = {}) {
           title: '解剖学',
           review_pending: 4,
           review_done: 6,
-          review_deferred: 2,
+          consolidate_pending: 2,
+          consolidate_done: 1,
           new_pending: 1,
           new_done: 2,
         },
       ],
-      deferred_details: [
-        {
-          palace_id: 1,
-          palace_title: '解剖学',
-          node_uid: 'n1',
-          defer_reason: 'over_review_quota',
-        },
-        {
-          palace_id: 1,
-          palace_title: '解剖学',
-          node_uid: 'n2',
-          defer_reason: 'over_review_quota',
-        },
-      ],
+      deferred_details: [],
       ...overrides,
     },
   }
@@ -69,16 +53,15 @@ describe('TodayPlanCard', () => {
     getTodayPlanMock.mockReset()
   })
 
-  it('renders the daily quota summary, backlog hint and deferred details', async () => {
+  it('renders review batches, new-card quota, consolidation, and backlog', async () => {
     getTodayPlanMock.mockResolvedValue(planItem())
     renderCard()
 
-    expect(await screen.findByText('今日任务：复习 10 张 + 新学 3 张')).toBeTruthy()
+    expect(await screen.findByText('今日任务：正式复习 10 张 + 新学 3 张')).toBeTruthy()
     expect(screen.getByText(/还有 15 张新卡待逐日放出/)).toBeTruthy()
 
-    fireEvent.click(screen.getByText(/因今日复习额度已满，2 张顺延至明天/))
-    expect(screen.getAllByText('解剖学').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('今日复习额度已满').length).toBe(2)
+    expect(screen.getByText(/按到期批次全部完成/)).toBeTruthy()
+    expect(screen.getByText(/巩固 1\/3/)).toBeTruthy()
   })
 
   it('shows the completed badge when today is done', async () => {
@@ -87,7 +70,6 @@ describe('TodayPlanCard', () => {
         completed: true,
         review_pending: 0,
         new_pending: 0,
-        review_deferred: 0,
         deferred: [],
         deferred_details: [],
         backlog_new: 0,
@@ -99,8 +81,8 @@ describe('TodayPlanCard', () => {
     expect(screen.queryByText(/顺延至明天/)).toBeNull()
   })
 
-  it('maps defer reasons to Chinese labels', () => {
-    expect(formatDeferReason('over_review_quota')).toBe('今日复习额度已满')
+  it('keeps new-card defer reasons readable', () => {
+    expect(formatDeferReason('over_new_quota')).toBe('今日新学额度已满')
     expect(formatDeferReason(null)).toBe('已顺延')
   })
 })

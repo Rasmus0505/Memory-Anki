@@ -162,7 +162,6 @@ def api_get_palace_review_settings(
             "aggregation_max_pull_days": row.aggregation_max_pull_days if row else None,
             "aggregation_max_push_days": row.aggregation_max_push_days if row else None,
             "daily_new_limit_override": row.daily_new_limit_override if row else None,
-            "daily_review_limit_override": row.daily_review_limit_override if row else None,
         }
     }
 
@@ -191,7 +190,6 @@ def api_put_palace_review_settings(
         aggregation_max_pull_days=_opt_int("aggregation_max_pull_days"),
         aggregation_max_push_days=_opt_int("aggregation_max_push_days"),
         daily_new_limit_override=_opt_int("daily_new_limit_override"),
-        daily_review_limit_override=_opt_int("daily_review_limit_override"),
     )
     cleared = 0
     if data.get("aggregation_enabled") is False:
@@ -204,7 +202,6 @@ def api_put_palace_review_settings(
             "aggregation_max_pull_days": row.aggregation_max_pull_days,
             "aggregation_max_push_days": row.aggregation_max_push_days,
             "daily_new_limit_override": row.daily_new_limit_override,
-            "daily_review_limit_override": row.daily_review_limit_override,
             "aggregation_cleared_count": cleared,
         }
     }
@@ -618,6 +615,7 @@ def api_start_formal_review_session(palace_id: int, data: dict | None = None, se
             branch_uid=str(payload.get("branch_uid") or "") or None,
             scope_node_uids=scope_node_uids,
             client_source=str(client_source) if client_source is not None else None,
+            consolidate=bool(payload.get("consolidate")),
         )
         return formal_review_session_payload(session, row)
     except ValueError as exc:
