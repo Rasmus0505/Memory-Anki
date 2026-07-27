@@ -1,9 +1,10 @@
-﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiWorkspacePage as ProfileAiConfigPage } from '@/modules/settings/ui/profile/AiWorkspacePage'
 import * as aiLogsApi from '@/modules/settings/domain/ai-log-entity/api'
 import * as profileApi from '@/modules/settings/domain/preferences-entity/api'
+import * as nativeDialog from '@/shared/components/ui/native-dialog'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -250,6 +251,11 @@ function renderPage() {
 }
 
 describe('ProfileAiConfigPage', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.spyOn(nativeDialog, 'appConfirm').mockResolvedValue(true)
+  })
+
   it('shows custom-scene state and saves shared category config', async () => {
     vi.spyOn(profileApi, 'getAiModelScenariosApi').mockResolvedValue(baseResponse as never)
     vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
@@ -339,7 +345,7 @@ describe('ProfileAiConfigPage', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('新增或覆盖模型')).toBeTruthy()
+      expect(screen.getByText('模型目录')).toBeTruthy()
     })
 
     fireEvent.click(screen.getAllByRole('button', { name: '查看使用影响' })[0])
@@ -411,4 +417,91 @@ describe('ProfileAiConfigPage', () => {
       expect(screen.getByText('Response Payload')).toBeTruthy()
     })
   })
+
+  it('tracks pending provider key clearing and allows undo', async () => {
+    vi.spyOn(profileApi, 'getAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+    vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+        <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByText('DashScope')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '清空密钥' }))
+    expect(screen.getByRole('button', { name: '保存并清空密钥' })).toBeTruthy()
+    expect(screen.getByPlaceholderText('保存后将清空')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '撤销清空' }))
+    expect(screen.queryByRole('button', { name: '保存并清空密钥' })).toBeNull()
+  })
+
+  it('confirms provider clearing and sends an explicit empty key', async () => {
+    vi.spyOn(profileApi, 'getAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+    vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
+    const updateSpy = vi.spyOn(profileApi, 'updateAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+
+    render(
+      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+        <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '清空密钥' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '清空密钥' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存并清空密钥' }))
+
+    await waitFor(() => {
+      expect(nativeDialog.appConfirm).toHaveBeenCalledWith(
+        expect.stringContaining('DashScope'),
+        expect.objectContaining({ title: '清空 Provider 密钥', tone: 'danger' }),
+      )
+      expect(updateSpy).toHaveBeenCalledWith({
+        provider_updates: { dashscope: { api_key: '', base_url: 'https://dashscope.example/v1' } },
+      })
+    })
+  })
+
+  it('confirms and disables every AI key in one request', async () => {
+    vi.spyOn(profileApi, 'getAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+    vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
+    const updateSpy = vi.spyOn(profileApi, 'updateAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+
+    render(
+      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+        <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '停用全部 AI' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '停用全部 AI' }))
+
+    await waitFor(() => {
+      expect(nativeDialog.appConfirm).toHaveBeenCalledWith(
+        expect.stringContaining('环境变量'),
+        expect.objectContaining({ title: '停用全部 AI', tone: 'danger' }),
+      )
+      expect(updateSpy).toHaveBeenCalledWith({ clear_all_api_keys: true })
+    })
+  })
+
+  it('opens model creation and edit forms in a dialog', async () => {
+    vi.spyOn(profileApi, 'getAiModelScenariosApi').mockResolvedValue(baseResponse as never)
+    vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
+
+    render(
+      <MemoryRouter initialEntries={['/profile?aiTab=models']}>
+        <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '新增模型' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('模型 key 相同时会覆盖目录元数据，不会修改场景绑定。')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑目录' })[0])
+    expect((screen.getByPlaceholderText('模型 key') as HTMLInputElement).value).toBe('qwen3.5-flash')
+  })
+
 })

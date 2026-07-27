@@ -1,6 +1,7 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Layers3, Play, RotateCcw, Save, ShieldCheck, WandSparkles } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
 import type {
   AiPromptBlock,
@@ -23,7 +24,7 @@ import {
   saveAiPromptBlockApi,
   saveAiPromptSceneDefaultApi,
   updateAiPromptTemplatesApi,
-} from '@/modules/settings/ui/profile/api'
+} from '@/modules/settings/domain/preferences-entity/api'
 import {
   filterBlocksForScene,
   groupBlocksByLayer,
@@ -48,8 +49,15 @@ function buildDraftMap(items: AiPromptTemplate[]) {
   return Object.fromEntries(items.map((item) => [item.key, item.template]))
 }
 
-export function ProfileAiPromptsPage({ standalone = false }: { standalone?: boolean }) {
-  const [activeTab, setActiveTab] = useState<'scenes' | 'blocks' | 'legacy'>('scenes')
+export function ProfileAiPromptsPage({
+  standalone = false,
+  view,
+}: {
+  standalone?: boolean
+  view?: 'scenes' | 'blocks'
+}) {
+  const [activeTab, setActiveTab] = useState<'scenes' | 'blocks' | 'legacy'>(view ?? 'scenes')
+  const visibleTab = view === 'scenes' ? 'scenes' : activeTab
   const [items, setItems] = useState<AiPromptTemplate[]>([])
   const [blocks, setBlocks] = useState<AiPromptBlock[]>([])
   const [scenes, setScenes] = useState<AiPromptSceneDefault[]>([])
@@ -121,6 +129,13 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
   }
 
   const handleResetAll = async () => {
+    if (
+      !(await appConfirm('将为全部完整模板创建默认候选版本，现有候选会被替换。', {
+        title: '全部恢复默认',
+        confirmText: '确认恢复',
+        tone: 'danger',
+      }))
+    ) return
     setResettingAll(true)
     try {
       const response = await resetAiPromptTemplatesApi()
@@ -165,12 +180,13 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
   const handleSaveBlock = async (blockKey: string) => {
     const draft = blockDrafts[blockKey]
     if (!draft) return
-    if (draft.affected_scene_keys.length > 0) {
-      const confirmed = window.confirm(
-        `修改会同步影响：${draft.affected_scene_keys.join('、')}。确认发布新版本吗？`,
-      )
-      if (!confirmed) return
-    }
+    if (
+      draft.affected_scene_keys.length > 0 &&
+      !(await appConfirm(
+        `修改会同步影响 ${draft.affected_scene_keys.length} 个场景：${draft.affected_scene_keys.join('、')}。`,
+        { title: '全局发布提示词块', confirmText: '确认发布', tone: 'danger' },
+      ))
+    ) return
     const saved = await saveAiPromptBlockApi(draft)
     setBlocks((current) => current.map((item) => (item.key === blockKey ? saved : item)))
     setBlockDrafts((current) => ({ ...current, [blockKey]: saved }))
@@ -227,19 +243,23 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
 
   const content = (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant={activeTab === 'scenes' ? 'default' : 'outline'} onClick={() => setActiveTab('scenes')}>
-          场景默认组合
-        </Button>
-        <Button type="button" variant={activeTab === 'blocks' ? 'default' : 'outline'} onClick={() => setActiveTab('blocks')}>
-          提示词块库
-        </Button>
-        <Button type="button" variant={activeTab === 'legacy' ? 'default' : 'outline'} onClick={() => setActiveTab('legacy')}>
-          完整模板兼容
-        </Button>
-      </div>
+      {view !== 'scenes' ? (
+        <div className="flex flex-wrap gap-2">
+          {view ? null : (
+            <Button type="button" variant={visibleTab === 'scenes' ? 'default' : 'outline'} onClick={() => setActiveTab('scenes')}>
+              场景默认组合
+            </Button>
+          )}
+          <Button type="button" variant={visibleTab === 'blocks' ? 'default' : 'outline'} onClick={() => setActiveTab('blocks')}>
+            提示词块库
+          </Button>
+          <Button type="button" variant={visibleTab === 'legacy' ? 'default' : 'outline'} onClick={() => setActiveTab('legacy')}>
+            完整模板兼容
+          </Button>
+        </div>
+      ) : null}
 
-      {activeTab === 'scenes' ? (
+      {visibleTab === 'scenes' ? (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">
@@ -395,7 +415,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
         </div>
       ) : null}
 
-      {activeTab === 'blocks' ? (
+      {visibleTab === 'blocks' ? (
         <div className="space-y-4">
           {blocks.map((block) => {
             const draft = blockDrafts[block.key] ?? block
@@ -453,7 +473,7 @@ export function ProfileAiPromptsPage({ standalone = false }: { standalone?: bool
         </div>
       ) : null}
 
-      {activeTab === 'legacy' ? (
+      {visibleTab === 'legacy' ? (
         <>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline">共 {items.length} 组提示词</Badge>

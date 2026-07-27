@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from unittest.mock import patch
 
@@ -74,6 +74,12 @@ def _mindmap_ai_split_test_defaults(
     monkeypatch.setattr(service, "DASHSCOPE_API_KEY", "test-key")
     monkeypatch.setattr(service, "DASHSCOPE_BASE_URL", "https://dashscope.test/v1")
     monkeypatch.setattr(service, "DASHSCOPE_TEXT_MODEL", "qwen3.6-flash")
+    db_session.add_all(
+        [
+            Config(key="dashscope_api_key", value="test-key"),
+            Config(key="dashscope_base_url", value="https://dashscope.test/v1"),
+        ]
+    )
     palace = Palace(title="测试宫殿", description="")
     db_session.add(palace)
     db_session.commit()
@@ -391,7 +397,7 @@ def test_split_granularity_is_inferred_from_existing_children(db_session: Sessio
     assert result.reassigned_existing_children_count == 10
 
 
-def test_config_falls_back_to_environment_credentials(db_session: Session, monkeypatch: pytest.MonkeyPatch):
+def test_config_uses_settings_runtime_credentials(db_session: Session, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(service, "DASHSCOPE_API_KEY", "env-key")
     monkeypatch.setattr(service, "DASHSCOPE_BASE_URL", "https://example.test/v1")
     monkeypatch.setattr(service, "DASHSCOPE_TEXT_MODEL", "qwen-env")
@@ -401,7 +407,7 @@ def test_config_falls_back_to_environment_credentials(db_session: Session, monke
         ai_runtime=_ai_runtime(db_session),
     )
 
-    assert config.api_key == "env-key"
+    assert config.api_key == "test-key"
     assert config.base_url == "https://example.test/v1"
     assert config.model == "qwen3.6-flash"
     assert config.temperature == pytest.approx(0.2)

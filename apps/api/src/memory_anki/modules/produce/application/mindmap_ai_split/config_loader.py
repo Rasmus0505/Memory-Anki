@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -38,18 +38,15 @@ def resolve_config(
     values = {row.key: row.value for row in rows}
     runtime = ai_runtime.resolve("ai_split", options=ai_options)
     legacy_values = legacy_defaults or {}
-    provider_api_key_key = f"{runtime.provider}_api_key"
     provider_base_url_key = f"{runtime.provider}_base_url"
-    has_provider_api_key = bool(_config_value(session, provider_api_key_key))
     has_provider_base_url = bool(_config_value(session, provider_base_url_key))
 
-    api_key = first_non_empty(values.get("mindmap_ai_split_api_key"))
-    if not api_key:
-        api_key = (
-            str(runtime.api_key or "").strip()
-            if has_provider_api_key
-            else str(legacy_values.get("api_key") or "").strip()
-        )
+    has_legacy_api_key_override = "mindmap_ai_split_api_key" in values
+    api_key = (
+        first_non_empty(values.get("mindmap_ai_split_api_key"))
+        if has_legacy_api_key_override
+        else str(runtime.api_key or "").strip()
+    )
     if not api_key:
         raise MindMapAiSplitError(
             "未配置 AI 分卡 API Key。请在个人中心填写 DashScope 或 Zhipu 配置后再试。"

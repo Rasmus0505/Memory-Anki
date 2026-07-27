@@ -2,7 +2,7 @@
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import ProfileAiPromptsPage from '@/modules/settings/ui/profile/ProfileAiPromptsPage'
-import * as profileApi from '@/modules/settings/ui/profile/api'
+import * as profileApi from '@/modules/settings/domain/preferences-entity/api'
 
 vi.mock('sonner', () => ({
   toast: {

@@ -4,7 +4,20 @@ import unittest
 from unittest.mock import patch
 
 from memory_anki.infrastructure.db._tables.misc import Config, ExternalAiCallLog
+from memory_anki.modules.english.infrastructure import dashscope_gateway
+from memory_anki.modules.english_reading.application import service as reading_service
+from memory_anki.modules.english_reading.application.ai_dependencies import (
+    EnglishReadingAiDependencies,
+)
+from memory_anki.modules.produce.application.mindmap_ai_split.config_loader import (
+    resolve_config as resolve_ai_split_config,
+)
+from memory_anki.modules.produce.application.mindmap_ai_split.contracts import MindMapAiSplitError
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
+from memory_anki.modules.settings.application.ai_model_registry_catalog import (
+    PROVIDER_API_KEY_CONFIG_KEYS,
+)
 from memory_anki.modules.settings.presentation import router as settings_router
 from support import RouterTestCase
 
@@ -450,6 +463,72 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("API Key", payload["error"])
 
+    def test_explicit_empty_provider_key_shadows_environment_default(self):
+        with patch.dict(
+            "memory_anki.modules.settings.application.ai_model_registry.PROVIDER_ENV_DEFAULTS",
+            {
+                "dashscope": {"api_key": "env-key", "base_url": "https://env.example/v1"},
+                "qwen": {"api_key": "env-key", "base_url": "https://env.example/v1"},
+                "zhipu": {"api_key": "", "base_url": "https://open.bigmodel.cn/api/paas/v4"},
+                "siliconflow": {"api_key": "", "base_url": "https://api.siliconflow.cn/v1"},
+                "deepseek": {"api_key": "", "base_url": "https://api.deepseek.com"},
+            },
+        ):
+            response = self.client.put(
+                "/api/v1/settings/ai-models",
+                json={"provider_updates": {"dashscope": {"api_key": ""}}},
+            )
+            self.assertEqual(response.status_code, 200)
+            provider = next(
+                item for item in response.json()["providers"] if item["key"] == "dashscope"
+            )
+            self.assertFalse(provider["has_api_key"])
+            self.assertEqual(provider["api_key_source"], "db")
+
+            with self.SessionLocal() as session:
+                runtime = resolve_scenario_runtime(session, "ai_split")
+            self.assertEqual(runtime.api_key, "")
+
+    def test_clear_all_api_keys_clears_provider_and_legacy_keys(self):
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    Config(key="dashscope_api_key", value="dashscope-key"),
+                    Config(key="zhipu_api_key", value="zhipu-key"),
+                    Config(key="mindmap_ai_split_api_key", value="legacy-key"),
+                ]
+            )
+            session.commit()
+
+        response = self.client.put(
+            "/api/v1/settings/ai-models",
+            json={"clear_all_api_keys": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(all(not provider["has_api_key"] for provider in response.json()["providers"]))
+
+        with self.SessionLocal() as session:
+            values = {
+                row.key: row.value
+                for row in session.query(Config)
+                .filter(
+                    Config.key.in_(
+                        (
+                            "dashscope_api_key",
+                            "zhipu_api_key",
+                            "siliconflow_api_key",
+                            "deepseek_api_key",
+                            "mindmap_ai_split_api_key",
+                        )
+                    )
+                )
+                .all()
+            }
+        self.assertEqual(values["dashscope_api_key"], "")
+        self.assertEqual(values["zhipu_api_key"], "")
+        self.assertEqual(values["siliconflow_api_key"], "")
+        self.assertEqual(values["deepseek_api_key"], "")
+        self.assertEqual(values["mindmap_ai_split_api_key"], "")
     def test_ai_call_log_endpoints_return_summary_and_detail(self):
         with self.SessionLocal() as session:
             session.add(
@@ -489,6 +568,64 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(payload["prompt_text"], "系统提示词")
         self.assertEqual(payload["response_text"], "{\"ok\":true}")
         self.assertEqual(payload["job_id"], "job-1")
+
+
+    def test_legacy_english_gateway_does_not_fall_back_to_environment_key(self):
+        with patch.object(dashscope_gateway, "DASHSCOPE_API_KEY", "environment-secret"):
+            runtime = dashscope_gateway._resolve_legacy_dashscope_runtime(
+                legacy_default_model="qwen3-asr-flash"
+            )
+        self.assertEqual(runtime.api_key, "")
+        self.assertEqual(runtime.base_url, "")
+
+    def test_english_reading_runtime_keeps_database_tombstone_over_environment_key(self):
+        with self.SessionLocal() as session:
+            runtime_provider = SettingsAiRuntimeProvider(session)
+            initial_runtime = runtime_provider.resolve("translation")
+            session.add(
+                Config(
+                    key=PROVIDER_API_KEY_CONFIG_KEYS[initial_runtime.provider],
+                    value="",
+                )
+            )
+            session.commit()
+            dependencies = EnglishReadingAiDependencies(
+                runtime=runtime_provider,
+                prompts=SettingsPromptCatalog(session),
+            )
+            with patch(
+                "memory_anki.modules.english_reading.application.service.DASHSCOPE_API_KEY",
+                "environment-secret",
+            ):
+                resolved = reading_service._resolve_legacy_dashscope_runtime(
+                    session,
+                    ai_dependencies=dependencies,
+                    scenario_key="translation",
+                    ai_options=None,
+                    legacy_default_model="qwen-mt-plus",
+                )
+        self.assertEqual(resolved.api_key, "")
+
+    def test_ai_split_legacy_empty_key_blocks_provider_and_environment_fallbacks(self):
+        with self.SessionLocal() as session:
+            runtime_provider = SettingsAiRuntimeProvider(session)
+            initial_runtime = runtime_provider.resolve("ai_split")
+            session.add_all(
+                [
+                    Config(
+                        key=PROVIDER_API_KEY_CONFIG_KEYS[initial_runtime.provider],
+                        value="provider-secret",
+                    ),
+                    Config(key="mindmap_ai_split_api_key", value=""),
+                ]
+            )
+            session.commit()
+            with self.assertRaises(MindMapAiSplitError):
+                resolve_ai_split_config(
+                    session,
+                    ai_runtime=runtime_provider,
+                    legacy_defaults={"api_key": "environment-secret"},
+                )
 
 
 if __name__ == "__main__":

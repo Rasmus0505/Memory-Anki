@@ -114,8 +114,6 @@ def _resolve_legacy_dashscope_runtime(
 ):
     del session
     runtime = ai_dependencies.runtime.resolve(scenario_key, options=ai_options)
-    if runtime.api_key:
-        return runtime
     return replace(
         runtime,
         model=(
@@ -123,8 +121,6 @@ def _resolve_legacy_dashscope_runtime(
             if ai_options and ai_options.model
             else str(legacy_default_model or runtime.model or "").strip()
         ),
-        api_key=str(_svc.DASHSCOPE_API_KEY or "").strip(),
-        base_url=str(_svc.DASHSCOPE_BASE_URL or runtime.base_url or "").strip(),
     )
 
 

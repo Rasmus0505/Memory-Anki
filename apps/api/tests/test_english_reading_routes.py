@@ -94,6 +94,13 @@ class EnglishReadingRouteTests(RouterTestCase):
 
     def seed(self, session):
         reading_service.prepare_english_reading_runtime(session)
+        session.add_all(
+            [
+                Config(key="dashscope_api_key", value="test-key"),
+                Config(key="dashscope_base_url", value="https://dashscope.test/compatible-mode/v1"),
+            ]
+        )
+        session.commit()
 
     def tearDown(self):
         reading_service.configure_english_reading_runtime(self.original_runtime)
@@ -447,6 +454,11 @@ class EnglishReadingRouteTests(RouterTestCase):
 
     def test_local_fallback_keeps_only_natural_green_words_colored(self):
         reading_service.DASHSCOPE_API_KEY = ""
+        with self.SessionLocal() as session:
+            row = session.query(Config).filter_by(key="dashscope_api_key").first()
+            self.assertIsNotNone(row)
+            row.value = ""
+            session.commit()
 
         material = self.client.post(
             "/api/v1/english-reading/materials",

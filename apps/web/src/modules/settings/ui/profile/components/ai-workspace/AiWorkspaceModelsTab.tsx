@@ -1,4 +1,5 @@
-import { Eye, Play, Save, Search, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Eye, Pencil, Play, Plus, Save, Search, Trash2 } from "lucide-react";
 import type {
   AiModelCatalogItem,
   AiModelType,
@@ -9,7 +10,17 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import {
   MODEL_TYPE_HINTS,
+  buildEmptyModelDraft,
   MODEL_TYPE_OPTIONS,
   PROVIDER_SELECT_OPTIONS,
   formatDateTime,
@@ -70,6 +81,31 @@ export function AiWorkspaceModelsTab({
     status?: string;
   }) => void;
 }) {
+  const [modelEditorOpen, setModelEditorOpen] = useState(false);
+
+  const openNewModel = () => {
+    onNewModelTypeChange("llm");
+    onModelDraftChange(buildEmptyModelDraft("llm"));
+    setModelEditorOpen(true);
+  };
+
+  const openModelEdit = (model: AiModelCatalogItem) => {
+    onNewModelTypeChange(model.model_type);
+    onModelDraftChange({
+      key: model.key,
+      displayName: model.display_name,
+      provider: model.provider,
+      hasVision: model.has_vision,
+      supportsThinking: model.supports_thinking,
+      supportsTemperature: model.supports_temperature,
+      structuredOutputMode: model.structured_output_mode,
+      inputPrice: model.input_price_per_million?.toString() ?? "",
+      outputPrice: model.output_price_per_million?.toString() ?? "",
+      cachedInputPrice: model.cached_input_price_per_million?.toString() ?? "",
+    });
+    setModelEditorOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -143,135 +179,66 @@ export function AiWorkspaceModelsTab({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">新增或覆盖模型</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[140px_repeat(3,minmax(0,1fr))]">
-            <select
-              value={newModelType}
-              onChange={(event) =>
-                onNewModelTypeChange(event.target.value as AiModelType)
-              }
-              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              {MODEL_TYPE_OPTIONS.map((item) => (
-                <option key={item.key} value={item.key}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <Input
-              value={modelDraft.key}
-              onChange={(event) =>
-                onModelDraftChange({ ...modelDraft, key: event.target.value })
-              }
-              placeholder="模型 key"
-            />
-            <Input
-              value={modelDraft.displayName}
-              onChange={(event) =>
-                onModelDraftChange({
-                  ...modelDraft,
-                  displayName: event.target.value,
-                })
-              }
-              placeholder="显示名称（可选）"
-            />
-            <select
-              value={modelDraft.provider}
-              onChange={(event) =>
-                onModelDraftChange({
-                  ...modelDraft,
-                  provider: event.target.value as AiProviderKey,
-                })
-              }
-              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              {PROVIDER_SELECT_OPTIONS.map((item) => (
-                <option key={item.key} value={item.key}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="font-medium">模型目录</div>
+            <p className="text-sm text-muted-foreground">
+              新增和编辑操作在对话框中完成，避免筛选列表被长表单打断。
+            </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
-            <select
-              value={modelDraft.structuredOutputMode}
-              onChange={(event) => onModelDraftChange({
-                ...modelDraft,
-                structuredOutputMode: event.target.value as ModelDraft["structuredOutputMode"],
-              })}
-              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              <option value="json_schema">JSON Schema</option>
-              <option value="json_object">JSON Object</option>
-              <option value="prompt_only">仅提示词</option>
-            </select>
-            <Input value={modelDraft.inputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, inputPrice: event.target.value })} placeholder="输入价/百万 token" type="number" min="0" step="0.0001" />
-            <Input value={modelDraft.outputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, outputPrice: event.target.value })} placeholder="输出价/百万 token" type="number" min="0" step="0.0001" />
-            <Input value={modelDraft.cachedInputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, cachedInputPrice: event.target.value })} placeholder="缓存输入价/百万" type="number" min="0" step="0.0001" />
-          </div>
-          <div className="flex flex-wrap gap-4 rounded-xl border border-dashed border-border/70 px-4 py-3">
-            {newModelType === "llm" ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={modelDraft.hasVision}
-                  onChange={(event) =>
-                    onModelDraftChange({
-                      ...modelDraft,
-                      hasVision: event.target.checked,
-                    })
-                  }
-                />
-                有视觉
-              </label>
-            ) : null}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={modelDraft.supportsThinking}
-                onChange={(event) =>
-                  onModelDraftChange({
-                    ...modelDraft,
-                    supportsThinking: event.target.checked,
-                  })
-                }
-              />
-              支持思考
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={modelDraft.supportsTemperature}
-                disabled={newModelType === "asr"}
-                onChange={(event) =>
-                  onModelDraftChange({
-                    ...modelDraft,
-                    supportsTemperature: event.target.checked,
-                  })
-                }
-              />
-              支持温度
-            </label>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm text-muted-foreground">
-              {MODEL_TYPE_HINTS[newModelType]}
+          <Button type="button" onClick={openNewModel}>
+            <Plus className="mr-2 size-4" />
+            新增模型
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={modelEditorOpen} onOpenChange={setModelEditorOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{modelDraft.key ? "编辑模型目录" : "新增模型"}</DialogTitle>
+            <DialogDescription>
+              模型 key 相同时会覆盖目录元数据，不会修改场景绑定。
+            </DialogDescription>
+            <DialogClose onClick={() => setModelEditorOpen(false)} />
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <select value={newModelType} onChange={(event) => onNewModelTypeChange(event.target.value as AiModelType)} className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                {MODEL_TYPE_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+              <select value={modelDraft.provider} onChange={(event) => onModelDraftChange({ ...modelDraft, provider: event.target.value as AiProviderKey })} className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                {PROVIDER_SELECT_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+              <Input value={modelDraft.key} onChange={(event) => onModelDraftChange({ ...modelDraft, key: event.target.value })} placeholder="模型 key" />
+              <Input value={modelDraft.displayName} onChange={(event) => onModelDraftChange({ ...modelDraft, displayName: event.target.value })} placeholder="显示名称（可选）" />
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void onCreateModel()}
-              disabled={Boolean(savingKeys["model:create"])}
-            >
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <select value={modelDraft.structuredOutputMode} onChange={(event) => onModelDraftChange({ ...modelDraft, structuredOutputMode: event.target.value as ModelDraft["structuredOutputMode"] })} className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="json_schema">JSON Schema</option>
+                <option value="json_object">JSON Object</option>
+                <option value="prompt_only">仅提示词</option>
+              </select>
+              <Input value={modelDraft.inputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, inputPrice: event.target.value })} placeholder="输入价/百万 token" type="number" min="0" step="0.0001" />
+              <Input value={modelDraft.outputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, outputPrice: event.target.value })} placeholder="输出价/百万 token" type="number" min="0" step="0.0001" />
+              <Input value={modelDraft.cachedInputPrice} onChange={(event) => onModelDraftChange({ ...modelDraft, cachedInputPrice: event.target.value })} placeholder="缓存输入价/百万" type="number" min="0" step="0.0001" />
+            </div>
+            <div className="flex flex-wrap gap-4 rounded-xl border border-dashed border-border/70 px-4 py-3">
+              {newModelType === "llm" ? <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={modelDraft.hasVision} onChange={(event) => onModelDraftChange({ ...modelDraft, hasVision: event.target.checked })} />有视觉</label> : null}
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={modelDraft.supportsThinking} onChange={(event) => onModelDraftChange({ ...modelDraft, supportsThinking: event.target.checked })} />支持思考</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={modelDraft.supportsTemperature} disabled={newModelType === "asr"} onChange={(event) => onModelDraftChange({ ...modelDraft, supportsTemperature: event.target.checked })} />支持温度</label>
+            </div>
+            <div className="text-sm text-muted-foreground">{MODEL_TYPE_HINTS[newModelType]}</div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setModelEditorOpen(false)}>取消</Button>
+            <Button type="button" onClick={() => void onCreateModel()} disabled={Boolean(savingKeys["model:create"])}>
               <Save className="mr-2 size-4" />
               {savingKeys["model:create"] ? "保存中..." : "保存模型目录"}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {filteredModels.map((model) => (
@@ -323,6 +290,15 @@ export function AiWorkspaceModelsTab({
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openModelEdit(model)}
+                >
+                  <Pencil className="mr-2 size-4" />
+                  编辑目录
+                </Button>
                 <Button
                   type="button"
                   size="sm"

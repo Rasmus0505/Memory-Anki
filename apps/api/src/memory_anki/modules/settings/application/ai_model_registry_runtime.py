@@ -241,8 +241,10 @@ def resolve_provider_setting(
     env_default = PROVIDER_ENV_DEFAULTS[provider][kind]
     if session is not None:
         row = session.query(Config).filter_by(key=config_key).first()
-        if row is not None and str(row.value or "").strip():
-            return str(row.value or "").strip()
+        if row is not None:
+            value = str(row.value or "").strip()
+            if kind == "api_key" or value:
+                return value
     return str(env_default or "").strip()
 
 
@@ -259,8 +261,10 @@ def resolve_provider_setting_source(
     )
     if session is not None:
         row = session.query(Config).filter_by(key=config_key).first()
-        if row is not None and str(row.value or "").strip():
-            return "db"
+        if row is not None:
+            value = str(row.value or "").strip()
+            if kind == "api_key" or value:
+                return "db"
     env_default = str(PROVIDER_ENV_DEFAULTS[provider][kind] or "").strip()
     hardcoded_default = str(PROVIDER_HARDCODED_DEFAULTS[provider][kind] or "").strip()
     if env_default and env_default != hardcoded_default:
@@ -400,9 +404,11 @@ def resolve_scenario_runtime(
             PROVIDER_BASE_URL_CONFIG_KEYS[resolved_provider],
         ),
     )
+    api_key_config_key = PROVIDER_API_KEY_CONFIG_KEYS[resolved_provider]
     api_key = (
-        _first_snapshot_value(provider_config_values, (PROVIDER_API_KEY_CONFIG_KEYS[resolved_provider],))
-        or str(PROVIDER_ENV_DEFAULTS[resolved_provider]["api_key"] or "").strip()
+        str(provider_config_values[api_key_config_key] or "").strip()
+        if api_key_config_key in provider_config_values
+        else str(PROVIDER_ENV_DEFAULTS[resolved_provider]["api_key"] or "").strip()
     )
     base_url = (
         _first_snapshot_value(provider_config_values, (PROVIDER_BASE_URL_CONFIG_KEYS[resolved_provider],))

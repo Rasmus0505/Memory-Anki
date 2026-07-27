@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "@/shared/feedback/toast";
+import { appConfirm } from "@/shared/components/ui/native-dialog";
 import { getAiCallLogApi, listAiCallLogsApi } from "@/modules/settings/domain/ai-log-entity/api";
 import type {
   AiCallLogDetail,
@@ -26,7 +27,7 @@ import {
 import {
   buildEmptyModelDraft,
   categorySupportsThinking,
-  normalizeWorkspaceTab,
+
   sceneSupportsThinking,
   type AiWorkspaceLogFilters,
   type AiWorkspaceModelCapabilityFilter,
@@ -36,10 +37,17 @@ import {
   type ProviderDraft,
   type WorkspaceTab,
 } from "@/modules/settings/ui/profile/model/ai-workspace";
+import {
+  aiTabToWorkspaceTab,
+  normalizeAiSearchParams,
+  resolveAiTab,
+  workspaceTabToAiTab,
+} from "@/modules/settings/ui/profile/model/ai-tabs";
 
 export function useAiWorkspaceController() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const workspaceTab = normalizeWorkspaceTab(searchParams.get("aiTab"));
+  const resolvedAiTab = resolveAiTab(searchParams);
+  const workspaceTab = aiTabToWorkspaceTab(resolvedAiTab === "blocks" ? "access" : resolvedAiTab);
   const [categories, setCategories] = useState<AiModelCategory[]>([]);
   const [models, setModels] = useState<AiModelCatalogItem[]>([]);
   const [scenes, setScenes] = useState<AiSceneBinding[]>([]);
@@ -273,9 +281,10 @@ export function useAiWorkspaceController() {
   }, [currentCategory]);
 
   const setWorkspaceTab = (nextTab: WorkspaceTab) => {
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.set("aiTab", nextTab);
-    setSearchParams(nextSearchParams, { replace: true });
+    setSearchParams(
+      normalizeAiSearchParams(searchParams, workspaceTabToAiTab(nextTab)),
+      { replace: true },
+    );
   };
 
   const jumpToObservability = (filters?: Partial<AiWorkspaceLogFilters>) => {
@@ -296,6 +305,15 @@ export function useAiWorkspaceController() {
       const draft = providerDrafts[providerKey];
       const provider = configurableProviders.find((item) => item.key === providerKey);
       if (!draft || !provider) return;
+      if (
+        draft.clearApiKey &&
+        !(await appConfirm(
+          `确定清空 ${provider.label} 的 API Key 吗？保存后该 Provider 会立即停止工作。`,
+          { title: "清空 Provider 密钥", confirmText: "保存并清空", tone: "danger" },
+        ))
+      ) {
+        return;
+      }
       const providerPayload: Record<string, string> = { base_url: draft.baseUrl.trim() };
       if (draft.clearApiKey) providerPayload.api_key = "";
       else if (draft.apiKeyInput.trim()) providerPayload.api_key = draft.apiKeyInput.trim();
@@ -312,6 +330,26 @@ export function useAiWorkspaceController() {
     }
   };
 
+  const handleClearAllApiKeys = async () => {
+    const configuredCount = configurableProviders.filter((provider) => provider.has_api_key).length;
+    if (
+      !(await appConfirm(
+        `这会清空全部 Provider 密钥和旧版 AI 分卡密钥，并让数据库中的空值覆盖环境变量。当前检测到 ${configuredCount} 个已配置接入。`,
+        { title: "停用全部 AI", confirmText: "清空全部密钥", tone: "danger" },
+      ))
+    ) {
+      return;
+    }
+    setSavingKeys((current) => ({ ...current, "providers:clear-all": true }));
+    try {
+      hydrateState(await updateAiModelScenariosApi({ clear_all_api_keys: true }));
+      toast.success("全部 AI 密钥已清空，站内 AI 已停用");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "停用全部 AI 失败。");
+    } finally {
+      setSavingKeys((current) => ({ ...current, "providers:clear-all": false }));
+    }
+  };
   const handleProviderTest = async (provider: AiProviderSettings) => {
     setConnectionTitle(`${provider.label} 连接测试`);
     setConnectionResult(null);
@@ -409,6 +447,15 @@ export function useAiWorkspaceController() {
       toast.error("请先给这一类选择通用模型。");
       return;
     }
+    const affectedScenes = groupedScenes[category.key] ?? [];
+    if (
+      !(await appConfirm(
+        `将用 ${selectedModel} 覆盖 ${category.label} 的 ${affectedScenes.length} 个场景。`,
+        { title: "保存并覆盖全部场景", confirmText: "确认覆盖", tone: "danger" },
+      ))
+    ) {
+      return;
+    }
     setSavingKeys((current) => ({ ...current, [`category:${category.key}`]: true }));
     try {
       const supportsThinking = categorySupportsThinking(category, selectedModel);
@@ -499,9 +546,18 @@ export function useAiWorkspaceController() {
       toast.error("当前分类还没有通用配置。");
       return;
     }
+    const categoryScenes = groupedScenes[category.key] ?? [];
+    if (
+      !(await appConfirm(
+        `将把 ${category.label} 的 ${categoryScenes.length} 个场景全部恢复为通用模型 ${sharedModel}。`,
+        { title: "恢复本类全部场景", confirmText: "确认恢复", tone: "danger" },
+      ))
+    ) {
+      return;
+    }
     const supportsThinking = categorySupportsThinking(category, sharedModel);
     const updates = Object.fromEntries(
-      (groupedScenes[category.key] ?? []).map((scene) => [
+      categoryScenes.map((scene) => [
         scene.key,
         {
           default_model: sharedModel,
@@ -531,17 +587,27 @@ export function useAiWorkspaceController() {
       toast.error("请先选择批量模型。");
       return;
     }
-    const supportsThinking = categorySupportsThinking(category, batchModel);
+    if (
+      !(await appConfirm(
+        `将批量更新当前筛选中的 ${filteredCurrentScenes.length} 个场景。`,
+        { title: "批量应用到当前筛选", confirmText: "确认批量应用", tone: "danger" },
+      ))
+    ) {
+      return;
+    }
     const updates = Object.fromEntries(
-      filteredCurrentScenes.map((scene) => [
-        scene.key,
-        {
-          default_model: batchModel,
-          current_model: batchModel,
-          default_thinking_enabled: supportsThinking ? batchThinking : false,
-          current_thinking_enabled: supportsThinking ? batchThinking : false,
-        },
-      ]),
+      filteredCurrentScenes.map((scene) => {
+        const supportsThinking = sceneSupportsThinking(scene, batchModel);
+        return [
+          scene.key,
+          {
+            default_model: batchModel,
+            current_model: batchModel,
+            default_thinking_enabled: supportsThinking ? batchThinking : false,
+            current_thinking_enabled: supportsThinking ? batchThinking : false,
+          },
+        ];
+      }),
     );
     setSavingKeys((current) => ({ ...current, [`batch:${category.key}`]: true }));
     try {
@@ -644,6 +710,7 @@ export function useAiWorkspaceController() {
     loadSettings,
     loadLogs,
     handleProviderSave,
+    handleClearAllApiKeys,
     handleProviderTest,
     handleCreateModel,
     handleOpenImpact,

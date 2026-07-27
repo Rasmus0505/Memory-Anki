@@ -1,4 +1,4 @@
-import { Play, Save, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Play, Save, Search, Trash2 } from "lucide-react";
 import type { AiProviderSettings } from "@/shared/api/contracts";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -21,6 +21,7 @@ export function AiWorkspaceProvidersTab({
   onProviderDraftChange,
   onProviderSave,
   onProviderTest,
+  onClearAllApiKeys,
   onJumpToObservability,
 }: {
   providerSearch: string;
@@ -31,6 +32,7 @@ export function AiWorkspaceProvidersTab({
   onProviderDraftChange: (providerKey: string, draft: ProviderDraft) => void;
   onProviderSave: (providerKey: string) => Promise<void>;
   onProviderTest: (provider: AiProviderSettings) => Promise<void>;
+  onClearAllApiKeys: () => Promise<void>;
   onJumpToObservability: (filters: {
     provider?: string;
     model?: string;
@@ -40,6 +42,27 @@ export function AiWorkspaceProvidersTab({
 }) {
   return (
     <div className="space-y-4">
+      <Card className="border-destructive/40 bg-destructive/5">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+            <div>
+              <p className="font-medium">需要临时停用站内全部 AI？</p>
+              <p className="text-sm text-muted-foreground">
+                清空所有 Provider 与旧版 AI 分卡密钥，显式空值会覆盖环境变量。
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => void onClearAllApiKeys()}
+            disabled={Boolean(savingKeys["providers:clear-all"])}
+          >
+            {savingKeys["providers:clear-all"] ? "正在停用…" : "停用全部 AI"}
+          </Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
           <div className="relative min-w-[260px] flex-1">
@@ -125,7 +148,12 @@ export function AiWorkspaceProvidersTab({
                       id={`provider-key-${provider.key}`}
                       type="password"
                       value={draft.apiKeyInput}
-                      placeholder={provider.api_key_masked || "输入新密钥即可更新"}
+                      placeholder={
+                        draft.clearApiKey
+                          ? "保存后将清空"
+                          : provider.api_key_masked || "输入新密钥即可更新"
+                      }
+                      className={draft.clearApiKey ? "border-destructive" : undefined}
                       onChange={(event) =>
                         onProviderDraftChange(provider.key, {
                           ...draft,
@@ -147,7 +175,11 @@ export function AiWorkspaceProvidersTab({
                     disabled={isSaving || !isDirty}
                   >
                     <Save className="mr-2 size-4" />
-                    {isSaving ? "保存中..." : "保存 Provider 配置"}
+                    {isSaving
+                      ? "保存中..."
+                      : draft.clearApiKey
+                        ? "保存并清空密钥"
+                        : "保存 Provider 配置"}
                   </Button>
                   <Button
                     type="button"
@@ -174,17 +206,17 @@ export function AiWorkspaceProvidersTab({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant={draft.clearApiKey ? "secondary" : "outline"}
                     onClick={() =>
                       onProviderDraftChange(provider.key, {
                         ...draft,
                         apiKeyInput: "",
-                        clearApiKey: true,
+                        clearApiKey: !draft.clearApiKey,
                       })
                     }
                   >
                     <Trash2 className="mr-2 size-4" />
-                    清空密钥
+                    {draft.clearApiKey ? "撤销清空" : "清空密钥"}
                   </Button>
                 </div>
               </CardContent>

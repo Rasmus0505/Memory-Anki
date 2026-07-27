@@ -430,7 +430,14 @@ def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep))
     scenario_updates = data.get("scenario_updates") if isinstance(data.get("scenario_updates"), dict) else None
     category_updates = data.get("category_updates") if isinstance(data.get("category_updates"), dict) else None
     provider_updates = data.get("provider_updates") if isinstance(data.get("provider_updates"), dict) else None
-    if scene_updates is None and scenario_updates is None and category_updates is None and provider_updates is None:
+    clear_all_api_keys = data.get("clear_all_api_keys") is True
+    if (
+        scene_updates is None
+        and scenario_updates is None
+        and category_updates is None
+        and provider_updates is None
+        and not clear_all_api_keys
+    ):
         legacy_updates = data.get("updates") if isinstance(data.get("updates"), dict) else data
         normalized_legacy_updates: dict[str, dict[str, Any]] = {}
         for key, value in dict(legacy_updates or {}).items():
@@ -445,6 +452,7 @@ def api_ai_model_scenarios_update(data: dict, s: Session = Depends(session_dep))
         scene_updates=scene_updates or scenario_updates,
         category_updates=category_updates,
         provider_updates=provider_updates,
+        clear_all_api_keys=clear_all_api_keys,
     )
 
 

@@ -15,8 +15,8 @@ from dashscope.audio.qwen_asr import QwenTranscription
 from dashscope.files import Files
 
 from memory_anki.core.config import (
-    DASHSCOPE_API_KEY,
-    DASHSCOPE_BASE_URL,
+    DASHSCOPE_API_KEY,  # noqa: F401 - compatibility export only
+    DASHSCOPE_BASE_URL,  # noqa: F401 - compatibility export only
     ENGLISH_TRANSLATION_MODEL,
 )
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
@@ -67,11 +67,7 @@ def _resolve_legacy_dashscope_runtime(
         or legacy_default_model
         or "qwen3-asr-flash"
     ).strip()
-    return LegacyDashscopeRuntime(
-        model=model,
-        api_key=str(DASHSCOPE_API_KEY or "").strip(),
-        base_url=str(DASHSCOPE_BASE_URL or "").strip(),
-    )
+    return LegacyDashscopeRuntime(model=model, api_key="", base_url="")
 
 
 class DashscopeEnglishAsrGateway:

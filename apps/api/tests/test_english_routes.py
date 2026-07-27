@@ -656,6 +656,7 @@ class EnglishRouteTests(RouterTestCase):
             ],
             task_id=created["id"],
             prompt_catalog=StubPromptCatalog(),
+            resolved_runtime=FakeAiRuntimeProvider().resolve("translation"),
         )
 
         self.assertEqual(

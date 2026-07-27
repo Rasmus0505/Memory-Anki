@@ -14,6 +14,7 @@ from memory_anki.infrastructure.llm.openai_compatible import (
 
 from .ai_model_registry_catalog import (
     CATEGORY_BY_KEY,
+    CONFIGURABLE_PROVIDER_KEYS,
     MODEL_TYPE_LABELS,
     PROVIDER_API_KEY_CONFIG_KEYS,
     PROVIDER_BASE_URL_CONFIG_KEYS,
@@ -79,7 +80,17 @@ def save_ai_model_settings(
     scene_updates: dict[str, Any] | None = None,
     category_updates: dict[str, Any] | None = None,
     provider_updates: dict[str, Any] | None = None,
+    clear_all_api_keys: bool = False,
 ) -> dict[str, Any]:
+    if clear_all_api_keys:
+        api_key_config_keys = dict.fromkeys(
+            PROVIDER_API_KEY_CONFIG_KEYS[provider]
+            for provider in CONFIGURABLE_PROVIDER_KEYS
+        )
+        for config_key in api_key_config_keys:
+            _upsert_config_value(session, config_key, "")
+        _upsert_config_value(session, "mindmap_ai_split_api_key", "")
+
     for category_key, payload in dict(category_updates or {}).items():
         normalized_category = str(category_key or "").strip().lower()
         if normalized_category not in CATEGORY_BY_KEY or not isinstance(payload, dict):

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import (
-    DASHSCOPE_API_KEY,
+    DASHSCOPE_API_KEY,  # noqa: F401 - compatibility export; runtime credentials come from AiRuntimeProvider
     DASHSCOPE_BASE_URL,
     DASHSCOPE_TEXT_MODEL,
 )
@@ -242,7 +242,6 @@ def resolve_mindmap_ai_split_config(
         ai_runtime=ai_runtime,
         ai_options=ai_options,
         legacy_defaults={
-            "api_key": DASHSCOPE_API_KEY,
             "base_url": DASHSCOPE_BASE_URL,
             "model": DASHSCOPE_TEXT_MODEL,
         },

@@ -1,6 +1,6 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
-import { getAiQualitySummaryApi } from '@/modules/settings/ui/profile/api'
+import { getAiQualitySummaryApi } from '@/modules/settings/domain/preferences-entity/api'
 import type { AiQualitySummary } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -19,6 +19,8 @@ export function AiWorkspaceQualityTab() {
     setLoading(true)
     try {
       setSummary(await getAiQualitySummaryApi({ days }))
+    } catch {
+      setSummary(null)
     } finally {
       setLoading(false)
     }

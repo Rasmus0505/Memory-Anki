@@ -112,7 +112,6 @@ def create_generation_task(
     file_bytes: bytes,
     asr_ai_options: AiRuntimeOptions | None = None,
     ai_dependencies: EnglishAiDependencies | None = None,
-    worker_ai_dependencies: EnglishAiDependencies | None = None,
 ) -> dict[str, Any]:
     current_task = get_current_task(session)
     if current_task is not None:
@@ -136,19 +135,12 @@ def create_generation_task(
     )
     get_english_runtime().runner.launch(
         task["id"],
-        lambda task_id: run_generation_task(
-            task_id,
-            ai_dependencies=worker_ai_dependencies,
-        ),
+        run_generation_task,
     )
     return task
 
 
-def retry_current_task(
-    session: Session,
-    *,
-    worker_ai_dependencies: EnglishAiDependencies | None = None,
-) -> dict[str, Any]:
+def retry_current_task(session: Session) -> dict[str, Any]:
     task = get_current_task(session)
     if task is None or task.status != "failed":
         raise EnglishCourseError("当前没有可重试的失败任务。")
@@ -184,10 +176,7 @@ def retry_current_task(
     session.commit()
     get_english_runtime().runner.launch(
         retry_task["id"],
-        lambda task_id: run_generation_task(
-            task_id,
-            ai_dependencies=worker_ai_dependencies,
-        ),
+        run_generation_task,
     )
     session.expire_all()
     persisted_retry_task = session.get(EnglishGenerationTask, retry_task["id"])
@@ -367,13 +356,18 @@ def create_task_row(
     return serialize_task(task)
 
 
-def run_generation_task(
-    task_id: str,
-    *,
-    ai_dependencies: EnglishAiDependencies | None = None,
-) -> None:
+def run_generation_task(task_id: str) -> None:
     session = get_session()
     try:
+        from memory_anki.modules.settings.api import (
+            SettingsAiRuntimeProvider,
+            SettingsPromptCatalog,
+        )
+
+        ai_dependencies = EnglishAiDependencies(
+            SettingsAiRuntimeProvider(session),
+            SettingsPromptCatalog(session),
+        )
         task = session.query(EnglishGenerationTask).filter_by(id=task_id).first()
         if task is None:
             return
@@ -512,9 +506,8 @@ def run_generation_task(
             ai_dependencies=ai_dependencies,
         )
         translation_kwargs: dict[str, Any] = {"task_id": task_id}
-        if ai_dependencies is not None:
-            translation_kwargs["prompt_catalog"] = ai_dependencies.prompt_catalog
         if translation_runtime is not None:
+            translation_kwargs["prompt_catalog"] = ai_dependencies.prompt_catalog
             translation_kwargs["resolved_runtime"] = translation_runtime
         translated_sentences = runtime.translator.translate_sentences(
             prepared_result.sentences,

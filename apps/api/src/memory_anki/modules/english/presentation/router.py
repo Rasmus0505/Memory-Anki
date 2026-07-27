@@ -153,10 +153,6 @@ async def api_upload_english_video(
                 SettingsAiRuntimeProvider(session),
                 SettingsPromptCatalog(session),
             )
-            worker_ai = EnglishAiDependencies(
-                SettingsAiRuntimeProvider(None),
-                SettingsPromptCatalog(None),
-            )
             task = create_generation_task(
                 session,
                 filename=str(video_file.filename or ""),
@@ -166,7 +162,6 @@ async def api_upload_english_video(
                     json.loads(ai_options) if ai_options else None
                 ),
                 ai_dependencies=request_ai,
-                worker_ai_dependencies=worker_ai,
             )
         return {"task": task}
     except EnglishCourseError as exc:
@@ -178,15 +173,7 @@ async def api_upload_english_video(
 @router.post("/english/current-task/retry")
 def api_retry_english_current_task(session: Session = Depends(session_dep)):
     try:
-        return {
-            "task": retry_current_task(
-                session,
-                worker_ai_dependencies=EnglishAiDependencies(
-                    SettingsAiRuntimeProvider(None),
-                    SettingsPromptCatalog(None),
-                ),
-            )
-        }
+        return {"task": retry_current_task(session)}
     except EnglishCourseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
