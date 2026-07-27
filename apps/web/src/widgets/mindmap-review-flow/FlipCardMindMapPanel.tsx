@@ -347,8 +347,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     return [...new Set([...mutedNodeUidsProp, ...ratingScopeMutedUids])]
   }, [mutedNodeUidsProp, ratingScopeMutedUids])
 
-  // 四键间隔预览：当前卡进入时请求，顺带批量预取队列中接下来的几张。
-  // 预览加载失败/未返回时按钮照常显示（没有小字），绝不阻塞评分。
   const upcomingPreviewUids = useMemo(() => {
     if (!ratingMode || isEditMode || !onRateNode) return [] as string[]
     const ordered = guidedModel.nodes
