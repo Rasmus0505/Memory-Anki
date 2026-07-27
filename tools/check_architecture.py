@@ -189,7 +189,6 @@ BASELINE_PERSONAL_PATH_TOOLS = {
     "tools/import_manual_quiz_texts.py",
 }
 BASELINE_OVERSIZED_FILES = {
-    "apps/web/src/modules/practice/ui/freestyle/FreestylePage.tsx",
     "apps/web/src/modules/quiz/ui/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
@@ -1048,6 +1047,45 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
                 )
                 break
 
+
+
+def check_ai_credential_tombstones(errors: list[str]) -> None:
+    legacy_consumers = (
+        API_SRC / "modules" / "english" / "infrastructure" / "dashscope_gateway.py",
+        API_SRC / "modules" / "english_reading" / "application" / "dictionary_service.py",
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "config_loader.py",
+        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split_service.py",
+    )
+    forbidden_runtime_names = {
+        "DASHSCOPE_API_KEY",
+        "ZHIPU_API_KEY",
+        "SILICONFLOW_API_KEY",
+        "DEEPSEEK_API_KEY",
+    }
+    for path in legacy_consumers:
+        if not path.exists():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8").lstrip("\ufeff"))
+        loaded_names = {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+        }
+        leaked_names = sorted(loaded_names & forbidden_runtime_names)
+        if leaked_names:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: migrated AI callers must resolve "
+                f"credentials through AiRuntimeProvider, not environment names {leaked_names}."
+            )
+
+    split_loader = API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "config_loader.py"
+    if split_loader.exists():
+        source = split_loader.read_text(encoding="utf-8")
+        required_marker = 'has_legacy_api_key_override = "mindmap_ai_split_api_key" in values'
+        if required_marker not in source:
+            errors.append(
+                "mind-map AI split must preserve an explicit empty legacy key as a credential tombstone."
+            )
 
 def check_review_application_boundary(errors: list[str]) -> None:
     application_root = API_SRC / "modules" / "memory" / "application"
@@ -2054,6 +2092,7 @@ def main() -> int:
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
+    check_ai_credential_tombstones(errors)
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)

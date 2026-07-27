@@ -1379,3 +1379,54 @@ def test_english_reading_gap_loop_rejects_retired_colored_flow(
 
     assert any("retired flow marker" in error for error in errors)
     assert any("createEnglishReadingTargetApi" in error for error in errors)
+
+def test_ai_credential_tombstones_reject_environment_secret_reads(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    write_file(
+        api_src / "modules/english/infrastructure/dashscope_gateway.py",
+        "def resolve():\n    return DASHSCOPE_API_KEY\n",
+    )
+    write_file(
+        api_src / "modules/english_reading/application/dictionary_service.py",
+        "def resolve(runtime):\n    return runtime.resolve('translation')\n",
+    )
+    write_file(
+        api_src / "modules/produce/application/mindmap_ai_split/config_loader.py",
+        "has_legacy_api_key_override = False\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_ai_credential_tombstones(errors)
+
+    assert any("DASHSCOPE_API_KEY" in error for error in errors)
+    assert any("credential tombstone" in error for error in errors)
+
+
+def test_ai_credential_tombstones_allow_compatibility_imports(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    write_file(
+        api_src / "modules/english/infrastructure/dashscope_gateway.py",
+        "from memory_anki.core.config import DASHSCOPE_API_KEY\n"
+        "def resolve(runtime):\n    return runtime.api_key\n",
+    )
+    write_file(
+        api_src / "modules/english_reading/application/dictionary_service.py",
+        "def resolve(runtime):\n    return runtime.resolve('translation')\n",
+    )
+    write_file(
+        api_src / "modules/produce/application/mindmap_ai_split/config_loader.py",
+        'has_legacy_api_key_override = "mindmap_ai_split_api_key" in values\n',
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_ai_credential_tombstones(errors)
+
+    assert errors == []

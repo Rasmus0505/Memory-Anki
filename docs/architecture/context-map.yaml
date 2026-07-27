@@ -371,13 +371,46 @@
       }
     },
     "frontendModules": {
-      "practice": {
-        "publicEntry": "src/modules/practice/public.ts",
-        "workflow": "FreestyleTrainingMachine"
+      "backup": {
+        "publicEntry": "src/modules/backup/public.ts"
+      },
+      "content": {
+        "publicEntry": "src/modules/content/public.ts"
+      },
+      "dashboard": {
+        "publicEntry": "src/modules/dashboard/public.ts"
+      },
+      "english": {
+        "publicEntry": "src/modules/english/public.ts"
+      },
+      "english-reading": {
+        "publicEntry": "src/modules/english-reading/public.ts"
+      },
+      "memory": {
+        "publicEntry": "src/modules/memory/public.ts"
       },
       "mindmap": {
         "publicEntry": "src/modules/mindmap/public.ts",
         "workflow": "MindMapPresentationMachine"
+      },
+      "practice": {
+        "publicEntry": "src/modules/practice/public.ts",
+        "workflow": "FreestyleTrainingMachine"
+      },
+      "produce": {
+        "publicEntry": "src/modules/produce/public.ts"
+      },
+      "quiz": {
+        "publicEntry": "src/modules/quiz/public.ts"
+      },
+      "search": {
+        "publicEntry": "src/modules/search/public.ts"
+      },
+      "session": {
+        "publicEntry": "src/modules/session/public.ts"
+      },
+      "settings": {
+        "publicEntry": "src/modules/settings/public.ts"
       }
     }
   }

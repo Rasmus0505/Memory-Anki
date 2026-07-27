@@ -8,9 +8,11 @@ This directory is the current architectural source of truth. Product and runtime
 ## System Shape
 
 ```text
-apps/web: app -> pages/widgets -> features -> entities -> shared
+apps/web: app -> pages/widgets -> modules (13, domain/application/ui/api + public.ts) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
+
+Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard english english-reading memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
 
 The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
 
@@ -18,14 +20,15 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 
 | Capability | Frontend owner | Backend owner |
 |---|---|---|
-| Mind-map document rules | `entities/mindmap-document` | `modules/mindmap_document` |
-| Generic mind-map rendering | `shared/ui/mindmap-canvas` | — |
-| Mind-map editing runtime | `features/mindmap-editor` | aggregate-specific editor services |
-| Palace aggregate | `entities/palace`, palace features | `modules/content` |
-| Review scheduling/execution | review features/entities | `modules/memory` |
-| AI runtime selection/calls | AI configuration features | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
-| Background jobs | feature adapters | target shared job lease/handler infrastructure |
-| Client preferences | `entities/preferences` | settings/profile preference endpoint |
+| Mind-map document rules | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
+| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`) | — |
+| Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
+| Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
+| Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
+| AI runtime selection/calls | `modules/settings/domain/ai-runtime-entity` | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
+| Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
+| Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
+| Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
 
 ## Hard Invariants
 
@@ -43,10 +46,11 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 
 ```mermaid
 graph LR
-  App[App / Route Composition] --> Feature[Feature Use Cases]
-  Feature --> Entity[Entities and Contracts]
-  Feature --> Shared[Shared Infrastructure/UI]
-  Entity --> Shared
+  App[App / Route Composition] --> Pages[Pages / Widgets]
+  Pages --> Modules[Runtime Modules public.ts]
+  Modules --> Shared[Shared Infrastructure/UI]
+  Modules --> Platform[Platform Ports]
+  Platform --> Shared
 
   Presentation[FastAPI Presentation] --> Application[Application Use Cases]
   Application --> Domain[Domain Rules]
@@ -55,7 +59,7 @@ graph LR
   Infrastructure --> Domain
 ```
 
-Feature-to-feature production imports are forbidden; cross-feature composition belongs in `pages` or `widgets`. Backend cross-context calls are allowed only when registered in the context map and imported through the target context's declared public `api` entry. Private application, infrastructure, and presentation modules are never cross-context APIs.
+Module-to-module production imports must go through the target module's `public.ts`; cross-module composition belongs in `pages` or `widgets`. Backend cross-context calls are allowed only when registered in the context map and imported through the target context's declared public `api` entry. Private application, infrastructure, and presentation modules are never cross-context APIs.
 
 `docs/architecture/context-map.yaml` is the single machine-readable architecture ledger. It inventories real backend contexts, frontend runtime modules, public dependency edges, ports, use cases, events, and `UnitOfWork` ownership. Placeholder target modules are forbidden: a module is registered only after a complete runtime slice exists. New dependency edges are rejected until intentionally designed and registered.
 
@@ -102,9 +106,21 @@ Request mutation IDs are represented by the framework-free `platform.application
 
 The five idempotent Study Session HTTP writes are composed by `sessions.application.study_session_commands`. Each command asks legacy persistence primitives to flush without committing, stores the mutation response through the platform adapter, and commits once through `UnitOfWork`. Sessions therefore has no dependency on the retired Persistence context.
 
-English course/task HTTP wrappers are entity-owned under `apps/web/src/entities/english/api`; features and pages must not recreate `features/english/api`.
+English course/task HTTP wrappers are owned by `apps/web/src/modules/english` (via its `public.ts`); pages must not recreate a parallel english API layer.
 
-Frontend AI scenario/model selection and per-run overrides are entity-owned under `entities/ai-runtime`; business features consume this entity and must not recreate an `ai-config` feature.
+Frontend AI scenario/model selection and per-run overrides are owned by `modules/settings/domain/ai-runtime-entity`; business modules consume it through `modules/settings/public` and must not recreate an `ai-config` feature.
+
+## Route metadata single source
+
+`apps/web/src/shared/routing/routeManifest.ts` is the single source for route → nav-section / page-history-section / history-key / fallback-target mapping. `app/shell/navSections.ts` matchers, `shared/page-history/navigationSection.ts`, `shared/page-history/pageHistoryRoute.ts`, and the router 404 fallback all derive from it; the JSX `<Routes>` table stays hand-maintained and is reconciled by `src/shared/routing/routeManifest.test.ts`. Register new routes in the manifest first.
+
+## Registered follow-up refactors (not yet done)
+
+- Split `pages/create/PalaceEditorPage.tsx` (823 lines, over the 750 gate) and sink into `modules/content`.
+- Sink the `shared/hooks/timedSession*` family + `SessionTimerBar` into `modules/session` (currently listed as explicit `shared→modules` ESLint boundary exceptions).
+- Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
+- Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
+- Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
 
 
 ## Runtime-owned workflows
