@@ -4,6 +4,7 @@ import {
   ClipboardList,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
@@ -13,9 +14,13 @@ import {
   prefetchPalaceSubjectShelfApi,
 } from '@/modules/content/public'
 import {
+  preloadDashboardPage,
   preloadFreestylePage,
   preloadPalaceEditPage,
+  preloadPalaceListPage,
+  preloadPalaceShelfPage,
   preloadPracticeRoutes,
+  preloadProfilePage,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
@@ -231,6 +236,9 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
       prefetchPalacesGroupedSummaryApi()
       prefetchReviewQueueApi()
       void preloadFreestylePage()
+      void preloadDashboardPage()
+      void preloadPalaceShelfPage()
+      void preloadPalaceListPage()
     })
   }, [])
 
@@ -277,6 +285,28 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           />
         ))}
       </nav>
+
+      <div className={cn('border-t border-border/70', compact ? 'px-2 py-2' : 'px-3 py-3')}>
+        <NavLink
+          to="/profile"
+          onPointerEnter={() => void preloadProfilePage()}
+          onFocus={() => void preloadProfilePage()}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
+              compact && 'justify-center px-0',
+              isActive
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+            )
+          }
+          aria-label="设置"
+          title="设置"
+        >
+          <Settings className="size-4 shrink-0" />
+          {!compact ? <span className="truncate">设置</span> : null}
+        </NavLink>
+      </div>
     </>
   )
 }

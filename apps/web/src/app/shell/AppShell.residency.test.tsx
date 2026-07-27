@@ -27,6 +27,9 @@ vi.mock('@/app/router/appRoutes', async () => {
     preloadKnowledgePage: vi.fn(),
     preloadPalaceEditPage: vi.fn(),
     preloadProfilePage: vi.fn(),
+    preloadDashboardPage: vi.fn(),
+    preloadPalaceListPage: vi.fn(),
+    preloadPalaceShelfPage: vi.fn(),
     AppRoutes({
       location,
     }: {

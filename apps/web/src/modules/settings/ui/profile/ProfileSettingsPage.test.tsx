@@ -78,6 +78,19 @@ describe('ProfileSettingsPage', () => {
     expect(screen.queryByRole('button', { name: '一键修复历史宫殿复习进度' })).toBeNull()
   })
 
+  it('moves migration links and PWA maintenance into local runtime', async () => {
+    mockSettings()
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '本机运行时' }))
+    expect(screen.getByText('PWA 更新')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '打开迁移与导入导出' }).getAttribute('href')).toBe(
+      '/profile/backups?tab=transfer',
+    )
+  })
   it('renders the local theme setting and applies dark mode immediately', async () => {
     mockSettings()
 

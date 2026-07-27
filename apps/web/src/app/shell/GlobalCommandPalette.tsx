@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Brain, FolderTree, History, Keyboard, ListChecks, MapPin, Plus, Search } from 'lucide-react'
+import { BookOpen, Brain, CalendarCheck, FileText, FolderTree, History, Keyboard, ListChecks, MapPin, Plus, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { globalSearchApi } from '@/modules/search/public'
 import {
@@ -20,6 +20,7 @@ import {
 } from '@/shared/components/ui/command'
 import { navSections } from '@/app/shell/navSections'
 import { readRecentVisits, recordRecentVisit, type RecentVisit } from '@/app/shell/recentVisits'
+import { COMMAND_PAGES } from '@/shared/routing/routeManifest'
 import { translateAppMessage } from '@/shared/i18n/messages'
 
 function isEditableTarget(target: EventTarget | null) {
@@ -53,6 +54,7 @@ export function GlobalCommandPalette() {
   const actions = useMemo(
     () => [
       { label: '开始今日复习', shortcut: '', icon: Brain, run: () => navigate('/review') },
+      { label: '打开今日工作台', shortcut: '', icon: CalendarCheck, run: () => navigate('/today') },
       { label: '新建宫殿', shortcut: 'Ctrl+N', icon: Plus, run: () => navigate('/palaces/new') },
       { label: '搜索宫殿', shortcut: '/', icon: Search, run: () => navigate('/palaces/list?focusSearch=true') },
     ],
@@ -182,7 +184,7 @@ export function GlobalCommandPalette() {
             <CommandItem
               key={action.id}
               value={`shortcut 快捷键 ${action.label} ${action.description}`}
-              onSelect={() => runAndClose(() => navigate('/profile/settings'))}
+              onSelect={() => runAndClose(() => navigate('/profile'))}
             >
               <Keyboard className="size-4" />
               <span className="truncate">{action.label}</span>
@@ -206,6 +208,17 @@ export function GlobalCommandPalette() {
               </CommandItem>
             )
           })}
+          {COMMAND_PAGES.map((page) => (
+            <CommandItem
+              key={page.path}
+              value={`page ${page.label} ${page.path}`}
+              onSelect={() => runAndClose(() => navigate(page.path))}
+            >
+              <FileText className="size-4" />
+              <span>{page.label}</span>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">{page.path}</span>
+            </CommandItem>
+          ))}
         </CommandGroup>
 
         {results && results.palaces.length > 0 ? (

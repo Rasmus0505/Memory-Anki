@@ -49,7 +49,6 @@ export {
   type FreestyleSkipState,
 } from './domain/queueState'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
-export { default as FreestylePage } from './ui/freestyle/FreestylePage'
 export * from './ui/review/api'
 export * from './ui/review/components/FsrsCompletionDialog'
 export * from './ui/review/components/MasteryDeltaBadge'

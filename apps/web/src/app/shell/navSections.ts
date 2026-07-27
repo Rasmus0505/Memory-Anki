@@ -19,19 +19,19 @@ import {
   preloadFreestylePage,
   preloadTodayLearningPage,
   preloadKnowledgePage,
+  preloadDashboardPage,
+  preloadPalaceListPage,
+  preloadPalaceShelfPage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 import { prefetchReviewQueueApi } from '@/modules/practice/public'
+// 路径归属规则统一由 routeManifest 派生（新增路由请在 manifest 登记）。
+import { createNavSectionMatcher, type NavSectionKey } from '@/shared/routing/routeManifest'
 
-export type NavSectionKey =
-  | 'freestyle'
-  | 'palaces'
-  | 'english'
-  | 'knowledge'
-  | 'review'
+export type { NavSectionKey }
 
 export interface NavSectionDefinition {
   key: NavSectionKey
@@ -43,22 +43,6 @@ export interface NavSectionDefinition {
   warmup?: () => void
 }
 
-const isPracticeRoute = (pathname: string) =>
-  /^\/palaces\/\d+\/practice$/.test(pathname) ||
-  /^\/segments\/\d+\/practice$/.test(pathname)
-
-const isCreationRoute = (pathname: string) =>
-  pathname === '/palaces/new' ||
-  pathname === '/batch-generation' ||
-  /^\/palaces\/\d+\/(edit|quiz)$/.test(pathname)
-
-const isLibraryRoute = (pathname: string) =>
-  pathname === '/palaces' ||
-  pathname === '/palaces/list' ||
-  /^\/palaces\/\d+$/.test(pathname) ||
-  pathname === '/knowledge' ||
-  pathname.startsWith('/knowledge/')
-
 export const navSections: NavSectionDefinition[] = [
   {
     key: 'freestyle',
@@ -68,10 +52,7 @@ export const navSections: NavSectionDefinition[] = [
     // Restore last freestyle/practice URL when switching back from another section.
     // Clicking 随心 again while already active still returns to /freestyle (section root).
     rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/freestyle' ||
-      pathname === '/freestyle/session' ||
-      isPracticeRoute(pathname),
+    matches: createNavSectionMatcher('freestyle'),
     warmup: () => {
       void preloadFreestylePage()
       void preloadTodayLearningPage()
@@ -86,10 +67,12 @@ export const navSections: NavSectionDefinition[] = [
     label: '知识',
     icon: BookOpen,
     rememberLastVisited: true,
-    matches: isLibraryRoute,
+    matches: createNavSectionMatcher('palaces'),
     warmup: () => {
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
+      void preloadPalaceShelfPage()
+      void preloadPalaceListPage()
       void preloadKnowledgePage()
     },
   },
@@ -99,11 +82,7 @@ export const navSections: NavSectionDefinition[] = [
     label: '英语',
     icon: Languages,
     rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/english' ||
-      pathname.startsWith('/english/') ||
-      pathname === '/english-reading' ||
-      pathname.startsWith('/english-reading/'),
+    matches: createNavSectionMatcher('english'),
     warmup: () => {
       void preloadEnglishHubPage()
       void preloadEnglishWorkspacePage()
@@ -120,7 +99,7 @@ export const navSections: NavSectionDefinition[] = [
     // Remember the last create/edit/quiz URL when leaving this section.
     // Clicking 创建 again while already active returns to /palaces/new for a fresh draft.
     rememberLastVisited: true,
-    matches: isCreationRoute,
+    matches: createNavSectionMatcher('knowledge'),
     warmup: () => {
       void preloadPalaceEditPage()
     },
@@ -133,14 +112,12 @@ export const navSections: NavSectionDefinition[] = [
     // Remember dashboard vs review-queue (and other insight routes) when switching sections.
     // Active review sessions are normalized to the dashboard hub; clicking 洞察 again
     // while already active returns to /dashboard so the hub remains one click away.
+    // /today（今日工作台）也归属洞察分区，与页面历史的 dashboard 归类一致。
     rememberLastVisited: true,
-    matches: (pathname) =>
-      pathname === '/' ||
-      pathname === '/dashboard' ||
-      pathname === '/review' ||
-      pathname.startsWith('/review/'),
+    matches: createNavSectionMatcher('review'),
     warmup: () => {
       prefetchDashboardApi()
+      void preloadDashboardPage()
       preloadReviewRoutes()
       prefetchReviewQueueApi()
     },

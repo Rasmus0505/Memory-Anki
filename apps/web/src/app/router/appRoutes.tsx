@@ -3,17 +3,16 @@ import { Navigate, Route, Routes, useParams, useSearchParams, type Location } fr
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
-import DashboardPage from '@/pages/insights/InsightsPage'
-import PalaceListPage from '@/pages/library/PalaceListPage'
-import PalaceShelfPage from '@/pages/library/PalaceLibraryPage'
-import ReviewOverviewPage from '@/app/router/review/ReviewOverview'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
+import { resolveRouteFallbackTarget } from '@/shared/routing/routeManifest'
 
 export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
+export const preloadDashboardPage = () => import('@/pages/insights/InsightsPage')
+export const preloadPalaceListPage = () => import('@/pages/library/PalaceListPage')
+export const preloadPalaceShelfPage = () => import('@/pages/library/PalaceLibraryPage')
+export const preloadReviewOverviewPage = () => import('@/app/router/review/ReviewOverview')
 /** Immersive freestyle card feed — default /freestyle entry. */
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
-/** @deprecated Alias kept for call sites that still preload the old session path. */
-export const preloadFreestyleSessionPage = preloadFreestylePage
 /** Today learning workspace (overview) — route /today. */
 export const preloadTodayLearningPage = () => import('@/pages/today/TodayLearningPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
@@ -33,6 +32,7 @@ export const preloadPalacePracticePage = () => import('@/app/router/PalacePracti
 export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
 
 export function preloadReviewRoutes() {
+  void preloadReviewOverviewPage()
   void preloadReviewSessionPage()
 }
 
@@ -45,6 +45,10 @@ export function preloadPracticeRoutes() {
 }
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
+const DashboardPage = lazyWithRetry(preloadDashboardPage)
+const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
+const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
+const ReviewOverviewPage = lazyWithRetry(preloadReviewOverviewPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const TodayLearningPage = lazyWithRetry(preloadTodayLearningPage)
 const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
@@ -102,96 +106,9 @@ function RouteFallback() {
   return <LoadingState text="正在加载页面…" />
 }
 
-function normalizePathname(pathname: string) {
-  if (!pathname || pathname === '/') return '/'
-  return pathname.replace(/\/+$/, '') || '/'
-}
-
-// 已注册的精确路由路径（normalize 后直接命中，保留原路径）。
-const REGISTERED_EXACT_PATHS = new Set<string>([
-  '/',
-  '/dashboard',
-  '/freestyle',
-  '/freestyle/session',
-  '/today',
-  '/knowledge',
-  '/english',
-  '/english/listening',
-  '/english/reading',
-  '/english/patterns',
-  '/english/vocab',
-  '/english-reading',
-  '/palaces',
-  '/palaces/list',
-  '/palaces/new',
-  '/review',
-  '/profile',
-  '/profile/timer',
-  '/profile/feedback',
-  '/profile/ai',
-  '/profile/backups',
-  '/timer-overlay',
-])
-
-// 已注册的动态段路由（命中后保留原路径）。仅匹配到主段，不含未知后代。
-const REGISTERED_DYNAMIC_PATTERNS = [
-  /^\/palaces\/\d+(?:\/(edit|practice|quiz))?$/,
-  /^\/segments\/\d+\/practice$/,
-  /^\/english\/courses\/\d+$/,
-  /^\/english\/listening\/courses\/\d+$/,
-  /^\/english\/reading\/materials\/\d+$/,
-  /^\/review\/session\/\d+$/,
-  /^\/review\/completed\/\d+$/,
-]
-
-// 动态段路由的"前缀提取"：命中已注册动态段的未知后代时，回退到主段。
-// 例：/palaces/42/unknown → /palaces/42；/review/session/9/x → /review/session/9。
-const DYNAMIC_PREFIX_FALLBACKS = [
-  { match: /^\/palaces\/(\d+)(?:\/.*)?$/, build: (id: string) => `/palaces/${id}` },
-  {
-    match: /^\/english\/listening\/courses\/(\d+)(?:\/.*)?$/,
-    build: (id: string) => `/english/listening/courses/${id}`,
-  },
-  { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id: string) => `/english/courses/${id}` },
-  {
-    match: /^\/english\/reading\/materials\/(\d+)(?:\/.*)?$/,
-    build: (id: string) => `/english/reading/materials/${id}`,
-  },
-  { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id: string) => `/review/session/${id}` },
-  { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id: string) => `/segments/${id}/practice` },
-]
-
-// 顶层 section 前缀：未知的子路径回退到 section 入口。
-const SECTION_PREFIX_FALLBACKS: Record<string, string> = {
-  '/knowledge/': '/knowledge',
-  '/freestyle/': '/freestyle',
-  '/profile/': '/profile',
-  '/review/': '/review',
-  '/english-reading/': '/english/reading',
-  '/english/': '/english',
-  '/palaces/': '/palaces',
-  '/timer-overlay/': '/timer-overlay',
-}
-
-export function resolveRouteFallbackTarget(pathname: string) {
-  const normalizedPathname = normalizePathname(pathname)
-
-  if (REGISTERED_EXACT_PATHS.has(normalizedPathname)) return normalizedPathname
-  if (REGISTERED_DYNAMIC_PATTERNS.some((pattern) => pattern.test(normalizedPathname))) {
-    return normalizedPathname
-  }
-
-  for (const { match, build } of DYNAMIC_PREFIX_FALLBACKS) {
-    const matched = normalizedPathname.match(match)
-    if (matched) return build(matched[1])
-  }
-
-  for (const [prefix, target] of Object.entries(SECTION_PREFIX_FALLBACKS)) {
-    if (normalizedPathname.startsWith(prefix)) return target
-  }
-
-  return '/freestyle'
-}
+// 路由注册清单与回退规则统一在 @/shared/routing/routeManifest 维护；
+// 这里保留 re-export 以维持既有调用方与测试的导入路径。
+export { resolveRouteFallbackTarget }
 
 function RouteNotFound({ pathname }: { pathname: string }) {
   const target = resolveRouteFallbackTarget(pathname)

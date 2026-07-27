@@ -1,8 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Brain, LayoutDashboard } from 'lucide-react'
+import { Brain, CalendarCheck, LayoutDashboard } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
-export type InsightsSectionTab = 'dashboard' | 'review'
+export type InsightsSectionTab = 'dashboard' | 'review' | 'today'
 
 const TABS: Array<{
   key: InsightsSectionTab
@@ -28,10 +28,19 @@ const TABS: Array<{
     icon: Brain,
     isActive: (pathname) => pathname === '/review' || pathname.startsWith('/review/'),
   },
+  {
+    key: 'today',
+    to: '/today',
+    label: '今日工作台',
+    description: '今日学习总览与快捷入口',
+    icon: CalendarCheck,
+    isActive: (pathname) => pathname === '/today',
+  },
 ]
 
 export function resolveInsightsSectionTab(pathname: string): InsightsSectionTab {
   if (pathname === '/review' || pathname.startsWith('/review/')) return 'review'
+  if (pathname === '/today') return 'today'
   return 'dashboard'
 }
 

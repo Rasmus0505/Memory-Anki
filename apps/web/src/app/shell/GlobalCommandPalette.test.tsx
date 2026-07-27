@@ -30,6 +30,9 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadTodayLearningPage: vi.fn(),
   preloadKnowledgePage: vi.fn(),
   preloadProfilePage: vi.fn(),
+  preloadDashboardPage: vi.fn(),
+  preloadPalaceListPage: vi.fn(),
+  preloadPalaceShelfPage: vi.fn(),
 }))
 
 function LocationEcho() {
@@ -136,6 +139,19 @@ describe('GlobalCommandPalette', () => {
     expect(await screen.findByText('快捷键')).toBeTruthy()
     expect(screen.getAllByText('隐藏/取消子级知识点显示').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Shift+H').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('navigates to /profile when selecting a shortcut entry', async () => {
+    renderPalette('/dashboard')
+
+    openPalette()
+
+    const [shortcutItem] = await screen.findAllByText('隐藏/取消子级知识点显示')
+    fireEvent.click(shortcutItem)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/profile')
+    })
   })
 
   it('queries remote search after two characters and navigates search hits', async () => {

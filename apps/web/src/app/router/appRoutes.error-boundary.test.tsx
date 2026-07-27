@@ -35,7 +35,7 @@ describe('AppRoutes route error boundary', () => {
     vi.restoreAllMocks()
   })
 
-  it('contains route render failures inside the route content area', () => {
+  it('contains route render failures inside the route content area', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AppRoutesHarness />
@@ -43,7 +43,7 @@ describe('AppRoutes route error boundary', () => {
     )
 
     expect(screen.getByText('shell chrome')).toBeTruthy()
-    expect(screen.getByText('这个页面出了点问题')).toBeTruthy()
+    expect(await screen.findByText('这个页面出了点问题')).toBeTruthy()
     expect(screen.getByText(/dashboard boom/)).toBeTruthy()
   })
 })

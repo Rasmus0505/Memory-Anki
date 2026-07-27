@@ -23,6 +23,9 @@ const preloadTodayLearningPage = vi.fn()
 const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
 const preloadProfilePage = vi.fn()
+const preloadDashboardPage = vi.fn()
+const preloadPalaceListPage = vi.fn()
+const preloadPalaceShelfPage = vi.fn()
 const backgroundTaskRegistryMock = vi.hoisted(() => ({
   useRunningTaskCountBySection: vi.fn<(section: unknown) => number>(() => 0),
 }))
@@ -54,6 +57,9 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadKnowledgePage: () => preloadKnowledgePage(),
   preloadPalaceEditPage: () => preloadPalaceEditPage(),
   preloadProfilePage: () => preloadProfilePage(),
+  preloadDashboardPage: () => preloadDashboardPage(),
+  preloadPalaceListPage: () => preloadPalaceListPage(),
+  preloadPalaceShelfPage: () => preloadPalaceShelfPage(),
 }))
 
 vi.mock('@/shared/background-tasks/backgroundTaskRegistry', async () => {

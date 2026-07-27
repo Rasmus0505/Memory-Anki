@@ -1,1 +1,1 @@
-export { EnglishHubPage as default } from '@/modules/english/public'
+export { EnglishWorkspacePage as default } from '@/modules/english/public'
