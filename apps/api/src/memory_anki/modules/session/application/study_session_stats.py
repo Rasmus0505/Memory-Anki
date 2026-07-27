@@ -192,7 +192,10 @@ def _range_start(
     attributed_at = _session_attribution_at()
     earliest = (
         session.query(func.min(attributed_at))
-        .filter(StudySession.deleted_at.is_(None))
+        .filter(
+            StudySession.deleted_at.is_(None),
+            StudySession.status == "completed",
+        )
         .scalar()
     )
     if earliest is None:
@@ -216,10 +219,14 @@ def _build_time_record_trend(
     rows = (
         session.query(
             local_day,
-            func.coalesce(func.sum(StudySession.effective_seconds), 0),
+            _positive_effective_seconds_sum(),
         )
         .filter(
             StudySession.deleted_at.is_(None),
+            # Autosave checkpoints (status='active') and demoted duplicates
+            # (status='abandoned') carry real effective_seconds but are not
+            # finished study; counting them made charts exceed the record list.
+            StudySession.status == "completed",
             attributed_at >= start,
             attributed_at < range_end,
         )
@@ -251,10 +258,18 @@ def _build_time_record_breakdown(
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
     attributed_at = _session_attribution_at()
+    # Project only the three columns the grouping needs: loading whole rows also
+    # pulls progress_json/events_json, which dominate row size on the default
+    # range='all' scan.
     rows = (
-        session.query(StudySession)
+        session.query(
+            StudySession.scene,
+            StudySession.effective_seconds,
+            StudySession.summary_json,
+        )
         .filter(
             StudySession.deleted_at.is_(None),
+            StudySession.status == "completed",
             attributed_at >= local_calendar_day_start_as_utc_naive(start_date),
             attributed_at < range_end,
         )
@@ -270,9 +285,9 @@ def _build_time_record_breakdown(
         }
         for kind in BUILTIN_TIME_RECORD_KINDS
     }
-    for row in rows:
-        seconds = max(0, int(row.effective_seconds or 0))
-        key, label, is_builtin = _breakdown_key_for_session(row)
+    for scene, effective_seconds, summary_json in rows:
+        seconds = max(0, int(effective_seconds or 0))
+        key, label, is_builtin = _breakdown_key_for_session(scene, summary_json)
         current = totals.get(key)
         if current is None:
             current = {
@@ -309,11 +324,14 @@ def _build_time_record_breakdown(
     ]
 
 
-def _breakdown_key_for_session(row: StudySession) -> tuple[str, str, bool]:
-    summary = _load_summary(row.summary_json)
+def _breakdown_key_for_session(
+    row_scene: str | None,
+    summary_json: str | None,
+) -> tuple[str, str, bool]:
+    summary = _load_summary(summary_json)
     activity_tag = str(summary.get("activity_tag") or "").strip()
     activity_label = str(summary.get("activity_tag_label") or "").strip()
-    scene = str(row.scene or "")
+    scene = str(row_scene or "")
     kind = _time_record_kind(scene)
 
     if activity_tag and activity_tag not in BUILTIN_TIME_RECORD_KINDS:

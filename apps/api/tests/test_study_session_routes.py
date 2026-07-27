@@ -498,6 +498,58 @@ class StudySessionRouteTests(RouterTestCase):
         self.assertEqual(breakdown["quiz"]["sessions"], 0)
         self.assertTrue(breakdown["practice"]["is_builtin"])
 
+    def test_time_record_analytics_counts_only_completed_sessions(self):
+        today = date.today()
+        today_start = datetime.combine(today, datetime.min.time())
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    StudySession(
+                        id="analytics-completed",
+                        status="completed",
+                        scene="practice",
+                        target_type="none",
+                        title="Completed",
+                        started_at=today_start,
+                        ended_at=today_start + timedelta(minutes=2),
+                        effective_seconds=120,
+                    ),
+                    # Autosave checkpoint: real seconds, no ended_at, never finished.
+                    StudySession(
+                        id="analytics-active-checkpoint",
+                        status="active",
+                        scene="practice",
+                        target_type="none",
+                        title="Orphan checkpoint",
+                        started_at=today_start,
+                        effective_seconds=900,
+                    ),
+                    # Demoted duplicate left behind by the autosave repair pass.
+                    StudySession(
+                        id="analytics-abandoned",
+                        status="abandoned",
+                        scene="practice",
+                        target_type="none",
+                        title="Abandoned duplicate",
+                        started_at=today_start,
+                        ended_at=today_start + timedelta(minutes=30),
+                        effective_seconds=1800,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/study-sessions/time-record-analytics"
+            "?trend_range=7&breakdown_range=all"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["trend"][-1]["seconds"], 120)
+        breakdown = {item["kind"]: item for item in payload["breakdown"]}
+        self.assertEqual(breakdown["practice"]["seconds"], 120)
+        self.assertEqual(breakdown["practice"]["sessions"], 1)
+
     def test_time_record_analytics_breakdown_includes_custom_activity_tags(self):
         today = date.today()
         today_start = datetime.combine(today, datetime.min.time())

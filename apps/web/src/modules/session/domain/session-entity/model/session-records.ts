@@ -75,15 +75,6 @@ export interface TimeSessionRecord {
   sceneSegments?: SessionSceneSegment[]
 }
 
-export interface TimeRecordSummary {
-  totalRecords: number
-  totalEffectiveSeconds: number
-  last7DaysSeconds: number
-  todaySeconds: number
-  weekPauseCount: number
-  longestSession: TimeSessionRecord | null
-}
-
 export interface DailyTrendPoint {
   dateKey: string
   label: string
