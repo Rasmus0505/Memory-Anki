@@ -85,6 +85,126 @@ def today_plan_payload(session: Session) -> dict[str, Any]:
     return {**summary, "palaces": palaces}
 
 
+def consolidate_today_payload(session: Session) -> dict[str, Any]:
+    """今日巩固：跨宫殿的短间隔/掉队卡，一个统一清单几张快速刷完。
+
+    这些卡不唤醒任何宫殿会话——一张差卡把整个宫殿拖成高频小批次，正是
+    碎片化最典型的路径。排序：宫殿按最早 due，宫殿内按导图 DFS 先序。
+    """
+    from memory_anki.modules.memory.application.node_memory_projection import (
+        _card_from_state,
+        _card_id,
+        _tree,
+    )
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ITEM_KIND_CONSOLIDATE,
+        ensure_daily_plan,
+    )
+    from memory_anki.modules.memory.application.scheduling.units import unit_of_node
+    from memory_anki.modules.mindmap_document.api import ancestor_path
+
+    summary = ensure_daily_plan(session)
+    local_day = local_date_of(utc_now_naive())
+    plan = (
+        session.query(ReviewDailyPlan)
+        .filter(
+            ReviewDailyPlan.local_date == local_day,
+            ReviewDailyPlan.scope == PLAN_SCOPE_PALACE,
+            ReviewDailyPlan.palace_id.is_(None),
+        )
+        .first()
+    )
+    if plan is None:
+        return {"local_date": local_day.isoformat(), "total": 0, "pending": 0, "done": 0, "items": []}
+
+    plan_items = (
+        session.query(ReviewDailyPlanItem)
+        .filter(
+            ReviewDailyPlanItem.plan_id == plan.id,
+            ReviewDailyPlanItem.kind == ITEM_KIND_CONSOLIDATE,
+        )
+        .all()
+    )
+    pending_keys = {
+        item.item_key for item in plan_items if item.status != "done"
+    }
+    palace_ids = {int(item.palace_id) for item in plan_items if item.palace_id}
+    if not pending_keys or not palace_ids:
+        return {
+            "local_date": local_day.isoformat(),
+            "total": len(plan_items),
+            "pending": len(pending_keys),
+            "done": len(plan_items) - len(pending_keys),
+            "items": [],
+        }
+
+    states = {
+        (int(row.palace_id), row.node_uid): row
+        for row in session.query(ReviewNodeState)
+        .filter(ReviewNodeState.palace_id.in_(palace_ids))
+        .all()
+    }
+    palaces = {
+        int(row.id): row
+        for row in session.query(Palace).filter(Palace.id.in_(palace_ids)).all()
+    }
+    now = datetime.now(UTC)
+    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for palace_id, palace in palaces.items():
+        _root, nodes = _tree(palace)
+        order = {uid: index for index, uid in enumerate(nodes)}
+        for key in pending_keys:
+            prefix, _, node_uid = key.partition(":")
+            if prefix != str(palace_id) or node_uid not in nodes:
+                continue
+            row = states.get((palace_id, node_uid))
+            if row is None:
+                continue
+            card = _card_from_state(row, card_id=_card_id(palace_id, node_uid))
+            unit = unit_of_node(session, palace_id, node_uid)
+            grouped[palace_id].append(
+                {
+                    "_order": order.get(node_uid, 0),
+                    "_due": row.due_at,
+                    "palace_id": palace_id,
+                    "palace_title": palace.manual_title or palace.title or "未命名宫殿",
+                    "unit_title": (unit.title if unit and unit.kind == "mark" else ""),
+                    "node_uid": node_uid,
+                    "text": str(nodes[node_uid].get("text") or ""),
+                    "context_path": ancestor_path(nodes, node_uid),
+                    "state": int(row.state),
+                    "interval_days": (
+                        round((row.due_at - row.last_review_at).total_seconds() / 86400, 2)
+                        if row.last_review_at and row.due_at
+                        else None
+                    ),
+                    "raw_due_at": to_api_datetime(row.raw_due_at) if row.raw_due_at else None,
+                    "schedule_reason": row.schedule_reason,
+                    "previews": preview_payload(
+                        preview_intervals(session, card=card, now=now)
+                    ),
+                }
+            )
+    items: list[dict[str, Any]] = []
+    for palace_id in sorted(
+        grouped,
+        key=lambda pid: min(
+            (entry["_due"] for entry in grouped[pid] if entry["_due"]), default=now
+        ),
+    ):
+        for entry in sorted(grouped[palace_id], key=lambda e: e["_order"]):
+            entry.pop("_order", None)
+            entry.pop("_due", None)
+            items.append(entry)
+    return {
+        "local_date": local_day.isoformat(),
+        "total": len(plan_items),
+        "pending": summary.get("consolidate_pending", len(pending_keys)),
+        "done": summary.get("consolidate_done", 0),
+        "items": items,
+    }
+
+
 def preview_intervals_payload(
     session: Session, *, items: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:

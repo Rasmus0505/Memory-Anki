@@ -236,6 +236,7 @@ def due_node_uids_for_entry(
     entry_mode: str | None = None,
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
+    unit_root_uid: str | None = None,
     progress_scopes: list[str] | set[str] | tuple[str, ...] | None = None,
 ) -> list[str]:
     """Freeze actionable UIDs; freestyle scope follows progress_scopes when set.
@@ -249,6 +250,16 @@ def due_node_uids_for_entry(
         PROGRESS_SCOPE_REINFORCEMENT,
         PROGRESS_SCOPES,
     )
+
+    # 单元入口：把单元的文档先序节点集当作 scope 走既有分支——该分支的语义
+    # 正是"与 due 求交"，恰好等于"只刷到期卡"，且保留传入顺序 → 复习顺序
+    # 自动是根→一级分支从上到下→分支内深度优先。
+    if scope_node_uids is None and unit_root_uid is not None:
+        from memory_anki.modules.memory.application.scheduling.units import resolve_units
+
+        unit = resolve_units(session, palace_id).get(unit_root_uid)
+        if unit is not None:
+            scope_node_uids = list(unit.order)
 
     projection = get_palace_memory_projection(session, palace_id, now=_utc_now())
     mode = entry_mode or projection.get("review_entry_mode") or "none"

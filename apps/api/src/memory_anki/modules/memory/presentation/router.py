@@ -93,6 +93,17 @@ def api_today_plan(session: Session = Depends(session_dep)):
     return {"item": payload}
 
 
+@router.get("/review/consolidate/today")
+def api_consolidate_today(session: Session = Depends(session_dep)):
+    from memory_anki.modules.memory.application.scheduling.insight_service import (
+        consolidate_today_payload,
+    )
+
+    payload = consolidate_today_payload(session)
+    session.commit()  # ensure_daily_plan 的幂等放出需要落库
+    return {"item": payload}
+
+
 @router.post("/review/preview-intervals")
 def api_preview_intervals(data: dict, session: Session = Depends(session_dep)):
     from memory_anki.modules.memory.application.scheduling.insight_service import (
