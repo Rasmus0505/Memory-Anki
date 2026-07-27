@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
 from memory_anki.modules.memory.application.formal_review_service import (
@@ -321,7 +321,12 @@ def test_post_settlement_can_undo_rerate_and_recomplete(db_session):
     assert second["duration_seconds"] == 45
 
 
-def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
+def test_completion_reanchors_whole_batch_to_finish_time(db_session):
+    """整批的间隔起点统一到"完成"时刻，保证同批下次也齐整。
+
+    长会话里先评分与后评分的卡本来会错开几十分钟，下次到期就散了——这正是
+    碎片化的一个来源。波次路径以前跳过重锚，现在一律执行。
+    """
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
 
@@ -364,8 +369,7 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
     # Immediate restudy batch (no multi-hour wait).
     assert hard_interval <= timedelta(minutes=1, seconds=5)
 
-    # Simulate a long session: move clocks into the past before complete so we
-    # can assert completion does not re-anchor already-written schedules.
+    # 模拟长会话：两张卡的时钟错开 40 分钟。
     past = utc_now_naive() - timedelta(minutes=90)
     hard.last_review_at = past
     hard.due_at = past + hard_interval
@@ -375,13 +379,11 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
         good.raw_due_at = good.last_review_at + good_interval
     db_session.commit()
 
-    # Without finalization, Hard would already be overdue at complete time.
+    # 不重锚的话，Hard 在点"完成"时就已经逾期了。
     assert hard.due_at < utc_now_naive()
+    assert hard.last_review_at != good.last_review_at
 
-    hard_last_review_at = hard.last_review_at
-    hard_due_at = hard.due_at
-    good_last_review_at = good.last_review_at
-    good_due_at = good.due_at
+    before_complete = utc_now_naive()
     result = complete_formal_review(
         db_session,
         row,
@@ -402,10 +404,13 @@ def test_wave_completion_does_not_reanchor_rated_schedules(db_session):
         .one()
     )
 
-    assert hard.last_review_at == hard_last_review_at
-    assert hard.due_at == hard_due_at
-    assert good.last_review_at == good_last_review_at
-    assert good.due_at == good_due_at
+    # 两张卡的起点被拉到同一个"完成"时刻，各自间隔长度不变。
+    assert hard.last_review_at == good.last_review_at
+    assert hard.last_review_at >= before_complete
+    assert hard.due_at - hard.last_review_at == hard_interval
+    assert good.due_at - good.last_review_at == good_interval
+    # 重锚后 Hard 不再是"完成即逾期"。
+    assert hard.due_at >= hard.last_review_at
     assert result["unrated_due_node_count"] == 0
 
 
@@ -693,7 +698,8 @@ def test_queue_reports_later_today_and_forecast_from_node_due_at(db_session):
     assert sum(item["due_count"] for item in forecast["items"]) == 2
 
 
-def test_queue_chapter_filter_and_daily_palace_limit(db_session):
+def test_queue_chapter_filter_and_no_review_truncation(db_session):
+    """复习额度已删除：到期卡全部进队列，章节过滤照常工作。"""
     first = _palace(db_session)
     second = _palace(db_session)
     second.title = "FSRS second"
@@ -703,15 +709,15 @@ def test_queue_chapter_filter_and_daily_palace_limit(db_session):
     overdue_at = datetime.now(UTC) - timedelta(hours=1)
     _set_all_due_at(db_session, first.id, overdue_at)
     _set_all_due_at(db_session, second.id, overdue_at)
-    db_session.add(Config(key="daily_max_reviews", value="1"))
     db_session.commit()
 
-    limited = get_fsrs_queue_payload(db_session)
+    queue = get_fsrs_queue_payload(db_session)
     chapter_queue = get_fsrs_queue_payload(db_session, chapter.id)
 
-    assert len(limited["reviews"]) == 1
-    assert limited["due_count"] == 2
-    assert limited["overdue_count"] == 4
+    # 两个宫殿各 2 张到期卡，一张都不截断。
+    assert queue["due_count"] == 4
+    assert "deferred_count" not in queue
+    assert queue["plan_summary"]["review_pending"] == 4
     assert [item["palace_id"] for item in chapter_queue["reviews"]] == [first.id]
     assert chapter_queue["chapter"]["id"] == chapter.id
     assert chapter_queue["chapter"]["subject"]["name"] == subject.name
@@ -996,7 +1002,8 @@ def test_formal_subtree_rating_updates_non_due_descendants(db_session):
     assert after.due_at != before_due or after.stability != before_stability
 
 
-def test_good_rating_floors_interval_to_at_least_one_day(db_session):
+def test_good_rating_schedules_fsrs_direct_learning_step(db_session):
+    """FSRS 直出：新卡记得 → 学习步短间隔，due_at 就是 raw_due_at（无吸附）。"""
     palace = _palace(db_session)
     row = start_or_resume_formal_review(db_session, palace.id)
     before = utc_now_naive()
@@ -1006,7 +1013,7 @@ def test_good_rating_floors_interval_to_at_least_one_day(db_session):
         node_uid="a",
         rating=3,
         study_session_id=row.id,
-        operation_id="good-floor",
+        operation_id="good-direct",
         rating_scope="single",
         source_scene="formal_review",
     )
@@ -1017,9 +1024,12 @@ def test_good_rating_floors_interval_to_at_least_one_day(db_session):
     )
     assert state.last_review_at is not None
     assert state.raw_due_at is not None
-    # FSRS floor lives on raw_due_at; due_at is wave-effective local day.
-    assert state.raw_due_at - state.last_review_at >= timedelta(days=1) - timedelta(seconds=2)
-    assert state.raw_due_at >= before + timedelta(days=1) - timedelta(seconds=5)
+    assert state.due_at == state.raw_due_at
+    assert state.schedule_reason == "fsrs_direct"
+    assert state.effective_wave_id is None
+    # 新卡第一次记得落在学习步窗口（分钟到小时级），不再强制抬到多日。
+    assert timedelta(minutes=5) <= state.raw_due_at - state.last_review_at <= timedelta(hours=2)
+    assert state.raw_due_at >= before
 
 
 def test_start_or_resume_supersedes_duplicate_active_sessions(db_session):

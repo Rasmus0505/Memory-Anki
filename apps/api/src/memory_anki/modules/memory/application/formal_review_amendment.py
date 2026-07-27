@@ -87,7 +87,7 @@ def reopen_formal_review_for_amendment(
             for item in items:
                 if item.status != ITEM_DONE:
                     continue
-                if item.evidence_origin in {"batch_inherited", "inherited"}:
+                if item.evidence_origin in {"branch_recall", "batch_inherited", "inherited"}:
                     item.status = ITEM_RATED_INHERITED
                 elif item.rating is not None:
                     item.status = ITEM_RATED_DIRECT

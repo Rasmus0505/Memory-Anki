@@ -72,8 +72,19 @@ FSRS_SETTINGS_KEYS = {
     "maximum_interval",
     "learning_steps",
     "relearning_steps",
-    "daily_max_reviews",
-    # reinforcement_again/hard_minutes retired: weak ratings use end-of-batch restudy
+    "enable_fuzzing",
+    "daily_new_limit",
+    # 宫殿整批调度
+    "scheduling_unit_mode",
+    "unit_max_pull_ratio",
+    "unit_max_push_ratio",
+    "unit_max_retention_drop_pp",
+    "unit_min_wave_cards",
+    "unit_day_policy",
+    "unit_fuzz_max_days",
+    "consolidate_enabled",
+    "consolidate_floor_days",
+    "large_batch_hint_size",
 }
 
 CLIENT_PREFERENCE_GROUPS = {

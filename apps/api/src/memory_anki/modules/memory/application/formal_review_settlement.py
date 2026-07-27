@@ -108,6 +108,45 @@ def _previous_formal_review_snapshot(
     }
 
 
+def _regroup_rated_units(
+    session: Session, *, palace_id: int, row: StudySession, now: datetime
+) -> None:
+    """结算后对本次涉及的调度单元做一次全局重聚类。
+
+    逐卡吸附是增量近似、结果依赖评分顺序；结算是唯一能看到"整批新到期日"
+    的时刻，此时重算一次才能得到全局最优的波次划分。
+    """
+    from memory_anki.modules.memory.application.scheduling.aggregation import (
+        apply_unit_aggregation,
+        compute_unit_aggregation,
+        unit_mode_for,
+    )
+    from memory_anki.modules.memory.application.scheduling.units import (
+        resolve_units,
+        unit_root_uid_of_node,
+    )
+
+    if unit_mode_for(session, palace_id) != "unit":
+        return
+    scope = set(_scope(row))
+    if not scope:
+        return
+    units = {
+        uid
+        for uid in (
+            unit_root_uid_of_node(session, palace_id, node_uid) for node_uid in scope
+        )
+        if uid
+    }
+    if not units:
+        units = set(resolve_units(session, palace_id))
+    for unit_root_uid in sorted(units):
+        preview = compute_unit_aggregation(
+            session, palace_id=palace_id, unit_root_uid=unit_root_uid, now=now
+        )
+        apply_unit_aggregation(session, palace_id=palace_id, preview=preview)
+
+
 def formal_review_completion_summary(session: Session, row: StudySession) -> dict[str, Any]:
     palace = session.get(Palace, row.palace_id) if row.palace_id else None
     if palace is None:
@@ -339,13 +378,14 @@ def complete_formal_review(
     score = round(sum(ratings.values()) / len(ratings)) if ratings else 0
     ended_at = utc_now_naive()
     wave_id = existing.get("wave_id")
-    if not wave_id:
-        finalize_formal_review_schedules(
-            session,
-            study_session_id=str(row.id),
-            palace_id=int(palace.id),
-            finalized_at=ended_at,
-        )
+    # 整批的间隔起点统一到"完成"时刻：长会话里先评分与后评分的卡本来会错开
+    # 几十分钟，下次到期就散了。波次路径以前跳过这一步，现在一律执行。
+    finalize_formal_review_schedules(
+        session,
+        study_session_id=str(row.id),
+        palace_id=int(palace.id),
+        finalized_at=ended_at,
+    )
     if wave_id:
         from memory_anki.modules.memory.application.wave_service import complete_formal_wave
 
@@ -354,6 +394,7 @@ def complete_formal_review(
         except ValueError:
             # Race: counts may have drifted; surface as incomplete.
             raise
+    _regroup_rated_units(session, palace_id=int(palace.id), row=row, now=ended_at)
     # Receipt due/next fields must reflect post-finalize schedules.
     projection = get_palace_memory_projection(session, palace.id)
     summary["remaining_due_node_count"] = projection["due_node_count"]
@@ -419,9 +460,7 @@ def complete_formal_review(
     # Temporary freestyle marks: clear a root when this unit settled with Good/Easy.
     temporary_completed: list[str] = []
     try:
-        from memory_anki.modules.practice.application.temporary_marks import (
-            mark_temporary_roots_completed_on_settlement,
-        )
+        from memory_anki.modules.practice.api import mark_temporary_roots_completed_on_settlement
 
         # `ratings` was popped earlier for score; still in local scope.
         good_or_easy = any(int(v) >= 3 for v in (ratings or {}).values())

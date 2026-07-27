@@ -130,14 +130,25 @@ export function normalizeShortcutBindingValue(value: unknown): ShortcutBinding |
   }
 }
 
-export function isShortcutBindingAllowed(bindingValue: unknown) {
+export interface ShortcutAllowOptions {
+  /**
+   * Bare single letters (A–Z) are fine for flip-card style non-typing scenes,
+   * but typing scenes (e.g. English answer input) must reject them. Default true.
+   */
+  allowBareLetters?: boolean
+}
+
+export function isShortcutBindingAllowed(
+  bindingValue: unknown,
+  options: ShortcutAllowOptions = {},
+) {
   const binding = normalizeShortcutBindingValue(bindingValue)
   if (!binding) return false
   const key = normalizeShortcutKeyValue(binding.key)
   const hasModifier = Boolean(binding.shift || binding.ctrl || binding.alt || binding.meta)
   if (!key || MODIFIER_ONLY_KEYS.has(key) || RESERVED_SHORTCUT_KEYS.has(key)) return false
   // Bare single letters (A–Z) are allowed for flip-card and similar non-typing scenes.
-  if (!hasModifier && isBareLetterShortcutKey(key)) return true
+  if (!hasModifier && isBareLetterShortcutKey(key)) return options.allowBareLetters !== false
   if (!hasModifier && isPrintableShortcutKey(key)) return false
   if (!hasModifier && !isAllowedBareShortcut(binding)) return false
   return true
@@ -202,6 +213,7 @@ export function isShortcutPressed(event: KeyboardEvent, shortcutValue: unknown) 
 export function captureShortcutFromKeyboardEvent(
   event: KeyboardEvent,
   messages: ShortcutCaptureMessages = {},
+  options: ShortcutAllowOptions = {},
 ) {
   const resolvedMessages = { ...DEFAULT_CAPTURE_MESSAGES, ...messages }
   const key = normalizeShortcutKeyValue(event.key)
@@ -221,7 +233,12 @@ export function captureShortcutFromKeyboardEvent(
       ),
     }
   }
-  if (!hasModifier && isPrintableShortcutKey(key) && !isBareLetterShortcutKey(key)) {
+  const bareLetterAllowed = options.allowBareLetters !== false
+  if (
+    !hasModifier &&
+    isPrintableShortcutKey(key) &&
+    (!isBareLetterShortcutKey(key) || !bareLetterAllowed)
+  ) {
     return { value: null, error: resolvedMessages.barePrintable(key) }
   }
 
@@ -233,7 +250,7 @@ export function captureShortcutFromKeyboardEvent(
     alt: Boolean(event.altKey),
     meta: Boolean(event.metaKey),
   }
-  if (!isShortcutBindingAllowed(candidate)) {
+  if (!isShortcutBindingAllowed(candidate, options)) {
     return { value: null, error: resolvedMessages.disallowed }
   }
   return { value: candidate, error: '' }

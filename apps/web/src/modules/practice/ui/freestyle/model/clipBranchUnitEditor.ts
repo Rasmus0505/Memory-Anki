@@ -75,9 +75,11 @@ export type ClipBranchUnitOptions = {
 export function clipEditorStateToBranchUnit(
   editorState: MindMapEditorState,
   branchUid: string,
-  _contextLabel?: string,
-  _options?: ClipBranchUnitOptions,
+  contextLabel?: string,
+  options?: ClipBranchUnitOptions,
 ): MindMapEditorState {
+  void contextLabel
+  void options
   const target = String(branchUid || '').trim()
   if (!target) return editorState
 

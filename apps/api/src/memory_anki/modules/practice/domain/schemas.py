@@ -44,6 +44,6 @@ class FreestyleTemporaryMarksReplaceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     node_uids: list[str] = Field(default_factory=list)
-    unify_progress: bool = True
+    unify_progress: bool = False
     operation_id: str | None = None
 

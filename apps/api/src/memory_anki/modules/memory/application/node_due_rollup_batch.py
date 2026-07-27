@@ -51,6 +51,7 @@ def _rollup_from_projection(projection: dict[str, Any]) -> dict[str, Any]:
         "overdue_node_count": projection["overdue_node_count"],
         "reinforcement_due_count": int(projection.get("reinforcement_due_count") or 0),
         "uninitialized_node_count": int(projection.get("uninitialized_node_count") or 0),
+        "backlog_new_node_count": int(projection.get("backlog_new_node_count") or 0),
         "content_changed_node_count": int(projection.get("content_changed_node_count") or 0),
         "next_review_at": projection["next_review_at"],
         "mastered": projection["mastered"],

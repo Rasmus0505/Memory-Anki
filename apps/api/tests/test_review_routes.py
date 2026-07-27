@@ -186,6 +186,65 @@ class ReviewRouteTests(RouterTestCase):
         self.assertEqual(payload["palace"]["title"], "Test Palace")
         self.assertIn("editor_doc", payload["palace"])
 
+    def test_queue_exposes_batch_contract(self):
+        payload = self.client.get("/api/v1/review/queue").json()
+        batch = payload["reviews"][0]
+        self.assertEqual(batch["batch_node_count"], 2)
+        self.assertEqual(set(batch["batch_due_node_uids"]), {"branch-a", "branch-b"})
+        self.assertTrue(batch["batch_key"].startswith(f"{batch['palace_id']}:"))
+        self.assertIn("unit_root_uids", batch)
+        self.assertIn("oversized", batch)
+
+    def test_consolidate_scope_starts_without_waking_whole_palace(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).one()
+            rows = session.query(ReviewNodeState).order_by(ReviewNodeState.node_uid).all()
+            rows[0].schedule_source = "consolidate"
+            rows[1].due_at = utc_now_naive() + timedelta(days=10)
+            rows[1].raw_due_at = rows[1].due_at
+            session.commit()
+            palace_id = palace.id
+            node_uid = rows[0].node_uid
+        response = self.client.post(
+            f"/api/v1/review/palaces/{palace_id}/sessions",
+            json={"entry_mode": "node", "scope_node_uids": [node_uid], "consolidate": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["frozen_due_node_uids"], [node_uid])
+
+    def test_unit_regroup_preview_execute_and_rollback(self):
+        with self.SessionLocal() as session:
+            palace_id = session.query(Palace).one().id
+        preview = self.client.post("/api/v1/review/units/regroup/preview", json={"palace_id": palace_id})
+        self.assertEqual(preview.status_code, 200)
+        revision = preview.json()["item"]["palace_revision"]
+        execute = self.client.post(
+            "/api/v1/review/units/regroup/execute",
+            json={"palace_id": palace_id, "palace_revision": revision, "operation_id": "route-unit-regroup"},
+        )
+        self.assertEqual(execute.status_code, 200)
+        rollback = self.client.post(
+            "/api/v1/review/units/regroup/rollback", json={"operation_id": "route-unit-regroup"}
+        )
+        self.assertEqual(rollback.status_code, 200)
+
+    def test_unit_regroup_rejects_stale_palace_revision(self):
+        with self.SessionLocal() as session:
+            palace = session.query(Palace).one()
+            palace_id = palace.id
+        preview = self.client.post("/api/v1/review/units/regroup/preview", json={"palace_id": palace_id})
+        revision = preview.json()["item"]["palace_revision"]
+        with self.SessionLocal() as session:
+            palace = session.get(Palace, palace_id)
+            palace.editor_doc = palace.editor_doc.replace("Branch B", "Branch B changed")
+            session.commit()
+        execute = self.client.post(
+            "/api/v1/review/units/regroup/execute",
+            json={"palace_id": palace_id, "palace_revision": revision, "operation_id": "route-stale-regroup"},
+        )
+        self.assertEqual(execute.status_code, 400)
+        self.assertIn("revision conflict", execute.json()["detail"])
+
     def test_soft_deleted_palace_is_excluded_from_queue(self):
         with self.SessionLocal() as session:
             palace = session.query(Palace).one()

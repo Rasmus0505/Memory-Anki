@@ -31,6 +31,7 @@ export function startReviewSessionApi(
     branch_uid?: string
     /** Freestyle unit freeze: due UIDs inside the branch unit only. */
     scope_node_uids?: string[]
+    consolidate?: boolean
     client_source?: 'desktop' | 'pwa'
   } = {},
 ) {

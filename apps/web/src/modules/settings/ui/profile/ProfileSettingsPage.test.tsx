@@ -18,14 +18,13 @@ vi.mock('@/pwa/resetPwa', () => ({
 function mockSettings() {
   vi.spyOn(preferencesApi, 'getReviewSettingsApi').mockResolvedValue({
     default_review_mode: 'review',
-    sleep_review_time: '22:00',
-    early_review_anchor: 'true',
-    ebbinghaus_intervals: '1h,sleep,1,2,4,7,15,30,60',
-    daily_max_reviews: '0',
-    mastered_interval: '30',
-    auto_smooth_overdue: 'false',
-    overdue_smoothing_days: '7',
-    overdue_smoothing_threshold: '5',
+    desired_retention: '0.90',
+    mastery_horizon_days: '60',
+    maximum_interval: '36500',
+    learning_steps: '10m,1h',
+    relearning_steps: '10m,1h',
+    enable_fuzzing: 'false',
+    daily_new_limit: '20',
     mindmap_ai_split_api_key: '',
     mindmap_ai_split_base_url: '',
     mindmap_ai_split_model: '',
@@ -80,6 +79,7 @@ describe('ProfileSettingsPage', () => {
 
   it('moves migration links and PWA maintenance into local runtime', async () => {
     mockSettings()
+
     render(
       <MemoryRouter initialEntries={['/profile']}>
         <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
@@ -91,6 +91,33 @@ describe('ProfileSettingsPage', () => {
       '/profile/backups?tab=transfer',
     )
   })
+  it('renders live FSRS/daily-plan settings and drops dead legacy configs', async () => {
+    mockSettings()
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
+      </MemoryRouter>,
+    )
+
+    // 真实生效的配置
+    expect(await screen.findByText('目标保持率')).toBeTruthy()
+    expect(screen.getByLabelText('最大间隔（天）')).toBeTruthy()
+    expect(screen.getByLabelText('首次学习短期步骤')).toBeTruthy()
+    expect(screen.getByLabelText('遗忘后短期步骤')).toBeTruthy()
+    expect(screen.getByLabelText('每日新学上限')).toBeTruthy()
+    expect(screen.queryByLabelText('每日复习上限')).toBeNull()
+    expect(screen.getByText('逐卡间隔随机化（默认关闭）')).toBeTruthy()
+    expect(screen.getByText(/目标保持率越高复习越频繁/)).toBeTruthy()
+
+    // 已删除的死配置不再渲染
+    expect(screen.queryByText('睡前复习时间')).toBeNull()
+    expect(screen.queryByText('每日正式复习上限')).toBeNull()
+    expect(screen.queryByText('逾期平滑窗口天数')).toBeNull()
+    expect(screen.queryByText('默认自动平滑逾期任务')).toBeNull()
+    expect(screen.queryByText('提前复习锚定策略')).toBeNull()
+  })
+
   it('renders the local theme setting and applies dark mode immediately', async () => {
     mockSettings()
 

@@ -46,7 +46,7 @@ Reviews now owns an independent FSRS card for every non-root palace node, keyed 
 
 Ratings are `忘记 / 困难 / 记得 / 轻松` and map to FSRS Again / Hard / Good / Easy. Rating operations are idempotent, append immutable mind-map evidence, update all affected node states in one transaction, and retain before-state snapshots for session-local LIFO undo. Under the wave model, rating time writes the next formal or reinforcement membership; completion closes the source wave without re-anchoring those dates.
 
-**Interval policy after FSRS:** 忘记/困难 enter the next same-day **restudy batch** immediately (no clock wait). Formal palace review may auto-chain into the next reinforcement pass; freestyle re-inserts the weak unit after **at most 3 other cards** in the current queue (not full end-of-queue tail) until 记得/轻松. 记得/轻松 are *floored* at 1 day / 3 days so default learning/relearning steps (10m, 1h) cannot bounce a “记得” card back within the hour; Learning/Relearning cards are promoted to Review after Good/Easy. Formal session freeze also includes nodes that become due within a 1-hour look-ahead so near-due relearning cards enter the same frozen scope instead of remaining due after completion.
+**Interval policy after FSRS (2026-07 kernel rewrite):** FSRS output is the scheduling truth — no rating tier is clamped or floored anymore. 忘记/困难 enter the next same-day **restudy batch** immediately (queue-level; `raw_due_at` keeps the untouched FSRS value). Formal palace review may auto-chain into the next reinforcement pass; freestyle re-inserts the weak unit after **at most 3 other cards** until 记得/轻松. 记得/轻松 follow learning/relearning steps verbatim (default 10m → 1h → graduate to multi-day Review), so a brand-new card rated 记得 legitimately returns within the hour on its first day. Fuzzing is enabled by default (`enable_fuzzing` config) to spread due dates; interval previews always disable fuzz for stable button labels.
 
 Formal review and vocabulary notes share the same FSRS runtime (`fsrs_runtime`). Manual `needs_practice` flags are retired.
 
@@ -83,17 +83,23 @@ Formal long-term scheduling is a **write-time wave domain** (`ReviewWave` / `Rev
 
 | Layer | Responsibility |
 |---|---|
-| FSRS (`fsrs_runtime`) | Node S/D and **raw** suggestion `raw_due_at` |
-| Wave (`wave_service` / `wave_policy`) | Safety-window adsorb, freeze, merge-new-due, membership reconciliation |
-| Wave session (`wave_session_service`) | Formal/reinforcement start, pause/resume, completion |
+| L1 kernel (`fsrs_runtime` / `scheduling/kernel`) | Pure FSRS: S/D, `raw_due_at`, four-rating interval previews, optimized parameter sets |
+| L2 daily plan (`scheduling/daily_plan`) | Card-count new/review daily quotas, backlog release, over-quota deferral (queue-level only — never rewrites due) |
+| L3 aggregation (`scheduling/aggregation` + wave adsorb) | **Opt-in per palace**; symmetric tolerance window (±2d, 15% of interval, ≤3pp retention drop), every move logged in `schedule_reason`, clearable |
+| Wave session (`wave_session_service`) | Formal/reinforcement start, pause/resume, completion (session freeze remains wave-based) |
 | StudySession | Execution slice of an active formal wave |
-| Calibration (`calibration_service`) | `align_wave` / `baseline` / `match_node` (copy one card's FSRS progress onto a scope) with audited snapshots (no recall events). Diagnose returns per-node progress for UI multi-select + template pick. |
+| Calibration (`calibration_service`) | `align_wave` / `baseline` / `match_node` + `kernel_rebuild` audited history replay (preview/execute/rollback) |
+| Optimizer (`scheduling/optimizer_service`) | One-click FSRS parameter optimization from direct/branch_recall evidence; activate/rollback |
 
-`ReviewNodeState.due_at` is the **effective** formal due for legacy queue fields. Projections also expose `raw_due_at`, `schedule_source`, `reinforcement_due`, and dual-date fields. **Never-reviewed / first-learn nodes** (no `last_review_at`, including tree nodes with no `ReviewNodeState` row yet) **are formal-due immediately** so a newly built palace enters the review queue without calibration. Content-changed nodes stay out of formal due until relearned or calibrated; reinforcement membership stays on same-day reinforcement waves only.
+Invariant: **`raw_due_at` is always the untouched FSRS value; only the aggregation layer may set `due_at` to a different (adjacent) day.** Default is FSRS-direct: `due_at == raw_due_at`, `schedule_reason="fsrs_direct"`.
 
-- Start freezes all current formal due+overdue nodes **plus first-learn nodes** (no count cap); no mid-session auto-expand.
-- 忘记/困难 → reinforcement restudy wave, **immediately available** (no 20/60 minute delay). Weak nodes do not re-enter the *active* pass; they accumulate on the next scheduled shell so the current freeze can complete, then freestyle re-inserts the unit with max 3 intervening cards / formal UI auto-chains into the next pass until 记得/轻松.
-- 记得/轻松 → long-term FSRS raw due + safety-window formal adsorb (graduate out of immediate restudy).
+**Backlog semantics:** tree nodes with no `ReviewNodeState` row are unreleased new cards — never due. The daily plan releases up to `daily_new_limit` per day (document order, palace overrides supported), creating rows on release. Over-quota due cards get `deferred` plan items (`over_review_quota`) and are excluded from the formal queue/freeze that day; their FSRS due is untouched, so they surface first the next day. Content-changed nodes stay out of formal due until relearned or calibrated; reinforcement membership stays on same-day reinforcement waves only.
+
+- Start freezes current formal due+overdue nodes **plus released first-learn nodes** (deferred cards excluded); no mid-session auto-expand.
+- 忘记/困难 → reinforcement restudy wave, **immediately available**. Weak nodes accumulate on the next scheduled shell so the current freeze can complete.
+- 记得/轻松 → FSRS-direct due; when the palace has aggregation enabled and the raw due is a future day, the card may adsorb into a scheduled future wave inside the symmetric window (never into today's/active waves — learning steps stay same-day direct).
+- Rating scopes: `single` (one real recall), `branch_recall` (whole-branch real recall — every descendant gets a real FSRS update, evidence `branch_recall`), `bulk_mark` (processed without recall — **zero FSRS writes**, event-only trace, wave item closed as done). Legacy `subtree` is an accepted alias of `branch_recall`; historical `batch_inherited` evidence is read-compatible but excluded from optimizer/rebuild replay.
+- `source_scene` whitelist for ratings: `formal_review` / `practice` / `local_practice`. Quiz is out of the rating system entirely.
 - Complete only when every frozen item is rated (direct or explicit inherited); otherwise pause. Completion receipts may include `pending_reinforcement: { wave_id, pending_count }` for auto-chain.
 - Empty open waves (0 items after reassignment) are closed: scheduled shells deleted, active/paused shells cancelled. Queue listing hides 0-pending reinforcement waves.
 - Public APIs: wave list/detail, reinforcement start, pause/resume/merge, calibration diagnose/preview/apply/undo.

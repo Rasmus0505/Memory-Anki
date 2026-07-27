@@ -117,6 +117,14 @@ export interface ReviewScheduleSummary {
   due_node_count: number
   overdue_node_count: number
   frozen_due_node_uids?: string[]
+  batch_key?: string
+  batch_local_date?: string | null
+  batch_due_node_uids?: string[]
+  batch_node_count?: number
+  oversized?: boolean
+  unit_root_uids?: string[]
+  unit_titles?: string[]
+  unit_kinds?: string[]
   wave_id?: string | null
   wave_progress?: {
     item_count: number
@@ -147,11 +155,160 @@ export interface ReviewQueueResponse {
   later_today_count: number
   overdue_count: number
   smoothed_count: number
+  /** Cards deferred past today because the daily review quota is used up. */
+  deferred_count?: number
+  /** Same summary as today-plan (without palaces / deferred_details). */
+  plan_summary?: ReviewTodayPlanSummary
   stats: { total: number; review_count: number; review_duration_seconds: number }
   chapter: ReviewQueueChapter | null
   reviews: ReviewScheduleSummary[]
   later_today_reviews: ReviewScheduleSummary[]
   reinforcement_waves?: ReviewWaveSummary[]
+}
+
+
+export interface ReviewConsolidateItem {
+  palace_id: number
+  palace_title: string
+  unit_title: string
+  node_uid: string
+  text: string
+  context_path: string[]
+  state: number
+  interval_days: number | null
+  raw_due_at: string | null
+  schedule_reason: string | null
+  previews: ReviewIntervalPreview[]
+}
+export interface ReviewConsolidateToday {
+  local_date: string
+  total: number
+  pending: number
+  done: number
+  items: ReviewConsolidateItem[]
+}
+export interface UnitRegroupPreview {
+  palace_id: number
+  palace_revision: string
+  unit_count: number
+  move_count: number
+  wave_count: number
+  consolidate_count: number
+  units: Array<{ unit_root_uid: string; wave_count: number; move_count: number; consolidate_count: number; day_counts_before: Record<string, number>; day_counts_after: Record<string, number> }>
+}
+/** One of the four rating buttons' projected next interval. */
+export interface ReviewIntervalPreview {
+  rating: 1 | 2 | 3 | 4
+  interval_seconds: number
+  due_at: string
+  /** Chinese display text, e.g. "10分钟" / "4天". */
+  display: string
+  resulting_state: number
+}
+
+export interface ReviewNodeIntervalPreviews {
+  palace_id: number
+  node_uid: string
+  previews: ReviewIntervalPreview[]
+}
+
+export interface ReviewTodayPlanDeferredItem {
+  item_key: string
+  palace_id: number
+  defer_reason: string | null
+}
+
+export interface ReviewTodayPlanSummary {
+  local_date: string
+  new_quota: number
+  review_pending: number
+  review_done: number
+  consolidate_pending: number
+  consolidate_done: number
+  new_pending: number
+  new_done: number
+  deferred: ReviewTodayPlanDeferredItem[]
+  /** New cards not yet released (waiting for future daily new quota). */
+  backlog_new: number
+  completed: boolean
+}
+
+export interface ReviewTodayPlanPalace {
+  palace_id: number
+  title: string
+  review_pending: number
+  review_done: number
+  consolidate_pending: number
+  consolidate_done: number
+  new_pending: number
+  new_done: number
+}
+
+export interface ReviewTodayPlanDeferredDetail {
+  palace_id: number
+  palace_title: string
+  node_uid: string
+  defer_reason: string | null
+}
+
+export interface ReviewTodayPlan extends ReviewTodayPlanSummary {
+  palaces: ReviewTodayPlanPalace[]
+  deferred_details: ReviewTodayPlanDeferredDetail[]
+}
+
+/** "Why today" panel data for a single card. */
+export interface ReviewNodeScheduleDetail {
+  palace_id: number
+  node_uid: string
+  exists: boolean
+  state: number | string
+  stability_days: number | null
+  difficulty: number | null
+  retrievability: number | null
+  last_review_at: string | null
+  raw_due_at: string | null
+  effective_due_at: string | null
+  shifted: boolean
+  schedule_source: string | null
+  schedule_reason: string | null
+  previews: ReviewIntervalPreview[]
+}
+
+export interface ReviewLoadSimulationItem {
+  date: string
+  current_due: number
+  simulated_due: number
+}
+
+export interface ReviewLoadSimulation {
+  days: number
+  desired_retention: number
+  current_total: number
+  simulated_total: number
+  items: ReviewLoadSimulationItem[]
+}
+
+export interface PalaceReviewScheduleSettings {
+  palace_id: number
+  aggregation_enabled: boolean
+  aggregation_max_pull_days: number | null
+  aggregation_max_push_days: number | null
+  daily_new_limit_override: number | null
+}
+
+export interface PalaceAggregationMove {
+  node_uid: string
+  raw_due_local: string
+  target_local: string
+  /** Estimated retention loss in percentage points caused by the move. */
+  retention_drop_pp: number
+}
+
+export interface PalaceAggregationPreview {
+  palace_id: number
+  horizon_days?: number
+  applied_count?: number
+  moves: PalaceAggregationMove[]
 }
 export interface ReviewCompletionSummary extends ReviewMemorySummary {
   scope_node_count: number

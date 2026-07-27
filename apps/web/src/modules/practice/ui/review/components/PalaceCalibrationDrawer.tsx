@@ -17,6 +17,7 @@ import {
 } from '@/shared/components/ui/sheet'
 import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
+import { PalaceAggregationSettingsSection } from './PalaceAggregationSettingsSection'
 import {
   applyPalaceCalibrationApi,
   diagnosePalaceCalibrationApi,
@@ -396,6 +397,14 @@ export function PalaceCalibrationDrawer({
               </div>
             ) : null}
           </section>
+
+          <PalaceAggregationSettingsSection
+            palaceId={palaceId}
+            onChanged={() => {
+              void loadDiagnose()
+              onApplied?.()
+            }}
+          />
 
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">

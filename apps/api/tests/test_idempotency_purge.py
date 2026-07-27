@@ -46,4 +46,4 @@ def test_read_settings_excludes_mutation_and_client_preference_prefixes(db_sessi
     assert "client_preferences.review_feedback_settings" not in settings
     assert settings["clientXpreferences.lookalike"] == "visible"
     assert settings["historical_top_level_setting"] == "still-visible"
-    assert "ebbinghaus_intervals" in settings
+    assert "desired_retention" in settings

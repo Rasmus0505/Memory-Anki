@@ -87,13 +87,16 @@ describe('PalaceQuizPage core flows', () => {
         'review_flip',
       )
     })
-    expect(screen.getByText('细胞核知识点')).toBeTruthy()
-    expect(screen.getByText('染色体线索')).toBeTruthy()
+    // 渐进翻卡：进入时只显示根节点，后代保持隐藏 → 待回忆 → 翻开。
+    expect(screen.queryByText('细胞核知识点')).toBeNull()
+    expect(screen.queryByText('染色体线索')).toBeNull()
 
-    fireEvent.contextMenu(screen.getByTestId('memory-node-child-1'))
-    await waitFor(() => {
-      expect(screen.queryByText('染色体线索')).toBeNull()
-    })
+    fireEvent.click(screen.getByTestId('memory-node-root-1'))
+    expect(await screen.findByText('待回忆')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('memory-node-child-1'))
+    expect(await screen.findByText('细胞核知识点')).toBeTruthy()
+
+    // 再点已翻开的节点，下一层以“待回忆”出现，翻开后触发 card_reveal 反馈。
     fireEvent.click(screen.getByTestId('memory-node-child-1'))
     expect(await screen.findByText('待回忆')).toBeTruthy()
     fireEvent.click(screen.getByTestId('memory-node-grandchild-1'))
@@ -103,6 +106,13 @@ describe('PalaceQuizPage core flows', () => {
         'card_reveal',
       )
     })
+
+    // 右键收起分支：仅隐藏后代，当前节点保留。
+    fireEvent.contextMenu(screen.getByTestId('memory-node-child-1'))
+    await waitFor(() => {
+      expect(screen.queryByText('染色体线索')).toBeNull()
+    })
+    expect(screen.getByText('细胞核知识点')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '查看模式' }))
     await waitFor(() => {

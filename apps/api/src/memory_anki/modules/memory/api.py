@@ -1,3 +1,4 @@
+
 """Public review context facade for cross-context composition."""
 
 from .application.calibration_service import (
@@ -28,6 +29,7 @@ from .application.node_memory_service import (
     undo_rating_operation,
 )
 from .application.review_metrics_service import get_weekly_stats
+from .application.temporary_mark_unify import unify_fsrs_progress_for_node_groups
 from .application.wave_service import (
     get_wave_detail,
     list_palace_waves,
@@ -62,4 +64,5 @@ __all__ = [
     "start_or_resume_formal_review",
     "undo_calibration",
     "undo_rating_operation",
+    "unify_fsrs_progress_for_node_groups",
 ]

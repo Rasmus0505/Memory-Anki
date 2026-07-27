@@ -50,7 +50,8 @@ vi.mock('@/modules/content/domain/palace-segment-entity/api', () => ({
   updatePalaceSegmentReviewProgressApi: vi.fn(),
 }))
 
-vi.mock('@/modules/settings/public', () => ({
+vi.mock('@/modules/settings/public', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/settings/public')>()),
   getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
   updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
 }))
@@ -208,7 +209,8 @@ describe('PalaceListPage', () => {
     expect(queryClient.getQueryData(buildPalaceCatalogGroupedQueryKey({ subject_id: '1' }))).toMatchObject({
       subjects: [{ subject: { id: 1, name: '中国近代史' } }],
     })
-    expect(screen.getByText('记忆宫殿')).toBeTruthy()
+    // 选中书架时页面标题显示书架名（无书架时才回退为「记忆宫殿」）。
+    expect(screen.getAllByRole('heading', { name: '中国近代史' }).length).toBeGreaterThan(0)
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.getAllByText('预计 1分 40秒').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /开始复习/ })).toBeTruthy()

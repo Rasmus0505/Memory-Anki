@@ -9,6 +9,7 @@ const { invalidatePalaceCatalogCacheMock, requestMock } = vi.hoisted(() => ({
 
 vi.mock('@/shared/api/http', () => ({
   request: requestMock,
+  API_BASE: '/api/v1',
 }))
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -108,13 +109,44 @@ class ReviewWave(Base):
         Index("ix_review_waves_palace_status", "palace_id", "status"),
         Index("ix_review_waves_palace_type_date", "palace_id", "wave_type", "local_date"),
         Index("ix_review_waves_palace_available", "palace_id", "wave_type", "available_at"),
-        # At most one active/paused formal wave per palace (partial unique via migration index).
+        Index(
+            "ix_review_waves_palace_unit_date",
+            "palace_id",
+            "unit_root_uid",
+            "wave_type",
+            "local_date",
+        ),
+        # Partial uniques keyed by (palace, unit): 全新安装走 create_all 不执行
+        # 迁移体，所以这两条必须在 ORM 里声明，否则只有升级上来的库有约束。
+        Index(
+            "uq_review_waves_palace_active_formal",
+            "palace_id",
+            "unit_root_uid",
+            unique=True,
+            sqlite_where=text(
+                "wave_type = 'formal_long_term' AND status IN ('active', 'paused')"
+            ),
+        ),
+        Index(
+            "uq_review_waves_palace_formal_day",
+            "palace_id",
+            "unit_root_uid",
+            "local_date",
+            unique=True,
+            sqlite_where=text(
+                "wave_type = 'formal_long_term' AND local_date IS NOT NULL"
+                " AND status IN ('scheduled', 'active', 'paused')"
+            ),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     palace_id: Mapped[int] = mapped_column(Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=False)
     # formal_long_term | same_day_reinforcement
     wave_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 调度单元键（永久标记 uid，或整宫殿/残余单元的宫殿根 uid）。
+    # 正式波次非空；同日补刷波次是宫殿级的，保持 NULL。
+    unit_root_uid: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # scheduled | active | paused | completed | cancelled
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="scheduled")
     # Local calendar day for formal waves (stored as date).
@@ -195,6 +227,105 @@ class ReviewCalibrationOperationItem(Base):
     before_state_json: Mapped[str] = mapped_column(Text, nullable=False)
     after_state_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class FsrsParameterSet(Base):
+    """Optimizer-produced FSRS weight sets; at most one row status=active."""
+
+    __tablename__ = "fsrs_parameter_sets"
+    __table_args__ = (Index("ix_fsrs_parameter_sets_status", "status"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    weights_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # default | optimized
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="optimized")
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    log_loss_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    log_loss_after: Mapped[float | None] = mapped_column(Float, nullable=True)
+    calibration_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # candidate | running | active | rolled_back | failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="candidate")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PalaceReviewSettings(Base):
+    """Per-palace scheduling overrides (aggregation layer + daily quotas)."""
+
+    __tablename__ = "palace_review_settings"
+
+    palace_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("palaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    # 旧字段：整批调度已成为默认，是否整批由 scheduling_unit_mode_override 表达。
+    # 保留是为了兼容既有行与旧的宫殿设置端点。
+    aggregation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    aggregation_max_pull_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    aggregation_max_push_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 三态：None = 未表态（跟随全局 scheduling_unit_mode，默认整批）；
+    # 'unit' = 显式整批；'card' = 显式逐卡直出（逃生舱）。
+    scheduling_unit_mode_override: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    unit_min_wave_cards_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    daily_new_limit_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    daily_review_limit_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive
+    )
+
+
+class ReviewDailyPlan(Base):
+    """Daily task plan: which cards count toward today's review/new quotas."""
+
+    __tablename__ = "review_daily_plans"
+    __table_args__ = (
+        UniqueConstraint(
+            "local_date", "scope", "palace_id", name="uq_review_daily_plans_date_scope"
+        ),
+        Index("ix_review_daily_plans_date", "local_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # palace | english_pattern | english_vocab
+    scope: Mapped[str] = mapped_column(String(24), nullable=False, default="palace")
+    palace_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=True
+    )
+    review_quota: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    new_quota: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    regenerated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ReviewDailyPlanItem(Base):
+    __tablename__ = "review_daily_plan_items"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "item_key", name="uq_review_daily_plan_items_key"),
+        Index("ix_review_daily_plan_items_status", "plan_id", "kind", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("review_daily_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    palace_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # palace scope: "{palace_id}:{node_uid}"; english scopes: row id.
+    item_key: Mapped[str] = mapped_column(String(192), nullable=False)
+    # review | new | consolidate
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # pending | done | deferred
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
+    # over_review_quota | over_new_quota
+    defer_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive
+    )
 
 
 class FreestyleTemporaryMark(Base):

@@ -161,6 +161,7 @@
         "content",
         "mindmap_document",
         "mindmap_learning",
+        "practice",
         "session"
       ],
       "pdf_library": [],
@@ -169,6 +170,7 @@
         "english",
         "english_reading",
         "memory",
+        "mindmap_document",
         "quiz",
         "session"
       ],

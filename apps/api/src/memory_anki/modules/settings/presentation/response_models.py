@@ -38,5 +38,11 @@ class SettingsResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     default_review_mode: str | None = None
-    ebbinghaus_intervals: str | None = None
-    daily_max_reviews: str | None = None
+    desired_retention: str | None = None
+    maximum_interval: str | None = None
+    daily_new_limit: str | None = None
+    enable_fuzzing: str | None = None
+    scheduling_unit_mode: str | None = None
+    unit_max_push_ratio: str | None = None
+    unit_min_wave_cards: str | None = None
+    unit_day_policy: str | None = None

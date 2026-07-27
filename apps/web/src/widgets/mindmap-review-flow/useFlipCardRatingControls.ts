@@ -20,11 +20,13 @@ type PendingSubtreeRating = {
   conflictCount: number
 }
 
+export type FlipCardRatingScope = 'single' | 'subtree' | 'bulk_mark'
+
 export type FlipCardRateNodeHandler = (
   nodeUid: string,
   rating: MindMapRecallRating,
   round: MindMapRecallRound,
-  scope?: 'single' | 'subtree',
+  scope?: FlipCardRatingScope,
   evidence?: { source?: 'manual' | 'inferred'; confidence?: number | null; responseMs?: number | null },
   conflictPolicy?: RatingConflictPolicy,
   /** Full rating-tree cascade targets (parent + all descendants). */
@@ -45,6 +47,7 @@ export function useFlipCardRatingControls({
   onUndoRating,
   onNodeActive,
   selectGuidedNode,
+  getIntervalPreviewDisplay,
 }: {
   ratingMode: boolean
   isEditMode: boolean
@@ -56,6 +59,11 @@ export function useFlipCardRatingControls({
   directRatedUids?: ReadonlySet<string>
   /** Any node with a score this round (direct or batch_inherited). Used for 避开 skip set size. */
   sessionRatedUids?: ReadonlySet<string>
+  /**
+   * Next-interval hint for the four rating buttons (e.g. "4天"). Null while
+   * loading / on failure — buttons render without the hint, never blocked.
+   */
+  getIntervalPreviewDisplay?: (nodeUid: string, rating: MindMapRecallRating) => string | null
   /**
    * @deprecated Soft-dim scope lives on the panel; any non-root card may be rated.
    * Kept optional so older call sites do not break.
@@ -116,14 +124,14 @@ export function useFlipCardRatingControls({
       rating: MindMapRecallRating,
       source: 'manual' | 'inferred' = 'manual',
       conflictPolicy: RatingConflictPolicy = 'overwrite',
-      scopeOverride?: 'single' | 'subtree',
+      scopeOverride?: FlipCardRatingScope,
     ) => {
       if (!ratingMode || !onRateNode) return
       const scope = scopeOverride ?? getRatingScopeForNode(nodeUid)
       // Always walk the full rating tree for cascade targets — including deep
       // grandchildren under a single-child spine (P → C → G1/G2/G3).
       const cascadeNodeUids =
-        scope === 'subtree'
+        scope !== 'single'
           ? collectSubtreeUids(guidedNodes, nodeUid, rootUid)
           : [nodeUid]
       void onRateNode(
@@ -195,6 +203,11 @@ export function useFlipCardRatingControls({
         submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, 'overwrite', 'single')
         return
       }
+      if (policy === 'bulk_mark') {
+        // 批量带过：零调度影响，仅留事件痕迹；无覆盖冲突需要解决。
+        submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, 'overwrite', 'bulk_mark')
+        return
+      }
       submitRateNodeUid(pending.nodeUid, pending.rating, pending.source, policy, 'subtree')
     },
     [pendingSubtreeRating, submitRateNodeUid],
@@ -229,16 +242,24 @@ export function useFlipCardRatingControls({
           onClick: () => {},
         })
       }
+      // Interval preview hint (e.g. "记得 · 4天"). Missing preview must never
+      // block rating — fall back to the plain count label.
+      const ratingLabel = (base: string, rating: MindMapRecallRating) => {
+        const interval = getIntervalPreviewDisplay?.(nodeId, rating) ?? null
+        const countPart = count > 1 ? ` · ${count}` : ''
+        return interval ? `${base}${countPart} · ${interval}` : `${base} · ${count}`
+      }
       actions.push(
-        { id: 'rate-1', label: `忘记 · ${count}`, variant: 'destructive', onClick: () => handleRateNodeUid(nodeId, 1) },
-        { id: 'rate-2', label: `困难 · ${count}`, variant: 'outline', onClick: () => handleRateNodeUid(nodeId, 2) },
-        { id: 'rate-3', label: `记得 · ${count}`, variant: 'default', onClick: () => handleRateNodeUid(nodeId, 3) },
-        { id: 'rate-4', label: `轻松 · ${count}`, variant: 'secondary', onClick: () => handleRateNodeUid(nodeId, 4) },
+        { id: 'rate-1', label: ratingLabel('忘记', 1), variant: 'destructive', onClick: () => handleRateNodeUid(nodeId, 1) },
+        { id: 'rate-2', label: ratingLabel('困难', 2), variant: 'outline', onClick: () => handleRateNodeUid(nodeId, 2) },
+        { id: 'rate-3', label: ratingLabel('记得', 3), variant: 'default', onClick: () => handleRateNodeUid(nodeId, 3) },
+        { id: 'rate-4', label: ratingLabel('轻松', 4), variant: 'secondary', onClick: () => handleRateNodeUid(nodeId, 4) },
       )
       return actions
     },
     [
       countAffectedNodes,
+      getIntervalPreviewDisplay,
       getRatingScopeForNode,
       handleRateNodeUid,
       handleUndoRating,

@@ -584,8 +584,9 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 event.remove(self.engine, "before_cursor_execute", record_select)
 
         self.assertGreaterEqual(int(payload.get("due_count") or 0), 12)
-        # Batch path: palace list + states + settings/config + optional counts — not O(N).
-        self.assertLessEqual(len(statements), 12)
+        # Batch path: palace list + states + settings/config + daily-plan ledger
+        # (quota/plan/items/candidates/deferred, all batch queries) — not O(N).
+        self.assertLessEqual(len(statements), 18)
 
     def test_batch_due_rollup_matches_single_palace_rollup(self):
         from memory_anki.modules.memory.application.node_due_rollup_batch import (

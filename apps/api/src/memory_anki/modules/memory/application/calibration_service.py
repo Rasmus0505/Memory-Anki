@@ -245,7 +245,9 @@ def diagnose_palace(session: Session, palace_id: int) -> dict[str, Any]:
     dates = sorted({w["local_date"] for w in formal if w.get("local_date")})
     nodes = projection.get("nodes") or []
     direct = sum(1 for n in nodes if n.get("evidence_source") == "direct")
-    inherited = sum(1 for n in nodes if n.get("evidence_source") == "batch_inherited")
+    inherited = sum(
+        1 for n in nodes if n.get("evidence_source") in {"branch_recall", "batch_inherited"}
+    )
     return {
         "palace_id": palace_id,
         "palace_revision": _palace_revision(palace),

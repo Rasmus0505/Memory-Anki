@@ -1,5 +1,5 @@
 import { request } from '@/shared/api/http'
-import type { MindMapRecallRating } from '@/shared/api/contracts'
+import type { MindMapRecallRating, MindMapRecallRatingScope } from '@/shared/api/contracts'
 import type { PalaceMemoryProjection, PalaceRatingOperationResult } from '@/shared/api/contracts'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
@@ -32,9 +32,11 @@ export function ratePalaceNodesApi(
     rating: MindMapRecallRating
     study_session_id: string
     operation_id: string
-    rating_scope?: 'single' | 'subtree'
+    /** "subtree" is a legacy alias of "branch_recall" (backend still accepts it). */
+    rating_scope?: MindMapRecallRatingScope
     conflict_policy?: RatingConflictPolicy
-    source_scene?: 'formal_review' | 'practice' | string
+    /** Backend only accepts these three scenes; anything else is a 400. */
+    source_scene?: 'formal_review' | 'practice' | 'local_practice'
     recall_round?: 'first' | 'weak_retry'
     rating_source?: 'manual' | 'inferred'
     inference_confidence?: number | null

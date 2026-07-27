@@ -142,12 +142,17 @@ def _tree(palace: Palace) -> tuple[str | None, dict[str, dict[str, Any]]]:
             for index, child in enumerate(children_raw)
             if isinstance(child, dict)
         ]
+        data = raw.get("data")
+        node_data = data if isinstance(data, dict) else {}
         result[uid] = {
             "uid": uid,
             "parent_uid": parent_uid,
             "children": children,
             "text": _node_text(raw),
             "content_fingerprint": _content_fingerprint(raw),
+            # 永久标记 = 调度单元边界（scheduling/units.py 的输入）。
+            "permanent_split_mark": node_data.get("permanentSplitMark") is True
+            or node_data.get("permanent_split_mark") is True,
         }
         return uid
 
@@ -286,8 +291,16 @@ def _restore_state(
 
 
 def _apply_card(
-    row: ReviewNodeState, card: Card, *, fingerprint: str, source: str = "manual"
+    row: ReviewNodeState,
+    card: Card,
+    *,
+    fingerprint: str,
+    source: str = "manual",
+    session: Session | None = None,
 ) -> None:
+    # 快照记录实际调度所用的参数，而非模块默认值——否则用户改过
+    # desired_retention 后，历史审计与重算会拿到错误的参数。
+    settings = load_fsrs_settings(session)
     row.state = int(card.state)
     row.step = card.step
     row.stability = card.stability
@@ -296,12 +309,12 @@ def _apply_card(
     row.due_at = due
     row.raw_due_at = due
     row.last_review_at = _naive(card.last_review)
-    row.desired_retention = DEFAULT_RETENTION
-    row.maximum_interval = DEFAULT_MAXIMUM_INTERVAL
+    row.desired_retention = float(settings["desired_retention"])
+    row.maximum_interval = int(settings["maximum_interval"])
     row.content_fingerprint = fingerprint
     row.state_source = source
     row.scheduler_version = SCHEDULER_VERSION
-    row.parameter_version = PARAMETER_VERSION
+    row.parameter_version = str(settings.get("parameter_version") or PARAMETER_VERSION)
     row.updated_at = utc_now_naive()
 
 
@@ -492,6 +505,7 @@ def _projection_from_tree(
     overdue_count = 0
     reinforcement_count = 0
     uninitialized_count = 0
+    backlog_count = 0
     content_changed_count = 0
     severe = 0
     next_due: str | None = None
@@ -507,11 +521,13 @@ def _projection_from_tree(
         if row is None:
             stability = 0.0
             retrievability = 0.0
-            # First-learn: new palace nodes have no FSRS row yet — treat as due now.
-            due_at = now
+            # Backlog：未放出的新卡没有 state 行，不进入任何到期队列。
+            # 每日任务层（daily_plan.release）按新学额度逐日放出并建行。
+            due_at = None
             state_source = "new"
             schedule_source = SCHEDULE_UNINITIALIZED
-            formal_due = True
+            formal_due = False
+            backlog_count += 1
         elif (
             row.content_fingerprint
             and row.content_fingerprint != nodes[uid]["content_fingerprint"]
@@ -673,6 +689,7 @@ def _projection_from_tree(
         "overdue_node_count": overdue_count,
         "reinforcement_due_count": reinforcement_count,
         "uninitialized_node_count": uninitialized_count,
+        "backlog_new_node_count": backlog_count,
         "content_changed_node_count": content_changed_count,
         "next_review_at": next_due,
         "mastered": total > 0 and mastered_count / total >= 0.9 and severe == 0,

@@ -10,7 +10,7 @@ import {
   savePalaceEditorApi,
 } from '@/modules/content/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
+import type { MindMapSelection } from '@/modules/content/public'
 import {
   getFreestyleTemporaryMarksApi,
   replaceFreestyleTemporaryMarksApi,
@@ -65,6 +65,7 @@ export function SplitMarkDialog({
   /** Temporary mode only: selected mark uids. Permanent uses editor_doc flags. */
   const [tempMarked, setTempMarked] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState('')
+  const [unifyProgress, setUnifyProgress] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -167,16 +168,13 @@ export function SplitMarkDialog({
         toast.error('请先点击卡片进行临时标记')
         return
       }
-      const confirmed = await appConfirm(
-        `将永久统一这 ${tempMarked.size} 个标记点及其子树的复习进度为平均值，并改写当前宫殿的随心拆分，直到每个标记支成功「记得/轻松」结算一次。确定继续？`,
-        { title: '确认临时标记', tone: 'danger' },
-      )
+      const confirmed = await appConfirm(unifyProgress ? `将额外平均改写 ${tempMarked.size} 个标记点及子树的 FSRS 进度。此高级操作不可自动恢复，确定继续？` : `保存 ${tempMarked.size} 个临时调度标记？只调整分组和到期日，不改写记忆参数。`, { title: '确认临时标记', tone: unifyProgress ? 'danger' : 'default' })
       if (!confirmed) return
       setSaving(true)
       try {
         const result = await replaceFreestyleTemporaryMarksApi(palaceId, {
           node_uids: Array.from(tempMarked),
-          unify_progress: true,
+          unify_progress: unifyProgress,
           operation_id: `temp-mark-${palaceId}-${Date.now()}`,
         })
         const unify = result.unify
@@ -237,6 +235,7 @@ export function SplitMarkDialog({
     onClose,
     editorState,
     markedCount,
+    unifyProgress,
   ])
 
   if (!open) return null
@@ -244,10 +243,10 @@ export function SplitMarkDialog({
   const isTemporary = mode === 'temporary'
   const title = isTemporary ? '临时标记' : '永久标记'
   const subtitleHint = isTemporary
-    ? '临时 · 评分后消除 · 点击卡片标记/取消 · 确认后统一进度'
+    ? '临时 · 评分后消除 · 默认只调整调度分组，不改写记忆参数'
     : '永久 · 写入宫殿文档 · 点击卡片标记/取消 · 层级按祖先自动推导'
   const confirmLabel = isTemporary
-    ? '完成并统一进度'
+    ? '保存临时标记'
     : markedCount === 0
       ? '清除并保存'
       : '保存永久标记'
@@ -268,6 +267,7 @@ export function SplitMarkDialog({
             </div>
           </div>
           <div className="text-xs tabular-nums text-amber-300">已标 {markedCount}</div>
+          {isTemporary ? <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={unifyProgress} onChange={(event) => setUnifyProgress(event.target.checked)} />高级：平均统一 FSRS 进度</label> : null}
           <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="关闭">
             <X className="size-4" />
           </Button>

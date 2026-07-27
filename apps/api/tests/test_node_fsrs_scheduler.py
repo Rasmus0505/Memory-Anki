@@ -127,15 +127,18 @@ def test_again_and_hard_schedule_immediate_restudy_not_days(db_session):
     assert again_delta <= timedelta(minutes=1, seconds=5)
 
 
-def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
-    """记得/轻松 must not bounce back in 10m/1h learning or relearning steps."""
-    from datetime import timedelta
+def test_learning_steps_apply_verbatim_no_strong_rating_floor(db_session):
+    """FSRS 直出：学习步（10m/1h）真实生效，记得/轻松不再被强制抬到多日。
+
+    新卡第一次记得 → 进入下一学习步（~1小时，仍在 Learning）；
+    到期后再记得 → 毕业进 Review（多日间隔）。
+    """
+    from datetime import UTC, datetime, timedelta
 
     from fsrs import State
 
     palace = _palace(db_session)
 
-    # First Good on a brand-new card would otherwise be ~1h (learning step).
     rate_nodes(
         db_session,
         palace_id=palace.id,
@@ -148,35 +151,35 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
     first = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
     first_raw = first.raw_due_at or first.due_at
     first_delta = first_raw - (first.last_review_at or first_raw)
-    assert first_delta >= timedelta(days=1) - timedelta(seconds=5)
-    assert int(first.state) == int(State.Review)
+    assert timedelta(minutes=5) <= first_delta <= timedelta(hours=2)
+    assert int(first.state) == int(State.Learning)
 
-    # Hard puts the card into a short relearning window…
-    rate_nodes(
-        db_session,
-        palace_id=palace.id,
-        node_uid="b",
-        rating=2,
-        study_session_id="s-relearn",
-        operation_id="op-relearn-hard",
-        rating_scope="single",
-    )
-    # …then Good must still floor to ≥1 day, not the 1h relearning step.
+    # Simulate the 1h step elapsing, then Good again → graduate to Review.
+    first.due_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
+    db_session.commit()
     rate_nodes(
         db_session,
         palace_id=palace.id,
         node_uid="b",
         rating=3,
-        study_session_id="s-relearn",
-        operation_id="op-relearn-good",
+        study_session_id="s-graduate",
+        operation_id="op-graduate",
         rating_scope="single",
     )
-    recovered = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
-    recovered_raw = recovered.raw_due_at or recovered.due_at
-    recovered_delta = recovered_raw - (recovered.last_review_at or recovered_raw)
-    assert recovered_delta >= timedelta(days=1) - timedelta(seconds=5)
-    assert int(recovered.state) == int(State.Review)
+    graduated = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    graduated_raw = graduated.raw_due_at or graduated.due_at
+    graduated_delta = graduated_raw - (graduated.last_review_at or graduated_raw)
+    assert graduated_delta >= timedelta(hours=12)
+    assert int(graduated.state) == int(State.Review)
 
+
+def test_easy_on_new_card_graduates_immediately_with_fsrs_interval(db_session):
+    """轻松跳过学习步直接毕业，间隔由 FSRS 给出（不再有人为 3 天下限）。"""
+    from datetime import timedelta
+
+    from fsrs import State
+
+    palace = _palace(db_session)
     rate_nodes(
         db_session,
         palace_id=palace.id,
@@ -189,7 +192,61 @@ def test_good_and_easy_never_reschedule_same_day_via_learning_steps(db_session):
     easy = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a").one()
     easy_raw = easy.raw_due_at or easy.due_at
     easy_delta = easy_raw - (easy.last_review_at or easy_raw)
-    assert easy_delta >= timedelta(days=3) - timedelta(seconds=5)
+    assert easy_delta >= timedelta(hours=12)
+    assert int(easy.state) == int(State.Review)
+
+
+def test_fuzzing_config_respected_and_preview_deterministic(db_session):
+    """enable_fuzzing 配置生效；间隔预览强制关 fuzz 保证按钮显示稳定。"""
+    from fsrs import Card, Rating, State
+
+    from memory_anki.modules.memory.application.fsrs_runtime import build_scheduler
+    from memory_anki.modules.memory.application.scheduling.kernel import preview_intervals
+
+    # conftest 里测试库 enable_fuzzing=false → session scheduler 不 fuzz。
+    scheduler = build_scheduler(db_session)
+    assert scheduler.enable_fuzzing is False
+    fuzzed = build_scheduler(enable_fuzzing=True)
+    assert fuzzed.enable_fuzzing is True
+
+    # Mature review card: preview must be identical across calls (no fuzz).
+    card = Card(card_id=1)
+    scheduler_plain = build_scheduler(enable_fuzzing=False)
+    for _ in range(3):
+        card, _log = scheduler_plain.review_card(card, Rating(3))
+    assert int(card.state) == int(State.Review)
+    p1 = preview_intervals(None, card=card)
+    p2 = preview_intervals(None, card=card)
+    assert {r: p.interval_seconds for r, p in p1.items()} == {
+        r: p.interval_seconds for r, p in p2.items()
+    }
+    # 四键间隔单调：忘记 < 困难 ≤ 记得 ≤ 轻松。
+    assert p1[1].interval_seconds < p1[2].interval_seconds
+    assert p1[2].interval_seconds <= p1[3].interval_seconds
+    assert p1[3].interval_seconds <= p1[4].interval_seconds
+
+
+def test_parameter_snapshot_records_actual_settings(db_session):
+    """行内参数快照必须等于实际调度配置，而非模块默认值。"""
+    from memory_anki.infrastructure.db._tables.misc import Config
+
+    db_session.add(Config(key="desired_retention", value="0.85"))
+    db_session.add(Config(key="maximum_interval", value="500"))
+    db_session.commit()
+
+    palace = _palace(db_session)
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="b",
+        rating=3,
+        study_session_id="s-snap",
+        operation_id="op-snap",
+        rating_scope="single",
+    )
+    row = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="b").one()
+    assert row.desired_retention == 0.85
+    assert row.maximum_interval == 500
 
 
 def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):
@@ -204,20 +261,73 @@ def test_child_rating_overrides_previous_batch_and_undo_restores(db_session):
     assert restored.stability and restored.stability > 0
 
 
-def test_projection_excludes_root_and_reports_due_nodes(db_session):
+def test_projection_backlog_until_daily_release_then_due(db_session):
+    """新卡先进 backlog（不到期）；每日放出后按额度成为到期新学。"""
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ensure_daily_plan,
+    )
+
     palace = _palace(db_session)
     projection = get_palace_memory_projection(db_session, palace.id)
     assert projection["node_count"] == 3
-    # First-learn: unlearned tree nodes are formal-due so new palaces enter review.
-    assert projection["due_node_count"] == 3
-    assert projection.get("uninitialized_node_count", 0) == 3
+    assert projection["due_node_count"] == 0
+    assert projection.get("backlog_new_node_count", 0) == 3
     assert projection["mastery_percent"] == 0
-    assert projection["has_due_review"] is True
-    assert projection["review_entry_mode"] in {"node", "palace"}
-    assert isinstance(projection["review_branch_summaries"], list)
-    assert len(projection["review_branch_summaries"]) >= 2
-    assert all("branch_uid" in row for row in projection["review_branch_summaries"])
-    assert all("status" in row for row in projection["review_branch_summaries"])
+    assert projection["has_due_review"] is False
+
+    summary = ensure_daily_plan(db_session)
+    assert summary["new_pending"] == 3
+    assert summary["backlog_new"] == 0
+    db_session.commit()
+
+    released = get_palace_memory_projection(db_session, palace.id)
+    assert released["due_node_count"] == 3
+    assert released.get("backlog_new_node_count", 0) == 0
+    assert released["has_due_review"] is True
+    assert released["review_entry_mode"] in {"node", "palace"}
+    assert isinstance(released["review_branch_summaries"], list)
+    assert len(released["review_branch_summaries"]) >= 2
+    assert all("branch_uid" in row for row in released["review_branch_summaries"])
+    assert all("status" in row for row in released["review_branch_summaries"])
+
+
+def test_daily_new_limit_releases_incrementally(db_session):
+    """大宫殿新卡按每日新学额度逐日放出，而不是当天全部到期。"""
+    from memory_anki.infrastructure.db._tables.misc import Config
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ensure_daily_plan,
+    )
+
+    document = {
+        "root": {
+            "data": {"uid": "root", "text": "root"},
+            "children": [
+                {"data": {"uid": f"n{i}", "text": f"N{i}"}, "children": []}
+                for i in range(30)
+            ],
+        }
+    }
+    palace = Palace(
+        title="Big", description="", difficulty=0, review_mode="review",
+        editor_doc=json.dumps(document),
+    )
+    db_session.add(palace)
+    db_session.add(Config(key="daily_new_limit", value="5"))
+    db_session.commit()
+
+    summary = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert summary["new_pending"] == 5
+    assert summary["backlog_new"] == 25
+    projection = get_palace_memory_projection(db_session, palace.id)
+    assert projection["due_node_count"] == 5
+    assert projection["backlog_new_node_count"] == 25
+
+    # 同日重复调用幂等：不重复放出。
+    again = ensure_daily_plan(db_session)
+    db_session.commit()
+    assert again["new_pending"] == 5
+    assert again["backlog_new"] == 25
 
 
 def test_due_rollup_skips_ratings_and_is_request_cached(db_session):
@@ -431,7 +541,7 @@ def test_subtree_skip_direct_preserves_batch_inherited_grandchildren(db_session)
         .all()
     }
     assert origins["c"] == "direct"
-    assert origins["g"] == "batch_inherited"
+    assert origins["g"] == "branch_recall"
 
     before_g = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="g").one()
     before_c = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="c").one()
@@ -560,6 +670,76 @@ def test_content_fingerprint_change_reuses_existing_node_state(db_session):
         assert row.id == old_ids[row.node_uid]
         assert row.content_fingerprint  # refreshed after content edit
         assert row.state_source == "manual"
+
+def test_bulk_mark_writes_zero_fsrs_state(db_session):
+    """批量带过：不建 state 行、不动 S/D/due，只留 bulk_mark 事件痕迹。"""
+    from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
+
+    palace = _palace(db_session)
+    # 先真实评分 a1，再对整枝 bulk_mark：a1 的状态必须原样。
+    rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a1",
+        rating=2,
+        study_session_id="s-bulk",
+        operation_id="op-bulk-direct",
+        rating_scope="single",
+        source_scene="practice",
+    )
+    before = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a1").one()
+    before_stability = before.stability
+    before_due = before.due_at
+
+    result = rate_nodes(
+        db_session,
+        palace_id=palace.id,
+        node_uid="a",
+        rating=3,
+        study_session_id="s-bulk",
+        operation_id="op-bulk-mark",
+        rating_scope="bulk_mark",
+        source_scene="practice",
+    )
+    assert set(result["affected_node_uids"]) == {"a", "a1"}
+    # a 从未真实回忆过 → 不建 state 行（仍是新卡）。
+    assert (
+        db_session.query(ReviewNodeState)
+        .filter_by(palace_id=palace.id, node_uid="a")
+        .first()
+        is None
+    )
+    after = db_session.query(ReviewNodeState).filter_by(palace_id=palace.id, node_uid="a1").one()
+    assert after.stability == before_stability
+    assert after.due_at == before_due
+    events = {
+        row.node_uid: row
+        for row in db_session.query(MindMapRecallEvent)
+        .filter_by(operation_id="op-bulk-mark")
+        .all()
+    }
+    assert events["a"].evidence_origin == "bulk_mark"
+    assert events["a1"].evidence_origin == "bulk_mark"
+    assert events["a"].rating_source == "bulk_mark"
+
+
+def test_quiz_source_scene_rejected(db_session):
+    """quiz 已退出评分体系：非白名单 source_scene 一律拒绝。"""
+    import pytest
+
+    palace = _palace(db_session)
+    with pytest.raises(ValueError, match="source_scene"):
+        rate_nodes(
+            db_session,
+            palace_id=palace.id,
+            node_uid="b",
+            rating=3,
+            study_session_id="s-quiz",
+            operation_id="op-quiz",
+            rating_scope="single",
+            source_scene="quiz",
+        )
+
 
 def test_rate_nodes_returns_slim_payload_without_full_node_details(db_session):
     """Rating hot path must not ship full per-node projection arrays."""

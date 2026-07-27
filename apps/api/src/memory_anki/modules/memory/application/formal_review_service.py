@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.memory.application.formal_review_amendment import (
     reopen_formal_review_for_amendment,
@@ -23,6 +23,11 @@ from memory_anki.modules.memory.application.node_memory_service import (
     due_node_uids_for_entry,
     get_palace_memory_projection,
 )
+from memory_anki.modules.memory.application.review_queue_batching import (
+    build_queue_item,
+    group_nodes_by_local_due_date,
+    large_batch_hint_size,
+)
 from memory_anki.modules.memory.application.review_queue_extras import (
     today_review_counts_by_palace,
 )
@@ -30,6 +35,9 @@ from memory_anki.modules.memory.application.review_queue_extras import (
 # Align with general study-session active set so recovered formal rows stay ratable.
 ACTIVE_REVIEW_STATUSES = ("active", "paused", "recovered")
 INACTIVE_REVIEW_MESSAGE = "本轮正式复习已结束，请返回复习队列重新开始"
+QUEUE_SORT_MODES = frozenset({"due_asc", "due_desc", "due_nodes_desc", "overdue_desc", "title_asc"})
+_QUEUE_SORT_FAR_FUTURE = datetime(9999, 1, 1, tzinfo=UTC)
+_QUEUE_SORT_FAR_PAST = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _json(raw: str | None) -> dict[str, Any]:
@@ -73,59 +81,6 @@ def _palace_payload(palace: Palace, *, include_editor_doc: bool = True) -> dict[
         "attachments": [],
         "chapters": [],
     }
-
-
-def _queue_item(
-    session: Session,
-    palace: Palace,
-    nodes: list[dict[str, Any]],
-    now: datetime,
-    projection: dict[str, Any] | None = None,
-    *,
-    today_review_count: int = 0,
-) -> dict[str, Any]:
-    times = [parsed for item in nodes if (parsed := _dt(item.get("due_at"))) is not None]
-    next_due = to_api_datetime(min(times)) if times else None
-    overdue = sum(1 for item in times if item < now)
-    projection = projection or {}
-    return {
-        "id": palace.id,
-        "palace_id": palace.id,
-        "session_id": None,
-        "algorithm_used": "FSRS",
-        "scheduled_date": next_due[:10] if next_due else now.date().isoformat(),
-        "due_at": next_due,
-        "next_due_at": next_due,
-        "completed": False,
-        "review_number": 0,
-        "review_type": "fsrs",
-        "interval_days": None,
-        "due_node_count": len(nodes),
-        "overdue_node_count": overdue,
-        "schedule_count": len(nodes),
-        "overdue_schedule_count": overdue,
-        "next_due_date": next_due[:10] if next_due else now.date().isoformat(),
-        "review_entry_mode": projection.get("review_entry_mode") or "palace",
-        "review_entry_label": projection.get("review_entry_label"),
-        "primary_branch_uid": projection.get("primary_branch_uid"),
-        "primary_branch_title": projection.get("primary_branch_title"),
-        "due_branch_count": projection.get("due_branch_count") or 0,
-        "review_branch_summaries": list(
-            projection.get("review_branch_summaries") or []
-        ),
-        # Completed formal sessions today (node + full palace each +1).
-        "today_review_count": max(0, int(today_review_count)),
-        "palace": _palace_payload(palace, include_editor_doc=False),
-    }
-
-
-# Default: earliest next_due first so long-overdue palaces surface first.
-# String ISO sort is unsafe when naive/aware formats mix; always parse to datetime.
-QUEUE_SORT_MODES = frozenset(
-    {"due_asc", "due_desc", "due_nodes_desc", "overdue_desc", "title_asc"}
-)
-_QUEUE_SORT_FAR_FUTURE = datetime(9999, 1, 1, tzinfo=UTC)
-_QUEUE_SORT_FAR_PAST = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _queue_item_due_at(item: dict[str, Any]) -> datetime | None:
@@ -194,8 +149,15 @@ def get_fsrs_queue_payload(
     include_items: bool = True,
     sort_by: str = "due_asc",
 ) -> dict[str, Any]:
+    from memory_anki.modules.memory.application.scheduling.daily_plan import (
+        ensure_daily_plan,
+    )
+
     now = datetime.now(UTC)
     tomorrow = datetime.combine(now.date() + timedelta(days=1), time.min, tzinfo=UTC)
+    # 每日任务层：放出今天的新学额度、记账（幂等）。复习不再有额度截断。
+    plan_summary = ensure_daily_plan(session)
+    hint_size = large_batch_hint_size(session)
     palaces = _palaces(session, chapter_id)
     palace_ids = [palace.id for palace in palaces]
     today_counts = today_review_counts_by_palace(session, palace_ids)
@@ -206,7 +168,8 @@ def get_fsrs_queue_payload(
         now=now,
         include_nodes=True,
     )
-    due, later = [], []
+    due: list[dict[str, Any]] = []
+    later: list[dict[str, Any]] = []
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
         nodes = list(projection.get("nodes") or [])
@@ -218,39 +181,26 @@ def get_fsrs_queue_payload(
         ]
         today_count = today_counts.get(int(palace.id), 0)
         if due_nodes:
-            due.append(
-                _queue_item(
-                    session,
-                    palace,
-                    due_nodes,
-                    now,
-                    projection,
+            due.extend(
+                build_queue_item(
+                    session, palace, batch, now, projection, parse_due=_dt,
                     today_review_count=today_count,
+                    large_batch_hint_size=hint_size,
                 )
+                for batch in group_nodes_by_local_due_date(due_nodes, _dt)
             )
         elif later_nodes:
-            later.append(
-                _queue_item(
-                    session,
-                    palace,
-                    later_nodes,
-                    now,
-                    projection,
+            later.extend(
+                build_queue_item(
+                    session, palace, batch, now, projection, parse_due=_dt,
                     today_review_count=today_count,
+                    large_batch_hint_size=hint_size,
                 )
+                for batch in group_nodes_by_local_due_date(later_nodes, _dt)
             )
-    # Always earliest-due first before daily limit so overdue work is not dropped.
     due = sort_queue_items(due, "due_asc")
     later = sort_queue_items(later, "due_asc")
     overdue_count = sum(item["overdue_node_count"] for item in due)
-    if chapter_id is None:
-        config = session.query(Config).filter_by(key="daily_max_reviews").first()
-        try:
-            daily_limit = int(config.value) if config and config.value else 0
-        except (TypeError, ValueError):
-            daily_limit = 0
-        if daily_limit > 0:
-            due = due[:daily_limit]
     # Optional display sort after limit (next-due / dashboard still default due_asc).
     if sort_by != "due_asc":
         due = sort_queue_items(due, sort_by)
@@ -315,6 +265,8 @@ def get_fsrs_queue_payload(
         "due_count": sum(item["due_node_count"] for item in due),
         "later_today_count": sum(item["due_node_count"] for item in later),
         "overdue_count": overdue_count,
+        "consolidate_count": int(plan_summary.get("consolidate_pending") or 0),
+        "plan_summary": plan_summary,
         "smoothed_count": 0,
         "stats": stats,
         "chapter": chapter,
@@ -516,6 +468,7 @@ def start_or_resume_formal_review(
     branch_uid: str | None = None,
     scope_node_uids: list[str] | None = None,
     client_source: str | None = None,
+    consolidate: bool = False,
 ) -> StudySession:
     from memory_anki.modules.memory.application.wave_service import (
         find_active_formal_wave,
@@ -579,7 +532,7 @@ def start_or_resume_formal_review(
     projection = get_palace_memory_projection(session, palace_id)
     resolved_mode = entry_mode or projection.get("review_entry_mode") or "palace"
     if requested_scope is not None:
-        # Unit-scoped start (freestyle): force node mode and exact due intersection.
+        # Unit-scoped or consolidation start (freestyle): force node mode and exact due intersection.
         resolved_mode = "node"
     if resolved_mode == "none":
         raise ValueError("palace has no due FSRS nodes")
@@ -589,6 +542,7 @@ def start_or_resume_formal_review(
         entry_mode=resolved_mode if resolved_mode in {"node", "palace"} else "palace",
         branch_uid=branch_uid or projection.get("primary_branch_uid"),
         scope_node_uids=requested_scope,
+        allow_consolidate=consolidate,
     )
     if not frozen:
         raise ValueError("palace has no due FSRS nodes")
@@ -635,7 +589,7 @@ def start_or_resume_formal_review(
                     "frozen_due_node_uids": frozen,
                     "wave_id": wave_id,
                     "chapter_id": chapter_id,
-                    "review_entry_mode": resolved_mode,
+                    "review_entry_mode": "consolidate" if consolidate else resolved_mode,
                     "primary_branch_uid": (
                         branch_uid or projection.get("primary_branch_uid")
                         if resolved_mode == "node"
@@ -651,6 +605,7 @@ def start_or_resume_formal_review(
                     ),
                     "review_entry_label": projection.get("review_entry_label"),
                     "explicit_scope": bool(requested_scope is not None),
+                    "consolidate": consolidate,
                     "editor_fingerprint": hashlib.sha256(
                         (palace.editor_doc or "").encode("utf-8")
                     ).hexdigest(),

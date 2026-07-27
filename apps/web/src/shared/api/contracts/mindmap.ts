@@ -57,6 +57,13 @@ export type MindMapTask = 'build' | 'learn'
 export type MindMapRecallRating = 1 | 2 | 3 | 4
 export type MindMapLegacyRecallRating = MindMapRecallRating | 5
 export type MindMapRecallRatingSource = 'manual' | 'inferred'
+/**
+ * Rating scope semantics (backend):
+ * - single: only this node was truly recalled
+ * - branch_recall: the whole expanded branch was truly recalled (legacy name "subtree")
+ * - bulk_mark: batch pass-through without real recall — zero FSRS/schedule impact
+ */
+export type MindMapRecallRatingScope = 'single' | 'subtree' | 'branch_recall' | 'bulk_mark'
 export type MindMapRecallRound = 'first' | 'weak_retry'
 export type MindMapMasteryStatus = 'unknown' | 'stable' | 'reinforce' | 'weak'
 export type MindMapNodeManualLabel = 'weak' | 'mastered' | null
@@ -70,8 +77,8 @@ export interface MindMapRecallEvent {
   recall_round: MindMapRecallRound
   rating: MindMapLegacyRecallRating
   rating_source: MindMapRecallRatingSource
-  rating_scope?: 'single' | 'subtree'
-  evidence_origin?: 'direct' | 'batch_inherited'
+  rating_scope?: MindMapRecallRatingScope
+  evidence_origin?: 'direct' | 'batch_inherited' | 'bulk_mark'
   inference_confidence: number | null
   response_ms: number | null
   hint_count: number
