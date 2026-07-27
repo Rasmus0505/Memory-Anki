@@ -31,6 +31,7 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
   getSceneEffectiveVolume,
   readReviewFeedbackSettings,
+  resolveFeedbackChannels,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { toast } from '@/shared/feedback/toast'
 import type { useTimedSession } from '@/shared/hooks/useTimedSession'
@@ -248,8 +249,7 @@ export function useFreestyleQuizFlow({
     }
     emittedMilestonesRef.current.add(currentStreak)
     if (
-      feedbackSettings.mode !== 'immersive' ||
-      feedbackSettings.milestoneEffectsEnabled === false ||
+      !resolveFeedbackChannels(feedbackSettings).milestoneEffects ||
       !feedbackSettings.scenes.milestone.enabled
     ) {
       return

@@ -12,6 +12,7 @@ import {
   REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
   getReviewFeedbackEffectiveVolume,
   readReviewFeedbackSettings,
+  resolveFeedbackChannels,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { dispatchGlobalFeedback } from './globalFeedbackModel'
 import {
@@ -93,7 +94,6 @@ function getFeedbackSettings() {
   if (typeof window === 'undefined') {
     return {
       animationEnabled: true,
-      mode: 'immersive' as const,
       soundEnabled: true,
       learningSoundsEnabled: true,
       milestoneEffectsEnabled: true,
@@ -102,13 +102,15 @@ function getFeedbackSettings() {
     }
   }
   const settings = readReviewFeedbackSettings()
+  // The three channels are tri-state: resolve preset defaults here so callers
+  // keep working with plain booleans.
+  const channels = resolveFeedbackChannels(settings)
   return {
     animationEnabled: settings.animationEnabled,
-    mode: settings.mode,
     soundEnabled: settings.soundEnabled,
-    learningSoundsEnabled: settings.learningSoundsEnabled !== false,
-    milestoneEffectsEnabled: settings.milestoneEffectsEnabled !== false,
-    completionEffectsEnabled: settings.completionEffectsEnabled !== false,
+    learningSoundsEnabled: channels.learningSounds,
+    milestoneEffectsEnabled: channels.milestoneEffects,
+    completionEffectsEnabled: channels.completionEffects,
     volume: getReviewFeedbackEffectiveVolume(settings),
   }
 }
@@ -127,7 +129,7 @@ export function showToast(
 
 export function playFeedbackAudio(request: FeedbackAudioRequest) {
   const settings = getFeedbackSettings()
-  const soundEnabled = settings.soundEnabled && settings.mode === 'immersive'
+  const soundEnabled = settings.soundEnabled
   const volume = clampVolume(request.volume ?? settings.volume)
   if (!soundEnabled || volume <= 0) return
   if (
@@ -175,11 +177,10 @@ export function triggerCelebration(request: TriggerCelebrationRequest) {
   const animationEnabled =
     (request.animationEnabled ?? true) &&
     settings.animationEnabled &&
-    settings.mode === 'immersive' &&
     (!milestoneScenario || settings.milestoneEffectsEnabled) &&
     (!completionScenario || settings.completionEffectsEnabled)
   const soundEnabled =
-    (request.soundEnabled ?? settings.soundEnabled) && settings.mode === 'immersive'
+    request.soundEnabled ?? settings.soundEnabled
   const volume = clampVolume(request.volume ?? settings.volume)
 
   if (animationEnabled) {

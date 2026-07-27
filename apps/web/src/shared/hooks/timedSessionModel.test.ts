@@ -42,26 +42,25 @@ describe('advanceTickState', () => {
 describe('resolveTimedSessionAutomation', () => {
   it('adds the warning grace window to configured inactivity timing', () => {
     expect(resolveTimedSessionAutomation({
-      inactiveAutoPauseSeconds: 120,
-      inactivePauseGraceSeconds: 30,
-      hiddenAutoPauseSeconds: 15,
-      autoPauseRollbackSeconds: 0,
+      idleTimeoutSeconds: 120,
+      idleGraceSeconds: 30,
+      backgroundGraceSeconds: 15,
     }, {})).toEqual({
       inactivityWarningMs: 120_000,
       inactivityGraceMs: 30_000,
       autoPauseMs: 150_000,
       hiddenPauseMs: 15_000,
       resumeWindowMs: 120_000,
-      autoPauseRollbackSeconds: 0,
+      // Only the warned-about grace window is rolled back, never the timeout.
+      autoPauseRollbackSeconds: 30,
     })
   })
 
   it('keeps explicit millisecond auto-pause overrides as the final deadline', () => {
     const resolved = resolveTimedSessionAutomation({
-      inactiveAutoPauseSeconds: 120,
-      inactivePauseGraceSeconds: 30,
-      hiddenAutoPauseSeconds: 15,
-      autoPauseRollbackSeconds: 0,
+      idleTimeoutSeconds: 120,
+      idleGraceSeconds: 30,
+      backgroundGraceSeconds: 15,
     }, { autoPauseMs: 20_000 })
 
     expect(resolved.autoPauseMs).toBe(20_000)

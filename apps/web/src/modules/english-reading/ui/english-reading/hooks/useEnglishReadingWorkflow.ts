@@ -298,12 +298,7 @@ export function useEnglishReadingWorkflow({
 
   useEffect(() => {
     if (!version?.id || !isActive || timerStatus !== "idle") return;
-    if (
-      !shouldAutoStartOnPageEnter(
-        readTimerAutomationConfig(),
-        "english_reading",
-      )
-    ) {
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) {
       return;
     }
     startTimer({ source: "english_reading_open" });

@@ -68,7 +68,7 @@ describe('usePalaceEditPage draft creation', () => {
       expect(screen.getByText('测试宫殿')).toBeTruthy()
     })
 
-    expect(shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything(), 'palace_edit')
+    expect(shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything())
     expect(timedSessionMock.start).not.toHaveBeenCalled()
   })
 

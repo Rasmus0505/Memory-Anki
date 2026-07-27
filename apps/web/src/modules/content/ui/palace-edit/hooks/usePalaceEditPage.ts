@@ -219,7 +219,7 @@ export function usePalaceEditPage() {
     if (!palaceId || !documentState.editorState) return
     if (!isActive) return
     if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'palace_edit')) return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
   }, [documentState.editorState, isActive, palaceId, timer])
 

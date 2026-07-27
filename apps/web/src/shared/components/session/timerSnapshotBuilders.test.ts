@@ -58,6 +58,7 @@ describe('buildStudyTimerSnapshot', () => {
       activeEntry: createEntry({ effectiveSeconds: 1_502 }),
       focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
       automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
+      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
     })
 
     expect(snapshot.displaySeconds).toBe(1_502)
@@ -68,11 +69,13 @@ describe('buildStudyTimerSnapshot', () => {
     expect(snapshot.availableActions).toEqual(['continueRound', 'startGoalBreak'])
   })
 
-  it('shows the 30-second idle warning without changing running timer status', () => {
+  it('opens the idle warning at the timeout and counts down the grace window', () => {
     const snapshot = buildStudyTimerSnapshot({
-      activeEntry: createEntry({ effectiveSeconds: 120, idleSeconds: 90 }),
+      // Idle just hit the 120s timeout, so the whole 30s grace window is left.
+      activeEntry: createEntry({ effectiveSeconds: 120, idleSeconds: 120 }),
       focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
       automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
+      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
     })
 
     expect(snapshot.status).toBe('running')
@@ -94,6 +97,7 @@ describe('buildStudyTimerSnapshot', () => {
       }),
       focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
       automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
+      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
     })
 
     expect(snapshot.displaySeconds).toBe(1_620)

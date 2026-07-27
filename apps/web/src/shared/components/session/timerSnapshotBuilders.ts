@@ -1,12 +1,6 @@
-import {
-  getTimerAutomationRule,
-  type TimerAutomationConfig,
-} from '@/shared/components/session/timer-automation-config'
-import {
-  getTimerFocusRule,
-  TIMER_FOCUS_SCENE_LABELS,
-  type TimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
+import type { TimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
+import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
+import { TIMER_FOCUS_SCENE_LABELS } from '@/shared/components/session/timer-scenes'
 import type { BreakGuardConfig } from '@/shared/components/session/break-guard-config'
 import type { BreakGuardState } from '@/shared/components/session/breakGuardModel'
 import type {
@@ -35,18 +29,18 @@ export function buildStudyTimerSnapshot({
   activeEntry,
   focusConfig,
   automationConfig,
+  breakConfig,
   feedbackSignal = null,
 }: {
   activeEntry: GlobalTimerRegistration | null
   focusConfig: TimerFocusConfig
   automationConfig: TimerAutomationConfig
+  breakConfig: BreakGuardConfig
   feedbackSignal?: UnifiedTimerFeedbackSignal | null
 }): UnifiedTimerSnapshot {
   const scene = activeEntry?.scene ?? null
   const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '计时器'
-  const focusRule = scene ? getTimerFocusRule(scene, focusConfig) : focusConfig.global
-  const automationRule = scene ? getTimerAutomationRule(scene, automationConfig) : null
-  const primarySeconds = Math.max(60, focusRule.primaryMinutes * 60)
+  const primarySeconds = Math.max(60, focusConfig.primaryMinutes * 60)
   const effectiveSeconds = activeEntry?.timer.effectiveSeconds ?? 0
   const roundState = activeEntry?.timer.focusRound
   const roundStartedAt = Math.min(
@@ -58,11 +52,13 @@ export function buildStudyTimerSnapshot({
   const status = activeEntry?.timer.status ?? 'idle'
   const goalReached = Boolean(activeEntry && roundElapsedSeconds >= primarySeconds)
   const idleSeconds = activeEntry?.timer.idleSeconds ?? 0
-  const warningThreshold = Math.max(0, automationRule?.inactiveAutoPauseSeconds ?? 0)
-  const warningWindowSeconds = Math.min(60, warningThreshold)
+  const warningThreshold = Math.max(0, automationConfig.idleTimeoutSeconds)
+  const graceSeconds = Math.max(0, automationConfig.idleGraceSeconds)
+  // The warning owns the grace window: it opens when the idle timeout is hit
+  // and counts down the seconds left before the auto-pause fires.
   const idleWarningRemainingSeconds =
-    activeEntry && status === 'running' && warningThreshold > 0 && idleSeconds >= warningThreshold - warningWindowSeconds
-      ? Math.max(0, warningThreshold - idleSeconds)
+    activeEntry && status === 'running' && warningThreshold > 0 && idleSeconds >= warningThreshold
+      ? Math.max(0, warningThreshold + graceSeconds - idleSeconds)
       : null
   const studyPhase: UnifiedTimerStudyPhase = !activeEntry
     ? 'idle'
@@ -84,13 +80,15 @@ export function buildStudyTimerSnapshot({
           ? '计时已暂停，本轮进度已保留'
           : studyPhase === 'completed'
             ? '本次学习已经完成'
-            : activeEntry && automationRule
+            : activeEntry && scene
               ? `专注中 · 闲置 ${idleSeconds}/${warningThreshold} 秒`
               : '当前无学习会话'
   const secondaryText = activeEntry
     ? `本轮 ${formatClock(Math.min(roundElapsedSeconds, primarySeconds))}/${formatClock(primarySeconds)} · 第 ${roundIndex} 轮`
     : `本轮 ${formatClock(0)}/${formatClock(primarySeconds)}`
-  const suggestedBreakMinutes = Math.max(1, Math.round(focusRule.breakMinutes ?? 5))
+  // The first break preset is the suggested length after a round. Focus config
+  // used to define this separately, so the two could silently disagree.
+  const suggestedBreakMinutes = Math.max(1, Math.round(breakConfig.presetMinutes[0] ?? 5))
   const semanticState = studyPhase === 'goal_reached'
     ? 'goal'
     : studyPhase === 'idle_warning'

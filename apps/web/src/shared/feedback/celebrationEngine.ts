@@ -1,4 +1,15 @@
-import confetti from 'canvas-confetti'
+import type confetti from 'canvas-confetti'
+
+type ConfettiApi = typeof confetti
+type ConfettiLauncher = ReturnType<ConfettiApi['create']>
+
+// canvas-confetti 惰性加载：庆祝动画非关键路径，不进入首屏静态依赖图。
+let confettiApiPromise: Promise<ConfettiApi> | null = null
+
+function loadConfettiApi() {
+  confettiApiPromise ??= import('canvas-confetti').then((module) => module.default)
+  return confettiApiPromise
+}
 
 export type CelebrationPreset =
   | 'random_direction'
@@ -52,10 +63,7 @@ interface CelebrationPresetDebugConfig {
 }
 
 interface CelebrationPresetDefinition extends CelebrationPresetDebugConfig {
-  tick: (
-    launch: ReturnType<typeof confetti.create>,
-    progress: CelebrationProgress,
-  ) => void
+  tick: (launch: ConfettiLauncher, progress: CelebrationProgress) => void
 }
 
 const GLOBAL_CONFETTI_CANVAS_ID = 'memory-anki-global-confetti-canvas'
@@ -74,7 +82,7 @@ const SCENARIO_DURATION_MULTIPLIER: Record<CelebrationScenario, number> = {
 }
 
 let sharedCanvas: HTMLCanvasElement | null = null
-let sharedLauncher: ReturnType<typeof confetti.create> | null = null
+let sharedLauncher: ConfettiLauncher | null = null
 let activeRunId = 0
 const scheduledTimeouts = new Set<number>()
 const scheduledIntervals = new Set<number>()
@@ -114,10 +122,7 @@ function clearScheduledWork() {
   scheduledIntervals.clear()
 }
 
-function emitBurst(
-  launch: ReturnType<typeof confetti.create>,
-  options: CelebrationBurstOptions,
-) {
+function emitBurst(launch: ConfettiLauncher, options: CelebrationBurstOptions) {
   void launch({
     angle: options.angle,
     colors: options.colors,
@@ -396,7 +401,7 @@ function resolveDurationMs(
   return Math.round((preset.minDurationMs + span * amountRatio) * scenarioMultiplier)
 }
 
-function ensureLauncher() {
+async function ensureLauncher(): Promise<ConfettiLauncher | null> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null
   if (sharedCanvas && sharedLauncher && document.body.contains(sharedCanvas)) {
     return sharedLauncher
@@ -422,7 +427,8 @@ function ensureLauncher() {
   }
 
   sharedCanvas = canvas
-  sharedLauncher = confetti.create(canvas, {
+  const confettiApi = await loadConfettiApi()
+  sharedLauncher = confettiApi.create(canvas, {
     resize: true,
     useWorker: true,
   })
@@ -445,7 +451,7 @@ function canEmitConfetti(reducedMotion: boolean) {
 }
 
 function runPreset(
-  launch: ReturnType<typeof confetti.create>,
+  launch: ConfettiLauncher,
   preset: CelebrationPresetDefinition,
   amount: number,
   durationMs: number,
@@ -496,7 +502,7 @@ export function launchCelebrationPreset(args: {
   amount?: number
   durationMs?: number
   scenario?: CelebrationScenario
-}) {
+}): Promise<void> {
   const {
     preset,
     reducedMotion,
@@ -504,18 +510,25 @@ export function launchCelebrationPreset(args: {
     durationMs,
     scenario = DEFAULT_SCENARIO,
   } = args
-  if (!canEmitConfetti(reducedMotion)) return
-  const launch = ensureLauncher()
-  if (!launch) return
+  if (!canEmitConfetti(reducedMotion)) return Promise.resolve()
 
-  const definition = PRESET_DEFINITIONS[preset]
-  const normalizedAmount = clamp(
-    scenario === 'preview' ? Math.max(amount, PREVIEW_AMOUNT) : amount,
-    0,
-    3,
-  )
-  const resolvedDuration = resolveDurationMs(definition, normalizedAmount, scenario, durationMs)
-  runPreset(launch, definition, normalizedAmount, resolvedDuration)
+  return (async () => {
+    try {
+      const launch = await ensureLauncher()
+      if (!launch) return
+
+      const definition = PRESET_DEFINITIONS[preset]
+      const normalizedAmount = clamp(
+        scenario === 'preview' ? Math.max(amount, PREVIEW_AMOUNT) : amount,
+        0,
+        3,
+      )
+      const resolvedDuration = resolveDurationMs(definition, normalizedAmount, scenario, durationMs)
+      runPreset(launch, definition, normalizedAmount, resolvedDuration)
+    } catch {
+      // 庆祝动画非关键路径：confetti chunk 加载失败时静默跳过。
+    }
+  })()
 }
 
 export function __resetCelebrationEngineForTests() {

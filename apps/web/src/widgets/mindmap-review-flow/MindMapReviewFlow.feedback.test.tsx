@@ -9,6 +9,7 @@ import {
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 import { writeReviewFeedbackSettings } from "@/shared/feedback/reviewFeedbackSettings";
+import { createReviewFeedbackSettingsFixture } from "@/shared/feedback/reviewFeedbackSettings.fixture";
 describe("MindMapReviewFlow feedback", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -96,63 +97,23 @@ describe("MindMapReviewFlow feedback", () => {
 
   it("dismisses the combo milestone burst on time even if the parent rerenders repeatedly", async () => {
     vi.useFakeTimers();
-    writeReviewFeedbackSettings({
-      schemaVersion: 3,
-      preset: 'balanced',
-      visualStyle: 'warm_playful',
-      reducedCelebrationMotion: false,
-      scenes: {
-        review: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 0.55, cooldownMs: 0 },
-        milestone: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0, steps: [2, 4, 6, 10, 15] },
-        completion: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 1.6, cooldownMs: 0 },
-        timer: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 2.2, cooldownMs: 12000 },
-        quiz: { enabled: true, soundEnabled: true, animationEnabled: true, confettiAmount: 0.8, cooldownMs: 0 },
-      },
-      mode: "immersive",
-      soundEnabled: true,
-      volume: 1.5,
-      baseVolumeMultiplier: 1,
-      confettiAmount: 1.6,
-      animationEnabled: true,
-      surpriseEnabled: true,
-      soundTheme: "classic",
-      globalIntensity: "balanced",
-      desktopNotificationsEnabled: false,
-      learningSoundsEnabled: true,
-      milestoneEffectsEnabled: true,
-      completionEffectsEnabled: true,
-      celebration: {
-        globalCooldownMs: 0,
-        milestone: {
-          enabled: true,
-          steps: [2, 4, 6, 10, 15],
-          cooldownMs: 0,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: true,
+    // Immersive-equivalent settings: everything on, no cooldowns.
+    writeReviewFeedbackSettings(
+      createReviewFeedbackSettingsFixture({
+        preset: 'motivating',
+        soundEnabled: true,
+        animationEnabled: true,
+        volume: 1.5,
+        scenes: {
+          ...createReviewFeedbackSettingsFixture().scenes,
+          milestone: {
+            ...createReviewFeedbackSettingsFixture().scenes.milestone,
+            cooldownMs: 0,
+            steps: [2, 4, 6, 10, 15],
+          },
         },
-        branchClear: {
-          enabled: true,
-          cooldownMs: 0,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: true,
-        },
-        allClearReady: {
-          enabled: true,
-          cooldownMs: 0,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: true,
-        },
-        sessionComplete: {
-          enabled: true,
-          confettiAmount: 1.6,
-          soundEnabled: true,
-          animationEnabled: true,
-        },
-      },
-    });
+      }),
+    );
     const comboEditorState = {
       editor_doc: {
         root: {

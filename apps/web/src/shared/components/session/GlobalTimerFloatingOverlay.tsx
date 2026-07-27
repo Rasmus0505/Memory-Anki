@@ -14,7 +14,6 @@ import {
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
-  getTimerCelebrationConfig,
   readTimerFocusConfig,
   resetTimerFocusConfig,
   saveTimerFocusConfig,
@@ -23,8 +22,9 @@ import {
 } from '@/shared/components/session/timer-focus-config'
 import { emitTimerCelebration } from '@/shared/components/session/timer-celebration'
 import { useMindMapFeedbackSettings } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
-import { getReviewFeedbackEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
+import { getSceneEffectiveVolume } from '@/shared/feedback/reviewFeedbackSettings'
 import { playFeedbackAudio } from '@/shared/feedback/feedbackCenter'
+import { notifyBreakExpired } from '@/shared/feedback/breakNotification'
 import {
   readTimerOverlayLayout,
   saveTimerOverlayLayout,
@@ -162,6 +162,7 @@ export function GlobalTimerFloatingOverlay({
     setPulseKind(signal.kind)
     setPulseNonce((current) => current + 1)
     const kind = signal.kind === 'goal' ? 'primary' : 'secondary'
+    const sceneKey = kind === 'primary' ? 'timerRound' : 'timerInterval'
     emitTimerCelebration({
       completionCount: signal.ordinal,
       kind,
@@ -169,12 +170,14 @@ export function GlobalTimerFloatingOverlay({
         feedbackSettings.reducedCelebrationMotion ||
         (typeof window.matchMedia === 'function' &&
           window.matchMedia('(prefers-reduced-motion: reduce)').matches),
-      soundEnabled: feedbackSettings.soundEnabled && feedbackSettings.mode === 'immersive',
-      volume: getReviewFeedbackEffectiveVolume(feedbackSettings),
-      feedbackIntensity: focusConfig.feedbackIntensity,
-      eventConfig: getTimerCelebrationConfig(kind, focusConfig),
+      soundEnabled: feedbackSettings.soundEnabled,
+      // One formula, one page: base volume × this scene's boost, both of which
+      // now live together in the feedback centre.
+      volume: getSceneEffectiveVolume(feedbackSettings, sceneKey),
+      preset: feedbackSettings.preset,
+      scene: feedbackSettings.scenes[sceneKey],
     })
-  }, [feedbackSettings, focusConfig, snapshot.feedbackSignal])
+  }, [feedbackSettings, snapshot.feedbackSignal])
 
   React.useEffect(() => {
     const expired = snapshot.mode === 'break' && snapshot.status === 'expired'
@@ -185,14 +188,10 @@ export function GlobalTimerFloatingOverlay({
     if (breakExpiredNotifiedRef.current) return
     breakExpiredNotifiedRef.current = true
     playFeedbackAudio({ event: 'navigation', audioScope: 'global' })
-    if (
-      feedbackSettings.desktopNotificationsEnabled &&
-      'Notification' in window &&
-      Notification.permission === 'granted'
-    ) {
-      new Notification('休息时间到了', { body: '准备好后手动开始下一轮学习。' })
+    if (breakConfig.notifyOnBreakExpired) {
+      void notifyBreakExpired()
     }
-  }, [feedbackSettings.desktopNotificationsEnabled, snapshot.mode, snapshot.status])
+  }, [breakConfig.notifyOnBreakExpired, snapshot.mode, snapshot.status])
 
   const {
     beginDrag,

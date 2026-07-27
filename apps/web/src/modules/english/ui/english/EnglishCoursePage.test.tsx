@@ -465,7 +465,7 @@ describe('EnglishCoursePage', () => {
     await screen.findByText('测试英语课')
 
     await waitFor(() => {
-      expect(mocks.shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything(), 'english')
+      expect(mocks.shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything())
     })
     expect(mocks.timerStartMock).toHaveBeenCalledWith({ source: 'page_enter', scene: 'english_course' })
     expect(screen.queryByTestId('session-timer-bar')).toBeNull()

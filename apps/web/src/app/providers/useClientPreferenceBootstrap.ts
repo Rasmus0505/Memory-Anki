@@ -64,6 +64,7 @@ import {
   sanitizeMarkColorLabelsSettings,
 } from '@/shared/preferences/markColorLabels'
 import { emitAppEvent } from '@/shared/events/appEvents'
+import { migrateTimerAndFeedbackConfigs } from '@/shared/components/session/timerConfigMigration'
 
 export function useClientPreferenceBootstrap() {
   useEffect(() => {
@@ -74,6 +75,10 @@ export function useClientPreferenceBootstrap() {
 export async function bootstrapClientPreferences() {
   await initializeClientPreferences()
   if (typeof window === 'undefined') return
+
+  // Must precede the migrations below: those sanitize each payload on its way
+  // to the backend, and the new schemas drop the very fields this carries over.
+  await migrateTimerAndFeedbackConfigs()
 
   const migrations = [
     migrateAndNotify(

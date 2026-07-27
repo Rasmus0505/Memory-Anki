@@ -3,10 +3,7 @@ import {
   type UnifiedTimerFeedbackSignal,
 } from '@/shared/components/session/desktopTimerBridge'
 import type { GlobalTimerRegistration } from '@/shared/components/session/globalTimerModel'
-import {
-  getTimerFocusRule,
-  type TimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
+import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 
 export function useTimerFocusCycle(
   activeEntry: GlobalTimerRegistration | null,
@@ -23,11 +20,10 @@ export function useTimerFocusCycle(
       return
     }
 
-    const focusRule = getTimerFocusRule(activeEntry.scene, focusConfig)
-    const goalSeconds = Math.max(60, Math.round(focusRule.primaryMinutes * 60))
+    const goalSeconds = Math.max(60, Math.round(focusConfig.primaryMinutes * 60))
     const intervalSeconds = Math.max(
       60,
-      Math.min(goalSeconds, Math.round(focusRule.secondaryMinutes * 60)),
+      Math.min(goalSeconds, Math.round(focusConfig.secondaryMinutes * 60)),
     )
     const roundState = activeEntry.timer.focusRound
     const roundElapsedSeconds = Math.max(

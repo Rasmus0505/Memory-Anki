@@ -58,16 +58,10 @@ export function TimerAutomationDialog({
     setDraft,
     setFocusDraft,
     setBreakDraft,
-    handleModeChange,
     handleFieldChange,
     handleAutoStartChange,
-    handleActionChange,
-    handleFocusModeChange,
+    handleKeepScreenAwakeChange,
     handleFocusFieldChange,
-    handleFeedbackIntensityChange,
-    handleCelebrationBooleanChange,
-    handleCelebrationVolumeChange,
-    handleCelebrationPresetChange,
     handleBreakBooleanChange,
     handleBreakNumberChange,
     handleBreakTextChange,
@@ -75,7 +69,7 @@ export function TimerAutomationDialog({
     parsedConfig,
     parsedFocusConfig,
     parsedBreakConfig,
-  } = useTimerConfigDrafts({ open, config, focusConfig, breakConfig })
+  } = useTimerConfigDrafts({ active: open, config, focusConfig, breakConfig })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,7 +85,7 @@ export function TimerAutomationDialog({
             <div>
               <DialogTitle>专注计时设置</DialogTitle>
               <DialogDescription className="mt-1">
-                先设置常用的专注轮次、闲置预警与休息时长，再按需展开高级选项。
+                学习中常用的几项。完整设置（后台宽限、休息高级项、反馈细则）在「计时与休息」页。
               </DialogDescription>
             </div>
           </div>
@@ -103,29 +97,28 @@ export function TimerAutomationDialog({
           className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
         >
           <TimerAutomationSection
+            variant="compact"
             draft={draft}
-            onModeChange={handleModeChange}
             onFieldChange={handleFieldChange}
             onAutoStartChange={handleAutoStartChange}
-            onActionChange={handleActionChange}
+            onKeepScreenAwakeChange={handleKeepScreenAwakeChange}
           />
           <TimerFocusSection
+            variant="compact"
             focusDraft={focusDraft}
             parsedFocusConfig={parsedFocusConfig}
-            onFocusModeChange={handleFocusModeChange}
+            parsedBreakConfig={parsedBreakConfig}
             onFocusFieldChange={handleFocusFieldChange}
-            onFeedbackIntensityChange={handleFeedbackIntensityChange}
-            onCelebrationBooleanChange={handleCelebrationBooleanChange}
-            onCelebrationVolumeChange={handleCelebrationVolumeChange}
-            onCelebrationPresetChange={handleCelebrationPresetChange}
           />
           <TimerBreakGuardSection
+            variant="compact"
             breakDraft={breakDraft}
             parsedBreakConfig={parsedBreakConfig}
             onBreakBooleanChange={handleBreakBooleanChange}
             onBreakNumberChange={handleBreakNumberChange}
             onBreakTextChange={handleBreakTextChange}
             onBreakAlertStrengthChange={handleBreakAlertStrengthChange}
+            onNotifyOnBreakExpiredChange={() => {}}
           />
         </div>
 

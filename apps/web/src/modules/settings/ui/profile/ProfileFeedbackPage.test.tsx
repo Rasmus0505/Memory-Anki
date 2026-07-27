@@ -42,7 +42,29 @@ describe('ProfileFeedbackPage', () => {
     expect(screen.getByRole('button', { name: /平衡/ }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('switch', { name: '声音反馈' })).toBeTruthy()
     expect(screen.queryByText('计时器反馈设置')).toBeNull()
-    expect(screen.queryByText('烟花类型')).toBeNull()
+  })
+
+  it('owns every celebration detail, including the timer scenes', () => {
+    // Timer celebration used to be configured on the timer page with a second
+    // set of labels for the same confetti presets.
+    renderPage()
+
+    expect(screen.getByText('计时 · 阶段提醒')).toBeTruthy()
+    expect(screen.getByText('计时 · 整轮完成')).toBeTruthy()
+    expect(screen.getByLabelText('计时 · 整轮完成烟花类型')).toBeTruthy()
+  })
+
+  it('lets an explicit channel choice survive a preset switch', () => {
+    renderPage()
+
+    const completion = screen.getByRole('switch', { name: '最终完成效果' })
+    fireEvent.click(completion)
+    expect(screen.getByRole('button', { name: /已自定义/ })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /激励/ }))
+    expect(
+      screen.getByRole('switch', { name: '最终完成效果' }).getAttribute('aria-checked'),
+    ).toBe('false')
   })
 
   it('applies a preset as a draft and confirms save inline', () => {
@@ -75,18 +97,13 @@ describe('ProfileFeedbackPage', () => {
     expect(emitReviewConfetti).toHaveBeenNthCalledWith(2, expect.objectContaining({ kind: 'session_complete' }))
   })
 
-  it('requests notification permission only after an explicit opt-in and keeps a denial local', async () => {
-    const requestPermission = vi.fn().mockResolvedValue('denied')
-    Object.defineProperty(window, 'Notification', {
-      configurable: true,
-      value: { permission: 'default', requestPermission },
-    })
+  it('keeps timing rules off the feedback page', () => {
+    // This page answers "how does the app respond to me". When to count study
+    // time and when to rest belongs to 计时与休息.
     renderPage()
 
-    fireEvent.click(screen.getByRole('switch', { name: '桌面通知' }))
-
-    expect(requestPermission).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('桌面通知权限未开启，计时器仍会保留常驻状态')).toBeTruthy()
-    expect(screen.getByRole('switch', { name: '桌面通知' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('switch', { name: '桌面通知' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: '计时中保持屏幕常亮' })).toBeNull()
+    expect(screen.getByRole('switch', { name: '声音反馈' })).toBeTruthy()
   })
 })

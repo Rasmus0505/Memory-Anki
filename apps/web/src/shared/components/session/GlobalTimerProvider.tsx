@@ -9,7 +9,6 @@ import {
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
-  getTimerFocusRule,
   readTimerFocusConfig,
   resetTimerFocusConfig,
   saveTimerFocusConfig,
@@ -40,6 +39,7 @@ import {
 import { useBreakGuardMachine } from '@/shared/components/session/useBreakGuardMachine'
 import { useDesktopTimerBridgeSync } from '@/shared/components/session/useDesktopTimerBridgeSync'
 import { useTimerFocusCycle } from '@/shared/components/session/useTimerFocusCycle'
+import { useScreenWakeLock } from '@/shared/hooks/useScreenWakeLock'
 import {
   GlobalTimerActionsContext,
   type GlobalTimerActions,
@@ -89,6 +89,11 @@ export function GlobalTimerProvider({
     setBreakState,
   } = useBreakGuardMachine({ activeEntry, entries })
   const feedbackSignal = useTimerFocusCycle(activeEntry, focusConfig)
+
+  // One place covers every study scene: the registry always knows which timer
+  // is live. Screen-off is what suspends timing on phones, so hold the lock
+  // only while actually counting.
+  useScreenWakeLock(automationConfig.keepScreenAwake && activeEntry?.timer.status === 'running')
 
   React.useEffect(() => {
     const handleMainAppClick = (event: MouseEvent) => {
@@ -195,8 +200,7 @@ export function GlobalTimerProvider({
 
     if (command.type === 'continueRound') {
       if (!currentActiveEntry) return
-      const rule = getTimerFocusRule(currentActiveEntry.scene, focusConfig)
-      const goalSeconds = Math.max(60, Math.round(rule.primaryMinutes * 60))
+      const goalSeconds = Math.max(60, Math.round(focusConfig.primaryMinutes * 60))
       const roundElapsedSeconds = Math.max(
         0,
         currentActiveEntry.timer.effectiveSeconds -
@@ -209,15 +213,17 @@ export function GlobalTimerProvider({
 
     if (command.type === 'startGoalBreak') {
       if (!currentActiveEntry) return
-      const rule = getTimerFocusRule(currentActiveEntry.scene, focusConfig)
-      const goalSeconds = Math.max(60, Math.round(rule.primaryMinutes * 60))
+      const goalSeconds = Math.max(60, Math.round(focusConfig.primaryMinutes * 60))
       const roundElapsedSeconds = Math.max(
         0,
         currentActiveEntry.timer.effectiveSeconds -
           currentActiveEntry.timer.focusRound.startedAtEffectiveSeconds,
       )
       if (roundElapsedSeconds < goalSeconds) return
-      const minutes = Math.max(1, Math.round(command.minutes ?? rule.breakMinutes ?? 5))
+      const minutes = Math.max(
+        1,
+        Math.round(command.minutes ?? breakConfigRef.current.presetMinutes[0] ?? 5),
+      )
       currentActiveEntry.timer.logEvent('break_start', {
         source: 'focus_goal',
         planned_minutes: minutes,
@@ -340,6 +346,7 @@ export function GlobalTimerProvider({
       activeEntry,
       focusConfig,
       automationConfig,
+      breakConfig,
       feedbackSignal,
     })
   }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakReturnPath, breakState, breakTick, feedbackSignal, focusConfig])

@@ -191,10 +191,9 @@ export interface ResolvedTimedSessionAutomation {
 }
 
 interface TimedSessionAutomationRuleInput {
-  inactiveAutoPauseSeconds: number
-  inactivePauseGraceSeconds?: number
-  hiddenAutoPauseSeconds: number
-  autoPauseRollbackSeconds: number
+  idleTimeoutSeconds: number
+  idleGraceSeconds: number
+  backgroundGraceSeconds: number
 }
 
 function nowIso() {
@@ -325,14 +324,8 @@ export function resolveTimedSessionAutomation(
     hiddenPauseMs?: number
   },
 ): ResolvedTimedSessionAutomation {
-  const inactivityGraceMs = Math.max(
-    0,
-    Math.round((rule.inactivePauseGraceSeconds ?? 30) * 1000),
-  )
-  const configuredWarningMs = Math.max(
-    0,
-    Math.round(rule.inactiveAutoPauseSeconds * 1000),
-  )
+  const inactivityGraceMs = Math.max(0, Math.round(rule.idleGraceSeconds * 1000))
+  const configuredWarningMs = Math.max(0, Math.round(rule.idleTimeoutSeconds * 1000))
   const explicitAutoPauseMs = overrides.autoPauseMs == null
     ? null
     : Math.max(0, Math.round(overrides.autoPauseMs))
@@ -346,16 +339,12 @@ export function resolveTimedSessionAutomation(
     autoPauseMs: resolvedInactiveMs,
     hiddenPauseMs: Math.max(
       0,
-      Math.round(overrides.hiddenPauseMs ?? rule.hiddenAutoPauseSeconds * 1000),
+      Math.round(overrides.hiddenPauseMs ?? rule.backgroundGraceSeconds * 1000),
     ),
     resumeWindowMs: explicitAutoPauseMs ?? configuredWarningMs,
-    autoPauseRollbackSeconds: Math.max(
-      0,
-      Math.min(
-        Math.round(rule.autoPauseRollbackSeconds),
-        Math.round(rule.inactiveAutoPauseSeconds),
-      ),
-    ),
+    // Roll back exactly the warned-about stretch. The idle timeout itself stays
+    // credited: silent recitation with no clicks is normal in a memory app.
+    autoPauseRollbackSeconds: Math.max(0, Math.round(rule.idleGraceSeconds)),
   }
 }
 

@@ -39,8 +39,8 @@ describe('celebrationEngine', () => {
     vi.useRealTimers()
   })
 
-  it('mounts a single global canvas at the highest layer', () => {
-    launchCelebrationPreset({
+  it('mounts a single global canvas at the highest layer', async () => {
+    await launchCelebrationPreset({
       preset: 'fireworks',
       reducedMotion: false,
     })
@@ -53,15 +53,15 @@ describe('celebrationEngine', () => {
     expect((canvas as HTMLCanvasElement).style.zIndex).toBe('2147483647')
     expect(create).toHaveBeenCalledTimes(1)
 
-    launchCelebrationPreset({
+    await launchCelebrationPreset({
       preset: 'stars',
       reducedMotion: false,
     })
     expect(create).toHaveBeenCalledTimes(1)
   })
 
-  it('fires continuously instead of a single static burst', () => {
-    launchCelebrationPreset({
+  it('fires continuously instead of a single static burst', async () => {
+    await launchCelebrationPreset({
       preset: 'fireworks',
       reducedMotion: false,
       amount: 1.5,
@@ -74,8 +74,8 @@ describe('celebrationEngine', () => {
     expect(fire.mock.calls.length).toBeGreaterThan(2)
   })
 
-  it('scales stronger presets above lighter ones', () => {
-    launchCelebrationPreset({
+  it('scales stronger presets above lighter ones', async () => {
+    await launchCelebrationPreset({
       preset: 'random_direction',
       reducedMotion: false,
       amount: 0.55,
@@ -91,7 +91,7 @@ describe('celebrationEngine', () => {
 
     fire.mockClear()
 
-    launchCelebrationPreset({
+    await launchCelebrationPreset({
       preset: 'school_pride',
       reducedMotion: false,
       amount: 2.2,

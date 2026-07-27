@@ -1,27 +1,14 @@
 import * as React from 'react'
-import type {
-  TimerAutomationConfig,
-  TimerAutomationMode,
-  TimerAutomationScene,
-} from '@/shared/components/session/timer-automation-config'
-import type {
-  TimerCelebrationVisualPreset,
-  TimerFeedbackIntensity,
-  TimerFocusConfig,
-  TimerFocusMode,
-  TimerFocusScene,
-} from '@/shared/components/session/timer-focus-config'
+import type { TimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
+import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 import type {
   BreakGuardAlertStrength,
   BreakGuardConfig,
 } from '@/shared/components/session/break-guard-config'
 import type {
-  ActionFieldKey,
   BreakBooleanFieldKey,
   BreakNumberFieldKey,
   BreakTextFieldKey,
-  CelebrationBooleanFieldKey,
-  CelebrationEventKey,
   FieldKey,
   FocusFieldKey,
 } from '@/shared/components/session/timerAutomationDialogModel'
@@ -34,13 +21,44 @@ import {
   toFocusDraft,
 } from '@/shared/components/session/timerAutomationDialogModel'
 
+/**
+ * Order-insensitive comparison. A plain JSON.stringify would report a change
+ * whenever a default and its sanitizer happen to list keys in a different
+ * order, which shows up as a settings page that is dirty the moment it opens.
+ */
+function isSameConfig(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (typeof left !== 'object' || typeof right !== 'object' || !left || !right) return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+    return left.every((item, index) => isSameConfig(item, right[index]))
+  }
+  const leftKeys = Object.keys(left as Record<string, unknown>).sort()
+  const rightKeys = Object.keys(right as Record<string, unknown>).sort()
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every(
+    (key, index) =>
+      key === rightKeys[index] &&
+      isSameConfig(
+        (left as Record<string, unknown>)[key],
+        (right as Record<string, unknown>)[key],
+      ),
+  )
+}
+
+/**
+ * Shared draft state for the timer settings page and the in-session dialog.
+ *
+ * `active` is `open` for the dialog and a constant `true` for the page, so both
+ * surfaces edit the same drafts through the same handlers.
+ */
 export function useTimerConfigDrafts({
-  open,
+  active,
   config,
   focusConfig,
   breakConfig,
 }: {
-  open: boolean
+  active: boolean
   config: TimerAutomationConfig
   focusConfig: TimerFocusConfig
   breakConfig: BreakGuardConfig
@@ -49,121 +67,31 @@ export function useTimerConfigDrafts({
   const [focusDraft, setFocusDraft] = React.useState(() => toFocusDraft(focusConfig))
   const [breakDraft, setBreakDraft] = React.useState(() => toBreakDraft(breakConfig))
 
-  React.useEffect(() => {
-    if (!open) return
+  const resetDrafts = React.useCallback(() => {
     setDraft(toDraft(config))
     setFocusDraft(toFocusDraft(focusConfig))
     setBreakDraft(toBreakDraft(breakConfig))
-  }, [breakConfig, config, focusConfig, open])
+  }, [breakConfig, config, focusConfig])
 
-  const handleModeChange = React.useCallback((mode: TimerAutomationMode) => {
-    setDraft((current) => ({ ...current, mode }))
+  React.useEffect(() => {
+    if (!active) return
+    resetDrafts()
+  }, [active, resetDrafts])
+
+  const handleFieldChange = React.useCallback((field: FieldKey, value: string) => {
+    setDraft((current) => ({ ...current, [field]: value }))
   }, [])
 
-  const handleFieldChange = React.useCallback(
-    (scene: 'shared' | TimerAutomationScene, field: FieldKey, value: string) => {
-      setDraft((current) => ({
-        ...current,
-        [scene]: {
-          ...current[scene],
-          [field]: value,
-        },
-      }))
-    },
-    [],
-  )
-
-  const handleAutoStartChange = React.useCallback(
-    (scene: 'shared' | TimerAutomationScene, checked: boolean) => {
-      setDraft((current) => ({
-        ...current,
-        [scene]: {
-          ...current[scene],
-          autoStartOnPageEnter: checked,
-        },
-      }))
-    },
-    [],
-  )
-
-  const handleActionChange = React.useCallback((field: ActionFieldKey, checked: boolean) => {
-    setDraft((current) => ({
-      ...current,
-      actions: {
-        ...current.actions,
-        [field]: checked,
-      },
-    }))
+  const handleAutoStartChange = React.useCallback((checked: boolean) => {
+    setDraft((current) => ({ ...current, autoStartOnPageEnter: checked }))
   }, [])
 
-  const handleFocusModeChange = React.useCallback((mode: TimerFocusMode) => {
-    setFocusDraft((current) => ({ ...current, mode }))
+  const handleKeepScreenAwakeChange = React.useCallback((checked: boolean) => {
+    setDraft((current) => ({ ...current, keepScreenAwake: checked }))
   }, [])
 
-  const handleFocusFieldChange = React.useCallback(
-    (scene: 'global' | TimerFocusScene, field: FocusFieldKey, value: string) => {
-      setFocusDraft((current) => ({
-        ...current,
-        [scene]: {
-          ...current[scene],
-          [field]: value,
-        },
-      }))
-    },
-    [],
-  )
-
-  const handleFeedbackIntensityChange = React.useCallback((value: TimerFeedbackIntensity) => {
-    setFocusDraft((current) => ({
-      ...current,
-      feedbackIntensity: value,
-    }))
-  }, [])
-
-  const handleCelebrationBooleanChange = React.useCallback((
-    eventKey: CelebrationEventKey,
-    field: CelebrationBooleanFieldKey,
-    checked: boolean,
-  ) => {
-    setFocusDraft((current) => ({
-      ...current,
-      celebration: {
-        ...current.celebration,
-        [eventKey]: {
-          ...current.celebration[eventKey],
-          [field]: checked,
-        },
-      },
-    }))
-  }, [])
-
-  const handleCelebrationVolumeChange = React.useCallback((eventKey: CelebrationEventKey, value: string) => {
-    setFocusDraft((current) => ({
-      ...current,
-      celebration: {
-        ...current.celebration,
-        [eventKey]: {
-          ...current.celebration[eventKey],
-          volumeBoost: value,
-        },
-      },
-    }))
-  }, [])
-
-  const handleCelebrationPresetChange = React.useCallback((
-    eventKey: CelebrationEventKey,
-    value: TimerCelebrationVisualPreset,
-  ) => {
-    setFocusDraft((current) => ({
-      ...current,
-      celebration: {
-        ...current.celebration,
-        [eventKey]: {
-          ...current.celebration[eventKey],
-          visualPreset: value,
-        },
-      },
-    }))
+  const handleFocusFieldChange = React.useCallback((field: FocusFieldKey, value: string) => {
+    setFocusDraft((current) => ({ ...current, [field]: value }))
   }, [])
 
   const handleBreakBooleanChange = React.useCallback((field: BreakBooleanFieldKey, checked: boolean) => {
@@ -198,6 +126,16 @@ export function useTimerConfigDrafts({
   const parsedFocusConfig = React.useMemo(() => parseFocusDraft(focusDraft), [focusDraft])
   const parsedBreakConfig = React.useMemo(() => parseBreakDraft(breakDraft), [breakDraft])
 
+  // Compare parsed against saved rather than draft against draft: a draft holds
+  // strings mid-edit ("05" vs 5) that must not register as a change.
+  const isDirty = React.useMemo(
+    () =>
+      !isSameConfig(parsedConfig, config) ||
+      !isSameConfig(parsedFocusConfig, focusConfig) ||
+      !isSameConfig(parsedBreakConfig, breakConfig),
+    [breakConfig, config, focusConfig, parsedBreakConfig, parsedConfig, parsedFocusConfig],
+  )
+
   return {
     draft,
     focusDraft,
@@ -205,16 +143,12 @@ export function useTimerConfigDrafts({
     setDraft,
     setFocusDraft,
     setBreakDraft,
-    handleModeChange,
+    resetDrafts,
+    isDirty,
     handleFieldChange,
     handleAutoStartChange,
-    handleActionChange,
-    handleFocusModeChange,
+    handleKeepScreenAwakeChange,
     handleFocusFieldChange,
-    handleFeedbackIntensityChange,
-    handleCelebrationBooleanChange,
-    handleCelebrationVolumeChange,
-    handleCelebrationPresetChange,
     handleBreakBooleanChange,
     handleBreakNumberChange,
     handleBreakTextChange,

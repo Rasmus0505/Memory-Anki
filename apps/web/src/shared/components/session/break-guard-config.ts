@@ -9,8 +9,18 @@ export type BreakGuardAlertStrength = 'strong' | 'gentle'
 export interface BreakGuardConfig {
   schemaVersion?: number
   enabled: boolean
+  /**
+   * Notify when a break runs out, even if the app is backgrounded. Lives here
+   * rather than with feedback settings: break expiry is its only consumer.
+   */
+  notifyOnBreakExpired: boolean
   promptOnWindowLeave: boolean
   promptDelaySeconds: number
+  /**
+   * Break lengths offered on the break panel. The first entry doubles as the
+   * suggested length after finishing a focus round — the single source of truth
+   * for "how long is a break" (focus config used to define that separately).
+   */
   presetMinutes: number[]
   allowCustomMinutes: boolean
   autoFinishOnStudyReturn: boolean
@@ -33,7 +43,14 @@ export interface BreakGuardLogEntry {
 export const BREAK_GUARD_STORAGE_KEY = 'memory-anki-break-guard-config'
 export const BREAK_GUARD_LOG_STORAGE_KEY = 'memory-anki-break-guard-logs'
 export const BREAK_GUARD_UPDATED_EVENT = 'memory-anki-break-guard-config-change'
-export const BREAK_GUARD_CONFIG_VERSION = 2
+export const BREAK_GUARD_CONFIG_VERSION = 3
+
+/**
+ * Schema v1 defaults. Only a v1 config is rewritten against these — later
+ * bumps must not re-trigger the migration, or a v2 user who deliberately chose
+ * a value that happens to equal a v1 default would silently lose it.
+ */
+const LEGACY_BREAK_GUARD_SCHEMA_VERSION = 2
 
 const LEGACY_DEFAULT_BREAK_GUARD_CONFIG = {
   enabled: true,
@@ -51,6 +68,7 @@ const LEGACY_DEFAULT_BREAK_GUARD_CONFIG = {
 export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
   schemaVersion: BREAK_GUARD_CONFIG_VERSION,
   enabled: true,
+  notifyOnBreakExpired: false,
   promptOnWindowLeave: false,
   promptDelaySeconds: 60,
   presetMinutes: [5],
@@ -59,7 +77,8 @@ export const DEFAULT_BREAK_GUARD_CONFIG: BreakGuardConfig = {
   resumeInterruptedStudyOnReturn: false,
   targetPath: '/freestyle',
   alertStrength: 'gentle',
-  snoozeMinutes: [1, 3, 5],
+  // Single entry: sanitize trims to one, and both overlays only render the first.
+  snoozeMinutes: [1],
   recordBreakLogs: true,
 }
 
@@ -112,9 +131,13 @@ export function sanitizeBreakGuardConfig(value: unknown): BreakGuardConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const parsedSchemaVersion = Number(raw.schemaVersion)
   const schemaVersion = Number.isFinite(parsedSchemaVersion) ? Math.round(parsedSchemaVersion) : 1
-  const isLegacyConfig = schemaVersion < BREAK_GUARD_CONFIG_VERSION
+  const isLegacyConfig = schemaVersion < LEGACY_BREAK_GUARD_SCHEMA_VERSION
   return {
     schemaVersion: BREAK_GUARD_CONFIG_VERSION,
+    notifyOnBreakExpired:
+      typeof raw.notifyOnBreakExpired === 'boolean'
+        ? raw.notifyOnBreakExpired
+        : DEFAULT_BREAK_GUARD_CONFIG.notifyOnBreakExpired,
     enabled:
       typeof raw.enabled === 'boolean'
         ? (migrateLegacyField(
@@ -185,6 +208,9 @@ export function sanitizeBreakGuardConfig(value: unknown): BreakGuardConfig {
             isLegacyConfig,
           ) as BreakGuardAlertStrength)
         : DEFAULT_BREAK_GUARD_CONFIG.alertStrength,
+    // Kept as an array for the desktop/PWA bridge contract, but trimmed to the
+    // single value both overlays actually render: offering four here only ever
+    // produced three settings the user could never see take effect.
     snoozeMinutes: sanitizeMinuteList(
       migrateLegacyField(
         raw.snoozeMinutes,
@@ -193,7 +219,7 @@ export function sanitizeBreakGuardConfig(value: unknown): BreakGuardConfig {
         isLegacyConfig,
       ),
       DEFAULT_BREAK_GUARD_CONFIG.snoozeMinutes,
-      { maxItems: 4 },
+      { maxItems: 1 },
     ),
     recordBreakLogs:
       typeof raw.recordBreakLogs === 'boolean'

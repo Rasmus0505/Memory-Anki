@@ -2,6 +2,10 @@ import * as React from "react";
 import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
+// 预载 motion 组件（生产中经 LazyCelebrations 懒加载）：让 motion-dom 在下方
+// 同步 requestAnimationFrame mock 安装之前捕获真实 rAF，否则帧循环会无限递归。
+import "@/shared/components/celebration/ComboMilestoneBurst";
+import "@/shared/components/celebration/CompletionCelebration";
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,

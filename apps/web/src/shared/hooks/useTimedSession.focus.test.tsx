@@ -84,11 +84,19 @@ describe('useTimedSession focus rounds', () => {
     expect(screen.getByTestId('focus-round-start').textContent).toBe('4')
   })
 
-  it('pauses after two minutes without a grace period', () => {
+  it('keeps counting through the idle timeout and pauses once the grace window closes', () => {
     render(<TimedSessionTestHarness kind="practice" />)
 
+    // The idle timeout alone only opens the "still studying?" warning: silent
+    // recitation with no clicks still counts as study time.
     act(() => {
       vi.advanceTimersByTime(120_000)
+    })
+
+    expect(screen.getByTestId('status').textContent).toBe('running')
+
+    act(() => {
+      vi.advanceTimersByTime(30_000)
     })
 
     expect(screen.getByTestId('status').textContent).toBe('paused')

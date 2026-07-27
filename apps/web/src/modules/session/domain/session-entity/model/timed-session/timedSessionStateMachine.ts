@@ -7,7 +7,6 @@ import {
   type TimeSessionRecord,
 } from '@/modules/session/domain/session-entity/model'
 import {
-  getTimerAutomationRule,
   readTimerAutomationConfig,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
@@ -121,8 +120,8 @@ export function useTimedSession({
   const timedSessionAutoSaveKey = React.useMemo(() => `timed-session:${sessionIdRef.current}`, [])
 
   const resolvedAutomation = React.useMemo(
-    () => resolveTimedSessionAutomation(getTimerAutomationRule(automationScene, automationConfig), { autoPauseMs, hiddenPauseMs }),
-    [autoPauseMs, automationConfig, automationScene, hiddenPauseMs],
+    () => resolveTimedSessionAutomation(automationConfig, { autoPauseMs, hiddenPauseMs }),
+    [autoPauseMs, automationConfig, hiddenPauseMs],
   )
 
   const storageKey = persistKey ? buildTimedSessionStorageKey(persistKey) : null
@@ -313,6 +312,16 @@ export function useTimedSession({
       persistRecord,
     })
   }, [buildRecord, persistCompletionRecord, persistRecord])
+
+  // Written the moment the page hides, so the background debounce window can
+  // never cost a session if the OS kills the tab before the window closes.
+  // Reuses the stable session id, so the eventual completed record overwrites
+  // it server-side (create_study_session merges by primary key).
+  const persistBackgroundCheckpoint = React.useCallback(() => {
+    persistSnapshot()
+    markDirty(timedSessionAutoSaveKey, 'document_hidden')
+    void saveInProgressRecord()
+  }, [persistSnapshot, saveInProgressRecord, timedSessionAutoSaveKey])
 
   const persistExpiredSuspendedSnapshot = React.useCallback(async (
     snapshot: RestorableTimedSessionSnapshot,
@@ -567,7 +576,6 @@ export function useTimedSession({
 
   const { logEvent, registerActivity } = useTimedSessionActivityActions({
     armAutoPause,
-    automationConfig,
     lastActivityAtRef,
     pushEvent,
     resume,
@@ -710,6 +718,7 @@ export function useTimedSession({
     hiddenPauseMs: resolvedAutomation.hiddenPauseMs,
     pause,
     leaveScene,
+    persistBackgroundCheckpoint,
     resumeAfterVisibilityReturn,
     clearTimer: clearTimedSessionTimeout,
     clearIntervalTimer: clearTimedSessionInterval,

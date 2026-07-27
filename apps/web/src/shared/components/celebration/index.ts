@@ -1,6 +1,5 @@
-export { ComboMilestoneBurst } from './ComboMilestoneBurst'
+export { ComboMilestoneBurst, CompletionCelebration } from './LazyCelebrations'
 export type { ComboMilestoneBurstProps } from './ComboMilestoneBurst'
-export { CompletionCelebration } from './CompletionCelebration'
 export type { CompletionCelebrationProps } from './CompletionCelebration'
 export { emitReviewConfetti } from './reviewConfetti'
 export {

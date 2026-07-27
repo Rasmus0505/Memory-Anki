@@ -6,13 +6,11 @@ import { Input } from '@/shared/components/ui/input'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
 import { cn } from '@/shared/lib/utils'
 import {
-  getTimerAutomationRule,
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
   saveTimerAutomationConfig,
   TIMER_AUTOMATION_UPDATED_EVENT,
   type TimerAutomationConfig,
-  type TimerAutomationScene,
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
@@ -33,7 +31,6 @@ import {
 interface SessionTimerBarProps {
   effectiveSeconds: number
   idleSeconds?: number
-  automationScene?: TimerAutomationScene
   pauseCount: number
   status: 'idle' | 'running' | 'paused' | 'completed'
   onStart: () => void
@@ -67,7 +64,6 @@ function inputValueToSeconds(value: string) {
 export function SessionTimerBar({
   effectiveSeconds,
   idleSeconds = 0,
-  automationScene = 'practice',
   pauseCount,
   status,
   onStart,
@@ -93,10 +89,6 @@ export function SessionTimerBar({
   )
   const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() => readTimerFocusConfig())
   const [breakConfig, setBreakConfig] = React.useState<BreakGuardConfig>(() => readBreakGuardConfig())
-  const automationRule = React.useMemo(
-    () => getTimerAutomationRule(automationScene, automationConfig),
-    [automationConfig, automationScene],
-  )
 
   React.useEffect(() => {
     if (isEditing) return
@@ -191,11 +183,10 @@ export function SessionTimerBar({
     />
   )
 
-  const isIdleWarning =
-    isRunning && safeIdleSeconds >= automationRule.inactiveAutoPauseSeconds
+  const isIdleWarning = isRunning && safeIdleSeconds >= automationConfig.idleTimeoutSeconds
   const idleWarningRemaining = Math.max(
     0,
-    automationRule.inactiveAutoPauseSeconds + (automationRule.inactivePauseGraceSeconds ?? 30) - safeIdleSeconds,
+    automationConfig.idleTimeoutSeconds + automationConfig.idleGraceSeconds - safeIdleSeconds,
   )
   const idleStatusClassName = isIdleWarning
     ? 'font-medium text-orange-600'
@@ -204,7 +195,7 @@ export function SessionTimerBar({
       : 'text-foreground'
   const idleStatusText = isIdleWarning
     ? `仍在学习吗？${idleWarningRemaining} 秒后暂停`
-    : `闲置 ${safeIdleSeconds}/${automationRule.inactiveAutoPauseSeconds} 秒`
+    : `闲置 ${safeIdleSeconds}/${automationConfig.idleTimeoutSeconds} 秒`
 
   if (layout === 'compact') {
     return (

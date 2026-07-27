@@ -9,7 +9,8 @@ import {
   calculateResizedTimerOverlayLayout,
   createTimerOverlaySizeTokens,
 } from '@/shared/components/session/globalTimerModel'
-import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
+import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
+import { createReviewFeedbackSettingsFixture } from '@/shared/feedback/reviewFeedbackSettings.fixture'
 import {
   TIMER_OVERLAY_MIN_HEIGHT,
   TIMER_OVERLAY_MIN_WIDTH,
@@ -31,11 +32,7 @@ vi.mock('@/shared/components/session/timer-celebration', () => ({
 }))
 
 vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
-  useMindMapFeedbackSettings: () => ({
-    mode: 'immersive',
-    soundEnabled: true,
-    volume: 1,
-  }),
+  useMindMapFeedbackSettings: () => createReviewFeedbackSettingsFixture(),
 }))
 
 function createTimer(

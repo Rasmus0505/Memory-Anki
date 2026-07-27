@@ -3,7 +3,6 @@ import type { SessionEventRecord } from '../session-records'
 import {
   isActivityEnabled,
   type TimerAutomationActivityKind,
-  type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import type { SessionStatus, TimedSessionMeta } from '@/shared/hooks/timedSessionModel'
 
@@ -13,7 +12,6 @@ type SessionTransition = (meta?: TimedSessionMeta) => unknown
 
 interface TimedSessionActivityActionsInput {
   armAutoPause: () => void
-  automationConfig: TimerAutomationConfig
   lastActivityAtRef: MutableValueRef<number | null>
   pushEvent: (type: SessionEventRecord['type'], meta?: TimedSessionMeta) => void
   resume: SessionTransition
@@ -24,7 +22,6 @@ interface TimedSessionActivityActionsInput {
 
 export function useTimedSessionActivityActions({
   armAutoPause,
-  automationConfig,
   lastActivityAtRef,
   pushEvent,
   resume,
@@ -36,7 +33,7 @@ export function useTimedSessionActivityActions({
     activityKind: TimerAutomationActivityKind,
     meta?: TimedSessionMeta,
   ) => {
-    if (!sceneActiveRef.current || !isActivityEnabled(activityKind, automationConfig)) return
+    if (!sceneActiveRef.current || !isActivityEnabled(activityKind)) return
     if (statusRef.current === 'idle') {
       start({ source: 'auto', ...(meta ?? {}) })
       return
@@ -49,7 +46,7 @@ export function useTimedSessionActivityActions({
       lastActivityAtRef.current = Date.now()
       armAutoPause()
     }
-  }, [armAutoPause, automationConfig, lastActivityAtRef, resume, sceneActiveRef, start, statusRef])
+  }, [armAutoPause, lastActivityAtRef, resume, sceneActiveRef, start, statusRef])
 
   const logEvent = React.useCallback((type: SessionEventRecord['type'], meta?: TimedSessionMeta) => {
     pushEvent(type, meta)

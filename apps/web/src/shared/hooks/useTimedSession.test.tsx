@@ -65,13 +65,13 @@ describe('useTimedSession automation config', () => {
     expect(result.current).toBe(initialController)
   })
 
-  it('arms the default inactivity pause after 120 seconds', () => {
+  it('arms the default inactivity pause after the 120s timeout plus its 30s grace', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
     render(<TimedSessionTestHarness kind="palace_edit" />)
 
     expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 120_000)).toBe(true)
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 150_000)).toBe(true)
   })
 
   it('treats explicit autoPauseMs overrides as milliseconds', () => {
@@ -807,6 +807,87 @@ describe('useTimedSession automation config', () => {
     visibility.mockRestore()
   })
 
+  it('keeps counting through a brief background dip without writing a left_page record', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'quiz',
+        title: 'PWA 做题',
+        palaceId: null,
+        hiddenPauseMs: 20_000,
+        persistKey: 'quiz:pwa-background-grace',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_100)
+    })
+
+    // Pulling down the notification shade / taking a call briefly hides the page.
+    visibility.mockReturnValue('hidden')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(5_000)
+      await Promise.resolve()
+    })
+
+    expect(result.current.status).toBe('running')
+
+    visibility.mockReturnValue('visible')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(20_000)
+      await Promise.resolve()
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(
+      persistStudySessionRecordSpy.mock.calls.some(
+        ([record]) => record?.completionMethod === 'left_page',
+      ),
+    ).toBe(false)
+    visibility.mockRestore()
+  })
+
+  it('checkpoints immediately on hide so the debounce window cannot lose the session', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'quiz',
+        title: 'PWA 做题',
+        palaceId: null,
+        hiddenPauseMs: 20_000,
+        persistKey: 'quiz:pwa-background-checkpoint',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_100)
+    })
+
+    visibility.mockReturnValue('hidden')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+    })
+
+    // Written before the grace timer even starts, as a crash-safe checkpoint.
+    await vi.waitFor(() => {
+      expect(
+        persistStudySessionRecordSpy.mock.calls.some(
+          ([record]) => record?.completionMethod === 'saved',
+        ),
+      ).toBe(true)
+    })
+    visibility.mockRestore()
+  })
+
   it('does not auto resume on focus when window return is disabled', () => {
     window.localStorage.setItem(
       TIMER_AUTOMATION_STORAGE_KEY,
@@ -824,7 +905,7 @@ describe('useTimedSession automation config', () => {
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(15_000)
+      vi.advanceTimersByTime(20_000)
     })
 
     expect(screen.getByTestId('status').textContent).toBe('paused')
@@ -854,7 +935,7 @@ describe('useTimedSession automation config', () => {
 
     act(() => {
       window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(15_000)
+      vi.advanceTimersByTime(20_000)
     })
 
     expect(screen.getByTestId('status').textContent).toBe('paused')

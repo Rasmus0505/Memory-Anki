@@ -54,13 +54,13 @@ export function GlobalFeedbackProvider({ children }: React.PropsWithChildren) {
   const settings = useMindMapFeedbackSettings()
   const reducedMotion = usePrefersReducedMotion()
   const { playEvent } = useMindMapFeedbackAudio(
-    settings.soundEnabled && settings.mode === 'immersive',
+    settings.soundEnabled,
     getReviewFeedbackEffectiveVolume(settings),
   )
 
   const emitDescriptor = React.useCallback(
     (descriptor: FeedbackDescriptor, point: { x: number; y: number }) => {
-      if (settings.soundEnabled && settings.mode === 'immersive') {
+      if (settings.soundEnabled) {
         playEvent(descriptor.audioEvent, {
           origin: descriptor.origin,
           audioScope: descriptor.audioScope,
@@ -85,7 +85,7 @@ export function GlobalFeedbackProvider({ children }: React.PropsWithChildren) {
         setScreenPulse((current) => (current?.id === pulseId ? null : current))
       }, PULSE_TTL_MS)
     },
-    [playEvent, reducedMotion, settings.animationEnabled, settings.mode, settings.soundEnabled],
+    [playEvent, reducedMotion, settings.animationEnabled, settings.soundEnabled],
   )
 
   const handleGlobalFeedbackRequest = React.useEffectEvent((event: Event) => {

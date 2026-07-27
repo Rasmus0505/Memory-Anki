@@ -19,13 +19,18 @@ vi.mock('@/shared/feedback/mindmap-audio/webAudioFeedback', () => ({
 }))
 
 vi.mock('@/shared/feedback/reviewFeedbackSettings', () => ({
-  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX: 16,
+  // Base volume max (2) x per-scene boost max (3).
+  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX: 6,
   getReviewFeedbackEffectiveVolume: () => 1,
   readReviewFeedbackSettings: () => ({
     animationEnabled: true,
-    mode: 'immersive',
     soundEnabled: true,
     volume: 1,
+  }),
+  resolveFeedbackChannels: () => ({
+    learningSounds: true,
+    milestoneEffects: true,
+    completionEffects: true,
   }),
 }))
 

@@ -9,6 +9,8 @@ import {
 } from '@/shared/components/session/desktopTimerBridge'
 import { cn } from '@/shared/lib/utils'
 import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
+import { readBreakGuardConfig } from '@/shared/components/session/break-guard-config'
+import { notifyBreakExpired } from '@/shared/feedback/breakNotification'
 
 function formatOverlayClock(seconds: number | null) {
   if (seconds == null) return '--:--'
@@ -70,12 +72,9 @@ function playTimerBeep(kind: 'interval' | 'goal' | 'break' = 'break') {
   }
 }
 
-function notifyBreakExpired() {
-  if (!readReviewFeedbackSettings().desktopNotificationsEnabled) return
-  if (!('Notification' in window)) return
-  if (Notification.permission === 'granted') {
-    new Notification('休息时间到了', { body: '回到随心模式继续一点点就好。' })
-  }
+function notifyBreakOver() {
+  if (!readBreakGuardConfig().notifyOnBreakExpired) return
+  void notifyBreakExpired('休息时间到了', '回到随心模式继续一点点就好。')
 }
 
 export default function TimerOverlayPage() {
@@ -102,9 +101,9 @@ export default function TimerOverlayPage() {
 
     if (expiredNotifiedRef.current) return
     expiredNotifiedRef.current = true
-    notifyBreakExpired()
+    notifyBreakOver()
     const settings = readReviewFeedbackSettings()
-    if (settings.soundEnabled && settings.mode === 'immersive') playTimerBeep('break')
+    if (settings.soundEnabled) playTimerBeep('break')
   }, [snapshot.mode, snapshot.status])
 
   React.useEffect(() => {
@@ -112,7 +111,7 @@ export default function TimerOverlayPage() {
     if (!signal || feedbackEventIdRef.current === signal.eventId) return
     feedbackEventIdRef.current = signal.eventId
     const settings = readReviewFeedbackSettings()
-    if (settings.soundEnabled && settings.mode === 'immersive') playTimerBeep(signal.kind)
+    if (settings.soundEnabled) playTimerBeep(signal.kind)
   }, [snapshot.feedbackSignal])
 
   const sendCommand = React.useCallback((command: UnifiedTimerCommand) => {

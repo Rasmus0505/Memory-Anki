@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
-import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
+import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import {
   DEFAULT_TIMER_OVERLAY_LAYOUT,
   sanitizeTimerOverlayLayout,

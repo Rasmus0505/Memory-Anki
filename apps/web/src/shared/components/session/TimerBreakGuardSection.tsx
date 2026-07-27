@@ -18,6 +18,8 @@ export function TimerBreakGuardSection({
   onBreakNumberChange,
   onBreakTextChange,
   onBreakAlertStrengthChange,
+  onNotifyOnBreakExpiredChange,
+  variant = 'full',
 }: {
   breakDraft: BreakDraft
   parsedBreakConfig: BreakGuardConfig
@@ -25,6 +27,9 @@ export function TimerBreakGuardSection({
   onBreakNumberChange: (field: BreakNumberFieldKey, value: string) => void
   onBreakTextChange: (field: BreakTextFieldKey, value: string) => void
   onBreakAlertStrengthChange: (value: BreakGuardAlertStrength) => void
+  onNotifyOnBreakExpiredChange: (checked: boolean) => Promise<void> | void
+  /** `compact` is the in-session dialog: length presets and the on/off switch only. */
+  variant?: 'full' | 'compact'
 }) {
   return (
     <div className="rounded-lg border border-border/70 bg-card/70 p-4">
@@ -47,20 +52,26 @@ export function TimerBreakGuardSection({
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
+        {variant === 'full' ? (
         <label className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-3 text-sm">
           <input
             type="checkbox"
             className="mt-0.5 size-4"
-            checked={breakDraft.promptOnWindowLeave}
-            onChange={(event) => onBreakBooleanChange('promptOnWindowLeave', event.target.checked)}
+            checked={breakDraft.notifyOnBreakExpired}
+            onChange={(event) => void onNotifyOnBreakExpiredChange(event.target.checked)}
           />
           <span>
-            <span className="block font-medium text-foreground">离开窗口时询问是否休息</span>
-            <span className="text-xs text-muted-foreground">默认关闭，查资料或查看 PDF 时不会弹出休息询问。</span>
+            <span className="block font-medium text-foreground">休息到点发桌面通知</span>
+            <span className="text-xs text-muted-foreground">
+              离开主窗口后也能收到提醒。需要授予浏览器通知权限。
+            </span>
           </span>
         </label>
+        ) : null}
         <label className="space-y-1.5 text-sm">
-          <span className="text-xs text-muted-foreground">休息时长按钮（分钟，英文逗号分隔）</span>
+          <span className="text-xs text-muted-foreground">
+            休息时长按钮（分钟，英文逗号分隔；第一个是完成一轮后的默认建议时长）
+          </span>
           <Input
             value={breakDraft.presetMinutes}
             onChange={(event) => onBreakTextChange('presetMinutes', event.target.value)}
@@ -69,6 +80,7 @@ export function TimerBreakGuardSection({
         </label>
       </div>
 
+      {variant === 'full' ? (
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {([
           ['gentle', '温和提醒（推荐）', '到点后提示休息结束，但不会自动开始下一轮学习。'],
@@ -90,13 +102,16 @@ export function TimerBreakGuardSection({
           </button>
         ))}
       </div>
+      ) : null}
 
+      {variant === 'full' ? (
       <details className="mt-4 rounded-lg border border-border/70 bg-background/45 p-4">
         <summary className="cursor-pointer text-sm font-semibold text-foreground">
           高级设置：离开检测、自动结束与日志
         </summary>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {([
+            ['promptOnWindowLeave', '离开窗口时询问是否休息', '默认关闭，查资料或看 PDF 时不会弹出询问。'],
             ['allowCustomMinutes', '允许自定义时长', '休息询问里展示自定义分钟输入。'],
             ['autoFinishOnStudyReturn', '学习即结束休息', '检测到学习操作时自动结束休息；默认关闭。'],
             ['resumeInterruptedStudyOnReturn', '自动恢复学习计时', '休息结束时自动恢复之前的学习计时；默认关闭。'],
@@ -135,15 +150,16 @@ export function TimerBreakGuardSection({
             />
           </label>
           <label className="space-y-1.5 text-sm md:col-span-2">
-            <span className="text-xs text-muted-foreground">延后按钮（分钟，英文逗号分隔）</span>
+            <span className="text-xs text-muted-foreground">延后按钮（分钟）</span>
             <Input
               value={breakDraft.snoozeMinutes}
               onChange={(event) => onBreakTextChange('snoozeMinutes', event.target.value)}
-              placeholder="1, 3, 5"
+              placeholder="1"
             />
           </label>
         </div>
       </details>
+      ) : null}
 
       <div className="mt-3 rounded-lg border border-dashed border-border/70 bg-background/55 px-3 py-3 text-xs text-muted-foreground">
         当前预览：休息按钮 {parsedBreakConfig.presetMinutes.join(' / ')} 分钟；

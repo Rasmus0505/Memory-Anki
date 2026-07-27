@@ -193,7 +193,7 @@ export default function PalaceQuizPage() {
     if (!palaceId) return
     if (!isActive) return
     if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'quiz')) return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
   }, [isActive, palaceId, timer])
 

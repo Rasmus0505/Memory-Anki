@@ -92,7 +92,7 @@ export function useMindMapFeedbackSettings() {
 export function useMindMapFeedbackAudioFromSettings() {
   const settings = useMindMapFeedbackSettings()
   return useMindMapFeedbackAudio(
-    settings.soundEnabled && settings.mode === 'immersive',
+    settings.soundEnabled,
     getReviewFeedbackEffectiveVolume(settings),
   )
 }

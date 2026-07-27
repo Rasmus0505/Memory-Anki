@@ -35,17 +35,24 @@ describe('SessionTimerBar', () => {
     const dialogContent = screen.getByTestId('timer-automation-dialog-content')
     expect(dialogContent.className).toContain('overflow-y-auto')
     expect(dialogContent.className).toContain('overscroll-contain')
-    const autoStart = screen.getByRole('checkbox', { name: /进入学习页面自动开始/ })
-    fireEvent.click(autoStart)
+
+    // The in-session dialog is a quick subset: settings that need thought stay
+    // on the settings page.
+    expect(screen.queryByRole('checkbox', { name: /进入学习页面自动开始/ })).toBeNull()
+    expect(screen.queryByRole('spinbutton', { name: '切后台宽限秒数' })).toBeNull()
+
     fireEvent.change(screen.getByRole('spinbutton', { name: '无点击自动暂停分钟' }), {
       target: { value: '5' },
     })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     const saved = readTimerAutomationConfig()
-    expect(saved.shared.autoStartOnPageEnter).toBe(true)
-    expect(saved.shared.inactiveAutoPauseSeconds).toBe(300)
-    expect(saved.english).toEqual(saved.shared)
+    expect(saved.idleTimeoutSeconds).toBe(300)
+    // Fields the compact dialog never showed must survive the save untouched,
+    // not fall back to defaults or zero.
+    expect(saved.backgroundGraceSeconds).toBe(20)
+    expect(saved.idleGraceSeconds).toBe(30)
+    expect(saved.keepScreenAwake).toBe(true)
   })
 
   it('renders the automation dialog with the wider desktop layout container', () => {
@@ -151,7 +158,6 @@ describe('SessionTimerBar', () => {
       <SessionTimerBar
         effectiveSeconds={30}
         idleSeconds={3}
-        automationScene="palace_edit"
         pauseCount={0}
         status="running"
         onStart={() => {}}
@@ -169,7 +175,6 @@ describe('SessionTimerBar', () => {
       <SessionTimerBar
         effectiveSeconds={30}
         idleSeconds={0}
-        automationScene="palace_edit"
         pauseCount={0}
         status="running"
         onStart={() => {}}
@@ -187,7 +192,6 @@ describe('SessionTimerBar', () => {
       <SessionTimerBar
         effectiveSeconds={30}
         idleSeconds={12}
-        automationScene="palace_edit"
         pauseCount={0}
         status="running"
         onStart={() => {}}

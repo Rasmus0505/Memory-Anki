@@ -155,7 +155,7 @@ export default function ImmersiveFreestylePage() {
   useEffect(() => {
     if (!isActive) return
     if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'freestyle')) return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
   }, [isActive, timer])
 

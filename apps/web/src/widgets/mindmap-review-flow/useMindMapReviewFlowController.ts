@@ -384,18 +384,6 @@ React.useEffect(() => {
     }));
   }, [flow.feedback]);
 
-  const handleCycleFeedbackGlobalIntensity = React.useCallback(() => {
-    flow.feedback.updateSettings((current) => ({
-      ...current,
-      globalIntensity:
-        current.globalIntensity === "balanced"
-          ? "immersive"
-          : current.globalIntensity === "immersive"
-            ? "quiet"
-            : "balanced",
-    }));
-  }, [flow.feedback]);
-
   const progressToneClassName =
     flow.feedback.progressTone === "all-clear"
       ? "memory-anki-review-progress-all-clear"
@@ -442,7 +430,6 @@ React.useEffect(() => {
     handleFeedbackVolumeChange,
     handleToggleFeedbackAnimation,
     handleToggleFeedbackSurprise,
-    handleCycleFeedbackGlobalIntensity,
     handleShortcutAdvanceReview,
     recallRatings,
     ratingMode,

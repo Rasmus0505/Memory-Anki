@@ -194,7 +194,7 @@ export default function EnglishCoursePage() {
     if (!course) return
     if (!isActive) return
     if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig(), 'english')) return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter', scene: 'english_course' })
   }, [course, isActive, timer])
 

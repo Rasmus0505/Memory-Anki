@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { GlobalTimerRegistration } from '@/shared/components/session/globalTimerModel'
-import type { TimerFocusScene } from '@/shared/components/session/timer-focus-config'
+import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 
 export interface GlobalTimerActions {

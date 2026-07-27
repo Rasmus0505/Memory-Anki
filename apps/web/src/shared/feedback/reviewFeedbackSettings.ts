@@ -6,18 +6,29 @@
 export type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 
-export type FeedbackVisualStyle = 'warm_playful' | 'focus_light'
 export type FeedbackPreset = 'focus' | 'balanced' | 'motivating'
 
 /**
- * 反馈场景键。四个场景分别对应：
- * - review     普通复习 / 翻卡
- * - milestone  连击 / 里程碑
- * - completion 完成结算
- * - timer      计时器达标
- * - quiz       做题结果
+ * 反馈场景键：
+ * - review        普通复习 / 翻卡
+ * - milestone     连击 / 里程碑
+ * - completion    完成结算
+ * - timerInterval 计时阶段提醒
+ * - timerRound    计时整轮完成
+ *
+ * v4 移除了 `timer` 与 `quiz`：前者的细则已从 timer_focus_config 迁到这里并拆成
+ * timerInterval / timerRound；后者的读取路径不可达（reviewEventToSceneKey 永远
+ * 不会返回 'quiz'），只有写入没有消费。
  */
-export type FeedbackSceneKey = 'review' | 'milestone' | 'completion' | 'timer' | 'quiz'
+export type FeedbackSceneKey =
+  | 'review'
+  | 'milestone'
+  | 'completion'
+  | 'timerInterval'
+  | 'timerRound'
+
+/** `null` = 跟随当前预设；显式布尔 = 用户覆盖，预设不再改写。 */
+export type FeedbackChannelOverride = boolean | null
 
 /**
  * 五种烟花类型（点击即预览）。顺序与中文标签一一对应：
@@ -93,28 +104,30 @@ export interface ReviewFeedbackScenesSettings {
   review: ReviewFeedbackSceneSettings
   milestone: ReviewMilestoneSceneSettings
   completion: ReviewFeedbackSceneSettings
-  timer: ReviewFeedbackSceneSettings
-  quiz: ReviewFeedbackSceneSettings
+  timerInterval: ReviewFeedbackSceneSettings
+  timerRound: ReviewFeedbackSceneSettings
 }
 
+/**
+ * Every way the app responds to you: sound, animation, celebration.
+ *
+ * Schema v4 removed fields that were stored but never read (`visualStyle`,
+ * `soundTheme`, top-level `confettiAmount`, `baseVolumeMultiplier`,
+ * `globalIntensity`), folded `mode` into the sound/animation switches it
+ * duplicated, and moved `keepScreenAwake` / `desktopNotificationsEnabled` to
+ * the timer and break-guard configs that are their only consumers.
+ */
 export interface ReviewFeedbackSettings {
-  schemaVersion: 3
+  schemaVersion: 4
   preset: FeedbackPreset
-  mode: 'immersive' | 'quiet'
-  visualStyle: FeedbackVisualStyle
   soundEnabled: boolean
   volume: number
-  baseVolumeMultiplier: number
-  confettiAmount: number
   animationEnabled: boolean
   reducedCelebrationMotion: boolean
   surpriseEnabled: boolean
-  soundTheme: 'classic'
-  globalIntensity: 'quiet' | 'balanced' | 'immersive'
-  desktopNotificationsEnabled: boolean
-  learningSoundsEnabled: boolean
-  milestoneEffectsEnabled: boolean
-  completionEffectsEnabled: boolean
+  learningSoundsEnabled: FeedbackChannelOverride
+  milestoneEffectsEnabled: FeedbackChannelOverride
+  completionEffectsEnabled: FeedbackChannelOverride
   scenes: ReviewFeedbackScenesSettings
   celebration: ReviewCelebrationSettings
 }
@@ -124,10 +137,10 @@ export const REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT = 'memory-anki-review-feedba
 
 export const DEFAULT_REVIEW_MILESTONE_STEPS = [4, 8, 12, 20]
 export const REVIEW_FEEDBACK_VOLUME_MAX = 2
-export const REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MIN = 1
-export const REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX = 8
+/** Per-scene boost ceiling; the effective ceiling is base volume × this. */
+export const REVIEW_FEEDBACK_SCENE_BOOST_MAX = 3
 export const REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX =
-  REVIEW_FEEDBACK_VOLUME_MAX * REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX
+  REVIEW_FEEDBACK_VOLUME_MAX * REVIEW_FEEDBACK_SCENE_BOOST_MAX
 
 const DEFAULT_REVIEW_SCENE: Omit<ReviewFeedbackSceneSettings, never> = {
   enabled: true,
@@ -143,16 +156,16 @@ const DEFAULT_SCENE_CONFETTI_PRESETS: Record<FeedbackSceneKey, CelebrationPreset
   review: 'random_direction',
   milestone: 'fireworks',
   completion: 'stars',
-  timer: 'school_pride',
-  quiz: 'random_direction',
+  timerInterval: 'stars',
+  timerRound: 'school_pride',
 }
 
 const DEFAULT_SCENE_VOLUME_BOOSTS: Record<FeedbackSceneKey, number> = {
   review: 1,
   milestone: 1.1,
   completion: 1.25,
-  timer: 1.35,
-  quiz: 1.05,
+  timerInterval: 1.2,
+  timerRound: 1.35,
 }
 
 function buildLegacyCelebrationFromScenes(scenes: ReviewFeedbackScenesSettings): ReviewCelebrationSettings {
@@ -190,23 +203,16 @@ function buildLegacyCelebrationFromScenes(scenes: ReviewFeedbackScenesSettings):
 }
 
 export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   preset: 'balanced',
-  mode: 'immersive',
-  visualStyle: 'warm_playful',
   soundEnabled: true,
   volume: 1.15,
-  baseVolumeMultiplier: 1,
-  confettiAmount: 1.25,
   animationEnabled: true,
   reducedCelebrationMotion: false,
   surpriseEnabled: true,
-  soundTheme: 'classic',
-  globalIntensity: 'balanced',
-  desktopNotificationsEnabled: false,
-  learningSoundsEnabled: true,
-  milestoneEffectsEnabled: true,
-  completionEffectsEnabled: true,
+  learningSoundsEnabled: null,
+  milestoneEffectsEnabled: null,
+  completionEffectsEnabled: null,
   scenes: {
     review: {
       ...DEFAULT_REVIEW_SCENE,
@@ -224,17 +230,20 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
       confettiAmount: 1.6,
       cooldownMs: 12000,
     },
-    timer: {
+    timerInterval: {
+      ...DEFAULT_REVIEW_SCENE,
+      animationEnabled: false,
+      confettiAmount: 0.9,
+      cooldownMs: 8000,
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.timerInterval,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.timerInterval,
+    },
+    timerRound: {
       ...DEFAULT_REVIEW_SCENE,
       confettiAmount: 2.2,
       cooldownMs: 12000,
-    },
-    quiz: {
-      ...DEFAULT_REVIEW_SCENE,
-      confettiAmount: 0.8,
-      cooldownMs: 900,
-      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.quiz,
-      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.quiz,
+      confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.timerRound,
+      volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.timerRound,
     },
   },
   celebration: undefined as never,
@@ -361,12 +370,29 @@ function readLegacyCelebrationScenes(raw: Record<string, unknown>): ReviewFeedba
       confettiPreset: DEFAULT_SCENE_CONFETTI_PRESETS.completion,
       volumeBoost: DEFAULT_SCENE_VOLUME_BOOSTS.completion,
     },
-    timer: {
-      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timer,
-    },
-    quiz: {
-      ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.quiz,
-    },
+    timerInterval: { ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timerInterval },
+    timerRound: { ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timerRound },
+  }
+}
+
+/**
+ * Convert a timer_focus_config `celebration.{secondaryInterval,primaryGoal}`
+ * entry into a feedback scene. Used by timerConfigMigration to carry the old
+ * per-event timer celebration settings into their new home.
+ */
+export function timerCelebrationEventToScene(
+  value: unknown,
+  fallback: ReviewFeedbackSceneSettings,
+): ReviewFeedbackSceneSettings {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    ...fallback,
+    enabled: sanitizeBoolean(raw.enabled, fallback.enabled),
+    soundEnabled: sanitizeBoolean(raw.soundEnabled, fallback.soundEnabled),
+    animationEnabled: sanitizeBoolean(raw.animationEnabled, fallback.animationEnabled),
+    volumeBoost: sanitizeNumber(raw.volumeBoost, fallback.volumeBoost ?? 1, 0, REVIEW_FEEDBACK_SCENE_BOOST_MAX),
+    // 'auto' had no equivalent here; fall back to the scene's own preset.
+    confettiPreset: sanitizeConfettiPreset(raw.visualPreset, fallback.confettiPreset),
   }
 }
 
@@ -380,63 +406,79 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
         : raw.globalIntensity === 'immersive'
           ? 'motivating'
           : 'balanced'
-  const mode = raw.mode === 'quiet' ? 'quiet' : 'immersive'
-  const globalIntensity =
-    raw.globalIntensity === 'quiet' || raw.globalIntensity === 'balanced' || raw.globalIntensity === 'immersive'
-      ? raw.globalIntensity
-      : DEFAULT_REVIEW_FEEDBACK_SETTINGS.globalIntensity
-  const visualStyle = raw.visualStyle === 'focus_light' ? 'focus_light' : DEFAULT_REVIEW_FEEDBACK_SETTINGS.visualStyle
-  const soundEnabled = sanitizeBoolean(raw.soundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundEnabled)
-  const animationEnabled = sanitizeBoolean(raw.animationEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.animationEnabled)
+  // v3 `mode: 'quiet'` gated the same paths sound/animation already gate, so it
+  // collapses into them rather than surviving as a redundant third switch.
+  const quietLegacyMode = raw.mode === 'quiet'
+  const soundEnabled = quietLegacyMode
+    ? false
+    : sanitizeBoolean(raw.soundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundEnabled)
+  const animationEnabled = quietLegacyMode
+    ? false
+    : sanitizeBoolean(raw.animationEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.animationEnabled)
   const fallbackScenes = readLegacyCelebrationScenes(raw)
   const scenesRaw = raw.scenes && typeof raw.scenes === 'object' ? (raw.scenes as Record<string, unknown>) : {}
   const scenes: ReviewFeedbackScenesSettings = {
     review: sanitizeSceneSettings(scenesRaw.review, fallbackScenes.review, soundEnabled, animationEnabled),
     milestone: sanitizeMilestoneSceneSettings(scenesRaw.milestone, fallbackScenes.milestone, soundEnabled, animationEnabled),
     completion: sanitizeSceneSettings(scenesRaw.completion, fallbackScenes.completion, soundEnabled, animationEnabled),
-    timer: sanitizeSceneSettings(scenesRaw.timer, fallbackScenes.timer, soundEnabled, animationEnabled),
-    quiz: sanitizeSceneSettings(scenesRaw.quiz, fallbackScenes.quiz, soundEnabled, animationEnabled),
+    timerInterval: sanitizeSceneSettings(
+      scenesRaw.timerInterval,
+      fallbackScenes.timerInterval,
+      soundEnabled,
+      animationEnabled,
+    ),
+    timerRound: sanitizeSceneSettings(
+      scenesRaw.timerRound,
+      fallbackScenes.timerRound,
+      soundEnabled,
+      animationEnabled,
+    ),
   }
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     preset,
-    mode,
-    visualStyle,
     soundEnabled,
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
-    baseVolumeMultiplier: sanitizeNumber(
-      raw.baseVolumeMultiplier,
-      DEFAULT_REVIEW_FEEDBACK_SETTINGS.baseVolumeMultiplier,
-      REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MIN,
-      REVIEW_FEEDBACK_BASE_VOLUME_MULTIPLIER_MAX,
-    ),
-    confettiAmount: sanitizeNumber(
-      raw.confettiAmount,
-      Math.max(scenes.review.confettiAmount, scenes.milestone.confettiAmount),
-      0,
-      3,
-    ),
     animationEnabled,
     reducedCelebrationMotion: sanitizeBoolean(raw.reducedCelebrationMotion, false),
     surpriseEnabled: sanitizeBoolean(raw.surpriseEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled),
-    soundTheme: 'classic',
-    globalIntensity,
-    desktopNotificationsEnabled: sanitizeBoolean(raw.desktopNotificationsEnabled, false),
-    learningSoundsEnabled: sanitizeBoolean(raw.learningSoundsEnabled, true),
-    milestoneEffectsEnabled: sanitizeBoolean(raw.milestoneEffectsEnabled, true),
-    completionEffectsEnabled: sanitizeBoolean(raw.completionEffectsEnabled, true),
+    learningSoundsEnabled: sanitizeChannelOverride(raw.learningSoundsEnabled),
+    milestoneEffectsEnabled: sanitizeChannelOverride(raw.milestoneEffectsEnabled),
+    completionEffectsEnabled: sanitizeChannelOverride(raw.completionEffectsEnabled),
     scenes,
     celebration: buildLegacyCelebrationFromScenes(scenes),
   }
 }
 
-export function getReviewFeedbackEffectiveVolume(
-  settings: Pick<ReviewFeedbackSettings, 'volume' | 'baseVolumeMultiplier'>,
+/** A stored boolean is an explicit user override; anything else follows the preset. */
+function sanitizeChannelOverride(value: unknown): FeedbackChannelOverride {
+  return typeof value === 'boolean' ? value : null
+}
+
+/**
+ * Preset-derived defaults, with explicit user overrides always winning.
+ *
+ * Presets used to write these three booleans directly, so turning off a channel
+ * and then touching any preset card silently switched it back on.
+ */
+export function resolveFeedbackChannels(
+  settings: Pick<
+    ReviewFeedbackSettings,
+    'preset' | 'learningSoundsEnabled' | 'milestoneEffectsEnabled' | 'completionEffectsEnabled'
+  >,
 ) {
-  const combined = settings.volume * settings.baseVolumeMultiplier
-  if (!Number.isFinite(combined)) return DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume
-  return Math.max(0, Math.min(REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX, combined))
+  const focus = settings.preset === 'focus'
+  return {
+    learningSounds: settings.learningSoundsEnabled ?? !focus,
+    milestoneEffects: settings.milestoneEffectsEnabled ?? !focus,
+    completionEffects: settings.completionEffectsEnabled ?? true,
+  }
+}
+
+export function getReviewFeedbackEffectiveVolume(settings: Pick<ReviewFeedbackSettings, 'volume'>) {
+  if (!Number.isFinite(settings.volume)) return DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume
+  return Math.max(0, Math.min(REVIEW_FEEDBACK_VOLUME_MAX, settings.volume))
 }
 
 export function applyFeedbackPreset(
@@ -470,27 +512,29 @@ export function applyFeedbackPreset(
       animationEnabled,
       confettiAmount: focus ? 0.65 : motivating ? 1.65 : 1.1,
     },
-    quiz: {
-      ...settings.scenes.quiz,
+    timerInterval: {
+      ...settings.scenes.timerInterval,
       enabled: true,
-      soundEnabled: soundEnabled && !focus,
-      animationEnabled,
-      confettiAmount: 0,
+      soundEnabled,
+      animationEnabled: animationEnabled && motivating,
+      confettiAmount: focus ? 0.5 : motivating ? 1.2 : 0.9,
     },
-    // Timer event details remain authoritative in timer_focus_config. This
-    // legacy scene is kept only so existing stored payloads still sanitize.
-    timer: { ...settings.scenes.timer },
+    timerRound: {
+      ...settings.scenes.timerRound,
+      enabled: true,
+      soundEnabled,
+      animationEnabled: animationEnabled && !focus,
+      confettiAmount: focus ? 0.9 : motivating ? 2.4 : 1.8,
+    },
   }
 
   return {
     ...settings,
-    schemaVersion: 3,
+    schemaVersion: 4,
     preset,
-    mode: 'immersive',
-    globalIntensity: preset === 'focus' ? 'quiet' : preset === 'motivating' ? 'immersive' : 'balanced',
-    learningSoundsEnabled: !focus,
-    milestoneEffectsEnabled: !focus,
-    completionEffectsEnabled: true,
+    // Deliberately does not touch learningSounds/milestoneEffects/
+    // completionEffectsEnabled: those are user overrides, and writing them here
+    // is what let a preset click silently re-enable a channel the user closed.
     scenes,
     celebration: buildLegacyCelebrationFromScenes(scenes),
   }

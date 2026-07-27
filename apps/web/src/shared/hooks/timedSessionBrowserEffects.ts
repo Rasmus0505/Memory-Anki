@@ -42,6 +42,14 @@ interface TimedSessionBrowserPauseOptions {
    */
   leaveScene: (meta?: TimedSessionMeta) => Promise<unknown>
   /**
+   * Crash-safe snapshot written the instant the page hides, before the debounce
+   * window opens. Backgrounding and leaving the scene are deliberately
+   * decoupled: waiting out `hiddenPauseMs` before persisting would lose the
+   * session if the OS killed the tab mid-window, but persisting without pausing
+   * costs nothing — the eventual record overwrites this one by id.
+   */
+  persistBackgroundCheckpoint: () => void
+  /**
    * Re-activate after a visibility-hidden leave while the study route is still
    * the resident page (isActive stayed true, so setSceneActive(true) never re-ran).
    */
@@ -59,6 +67,7 @@ export function useTimedSessionBrowserPauseEffects({
   hiddenPauseMs,
   pause,
   leaveScene,
+  persistBackgroundCheckpoint,
   resumeAfterVisibilityReturn,
   clearTimer,
   clearIntervalTimer,
@@ -77,6 +86,11 @@ export function useTimedSessionBrowserPauseEffects({
         }
         shouldResumeAfterVisibilityRef.current = true
         clearTimer(hiddenPauseRef)
+        // Insure the debounce window before opening it. With no window
+        // (hiddenPauseMs === 0) the leave below persists on the spot anyway.
+        if (hiddenPauseMs > 0 && statusRef.current === 'running') {
+          persistBackgroundCheckpoint()
+        }
         hiddenPauseRef.current = window.setTimeout(() => {
           void leaveScene({ reason: 'document_hidden' })
         }, hiddenPauseMs)
@@ -133,6 +147,7 @@ export function useTimedSessionBrowserPauseEffects({
     hiddenPauseRef,
     leaveScene,
     pause,
+    persistBackgroundCheckpoint,
     resumeAfterVisibilityReturn,
     sceneActiveRef,
     statusRef,

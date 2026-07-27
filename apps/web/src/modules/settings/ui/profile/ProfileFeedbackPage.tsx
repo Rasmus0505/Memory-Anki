@@ -15,10 +15,17 @@ import {
   applyFeedbackPreset,
   getReviewFeedbackEffectiveVolume,
   readReviewFeedbackSettings,
+  resolveFeedbackChannels,
   writeReviewFeedbackSettings,
+  type FeedbackChannelOverride,
   type FeedbackPreset,
+  type FeedbackSceneKey,
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
+import {
+  FEEDBACK_SCENE_DESCRIPTORS,
+  FeedbackSceneEditor,
+} from '@/modules/settings/ui/profile/components/FeedbackSceneEditor'
 import { cn } from '@/shared/lib/utils'
 
 const PRESET_OPTIONS: Array<{
@@ -69,6 +76,67 @@ function SettingRow({
   )
 }
 
+const CHANNEL_ROWS = [
+  {
+    field: 'learningSoundsEnabled',
+    resolvedKey: 'learningSounds',
+    title: '学习结果声音',
+    description: '控制答题和翻卡结果音，不影响计时召回。',
+  },
+  {
+    field: 'milestoneEffectsEnabled',
+    resolvedKey: 'milestoneEffects',
+    title: '阶段成就效果',
+    description: '控制连击与阶段里程碑，不改变进度状态本身。',
+  },
+  {
+    field: 'completionEffectsEnabled',
+    resolvedKey: 'completionEffects',
+    title: '最终完成效果',
+    description: '控制整次训练完成的彩带与总结强调。',
+  },
+] as const
+
+/** Tri-state row: `null` follows the preset, an explicit boolean overrides it. */
+function ChannelRow({
+  title,
+  description,
+  value,
+  resolved,
+  onChange,
+}: {
+  title: string
+  description: string
+  value: FeedbackChannelOverride
+  resolved: boolean
+  onChange: (next: FeedbackChannelOverride) => void
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-border/55 py-4 last:border-b-0">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          {value == null ? (
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
+              跟随预设
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary hover:bg-primary/20"
+            >
+              已自定义 · 恢复跟随
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <Switch checked={resolved} onCheckedChange={(next) => onChange(next)} aria-label={title} />
+    </div>
+  )
+}
+
 export default function ProfileFeedbackPage() {
   const [savedSettings, setSavedSettings] = React.useState<ReviewFeedbackSettings>(() =>
     readReviewFeedbackSettings(),
@@ -80,15 +148,18 @@ export default function ProfileFeedbackPage() {
     tone: 'success' | 'warning'
     message: string
   } | null>(null)
-  const [showAdvanced, setShowAdvanced] = React.useState(false)
   const effectiveVolume = getReviewFeedbackEffectiveVolume(draftSettings)
   const audio = useMindMapFeedbackAudio(
-    draftSettings.soundEnabled && draftSettings.mode === 'immersive',
+    draftSettings.soundEnabled,
     effectiveVolume,
   )
   const isDirty = React.useMemo(
     () => JSON.stringify(savedSettings) !== JSON.stringify(draftSettings),
     [draftSettings, savedSettings],
+  )
+  const resolvedChannels = React.useMemo(
+    () => resolveFeedbackChannels(draftSettings),
+    [draftSettings],
   )
   const isDirtyRef = React.useRef(isDirty)
   React.useEffect(() => {
@@ -132,29 +203,6 @@ export default function ProfileFeedbackPage() {
     setDraftSettings(next)
     setStatus(null)
   }, [])
-
-  const toggleDesktopNotifications = React.useCallback(
-    async (enabled: boolean) => {
-      if (!enabled) {
-        updateDraft((current) => ({ ...current, desktopNotificationsEnabled: false }))
-        return
-      }
-      if (!('Notification' in window)) {
-        setStatus({ tone: 'warning', message: '当前环境不支持桌面通知' })
-        return
-      }
-      const permission =
-        Notification.permission === 'default'
-          ? await Notification.requestPermission()
-          : Notification.permission
-      if (permission !== 'granted') {
-        setStatus({ tone: 'warning', message: '桌面通知权限未开启，计时器仍会保留常驻状态' })
-        return
-      }
-      updateDraft((current) => ({ ...current, desktopNotificationsEnabled: true }))
-    },
-    [updateDraft],
-  )
 
   const previewMilestone = React.useCallback(() => {
     emitReviewConfetti({
@@ -276,10 +324,12 @@ export default function ProfileFeedbackPage() {
                 }
               />
               <SettingRow
-                title="桌面通知"
-                description="仅用于休息到点等离开主窗口后仍需感知的提醒。"
-                checked={draftSettings.desktopNotificationsEnabled}
-                onCheckedChange={(enabled) => void toggleDesktopNotifications(enabled)}
+                title="惊喜彩蛋"
+                description="偶尔在连击时出现的额外鼓励文案。"
+                checked={draftSettings.surpriseEnabled}
+                onCheckedChange={(surpriseEnabled) =>
+                  updateDraft((current) => ({ ...current, surpriseEnabled }))
+                }
               />
             </CardContent>
           </Card>
@@ -323,37 +373,53 @@ export default function ProfileFeedbackPage() {
         </div>
 
         <Card>
-          <CardContent className="py-4">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-left text-sm font-semibold"
-              onClick={() => setShowAdvanced((current) => !current)}
-            >
-              高级分类开关
-              <span className="text-sm font-normal text-muted-foreground">{showAdvanced ? '收起' : '展开'}</span>
-            </button>
-            {showAdvanced ? (
-              <div className="mt-3 border-t border-border/60">
-                <SettingRow
-                  title="学习结果声音"
-                  description="控制答题和翻卡结果音，不影响计时召回。"
-                  checked={draftSettings.learningSoundsEnabled}
-                  onCheckedChange={(learningSoundsEnabled) => updateDraft((current) => ({ ...current, learningSoundsEnabled }))}
-                />
-                <SettingRow
-                  title="阶段成就效果"
-                  description="控制连击与阶段里程碑，不改变进度状态本身。"
-                  checked={draftSettings.milestoneEffectsEnabled}
-                  onCheckedChange={(milestoneEffectsEnabled) => updateDraft((current) => ({ ...current, milestoneEffectsEnabled }))}
-                />
-                <SettingRow
-                  title="最终完成效果"
-                  description="控制整次训练完成的彩带与总结强调。"
-                  checked={draftSettings.completionEffectsEnabled}
-                  onCheckedChange={(completionEffectsEnabled) => updateDraft((current) => ({ ...current, completionEffectsEnabled }))}
-                />
-              </div>
-            ) : null}
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">分类通道</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="pb-2 text-xs text-muted-foreground">
+              默认跟随上面的反馈模式。一旦你在这里明确开关，预设就不会再改动它。
+            </p>
+            {CHANNEL_ROWS.map((row) => (
+              <ChannelRow
+                key={row.field}
+                title={row.title}
+                description={row.description}
+                value={draftSettings[row.field]}
+                resolved={resolvedChannels[row.resolvedKey]}
+                onChange={(next) =>
+                  updateDraft((current) => ({ ...current, [row.field]: next }))
+                }
+              />
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">按场景微调</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 pt-0 xl:grid-cols-2">
+            {FEEDBACK_SCENE_DESCRIPTORS.map((descriptor) => (
+              <FeedbackSceneEditor
+                key={descriptor.key}
+                descriptor={descriptor}
+                scene={draftSettings.scenes[descriptor.key as FeedbackSceneKey]}
+                baseVolume={draftSettings.volume}
+                onChange={(patch) =>
+                  updateDraft((current) => ({
+                    ...current,
+                    scenes: {
+                      ...current.scenes,
+                      [descriptor.key]: {
+                        ...current.scenes[descriptor.key as FeedbackSceneKey],
+                        ...patch,
+                      },
+                    },
+                  }))
+                }
+              />
+            ))}
           </CardContent>
         </Card>
 

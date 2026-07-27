@@ -17,6 +17,7 @@ import {
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
   applyFeedbackPreset,
   getReviewFeedbackEffectiveVolume,
+  resolveFeedbackChannels,
   getSceneEffectiveVolume,
   readReviewFeedbackSettings,
   writeReviewFeedbackSettings,
@@ -44,10 +45,7 @@ function reviewEventToSceneKey(event: ReviewFeedbackEvent): FeedbackSceneKey {
 
 function shouldPlaySceneAudio(settings: ReviewFeedbackSettings, sceneKey: FeedbackSceneKey) {
   const scene = settings.scenes[sceneKey]
-  if (
-    (sceneKey === 'review' || sceneKey === 'quiz') &&
-    settings.learningSoundsEnabled === false
-  ) {
+  if (sceneKey === 'review' && !resolveFeedbackChannels(settings).learningSounds) {
     return false
   }
   return settings.soundEnabled && scene.enabled && scene.soundEnabled
@@ -71,13 +69,12 @@ interface UseReviewFeedbackOptions {
 }
 
 function deriveFxIntensity(args: {
-  mode: ReviewFeedbackSettings['mode']
   animationEnabled: boolean
   reducedMotion: boolean
   event?: ReviewFeedbackEvent
 }): MindMapReviewFxPayload['intensity'] {
   if (args.reducedMotion) return 'none'
-  if (args.mode === 'quiet' || !args.animationEnabled) return 'soft'
+  if (!args.animationEnabled) return 'soft'
   // 关键节点演出（区域攻克 / 全域攻克 / 完成）保持满档；
   // 普通翻卡为轻档，避免每次小爆发过强。
   if (
@@ -146,7 +143,7 @@ export function useReviewFeedback({
   const reducedMotion = usePrefersReducedMotion()
   const effectiveVolume = getReviewFeedbackEffectiveVolume(settings)
   const audio = useMindMapFeedbackAudio(
-    settings.soundEnabled && settings.mode === 'immersive',
+    settings.soundEnabled,
     effectiveVolume,
   )
   const rewardSnapshotRef = React.useRef(createInitialReviewRewardSnapshot(milestoneSteps))
@@ -174,18 +171,20 @@ export function useReviewFeedback({
       },
     ): CelebrationDecision => {
       const ignoreCooldown = options?.ignoreCooldown ?? false
-      if (settings.mode !== 'immersive') {
+      // Nothing to play or show at all. The two channel switches are the
+      // whole story now that the redundant immersive/quiet mode is gone.
+      if (!settings.soundEnabled && !settings.animationEnabled) {
         return { allowed: false, soundEnabled: false, animationEnabled: false }
       }
       if (
         (kind === 'milestone' || kind === 'branch_clear') &&
-        settings.milestoneEffectsEnabled === false
+        !resolveFeedbackChannels(settings).milestoneEffects
       ) {
         return { allowed: false, soundEnabled: false, animationEnabled: false }
       }
       if (
         (kind === 'all_clear_ready' || kind === 'session_complete') &&
-        settings.completionEffectsEnabled === false
+        !resolveFeedbackChannels(settings).completionEffects
       ) {
         return { allowed: false, soundEnabled: false, animationEnabled: false }
       }
@@ -229,19 +228,9 @@ export function useReviewFeedback({
         animationEnabled: eventConfig.animationEnabled && settings.animationEnabled && !reducedMotion,
       }
     },
-    [
-      reducedMotion,
-      settings.animationEnabled,
-      settings.celebration.allClearReady,
-      settings.celebration.branchClear,
-      settings.celebration.globalCooldownMs,
-      settings.celebration.milestone,
-      settings.celebration.sessionComplete,
-      settings.mode,
-      settings.milestoneEffectsEnabled,
-      settings.completionEffectsEnabled,
-      settings.soundEnabled,
-    ],
+    // resolveFeedbackChannels reads the whole settings object, so the individual
+    // keys it used to list are all subsumed by `settings`.
+    [reducedMotion, settings],
   )
 
   React.useEffect(() => {
@@ -354,7 +343,7 @@ export function useReviewFeedback({
     }
 
     const surpriseEnabled =
-      settings.mode === 'immersive' && settings.surpriseEnabled && !reducedMotion
+      settings.surpriseEnabled && !reducedMotion
     const surprise = shouldEmitSurprise({
       comboCount: nextRewardSnapshot.comboCount,
       surpriseEnabled,
@@ -378,7 +367,7 @@ export function useReviewFeedback({
       })
     }
 
-    if (settings.mode === 'immersive' && settings.animationEnabled && !reducedMotion) {
+    if (settings.animationEnabled && !reducedMotion) {
       if (milestoneIndex !== -1 && newCombo > prevCombo) {
         // 里程碑彩带由 ComboMilestoneBurst 组件负责，避免重复喷发。
       } else if (transition.events.includes('branch_clear')) {
@@ -433,7 +422,6 @@ export function useReviewFeedback({
               ? transition.revealedNodeIds
               : transition.revealedNodeIds.slice(-1),
         intensity: deriveFxIntensity({
-          mode: settings.mode,
           animationEnabled: settings.animationEnabled,
           reducedMotion,
           event: fxEvent,
@@ -470,7 +458,6 @@ export function useReviewFeedback({
     settings.celebration.branchClear,
     settings.celebration.milestone,
     settings.celebration.sessionComplete,
-    settings.mode,
     settings.surpriseEnabled,
     settings.soundEnabled,
     settings,
@@ -520,7 +507,7 @@ export function useReviewFeedback({
       }
       if (
         event === 'session_complete' &&
-        settings.completionEffectsEnabled !== false &&
+        resolveFeedbackChannels(settings).completionEffects &&
         settings.animationEnabled &&
         settings.celebration.sessionComplete.enabled &&
         settings.celebration.sessionComplete.animationEnabled &&
@@ -538,7 +525,7 @@ export function useReviewFeedback({
         event === 'session_reset' ||
         (
           event === 'session_complete' &&
-          settings.completionEffectsEnabled !== false &&
+          resolveFeedbackChannels(settings).completionEffects &&
           settings.celebration.sessionComplete.enabled &&
           settings.celebration.sessionComplete.animationEnabled
         )
@@ -549,7 +536,6 @@ export function useReviewFeedback({
           nodeUid: null,
           relatedNodeUids: [],
           intensity: deriveFxIntensity({
-            mode: settings.mode,
             animationEnabled: settings.animationEnabled,
             reducedMotion,
             event,
@@ -610,7 +596,7 @@ export function useReviewFeedback({
   )
   const progressTone = getReviewProgressTone(progressPercent)
   const animationEnabled =
-    settings.mode === 'immersive' && settings.animationEnabled && !reducedMotion
+    settings.animationEnabled && !reducedMotion
 
   return {
     settings,
@@ -627,7 +613,7 @@ export function useReviewFeedback({
     surpriseText,
     completionCeremonyActive,
     animationEnabled,
-    soundEnabled: settings.mode === 'immersive' && settings.soundEnabled,
+    soundEnabled: settings.soundEnabled,
     milestoneCelebration,
     reviewFxSignal,
     emitManualEvent,
