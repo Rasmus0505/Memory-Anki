@@ -1,5 +1,6 @@
 ﻿export interface BackupSummary {
-  kind: "full" | "rescue"
+  /** list_backups walks three directories; "rolling" was missing here, so those entries rendered as 事故快照. */
+  kind: "full" | "rolling" | "rescue"
   /** full = 完整备份(含附件等大目录)，rolling = 轻量备份(仅数据库+迁移状态) */
   scope?: "full" | "rolling"
   full?: boolean

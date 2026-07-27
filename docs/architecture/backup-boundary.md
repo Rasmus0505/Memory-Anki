@@ -14,3 +14,8 @@ knowledge -> backups.api
 `backups.api` is the only cross-context entry point. It exposes explicit lifecycle commands, Palace-version operations, archive transfer operations, and structure-safety predicates. Backups presentation may continue composing its own application services internally.
 
 The facade does not introduce cloud storage or a remote service. All backup and transfer behavior remains local and follows the configured Memory Anki runtime storage roots.
+
+
+## Settings Presentation Contract
+
+`ProfileBackupsPage` presents three explicit areas: backup/restore, migration/import-export, and danger. Restore eligibility is based on `has_database`, independent of whether the snapshot kind is `full`, `rolling`, or `rescue`. Safe exports and Palace imports remain in migration; full ZIP replacement remains only in danger and must preserve preview, schema validation, destructive confirmation, rescue backup, and reload behavior.
