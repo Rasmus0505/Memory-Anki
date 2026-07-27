@@ -349,8 +349,11 @@ def simulate_load_payload(
         stability = float(row.stability or 0.0)
         if stability <= 0:
             continue
+        last_review_at = row.last_review_at
+        if last_review_at is None:
+            continue
         interval_days = 9.0 * stability * (1.0 / retention - 1.0)
-        sim_due = row.last_review_at + timedelta(days=interval_days)
+        sim_due = last_review_at + timedelta(days=interval_days)
         sim_day = max(local_date_of(sim_due), today)
         if sim_day <= end:
             key = sim_day.isoformat()

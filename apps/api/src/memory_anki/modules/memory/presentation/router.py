@@ -138,8 +138,11 @@ def api_simulate_load(data: dict, session: Session = Depends(session_dep)):
         simulate_load_payload,
     )
 
+    raw_retention = data.get("desired_retention")
     try:
-        retention = float(data.get("desired_retention"))
+        if raw_retention is None:
+            raise ValueError
+        retention = float(raw_retention)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="desired_retention required") from exc
     days = int(data.get("days") or 30)

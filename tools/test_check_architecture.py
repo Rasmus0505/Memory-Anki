@@ -1337,6 +1337,31 @@ def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
     assert any("startup warmup" in error for error in errors)
 
 
+def test_fsrs_review_boundary_requires_practice_public_facade(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    write_file(api_src / "modules/memory/presentation/router.py", "")
+    write_file(
+        api_src / "modules/memory/application/formal_review_service.py",
+        "def get_fsrs_queue_payload(): pass\ndef get_fsrs_load_forecast(): pass\n",
+    )
+    write_file(
+        api_src / "modules/memory/application/formal_review_settlement.py",
+        "from memory_anki.modules.practice.application.temporary_marks import mark_temporary_roots_completed_on_settlement\n"
+        "def complete_formal_review(): pass\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_fsrs_review_frontend(errors)
+
+    assert any("practice.api" in error for error in errors)
+
+
 def test_fsrs_review_boundary_keeps_wave_execution_in_session_service(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import FreestyleTemporaryMark
-from memory_anki.modules.content.application.tree_structure import get_palace_tree_structure
+from memory_anki.modules.content.api import get_palace_tree_structure
 from memory_anki.modules.practice.domain.branch_units import subtree_uids
 
 
@@ -108,9 +108,7 @@ def replace_palace_temporary_marks(
 
     unify_result: dict[str, Any] | None = None
     if unify_progress and valid:
-        from memory_anki.modules.memory.application.temporary_mark_unify import (
-            unify_fsrs_progress_for_node_groups,
-        )
+        from memory_anki.modules.memory.api import unify_fsrs_progress_for_node_groups
 
         group_uids: list[str] = []
         seen: set[str] = set()

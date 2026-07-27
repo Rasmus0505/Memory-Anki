@@ -10,7 +10,7 @@ import {
   savePalaceEditorApi,
 } from '@/modules/content/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
+import type { MindMapSelection } from '@/modules/content/public'
 import {
   getFreestyleTemporaryMarksApi,
   replaceFreestyleTemporaryMarksApi,

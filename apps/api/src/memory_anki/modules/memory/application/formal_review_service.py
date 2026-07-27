@@ -168,7 +168,8 @@ def get_fsrs_queue_payload(
         now=now,
         include_nodes=True,
     )
-    due, later = [], []
+    due: list[dict[str, Any]] = []
+    later: list[dict[str, Any]] = []
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
         nodes = list(projection.get("nodes") or [])

@@ -1,5 +1,5 @@
-import { QueryClient, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { QueryClient, QueryClientContext } from '@tanstack/react-query'
+import { useContext, useEffect } from 'react'
 import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 
 /** Query keys of the scheduling transparency layer. */
@@ -12,29 +12,13 @@ export const reviewInsightQueryKeys = {
     ['review', 'schedule-detail', palaceId, nodeUid] as const,
 }
 
-let fallbackQueryClient: QueryClient | null = null
+const fallbackQueryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+})
 
-/**
- * Some hosts (deep widget tests, isolated mounts) render review widgets without
- * the app-level QueryClientProvider. Interval previews are purely additive UI,
- * so fall back to a module-level client instead of crashing the whole panel.
- */
+/** Return the provider client when present, otherwise an isolated additive-UI client. */
 export function useReviewInsightQueryClient(): QueryClient {
-  let providerClient: QueryClient | null = null
-  try {
-    // Stable hook order: useQueryClient is a plain useContext read that throws
-    // *after* the context read when no provider exists.
-    providerClient = useQueryClient()
-  } catch {
-    providerClient = null
-  }
-  if (providerClient) return providerClient
-  if (!fallbackQueryClient) {
-    fallbackQueryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
-    })
-  }
-  return fallbackQueryClient
+  return useContext(QueryClientContext) ?? fallbackQueryClient
 }
 
 /**

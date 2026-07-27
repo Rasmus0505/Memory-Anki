@@ -1997,6 +1997,15 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
                     "wave_session_service.py, not wave_service.py"
                 )
 
+    settlement_path = API_SRC / "modules/memory/application/formal_review_settlement.py"
+    if settlement_path.exists():
+        settlement_source = settlement_path.read_text(encoding="utf-8")
+        if "memory_anki.modules.practice.application" in settlement_source:
+            errors.append(
+                "formal review settlement must consume temporary-mark lifecycle through "
+                "memory_anki.modules.practice.api"
+            )
+
     warmup_path = API_SRC / "app/startup_warmup.py"
     if warmup_path.exists() and "review_schedules" in warmup_path.read_text(encoding="utf-8"):
         errors.append("startup warmup must use review_node_states, not legacy review_schedules")

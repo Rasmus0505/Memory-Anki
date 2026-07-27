@@ -193,11 +193,14 @@ def _eligible_rows(
             continue
         if int(row.state or 0) in {int(State.Learning), int(State.Relearning)}:
             continue
-        if (row.raw_due_at - now_naive) < timedelta(
+        raw_due_at = row.raw_due_at
+        if raw_due_at is None:
+            continue
+        if (raw_due_at - now_naive) < timedelta(
             days=active_policy.consolidate_floor_days
         ):
             continue
-        raw_local = local_date_of(row.raw_due_at)
+        raw_local = local_date_of(raw_due_at)
         # 今天及过期的卡不聚合（它们本来就该现在复习）。
         if raw_local <= today or raw_local > horizon_end:
             continue
@@ -286,8 +289,12 @@ def compute_aggregation(
     windows: dict[str, tuple[date, date, date]] = {}
     before_counts: dict[str, int] = {}
     for row in rows:
-        raw_local = local_date_of(row.raw_due_at)
-        iv = interval_days(row.last_review_at, row.raw_due_at)
+        raw_due_at = row.raw_due_at
+        last_review_at = row.last_review_at
+        if raw_due_at is None or last_review_at is None:
+            continue
+        raw_local = local_date_of(raw_due_at)
+        iv = interval_days(last_review_at, raw_due_at)
         earliest, latest = safety_window_bounds(
             anchor=raw_local, interval_days_value=iv, policy=active_policy
         )
@@ -392,7 +399,10 @@ def clear_aggregation(session: Session, *, palace_id: int) -> int:
         )
 
         remove_node_from_open_waves(session, row)
-        row.due_at = row.raw_due_at
+        raw_due_at = row.raw_due_at
+        if raw_due_at is None:
+            continue
+        row.due_at = raw_due_at
         row.effective_wave_id = None
         row.effective_local_date = None
         row.schedule_source = "manual"
@@ -530,8 +540,12 @@ def compute_unit_aggregation(
     before_counts: dict[str, int] = {}
     intervals: list[float] = []
     for row in rows:
-        raw_local = local_date_of(row.raw_due_at)
-        iv = interval_days(row.last_review_at, row.raw_due_at)
+        raw_due_at = row.raw_due_at
+        last_review_at = row.last_review_at
+        if raw_due_at is None or last_review_at is None:
+            continue
+        raw_local = local_date_of(raw_due_at)
+        iv = interval_days(last_review_at, raw_due_at)
         intervals.append(iv)
         earliest, latest = safety_window_bounds(
             anchor=raw_local, interval_days_value=iv, policy=active_policy

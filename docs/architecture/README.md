@@ -123,3 +123,7 @@ The concentrated architecture replacement has started with the two failure-prone
 
 - AI learning workbench and immutable run records: `docs/architecture/ai-learning-workbench.md`
 - English reading gap-driven input loop: `docs/architecture/english-reading-gap-loop.md`
+
+## Review Settlement Boundary
+
+- Formal review settlement may notify temporary-mark lifecycle only through `memory_anki.modules.practice.api`; the memory context must not import practice application internals.

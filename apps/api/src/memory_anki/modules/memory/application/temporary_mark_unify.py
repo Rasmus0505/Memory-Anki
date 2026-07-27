@@ -102,11 +102,13 @@ def unify_fsrs_progress_for_node_groups(
     now = utc_now_naive()
     affected = 0
     for uid in uids:
-        row = rows.get(uid)
-        if row is None:
+        existing = rows.get(uid)
+        if existing is None:
             row = ReviewNodeState(palace_id=int(palace_id), node_uid=uid)
             session.add(row)
             rows[uid] = row
+        else:
+            row = existing
         remove_node_from_open_waves(session, row)
         row.state = int(avg_state)
         row.step = None if int(avg_state) == int(State.Review) else 0

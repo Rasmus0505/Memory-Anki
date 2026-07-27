@@ -460,9 +460,7 @@ def complete_formal_review(
     # Temporary freestyle marks: clear a root when this unit settled with Good/Easy.
     temporary_completed: list[str] = []
     try:
-        from memory_anki.modules.practice.application.temporary_marks import (
-            mark_temporary_roots_completed_on_settlement,
-        )
+        from memory_anki.modules.practice.api import mark_temporary_roots_completed_on_settlement
 
         # `ratings` was popped earlier for score; still in local scope.
         good_or_easy = any(int(v) >= 3 for v in (ratings or {}).values())
