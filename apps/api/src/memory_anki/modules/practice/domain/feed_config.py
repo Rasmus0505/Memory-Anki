@@ -7,7 +7,6 @@ from typing import Any
 DEFAULT_MINDMAP_WEIGHT = 2
 DEFAULT_ANKI_WEIGHT = 2
 DEFAULT_QUIZ_WEIGHT = 1
-DEFAULT_NODE_LIMIT = 12
 DEFAULT_QUEUE_LENGTH = 20
 DEFAULT_SEED = 17
 DEFAULT_MIX_RATIO_MINDMAP = 2
@@ -19,9 +18,6 @@ DUE_POLICY_ALL_WEIGHTED = "all_content_due_weighted"
 
 PALACE_ORDER_SEQUENTIAL = "finish_palace_then_next"
 PALACE_ORDER_INTERLEAVE = "interleave_palaces"
-
-WITHIN_PALACE_TREE = "tree_order"
-WITHIN_PALACE_SHUFFLE = "deterministic_shuffle"
 
 MIX_MODE_MINDMAP_ONLY = "mindmap_only"
 MIX_MODE_QUIZ_ONLY = "quiz_only"
@@ -55,40 +51,9 @@ BOUND_QUIZ_PLACEMENTS = {
     BOUND_QUIZ_STREAM,
 }
 
-# Freestyle progress buckets (must match memory projection progress_bucket values).
-PROGRESS_SCOPE_OVERDUE = "overdue"
-PROGRESS_SCOPE_DUE = "due"
-PROGRESS_SCOPE_CALENDAR_TODAY = "calendar_today"
-PROGRESS_SCOPE_REINFORCEMENT = "reinforcement"
-PROGRESS_SCOPE_NEW = "new"
-
-# Stable order for API / preference echo.
-PROGRESS_SCOPE_ORDER = (
-    PROGRESS_SCOPE_OVERDUE,
-    PROGRESS_SCOPE_DUE,
-    PROGRESS_SCOPE_CALENDAR_TODAY,
-    PROGRESS_SCOPE_REINFORCEMENT,
-    PROGRESS_SCOPE_NEW,
-)
-
-PROGRESS_SCOPES = frozenset(PROGRESS_SCOPE_ORDER)
-
-# Default: clock-due formal + same-day restudy + first-learn; calendar_today opt-in.
-DEFAULT_PROGRESS_SCOPES: tuple[str, ...] = (
-    PROGRESS_SCOPE_OVERDUE,
-    PROGRESS_SCOPE_DUE,
-    PROGRESS_SCOPE_REINFORCEMENT,
-    PROGRESS_SCOPE_NEW,
-)
-
 PALACE_ORDERS = {
     PALACE_ORDER_SEQUENTIAL,
     PALACE_ORDER_INTERLEAVE,
-}
-
-WITHIN_PALACE_ORDERS = {
-    WITHIN_PALACE_TREE,
-    WITHIN_PALACE_SHUFFLE,
 }
 
 QUESTION_TYPES = {
@@ -130,37 +95,6 @@ def _as_positive_ids(value: Any) -> list[int]:
         seen.add(number)
         result.append(number)
     return result
-
-
-def _as_progress_scopes(value: Any, *, include_calendar_today_due: bool) -> list[str]:
-    """Sanitize multi-select progress scopes; empty/invalid → defaults.
-
-    Legacy ``include_calendar_today_due=True`` injects calendar_today when the
-    raw scopes list is missing or when the flag is set without that scope.
-    """
-    if isinstance(value, list):
-        selected: list[str] = []
-        seen: set[str] = set()
-        for item in value:
-            key = str(item or "").strip()
-            if key not in PROGRESS_SCOPES or key in seen:
-                continue
-            seen.add(key)
-            selected.append(key)
-        if include_calendar_today_due and PROGRESS_SCOPE_CALENDAR_TODAY not in seen:
-            selected.append(PROGRESS_SCOPE_CALENDAR_TODAY)
-        if selected:
-            # Stable canonical order for equality / storage.
-            return [key for key in PROGRESS_SCOPE_ORDER if key in set(selected)]
-    # No valid list: start from product default, then legacy calendar flag.
-    scopes = list(DEFAULT_PROGRESS_SCOPES)
-    if include_calendar_today_due and PROGRESS_SCOPE_CALENDAR_TODAY not in scopes:
-        scopes = [
-            key
-            for key in PROGRESS_SCOPE_ORDER
-            if key in set(scopes) | {PROGRESS_SCOPE_CALENDAR_TODAY}
-        ]
-    return scopes
 
 
 def _infer_mix_mode(
@@ -261,11 +195,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     if palace_order not in PALACE_ORDERS:
         palace_order = PALACE_ORDER_SEQUENTIAL
 
-    within_palace_order = str(data.get("within_palace_order") or WITHIN_PALACE_TREE)
-    if within_palace_order not in WITHIN_PALACE_ORDERS:
-        within_palace_order = WITHIN_PALACE_TREE
-
-    # Default due_only: freestyle mind-map cards are formal FSRS units only
+    # Default due_only: freestyle mind-map cards are due Reviews units only
     # (no zero-due practice fill). Expand policies still only emit due mindmaps.
     due_policy = str(data.get("due_policy") or DUE_POLICY_DUE_ONLY)
     if due_policy not in DUE_POLICIES:
@@ -296,15 +226,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     synced_anki = anki_weight if anki_enabled else 0
     synced_quiz = quiz_weight if quiz_enabled else 0
 
-    # Legacy bool (default off). Kept as derived mirror of progress_scopes for
-    # older clients; progress_scopes is the source of truth after sanitize.
-    include_calendar_today_due = _as_bool(data.get("include_calendar_today_due"), False)
-    progress_scopes = _as_progress_scopes(
-        data.get("progress_scopes"),
-        include_calendar_today_due=include_calendar_today_due,
-    )
-    include_calendar_today_due = PROGRESS_SCOPE_CALENDAR_TODAY in progress_scopes
-
     return {
         "content": {
             "mindmap_branch": mindmap_enabled,
@@ -320,18 +241,13 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "mix_ratio": mix_ratio,
         "bound_quiz_placement": bound_quiz_placement,
         "palace_order": palace_order,
-        "within_palace_order": within_palace_order,
         "due_policy": due_policy,
-        "node_limit": _as_int(data.get("node_limit"), DEFAULT_NODE_LIMIT, minimum=3, maximum=50),
         "queue_length": _as_int(
             data.get("queue_length"), DEFAULT_QUEUE_LENGTH, minimum=5, maximum=100
         ),
         "specific_palace_ids": _as_positive_ids(data.get("specific_palace_ids")),
         "question_type": question_type,
         "weak_quiz_priority": _as_bool(data.get("weak_quiz_priority"), True),
-        "progress_scopes": progress_scopes,
-        # Derived mirror of progress_scopes (calendar_today membership).
-        "include_calendar_today_due": include_calendar_today_due,
         "seed": _as_int(data.get("seed"), DEFAULT_SEED, minimum=1, maximum=2_147_483_647),
     }
 
@@ -345,7 +261,6 @@ __all__ = [
     "DEFAULT_MINDMAP_WEIGHT",
     "DEFAULT_MIX_RATIO_MINDMAP",
     "DEFAULT_MIX_RATIO_QUIZ",
-    "DEFAULT_NODE_LIMIT",
     "DEFAULT_QUEUE_LENGTH",
     "DEFAULT_QUIZ_WEIGHT",
     "DEFAULT_SEED",
@@ -363,17 +278,6 @@ __all__ = [
     "PALACE_ORDER_INTERLEAVE",
     "PALACE_ORDER_SEQUENTIAL",
     "PALACE_ORDERS",
-    "DEFAULT_PROGRESS_SCOPES",
-    "PROGRESS_SCOPE_CALENDAR_TODAY",
-    "PROGRESS_SCOPE_DUE",
-    "PROGRESS_SCOPE_NEW",
-    "PROGRESS_SCOPE_ORDER",
-    "PROGRESS_SCOPE_OVERDUE",
-    "PROGRESS_SCOPE_REINFORCEMENT",
-    "PROGRESS_SCOPES",
     "QUESTION_TYPES",
-    "WITHIN_PALACE_ORDERS",
-    "WITHIN_PALACE_SHUFFLE",
-    "WITHIN_PALACE_TREE",
     "sanitize_feed_config",
 ]

@@ -133,9 +133,7 @@ def build_quiz_cards(
     *,
     range_filter: str,
     due_ids: set[int],
-    practice_ids: set[int],
     due_range: str,
-    needs_practice_range: str,
     wrong_range: str = "",
     limit: int = DEFAULT_QUIZ_CARD_LIMIT,
 ) -> list[dict[str, Any]]:
@@ -144,8 +142,6 @@ def build_quiz_cards(
     card_limit = max(0, int(limit))
     for palace in palaces:
         if range_filter == due_range and palace.id not in due_ids:
-            continue
-        if range_filter == needs_practice_range and palace.id not in practice_ids:
             continue
         context = palace_context(palace)
         for question in _iter_palace_questions(palace, chapter_questions_by_palace.get(palace.id, [])):
@@ -179,4 +175,3 @@ __all__ = [
     "DEFAULT_QUIZ_CARD_LIMIT",
     "build_quiz_cards",
 ]
-

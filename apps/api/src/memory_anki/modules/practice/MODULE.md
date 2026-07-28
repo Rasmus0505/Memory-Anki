@@ -1,17 +1,19 @@
 # Module: practice
 
 ## Status
-scaffolding — public surface path for concentrated refactor (branch 7.22-refactor-optimize).
+migrated — consumer of Reviews unit projections.
 
 ## Owns
 Immersive freestyle queue, formal review session UX orchestration
 
 ## Migrates from
 - freestyle (queue/feed)
-- formal review orchestration (not FSRS math)
+- formal review orchestration (not scheduling math)
 
 ## Forbids
 No direct ORM; compose content/memory/quiz/session public only
+
+Practice must not split permanent-mark topology, persist review progress, or attach unit identity to quiz/Anki cards.
 
 ## Public surface
 - `public/commands.py` — write intents

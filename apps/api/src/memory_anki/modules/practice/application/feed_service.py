@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
@@ -13,7 +14,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 from memory_anki.modules.content.public.queries import resolve_palace_title
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
 from memory_anki.modules.english_reading.api import list_recent_materials
-from memory_anki.modules.memory.public.queries import project_due_rollups_batch
+from memory_anki.modules.memory.public.queries import project_palace_review_summaries
 
 from .card_context import palace_context
 from .quiz_cards import CONTENT_TYPE_QUIZ_QUESTION, build_quiz_cards
@@ -31,26 +32,22 @@ FREESTYLE_RANGES = {
 }
 
 CONTENT_TYPE_REVIEW = "review"
-CONTENT_TYPE_PRACTICE = "practice"
 CONTENT_TYPE_ENGLISH = "english"
 CONTENT_TYPE_ENGLISH_READING = "english_reading"
 
 FEED_CONTENT_TYPE_WEIGHTS = {
     CONTENT_TYPE_REVIEW: 50,
     CONTENT_TYPE_QUIZ_QUESTION: 40,
-    CONTENT_TYPE_PRACTICE: 30,
     CONTENT_TYPE_ENGLISH: 20,
     CONTENT_TYPE_ENGLISH_READING: 10,
 }
 
 QUIZ_DUE_PRIORITY = 96
-QUIZ_PRACTICE_PRIORITY = 66
 QUIZ_DEFAULT_PRIORITY = 60
 
 FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
-    CONTENT_TYPE_PRACTICE,
     CONTENT_TYPE_ENGLISH,
     CONTENT_TYPE_ENGLISH_READING,
 }
@@ -58,7 +55,6 @@ FREESTYLE_CONTENT_TYPES = {
 DEFAULT_FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
-    CONTENT_TYPE_PRACTICE,
     CONTENT_TYPE_ENGLISH,
     CONTENT_TYPE_ENGLISH_READING,
 }
@@ -171,7 +167,7 @@ def _due_rollups_for_palaces(
     """Single batch rollup for freestyle due filter + review cards."""
     if not palaces:
         return {}
-    return project_due_rollups_batch(
+    return project_palace_review_summaries(
         session,
         palaces,
         now=None,
@@ -182,11 +178,7 @@ def _due_rollups_for_palaces(
 def _due_palace_ids_from_rollups(rollups: dict[int, dict[str, Any]]) -> set[int]:
     ids: set[int] = set()
     for palace_id, projection in rollups.items():
-        if (
-            projection.get("has_due_review")
-            or projection.get("due_node_count")
-            or int(projection.get("reinforcement_due_count") or 0) > 0
-        ):
+        if projection.get("has_due_review"):
             ids.add(int(palace_id))
     return ids
 
@@ -202,71 +194,39 @@ def _build_review_cards_from_rollups(
     cards: list[dict[str, Any]] = []
     for palace in palaces:
         projection = rollups.get(int(palace.id)) or {}
-        due_count = int(projection.get("due_node_count") or 0)
-        reinforcement_count = int(projection.get("reinforcement_due_count") or 0)
-        if due_count <= 0 and reinforcement_count <= 0:
+        due_units = [
+            item
+            for item in projection.get("units") or []
+            if item.get("due") and item.get("id") and item.get("revision") is not None
+        ]
+        if not due_units:
             continue
-        overdue = int(projection.get("overdue_node_count") or 0)
         palace_title = resolve_palace_title(palace)
-        if due_count > 0:
-            label = projection.get("review_entry_label") or "开始复习"
-            mode = projection.get("review_entry_mode") or "palace"
-            branch = projection.get("primary_branch_title")
-            subtitle = label
-            if mode == "node" and branch:
-                subtitle = f"{label} · {branch}"
+        for unit in due_units:
+            unit_title = str(unit.get("title") or "剩余水流单元")
+            due_date = str(unit.get("due_date") or "")
+            overdue = due_date < date.today().isoformat()
             cards.append(
                 _action_card(
-                    card_id=f"review:palace:{palace.id}",
+                    card_id=f"review_unit:{unit['id']}:r{unit['revision']}",
                     content_type=CONTENT_TYPE_REVIEW,
                     action_kind="review",
-                    title=f"{'节点复习' if mode == 'node' else '正式复习'}：{palace_title}",
-                    subtitle=subtitle,
-                    href=f"/review/session/{palace.id}",
-                    priority=110 if overdue else 100,
-                    reason=f"{overdue} 个逾期节点" if overdue else "今天有到期节点",
-                    palace=palace,
-                    extra={
-                        "palace_id": palace.id,
-                        "due_node_count": due_count,
-                        "review_entry_mode": mode,
-                    },
-                )
-            )
-        if reinforcement_count > 0:
-            # Same-day reinforcement is a separate track from formal due; still
-            # surface it in freestyle so weak cards are not only on /review.
-            cards.append(
-                _action_card(
-                    card_id=f"review:reinforcement:{palace.id}",
-                    content_type=CONTENT_TYPE_REVIEW,
-                    action_kind="review",
-                    title=f"本轮补刷：{palace_title}",
-                    subtitle=f"忘记/困难后的队尾补刷 · 待复习 {reinforcement_count} 张",
+                    title=f"单元复习：{palace_title}",
+                    subtitle=f"{unit_title} · 到期 {due_date}",
                     href="/review",
-                    priority=115,
-                    reason=f"{reinforcement_count} 个节点待本轮补刷",
+                    priority=110 if overdue else 100,
+                    reason="已逾期" if overdue else "今天到期",
                     palace=palace,
                     extra={
                         "palace_id": palace.id,
-                        "due_node_count": reinforcement_count,
-                        "review_entry_mode": "reinforcement",
-                        "reinforcement_due_count": reinforcement_count,
+                        "unit_id": unit["id"],
+                        "unit_revision": unit["revision"],
+                        "node_count": len(unit.get("node_uids") or []),
+                        "due_date": due_date,
                     },
                 )
             )
     return cards
-
-
-def _build_practice_cards(
-    palaces: list[Palace],
-    *,
-    candidate_ids: set[int] | None,
-    range_filter: str,
-) -> list[dict[str, Any]]:
-    # Manual needs_practice flags are retired; practice cards no longer emit.
-    del palaces, candidate_ids, range_filter
-    return []
 
 
 def _build_english_card_from_course(session: Session, range_filter: str) -> list[dict[str, Any]]:
@@ -345,7 +305,6 @@ def _feed_card_action_priority(
     card: dict[str, Any],
     *,
     due_ids: set[int],
-    practice_ids: set[int],
 ) -> int:
     if card.get("type") == "action":
         try:
@@ -359,13 +318,11 @@ def _feed_card_action_priority(
     palace_id = _card_palace_id(card)
     if palace_id in due_ids:
         return QUIZ_DUE_PRIORITY
-    if palace_id in practice_ids:
-        return QUIZ_PRACTICE_PRIORITY
     return QUIZ_DEFAULT_PRIORITY
 
 
 def _feed_due_rank(card: dict[str, Any], *, due_ids: set[int]) -> int:
-    priority = _feed_card_action_priority(card, due_ids=due_ids, practice_ids=set())
+    priority = _feed_card_action_priority(card, due_ids=due_ids)
     if card.get("content_type") == CONTENT_TYPE_REVIEW and priority >= 110:
         return 2
     if card.get("content_type") == CONTENT_TYPE_REVIEW and priority >= 100:
@@ -382,10 +339,9 @@ def _feed_rank(
     card: dict[str, Any],
     *,
     due_ids: set[int],
-    practice_ids: set[int],
 ) -> tuple[int, int, int]:
     return (
-        _feed_card_action_priority(card, due_ids=due_ids, practice_ids=practice_ids),
+        _feed_card_action_priority(card, due_ids=due_ids),
         _feed_due_rank(card, due_ids=due_ids),
         _feed_type_weight(card),
     )
@@ -395,7 +351,6 @@ def _dedupe_and_sort_feed_cards(
     cards: list[dict[str, Any]],
     *,
     due_ids: set[int],
-    practice_ids: set[int],
 ) -> list[dict[str, Any]]:
     best_by_identity: dict[str, tuple[int, dict[str, Any]]] = {}
     anonymous_cards: list[tuple[int, dict[str, Any]]] = []
@@ -410,17 +365,16 @@ def _dedupe_and_sort_feed_cards(
             best_by_identity[identity] = (index, card)
             continue
         existing_index, existing_card = existing
-        if _feed_rank(card, due_ids=due_ids, practice_ids=practice_ids) > _feed_rank(
+        if _feed_rank(card, due_ids=due_ids) > _feed_rank(
             existing_card,
             due_ids=due_ids,
-            practice_ids=practice_ids,
         ):
             best_by_identity[identity] = (existing_index, card)
 
     ranked_cards = [*best_by_identity.values(), *anonymous_cards]
     ranked_cards.sort(
         key=lambda item: (
-            -_feed_card_action_priority(item[1], due_ids=due_ids, practice_ids=practice_ids),
+            -_feed_card_action_priority(item[1], due_ids=due_ids),
             -_feed_due_rank(item[1], due_ids=due_ids),
             -_feed_type_weight(item[1]),
             item[0],
@@ -457,8 +411,6 @@ def build_freestyle_feed(
     # One batch rollup serves due filter + review cards (no double per-palace loop).
     rollups = _due_rollups_for_palaces(session, palaces) if need_due else {}
     due_ids = _due_palace_ids_from_rollups(rollups)
-    practice_ids: set[int] = set()
-
     cards: list[dict[str, Any]] = []
     if need_quiz:
         cards.extend(
@@ -467,9 +419,7 @@ def build_freestyle_feed(
                 palaces,
                 range_filter=range_filter,
                 due_ids=due_ids,
-                practice_ids=practice_ids,
                 due_range=FREESTYLE_RANGE_DUE,
-                needs_practice_range="needs_practice",
                 wrong_range=FREESTYLE_RANGE_WRONG,
             )
         )
@@ -481,20 +431,12 @@ def build_freestyle_feed(
                 range_filter=range_filter,
             )
         )
-    if CONTENT_TYPE_PRACTICE in content_types:
-        cards.extend(
-            _build_practice_cards(
-                palaces,
-                candidate_ids=None,
-                range_filter=range_filter,
-            )
-        )
     if CONTENT_TYPE_ENGLISH in content_types:
         cards.extend(_build_english_card_from_course(session, range_filter))
     if CONTENT_TYPE_ENGLISH_READING in content_types:
         cards.extend(_build_english_reading_cards(session, range_filter))
 
-    cards = _dedupe_and_sort_feed_cards(cards, due_ids=due_ids, practice_ids=practice_ids)
+    cards = _dedupe_and_sort_feed_cards(cards, due_ids=due_ids)
 
     counts = {content_type: 0 for content_type in FREESTYLE_CONTENT_TYPES}
     for card in cards:

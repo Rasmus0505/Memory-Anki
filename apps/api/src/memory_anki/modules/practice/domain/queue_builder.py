@@ -3,16 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
 from .anki_cards import collect_anki_cards, resolve_effective_role
-from .branch_units import (
-    BranchUnit,
-    order_units_within_palace,
-    sort_units_by_node_policy,
-    split_branch_units,
-)
 from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
     DUE_POLICY_ALL_WEIGHTED,
@@ -26,8 +20,8 @@ from .feed_config import (
     MIX_MODE_SEQUENTIAL_QUIZ_MAP,
     PALACE_ORDER_INTERLEAVE,
     PALACE_ORDER_SEQUENTIAL,
-    WITHIN_PALACE_SHUFFLE,
 )
+from .review_units import ReviewUnitCandidate
 
 
 @dataclass(frozen=True)
@@ -52,11 +46,11 @@ class QueueBuildResult:
     operation_id: str = ""
 
 
-def _unit_due_count(unit: BranchUnit, due_uids: set[str]) -> int:
-    return sum(1 for uid in unit.ratable_node_uids if uid in due_uids)
+def _unit_due_count(unit: ReviewUnitCandidate, due_uids: set[str]) -> int:
+    return sum(1 for uid in unit.node_uids if uid in due_uids)
 
 
-def _unit_has_due(unit: BranchUnit, due_uids: set[str]) -> bool:
+def _unit_has_due(unit: ReviewUnitCandidate, due_uids: set[str]) -> bool:
     return _unit_due_count(unit, due_uids) > 0
 
 
@@ -70,70 +64,12 @@ def _stable_mix(*parts: Any) -> int:
     return value
 
 
-def build_palace_units(
-    *,
-    palace_id: int,
-    nodes: Mapping[str, Mapping[str, Any]],
-    root_uid: str | None,
-    node_limit: int,
-    within_palace_order: str,
-    seed: int,
-    permanent_mark_uids: Sequence[str] | None = None,
-    temporary_root_uids: Sequence[str] | None = None,
-) -> list[BranchUnit]:
-    units = split_branch_units(
-        palace_id=palace_id,
-        nodes=nodes,
-        root_uid=root_uid,
-        node_limit=node_limit,
-        permanent_mark_uids=permanent_mark_uids,
-        temporary_root_uids=temporary_root_uids,
-    )
-    ordered = order_units_within_palace(
-        units,
-        nodes=nodes,
-        root_uid=root_uid,
-        shuffle=within_palace_order == WITHIN_PALACE_SHUFFLE,
-        seed=seed,
-    )
-    return ordered
-
-
-def order_palace_batches(
-    palace_ids: Sequence[int],
-    units_by_palace: Mapping[int, Sequence[BranchUnit]],
-    *,
-    palace_order: str,
-    seed: int,
-) -> list[BranchUnit]:
-    """Sequential: finish each palace's units; interleave: deterministic round-robin."""
-    active_ids = [pid for pid in palace_ids if units_by_palace.get(pid)]
-    if not active_ids:
-        return []
-    if palace_order == PALACE_ORDER_SEQUENTIAL:
-        result: list[BranchUnit] = []
-        for palace_id in active_ids:
-            result.extend(units_by_palace[palace_id])
-        return result
-
-    # Deterministic interleave by seed-ordered palace sequence then round-robin.
-    ordered_ids = sorted(active_ids, key=lambda pid: (_stable_mix(seed, "palace", pid), pid))
-    queues = {pid: list(units_by_palace[pid]) for pid in ordered_ids}
-    result = []
-    while any(queues.values()):
-        for pid in ordered_ids:
-            bucket = queues[pid]
-            if bucket:
-                result.append(bucket.pop(0))
-    return result
-
-
 def partition_units_by_due(
-    units: Sequence[BranchUnit],
+    units: Sequence[ReviewUnitCandidate],
     due_by_palace: Mapping[int, set[str]],
-) -> tuple[list[BranchUnit], list[BranchUnit]]:
-    due_units: list[BranchUnit] = []
-    later_units: list[BranchUnit] = []
+) -> tuple[list[ReviewUnitCandidate], list[ReviewUnitCandidate]]:
+    due_units: list[ReviewUnitCandidate] = []
+    later_units: list[ReviewUnitCandidate] = []
     for unit in units:
         due_uids = due_by_palace.get(unit.palace_id, set())
         if _unit_has_due(unit, due_uids):
@@ -144,40 +80,29 @@ def partition_units_by_due(
 
 
 def sort_due_phase_units(
-    units: Sequence[BranchUnit],
+    units: Sequence[ReviewUnitCandidate],
     due_by_palace: Mapping[int, set[str]],
-) -> list[BranchUnit]:
-    """Due phase still applies node-limit preference within the due set."""
-    return sort_units_by_node_policy(units)
+) -> list[ReviewUnitCandidate]:
+    del due_by_palace
+    return list(units)
 
 
 def sort_fill_phase_units(
-    units: Sequence[BranchUnit],
+    units: Sequence[ReviewUnitCandidate],
     mastery_by_palace: Mapping[int, float],
     recent_practice_rank: Mapping[int, int],
-) -> list[BranchUnit]:
-    """Fill: node policy first, then lower mastery, then older practice."""
-    policy = sort_units_by_node_policy(units)
-    return sorted(
-        policy,
-        key=lambda unit: (
-            0 if unit.over_limit_delta == 0 else 1,
-            unit.node_count if unit.over_limit_delta == 0 else unit.over_limit_delta,
-            mastery_by_palace.get(unit.palace_id, 0.5),
-            recent_practice_rank.get(unit.palace_id, 10**9),
-            unit.palace_id,
-            unit.branch_uid,
-        ),
-    )
+) -> list[ReviewUnitCandidate]:
+    del mastery_by_palace, recent_practice_rank
+    return list(units)
 
 
 def attach_questions_to_units(
-    units: Sequence[BranchUnit],
+    units: Sequence[ReviewUnitCandidate],
     quizzes: Sequence[QuizCandidate],
 ) -> tuple[dict[str, list[QuizCandidate]], list[QuizCandidate]]:
     """Bound questions follow a branch that contains the bound node; else palace pool."""
     unit_questions: dict[str, list[QuizCandidate]] = {unit_key(unit): [] for unit in units}
-    palace_units: dict[int, list[BranchUnit]] = {}
+    palace_units: dict[int, list[ReviewUnitCandidate]] = {}
     for unit in units:
         palace_units.setdefault(unit.palace_id, []).append(unit)
 
@@ -188,7 +113,7 @@ def attach_questions_to_units(
             continue
         matched = False
         for unit in palace_units.get(quiz.palace_id, []):
-            ratable = set(unit.ratable_node_uids)
+            ratable = set(unit.node_uids)
             if any(uid in ratable for uid in quiz.bound_node_uids):
                 unit_questions[unit_key(unit)].append(quiz)
                 matched = True
@@ -198,10 +123,8 @@ def attach_questions_to_units(
     return unit_questions, unbound
 
 
-def unit_key(unit: BranchUnit) -> str:
-    if unit.unit_id:
-        return f"review_unit:{unit.unit_id}:r{unit.unit_revision or 0}"
-    return f"mindmap_branch:{unit.palace_id}:{unit.branch_uid}"
+def unit_key(unit: ReviewUnitCandidate) -> str:
+    return f"review_unit:{unit.unit_id}:r{unit.revision}"
 
 
 def quiz_key(quiz: QuizCandidate) -> str:
@@ -349,7 +272,7 @@ def _is_quiz_side_card(card: Mapping[str, Any]) -> bool:
 
 
 def mindmap_card_payload(
-    unit: BranchUnit,
+    unit: ReviewUnitCandidate,
     *,
     palace_title: str,
     due_uids: set[str],
@@ -358,21 +281,14 @@ def mindmap_card_payload(
     anki_front_uid: str | None = None,
     anki_back_uids: list[str] | None = None,
 ) -> dict[str, Any] | None:
-    """Build a mind-map queue card, or None when the unit has no actionable nodes.
-
-    Freestyle mind-map cards cover formal FSRS due **and** same-day reinforcement
-    (when those UIDs are present in ``due_uids``). Units without either kind of
-    actionable node are never emitted as practice/fill filler.
-
-    ``presentation`` is ``palace`` (default flip) or ``anki`` (front/back card).
-    """
-    due_in_unit = [uid for uid in unit.ratable_node_uids if uid in due_uids]
+    """Build a due review-unit card or an independent Anki presentation card."""
+    due_in_unit = [uid for uid in unit.node_uids if uid in due_uids]
     if not due_in_unit:
         return None
     is_anki = presentation == "anki"
     card_type = "anki_card" if is_anki else "mindmap_branch"
     card_id = (
-        f"anki_card:{unit.palace_id}:{anki_front_uid or unit.branch_uid}"
+        f"anki_card:{unit.palace_id}:{anki_front_uid or unit.anchor_uid}"
         if is_anki
         else unit_key(unit)
     )
@@ -383,16 +299,10 @@ def mindmap_card_payload(
         "presentation": "anki" if is_anki else "palace",
         "palace_id": unit.palace_id,
         "palace_title": palace_title,
-        "branch_uid": unit.branch_uid,
+        "anchor_uid": unit.anchor_uid,
         "context_path": list(unit.context_path),
-        "ratable_node_uids": list(unit.ratable_node_uids),
-        "due_node_uids": due_in_unit,
+        "node_uids": list(unit.node_uids),
         "node_count": unit.node_count,
-        "over_limit_delta": unit.over_limit_delta,
-        "due_node_count": len(due_in_unit),
-        "selection_reason": unit.selection_reason,
-        "unit_id": unit.unit_id,
-        "unit_revision": unit.unit_revision,
         "phase": phase,
         "palace_context": {
             "id": unit.palace_id,
@@ -401,8 +311,11 @@ def mindmap_card_payload(
         },
     }
     if is_anki:
-        payload["anki_front_uid"] = anki_front_uid or unit.branch_uid
+        payload["anki_front_uid"] = anki_front_uid or unit.anchor_uid
         payload["anki_back_uids"] = list(anki_back_uids or [])
+    else:
+        payload["unit_id"] = unit.unit_id
+        payload["unit_revision"] = unit.revision
     return payload
 
 
@@ -453,7 +366,7 @@ def assemble_queue(
     *,
     config: Mapping[str, Any],
     palace_meta: Mapping[int, Mapping[str, Any]],
-    units_by_palace: Mapping[int, Sequence[BranchUnit]],
+    units_by_palace: Mapping[int, Sequence[ReviewUnitCandidate]],
     due_by_palace: Mapping[int, set[str]],
     mastery_by_palace: Mapping[int, float],
     recent_practice_rank: Mapping[int, int],
@@ -512,8 +425,8 @@ def assemble_queue(
             key=lambda palace_id: (_stable_mix(seed, "palace", palace_id), palace_id),
         )
 
-    due_units_by_palace: dict[int, list[BranchUnit]] = {}
-    later_units_by_palace: dict[int, list[BranchUnit]] = {}
+    due_units_by_palace: dict[int, list[ReviewUnitCandidate]] = {}
+    later_units_by_palace: dict[int, list[ReviewUnitCandidate]] = {}
     for palace_id in palace_ids:
         due_units, later_units = partition_units_by_due(
             units_by_palace.get(palace_id, ()),
@@ -539,7 +452,9 @@ def assemble_queue(
             weak_priority=False,
         )
 
-    def unit_cards(units: Sequence[BranchUnit], phase: str) -> list[dict[str, Any]]:
+    def unit_cards(
+        units: Sequence[ReviewUnitCandidate], phase: str
+    ) -> list[dict[str, Any]]:
         if not mindmap_enabled and not anki_enabled:
             return []
         cards: list[dict[str, Any]] = []
@@ -547,14 +462,26 @@ def assemble_queue(
             title = str((palace_meta.get(unit.palace_id) or {}).get("title") or "")
             due_uids = due_by_palace.get(unit.palace_id, set())
             palace_nodes = nodes_by_palace.get(unit.palace_id) or {}
+            if mindmap_enabled:
+                payload = mindmap_card_payload(
+                    unit,
+                    palace_title=title,
+                    due_uids=due_uids,
+                    phase=phase,
+                    presentation="palace",
+                )
+                if payload is not None:
+                    cards.append(payload)
+
             memo: dict[str, str] = {}
             due_fronts = [
                 uid
-                for uid in unit.ratable_node_uids
+                for uid in unit.node_uids
                 if uid in due_uids
                 and resolve_effective_role(str(uid), palace_nodes, memo) == "front"
             ]
-            # Prefer Anki presentation when enabled and unit has due front(s).
+            # Anki cards are independent practice prompts. They supplement the
+            # review-unit card and never carry unit identity or replace scoring.
             if anki_enabled and due_fronts and palace_nodes:
                 anki_defs = {
                     str(item["front_uid"]): item
@@ -570,12 +497,13 @@ def assemble_queue(
                     due_for_card = [uid for uid in ratable if uid in due_uids]
                     if not due_for_card:
                         due_for_card = [str(front_uid)]
-                    # Synthetic unit scope for this Anki card.
-                    scoped = replace(
-                        unit,
-                        branch_uid=str(front_uid),
-                        ratable_node_uids=tuple(ratable),
-                        node_count=len(ratable),
+                    scoped = ReviewUnitCandidate(
+                        palace_id=unit.palace_id,
+                        anchor_uid=str(front_uid),
+                        context_path=unit.context_path,
+                        node_uids=tuple(ratable),
+                        unit_id=unit.unit_id,
+                        revision=unit.revision,
                     )
                     payload = mindmap_card_payload(
                         scoped,
@@ -588,19 +516,6 @@ def assemble_queue(
                     )
                     if payload is not None:
                         cards.append(payload)
-                # Avoid double-queue: unit with Anki fronts skips palace flip.
-                continue
-
-            if mindmap_enabled:
-                payload = mindmap_card_payload(
-                    unit,
-                    palace_title=title,
-                    due_uids=due_uids,
-                    phase=phase,
-                    presentation="palace",
-                )
-                if payload is not None:
-                    cards.append(payload)
         return cards
 
     def quiz_cards(items: Sequence[QuizCandidate], phase: str) -> list[dict[str, Any]]:
@@ -613,7 +528,7 @@ def assemble_queue(
         return cards
 
     def palace_map_stream(
-        units: Sequence[BranchUnit],
+        units: Sequence[ReviewUnitCandidate],
         phase: str,
     ) -> list[dict[str, Any]]:
         """Palace-side cards only (mindmap / anki)."""
@@ -623,7 +538,7 @@ def assemble_queue(
         return stream
 
     def collect_palace_streams(
-        units: Sequence[BranchUnit],
+        units: Sequence[ReviewUnitCandidate],
         palace_quizzes: Sequence[QuizCandidate],
         phase: str,
     ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
@@ -670,7 +585,7 @@ def assemble_queue(
         )
 
     def compose_phase(
-        units_map: Mapping[int, Sequence[BranchUnit]],
+        units_map: Mapping[int, Sequence[ReviewUnitCandidate]],
         quizzes_map: Mapping[int, Sequence[QuizCandidate]],
         phase: str,
     ) -> list[dict[str, Any]]:
@@ -778,13 +693,11 @@ __all__ = [
     "QueueBuildResult",
     "assemble_queue",
     "attach_questions_to_units",
-    "build_palace_units",
     "deterministic_random_merge",
     "filter_completed",
     "interleave_by_weights",
     "merge_streams_by_mix_mode",
     "mindmap_card_payload",
-    "order_palace_batches",
     "partition_units_by_due",
     "quiz_card_payload",
     "quiz_key",

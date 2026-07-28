@@ -14,12 +14,12 @@ from memory_anki.modules.quiz.public.queries import (
     list_published_questions_for_palaces,
 )
 
-from ..domain.branch_units import BranchUnit, ancestor_path
 from ..domain.feed_config import sanitize_feed_config
 from ..domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
 )
+from ..domain.review_units import candidate_from_projection
 
 
 def build_freestyle_queue(
@@ -60,16 +60,10 @@ def build_freestyle_queue(
             projection = get_palace_unit_projection(session, palace_id)
             projected_units = list(projection.get("units") or [])
             units_by_palace[palace_id] = [
-                BranchUnit(
+                candidate_from_projection(
                     palace_id=palace_id,
-                    branch_uid=str(item["anchor_uid"]),
-                    context_path=tuple(ancestor_path(nodes, str(item["anchor_uid"]))),
-                    ratable_node_uids=tuple(item.get("node_uids") or []),
-                    node_count=len(item.get("node_uids") or []),
-                    over_limit_delta=0,
-                    selection_reason="permanent_review_unit",
-                    unit_id=str(item["id"]),
-                    unit_revision=int(item["revision"]),
+                    nodes=nodes,
+                    projection=item,
                 )
                 for item in projected_units
             ]
