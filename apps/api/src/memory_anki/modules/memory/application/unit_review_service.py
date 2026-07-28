@@ -38,12 +38,31 @@ ITEM_PASSED = "passed"
 ENCOUNTER_OPEN = "open"
 ENCOUNTER_CLOSED = "closed"
 
+def _normalize_unit_review_client_source(value: Any) -> str | None:
+    """Align with study-session time-record client_source buckets."""
+    normalized = str(value or "").strip().lower()
+    if normalized == "desktop":
+        return "desktop"
+    if normalized in {"pwa", "mobile"}:
+        return "pwa"
+    return None
+
+
+def _load_study_summary(study: StudySession) -> dict[str, Any]:
+    try:
+        raw = json.loads(study.summary_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        raw = {}
+    return raw if isinstance(raw, dict) else {}
+
+
 def start_unit_review_session(
     session: Session,
     palace_id: int,
     *,
     scene: str = "formal_unit_review",
     unit_ids: list[str] | None = None,
+    client_source: str | None = None,
 ) -> dict[str, Any]:
     projection = get_palace_unit_projection(session, palace_id)
     if projection["mark_required"]:
@@ -61,6 +80,10 @@ def start_unit_review_session(
         raise ValueError("no review units available")
 
     now = utc_now_naive()
+    summary: dict[str, Any] = {}
+    normalized_source = _normalize_unit_review_client_source(client_source)
+    if normalized_source is not None:
+        summary["client_source"] = normalized_source
     study = StudySession(
         id=uuid.uuid4().hex,
         status=SESSION_ACTIVE,
@@ -70,7 +93,7 @@ def start_unit_review_session(
         palace_id=palace_id,
         title=str(projection.get("title") or ""),
         started_at=now,
-        summary_json="{}",
+        summary_json=json.dumps(summary, ensure_ascii=False),
         progress_json="{}",
         events_json="[]",
     )
@@ -344,6 +367,7 @@ def start_freestyle_unit_review_session(
     unit_revision: int,
     encounter_id: str,
     round_id: str,
+    client_source: str | None = None,
 ) -> dict[str, Any]:
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
@@ -370,10 +394,19 @@ def start_freestyle_unit_review_session(
             state.palace_id,
             scene="freestyle_unit_review",
             unit_ids=[state.id],
+            client_source=client_source,
         )
         study = session.get(StudySession, str(created["id"]))
         if study is None:
             raise ValueError("failed to create unit review session")
+    else:
+        # Resume path: stamp source if the active session still lacks one.
+        normalized_source = _normalize_unit_review_client_source(client_source)
+        if normalized_source is not None:
+            summary = _load_study_summary(study)
+            if summary.get("client_source") not in {"desktop", "pwa"}:
+                summary["client_source"] = normalized_source
+                study.summary_json = json.dumps(summary, ensure_ascii=False)
 
     return open_unit_review_encounter(
         session,
@@ -626,7 +659,11 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
         .order_by(ReviewUnitState.due_date.asc())
         .first()
     )
+    # Merge completion receipt into existing summary so client_source stamped at
+    # start (desktop/pwa freestyle or formal review) is not wiped to 未知端.
+    prior = _load_study_summary(study)
     summary = {
+        **prior,
         "study_session_id": study.id,
         "palace_id": study.palace_id,
         "completed_unit_count": len(items),
@@ -636,6 +673,12 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
         "next_review_date": next_due.due_date.isoformat() if next_due else None,
         "completed_at": to_api_datetime(now),
     }
+    prior_source = _normalize_unit_review_client_source(prior.get("client_source"))
+    if prior_source is not None:
+        summary["client_source"] = prior_source
+    elif "client_source" in summary:
+        # Drop invalid leftover values so summarize stays clean.
+        summary.pop("client_source", None)
     study.effective_seconds = duration
     study.summary_json = json.dumps(summary, ensure_ascii=False)
     return summary

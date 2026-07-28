@@ -50,13 +50,14 @@ def _seed_review_unit(session) -> ReviewUnitState:
     return session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True).one()
 
 
-def _start(session, state: ReviewUnitState, encounter_id: str):
+def _start(session, state: ReviewUnitState, encounter_id: str, client_source: str | None = "desktop"):
     return start_freestyle_unit_review_session(
         session,
         unit_id=state.id,
         unit_revision=state.revision,
         encounter_id=encounter_id,
         round_id="round-2026-07-27",
+        client_source=client_source,
     )
 
 
@@ -152,6 +153,29 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
         _start(db_session, state, "encounter-future")
 
 
+def test_freestyle_complete_preserves_client_source_in_summary(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-source", client_source="pwa")
+    study = db_session.get(StudySession, review_session["id"])
+    assert '"client_source": "pwa"' in (study.summary_json or "")
+
+    _rate(db_session, review_session, state, "encounter-source", "rating-source", 3)
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-source",
+        operation_id="close-source",
+    )
+
+    assert closed["session_status"] == "completed"
+    assert closed["completion"]["client_source"] == "pwa"
+    db_session.refresh(study)
+    summary = json.loads(study.summary_json or "{}")
+    assert summary["client_source"] == "pwa"
+    assert summary["completed_unit_count"] == 1
+
+
 def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-hard")
@@ -198,11 +222,17 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
             "unit_revision": revision,
             "round_id": "http-round",
             "encounter_id": "http-encounter",
+            "clientSource": "desktop",
         },
     )
     assert started.status_code == 200
     review_session = started.json()["item"]
     assert review_session["units"][0]["encounter"]["id"] == "http-encounter"
+
+    with session_factory() as session:
+        study = session.get(StudySession, review_session["id"])
+        assert study is not None
+        assert json.loads(study.summary_json or "{}").get("client_source") == "desktop"
 
     rated = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}/ratings",

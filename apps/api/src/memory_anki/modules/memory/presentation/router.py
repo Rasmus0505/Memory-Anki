@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
@@ -53,9 +53,20 @@ def reconcile_units(palace_id: int, session: Session = Depends(session_dep)):
 
 
 @router.post("/review/palaces/{palace_id}/sessions")
-def start_formal_session(palace_id: int, session: Session = Depends(session_dep)):
+def start_formal_session(
+    palace_id: int,
+    data: dict | None = Body(default=None),
+    session: Session = Depends(session_dep),
+):
     try:
-        return {"item": start_unit_review_session(session, palace_id)}
+        payload = data if isinstance(data, dict) else {}
+        return {
+            "item": start_unit_review_session(
+                session,
+                palace_id,
+                client_source=payload.get("client_source") or payload.get("clientSource"),
+            )
+        }
     except ValueError as exc:
         raise _bad_request(exc) from exc
 
@@ -74,6 +85,7 @@ def start_freestyle_session(
                 unit_revision=int(data.get("unit_revision") or 0),
                 encounter_id=str(data.get("encounter_id") or ""),
                 round_id=str(data.get("round_id") or ""),
+                client_source=data.get("client_source") or data.get("clientSource"),
             )
         }
     except (TypeError, ValueError) as exc:

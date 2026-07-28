@@ -1,5 +1,6 @@
 import { request } from '@/shared/api/http'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
+import { detectClientSource } from '@/shared/lib/clientSource'
 
 export type UnitRating = 1 | 2 | 3 | 4
 
@@ -107,7 +108,12 @@ export async function getDueReviewUnitsApi() {
 }
 
 export async function startUnitReviewSessionApi(palaceId: number) {
-  const response = await request<{ item: UnitReviewSessionDto }>(`/review/palaces/${palaceId}/sessions`, { method: 'POST' })
+  const response = await request<{ item: UnitReviewSessionDto }>(`/review/palaces/${palaceId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      clientSource: detectClientSource(),
+    }),
+  })
   return response.item
 }
 
@@ -122,6 +128,7 @@ export async function startFreestyleUnitReviewSessionApi(
       unit_revision: unit.revision,
       round_id: roundId,
       encounter_id: encounterId,
+      clientSource: detectClientSource(),
     }),
   })
   return response.item
