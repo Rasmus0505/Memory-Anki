@@ -68,23 +68,11 @@ router = APIRouter(tags=["settings"])
 
 FSRS_SETTINGS_KEYS = {
     "desired_retention",
-    "mastery_horizon_days",
     "maximum_interval",
     "learning_steps",
     "relearning_steps",
     "enable_fuzzing",
     "daily_new_limit",
-    # 宫殿整批调度
-    "scheduling_unit_mode",
-    "unit_max_pull_ratio",
-    "unit_max_push_ratio",
-    "unit_max_retention_drop_pp",
-    "unit_min_wave_cards",
-    "unit_day_policy",
-    "unit_fuzz_max_days",
-    "consolidate_enabled",
-    "consolidate_floor_days",
-    "large_batch_hint_size",
 }
 
 CLIENT_PREFERENCE_GROUPS = {
@@ -98,7 +86,6 @@ CLIENT_PREFERENCE_GROUPS = {
     "study_goals",
     "palace_list_view_settings",
     "palace_shelf_view_settings",
-    "review_queue_view_settings",
     "time_record_tags",
     "freestyle_feed_config",
     "mark_color_labels",

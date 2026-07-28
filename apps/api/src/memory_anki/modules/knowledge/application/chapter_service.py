@@ -42,32 +42,30 @@ def _subject_json(s) -> dict:
 
 
 def _palace_out(p: Palace, session: Session | None = None) -> dict:
-    due_node_count = 0
-    mastery_percent = 0
-    next_due = None
-    mastered = bool(getattr(p, "mastered", False))
+    review_status = "marking_required"
+    review_unit_count = 0
+    due_review_unit_count = 0
+    next_review_date = None
     if session is not None:
-        from memory_anki.modules.memory.public.queries import get_palace_due_rollup
+        from memory_anki.modules.memory.public.queries import get_palace_review_summary
 
         try:
-            projection = get_palace_due_rollup(session, p.id)
-            due_node_count = int(projection.get("due_node_count") or 0)
-            mastery_percent = int(projection.get("mastery_percent") or 0)
-            next_due = projection.get("next_review_at")
-            mastered = bool(projection.get("mastered"))
+            projection = get_palace_review_summary(session, p.id)
+            review_status = str(projection.get("review_status") or "marking_required")
+            review_unit_count = int(projection.get("unit_count") or 0)
+            due_review_unit_count = int(projection.get("due_unit_count") or 0)
+            next_review_date = projection.get("next_review_date")
         except ValueError:
             pass
     return {
         "id": p.id,
         "title": p.title,
         "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
-        "mastered": mastered,
         "archived": bool(p.archived),
-        "review_stage_completed": mastery_percent,
-        "review_stage_total": 100,
-        "due_node_count": due_node_count,
-        "mastery_percent": mastery_percent,
-        "next_due_date": next_due[:10] if isinstance(next_due, str) and next_due else None,
+        "review_status": review_status,
+        "review_unit_count": review_unit_count,
+        "due_review_unit_count": due_review_unit_count,
+        "next_review_date": next_review_date,
     }
 
 

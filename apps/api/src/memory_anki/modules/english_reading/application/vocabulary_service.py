@@ -17,14 +17,14 @@ from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingVersion,
     EnglishReadingVocabularyNote,
 )
-from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
-from memory_anki.platform.persistence.fsrs_runtime import (
+from memory_anki.modules.english.api import (
     RATING_LABELS,
     VALID_RATINGS,
     build_scheduler,
     load_fsrs_settings,
     normalize_rating,
 )
+from memory_anki.modules.english_reading.domain.errors import EnglishReadingError
 
 from . import service as _svc
 

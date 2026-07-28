@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.english import EnglishPatternSentence
-from memory_anki.platform.persistence.fsrs_runtime import build_scheduler, load_fsrs_settings
+
+from .fsrs_runtime import build_scheduler, load_fsrs_settings
 
 
 def init_fsrs_card(session: Session, row: EnglishPatternSentence) -> None:

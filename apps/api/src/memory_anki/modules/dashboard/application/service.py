@@ -112,30 +112,21 @@ def build_dashboard_payload(
     for item in queue.get("reviews") or []:
         reviews.append(
             {
-                "id": item["palace_id"],
+                "id": item["id"],
                 "palace_id": item["palace_id"],
-                "palace": item.get("palace"),
-                "scheduled_date": item.get("due_date"),
+                "palace_title": item.get("palace_title") or "",
+                "unit_title": item.get("title") or "",
+                "due_date": item.get("due_date"),
                 "interval_days": item.get("interval_days"),
-                "algorithm_used": "fixed_ladder",
-                "review_number": 0,
-                "completed": False,
-                "schedule_count": 1,
-                "overdue_schedule_count": 1,
-                "next_due_date": item.get("due_date"),
-                "due_node_count": len(item.get("node_uids") or []),
-                "due_unit_count": 1,
-                "overdue_node_count": len(item.get("node_uids") or []),
-                "review_entry_mode": "unit",
-                "review_entry_label": "立即复习",
-                "primary_branch_title": item.get("title"),
+                "node_count": len(item.get("node_uids") or []),
+                "overdue": str(item.get("due_date") or "") < date.today().isoformat(),
             }
         )
 
     return {
         "due_count": int(queue.get("due_count") or 0),
-        "due_later_today_count": int(queue.get("later_today_count") or 0),
-        "needs_practice_count": 0,
+        "overdue_count": sum(1 for item in reviews if item["overdue"]),
+        "due_later_today_count": 0,
         "reviews": reviews,
         "stats": get_unit_review_weekly_stats(session),
         "today_review_duration_seconds": get_study_session_duration_seconds(
