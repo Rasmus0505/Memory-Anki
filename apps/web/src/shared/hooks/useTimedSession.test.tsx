@@ -789,9 +789,16 @@ describe('useTimedSession automation config', () => {
 
     expect(result.current.status).toBe('paused')
     await vi.waitFor(() => {
-      expect(persistStudySessionRecordSpy).toHaveBeenCalled()
+      expect(
+        persistStudySessionRecordSpy.mock.calls.some(
+          ([record]) => record?.completionMethod === 'left_page',
+        ),
+      ).toBe(true)
     })
-    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
+    const leftPage = persistStudySessionRecordSpy.mock.calls.find(
+      ([record]) => record?.completionMethod === 'left_page',
+    )?.[0]
+    expect(leftPage).toMatchObject({
       completionMethod: 'left_page',
       effectiveSeconds: 2,
       title: 'PWA 做题',
@@ -807,7 +814,7 @@ describe('useTimedSession automation config', () => {
     visibility.mockRestore()
   })
 
-  it('keeps counting through a brief background dip without writing a left_page record', async () => {
+  it('keeps one continuous session through a brief background dip without left_page or hang-up credit', async () => {
     persistStudySessionRecordSpy.mockImplementation(async (record) => record)
     const visibility = vi.spyOn(document, 'visibilityState', 'get')
 
@@ -825,8 +832,10 @@ describe('useTimedSession automation config', () => {
       result.current.start({ source: 'test' })
       vi.advanceTimersByTime(2_100)
     })
+    const secondsBeforeHide = result.current.effectiveSeconds
 
     // Pulling down the notification shade / taking a call briefly hides the page.
+    // Clock freezes immediately: hidden gap must not enter effectiveSeconds.
     visibility.mockReturnValue('hidden')
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
@@ -835,20 +844,80 @@ describe('useTimedSession automation config', () => {
     })
 
     expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
 
     visibility.mockReturnValue('visible')
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
-      vi.advanceTimersByTime(20_000)
+      vi.advanceTimersByTime(1_000)
       await Promise.resolve()
     })
 
     expect(result.current.status).toBe('running')
+    // Only post-return visible time may accrue — not the 5s hidden gap.
+    expect(result.current.effectiveSeconds).toBeGreaterThanOrEqual(secondsBeforeHide)
+    expect(result.current.effectiveSeconds).toBeLessThan(secondsBeforeHide + 5)
     expect(
       persistStudySessionRecordSpy.mock.calls.some(
         ([record]) => record?.completionMethod === 'left_page',
       ),
     ).toBe(false)
+    visibility.mockRestore()
+  })
+
+  it('does not credit multi-minute hang-up when background timers never fire', async () => {
+    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    const { result } = renderHook(() =>
+      useTimedSession({
+        kind: 'quiz',
+        title: 'PWA 挂机',
+        palaceId: null,
+        autoPauseMs: 24 * 60 * 60 * 1000,
+        hiddenPauseMs: 20_000,
+        persistKey: 'quiz:pwa-hangup-freeze',
+      }),
+    )
+
+    act(() => {
+      result.current.start({ source: 'test' })
+      vi.advanceTimersByTime(2_100)
+    })
+    const secondsBeforeHide = result.current.effectiveSeconds
+    const hideAt = Date.now()
+
+    visibility.mockReturnValue('hidden')
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+    })
+
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
+
+    // Jump wall clock past grace without running pending leave timeouts
+    // (mobile PWA freezes setTimeout while Date.now continues).
+    visibility.mockReturnValue('visible')
+    await act(async () => {
+      vi.setSystemTime(hideAt + 10 * 60_000)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Hang-up must not be baked into effective seconds.
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
+    await vi.waitFor(() => {
+      expect(
+        persistStudySessionRecordSpy.mock.calls.some(
+          ([record]) => record?.completionMethod === 'left_page',
+        ),
+      ).toBe(true)
+    })
+    const leftPage = persistStudySessionRecordSpy.mock.calls.find(
+      ([record]) => record?.completionMethod === 'left_page',
+    )?.[0]
+    expect(leftPage?.effectiveSeconds).toBe(secondsBeforeHide)
     visibility.mockRestore()
   })
 

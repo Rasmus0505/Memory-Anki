@@ -114,6 +114,8 @@ export function useTimedSession({
     ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
   })
   const lastTickPersistAtRef = React.useRef<number | null>(null)
+  /** Wall-clock moment the document hid while study was still accruing. Null when visible. */
+  const clockFrozenAtMsRef = React.useRef<number | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
@@ -224,14 +226,24 @@ export function useTimedSession({
     }
   }, [persistSnapshot])
 
+  const resolveTickBoundaryMs = React.useCallback((currentMs = Date.now()) => {
+    const frozenAt = clockFrozenAtMsRef.current
+    if (frozenAt != null && Number.isFinite(frozenAt)) {
+      return Math.min(currentMs, frozenAt)
+    }
+    return currentMs
+  }, [])
+
   const syncTick = React.useCallback((currentMs = Date.now()) => {
     if (statusRef.current !== 'running' || lastTickAtRef.current == null) return
+    // Never credit wall time after the document hid / clock freeze boundary.
+    if (clockFrozenAtMsRef.current != null) return
     const tickState = advanceTickState({
       previousEffectiveSeconds: effectiveSecondsRef.current,
       previousIdleSeconds: idleSecondsRef.current,
       lastTickAtMs: lastTickAtRef.current,
       lastActivityAtMs: lastActivityAtRef.current,
-      currentMs,
+      currentMs: resolveTickBoundaryMs(currentMs),
     })
     if (tickState.effectiveChanged) {
       effectiveSecondsRef.current = tickState.effectiveSeconds
@@ -248,10 +260,11 @@ export function useTimedSession({
       persistSnapshot()
       markDirty(timedSessionAutoSaveKey, 'tick')
     }
-  }, [persistSnapshot, timedSessionAutoSaveKey])
+  }, [persistSnapshot, resolveTickBoundaryMs, timedSessionAutoSaveKey])
 
   const startTicker = React.useCallback(() => {
     clearTimedSessionInterval(tickerRef)
+    clockFrozenAtMsRef.current = null
     lastTickAtRef.current = Date.now()
     tickerRef.current = window.setInterval(() => {
       syncTick()
@@ -259,10 +272,11 @@ export function useTimedSession({
   }, [syncTick])
 
   const stopTicker = React.useCallback((currentMs?: number) => {
-    syncTick(currentMs)
+    const boundaryMs = currentMs == null ? resolveTickBoundaryMs() : resolveTickBoundaryMs(currentMs)
+    syncTick(boundaryMs)
     clearTimedSessionInterval(tickerRef)
     lastTickAtRef.current = null
-  }, [syncTick])
+  }, [resolveTickBoundaryMs, syncTick])
 
   const buildRecord = React.useCallback((
     method: SessionCompletionMethod,
@@ -317,11 +331,45 @@ export function useTimedSession({
   // never cost a session if the OS kills the tab before the window closes.
   // Reuses the stable session id, so the eventual completed record overwrites
   // it server-side (create_study_session merges by primary key).
+  // Snapshot is frozen/paused so remount restore cannot wall-clock catch-up
+  // hang-up time (running + elapsedSincePersist was the old inflation path).
   const persistBackgroundCheckpoint = React.useCallback(() => {
-    persistSnapshot()
+    persistSnapshot({
+      statusOverride: 'paused',
+      suspended: false,
+    })
     markDirty(timedSessionAutoSaveKey, 'document_hidden')
     void saveInProgressRecord()
   }, [persistSnapshot, saveInProgressRecord, timedSessionAutoSaveKey])
+
+  /**
+   * Stop accruing study seconds the instant the document hides. Status may stay
+   * `running` during the grace window so a brief notification shade does not
+   * look like a full pause, but the ticker and lastTickAt are cleared so no
+   * later wall-clock catch-up can inflate effectiveSeconds.
+   */
+  const freezeClockOnDocumentHidden = React.useCallback((meta?: TimedSessionMeta) => {
+    if (!startedAtRef.current) return
+    if (clockFrozenAtMsRef.current != null) return
+    if (statusRef.current !== 'running') return
+    const frozenAtMs = Date.now()
+    // Accrue only up to hide, then lock. Setting the freeze flag after stopTicker
+    // lets the final sync include the last visible second; later ticks no-op.
+    stopTicker(frozenAtMs)
+    clockFrozenAtMsRef.current = frozenAtMs
+    clearTimedSessionTimeout(autoPauseRef)
+    // Keep autoPauseDeadlineAt so restore still knows the idle boundary, but do
+    // not let a late setTimeout fire add hang-up time first.
+    lastTickPersistAtRef.current = null
+    pushEvent('pause', {
+      reason: 'document_hidden_freeze',
+      ...(meta ?? {}),
+    }, { persist: false })
+    persistSnapshot({
+      statusOverride: 'running',
+      suspended: false,
+    })
+  }, [persistSnapshot, pushEvent, stopTicker])
 
   const persistExpiredSuspendedSnapshot = React.useCallback(async (
     snapshot: RestorableTimedSessionSnapshot,
@@ -410,6 +458,7 @@ export function useTimedSession({
     startedAtRef.current = nextStartedAt
     ensureRecordId()
     clearSuspendedState()
+    clockFrozenAtMsRef.current = null
     lastActivityAtRef.current = Date.now()
     lastTickPersistAtRef.current = null
     idleSecondsRef.current = 0
@@ -467,6 +516,7 @@ export function useTimedSession({
   const pause = React.useCallback((meta?: TimedSessionMeta) => {
     if (statusRef.current !== 'running') return
     stopTicker()
+    clockFrozenAtMsRef.current = null
     clearTimedSessionTimeout(autoPauseRef)
     autoPauseDeadlineAtRef.current = null
     pauseCountRef.current += 1
@@ -569,9 +619,77 @@ export function useTimedSession({
         return
       }
       sceneActiveRef.current = true
+      clockFrozenAtMsRef.current = null
       resumeSuspendedScene(meta)
     },
     [resumeSuspendedScene],
+  )
+
+  /**
+   * Visibility return is the PWA-correct grace decision point. Background
+   * setTimeout often freezes, so we measure hidden duration with wall clock:
+   * - still frozen + within grace → resume same session without crediting gap
+   * - still frozen + beyond grace → durable leave at freeze boundary
+   * - already left/suspended → resume suspended scene if within resume window
+   */
+  const resolveVisibilityReturn = React.useCallback(
+    (meta?: TimedSessionMeta) => {
+      if (statusRef.current === 'completed') return
+      if (!startedAtRef.current) return
+
+      const frozenAtMs = clockFrozenAtMsRef.current
+      const hiddenMs =
+        frozenAtMs != null && Number.isFinite(frozenAtMs)
+          ? Math.max(0, Date.now() - frozenAtMs)
+          : 0
+      const graceMs = Math.max(0, resolvedAutomation.hiddenPauseMs)
+
+      if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
+        resumeAfterVisibilityReturn(meta)
+        return
+      }
+
+      if (frozenAtMs != null && statusRef.current === 'running') {
+        // graceMs === 0 already left on hide; treat any residual freeze as leave.
+        if (graceMs > 0 && hiddenMs < graceMs) {
+          // Brief dip: keep one continuous session; seconds already frozen at hide.
+          sceneActiveRef.current = true
+          clockFrozenAtMsRef.current = null
+          lastActivityAtRef.current = Date.now()
+          idleSecondsRef.current = 0
+          setIdleSeconds(0)
+          startTicker()
+          armAutoPause()
+          pushEvent('resume', {
+            reason: 'document_visible_within_grace',
+            hidden_ms: hiddenMs,
+            ...(meta ?? {}),
+          })
+          persistSnapshot()
+          return
+        }
+        // Long hang-up (or zero grace residual): durable leave at freeze boundary.
+        void leaveScene({
+          reason: 'document_hidden_grace_exceeded',
+          hidden_ms: hiddenMs,
+          ...(meta ?? {}),
+        }).then(() => {
+          resumeAfterVisibilityReturn(meta)
+        })
+        return
+      }
+
+      // Soft blur pause or other non-leave paused states: do not auto-resume.
+    },
+    [
+      armAutoPause,
+      leaveScene,
+      persistSnapshot,
+      pushEvent,
+      resolvedAutomation.hiddenPauseMs,
+      resumeAfterVisibilityReturn,
+      startTicker,
+    ],
   )
 
   const { logEvent, registerActivity } = useTimedSessionActivityActions({
@@ -610,6 +728,7 @@ export function useTimedSession({
       if (!startedAtRef.current) return null
       if (statusRef.current === 'completed') return null
       stopTicker()
+      clockFrozenAtMsRef.current = null
       clearTimedSessionTimeout(autoPauseRef)
       autoPauseDeadlineAtRef.current = null
       clearTimedSessionTimeout(hiddenPauseRef)
@@ -641,6 +760,7 @@ export function useTimedSession({
 
   const reset = React.useCallback(() => {
     stopTicker()
+    clockFrozenAtMsRef.current = null
     clearTimedSessionTimeout(autoPauseRef)
     autoPauseDeadlineAtRef.current = null
     clearTimedSessionTimeout(hiddenPauseRef)
@@ -718,8 +838,9 @@ export function useTimedSession({
     hiddenPauseMs: resolvedAutomation.hiddenPauseMs,
     pause,
     leaveScene,
+    freezeClockOnDocumentHidden,
     persistBackgroundCheckpoint,
-    resumeAfterVisibilityReturn,
+    resolveVisibilityReturn,
     clearTimer: clearTimedSessionTimeout,
     clearIntervalTimer: clearTimedSessionInterval,
   })

@@ -112,6 +112,8 @@ export function useTimedSessionSceneLeave(input: {
       }
       leaveHandledRef.current = true
       const currentMs = Date.now()
+      // stopTicker clamps to any document-hidden freeze boundary so a late leave
+      // after PWA timer thaw cannot credit hang-up wall clock into effectiveSeconds.
       const { suspendedAt, resumeDeadlineAt, persistedLeaveMeta } =
         buildSuspendedSceneLeaveState({
           currentMs,
@@ -125,6 +127,8 @@ export function useTimedSessionSceneLeave(input: {
       clearTimedSessionTimeout(autoPauseRef)
       autoPauseDeadlineAtRef.current = null
       clearTimedSessionTimeout(hiddenPauseRef)
+      // Leave freezes duration permanently for this scene visit; clear any
+      // document-hidden freeze marker so a later resume starts clean.
       statusRef.current = 'paused'
       if (options?.unload) {
         lastTickPersistAtRef.current = null

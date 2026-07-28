@@ -42,6 +42,12 @@ interface TimedSessionBrowserPauseOptions {
    */
   leaveScene: (meta?: TimedSessionMeta) => Promise<unknown>
   /**
+   * Immediately stop wall-clock accrual when the document hides. Mobile PWA
+   * freezes setTimeout/setInterval; leave debounces must not be the only
+   * correctness path or hang-up time is credited on the next tick.
+   */
+  freezeClockOnDocumentHidden: (meta?: TimedSessionMeta) => void
+  /**
    * Crash-safe snapshot written the instant the page hides, before the debounce
    * window opens. Backgrounding and leaving the scene are deliberately
    * decoupled: waiting out `hiddenPauseMs` before persisting would lose the
@@ -50,10 +56,10 @@ interface TimedSessionBrowserPauseOptions {
    */
   persistBackgroundCheckpoint: () => void
   /**
-   * Re-activate after a visibility-hidden leave while the study route is still
-   * the resident page (isActive stayed true, so setSceneActive(true) never re-ran).
+   * Decide brief-dip resume vs durable leave using wall-clock time spent hidden.
+   * Must not rely on background timers having fired.
    */
-  resumeAfterVisibilityReturn: (meta?: TimedSessionMeta) => void
+  resolveVisibilityReturn: (meta?: TimedSessionMeta) => void
   clearTimer: (ref: React.MutableRefObject<number | null>) => void
   clearIntervalTimer: (ref: React.MutableRefObject<number | null>) => void
 }
@@ -67,8 +73,9 @@ export function useTimedSessionBrowserPauseEffects({
   hiddenPauseMs,
   pause,
   leaveScene,
+  freezeClockOnDocumentHidden,
   persistBackgroundCheckpoint,
-  resumeAfterVisibilityReturn,
+  resolveVisibilityReturn,
   clearTimer,
   clearIntervalTimer,
 }: TimedSessionBrowserPauseOptions) {
@@ -86,21 +93,31 @@ export function useTimedSessionBrowserPauseEffects({
         }
         shouldResumeAfterVisibilityRef.current = true
         clearTimer(hiddenPauseRef)
-        // Insure the debounce window before opening it. With no window
-        // (hiddenPauseMs === 0) the leave below persists on the spot anyway.
-        if (hiddenPauseMs > 0 && statusRef.current === 'running') {
+        // Freeze first: hidden gaps must never enter effectiveSeconds, even if
+        // the grace setTimeout is delayed or cancelled by a later visible event.
+        freezeClockOnDocumentHidden({ reason: 'document_hidden' })
+        if (hiddenPauseMs <= 0) {
+          // Immediate leave writes left_page; no intermediate saved checkpoint.
+          void leaveScene({ reason: 'document_hidden' })
+          return
+        }
+        // Crash-safe checkpoint during the grace window only. leaveScene will
+        // overwrite the same record id when grace expires or return exceeds it.
+        if (statusRef.current === 'running' || statusRef.current === 'paused') {
           persistBackgroundCheckpoint()
         }
+        // Best-effort leave while backgrounded. Correctness on return is handled
+        // by resolveVisibilityReturn with wall-clock grace (timers may freeze).
         hiddenPauseRef.current = window.setTimeout(() => {
           void leaveScene({ reason: 'document_hidden' })
         }, hiddenPauseMs)
         return
       }
-      // Foreground: cancel pending leave and resume only if we hid while active.
+      // Foreground: cancel pending leave and resolve freeze/leave with wall clock.
       clearTimer(hiddenPauseRef)
       if (shouldResumeAfterVisibilityRef.current) {
         shouldResumeAfterVisibilityRef.current = false
-        resumeAfterVisibilityReturn({ source: 'document_visible' })
+        resolveVisibilityReturn({ source: 'document_visible' })
       }
     }
 
@@ -114,6 +131,7 @@ export function useTimedSessionBrowserPauseEffects({
         // True background (tab/app hidden): durable leave. Soft blur only: pause.
         if (document.visibilityState === 'hidden') {
           shouldResumeAfterVisibilityRef.current = true
+          freezeClockOnDocumentHidden({ reason: 'window_blur_hidden' })
           void leaveScene({ reason: 'window_blur_hidden' })
           return
         }
@@ -143,12 +161,13 @@ export function useTimedSessionBrowserPauseEffects({
     autoPauseRef,
     clearIntervalTimer,
     clearTimer,
+    freezeClockOnDocumentHidden,
     hiddenPauseMs,
     hiddenPauseRef,
     leaveScene,
     pause,
     persistBackgroundCheckpoint,
-    resumeAfterVisibilityReturn,
+    resolveVisibilityReturn,
     sceneActiveRef,
     statusRef,
     tickerRef,

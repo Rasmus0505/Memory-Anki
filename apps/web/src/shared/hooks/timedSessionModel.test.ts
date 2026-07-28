@@ -37,6 +37,18 @@ describe('advanceTickState', () => {
       idleChanged: false,
     })
   })
+
+  it('documents that large wall gaps are pure arithmetic (callers must freeze first)', () => {
+    // Guards against reintroducing "trust every Date.now gap" at the UI layer
+    // without an explicit freeze boundary in the state machine.
+    expect(advanceTickState({
+      previousEffectiveSeconds: 10,
+      previousIdleSeconds: 0,
+      lastTickAtMs: 1_000,
+      lastActivityAtMs: 1_000,
+      currentMs: 1_000 + 10 * 60_000,
+    }).effectiveSeconds).toBe(10 + 10 * 60)
+  })
 })
 
 describe('resolveTimedSessionAutomation', () => {

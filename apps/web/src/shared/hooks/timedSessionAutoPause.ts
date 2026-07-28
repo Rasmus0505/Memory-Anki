@@ -87,7 +87,12 @@ export function useTimedSessionAutoPause(input: {
     autoPauseDeadlineAtRef.current = resolvedDeadlineAtMs
     autoPauseRef.current = window.setTimeout(() => {
       if (statusRef.current !== 'running') return
-      const pausedAtMs = Date.now()
+      // Prefer the armed deadline so a late fire after PWA thaw does not first
+      // credit the whole hang-up gap and only then roll back idle grace.
+      const pausedAtMs =
+        autoPauseDeadlineAtRef.current != null && Number.isFinite(autoPauseDeadlineAtRef.current)
+          ? Math.min(Date.now(), autoPauseDeadlineAtRef.current)
+          : Date.now()
       stopTicker(pausedAtMs)
       const idleSecondsAtPause = getIdleSecondsAt({
         lastActivityAtMs: lastActivityAtRef.current,

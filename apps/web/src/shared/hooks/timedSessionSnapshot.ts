@@ -143,24 +143,15 @@ export function isExpiredSuspendedSnapshot(snapshot: RestorableTimedSessionSnaps
 export function resolveRestoredTimedSessionSnapshot(
   snapshot: RestorableTimedSessionSnapshot,
 ): RestoredTimedSessionSnapshot {
-  const persistedAtMs = new Date(snapshot.persistedAt).getTime()
-  const restoreAtMs = Date.now()
-  const effectiveRestoreBoundaryMs =
-    snapshot.status === 'running' &&
-    snapshot.autoPauseDeadlineAtMs != null &&
-    Number.isFinite(snapshot.autoPauseDeadlineAtMs)
-      ? Math.min(restoreAtMs, snapshot.autoPauseDeadlineAtMs)
-      : restoreAtMs
-  const elapsedSincePersistSeconds =
-    !snapshot.suspended && snapshot.status === 'running' && Number.isFinite(persistedAtMs)
-      ? Math.max(0, Math.floor((effectiveRestoreBoundaryMs - persistedAtMs) / 1000))
-      : 0
+  // Never wall-clock catch-up on restore. PWA background checkpoints used to
+  // persist status=running; adding (now - persistedAt) credited hang-up time
+  // after process kill. Frozen/paused/suspended snapshots already hold the
+  // correct effectiveSeconds at hide/leave.
+  void snapshot.persistedAt
+  void snapshot.autoPauseDeadlineAtMs
   return {
     snapshot,
-    effectiveSeconds: Math.max(
-      0,
-      Math.round(snapshot.effectiveSeconds + elapsedSincePersistSeconds),
-    ),
+    effectiveSeconds: Math.max(0, Math.round(snapshot.effectiveSeconds)),
   }
 }
 
