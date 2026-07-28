@@ -140,20 +140,6 @@ def set_palace_archived(
     return palace
 
 
-def set_palace_practice_flag(
-    session: Session,
-    palace: Palace,
-    needs_practice: bool,
-    *,
-    uow: UnitOfWork,
-) -> Palace:
-    """Compatibility no-op: manual needs_practice flags were removed for FSRS-only."""
-    del needs_practice
-    uow.commit()
-    uow.refresh(palace)
-    return palace
-
-
 def delete_palace(
     session: Session,
     palace_id: int,

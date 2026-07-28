@@ -12,7 +12,6 @@ class PalaceSummaryResponse(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     archived: bool | None = None
-    needs_practice: bool | None = None
     primary_chapter_id: int | None = None
 
 

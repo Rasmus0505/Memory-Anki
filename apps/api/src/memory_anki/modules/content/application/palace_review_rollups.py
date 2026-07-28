@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.memory.api import get_palace_due_rollup
+from memory_anki.modules.memory.api import get_palace_review_summary
 
 
 def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
@@ -32,7 +32,7 @@ def _palace_due_rollup(
     now: datetime | None = None,
 ) -> dict[str, Any] | None:
     try:
-        return get_palace_due_rollup(session, palace.id, now=now)
+        return get_palace_review_summary(session, palace.id, now=now)
     except ValueError:
         return None
 
@@ -49,9 +49,8 @@ def count_palace_review_units(
         return {
             "due_now_count": 0,
             "due_later_today_count": 0,
-            "needs_practice_count": 0,
         }
-    due_now_count = 1 if bool(projection.get("has_due_review") or projection.get("due_node_count")) else 0
+    due_now_count = 1 if bool(projection.get("has_due_review")) else 0
     due_later_today_count = 0
     if due_now_count == 0 and _review_datetime_is_later_today(
         projection.get("next_review_at"), current
@@ -60,7 +59,6 @@ def count_palace_review_units(
     return {
         "due_now_count": due_now_count,
         "due_later_today_count": due_later_today_count,
-        "needs_practice_count": 0,
     }
 
 
@@ -73,7 +71,7 @@ def palace_has_due_review(
     projection = _palace_due_rollup(session, palace, now=now)
     if projection is None:
         return False
-    return bool(projection.get("has_due_review") or projection.get("due_node_count"))
+    return bool(projection.get("has_due_review"))
 
 
 def palace_has_due_later_today(
@@ -86,7 +84,7 @@ def palace_has_due_later_today(
     projection = _palace_due_rollup(session, palace, now=current)
     if projection is None:
         return False
-    if projection.get("has_due_review") or projection.get("due_node_count"):
+    if projection.get("has_due_review"):
         return False
     return _review_datetime_is_later_today(projection.get("next_review_at"), current)
 

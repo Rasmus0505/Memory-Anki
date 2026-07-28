@@ -2,14 +2,9 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.content.application.palace_serializer import palace_json
-from memory_anki.modules.content.application.palace_service import (
-    get_palace,
-    set_palace_practice_flag,
-)
-from memory_anki.modules.content.application.segment_review_service import (
-    build_palace_default_segment_summary,
-    build_segment_editor_doc,
+from memory_anki.modules.content.application.palace_service import get_palace
+from memory_anki.modules.content.application.segment_projection import (
+    build_unassigned_segment_summary,
     list_palace_segments,
     segment_summary_json,
 )
@@ -40,8 +35,8 @@ def api_list_segments(palace_id: int, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
     if not palace:
         raise_not_found()
-    default_segment = build_palace_default_segment_summary(s, palace)
-    return {"items": list_palace_segments(s, palace, default_segment_payload=default_segment)}
+    unassigned_segment = build_unassigned_segment_summary(palace)
+    return {"items": list_palace_segments(s, palace, unassigned_segment=unassigned_segment)}
 
 
 @router.post("/palaces/{palace_id}/segments")
@@ -88,19 +83,6 @@ def api_update_segment(segment_id: int, data: dict, s: Session = Depends(session
     return {"item": segment_summary_json(s, updated)}
 
 
-@router.put("/palaces/{palace_id}/practice-flag")
-def api_update_palace_practice_flag(palace_id: int, data: dict, s: Session = Depends(session_dep)):
-    palace = get_palace(s, palace_id)
-    if not palace:
-        raise_not_found()
-    palace = set_palace_practice_flag(
-        s,
-        palace,
-        bool(data.get("needs_practice", False)),
-        uow=SqlAlchemyUnitOfWork(s),
-    )
-    return {"item": palace_json(palace, s)}
-
 @router.delete("/palace-segments/{segment_id}")
 def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):
     segment = get_palace_segment(s, segment_id)
@@ -109,15 +91,3 @@ def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):
     delete_palace_segment(s, segment, uow=SqlAlchemyUnitOfWork(s))
     _maybe_create_rolling_backup("rolling-delete-palace-segment")
     return {"ok": True}
-
-
-@router.get("/palace-segments/{segment_id}")
-def api_get_segment(segment_id: int, s: Session = Depends(session_dep)):
-    segment = get_palace_segment(s, segment_id)
-    if not segment or not segment.palace:
-        raise_not_found()
-    return {
-        "item": segment_summary_json(s, segment),
-        "palace": palace_json(segment.palace, s),
-        "editor_doc": build_segment_editor_doc(segment.palace, segment),
-    }

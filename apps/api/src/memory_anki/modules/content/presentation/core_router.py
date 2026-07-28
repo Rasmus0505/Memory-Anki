@@ -25,9 +25,6 @@ from memory_anki.modules.content.application.peg_association_service import (
     MAX_SUGGESTIONS_LIMIT,
     suggest_peg_associations,
 )
-from memory_anki.modules.content.application.review_plan_service import (
-    build_palace_review_plan,
-)
 from memory_anki.modules.content.domain.schemas import (
     PalaceCreate,
     PalaceKnowledgeBindingUpdate,
@@ -203,10 +200,3 @@ def api_archive(palace_id: int, data: dict, s: Session = Depends(session_dep)):
     )
     return {"ok": True, "archived": palace.archived}
 
-
-@router.get("/palaces/{palace_id}/review-plan")
-def api_review_plan(palace_id: int, s: Session = Depends(session_dep)):
-    plan = build_palace_review_plan(s, palace_id)
-    if plan is None:
-        raise_not_found()
-    return plan

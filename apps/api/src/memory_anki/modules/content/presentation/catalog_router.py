@@ -38,10 +38,12 @@ from memory_anki.platform.persistence import (
 router = APIRouter()
 
 
-def _precomputed_palace_serialization_context(s: Session, palaces) -> tuple[dict[int, set[int]], list[str]]:
+def _precomputed_palace_serialization_context(
+    s: Session,
+    palaces,
+) -> dict[int, set[int]]:
     palace_ids = [p.id for p in palaces]
-    explicit_map = get_explicit_chapter_ids_by_palace(s, palace_ids)
-    return explicit_map, []
+    return get_explicit_chapter_ids_by_palace(s, palace_ids)
 
 
 @router.get("/palaces", response_model=PalaceListResponse)
@@ -53,7 +55,7 @@ def api_list(
 ):
     if limit is None:
         palaces = list_palaces(s, search)
-        explicit_map, stage_labels = _precomputed_palace_serialization_context(
+        explicit_map = _precomputed_palace_serialization_context(
             s,
             palaces,
         )
@@ -63,14 +65,13 @@ def api_list(
                 p,
                 s,
                 precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-                precomputed_stage_labels=stage_labels,
                 precomputed_memory_projection=memory_map.get(p.id),
                 include_heavy_collections=False,
             )
             for p in palaces
         ]
     palaces = list_palaces(s, search, limit=limit, offset=offset)
-    explicit_map, stage_labels = _precomputed_palace_serialization_context(
+    explicit_map = _precomputed_palace_serialization_context(
         s,
         palaces,
     )
@@ -80,7 +81,6 @@ def api_list(
             p,
             s,
             precomputed_explicit_chapter_ids=explicit_map.get(p.id, set()),
-            precomputed_stage_labels=stage_labels,
             precomputed_memory_projection=memory_map.get(p.id),
             include_heavy_collections=False,
         )
@@ -94,7 +94,7 @@ def api_list(
     }
 
 
-def _cached_palace_serializer(serialize_fn, palaces, explicit_map, stage_labels, memory_map):
+def _cached_palace_serializer(serialize_fn, palaces, explicit_map, memory_map):
     """Serialize each palace once; chapter + model grouping share the same payload."""
     cache: dict[int, dict] = {}
 
@@ -106,7 +106,6 @@ def _cached_palace_serializer(serialize_fn, palaces, explicit_map, stage_labels,
             palace,
             session,
             precomputed_explicit_chapter_ids=explicit_map.get(palace.id, set()),
-            precomputed_stage_labels=stage_labels,
             precomputed_memory_projection=memory_map.get(palace.id),
         )
         cache[palace.id] = payload
@@ -118,10 +117,10 @@ def _cached_palace_serializer(serialize_fn, palaces, explicit_map, stage_labels,
 @router.get("/palaces/grouped")
 def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
-    explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
+    explicit_map = _precomputed_palace_serialization_context(s, palaces)
     memory_map = batch_palace_due_rollups(s, palaces)
     serialize = _cached_palace_serializer(
-        palace_card_json, palaces, explicit_map, stage_labels, memory_map
+        palace_card_json, palaces, explicit_map, memory_map
     )
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
     model_grouped = build_grouped_palace_list(s, palaces, serialize)
@@ -135,10 +134,10 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
 @router.get("/palaces/grouped-summary")
 def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
-    explicit_map, stage_labels = _precomputed_palace_serialization_context(s, palaces)
+    explicit_map = _precomputed_palace_serialization_context(s, palaces)
     memory_map = batch_palace_due_rollups(s, palaces)
     serialize = _cached_palace_serializer(
-        palace_summary_json, palaces, explicit_map, stage_labels, memory_map
+        palace_summary_json, palaces, explicit_map, memory_map
     )
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
     model_grouped = build_grouped_palace_list(s, palaces, serialize)

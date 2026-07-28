@@ -12,8 +12,8 @@ from typing import Any
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.content.application.segment_review_service import (
-    build_palace_default_segment_summary,
+from memory_anki.modules.content.application.segment_projection import (
+    build_unassigned_segment_summary,
     list_palace_segments,
 )
 from memory_anki.modules.content.application.title_sync_service import (
@@ -45,30 +45,15 @@ def batch_palace_due_rollups(session: Session, palaces: list[Any]) -> dict[int, 
         return {}
     return project_palace_review_summaries(session, list(palaces))
 
-_EMPTY_MEMORY: dict[str, Any] = {
-    "node_count": 0,
-    "mastery_progress": 0.0,
-    "mastery_percent": 0,
-    "memory_health": 0.0,
-    "memory_health_percent": 0,
-    "mastered_node_count": 0,
-    "mastery_horizon_days": 60,
-    "due_node_count": 0,
-    "overdue_node_count": 0,
-    "reinforcement_due_count": 0,
-    "uninitialized_node_count": 0,
-    "content_changed_node_count": 0,
+_EMPTY_REVIEW: dict[str, Any] = {
+    "mark_required": True,
+    "permanent_mark_count": 0,
+    "unit_count": 0,
+    "due_unit_count": 0,
     "next_review_at": None,
-    "mastered": False,
-    "severe_weak_node_count": 0,
     "has_due_review": False,
-    "review_entry_mode": "none",
-    "review_entry_label": None,
-    "primary_branch_uid": None,
-    "primary_branch_title": None,
-    "due_branch_count": 0,
-    "due_node_uids": [],
-    "review_branch_summaries": [],
+    "next_review_date": None,
+    "review_status": "marking_required",
 }
 
 
@@ -83,49 +68,15 @@ def peg_json(peg) -> dict:
     }
 
 
-def _memory_fields(memory_projection: dict) -> dict:
-    next_review = memory_projection.get("next_review_at")
+def _review_fields(review_projection: dict[str, Any]) -> dict[str, Any]:
     return {
-        "next_scheduled_date": next_review[:10] if isinstance(next_review, str) and next_review else None,
-        "next_review_at": next_review,
-        "has_due_review": bool(memory_projection.get("has_due_review")),
-        "current_review_schedule_id": None,
-        "review_stage_total": 0,
-        "review_stage_completed": 0,
-        "review_stage_progress": 0.0,
-        "stage_labels": [],
-        "review_stages": [],
-        "memory_node_count": memory_projection["node_count"],
-        "mastery_progress": memory_projection["mastery_progress"],
-        "mastery_percent": memory_projection["mastery_percent"],
-        "memory_health": memory_projection["memory_health"],
-        "memory_health_percent": memory_projection["memory_health_percent"],
-        "mastered_node_count": memory_projection["mastered_node_count"],
-        "mastery_horizon_days": memory_projection["mastery_horizon_days"],
-        "due_node_count": memory_projection["due_node_count"],
-        "overdue_node_count": memory_projection["overdue_node_count"],
-        "reinforcement_due_count": int(memory_projection.get("reinforcement_due_count") or 0),
-        "uninitialized_node_count": int(
-            memory_projection.get("uninitialized_node_count") or 0
-        ),
-        "content_changed_node_count": int(
-            memory_projection.get("content_changed_node_count") or 0
-        ),
-        "memory_next_review_at": memory_projection["next_review_at"],
-        "memory_mastered": memory_projection["mastered"],
-        "severe_weak_node_count": memory_projection["severe_weak_node_count"],
-        "review_entry_mode": memory_projection.get("review_entry_mode") or "none",
-        "review_entry_label": memory_projection.get("review_entry_label"),
-        "review_status": memory_projection.get("review_status") or "marking_required",
-        "review_unit_count": int(memory_projection.get("unit_count") or 0),
-        "due_review_unit_count": int(memory_projection.get("due_unit_count") or 0),
-        "next_review_date": memory_projection.get("next_review_date"),
-        "primary_branch_uid": memory_projection.get("primary_branch_uid"),
-        "primary_branch_title": memory_projection.get("primary_branch_title"),
-        "due_branch_count": memory_projection.get("due_branch_count") or 0,
-        "review_branch_summaries": list(
-            memory_projection.get("review_branch_summaries") or []
-        ),
+        "review_status": review_projection.get("review_status") or "marking_required",
+        "review_unit_count": int(review_projection.get("unit_count") or 0),
+        "due_review_unit_count": int(review_projection.get("due_unit_count") or 0),
+        "permanent_mark_count": int(review_projection.get("permanent_mark_count") or 0),
+        "next_review_date": review_projection.get("next_review_date"),
+        "next_review_at": review_projection.get("next_review_at"),
+        "has_due_review": bool(review_projection.get("has_due_review")),
     }
 
 
@@ -134,11 +85,9 @@ def palace_json(
     session: Session | None = None,
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
-    precomputed_stage_labels: list[str] | None = None,
     precomputed_memory_projection: dict[str, Any] | None = None,
     include_heavy_collections: bool = True,
 ) -> dict:
-    del precomputed_stage_labels  # legacy stage labels removed
     explicit_chapter_ids: set[int] = set()
     if session is not None:
         explicit_chapter_ids = (
@@ -151,9 +100,9 @@ def palace_json(
     elif session is not None:
         memory_projection = get_palace_review_summary(session, p.id)
     else:
-        memory_projection = dict(_EMPTY_MEMORY)
-    default_segment = (
-        build_palace_default_segment_summary(session, p)
+        memory_projection = dict(_EMPTY_REVIEW)
+    unassigned_segment = (
+        build_unassigned_segment_summary(p)
         if session is not None and include_heavy_collections
         else None
     )
@@ -174,11 +123,10 @@ def palace_json(
         "title": p.title,
         "description": p.description,
         "archived": p.archived,
-        "mastered": bool(memory_projection.get("mastered")),
         "editor_doc": p.editor_doc if include_heavy_collections else "",
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-        **_memory_fields(memory_projection),
+        **_review_fields(memory_projection),
         "pegs": [peg_json(peg) for peg in pegs],
         "attachments": [
             {
@@ -201,7 +149,7 @@ def palace_json(
             for c in chapters
         ],
         "segments": (
-            list_palace_segments(session, p, default_segment_payload=default_segment)
+            list_palace_segments(session, p, unassigned_segment=unassigned_segment)
             if session is not None and include_heavy_collections
             else []
         ),
@@ -259,15 +207,13 @@ def palace_card_json(
     session: Session | None = None,
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
-    precomputed_stage_labels: list[str] | None = None,
     precomputed_memory_projection: dict[str, Any] | None = None,
 ) -> dict:
-    """Catalog card payload — same FSRS fields as summary, without editor_doc bulk."""
+    """Catalog card payload without editor document bulk."""
     return palace_summary_json(
         p,
         session,
         precomputed_explicit_chapter_ids=precomputed_explicit_chapter_ids,
-        precomputed_stage_labels=precomputed_stage_labels,
         precomputed_memory_projection=precomputed_memory_projection,
     )
 
@@ -277,10 +223,8 @@ def palace_summary_json(
     session: Session | None = None,
     *,
     precomputed_explicit_chapter_ids: set[int] | None = None,
-    precomputed_stage_labels: list[str] | None = None,
     precomputed_memory_projection: dict[str, Any] | None = None,
 ) -> dict:
-    del precomputed_stage_labels
     explicit_chapter_ids: set[int] = set()
     if session is not None:
         explicit_chapter_ids = (
@@ -293,7 +237,7 @@ def palace_summary_json(
     elif session is not None:
         memory_projection = get_palace_review_summary(session, p.id)
     else:
-        memory_projection = dict(_EMPTY_MEMORY)
+        memory_projection = dict(_EMPTY_REVIEW)
     primary_chapter = getattr(p, "primary_chapter", None)
     resolved_subject = resolve_palace_subject(p)
     parent_chapter = (
@@ -306,10 +250,9 @@ def palace_summary_json(
         "title": p.title,
         "description": p.description,
         "archived": p.archived,
-        "mastered": bool(memory_projection.get("mastered")),
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-        **_memory_fields(memory_projection),
+        **_review_fields(memory_projection),
         "chapter_count": len(chapters),
         "segment_count": len(segments),
         "chapters": [

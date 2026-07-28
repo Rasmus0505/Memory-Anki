@@ -73,7 +73,6 @@ def update_palace_segment(
             segment.created_at = parsed_created_at
     if "sort_order" in payload:
         segment.sort_order = max(0, int(payload.get("sort_order") or 0))
-    # needs_practice is retired; ignore client payload keys for compatibility.
     if "node_uids" in payload:
         segment.node_uids_json = serialize_segment_node_uids(
             normalize_segment_node_uids(

@@ -232,7 +232,6 @@ def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict
                     "has_due_later_today": False,
                     "due_now_count": 0,
                     "due_later_today_count": 0,
-                    "needs_practice_count": 0,
                 },
             )
             bucket["palace_ids"].add(palace.id)
@@ -245,7 +244,6 @@ def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict
             if unit_counts["due_later_today_count"] > 0:
                 bucket["has_due_later_today"] = True
                 bucket["due_later_today_count"] += unit_counts["due_later_today_count"]
-            bucket["needs_practice_count"] += unit_counts["needs_practice_count"]
 
     items = []
     for bucket in subject_buckets.values():
@@ -260,7 +258,6 @@ def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict
             "has_due_later_today": has_due_later_today,
             "due_now_count": bucket["due_now_count"],
             "due_later_today_count": bucket["due_later_today_count"],
-            "needs_practice_count": bucket["needs_practice_count"],
         })
     items.sort(key=lambda item: _subject_sort_key(subject_buckets[(item["subject"] or {}).get("id", 0)]["_subject"]))
     return {"items": items}

@@ -16,9 +16,6 @@ from memory_anki.modules.content.presentation.core_router import router as core_
 from memory_anki.modules.content.presentation.editor_router import (
     router as editor_router,
 )
-from memory_anki.modules.content.presentation.practice_progress_router import (
-    router as practice_progress_router,
-)
 from memory_anki.modules.content.presentation.segment_router import (
     router as segment_router,
 )
@@ -40,6 +37,5 @@ router.include_router(catalog_router)
 router.include_router(core_router)
 router.include_router(editor_router)
 router.include_router(segment_router)
-router.include_router(practice_progress_router)
 router.include_router(version_router)
 router.include_router(attachment_router)
