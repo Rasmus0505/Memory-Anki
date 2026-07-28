@@ -50,6 +50,37 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: '宫殿进度校准' })).toBeNull()
   })
 
+  it('hides the mobile guided rail in compact freestyle (tap nodes to reveal)', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        chromeDensity="compact"
+        sessionKind="review"
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: '揭示' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '更多导图操作' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '上级' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '下一个' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '全局' })).toBeNull()
+  })
+
+  it('shows full guided rail in default (non-compact) freestyle', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        chromeDensity="default"
+        sessionKind="review"
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '揭示' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '上级' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '下一个' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '全局' })).toBeTruthy()
+  })
+
   it('keeps view preservation when switching into edit mode', () => {
     renderInRouter(
       <FlipCardMindMapPanel

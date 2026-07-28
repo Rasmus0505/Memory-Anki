@@ -12,10 +12,13 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  MoreHorizontal,
   RefreshCw,
   Settings2,
+  Star,
   Waypoints,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { FreestyleFeedSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleFeedSettingsDialog'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
@@ -44,11 +47,27 @@ import {
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/shared/components/ui/tooltip'
 import { toast } from '@/shared/feedback/toast'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { cn } from '@/shared/lib/utils'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
+
+const FREESTYLE_SECTION_LINKS = [
+  { to: '/palaces', label: '知识' },
+  { to: '/english', label: '英语' },
+  { to: '/palaces/new', label: '创建' },
+  { to: '/dashboard', label: '洞察' },
+  { to: '/today', label: '今日工作台' },
+] as const
 
 function StaleUnitReviewCard({
   cardId,
@@ -530,8 +549,8 @@ export default function ImmersiveFreestylePage() {
           'relative max-w-full overflow-hidden text-zinc-50',
           // Soft stage: one continuous dark field so card chrome does not float on flat black.
           'bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(52,211,153,0.08),transparent_45%),linear-gradient(180deg,#0c0d10_0%,#09090b_100%)]',
-          // Bottom nav (~4.5rem) + shell padding (~1rem) + safe area; keep the feed fully on-screen.
-          'h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px))] min-h-0 rounded-xl border border-white/5 shadow-2xl lg:h-[calc(100vh-88px)]',
+          // Immersive freestyle hides mobile bottom nav; use almost full viewport height on phone.
+          'h-[calc(100dvh-env(safe-area-inset-bottom,0px))] min-h-0 rounded-xl border border-white/5 shadow-2xl max-lg:rounded-none max-lg:border-0 lg:h-[calc(100vh-88px)]',
         )}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
@@ -556,14 +575,11 @@ export default function ImmersiveFreestylePage() {
           onOpenChange={setHistoryOpen}
         />
 
-        {/* Compact top HUD — single bar; roomy hit targets on PWA, denser on desktop */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] sm:px-3 sm:pt-2.5">
-          <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1.5 py-1 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
+        {/* Compact top HUD — progress + timer + rating toggle + overflow menu */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-[max(0.35rem,env(safe-area-inset-top,0px))] sm:px-3 sm:pt-2.5">
+          <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2">
-              <span className="shrink-0 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-200">
-                随心
-              </span>
-              <span className="shrink-0 tabular-nums text-sm text-zinc-100">
+              <span className="shrink-0 tabular-nums text-sm font-medium text-zinc-100">
                 {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
               </span>
               <span className="hidden min-w-0 truncate text-xs text-zinc-500 md:inline">
@@ -611,49 +627,60 @@ export default function ImmersiveFreestylePage() {
                   ? formatTimer(timer.effectiveSeconds)
                   : timer.status === 'paused'
                     ? `暂停 ${formatTimer(timer.effectiveSeconds)}`
-                    : '计时 开始'}
+                    : '计时'}
               </button>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1 sm:gap-1 sm:pl-1.5">
               <button
                 type="button"
                 className={cn(
-                  'inline-flex h-10 shrink-0 items-center rounded-full px-2.5 text-xs font-medium sm:h-9 sm:px-2.5',
+                  hudActionClass,
                   ratingMode
                     ? 'bg-amber-300/20 text-amber-50'
-                    : 'text-zinc-400 hover:bg-white/10 hover:text-zinc-200',
+                    : 'text-zinc-400 hover:text-zinc-200',
                 )}
+                title={ratingMode ? '评分开：点击关闭' : '评分关：点击开启'}
+                aria-label={ratingMode ? '评分开' : '评分关'}
+                aria-pressed={ratingMode}
                 onClick={() => setRatingMode((value) => !value)}
               >
-                评分{ratingMode ? '开' : '关'}
+                <Star className={cn('size-4', ratingMode && 'fill-current')} />
               </button>
-              <button
-                type="button"
-                className={hudActionClass}
-                title="刷新队列"
-                aria-label="刷新队列"
-                onClick={refreshQueue}
-              >
-                <RefreshCw className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={hudActionClass}
-                title="历史"
-                aria-label="历史"
-                onClick={() => setHistoryOpen(true)}
-              >
-                <History className="size-4" />
-              </button>
-              <button
-                type="button"
-                className={hudActionClass}
-                title="设置"
-                aria-label="设置"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings2 className="size-4" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={hudActionClass}
+                    title="更多"
+                    aria-label="更多"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-44">
+                  <DropdownMenuItem onSelect={() => refreshQueue()}>
+                    <RefreshCw className="mr-2 size-4" />
+                    刷新队列
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
+                    <History className="mr-2 size-4" />
+                    历史
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                    <Settings2 className="mr-2 size-4" />
+                    设置
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    切换模块
+                  </DropdownMenuLabel>
+                  {FREESTYLE_SECTION_LINKS.map((item) => (
+                    <DropdownMenuItem key={item.to} asChild>
+                      <Link to={item.to}>{item.label}</Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -742,9 +769,8 @@ export default function ImmersiveFreestylePage() {
                   key={card.id}
                   className={cn(
                     'box-border flex h-full min-h-full flex-col snap-start snap-always',
-                    // HUD top inset only; dock floats over the lower-right of the card so the
-                    // mind-map can claim the vertical space that used to be empty padding.
-                    'px-2 pb-2 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:px-3 sm:pb-3 sm:pt-14',
+                    // HUD top inset only; rating overlay floats over map bottom on mobile.
+                    'px-2 pb-2 pt-[calc(3rem+env(safe-area-inset-top,0px))] sm:px-3 sm:pb-3 sm:pt-14',
                   )}
                 >
                   {isMindMapBranchCard(card) ? (
@@ -757,6 +783,7 @@ export default function ImmersiveFreestylePage() {
                           roundId={queueState.roundId}
                           encounter={queueState.unitEncountersByCardId[card.id]}
                           retryAfterCards={Math.min(3, Math.max(0, cards.length - index - 1))}
+                          ratingVisible={ratingMode}
                           onEnsureEncounter={ensureUnitEncounter}
                           onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
@@ -810,14 +837,14 @@ export default function ImmersiveFreestylePage() {
           )}
         </div>
 
-        {/* One glass action dock: desktop mid-right, PWA over map lower-right (not eating map height) */}
+        {/* Nav dock: desktop mid-right; phone lower-right above rating overlay */}
         <div
           className={cn(
             'pointer-events-none absolute z-20',
             'right-3 top-1/2 -translate-y-1/2',
-            unitReviewActive
-              ? 'max-lg:bottom-[calc(10.25rem+env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0'
-              : 'max-lg:bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
+            unitReviewActive && ratingMode
+              ? 'max-lg:bottom-[calc(6.75rem+env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0'
+              : 'max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
           )}
         >
           <div
@@ -826,12 +853,6 @@ export default function ImmersiveFreestylePage() {
               'max-lg:flex-row max-lg:items-center',
             )}
           >
-            <span
-              className="inline-flex h-7 min-w-11 items-center justify-center rounded-lg bg-white/[0.07] px-2 text-xs font-semibold tabular-nums text-zinc-200 sm:h-8"
-              aria-label="题目位置"
-            >
-              {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
-            </span>
             <button
               type="button"
               className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"

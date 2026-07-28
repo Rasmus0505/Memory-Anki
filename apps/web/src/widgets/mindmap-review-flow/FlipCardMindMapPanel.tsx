@@ -15,6 +15,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { resolveMindMapSceneChrome } from '@/shared/ui/mindmap-canvas'
+import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { buildFlipCardToolbar } from './buildFlipCardToolbar'
 import {
   buildGuidedMindMapModel,
@@ -355,32 +356,27 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}
       data-english-mode={englishModeActive ? 'true' : 'false'}
     >
-      {!isEditMode ? (
+      {/* compact freestyle: no second guided rail — tap nodes to reveal; map toolbar is enough.
+          default density keeps the mobile guided path + 上级/下一个/揭示/全局 rail. */}
+      {!isEditMode && !compactChrome ? (
         <div
           className={cn(
             // text-foreground: avoid inheriting light shell text onto light chrome (PWA freestyle).
-            'shrink-0 rounded-xl border border-border/70 bg-background/95 text-foreground shadow-sm md:hidden',
-            compactChrome ? 'mb-1.5 space-y-1 p-1.5' : 'mb-3 space-y-2 p-2',
+            'mb-3 shrink-0 space-y-2 rounded-xl border border-border/70 bg-background/95 p-2 text-foreground shadow-sm md:hidden',
           )}
         >
-          <div
-            className={cn(
-              'flex items-center gap-1 overflow-hidden px-1 text-xs text-muted-foreground',
-              compactChrome ? 'min-h-6' : 'min-h-9',
-            )}
-          >
+          <div className="flex min-h-9 items-center gap-1 overflow-hidden px-1 text-xs text-muted-foreground">
             {guidedPath.length > 0 ? (
               guidedPath.map((node, index) => (
                 <span key={node.uid} className="inline-flex min-w-0 items-center gap-1">
                   {index > 0 ? <span className="shrink-0 text-muted-foreground/50">/</span> : null}
                   <span
                     className={cn(
-                      'truncate',
-                      compactChrome ? 'max-w-[5.5rem]' : 'max-w-[8rem]',
+                      'max-w-[8rem] truncate',
                       index === guidedPath.length - 1 && 'font-medium text-foreground',
                     )}
                   >
-                    {node.text}
+                    {stripMindMapHtml(node.text)}
                   </span>
                 </span>
               ))
@@ -388,12 +384,12 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               <span className="truncate">未命名导图</span>
             )}
           </div>
-          <div className={cn('grid grid-cols-4', compactChrome ? 'gap-1' : 'gap-1.5')}>
+          <div className="grid grid-cols-4 gap-1.5">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              className="min-h-11 px-1 text-xs"
               disabled={!guidedParentNode}
               onClick={() => selectGuidedNode(guidedParentNode?.uid ?? null, { syncCanvas: true })}
             >
@@ -403,7 +399,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               type="button"
               size="sm"
               variant="outline"
-              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              className="min-h-11 px-1 text-xs"
               disabled={!guidedNextNode}
               onClick={handleGuidedNext}
             >
@@ -412,7 +408,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
             <Button
               type="button"
               size="sm"
-              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              className="min-h-11 px-1 text-xs"
               disabled={!guidedCurrentNode}
               onClick={handleGuidedReveal}
             >
@@ -422,7 +418,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               type="button"
               size="sm"
               variant="outline"
-              className={cn('px-1 text-xs', compactChrome ? 'min-h-9' : 'min-h-11')}
+              className="min-h-11 px-1 text-xs"
               onClick={handleGuidedGlobal}
             >
               <Network className="size-4" />全局

@@ -26,6 +26,18 @@ const apiMocks = vi.hoisted(() => ({
   undoReviewUnitRatingApi: vi.fn(),
 }))
 
+const quizBindingMocks = vi.hoisted(() => ({
+  getOpenQuestionIds: vi.fn((nodeUid: string) => (nodeUid === 'unit-node' ? [101, 102] : [])),
+  getInitialQuestionIndex: vi.fn(() => 0),
+  markQuestionCompleted: vi.fn(),
+  updateQuestionState: vi.fn(),
+  countBadgeByNodeUid: {
+    'unit-node': { text: '2', tone: 'success' as const, title: '2/2 道未做关联题' },
+    'unit-child': { text: '1', tone: 'success' as const, title: '1/1 道未做关联题' },
+  },
+  questionStates: {} as Record<number, unknown>,
+}))
+
 let capturedPanelProps: Record<string, unknown> | null = null
 let revealFrameCallbacks: FrameRequestCallback[] = []
 let originalRequestAnimationFrame: typeof window.requestAnimationFrame
@@ -37,6 +49,34 @@ vi.mock('@/modules/practice/public', () => ({
   startFreestyleUnitReviewSessionApi: apiMocks.startFreestyleUnitReviewSessionApi,
   rateReviewUnitApi: apiMocks.rateReviewUnitApi,
   undoReviewUnitRatingApi: apiMocks.undoReviewUnitRatingApi,
+}))
+
+vi.mock('@/modules/quiz/public', () => ({
+  usePalaceQuizNodeBindings: () => ({
+    countBadgeByNodeUid: quizBindingMocks.countBadgeByNodeUid,
+    getOpenQuestionIds: quizBindingMocks.getOpenQuestionIds,
+    getInitialQuestionIndex: quizBindingMocks.getInitialQuestionIndex,
+    markQuestionCompleted: quizBindingMocks.markQuestionCompleted,
+    updateQuestionState: quizBindingMocks.updateQuestionState,
+    questionStates: quizBindingMocks.questionStates,
+  }),
+}))
+
+vi.mock('@/shared/feedback/toast', () => ({
+  toast: {
+    message: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+vi.mock('@/widgets/node-bound-quiz', () => ({
+  NodeBoundQuizDialog: (props: Record<string, unknown>) =>
+    props.open ? (
+      <div data-testid="node-bound-quiz-dialog">
+        {String(props.nodeUid)}:{Array.isArray(props.questionIds) ? props.questionIds.join(',') : ''}
+      </div>
+    ) : null,
 }))
 
 vi.mock('@/widgets/mindmap-review-flow', () => ({
@@ -207,7 +247,12 @@ function ratingResult(session: UnitReviewSessionDto, rating: UnitRating, operati
 
 function renderCard(
   card: FreestyleReviewUnitCard,
-  options: { active?: boolean; readOnly?: boolean; encounter?: FreestyleUnitEncounterState } = {},
+  options: {
+    active?: boolean
+    readOnly?: boolean
+    encounter?: FreestyleUnitEncounterState
+    ratingVisible?: boolean
+  } = {},
 ) {
   const callbacks = {
     onEnsureEncounter: vi.fn(() => options.encounter ?? queueEncounter()),
@@ -223,6 +268,7 @@ function renderCard(
     roundId: 'round-1',
     encounter: options.encounter ?? queueEncounter(),
     retryAfterCards: 3,
+    ratingVisible: options.ratingVisible ?? true,
     ...callbacks,
   }
   const renderResult = render(<FreestyleUnitReviewCardView {...props} />)
@@ -258,6 +304,14 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     window.cancelAnimationFrame = vi.fn()
     Object.values(apiMocks).forEach((mock) => mock.mockReset())
+    quizBindingMocks.getOpenQuestionIds.mockClear()
+    quizBindingMocks.getInitialQuestionIndex.mockClear()
+    quizBindingMocks.markQuestionCompleted.mockClear()
+    quizBindingMocks.updateQuestionState.mockClear()
+    quizBindingMocks.getOpenQuestionIds.mockImplementation(
+      (nodeUid: string) => (nodeUid === 'unit-node' ? [101, 102] : []),
+    )
+    quizBindingMocks.getInitialQuestionIndex.mockReturnValue(0)
     apiMocks.closeUnitReviewEncounterApi.mockResolvedValue({
       operation_id: 'close-default',
       encounter: buildEncounter({ status: 'closed' }),
@@ -294,11 +348,59 @@ describe('FreestyleUnitReviewCardView', () => {
       'encounter-1',
     )
     expect(capturedPanelProps?.activeUnitNodeUids).toEqual(['unit-node', 'unit-child'])
+    expect(capturedPanelProps?.countBadgeByNodeUid).toEqual(quizBindingMocks.countBadgeByNodeUid)
+    expect(typeof capturedPanelProps?.onCountBadgeClick).toBe('function')
     expect(
       (capturedPanelProps?.visibleEditorState as {
         editor_doc: { root: { data: { uid: string } } }
       }).editor_doc.root.data.uid,
     ).toBe('root')
+  })
+
+  it('opens node-bound quiz from the corner question badge', async () => {
+    const card = buildCard('unit-badge-open')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const onCountBadgeClick = capturedPanelProps?.onCountBadgeClick as (nodeUid: string) => void
+    act(() => onCountBadgeClick('unit-node'))
+    expect(quizBindingMocks.getOpenQuestionIds).toHaveBeenCalledWith('unit-node')
+    const dialog = await screen.findByTestId('node-bound-quiz-dialog')
+    expect(dialog.textContent).toBe('unit-node:101,102')
+  })
+
+  it('exposes 进入编辑 in mind-map moreActions and toggles to 返回学习', async () => {
+    const card = buildCard('unit-inline-edit')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(capturedPanelProps?.displayMode).toBe('review')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    const enter = moreActions?.moreActions?.find((item) => item.label === '进入编辑')
+    expect(enter).toBeTruthy()
+
+    act(() => enter!.onClick())
+
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('edit')
+    })
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    const labels = (editMore?.moreActions ?? []).map((item) => item.label)
+    expect(labels).toContain('返回学习')
+    expect(labels).toContain('永久标记')
+    expect(screen.queryByRole('button', { name: /忘记/ })).toBeNull()
+
+    const leave = editMore?.moreActions?.find((item) => item.label === '返回学习')
+    act(() => leave!.onClick())
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('review')
+    })
   })
 
   it('keeps reveal and hide interactions scoped to presentation only', async () => {

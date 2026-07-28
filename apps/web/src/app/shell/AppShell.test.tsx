@@ -210,7 +210,7 @@ describe('AppShell', () => {
     expect(screen.getAllByRole('link', { name: '知识' })[0].className).not.toContain('bg-primary')
   })
 
-  it('renders a mobile bottom navigation that reuses the main route targets', async () => {
+  it('hides mobile bottom navigation on immersive freestyle', async () => {
     getRuntimeInfoApi.mockResolvedValue(null)
 
     render(
@@ -221,11 +221,25 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.queryByRole('navigation', { name: '移动端主导航' })).toBeNull()
+  })
+
+  it('renders a mobile bottom navigation that reuses the main route targets', async () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+
+    render(
+      <MemoryRouter initialEntries={['/palaces']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('lg:hidden')
     expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
-    expect(mobileNav.querySelector('a[href="/freestyle"]')?.className).toContain('bg-primary')
-    expect(mobileNav.querySelector('a[href="/palaces"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
+    expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/english"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/english-reading"]')).toBeFalsy()
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
@@ -244,7 +258,7 @@ describe('AppShell', () => {
     }))
 
     render(
-      <MemoryRouter initialEntries={['/freestyle']}>
+      <MemoryRouter initialEntries={['/palaces']}>
         <AppShell>
           <div>content</div>
         </AppShell>

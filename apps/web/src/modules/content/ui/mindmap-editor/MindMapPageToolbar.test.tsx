@@ -76,6 +76,29 @@ describe('MindMapPageToolbar', () => {
     expect(screen.queryByRole('menuitem', { name: '英语' })).toBeNull()
   })
 
+  it('opens ⋯ from moreActions alone and keeps 做题 as a primary button', async () => {
+    const onEdit = vi.fn()
+    const onQuiz = vi.fn()
+    render(
+      <MindMapPageToolbar
+        englishAction={{ label: '英语', onClick: vi.fn() }}
+        quizAction={{ label: '做题', onClick: onQuiz }}
+        moreActions={[{ label: '进入编辑', onClick: onEdit }]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '更多脑图操作' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '进入编辑' })).toBeNull()
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '进入编辑' }))
+    expect(onEdit).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '做题' }))
+    expect(onQuiz).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
     const onImport = vi.fn()
     render(

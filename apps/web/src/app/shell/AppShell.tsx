@@ -34,7 +34,7 @@ import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
-import { GlobalBackButton } from '@/app/shell/GlobalBackButton'
+import { GlobalBackButton, isImmersiveFeedPath } from '@/app/shell/GlobalBackButton'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 import {
   readPageHistorySectionUrl,
@@ -322,6 +322,9 @@ function MobileBottomNav() {
     recordPageHistorySectionVisit(matchedSection.key, rememberedTarget)
   }, [hash, pathname, search])
 
+  // Freestyle owns full-screen chrome; section switch lives in the freestyle HUD menu.
+  if (isImmersiveFeedPath(pathname)) return null
+
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_rgba(15,23,42,0.12)] backdrop-blur-xl lg:hidden"
@@ -354,6 +357,8 @@ function MobileBottomNav() {
 }
 
 function ShellFrame({ children }: PropsWithChildren) {
+  const { pathname } = useLocation()
+  const immersiveFeed = isImmersiveFeedPath(pathname)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
@@ -428,11 +433,21 @@ function ShellFrame({ children }: PropsWithChildren) {
 
         <main
           className={cn(
-            'min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] transition-[padding] duration-300 lg:pb-0',
+            'min-w-0 transition-[padding] duration-300 lg:pb-0',
+            immersiveFeed
+              ? 'pb-0'
+              : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
             sidebarCollapsed ? 'lg:pl-[104px]' : 'lg:pl-[264px]',
           )}
         >
-          <div className="mx-auto w-full max-w-[1600px] px-2 py-2 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9">
+          <div
+            className={cn(
+              'mx-auto w-full max-w-[1600px]',
+              immersiveFeed
+                ? 'px-0 py-0 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9'
+                : 'px-2 py-2 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9',
+            )}
+          >
             <BackgroundTaskBar />
             {children}
           </div>

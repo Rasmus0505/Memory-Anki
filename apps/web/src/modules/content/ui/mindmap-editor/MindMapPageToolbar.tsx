@@ -79,9 +79,13 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
   // englishAction is a first-class toolbar toggle (right of 编辑); keep it out of overflow.
-  const legacyActions = [importMindMapAction, importTextAction, quizAction].filter(Boolean) as MindMapToolbarAction[]
+  // quizAction stays visible as a primary button; do not also bury it in ⋯ (avoids duplicate "做题").
+  const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
-  const modern = Boolean(taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length)
+  // moreActions alone must open the ⋯ menu (freestyle: 进入编辑 / 永久标记 live only there).
+  const modern = Boolean(
+    taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length > 0,
+  )
   const overflowMenu = useDropdownMenuActionCoordinator()
 
   return (
@@ -131,6 +135,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             ))}
           </div>
         ) : null}
+        {/* modeToggle is optional primary chrome; freestyle puts 进入编辑 inside moreActions ⋯ instead. */}
         {modeToggle ? <Button type="button" variant="outline" onClick={modeToggle.onClick}><Wand2 className="size-4" />{modeToggle.label}</Button> : null}
         {englishAction ? (
           <Button
@@ -143,11 +148,16 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             {englishAction.label}
           </Button>
         ) : null}
+        {quizAction ? (
+          <Button type="button" variant="outline" disabled={quizAction.disabled} onClick={quizAction.onClick}>
+            {quizAction.label}
+          </Button>
+        ) : null}
         {!modern ? legacyActions.map((action) => <Button key={action.label} type="button" variant="outline" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>) : null}
         {!modern && immersiveAction ? <Button type="button" variant="outline" onClick={immersiveAction.onClick}>{immersiveAction.label}</Button> : null}
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}
         {!modern && clearUiAction ? <Button type="button" variant="outline" onClick={clearUiAction.onClick}>{clearUiAction.label}</Button> : null}
-        {modern && overflowActions.length ? (
+        {overflowActions.length ? (
           <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
             <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
