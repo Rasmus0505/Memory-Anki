@@ -30,7 +30,10 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
         .group_by(review_day)
         .all()
     )
-    session_day = func.date(StudySession.started_at)
+    # Match dashboard duration stats: only completed positive seconds, day by
+    # coalesce(ended_at, started_at). Active autosave checkpoints must not inflate
+    # the heatmap (they previously did when status was unfiltered).
+    session_day = func.date(func.coalesce(StudySession.ended_at, StudySession.started_at))
     session_rows = (
         session.query(
             session_day,
@@ -38,8 +41,9 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
         )
         .filter(
             StudySession.deleted_at.is_(None),
-            StudySession.started_at >= start_dt,
+            StudySession.status == "completed",
             StudySession.effective_seconds > 0,
+            func.coalesce(StudySession.ended_at, StudySession.started_at) >= start_dt,
         )
         .group_by(session_day)
         .all()

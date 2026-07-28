@@ -123,3 +123,42 @@ def test_weekly_report_payload(session_factory):
     assert "week_start" in payload
     assert "review_count" in payload
     assert "study_seconds" in payload
+
+
+def test_heatmap_excludes_active_checkpoint_seconds(session_factory):
+    from memory_anki.modules.dashboard.application.heatmap_service import build_heatmap_payload
+
+    now = datetime.now().replace(microsecond=0)
+    with session_factory() as session:
+        session.add(
+            StudySession(
+                id="active-checkpoint",
+                status="active",
+                scene="quiz",
+                target_type="none",
+                title="checkpoint",
+                started_at=now,
+                ended_at=None,
+                effective_seconds=9_000,
+                completion_method="saved",
+            )
+        )
+        session.add(
+            StudySession(
+                id="completed-real",
+                status="completed",
+                scene="quiz",
+                target_type="none",
+                title="real",
+                started_at=now - timedelta(minutes=10),
+                ended_at=now,
+                effective_seconds=600,
+                completion_method="left_page",
+            )
+        )
+        session.commit()
+        payload = build_heatmap_payload(session, days=7)
+
+    today_key = date.today().isoformat()
+    today_item = next(item for item in payload["items"] if item["date"] == today_key)
+    assert today_item["study_seconds"] == 600
