@@ -144,4 +144,11 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 ## Node identity and review units
 
-A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` applies the water-pour topology and returns complete unit memberships; it contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions. A content change makes only the affected unit immediately due and lowers it one fixed-ladder level. Practice and Knowledge consume the Reviews projection and must not derive a second topology or node schedule.
+A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` applies the water-pour topology and returns complete unit memberships; it contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions.
+
+- Content autosave may write `editor_doc` without reconciling schedule; editing must not block on unit arrangement.
+- Permanent mark / membership changes reconcile immediately.
+- Content demotion (affected unit immediately due, one fixed-ladder step down) may batch to leave / idle / explicit reconcile — at most one demotion per unit per edit session.
+- Reconcile exposes unit-level before/after; content demotions form an undoable schedule batch (document content stays as saved). Manual adjust and undo demote-batch are Reviews write commands.
+
+Practice and Knowledge consume the Reviews projection and must not derive a second topology or node schedule.

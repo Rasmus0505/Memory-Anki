@@ -27,10 +27,10 @@ Each facade is intentionally narrow: recent English course continuation, recent 
 `POST /api/v1/freestyle/queue/build` composes a finite immersive queue:
 
 - **Palaces facade**: stable tree structure used only to render the complete palace and resolve context paths (`list_active_palace_tree_structures`).
-- **Reviews facade**: active permanent-mark units, stable membership, revision, stage, and due date (`get_palace_unit_projection`). Reviews owns all palace scheduling writes.
+- **Reviews facade**: active permanent-mark units, stable membership, revision, stage, and due date (`get_palace_unit_projection`). Reviews owns all palace scheduling writes (rating, manual schedule adjust, undo content-demote batch, reconcile). UI may show a unit projection panel over this read model for schedule observability; it must not invent a second schedule store.
 - **Palace Quiz facade**: published questions, node bindings, mastery profiles (`list_published_questions_for_palaces`, `list_node_bindings_for_palaces`, `list_mastery_profiles_for_palaces` / `build_mastery_profile`).
 
-Practice does not split palace documents. It maps each Reviews projection to one revisioned queue card and uses the member UIDs only for highlighting and quiz binding. Queue requests carry `operation_id`; clients ignore stale responses. A due unit always keeps its palace review card even when standalone Anki cards are generated from nodes inside that unit. Anki and quiz cards never carry review-unit rating identity.
+Practice does not split palace documents. It maps each Reviews projection to one revisioned queue card and uses the member UIDs only for highlighting and quiz binding. Queue requests carry `operation_id`; clients ignore stale responses. Stale encounter / revision after concurrent document or schedule writes is treated as rebuildable queue state, not a hard feed failure. A due unit always keeps its palace review card even when standalone Anki cards are generated from nodes inside that unit. Anki and quiz cards never carry review-unit rating identity.
 
 Frontend ownership:
 

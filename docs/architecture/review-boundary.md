@@ -8,11 +8,11 @@ Reviews owns the only scheduling state for palace mind maps. The scheduling atom
 mindmap_document -> projects editor documents and permanent-mark topology
 reviews projection -> reconciles unit identity, membership, revision, and due projections
 reviews session    -> owns encounters, ratings, amendments, close locking, and undo
-content          -> saves palace documents and invokes reviews.api reconciliation
+content          -> saves palace documents; may save editor_doc without schedule reconcile
 practice         -> consumes reviews.api unit projections and the shared rating command
 ```
 
-Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks.
+Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.
 
 ## Topology Invariants
 
@@ -21,8 +21,16 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Nodes outside marked regions form one residual root-flow unit.
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
 - Every non-root node belongs to exactly one active unit.
-- Mark changes reconcile immediately. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
+- Permanent mark / membership changes reconcile immediately. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
 - Deleting the final mark deactivates every unit. A later first mark starts a new schedule.
+
+## Content Save vs Schedule Reconcile
+
+- Content autosave may persist `editor_doc` without reconciling schedule. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/level updates.
+- Permanent mark and membership-affecting changes still reconcile immediately (same transaction or immediate post-save reconcile).
+- Content-only edits that demote affected units may batch demotion to leave / idle / explicit reconcile. At most one content demotion is applied per edit session for a unit, even across many interim autosaves.
+- Reconcile returns unit-level before/after changes (identity, membership, revision, due, ladder level). Content demotions create an undoable schedule batch while keeping document content as saved.
+- Manual schedule adjust and undo of a content-demote batch are Reviews write commands. Content must not invent a parallel schedule-write API.
 
 ## Scheduling Invariants
 
@@ -33,6 +41,7 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Closing a `困难` or `忘记` encounter preserves its penalty in the next encounter. A later `记得` settles at that penalized level; a later `轻松` recovers only one level.
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
 - Due dates are local natural-day dates; presentation converts them to local midnight only at API boundaries.
+- A content change, once reconciled, makes only the affected unit immediately due and lowers it one fixed-ladder level (batched per edit session as above).
 
 ## Session Invariants
 
