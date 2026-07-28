@@ -43,7 +43,6 @@ from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.memory.presentation import router as review_router
-from memory_anki.modules.mindmap_learning.presentation import router as mindmap_router
 from memory_anki.modules.pdf_library import router as pdf_library_router
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
@@ -165,7 +164,6 @@ app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(pdf_library_router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
-app.include_router(mindmap_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
@@ -180,4 +178,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("memory_anki.app.main:app", host="127.0.0.1", port=8012)
-

@@ -23,17 +23,17 @@ def run_startup_warmup() -> None:
         connection.execute(text("PRAGMA journal_mode")).scalar()
         for table_name in (
             "palaces",
-            "review_node_states",
-            "session_progress",
+            "review_unit_states",
+            "study_sessions",
         ):
             connection.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
         connection.execute(
             text(
                 """
                 SELECT id
-                FROM review_node_states
-                WHERE due_at <= CURRENT_TIMESTAMP
-                ORDER BY due_at, palace_id, id
+                FROM review_unit_states
+                WHERE active = 1 AND due_date <= CURRENT_DATE
+                ORDER BY due_date, palace_id, id
                 LIMIT 8
                 """
             )

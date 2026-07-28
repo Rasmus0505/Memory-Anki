@@ -23,10 +23,6 @@ from memory_anki.modules.english.application.startup import (
 from memory_anki.modules.english_reading.application.startup import (
     prepare_english_reading,
 )
-from memory_anki.modules.session.api import (
-    ensure_review_log_study_sessions,
-    reclassify_ghost_formal_review_time_sessions,
-)
 from memory_anki.modules.settings.application.ai_model_registry import (
     ensure_ai_model_catalog_seed,
 )
@@ -77,9 +73,6 @@ def run_prepare_runtime() -> StartupState:
         session.commit()
         # Each device only deletes expired local cache rows; repeated cleanup is safe.
         purge_expired_mutation_responses(session)
-        ensure_review_log_study_sessions(session)
-        reclassify_ghost_formal_review_time_sessions(session)
-        session.commit()
         ensure_daily_backup()
         maybe_create_periodic_backup()
         try:
@@ -101,19 +94,6 @@ def run_prepare_runtime() -> StartupState:
     )
 
 
-def _heal_study_session_data() -> None:
-    """Idempotent startup heals that must run on existing devices (serve path)."""
-    session = get_session()
-    try:
-        ensure_review_log_study_sessions(session)
-        if reclassify_ghost_formal_review_time_sessions(session):
-            session.commit()
-        else:
-            session.commit()
-    finally:
-        session.close()
-
-
 def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> StartupState:
     configure_logging()
     startup_mode = mode or resolve_startup_mode()
@@ -122,8 +102,6 @@ def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> Star
     init_db()
     runtime_info = build_runtime_info(shared_state)
     if startup_mode == STARTUP_MODE_SERVE:
-        # Existing installs skip prepare; still rewrite ghost review timer rows.
-        _heal_study_session_data()
         started_state = record_runtime_start(
             shared_state,
             channel=os.environ.get("MEMORY_ANKI_CHANNEL") or "production",
