@@ -7,6 +7,8 @@ import {
 import type {
   FreestyleMindMapBranchCard,
   MindMapEditorState,
+  PalaceEditorSource,
+  PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
@@ -66,13 +68,60 @@ export function loadPalaceEditor(palaceId: number) {
   return promise
 }
 
+export type PersistPalaceEditorOptions = {
+  /** Force unit reconcile (also set for mark/leave reasons). */
+  reconcileUnits?: boolean
+  /** Backend reconcile triggers: mark_change | return_to_review | editor_leave | editor_idle */
+  syncReason?: string
+  editorSource?: PalaceEditorSource | string
+}
+
+export type PersistPalaceEditorResult = {
+  state: MindMapEditorState
+  unitReconcile?: PalaceUnitReconcileResult | null
+}
+
+function readUnitReconcile(response: unknown): PalaceUnitReconcileResult | null {
+  if (!response || typeof response !== 'object') return null
+  const value = (response as { unit_reconcile?: PalaceUnitReconcileResult | null }).unit_reconcile
+  return value ?? null
+}
+
+/**
+ * Persist freestyle inline palace edits.
+ * - No options → plain autosave (`savePalaceEditorApi`, no force reconcile).
+ * - With options → `savePalaceEditorWithOptionsApi` so mark/leave can set
+ *   `sync_reason` / `reconcile_units` without changing the default path.
+ */
 export async function persistPalaceEditor(
   palaceId: number,
   state: MindMapEditorState,
-): Promise<MindMapEditorState> {
+  options?: PersistPalaceEditorOptions,
+): Promise<PersistPalaceEditorResult> {
+  const hasOptions = Boolean(
+    options
+    && (
+      options.reconcileUnits
+      || (options.syncReason != null && options.syncReason !== '')
+      || (options.editorSource != null && options.editorSource !== '')
+    ),
+  )
+  const buildOptionsPayload = (extra?: Record<string, unknown>) => ({
+    ...state,
+    editor_source: (options?.editorSource as PalaceEditorSource | undefined) ?? 'palace_edit_autosave',
+    ...(options?.syncReason ? { sync_reason: options.syncReason } : {}),
+    ...(options?.reconcileUnits ? { reconcile_units: true } : {}),
+    ...extra,
+  })
+
   try {
-    const response = await savePalaceEditorApi(palaceId, state)
-    return readMindMapEditorState(response)
+    const response = hasOptions
+      ? await savePalaceEditorWithOptionsApi(palaceId, buildOptionsPayload())
+      : await savePalaceEditorApi(palaceId, state)
+    return {
+      state: readMindMapEditorState(response),
+      unitReconcile: readUnitReconcile(response),
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || '')
     if (!message.includes('危险结构变更')) throw error
@@ -81,12 +130,14 @@ export async function persistPalaceEditor(
       { title: '确认危险保存', tone: 'danger' },
     )
     if (!confirmed) throw error
-    const response = await savePalaceEditorWithOptionsApi(palaceId, {
-      ...state,
+    const response = await savePalaceEditorWithOptionsApi(palaceId, buildOptionsPayload({
       confirm_dangerous_change: true,
       editor_source: 'palace_edit',
-    })
-    return readMindMapEditorState(response)
+    }))
+    return {
+      state: readMindMapEditorState(response),
+      unitReconcile: readUnitReconcile(response),
+    }
   }
 }
 

@@ -39,6 +39,7 @@ export {
   resolveRestudyPreferCardId,
   sanitizeQueueState,
   setUnitEncounterState,
+  clearUnitEncounterState,
   startNewRound,
   undoSkip,
   visibleMountIndices,
@@ -52,6 +53,7 @@ export {
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
 export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'
+export * from './ui/review/components/PalaceReviewUnitsPanel'
 export * from './ui/review/hooks/useReviewCompletionCoordinator'
 export * from './ui/review/hooks/useReviewFlowSession'
 export * from './ui/review/model/mind-map-review-flow'

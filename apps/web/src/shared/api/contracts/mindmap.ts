@@ -18,10 +18,26 @@ export type PalaceEditorSource =
 export interface PalaceEditorSavePayload extends Partial<MindMapEditorState> {
   editor_source?: PalaceEditorSource
   sync_reason?: string | null
+  /** When true, backend demotes/reconciles review units even for palace_edit_autosave. */
+  reconcile_units?: boolean
   allow_stale_overwrite?: boolean
   confirm_dangerous_change?: boolean
   expected_editor_fingerprint?: string | null
 }
+
+/** Diff returned when editor save reconciles permanent-mark review units. */
+export interface PalaceUnitReconcileResult {
+  palace_id?: number
+  mark_required?: boolean
+  unit_count?: number
+  changed?: boolean
+  invalidated_session_count?: number
+  title?: string
+  changes?: Array<Record<string, unknown>>
+  undo_token?: string | null
+  schedule_batch_id?: string | null
+}
+
 export interface MindMapNodeData {
   text?: string
   note?: string

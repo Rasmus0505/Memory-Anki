@@ -12,28 +12,14 @@ import {
   type UnitRatingEffectDto,
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
-import { useRevealSession } from '@/modules/memory/public'
-import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
-import type { FreestyleReviewUnitCard, MindMapEditorState } from '@/shared/api/contracts'
-import type { MindMapSelection } from '@/modules/content/public'
+import type {
+  FreestyleReviewUnitCard,
+  MindMapEditorState,
+} from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
-import {
-  buildEditorParentMap,
-  buildSplitMarkStatusChips,
-  collectPermanentMarkUids,
-  collectRootUid,
-  togglePermanentMarkInDoc,
-  type EditorDoc,
-} from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
-import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
-import {
-  FlipCardMindMapPanel,
-  persistPalaceEditor,
-  readBranchRevealSnapshot,
-  writeBranchRevealSnapshot,
-} from './freestyleBranchCardSupport'
+import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
 const ratings: Array<{
@@ -127,6 +113,8 @@ function isStaleUnitError(error: unknown) {
     || message.includes('rebuild the queue')
     || message.includes('not due')
     || message.includes('no review units available')
+    || message.includes('encounter_id belongs to another review unit')
+    || message.includes('active unit review session required')
 }
 
 function localDateLabel(value: string) {
@@ -181,279 +169,6 @@ function updateSessionUnit(
   }
 }
 
-function FreestyleUnitReviewFlipPanel({
-  card,
-  session,
-  unit,
-  editorState,
-  fullscreen,
-  onToggleFullscreen,
-  onEditingChange,
-  onSaveFailed,
-}: {
-  card: FreestyleReviewUnitCard
-  session: UnitReviewSessionDto
-  unit: ReviewUnitDto
-  editorState: MindMapEditorState
-  fullscreen: boolean
-  onToggleFullscreen: (active?: boolean) => void
-  /** Parent hides rating overlay while inline editing. */
-  onEditingChange?: (editing: boolean) => void
-  onSaveFailed?: (message: string) => void
-}) {
-  // A weak rating creates a new encounter when this unit returns to the queue.
-  // Its reveal state must start at the root; only a remount of the same encounter
-  // is allowed to restore the learner's in-progress flips.
-  const revealSnapshotKey = `${card.id}:${unit.encounter.id}`
-  const initialRevealSnapshot = useMemo(
-    () => readBranchRevealSnapshot(revealSnapshotKey),
-    [revealSnapshotKey],
-  )
-  const reveal = useRevealSession({
-    title: card.palace_title || session.title || `宫殿 ${card.palace_id}`,
-    editorState,
-    initialSnapshot: initialRevealSnapshot,
-  })
-
-  useEffect(() => {
-    writeBranchRevealSnapshot(revealSnapshotKey, {
-      revealMap: reveal.revealMap,
-      redNodeIds: [...reveal.redNodeIds],
-      completed: reveal.completed,
-    })
-  }, [reveal.completed, reveal.redNodeIds, reveal.revealMap, revealSnapshotKey])
-
-  const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
-  const [editEditorState, setEditEditorState] = useState<MindMapEditorState>(editorState)
-  const [modeSyncVersion, setModeSyncVersion] = useState(0)
-  const [permanentMarkMode, setPermanentMarkMode] = useState(false)
-  const [savingEdit, setSavingEdit] = useState(false)
-  const saveTimerRef = useRef<number | null>(null)
-  const editBaselineRef = useRef(editorState)
-  const isEditMode = displayMode === 'edit'
-
-  // Session reload (stale rebuild) refreshes the edit baseline only while learning.
-  useEffect(() => {
-    if (isEditMode) return
-    setEditEditorState(editorState)
-    editBaselineRef.current = editorState
-  }, [editorState, isEditMode])
-
-  useEffect(() => {
-    onEditingChange?.(isEditMode)
-  }, [isEditMode, onEditingChange])
-
-  useEffect(() => () => {
-    if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
-  }, [])
-
-  const persistEdit = useCallback(async (state: MindMapEditorState) => {
-    setSavingEdit(true)
-    try {
-      const saved = await persistPalaceEditor(session.palace_id, state)
-      setEditEditorState(saved)
-      editBaselineRef.current = saved
-      toast.success('已保存宫殿编辑')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '保存宫殿失败'
-      onSaveFailed?.(message)
-      toast.error(message)
-    } finally {
-      setSavingEdit(false)
-    }
-  }, [onSaveFailed, session.palace_id])
-
-  const schedulePersist = useCallback((state: MindMapEditorState) => {
-    if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null
-      void persistEdit(state)
-    }, 700)
-  }, [persistEdit])
-
-  const handleToggleMode = useCallback(() => {
-    setDisplayMode((current) => {
-      const next = current === 'edit' ? 'review' : 'edit'
-      if (next === 'edit') {
-        setEditEditorState(editBaselineRef.current)
-        setPermanentMarkMode(false)
-      } else {
-        setPermanentMarkMode(false)
-        // Flush pending save before returning to learn.
-        if (saveTimerRef.current != null) {
-          window.clearTimeout(saveTimerRef.current)
-          saveTimerRef.current = null
-          void persistEdit(editEditorState)
-        }
-      }
-      return next
-    })
-    setModeSyncVersion((value) => value + 1)
-  }, [editEditorState, persistEdit])
-
-  const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
-    setEditEditorState(nextState)
-    editBaselineRef.current = nextState
-    schedulePersist(nextState)
-  }, [schedulePersist])
-
-  const handlePermanentMarkClick = useCallback((nodes: MindMapSelection[]) => {
-    const uid = nodes[0]?.uid
-    if (!uid) return
-    const doc = editEditorState.editor_doc as EditorDoc
-    const result = togglePermanentMarkInDoc(doc, String(uid))
-    if (result.doc === doc) return
-    const nextState = { ...editEditorState, editor_doc: result.doc }
-    setEditEditorState(nextState)
-    editBaselineRef.current = nextState
-    schedulePersist(nextState)
-    toast.success(result.marked ? '已添加永久标记（层级自动）' : '已取消永久标记')
-  }, [editEditorState, schedulePersist])
-
-  const permanentMarkChips = useMemo(() => {
-    const doc = editEditorState.editor_doc as EditorDoc
-    const marked = collectPermanentMarkUids(doc)
-    const parentMap = buildEditorParentMap(doc)
-    const rootUid = collectRootUid(doc)
-    return buildSplitMarkStatusChips(marked, parentMap, rootUid)
-  }, [editEditorState])
-
-  const permanentMarkHighlights = useMemo(
-    () => Object.keys(permanentMarkChips),
-    [permanentMarkChips],
-  )
-
-  // Badge counts must use the full palace doc (not the flip-reveal visible subtree),
-  // matching formal review — otherwise parent badges grow as children are revealed.
-  const quizNodeBindings = usePalaceQuizNodeBindings({
-    palaceId: session.palace_id,
-    editorDoc: (isEditMode ? editEditorState : editorState).editor_doc,
-    enabled: Boolean(session.palace_id),
-  })
-  const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds
-  const getInitialQuestionIndex = quizNodeBindings.getInitialQuestionIndex
-  const [nodeQuizOpen, setNodeQuizOpen] = useState(false)
-  const [nodeQuizNodeUid, setNodeQuizNodeUid] = useState<string | null>(null)
-  const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = useState<number[]>([])
-  const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
-
-  const handleOpenNodeQuiz = useCallback(
-    (nodeUid: string) => {
-      const ids = getOpenQuestionIds(nodeUid)
-      if (!ids.length) {
-        toast.message('该卡片没有关联题目。')
-        return
-      }
-      setNodeQuizNodeUid(nodeUid)
-      setNodeQuizQuestionIds(ids)
-      setNodeQuizInitialIndex(getInitialQuestionIndex(ids))
-      setNodeQuizOpen(true)
-    },
-    [getInitialQuestionIndex, getOpenQuestionIds],
-  )
-
-  const moreActions = useMemo(() => {
-    const actions: Array<{
-      label: string
-      onClick: () => void
-      disabled?: boolean
-      separatorBefore?: boolean
-    }> = [
-      {
-        label: isEditMode ? '返回学习' : '进入编辑',
-        onClick: handleToggleMode,
-        disabled: savingEdit,
-      },
-    ]
-    if (isEditMode) {
-      actions.push({
-        label: permanentMarkMode ? '退出永久标记' : '永久标记',
-        onClick: () => {
-          setPermanentMarkMode((current) => {
-            const next = !current
-            toast.success(
-              next
-                ? '永久标记：点击卡片标记/取消；层级按祖先自动推导并分色'
-                : '已退出永久标记',
-            )
-            return next
-          })
-        },
-        separatorBefore: true,
-      })
-    }
-    return actions
-  }, [handleToggleMode, isEditMode, permanentMarkMode, savingEdit])
-
-  return (
-    <>
-      <FlipCardMindMapPanel
-        fullscreen={fullscreen}
-        displayMode={displayMode}
-        sessionKind="review"
-        chromeDensity="compact"
-        hidePresentationOverflowActions
-        modeSyncVersion={modeSyncVersion}
-        onToggleFullscreen={onToggleFullscreen}
-        visibleEditorState={
-          isEditMode
-            ? editEditorState
-            : (reveal.visibleEditorState ?? editorState)
-        }
-        editableEditorState={editEditorState}
-        visibleEditorSyncKey={
-          isEditMode
-            ? `freestyle-edit:${session.palace_id}:${modeSyncVersion}`
-            : reveal.visibleEditorSyncKey
-        }
-        currentPalaceId={session.palace_id}
-        activeUnitNodeUids={isEditMode ? null : unit.node_uids}
-        countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
-        onCountBadgeClick={handleOpenNodeQuiz}
-        onEditorStateChange={isEditMode ? handleEditorStateChange : undefined}
-        onNodeClick={isEditMode ? () => undefined : reveal.handleNodeClick}
-        onNodeContextMenu={
-          isEditMode ? () => undefined : reveal.handleNodeContextMenu
-        }
-        onEditNodeClick={
-          permanentMarkMode ? handlePermanentMarkClick : undefined
-        }
-        onEditNodeContextMenu={
-          permanentMarkMode ? handlePermanentMarkClick : undefined
-        }
-        statusChipsByNodeUid={
-          isEditMode && (permanentMarkMode || permanentMarkHighlights.length > 0)
-            ? permanentMarkChips
-            : undefined
-        }
-        highlightedNodeUids={
-          isEditMode && permanentMarkHighlights.length > 0
-            ? permanentMarkHighlights
-            : undefined
-        }
-        toolbarExtensions={{ moreActions }}
-        onNodeActive={() => undefined}
-        onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
-        preserveViewOnSync
-        initialViewPolicy={isEditMode ? 'preserve' : 'reset'}
-        className="h-full min-h-0"
-        surfaceClassName="h-full min-h-0"
-      />
-      <NodeBoundQuizDialog
-        open={nodeQuizOpen}
-        onOpenChange={setNodeQuizOpen}
-        palaceId={session.palace_id}
-        nodeUid={nodeQuizNodeUid}
-        questionIds={nodeQuizQuestionIds}
-        initialIndex={nodeQuizInitialIndex}
-        initialQuestionStates={quizNodeBindings.questionStates}
-        onQuestionStateChange={quizNodeBindings.updateQuestionState}
-        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
-      />
-    </>
-  )
-}
-
 export function FreestyleUnitReviewCardView({
   card,
   active,
@@ -467,6 +182,7 @@ export function FreestyleUnitReviewCardView({
   onBranchComplete,
   onStaleDrop,
   onSaveFailed,
+  onUnitsReconciled,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -488,6 +204,8 @@ export function FreestyleUnitReviewCardView({
   ) => void
   onStaleDrop: (cardId: string) => void
   onSaveFailed: (message: string) => void
+  /** Silent freestyle queue rebuild after mark/leave unit reconcile changes. */
+  onUnitsReconciled?: () => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [busy, setBusy] = useState(false)
@@ -763,10 +481,12 @@ export function FreestyleUnitReviewCardView({
           session={session}
           unit={unit}
           editorState={editorState}
+          active={active}
           fullscreen={fullscreen}
           onToggleFullscreen={(next) => setFullscreen(next ?? !fullscreen)}
           onEditingChange={setInlineEditing}
           onSaveFailed={onSaveFailed}
+          onUnitsReconciled={onUnitsReconciled}
         />
 
         {ratingVisible && !inlineEditing ? (

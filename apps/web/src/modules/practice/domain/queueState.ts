@@ -281,6 +281,24 @@ export function setUnitEncounterState(
 }
 
 /**
+ * Drop local encounter identity for a card so the next ensure mints a fresh
+ * encounterId (e.g. after stale unit / wrong-unit encounter errors).
+ */
+export function clearUnitEncounterState(
+  state: FreestyleSkipState,
+  cardId: string,
+): FreestyleSkipState {
+  const id = String(cardId || '').trim()
+  if (!id || !(id in state.unitEncountersByCardId)) return state
+  const unitEncountersByCardId = { ...state.unitEncountersByCardId }
+  delete unitEncountersByCardId[id]
+  return {
+    ...state,
+    unitEncountersByCardId,
+  }
+}
+
+/**
  * Silent rebuild after settle / answer: keep the local feed order under the
  * viewport so completion never looks like auto-advance to the next card.
  *

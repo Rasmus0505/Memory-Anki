@@ -20,6 +20,7 @@ import {
   saveFreestyleFeedConfig,
   saveQueueState,
   setUnitEncounterState,
+  clearUnitEncounterState,
   applySkip,
   sanitizeFreestyleFeedConfig,
   startNewRound,
@@ -409,6 +410,7 @@ export function useImmersiveQueue() {
   /**
    * Drop a card whose formal due vanished between queue build and open.
    * Does **not** mark completed — still-due units must remain eligible after rebuild.
+   * Clears local encounter state so a renewed card does not reuse a bad encounter_id.
    */
   const dropStaleCard = useCallback(
     (cardId: string) => {
@@ -419,6 +421,8 @@ export function useImmersiveQueue() {
         index >= 0
           ? (filtered[Math.min(index, Math.max(0, filtered.length - 1))]?.id ?? null)
           : (filtered[currentIndexRef.current]?.id ?? filtered[0]?.id ?? null)
+      // Stale encounter_id / unit revision must not survive rebuild — next ensure mints fresh.
+      persistQueueState(clearUnitEncounterState(queueStateRef.current, cardId))
       cardsRef.current = filtered
       setCards(filtered)
       applyCurrentIndex(
@@ -431,7 +435,7 @@ export function useImmersiveQueue() {
         preferCardId,
       })
     },
-    [applyCurrentIndex, buildQueue],
+    [applyCurrentIndex, buildQueue, persistQueueState],
   )
 
   const skipCurrent = useCallback(() => {

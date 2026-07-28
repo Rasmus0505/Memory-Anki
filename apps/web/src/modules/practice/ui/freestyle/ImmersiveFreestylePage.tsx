@@ -132,6 +132,7 @@ export default function ImmersiveFreestylePage() {
     updateUnitEncounter,
     dropStaleCard,
     skipToNextPalace,
+    buildQueue,
   } = useImmersiveQueue()
 
   queueRef.current = cards
@@ -791,6 +792,13 @@ export default function ImmersiveFreestylePage() {
                           onSaveFailed={(message) => {
                             setSaveError(message)
                             toast.error(message)
+                          }}
+                          onUnitsReconciled={() => {
+                            void buildQueue(config, {
+                              preserveCompleted: true,
+                              silent: true,
+                              preferCardId: card.id,
+                            })
                           }}
                         />
                       ) : (

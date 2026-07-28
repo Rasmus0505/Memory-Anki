@@ -1,4 +1,4 @@
-import type { MindMapDoc, MindMapEditorState } from './mindmap'
+import type { MindMapDoc, MindMapEditorState, PalaceUnitReconcileResult } from './mindmap'
 export interface PalaceSegmentSummary {
   id: number
   palace_id: number
@@ -85,6 +85,8 @@ export interface PalaceEditorMeta {
 }
 export interface PalaceEditorResponse extends MindMapEditorState {
   palace: PalaceEditorMeta
+  /** Present when save reconciled permanent-mark review units. */
+  unit_reconcile?: PalaceUnitReconcileResult | null
 }
 export interface PalaceGroupedSummaryItem {
   id: number

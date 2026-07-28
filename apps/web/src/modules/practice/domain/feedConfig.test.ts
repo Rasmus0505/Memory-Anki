@@ -8,6 +8,7 @@ import {
   applyDeferredPalaceOrder,
   applySkip,
   cardPalaceId,
+  clearUnitEncounterState,
   deferPalace,
   findNextPalaceIndex,
   moveRemainingPalaceToTail,
@@ -230,6 +231,41 @@ describe('freestyle queue skip rules', () => {
       },
     })
     expect(startNewRound(sanitized).unitEncountersByCardId).toEqual({})
+  })
+
+  it('clearUnitEncounterState removes one card encounter so ensure can remint', () => {
+    const withEncounter = sanitizeQueueState({
+      ...DEFAULT_QUEUE_STATE,
+      unitEncountersByCardId: {
+        'review-unit:a': {
+          encounterId: 'encounter-a',
+          unitRevision: 4,
+          status: 'open',
+          sessionId: 'session-a',
+          selectedRating: 3,
+          passed: true,
+          retryAfterCards: 0,
+        },
+        'review-unit:b': {
+          encounterId: 'encounter-b',
+          unitRevision: 1,
+          status: 'pending',
+          sessionId: null,
+          selectedRating: null,
+          passed: null,
+          retryAfterCards: 0,
+        },
+      },
+    })
+
+    const cleared = clearUnitEncounterState(withEncounter, 'review-unit:a')
+    expect(cleared.unitEncountersByCardId).toEqual({
+      'review-unit:b': withEncounter.unitEncountersByCardId['review-unit:b'],
+    })
+    expect(clearUnitEncounterState(cleared, 'review-unit:a')).toBe(cleared)
+    expect(clearUnitEncounterState(withEncounter, '  review-unit:a  ').unitEncountersByCardId).not.toHaveProperty(
+      'review-unit:a',
+    )
   })
 
   it('resolveRebuildIndex resumes the persisted card after remount (no live viewport)', () => {

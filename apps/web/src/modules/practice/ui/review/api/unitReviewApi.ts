@@ -102,9 +102,163 @@ export interface UnitReviewCompletionDto {
   completed_at: string
 }
 
+export interface UnitScheduleSnapshotDto {
+  stage_index: number
+  interval_days: number
+  due_date: string
+  has_passed: boolean
+}
+
+export interface PalaceUnitProjectionDto {
+  palace_id: number
+  title: string
+  mark_required: boolean
+  permanent_mark_count?: number
+  unit_count: number
+  due_unit_count: number
+  next_review_date: string | null
+  review_status: string
+  units: Array<
+    Pick<
+      ReviewUnitDto,
+      | 'id'
+      | 'palace_id'
+      | 'anchor_uid'
+      | 'unit_kind'
+      | 'title'
+      | 'node_uids'
+      | 'revision'
+      | 'stage_index'
+      | 'interval_days'
+      | 'has_passed'
+      | 'due_date'
+      | 'due'
+    > & { active?: boolean }
+  >
+}
+
+export interface ReconcilePalaceUnitsResultDto {
+  palace_id: number
+  mark_required: boolean
+  unit_count: number
+  changed: boolean
+  invalidated_session_count: number
+  title?: string
+  changes: Array<{
+    unit_id: string
+    anchor_uid: string
+    title: string
+    action: string
+    before: UnitScheduleSnapshotDto | null
+    after: UnitScheduleSnapshotDto | null
+  }>
+  undo_token: string | null
+  schedule_batch_id: string | null
+}
+
+export interface AdjustUnitSchedulePayload {
+  operation_id: string
+  stage_index?: number
+  due_date?: string
+  has_passed?: boolean
+  reason?: string
+}
+
+export interface AdjustUnitScheduleResultDto {
+  operation_id: string
+  reason: string
+  unit: PalaceUnitProjectionDto['units'][number]
+  before: UnitScheduleSnapshotDto
+  after: UnitScheduleSnapshotDto
+  invalidated_session_count: number
+  palace: {
+    palace_id: number
+    title: string
+    unit_count: number
+    due_unit_count: number
+    next_review_date: string | null
+    review_status: string
+    mark_required: boolean
+  }
+}
+
+export interface UndoContentScheduleBatchResultDto {
+  batch_id: string
+  undo_token: string
+  palace_id: number
+  operation_id: string | null
+  restored_count: number
+  restored: Array<{
+    unit_id: string
+    anchor_uid: string
+    after: UnitScheduleSnapshotDto
+  }>
+  invalidated_session_count: number
+}
+
 export async function getDueReviewUnitsApi() {
   const response = await request<{ items: ReviewUnitDto[] }>('/review/queue')
   return response.items
+}
+
+export async function getPalaceReviewUnitsApi(palaceId: number) {
+  const response = await request<{ item: PalaceUnitProjectionDto }>(`/review/palaces/${palaceId}/units`)
+  return response.item
+}
+
+export async function reconcilePalaceUnitsApi(palaceId: number) {
+  const response = await request<{ item: ReconcilePalaceUnitsResultDto }>(
+    `/review/palaces/${palaceId}/units/reconcile`,
+    { method: 'POST' },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  return response.item
+}
+
+export async function adjustUnitScheduleApi(unitId: string, payload: AdjustUnitSchedulePayload) {
+  const response = await request<{ item: AdjustUnitScheduleResultDto }>(`/review/units/${unitId}/schedule`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      operation_id: payload.operation_id,
+      stage_index: payload.stage_index,
+      due_date: payload.due_date,
+      has_passed: payload.has_passed,
+      reason: payload.reason ?? 'manual_adjust',
+    }),
+    persistence: {
+      resourceKey: `review-unit-schedule-adjust:${payload.operation_id}`,
+      description: 'Adjust review unit schedule',
+      replayMode: 'auto',
+    },
+  })
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  return response.item
+}
+
+export async function undoContentScheduleBatchApi(
+  palaceId: number,
+  batchId: string,
+  operationId?: string,
+) {
+  const response = await request<{ item: UndoContentScheduleBatchResultDto }>(
+    `/review/palaces/${palaceId}/schedule-batches/${batchId}/undo`,
+    {
+      method: 'POST',
+      body: JSON.stringify(operationId ? { operation_id: operationId } : {}),
+      persistence: operationId
+        ? {
+            resourceKey: `review-schedule-batch-undo:${operationId}`,
+            description: 'Undo content schedule batch',
+            replayMode: 'auto',
+          }
+        : undefined,
+    },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  return response.item
 }
 
 export async function startUnitReviewSessionApi(palaceId: number) {

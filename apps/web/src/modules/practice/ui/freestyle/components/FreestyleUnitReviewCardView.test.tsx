@@ -26,6 +26,10 @@ const apiMocks = vi.hoisted(() => ({
   undoReviewUnitRatingApi: vi.fn(),
 }))
 
+const persistMocks = vi.hoisted(() => ({
+  persistPalaceEditor: vi.fn(),
+}))
+
 const quizBindingMocks = vi.hoisted(() => ({
   getOpenQuestionIds: vi.fn((nodeUid: string) => (nodeUid === 'unit-node' ? [101, 102] : [])),
   getInitialQuestionIndex: vi.fn(() => 0),
@@ -49,6 +53,13 @@ vi.mock('@/modules/practice/public', () => ({
   startFreestyleUnitReviewSessionApi: apiMocks.startFreestyleUnitReviewSessionApi,
   rateReviewUnitApi: apiMocks.rateReviewUnitApi,
   undoReviewUnitRatingApi: apiMocks.undoReviewUnitRatingApi,
+}))
+
+vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => ({
+  PalaceReviewUnitsPanel: (props: { open: boolean; palaceId: number }) =>
+    props.open ? (
+      <div data-testid="palace-review-units-panel-mock">palace:{props.palaceId}</div>
+    ) : null,
 }))
 
 vi.mock('@/modules/quiz/public', () => ({
@@ -85,6 +96,14 @@ vi.mock('@/widgets/mindmap-review-flow', () => ({
     return <div data-testid="flip-card-mind-map-panel" />
   },
 }))
+
+vi.mock('./freestyleBranchCardSupport', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./freestyleBranchCardSupport')>()
+  return {
+    ...actual,
+    persistPalaceEditor: (...args: unknown[]) => persistMocks.persistPalaceEditor(...args),
+  }
+})
 
 const palaceEditorDoc = {
   root: {
@@ -320,6 +339,11 @@ describe('FreestyleUnitReviewCardView', () => {
       session_status: 'active',
       completion: null,
     })
+    persistMocks.persistPalaceEditor.mockReset()
+    persistMocks.persistPalaceEditor.mockImplementation(async (_palaceId, state) => ({
+      state,
+      unitReconcile: null,
+    }))
   })
 
   afterEach(() => {
@@ -382,6 +406,7 @@ describe('FreestyleUnitReviewCardView', () => {
     }
     const enter = moreActions?.moreActions?.find((item) => item.label === '进入编辑')
     expect(enter).toBeTruthy()
+    expect(moreActions?.moreActions?.some((item) => item.label === '复习进度')).toBe(true)
 
     act(() => enter!.onClick())
 
@@ -394,6 +419,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const labels = (editMore?.moreActions ?? []).map((item) => item.label)
     expect(labels).toContain('返回学习')
     expect(labels).toContain('永久标记')
+    expect(labels).toContain('复习进度')
     expect(screen.queryByRole('button', { name: /忘记/ })).toBeNull()
 
     const leave = editMore?.moreActions?.find((item) => item.label === '返回学习')
@@ -401,6 +427,124 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => {
       expect(capturedPanelProps?.displayMode).toBe('review')
     })
+  })
+
+  it('opens 复习进度 panel from moreActions', async () => {
+    const card = buildCard('unit-review-progress')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    const progress = moreActions?.moreActions?.find((item) => item.label === '复习进度')
+    expect(progress).toBeTruthy()
+    act(() => progress!.onClick())
+    expect(await screen.findByTestId('palace-review-units-panel-mock')).toBeTruthy()
+  })
+
+  it('saves permanent mark toggles with mark_change reconcile flags', async () => {
+    const card = buildCard('unit-mark-reconcile')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMore?.moreActions?.find((item) => item.label === '永久标记')!.onClick())
+    const onEditNodeClick = capturedPanelProps?.onEditNodeClick as (
+      nodes: MindMapSelection[],
+    ) => void
+    expect(typeof onEditNodeClick).toBe('function')
+
+    act(() => onEditNodeClick([selection('unit-node', '当前单元')]))
+
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalled())
+    expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ editor_doc: expect.any(Object) }),
+      expect.objectContaining({
+        reconcileUnits: true,
+        syncReason: 'mark_change',
+      }),
+    )
+  })
+
+  it('flushes leave edit with return_to_review reconcile flags', async () => {
+    const card = buildCard('unit-leave-reconcile')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMore?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
+
+    await waitFor(() => {
+      expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ editor_doc: expect.any(Object) }),
+        expect.objectContaining({
+          reconcileUnits: true,
+          syncReason: 'return_to_review',
+        }),
+      )
+    })
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+  })
+
+  it('typing autosave does not force reconcile options', async () => {
+    const card = buildCard('unit-type-autosave')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    vi.useFakeTimers()
+    try {
+      const onEditorStateChange = capturedPanelProps?.onEditorStateChange as (
+        state: {
+          editor_doc: unknown
+          editor_config: object
+          editor_local_config: object
+          lang: string
+        },
+      ) => void
+      const nextState = {
+        editor_doc: palaceEditorDoc,
+        editor_config: {},
+        editor_local_config: {},
+        lang: 'zh',
+      }
+      act(() => onEditorStateChange(nextState))
+      await act(async () => {
+        vi.advanceTimersByTime(800)
+        await Promise.resolve()
+      })
+      expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(1, nextState, undefined)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps reveal and hide interactions scoped to presentation only', async () => {
@@ -554,5 +698,33 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
+  })
+
+  it('drops silently when encounter_id belongs to another review unit', async () => {
+    const card = buildCard('unit-wrong-encounter')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue({
+      status: 400,
+      message: 'encounter_id belongs to another review unit',
+    })
+    const { onStaleDrop, onSaveFailed } = renderCard(card)
+
+    await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
+    // Still shows loading placeholder until parent unmounts after onStaleDrop;
+    // permanent load-failure toast path must not run.
+    expect(screen.getByText('正在加载永久标记单元...')).toBeTruthy()
+  })
+
+  it('drops silently when active unit review session is required', async () => {
+    const card = buildCard('unit-session-required')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue({
+      status: 409,
+      message: 'Active unit review session required',
+    })
+    const { onStaleDrop, onSaveFailed } = renderCard(card)
+
+    await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
+    expect(onSaveFailed).not.toHaveBeenCalled()
   })
 })
