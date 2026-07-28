@@ -350,3 +350,314 @@ def restore_nested_freestyle_review_time_durations(session: Session) -> int:
     if fixed:
         session.flush()
     return fixed
+
+
+# Align with migration 0031 trustworthy cap: multi-hour hang-ups from PWA
+# background freezes are not credible continuous study without duration_edited.
+MAX_TRUSTWORTHY_STUDY_SECONDS = 4 * 60 * 60
+STALE_ACTIVE_AGE = timedelta(hours=24)
+
+
+def _load_summary(row: StudySession) -> dict[str, Any]:
+    try:
+        summary = json.loads(row.summary_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        summary = {}
+    return summary if isinstance(summary, dict) else {}
+
+
+def _scene_segments_sum_seconds(summary: dict[str, Any]) -> int | None:
+    segments = summary.get("scene_segments")
+    if not isinstance(segments, list) or not segments:
+        return None
+    total = 0
+    any_valid = False
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        raw = segment.get("effectiveSeconds", segment.get("effective_seconds"))
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value < 0:
+            continue
+        any_valid = True
+        total += value
+    if not any_valid:
+        return None
+    return max(0, total)
+
+
+def _wall_seconds(row: StudySession) -> int | None:
+    if row.started_at is None or row.ended_at is None:
+        return None
+    try:
+        return max(0, int((row.ended_at - row.started_at).total_seconds()))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def audit_inflated_study_sessions(
+    session: Session,
+    *,
+    max_trustworthy_seconds: int = MAX_TRUSTWORTHY_STUDY_SECONDS,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Read-only inventory of hang-up / inflated / ghost time-record candidates."""
+    max_trust = max(60, int(max_trustworthy_seconds))
+    completed = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.effective_seconds > max_trust,
+        )
+        .order_by(StudySession.effective_seconds.desc())
+        .limit(limit)
+        .all()
+    )
+    inflated_samples: list[dict[str, Any]] = []
+    for row in completed:
+        summary = _load_summary(row)
+        inflated_samples.append(
+            {
+                "id": row.id,
+                "scene": row.scene,
+                "title": row.title,
+                "completion_method": row.completion_method,
+                "effective_seconds": int(row.effective_seconds or 0),
+                "wall_seconds": _wall_seconds(row),
+                "started_at": row.started_at.isoformat(sep=" ") if row.started_at else None,
+                "ended_at": row.ended_at.isoformat(sep=" ") if row.ended_at else None,
+                "client_source": summary.get("client_source"),
+                "duration_edited": bool(summary.get("duration_edited")),
+            }
+        )
+
+    autosave_completed = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.completion_method == "saved",
+            StudySession.deleted_at.is_(None),
+        )
+        .count()
+    )
+    ghost_review = (
+        session.query(StudySession)
+        .filter(
+            StudySession.scene == "review",
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.completion_method.in_(tuple(GHOST_FORMAL_REVIEW_COMPLETION_METHODS)),
+        )
+        .count()
+    )
+    cutoff = utc_now_naive() - STALE_ACTIVE_AGE
+    stale_active = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status.in_(("active", "paused", "recovered")),
+            StudySession.deleted_at.is_(None),
+            StudySession.updated_at < cutoff,
+        )
+        .count()
+    )
+    return {
+        "max_trustworthy_seconds": max_trust,
+        "inflated_completed_count": len(inflated_samples)
+        if len(inflated_samples) < limit
+        else session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.effective_seconds > max_trust,
+        )
+        .count(),
+        "inflated_samples": inflated_samples,
+        "autosave_completed_count": int(autosave_completed),
+        "ghost_review_count": int(ghost_review),
+        "stale_active_count": int(stale_active),
+    }
+
+
+def demote_inflated_hang_study_sessions(
+    session: Session,
+    *,
+    max_trustworthy_seconds: int = MAX_TRUSTWORTHY_STUDY_SECONDS,
+) -> dict[str, int]:
+    """Demote or cap completed sessions inflated by PWA background hang-up.
+
+    Strategy (safe, auditable):
+    1. Skip duration_edited rows (user-owned duration).
+    2. If scene_segments sum is positive and <= cap, set effective to that sum.
+    3. Else if same-day wall span is 1..cap, cap effective to wall.
+    4. Else demote status to abandoned with duration_repair audit trail.
+    """
+    max_trust = max(60, int(max_trustworthy_seconds))
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+            StudySession.effective_seconds > max_trust,
+        )
+        .all()
+    )
+    capped = 0
+    demoted = 0
+    skipped = 0
+    for row in rows:
+        summary = _load_summary(row)
+        if summary.get("duration_edited"):
+            skipped += 1
+            continue
+        if isinstance(summary.get("duration_repair"), dict):
+            skipped += 1
+            continue
+
+        original = max(0, int(row.effective_seconds or 0))
+        segments_sum = _scene_segments_sum_seconds(summary)
+        wall = _wall_seconds(row)
+        same_day = bool(
+            row.started_at
+            and row.ended_at
+            and row.started_at.date() == row.ended_at.date()
+        )
+
+        repair: dict[str, Any] = {
+            "version": 1,
+            "reason": "overnight_or_background_hang",
+            "original_effective_seconds": original,
+            "max_trustworthy_seconds": max_trust,
+        }
+
+        if segments_sum is not None and 0 < segments_sum <= max_trust and segments_sum < original:
+            row.effective_seconds = segments_sum
+            repair["action"] = "cap_to_scene_segments"
+            repair["repaired_effective_seconds"] = segments_sum
+            summary["duration_repair"] = repair
+            row.summary_json = json.dumps(summary, ensure_ascii=False)
+            row.updated_at = utc_now_naive()
+            capped += 1
+            continue
+
+        if (
+            same_day
+            and wall is not None
+            and 0 < wall <= max_trust
+            and wall < original
+        ):
+            row.effective_seconds = wall
+            repair["action"] = "cap_to_wall_seconds"
+            repair["repaired_effective_seconds"] = wall
+            repair["wall_seconds"] = wall
+            summary["duration_repair"] = repair
+            row.summary_json = json.dumps(summary, ensure_ascii=False)
+            row.updated_at = utc_now_naive()
+            capped += 1
+            continue
+
+        row.status = "abandoned"
+        repair["action"] = "demote_abandoned"
+        summary["duration_repair"] = repair
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        demoted += 1
+
+    if capped or demoted:
+        session.flush()
+    return {"capped": capped, "demoted": demoted, "skipped": skipped}
+
+
+def backfill_missing_client_source_on_study_sessions(
+    session: Session,
+    *,
+    default_source: str = "desktop",
+    only_unit_review: bool = False,
+) -> int:
+    """Fill missing summary.client_source for completed sessions that lack it.
+
+    Default is conservative desktop: this private product is primarily used on
+    the two Windows machines; freestyle unit review / formal review server paths
+    never stamped source historically. Timer rows with migrated_from time_records
+    also lack the field.
+
+    Set only_unit_review=True to limit to freestyle/formal unit review receipts.
+    """
+    normalized = _normalize_client_source(default_source)
+    if normalized is None:
+        raise ValueError("default_source must be desktop or pwa")
+
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status == "completed",
+            StudySession.deleted_at.is_(None),
+        )
+        .all()
+    )
+    fixed = 0
+    for row in rows:
+        if only_unit_review and row.scene not in {
+            "freestyle_unit_review",
+            "formal_unit_review",
+        }:
+            continue
+        summary = _load_summary(row)
+        existing = _normalize_client_source(summary.get("client_source"))
+        if existing is not None:
+            continue
+        summary = {
+            **summary,
+            "client_source": normalized,
+            "client_source_backfill": {
+                "version": 1,
+                "source": normalized,
+                "reason": "missing_client_source",
+                "only_unit_review": only_unit_review,
+            },
+        }
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        fixed += 1
+    if fixed:
+        session.flush()
+    return fixed
+
+
+def abandon_stale_active_study_sessions(
+    session: Session,
+    *,
+    older_than: timedelta = STALE_ACTIVE_AGE,
+) -> int:
+    """Mark long-idle active/paused/recovered checkpoints as abandoned."""
+    cutoff = utc_now_naive() - older_than
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.status.in_(("active", "paused", "recovered")),
+            StudySession.deleted_at.is_(None),
+            StudySession.updated_at < cutoff,
+        )
+        .all()
+    )
+    fixed = 0
+    for row in rows:
+        summary = _load_summary(row)
+        previous_status = row.status
+        row.status = "abandoned"
+        if row.ended_at is None:
+            row.ended_at = row.updated_at or utc_now_naive()
+        summary = {
+            **summary,
+            "abandoned_from": previous_status,
+            "abandoned_reason": "stale_active_checkpoint",
+        }
+        row.summary_json = json.dumps(summary, ensure_ascii=False)
+        row.updated_at = utc_now_naive()
+        fixed += 1
+    if fixed:
+        session.flush()
+    return fixed

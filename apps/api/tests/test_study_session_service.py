@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import create_engine
@@ -314,3 +315,129 @@ def test_finalize_after_autosave_checkpoint_marks_completed():
         persisted = session.query(StudySession).filter_by(id="freestyle-1").one()
         assert persisted.status == "completed"
         assert persisted.completion_method == "left_page"
+
+
+def test_backfill_missing_client_source_on_unit_review_only():
+    from memory_anki.modules.session.application.study_session_bridge import (
+        backfill_missing_client_source_on_study_sessions,
+    )
+
+    SessionLocal = build_session_factory()
+    with SessionLocal() as session:
+        session.add(
+            StudySession(
+                id="unit-missing",
+                status="completed",
+                scene="freestyle_unit_review",
+                title="单元",
+                started_at=datetime(2026, 7, 28, 10, 0, 0),
+                ended_at=datetime(2026, 7, 28, 10, 5, 0),
+                effective_seconds=300,
+                completion_method="all_units_passed",
+                summary_json='{"completed_unit_count":1}',
+            )
+        )
+        session.add(
+            StudySession(
+                id="timer-missing",
+                status="completed",
+                scene="quiz",
+                title="随心模式",
+                started_at=datetime(2026, 7, 28, 10, 0, 0),
+                ended_at=datetime(2026, 7, 28, 10, 5, 0),
+                effective_seconds=300,
+                completion_method="left_page",
+                summary_json="{}",
+            )
+        )
+        session.add(
+            StudySession(
+                id="already-pwa",
+                status="completed",
+                scene="quiz",
+                title="PWA",
+                started_at=datetime(2026, 7, 28, 10, 0, 0),
+                ended_at=datetime(2026, 7, 28, 10, 5, 0),
+                effective_seconds=100,
+                completion_method="left_page",
+                summary_json='{"client_source":"pwa"}',
+            )
+        )
+        session.commit()
+
+        fixed = backfill_missing_client_source_on_study_sessions(
+            session,
+            default_source="desktop",
+            only_unit_review=True,
+        )
+        session.commit()
+        assert fixed == 1
+        unit = session.query(StudySession).filter_by(id="unit-missing").one()
+        unit_summary = json.loads(unit.summary_json or "{}")
+        assert unit_summary.get("client_source") == "desktop"
+        assert session.query(StudySession).filter_by(id="timer-missing").one().summary_json == "{}"
+        already = json.loads(
+            session.query(StudySession).filter_by(id="already-pwa").one().summary_json or "{}"
+        )
+        assert already.get("client_source") == "pwa"
+
+
+def test_demote_inflated_hang_sessions_caps_segments_and_abandons_overnight():
+    from memory_anki.modules.session.application.study_session_bridge import (
+        demote_inflated_hang_study_sessions,
+    )
+
+    SessionLocal = build_session_factory()
+    with SessionLocal() as session:
+        session.add(
+            StudySession(
+                id="overnight-hang",
+                status="completed",
+                scene="quiz",
+                title="挂机",
+                started_at=datetime(2026, 7, 23, 1, 0, 0),
+                ended_at=datetime(2026, 7, 23, 12, 0, 0),
+                effective_seconds=40_000,
+                completion_method="left_page",
+                summary_json='{"client_source":"pwa"}',
+            )
+        )
+        session.add(
+            StudySession(
+                id="segment-cap",
+                status="completed",
+                scene="quiz",
+                title="有片段",
+                started_at=datetime(2026, 7, 23, 8, 0, 0),
+                ended_at=datetime(2026, 7, 23, 14, 0, 0),
+                effective_seconds=20_000,
+                completion_method="left_page",
+                summary_json='{"scene_segments":[{"effectiveSeconds":1500}]}',
+            )
+        )
+        session.add(
+            StudySession(
+                id="edited-keep",
+                status="completed",
+                scene="quiz",
+                title="手改",
+                started_at=datetime(2026, 7, 23, 8, 0, 0),
+                ended_at=datetime(2026, 7, 23, 14, 0, 0),
+                effective_seconds=20_000,
+                completion_method="manual_complete",
+                summary_json='{"duration_edited":true}',
+            )
+        )
+        session.commit()
+
+        result = demote_inflated_hang_study_sessions(session)
+        session.commit()
+
+        assert result["demoted"] == 1
+        assert result["capped"] == 1
+        assert result["skipped"] == 1
+        assert session.query(StudySession).filter_by(id="overnight-hang").one().status == "abandoned"
+        capped = session.query(StudySession).filter_by(id="segment-cap").one()
+        assert capped.status == "completed"
+        assert capped.effective_seconds == 1500
+        assert session.query(StudySession).filter_by(id="edited-keep").one().effective_seconds == 20_000
