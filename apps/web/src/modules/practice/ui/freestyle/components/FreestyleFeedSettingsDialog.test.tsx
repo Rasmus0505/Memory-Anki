@@ -24,15 +24,11 @@ const baseConfig: FreestyleFeedConfig = {
   mix_ratio: { mindmap: 2, quiz: 1 },
   bound_quiz_placement: 'follow_unit',
   palace_order: 'finish_palace_then_next',
-  within_palace_order: 'tree_order',
   due_policy: 'due_only',
-  node_limit: 12,
   queue_length: 20,
   specific_palace_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
-  progress_scopes: ['overdue', 'due', 'reinforcement', 'new'],
-  include_calendar_today_due: false,
   seed: 17,
 }
 
@@ -60,7 +56,6 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
               resolved_title: '宫殿甲',
               resolved_subject: null,
               primary_chapter: null,
-              needs_practice: false,
             },
             {
               id: 22,
@@ -68,7 +63,6 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
               resolved_title: '宫殿乙',
               resolved_subject: null,
               primary_chapter: null,
-              needs_practice: false,
             },
           ],
         },

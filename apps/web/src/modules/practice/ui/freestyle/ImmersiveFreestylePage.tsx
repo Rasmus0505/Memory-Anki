@@ -19,6 +19,7 @@ import {
 import { FreestyleFeedSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleFeedSettingsDialog'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
+import { FreestyleUnitReviewCardView } from '@/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView'
 import { FreestyleQuizCardView } from '@/modules/practice/ui/freestyle/components/FreestyleQuizCardView'
 import {
   FreestyleEmptyState,
@@ -49,6 +50,24 @@ import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useT
 import { cn } from '@/shared/lib/utils'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
+function StaleUnitReviewCard({
+  cardId,
+  onStaleDrop,
+}: {
+  cardId: string
+  onStaleDrop: (cardId: string) => void
+}) {
+  useEffect(() => {
+    onStaleDrop(cardId)
+  }, [cardId, onStaleDrop])
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+      <RefreshCw className="mr-2 size-4 animate-spin" />
+      正在重建复习队列...
+    </div>
+  )
+}
+
 export default function ImmersiveFreestylePage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const reducedMotion = usePrefersReducedMotion()
@@ -73,6 +92,7 @@ export default function ImmersiveFreestylePage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [ratingMode, setRatingMode] = useState(true)
   const [saveError, setSaveError] = useState('')
+  const [readOnlyHistoryCardId, setReadOnlyHistoryCardId] = useState<string | null>(null)
   const { promptForAiOptions } = useAiRunConfigDialog()
 
   const {
@@ -89,6 +109,8 @@ export default function ImmersiveFreestylePage() {
     reshuffleQueue,
     completeCard,
     acknowledgeCard,
+    ensureUnitEncounter,
+    updateUnitEncounter,
     dropStaleCard,
     skipToNextPalace,
   } = useImmersiveQueue()
@@ -198,10 +220,16 @@ export default function ImmersiveFreestylePage() {
         reorderRestudy?: boolean
         /** When true, do not push the leaving card into view history (used by 上一张). */
         skipHistory?: boolean
+        /** Historical navigation shows a closed encounter without creating a new one. */
+        historical?: boolean
       },
     ) => {
       const max = Math.max(0, cards.length - 1)
       const next = Math.max(0, Math.min(index, max))
+      const targetCardId = cards[next]?.id ?? null
+      setReadOnlyHistoryCardId(
+        options?.historical || next < currentIndex ? targetCardId : null,
+      )
       const fromScroll = options?.scroll === false
       if (fromScroll) {
         indexChangeFromScrollRef.current = true
@@ -254,12 +282,12 @@ export default function ImmersiveFreestylePage() {
       viewHistoryRef.current = popped.history
       const targetIndex = list.findIndex((card) => card.id === popped.targetId)
       if (targetIndex >= 0) {
-        navigateToIndex(targetIndex, { skipHistory: true })
+        navigateToIndex(targetIndex, { skipHistory: true, historical: true })
         return
       }
     }
     if (currentIndex > 0) {
-      navigateToIndex(currentIndex - 1, { skipHistory: true })
+      navigateToIndex(currentIndex - 1, { skipHistory: true, historical: true })
     }
   }, [cards, currentIndex, navigateToIndex])
 
@@ -351,11 +379,11 @@ export default function ImmersiveFreestylePage() {
   )
 
   const handleBranchComplete = useCallback(
-    (cardId: string, options?: { restudy?: boolean }) => {
+    (cardId: string, options?: { restudy?: boolean; cleared?: boolean }) => {
       if (saveError) return
       // Mind-map settles often stopPropagation; register here so idle timers start.
       timer.registerActivity('practice_interaction', { source: 'freestyle_branch_complete' })
-      // Successful FSRS only: marks completedIds + silent rebuild; stay on card.
+      // A passed unit marks completedIds and rebuilds silently; stay on card.
       // Weak ratings (restudy) skip completedIds; never auto-flip to the next unit.
       completeCard(cardId, options)
     },
@@ -442,6 +470,7 @@ export default function ImmersiveFreestylePage() {
    * cannot keep the previous card in view — that looked like「下一题」.
    */
   const handleSkipToNextPalace = useCallback(() => {
+    setReadOnlyHistoryCardId(null)
     const leavingId = cards[currentIndex]?.id
     if (leavingId) {
       viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
@@ -481,6 +510,12 @@ export default function ImmersiveFreestylePage() {
 
   const mindmapCount = cards.filter(isMindMapBranchCard).length
   const quizCount = cards.filter(isQuizCard).length
+  const unitReviewActive = Boolean(
+    currentCard
+    && currentCard.type === 'mindmap_branch'
+    && currentCard.unit_id
+    && currentCard.unit_revision != null,
+  )
   const resolvedQuiz = cards.filter(
     (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
   ).length
@@ -522,7 +557,7 @@ export default function ImmersiveFreestylePage() {
         />
 
         {/* Compact top HUD — single bar; roomy hit targets on PWA, denser on desktop */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-2 sm:px-3 sm:pt-2.5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] sm:px-3 sm:pt-2.5">
           <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1.5 py-1 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2">
               <span className="shrink-0 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-200">
@@ -655,7 +690,6 @@ export default function ImmersiveFreestylePage() {
                 contentTypes: {
                   quiz_question: true,
                   review: false,
-                  practice: false,
                   english: false,
                   english_reading: false,
                 },
@@ -710,24 +744,42 @@ export default function ImmersiveFreestylePage() {
                     'box-border flex h-full min-h-full flex-col snap-start snap-always',
                     // HUD top inset only; dock floats over the lower-right of the card so the
                     // mind-map can claim the vertical space that used to be empty padding.
-                    'px-2 pb-2 pt-[3.5rem] sm:px-3 sm:pb-3 sm:pt-14',
+                    'px-2 pb-2 pt-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:px-3 sm:pb-3 sm:pt-14',
                   )}
                 >
                   {isMindMapBranchCard(card) ? (
-                    <FreestyleMindMapBranchCardView
-                      card={card}
-                      active={index === currentIndex}
-                      ratingMode={ratingMode}
-                      onToggleRatingMode={() => setRatingMode((value) => !value)}
-                      onBranchComplete={handleBranchComplete}
-                      onStaleDrop={handleStaleDrop}
-                      onSaveFailed={(message) => {
-                        setSaveError(message)
-                        toast.error(message)
-                      }}
-                      reducedMotion={reducedMotion}
-                      onQueueInvalidate={refreshQueue}
-                    />
+                    card.type === 'mindmap_branch' ? (
+                      card.unit_id && card.unit_revision != null ? (
+                        <FreestyleUnitReviewCardView
+                          card={card}
+                          active={isActive && index === currentIndex}
+                          readOnly={readOnlyHistoryCardId === card.id}
+                          roundId={queueState.roundId}
+                          encounter={queueState.unitEncountersByCardId[card.id]}
+                          retryAfterCards={Math.min(3, Math.max(0, cards.length - index - 1))}
+                          onEnsureEncounter={ensureUnitEncounter}
+                          onEncounterChange={updateUnitEncounter}
+                          onBranchComplete={handleBranchComplete}
+                          onStaleDrop={handleStaleDrop}
+                          onSaveFailed={(message) => {
+                            setSaveError(message)
+                            toast.error(message)
+                          }}
+                        />
+                      ) : (
+                        <StaleUnitReviewCard
+                          cardId={card.id}
+                          onStaleDrop={handleStaleDrop}
+                        />
+                      )
+                    ) : (
+                      <FreestyleMindMapBranchCardView
+                        card={card}
+                        active={isActive && index === currentIndex}
+                        onBranchComplete={handleBranchComplete}
+                        reducedMotion={reducedMotion}
+                      />
+                    )
                   ) : isQuizCard(card) ? (
                     <FreestyleQuizCardView
                       card={card}
@@ -763,7 +815,9 @@ export default function ImmersiveFreestylePage() {
           className={cn(
             'pointer-events-none absolute z-20',
             'right-3 top-1/2 -translate-y-1/2',
-            'max-lg:bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
+            unitReviewActive
+              ? 'max-lg:bottom-[calc(10.25rem+env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0'
+              : 'max-lg:bottom-[max(0.5rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
           )}
         >
           <div
@@ -772,6 +826,12 @@ export default function ImmersiveFreestylePage() {
               'max-lg:flex-row max-lg:items-center',
             )}
           >
+            <span
+              className="inline-flex h-7 min-w-11 items-center justify-center rounded-lg bg-white/[0.07] px-2 text-xs font-semibold tabular-nums text-zinc-200 sm:h-8"
+              aria-label="题目位置"
+            >
+              {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
+            </span>
             <button
               type="button"
               className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"

@@ -17,14 +17,7 @@ export const APP_EVENT_NAMES = {
 export interface AppEventMap {
   [APP_EVENT_NAMES.clientPreferencesUpdated]: Partial<ClientPreferences>
   [APP_EVENT_NAMES.palaceCatalogInvalidated]: undefined
-  [APP_EVENT_NAMES.reviewStateChanged]: {
-    palaceId: number
-    chapterId: number | null
-    completedStageCount: number
-    totalStageCount: number
-    mastered: boolean
-    nextReviewAt: string | null
-  }
+  [APP_EVENT_NAMES.reviewStateChanged]: undefined
   [APP_EVENT_NAMES.timerAutomationUpdated]: TimerAutomationConfig
   [APP_EVENT_NAMES.timerFocusUpdated]: TimerFocusConfig
   [APP_EVENT_NAMES.breakGuardUpdated]: BreakGuardConfig

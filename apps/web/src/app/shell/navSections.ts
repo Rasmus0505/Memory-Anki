@@ -27,7 +27,6 @@ import {
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
-import { prefetchReviewQueueApi } from '@/modules/practice/public'
 // 路径归属规则统一由 routeManifest 派生（新增路由请在 manifest 登记）。
 import { createNavSectionMatcher, type NavSectionKey } from '@/shared/routing/routeManifest'
 
@@ -58,7 +57,6 @@ export const navSections: NavSectionDefinition[] = [
       void preloadTodayLearningPage()
       preloadPracticeRoutes()
       preloadReviewRoutes()
-      prefetchReviewQueueApi()
     },
   },
   {
@@ -119,7 +117,6 @@ export const navSections: NavSectionDefinition[] = [
       prefetchDashboardApi()
       void preloadDashboardPage()
       preloadReviewRoutes()
-      prefetchReviewQueueApi()
     },
   },
 ]

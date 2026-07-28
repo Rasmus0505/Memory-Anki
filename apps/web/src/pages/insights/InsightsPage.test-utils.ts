@@ -9,8 +9,8 @@ export function buildDashboardResponse(
   const { stats, english_stats, ...rest } = payload
   return {
     due_count: 0,
+    overdue_count: 0,
     due_later_today_count: 0,
-    needs_practice_count: 0,
     reviews: [],
     stats: {
       total: 0,

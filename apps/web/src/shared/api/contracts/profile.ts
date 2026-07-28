@@ -19,7 +19,6 @@ export interface BackupListResponse {
 export interface ReviewSettings {
   default_review_mode: string
   desired_retention?: string
-  mastery_horizon_days?: string
   maximum_interval?: string
   learning_steps?: string
   relearning_steps?: string
@@ -400,7 +399,6 @@ export interface ClientPreferences {
   study_goals: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
-  review_queue_view_settings: Record<string, unknown> | null
   time_record_tags: Array<Record<string, unknown>> | null
   /** Immersive freestyle queue settings; shared across PWA and desktop via backend. */
   freestyle_feed_config: Record<string, unknown> | null

@@ -86,14 +86,10 @@ function ContinueLearningPanel({ data }: { data: DashboardResponse }) {
           <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-secondary">
             <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
           </div>
-          <div className="mt-4 grid grid-cols-3 divide-x divide-border text-sm">
+          <div className="mt-4 grid grid-cols-2 divide-x divide-border text-sm">
             <div className="pr-4">
               <div className="text-xs text-muted-foreground">待复习</div>
               <div className="mt-1 text-2xl font-semibold">{numberFormatter.format(remainingReviews)}</div>
-            </div>
-            <div className="px-4">
-              <div className="text-xs text-muted-foreground">需练习</div>
-              <div className="mt-1 text-2xl font-semibold">{numberFormatter.format(data.needs_practice_count)}</div>
             </div>
             <div className="pl-4">
               <div className="text-xs text-muted-foreground">今日时长</div>
@@ -139,8 +135,8 @@ function QueuePanel({ data }: { data: DashboardResponse }) {
         {reviews.length > 0 ? (
           <div className="divide-y divide-border/70">
             {reviews.map((review, index) => {
-              const priority = review.overdue_schedule_count > 0 ? '高优先级' : index === 0 ? '中优先级' : '常规'
-              const priorityClass = review.overdue_schedule_count > 0
+              const priority = review.overdue ? '高优先级' : index === 0 ? '中优先级' : '常规'
+              const priorityClass = review.overdue
                 ? 'border-error/25 bg-error/5 text-error'
                 : index === 0
                   ? 'border-warning/30 bg-warning/5 text-warning'
@@ -148,15 +144,17 @@ function QueuePanel({ data }: { data: DashboardResponse }) {
               return (
                 <Link
                   key={review.id}
-                  to={`/review/session/${review.id}`}
+                  to="/review"
                   className="group grid gap-3 px-2 py-3 transition-colors hover:bg-accent/40 sm:grid-cols-[108px_minmax(0,1fr)_96px_72px] sm:items-center"
                 >
                   <span className={cn('w-fit rounded border px-2 py-1 text-[11px]', priorityClass)}>{priority}</span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{review.palace?.title || `宫殿 #${review.palace_id}`}</span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">下一到期：{review.next_due_date}</span>
+                    <span className="block truncate text-sm font-medium">{review.palace_title || `宫殿 #${review.palace_id}`}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {review.unit_title || '剩余水流单元'} · 到期 {review.due_date}
+                    </span>
                   </span>
-                  <span className="text-xs text-muted-foreground">{review.schedule_count} 张卡片</span>
+                  <span className="text-xs text-muted-foreground">1 个单元 · {review.node_count} 张卡片</span>
                   <span className="inline-flex items-center justify-end gap-1 text-xs font-medium text-primary opacity-70 group-hover:opacity-100">
                     进入 <ArrowRight className="size-3" />
                   </span>
@@ -266,13 +264,6 @@ function OverviewRail({ data }: { data: DashboardResponse }) {
       currentText: `${data.due_count} 张`,
       targetText: '100 张',
     },
-    {
-      label: '新学任务',
-      current: data.needs_practice_count,
-      target: 60,
-      currentText: `${data.needs_practice_count} 项`,
-      targetText: '60 项',
-    },
   ]
 
   return (
@@ -282,7 +273,7 @@ function OverviewRail({ data }: { data: DashboardResponse }) {
           <CalendarDays className="size-4 text-primary" />
           今日学习概览
         </div>
-        <div className="grid grid-cols-3 divide-x divide-border px-2 py-5 text-center">
+        <div className="grid grid-cols-2 divide-x divide-border px-2 py-5 text-center">
           <div className="px-2">
             <div className="text-[11px] text-muted-foreground">学习时长</div>
             <div className="mt-2 text-xl font-semibold">{(data.today_total_review_duration_seconds / 3600).toFixed(1)}</div>
@@ -291,11 +282,6 @@ function OverviewRail({ data }: { data: DashboardResponse }) {
           <div className="px-2">
             <div className="text-[11px] text-muted-foreground">待复习</div>
             <div className="mt-2 text-xl font-semibold">{data.due_count}</div>
-            <div className="text-[11px] text-muted-foreground">项</div>
-          </div>
-          <div className="px-2">
-            <div className="text-[11px] text-muted-foreground">需练习</div>
-            <div className="mt-2 text-xl font-semibold">{data.needs_practice_count}</div>
             <div className="text-[11px] text-muted-foreground">项</div>
           </div>
         </div>

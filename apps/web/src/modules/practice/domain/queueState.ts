@@ -1,5 +1,15 @@
 import type { FreestyleCard } from '@/shared/api/contracts'
 
+export type FreestyleUnitEncounterState = {
+  encounterId: string
+  unitRevision: number
+  status: 'pending' | 'open' | 'closed'
+  sessionId: string | null
+  selectedRating: number | null
+  passed: boolean | null
+  retryAfterCards: number
+}
+
 export type FreestyleSkipState = {
   roundId: string
   startedAt: number
@@ -20,6 +30,7 @@ export type FreestyleSkipState = {
    * returning from palace edit (or other pages) resumes the same unit.
    */
   currentCardId: string | null
+  unitEncountersByCardId: Record<string, FreestyleUnitEncounterState>
 }
 
 export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
@@ -34,6 +45,7 @@ export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
   lastSkippedId: null,
   lastSkippedAt: null,
   currentCardId: null,
+  unitEncountersByCardId: {},
 }
 
 export const FREESTYLE_QUEUE_STATE_STORAGE_KEY = 'memory-anki.freestyle.queue-state.v1'
@@ -89,6 +101,41 @@ function asIdList(value: unknown) {
   return result
 }
 
+function asUnitEncounterMap(value: unknown) {
+  if (!value || typeof value !== 'object') return {}
+  const result: Record<string, FreestyleUnitEncounterState> = {}
+  Object.entries(value as Record<string, unknown>).forEach(([cardId, item]) => {
+    if (!cardId || !item || typeof item !== 'object') return
+    const raw = item as Record<string, unknown>
+    const encounterId = typeof raw.encounterId === 'string' ? raw.encounterId.trim() : ''
+    const unitRevision = Number(raw.unitRevision)
+    const status = raw.status
+    if (
+      !encounterId
+      || !Number.isInteger(unitRevision)
+      || unitRevision <= 0
+      || (status !== 'pending' && status !== 'open' && status !== 'closed')
+    ) {
+      return
+    }
+    const selectedRating = Number(raw.selectedRating)
+    result[cardId] = {
+      encounterId,
+      unitRevision,
+      status,
+      sessionId: typeof raw.sessionId === 'string' && raw.sessionId.trim()
+        ? raw.sessionId.trim()
+        : null,
+      selectedRating: Number.isInteger(selectedRating) && selectedRating >= 1 && selectedRating <= 4
+        ? selectedRating
+        : null,
+      passed: typeof raw.passed === 'boolean' ? raw.passed : null,
+      retryAfterCards: Math.max(0, Math.min(3, Math.round(Number(raw.retryAfterCards) || 0))),
+    }
+  })
+  return result
+}
+
 export function sanitizeQueueState(value: unknown): FreestyleSkipState {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const skipRaw =
@@ -124,6 +171,7 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
       typeof raw.currentCardId === 'string' && raw.currentCardId.trim()
         ? raw.currentCardId.trim()
         : null,
+    unitEncountersByCardId: asUnitEncounterMap(raw.unitEncountersByCardId),
   }
 }
 
@@ -207,6 +255,28 @@ export function markCompleted(state: FreestyleSkipState, cardId: string): Freest
   return {
     ...state,
     completedIds: [...state.completedIds, cardId],
+  }
+}
+
+export function markIncomplete(state: FreestyleSkipState, cardId: string): FreestyleSkipState {
+  if (!state.completedIds.includes(cardId)) return state
+  return {
+    ...state,
+    completedIds: state.completedIds.filter((id) => id !== cardId),
+  }
+}
+
+export function setUnitEncounterState(
+  state: FreestyleSkipState,
+  cardId: string,
+  encounter: FreestyleUnitEncounterState,
+): FreestyleSkipState {
+  return {
+    ...state,
+    unitEncountersByCardId: {
+      ...state.unitEncountersByCardId,
+      [cardId]: encounter,
+    },
   }
 }
 
@@ -337,7 +407,7 @@ export function placeRestudyCardWithMaxGap(
 
 /**
  * True when this formal pass still has 忘记/困难 scores that need another restudy
- * pass before graduating to long-interval FSRS.
+ * pass before leaving the immediate unit-retry loop.
  */
 export function needsRestudyAfterRatings(
   ratingCounts:

@@ -7,7 +7,6 @@ import type {
   FreestyleFeedConfig,
   FreestyleMixMode,
   FreestylePalaceContext,
-  FreestyleProgressScope,
 } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -25,38 +24,6 @@ import { cn } from '@/shared/lib/utils'
 
 const FIELD_CLASS =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-
-const PROGRESS_SCOPE_OPTIONS: Array<{
-  value: FreestyleProgressScope
-  label: string
-  description: string
-}> = [
-  {
-    value: 'overdue',
-    label: '逾期',
-    description: '该复习日已经过去，优先清掉积压。',
-  },
-  {
-    value: 'due',
-    label: '已到期',
-    description: '今天该复习，并且时间已经到了。',
-  },
-  {
-    value: 'calendar_today',
-    label: '今日将到期',
-    description: '今天排了复习，但还没到点；提前练可选。',
-  },
-  {
-    value: 'reinforcement',
-    label: '同日补刷',
-    description: '刚才忘记/困难后，20/60 分钟再练的节点。',
-  },
-  {
-    value: 'new',
-    label: '新学',
-    description: '还没评过分的节点（新建宫殿也能进队列）。',
-  },
-]
 
 const MIX_MODE_OPTIONS: Array<{
   value: FreestyleMixMode
@@ -491,7 +458,7 @@ export function FreestyleFeedSettingsDialog({
             </div>
           </Section>
 
-          <Section title="顺序与进度范围" description="宫殿之间、宫内怎么排，以及今天练哪些记忆进度。">
+          <Section title="顺序与题目范围" description="决定多个宫殿的顺序，以及题目池如何扩展。">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="多个宫殿时怎么排" className="sm:col-span-2">
                 <select
@@ -508,64 +475,6 @@ export function FreestyleFeedSettingsDialog({
                   <option value="interleave_palaces">多个宫殿轮流穿插</option>
                 </select>
               </Field>
-
-              <Field label="同一宫殿内怎么排" className="sm:col-span-2">
-                <select
-                  className={FIELD_CLASS}
-                  value={draft.within_palace_order}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      within_palace_order: event.target
-                        .value as FreestyleFeedConfig['within_palace_order'],
-                    }))
-                  }
-                >
-                  <option value="tree_order">按导图结构顺序</option>
-                  <option value="deterministic_shuffle">打乱顺序（结果可复现）</option>
-                </select>
-              </Field>
-
-              <div className="space-y-2 sm:col-span-2">
-                <div className="space-y-0.5">
-                  <div className="text-sm font-medium">今天练哪些进度</div>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    可多选组合；至少保留一项。关掉的类型不会进宫殿翻卡队列。
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  {PROGRESS_SCOPE_OPTIONS.map((option) => {
-                    const checked = draft.progress_scopes.includes(option.value)
-                    return (
-                      <ToggleRow
-                        key={option.value}
-                        label={option.label}
-                        description={option.description}
-                        checked={checked}
-                        onCheckedChange={(nextChecked) =>
-                          setDraft((current) => {
-                            const set = new Set(current.progress_scopes)
-                            if (nextChecked) {
-                              set.add(option.value)
-                            } else if (set.size > 1) {
-                              set.delete(option.value)
-                            }
-                            // Refuse to clear the last scope (avoids empty mind-map queue).
-                            const progress_scopes = PROGRESS_SCOPE_OPTIONS.map((item) => item.value).filter(
-                              (scope) => set.has(scope),
-                            )
-                            return {
-                              ...current,
-                              progress_scopes,
-                              include_calendar_today_due: progress_scopes.includes('calendar_today'),
-                            }
-                          })
-                        }
-                      />
-                    )
-                  })}
-                </div>
-              </div>
 
               <Field
                 label="题目从哪一层池子来"
@@ -592,24 +501,6 @@ export function FreestyleFeedSettingsDialog({
 
           <Section title="一轮刷多少">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="每张宫殿卡大概含多少知识点"
-                hint="按完整小分支切分，可能会略多一点。"
-              >
-                <Input
-                  type="number"
-                  min={3}
-                  max={50}
-                  className="h-10"
-                  value={draft.node_limit}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      node_limit: Number(event.target.value),
-                    }))
-                  }
-                />
-              </Field>
               <Field label="这一轮大概刷多少张">
                 <Input
                   type="number"

@@ -12,7 +12,6 @@ import type { FreestyleMode } from '@/modules/practice/ui/freestyle/model/today-
 export const CONTENT_TYPE_LABELS: Record<FreestyleContentType, string> = {
   quiz_question: '宫殿题卡',
   review: '正式复习',
-  practice: '加强练习',
   english: '英语听力',
   english_reading: '英语阅读',
 }
@@ -20,7 +19,6 @@ export const CONTENT_TYPE_LABELS: Record<FreestyleContentType, string> = {
 export const RANGE_LABELS: Record<FreestyleConfig['range'], string> = {
   all: '全部',
   due: '待复习',
-  needs_practice: '需练习',
   specific_palaces: '指定宫殿',
   wrong: '错题重练',
 }

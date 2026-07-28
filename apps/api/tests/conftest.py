@@ -36,7 +36,7 @@ def _deterministic_fsrs(monkeypatch):
     专门验证 fuzzing 的测试自行写 Config 行或传 enable_fuzzing=True。
     """
     monkeypatch.setattr(
-        "memory_anki.modules.memory.application.fsrs_runtime.DEFAULT_ENABLE_FUZZING",
+        "memory_anki.modules.english.application.fsrs_runtime.DEFAULT_ENABLE_FUZZING",
         False,
     )
 

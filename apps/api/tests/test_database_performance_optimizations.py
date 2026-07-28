@@ -241,16 +241,16 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         with self.SessionLocal() as session:
             session.add_all(
                 [
-                    _study_session("included", "completed", "review", start, 120),
-                    _study_session("negative", "completed", "review", start + timedelta(hours=1), -30),
-                    _study_session("active", "active", "review", start + timedelta(hours=2), 60),
+                    _study_session("included", "completed", "formal_unit_review", start, 120),
+                    _study_session("negative", "completed", "formal_unit_review", start + timedelta(hours=1), -30),
+                    _study_session("active", "active", "formal_unit_review", start + timedelta(hours=2), 60),
                     _study_session("other-scene", "completed", "english", start + timedelta(hours=3), 90),
-                    _study_session("end-boundary", "completed", "review", end, 45),
+                    _study_session("end-boundary", "completed", "formal_unit_review", end, 45),
                     # Started before the window, finished inside it → counts for the range.
                     _study_session(
                         "recovered-cross-day",
                         "completed",
-                        "review",
+                        "formal_unit_review",
                         start - timedelta(days=3),
                         80,
                         ended_at=start + timedelta(hours=6),
@@ -258,7 +258,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                     _study_session(
                         "deleted",
                         "completed",
-                        "review",
+                        "formal_unit_review",
                         start + timedelta(hours=4),
                         30,
                         deleted_at=start + timedelta(hours=5),
@@ -518,17 +518,22 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, 3, 3))))
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
 
-    def test_fsrs_queue_select_count_stays_flat_with_many_palaces(self):
-        from memory_anki.core.time import utc_now_naive
-        from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
-        from memory_anki.modules.memory.application.formal_review_service import (
-            get_fsrs_queue_payload,
+    def test_unit_queue_select_count_stays_flat_with_many_palaces(self):
+        from memory_anki.modules.memory.application.unit_review_projection import (
+            reconcile_palace_units,
+        )
+        from memory_anki.modules.memory.application.unit_review_summary import (
+            get_review_queue_summary,
         )
 
         editor_doc = json.dumps(
             {
                 "root": {
-                    "data": {"uid": "root", "text": "root"},
+                    "data": {
+                        "uid": "root",
+                        "text": "root",
+                        "permanentSplitMark": True,
+                    },
                     "children": [
                         {
                             "data": {"uid": "n1", "text": "node-1"},
@@ -539,8 +544,6 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             },
             ensure_ascii=False,
         )
-        # Wave formal queue only counts initialized memory nodes (not uninitialized).
-        past = utc_now_naive() - timedelta(days=1)
         with self.SessionLocal() as session:
             for index in range(12):
                 palace = Palace(
@@ -550,20 +553,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 )
                 session.add(palace)
                 session.flush()
-                session.add(
-                    ReviewNodeState(
-                        palace_id=palace.id,
-                        node_uid="n1",
-                        state=2,
-                        stability=3.0,
-                        difficulty=5.0,
-                        due_at=past,
-                        raw_due_at=past,
-                        last_review_at=past - timedelta(days=3),
-                        schedule_source="manual",
-                        content_fingerprint="",
-                    )
-                )
+                reconcile_palace_units(session, palace.id)
             session.commit()
 
             statements: list[str] = []
@@ -574,32 +564,30 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
 
             event.listen(self.engine, "before_cursor_execute", record_select)
             try:
-                payload = get_fsrs_queue_payload(
-                    session,
-                    include_stats=False,
-                    include_items=True,
-                )
+                payload = get_review_queue_summary(session)
             finally:
                 event.remove(self.engine, "before_cursor_execute", record_select)
 
         self.assertGreaterEqual(int(payload.get("due_count") or 0), 12)
-        # Batch path: palace list + states + settings/config + daily-plan ledger
-        # (quota/plan/items/candidates/deferred, all batch queries) — not O(N).
-        self.assertLessEqual(len(statements), 18)
+        self.assertLessEqual(len(statements), 3)
 
-    def test_batch_due_rollup_matches_single_palace_rollup(self):
-        from memory_anki.modules.memory.application.node_due_rollup_batch import (
-            project_due_rollups_batch,
+    def test_batch_unit_summary_matches_single_palace_summary(self):
+        from memory_anki.modules.memory.application.unit_review_projection import (
+            reconcile_palace_units,
         )
-        from memory_anki.modules.memory.application.node_memory_projection import (
-            _clear_due_rollup_cache,
-            get_palace_due_rollup,
+        from memory_anki.modules.memory.application.unit_review_summary import (
+            get_palace_review_summary,
+            project_palace_review_summaries,
         )
 
         editor_doc = json.dumps(
             {
                 "root": {
-                    "data": {"uid": "root", "text": "root"},
+                    "data": {
+                        "uid": "root",
+                        "text": "root",
+                        "permanentSplitMark": True,
+                    },
                     "children": [
                         {"data": {"uid": "a", "text": "A"}, "children": []},
                         {"data": {"uid": "b", "text": "B"}, "children": []},
@@ -615,16 +603,17 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             session.commit()
             session.refresh(left)
             session.refresh(right)
+            reconcile_palace_units(session, left.id)
+            reconcile_palace_units(session, right.id)
 
-            batch = project_due_rollups_batch(session, [left, right], include_nodes=True)
-            _clear_due_rollup_cache(session)
-            single_left = get_palace_due_rollup(session, left.id)
-            single_right = get_palace_due_rollup(session, right.id)
+            batch = project_palace_review_summaries(session, [left, right])
+            single_left = get_palace_review_summary(session, left.id)
+            single_right = get_palace_review_summary(session, right.id)
 
-        self.assertEqual(batch[left.id]["due_node_count"], single_left["due_node_count"])
-        self.assertEqual(batch[right.id]["due_node_count"], single_right["due_node_count"])
-        self.assertEqual(batch[left.id]["review_entry_mode"], single_left["review_entry_mode"])
-        self.assertEqual(batch[right.id]["review_entry_mode"], single_right["review_entry_mode"])
+        self.assertEqual(batch[left.id]["due_unit_count"], single_left["due_unit_count"])
+        self.assertEqual(batch[right.id]["due_unit_count"], single_right["due_unit_count"])
+        self.assertEqual(batch[left.id]["review_status"], single_left["review_status"])
+        self.assertEqual(batch[right.id]["review_status"], single_right["review_status"])
 
     def test_list_palaces_loader_does_not_query_pegs_or_attachments(self):
         from memory_anki.modules.content.application.palace_service import list_palaces

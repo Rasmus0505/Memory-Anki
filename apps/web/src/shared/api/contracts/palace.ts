@@ -1,22 +1,4 @@
 import type { MindMapDoc, MindMapEditorState } from './mindmap'
-import type { ReviewStageSummary } from './review'
-
-export interface PalaceReviewPlanItem {
-  date: string | null
-  representative_schedule_id: number
-  schedule_count: number
-  pending_count: number
-  completed_count: number
-  completed: boolean
-  review_number: number
-  interval_days: number
-  review_type: string
-}
-export interface PalaceReviewPlanResponse {
-  palace_id: number
-  palace_title: string
-  plan: PalaceReviewPlanItem[]
-}
 export interface PalaceSegmentSummary {
   id: number
   palace_id: number
@@ -27,18 +9,6 @@ export interface PalaceSegmentSummary {
   sort_order: number
   node_uids: string[]
   node_count: number
-  needs_practice?: boolean
-  estimated_review_seconds: number
-  review_stage_total: number
-  review_stage_completed: number
-  review_stage_progress: number
-  stage_labels: string[]
-  review_stages: ReviewStageSummary[]
-  next_review_at: string | null
-  has_due_review: boolean
-  current_review_schedule_id: number | null
-  current_review_type?: string | null
-  active_review_progress?: number | null
   is_empty: boolean
   is_virtual_default?: boolean
 }
@@ -46,46 +16,16 @@ export interface PalaceListItem {
   id: number
   title: string
   description: string
-  mastered: boolean
-  needs_practice?: boolean
+  archived?: boolean
   created_at: string | null
+  updated_at?: string | null
   next_review_at: string | null
   has_due_review: boolean
-  current_review_schedule_id: number | null
-  review_stage_total: number
-  review_stage_completed: number
-  review_stage_progress: number
-  stage_labels: string[]
-  review_stages?: ReviewStageSummary[]
-  active_review_progress?: number | null
-  memory_node_count?: number
-  mastery_progress?: number
-  mastery_percent?: number
-  memory_health?: number
-  memory_health_percent?: number
-  mastered_node_count?: number
-  mastery_horizon_days?: number
-  due_node_count?: number
-  overdue_node_count?: number
-  reinforcement_due_count?: number
-  uninitialized_node_count?: number
-  content_changed_node_count?: number
-  memory_next_review_at?: string | null
-  memory_mastered?: boolean
-  severe_weak_node_count?: number
-  review_entry_mode?: 'none' | 'node' | 'palace'
-  review_entry_label?: string | null
-  primary_branch_uid?: string | null
-  primary_branch_title?: string | null
-  due_branch_count?: number
-  review_branch_summaries?: Array<{
-    branch_uid: string
-    title: string
-    due_node_count: number
-    next_review_at: string | null
-    status: 'due_now' | 'later_today' | 'future' | 'none'
-  }>
-  /** Catalog card payloads may omit segments; FSRS CTAs use palace-level fields. */
+  review_status: 'marking_required' | 'due' | 'scheduled'
+  review_unit_count: number
+  due_review_unit_count: number
+  permanent_mark_count: number
+  next_review_date?: string | null
   segments?: PalaceSegmentSummary[]
   chapters?: Array<unknown>
 }
@@ -120,8 +60,6 @@ export interface PalaceEditorMeta {
   title: string
   description: string
   archived?: boolean
-  mastered?: boolean
-  needs_practice?: boolean
   created_at?: string | null
   updated_at?: string | null
   primary_chapter_id?: number | null
@@ -135,55 +73,33 @@ export interface PalaceEditorMeta {
   }>
   pegs?: Array<{ id: number; name: string; content: string; children: unknown[] }>
   attachments: Array<{ id: number; filename?: string; original_name: string; file_size: number }>
-  stage_labels?: string[]
-  review_stages?: ReviewStageSummary[]
-  current_review_schedule_id?: number | null
-  review_stage_total?: number
-  review_stage_completed?: number
-  review_stage_progress?: number
-  memory_node_count?: number
-  mastery_progress?: number
-  mastery_percent?: number
-  memory_health?: number
-  memory_health_percent?: number
-  mastered_node_count?: number
-  mastery_horizon_days?: number
-  due_node_count?: number
-  overdue_node_count?: number
-  reinforcement_due_count?: number
-  uninitialized_node_count?: number
-  content_changed_node_count?: number
-  memory_next_review_at?: string | null
-  memory_mastered?: boolean
-  severe_weak_node_count?: number
+  review_status?: 'marking_required' | 'due' | 'scheduled'
+  review_unit_count?: number
+  due_review_unit_count?: number
+  permanent_mark_count?: number
+  next_review_date?: string | null
+  next_review_at?: string | null
+  has_due_review?: boolean
   segments?: PalaceSegmentSummary[]
   editor_doc?: MindMapDoc | string | null
 }
 export interface PalaceEditorResponse extends MindMapEditorState {
   palace: PalaceEditorMeta
 }
-export interface PalaceSegmentPracticeResponse {
-  palace: Pick<PalaceEditorMeta, 'id' | 'title' | 'editor_doc'>
-  item: PalaceSegmentSummary
-  editor_doc: MindMapDoc | string | null
-}
 export interface PalaceGroupedSummaryItem {
   id: number
   title: string
   description: string
-  mastered: boolean
   archived?: boolean
-  needs_practice?: boolean
   created_at: string | null
   updated_at?: string | null
-  next_scheduled_date?: string | null
   next_review_at: string | null
   has_due_review: boolean
-  current_review_schedule_id: number | null
-  review_stage_total: number
-  review_stage_completed: number
-  review_stage_progress: number
-  stage_labels: string[]
+  review_status: 'marking_required' | 'due' | 'scheduled'
+  review_unit_count: number
+  due_review_unit_count: number
+  permanent_mark_count: number
+  next_review_date: string | null
   title_mode: string
   manual_title: string
   resolved_title: string
@@ -226,7 +142,6 @@ export interface PalaceSubjectShelfItem {
   has_due_later_today: boolean
   due_now_count: number
   due_later_today_count: number
-  needs_practice_count: number
 }
 export interface PalaceSubjectShelfResponse {
   items: PalaceSubjectShelfItem[]
@@ -285,13 +200,8 @@ export interface PalaceTemplateSummary {
 }
 export interface SessionProgressSnapshot {
   id: number
-  session_kind:
-    | "practice"
-    | "review"
-    | "segment_practice"
+  session_kind: "practice"
   palace_id: number | null
-  review_schedule_id: number | null
-  palace_segment_id: number | null
   reveal_map: Record<string, "hidden" | "placeholder" | "revealed">
   red_node_ids: string[]
   completed: boolean

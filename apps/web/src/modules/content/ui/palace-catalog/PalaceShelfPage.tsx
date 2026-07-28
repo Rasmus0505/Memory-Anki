@@ -119,7 +119,7 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   )
 }
 
-export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchReviewSession?: (reviewId: number) => void }) {
+export default function PalaceShelfPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
@@ -200,10 +200,8 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
     [viewSettings.densityMode, viewSettings.expandedLayoutMode],
   )
   const cardActions = usePalaceListCardActions({
-    allPalaces,
     fetchData,
     navigate,
-    prefetchReviewSession,
   })
   const renderExpandedPalaceCard = useCallback(
     (palace: PalaceGroupedItem) => (
@@ -213,9 +211,6 @@ export default function PalaceShelfPage({ prefetchReviewSession }: { prefetchRev
         viewSettings={expandedViewSettings}
         defaultExpanded
         onPalaceReview={cardActions.onPalaceReview}
-        onWarmPalaceReview={cardActions.onWarmPalaceReview}
-        onSegmentReview={cardActions.onSegmentReview}
-        onWarmSegmentReview={cardActions.onWarmSegmentReview}
         onDelete={cardActions.onDelete}
       />
     ),

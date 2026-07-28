@@ -17,7 +17,6 @@ describe("DashboardPage overview", () => {
     getDashboardApi.mockResolvedValue({
       due_count: 2,
       due_later_today_count: 1,
-      needs_practice_count: 3,
       reviews: [],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,
@@ -98,7 +97,6 @@ describe("DashboardPage overview", () => {
     getDashboardApi.mockResolvedValue({
       due_count: 3,
       due_later_today_count: 1,
-      needs_practice_count: 4,
       reviews: [
         {
           id: 1,
@@ -135,10 +133,8 @@ describe("DashboardPage overview", () => {
     expect(screen.getByLabelText("今日待处理优先级")).toBeTruthy();
     expect(screen.getByText("逾期/立即")).toBeTruthy();
     expect(screen.getByText("今日")).toBeTruthy();
-    expect(screen.getByText("可选提前巩固")).toBeTruthy();
     expect(screen.getByText("优先清理")).toBeTruthy();
     expect(screen.getByText("按时推进")).toBeTruthy();
-    expect(screen.getByText("状态维护")).toBeTruthy();
     expect(screen.queryByText("快速操作")).toBeNull();
     expect(screen.queryByText("最近复盘")).toBeNull();
   });
@@ -202,7 +198,6 @@ describe("DashboardPage overview", () => {
     getDashboardApi.mockResolvedValue({
       due_count: 0,
       due_later_today_count: 0,
-      needs_practice_count: 0,
       reviews: [],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,

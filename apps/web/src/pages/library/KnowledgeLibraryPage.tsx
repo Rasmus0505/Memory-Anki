@@ -54,6 +54,12 @@ import { detectClientSource } from '@/shared/lib/clientSource'
 
 type ChapterDetail = ChapterDetailResponse
 
+function formatReviewDate(value: string | null) {
+  if (!value) return '日期复习'
+  const [, month, day] = value.split('-').map(Number)
+  return month && day ? `${month}月${day}日复习` : '日期复习'
+}
+
 export default function Knowledge() {
   const isPwaClient = detectClientSource() === 'pwa'
   const [searchParams, setSearchParams] = useSearchParams()
@@ -230,26 +236,8 @@ export default function Knowledge() {
 
   useEffect(() => {
     if (!selectedChapterId) return
-    return onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (detail) => {
-      if (detail.chapterId != null && detail.chapterId !== selectedChapterId) return
-      // Patch in place from the event. Avoid a full chapter refetch on every
-      // mid-session node rating (that was a major lag source). Formal complete
-      // already invalidates catalog/queue caches for a later cold load.
-      setChapterDetail((current) => {
-        if (!current) return current
-        return {
-          ...current,
-          palaces: current.palaces.map((palace) => palace.id === detail.palaceId
-            ? {
-                ...palace,
-                mastered: detail.mastered,
-                review_stage_completed: detail.completedStageCount,
-                review_stage_total: detail.totalStageCount,
-                next_due_date: detail.nextReviewAt?.slice(0, 10) ?? null,
-              }
-            : palace),
-        }
-      })
+    return onAppEvent(APP_EVENT_NAMES.reviewStateChanged, () => {
+      void getChapterApi(selectedChapterId).then(setChapterDetail)
     })
   }, [selectedChapterId])
 
@@ -581,15 +569,19 @@ export default function Knowledge() {
                           >
                             <span>{palace.title}</span>
                             <span className="flex flex-wrap items-center justify-end gap-2">
-                              {palace.mastered ? (
-                                <Badge variant="secondary">已掌握</Badge>
-                              ) : palace.review_stage_total > 0 ? (
-                                <Badge variant="outline">
-                                  复习 {palace.review_stage_completed}/{palace.review_stage_total}
-                                </Badge>
-                              ) : null}
-                              {palace.next_due_date ? (
-                                <span className="text-xs text-muted-foreground">下次 {palace.next_due_date}</span>
+                              <Badge
+                                variant={palace.review_status === 'due' ? 'default' : 'outline'}
+                              >
+                                {palace.review_status === 'marking_required'
+                                  ? '开始标记'
+                                  : palace.review_status === 'due'
+                                    ? '立即复习'
+                                    : formatReviewDate(palace.next_review_date)}
+                              </Badge>
+                              {palace.review_unit_count > 0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {palace.due_review_unit_count}/{palace.review_unit_count} 单元到期
+                                </span>
                               ) : null}
                               <span className="text-xs text-muted-foreground">查看宫殿</span>
                             </span>

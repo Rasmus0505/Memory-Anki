@@ -147,6 +147,7 @@
         "settings"
       ],
       "english_reading": [
+        "english",
         "memory",
         "session",
         "settings"
@@ -161,7 +162,6 @@
         "content",
         "mindmap_document",
         "mindmap_learning",
-        "practice",
         "session"
       ],
       "pdf_library": [],
@@ -325,7 +325,7 @@
         ],
         "endpoint": "POST /api/v1/freestyle/queue/build",
         "tests": [
-          "test_freestyle_branch_units.py",
+          "test_freestyle_queue_builder.py",
           "feedConfig.test.ts"
         ]
       },

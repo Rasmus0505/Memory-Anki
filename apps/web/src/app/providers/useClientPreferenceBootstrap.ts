@@ -10,11 +10,8 @@ import {
 } from '@/modules/settings/public'
 import {
   DEFAULT_FREESTYLE_FEED_CONFIG,
-  DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
   FREESTYLE_FEED_CONFIG_STORAGE_KEY,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
-  isReviewQueueViewSettings,
-  REVIEW_QUEUE_VIEW_SETTINGS_KEY,
   sanitizeFreestyleFeedConfig,
 } from '@/modules/practice/public'
 import {
@@ -136,12 +133,6 @@ export async function bootstrapClientPreferences() {
       isPalaceShelfViewSettings,
     ),
     migrateAndNotify(
-      'review_queue_view_settings',
-      REVIEW_QUEUE_VIEW_SETTINGS_KEY,
-      DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
-      isReviewQueueViewSettings,
-    ),
-    migrateAndNotify(
       'freestyle_feed_config',
       FREESTYLE_FEED_CONFIG_STORAGE_KEY,
       DEFAULT_FREESTYLE_FEED_CONFIG,
@@ -168,7 +159,6 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))
 
   await Promise.all(migrations)
@@ -182,7 +172,6 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
-    Boolean(window.localStorage.getItem(REVIEW_QUEUE_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))
 
   if (hadLegacyLocalState && !hasRemainingLegacyLocalState) {

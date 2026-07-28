@@ -15,7 +15,6 @@ describe('TodayLearningPage', () => {
     getDashboardApi.mockResolvedValue({
       due_count: 3,
       due_later_today_count: 2,
-      needs_practice_count: 4,
       reviews: [{
         id: 7,
         palace_id: 9,

@@ -24,7 +24,6 @@ import {
   preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
-import { prefetchReviewQueueApi } from '@/modules/practice/public'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -234,7 +233,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
       preloadReviewRoutes()
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
-      prefetchReviewQueueApi()
       void preloadFreestylePage()
       void preloadDashboardPage()
       void preloadPalaceShelfPage()

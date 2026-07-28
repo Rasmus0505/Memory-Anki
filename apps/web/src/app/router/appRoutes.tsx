@@ -29,7 +29,6 @@ export const preloadProfilePage = () => import('@/pages/settings/SettingsOvervie
 export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
 export const preloadReviewCompletionPage = () => import('@/app/router/review/ReviewCompletion')
 export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
-export const preloadSegmentPracticePage = () => import('@/app/router/SegmentPracticePage')
 
 export function preloadReviewRoutes() {
   void preloadReviewOverviewPage()
@@ -41,7 +40,6 @@ export function preloadPracticeRoutes() {
   void preloadPalaceViewPage()
   void preloadPalaceQuizPage()
   void preloadPalacePracticePage()
-  void preloadSegmentPracticePage()
 }
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
@@ -96,7 +94,6 @@ const ProfileBackupsPage = lazyWithRetry(
 const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
 const ReviewCompletionPage = lazyWithRetry(preloadReviewCompletionPage)
 const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
-const SegmentPracticePage = lazyWithRetry(preloadSegmentPracticePage)
 const ReviewFeedbackPreviewRoute = lazyWithRetry(
   () => import('@/app/router/ReviewFeedbackPreviewRoute'),
 )
@@ -151,7 +148,6 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/palaces/:id" element={<PalaceViewPage />} />
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
           <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
-          <Route path="/segments/:id/practice" element={<SegmentPracticePage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/review" element={<ReviewOverviewPage />} />

@@ -21,7 +21,6 @@ export interface TodayTrainingConfig {
 
 export interface TodayTrainingQueueSources {
   dueCards: FreestyleCard[]
-  practiceCards: FreestyleCard[]
   fillCards: FreestyleCard[]
 }
 
@@ -48,7 +47,6 @@ export const DEFAULT_TODAY_TRAINING_CONFIG: TodayTrainingConfig = {
 
 export const EMPTY_TODAY_TRAINING_SOURCES: TodayTrainingQueueSources = {
   dueCards: [],
-  practiceCards: [],
   fillCards: [],
 }
 
@@ -133,10 +131,6 @@ function isDueActionCard(card: FreestyleCard): card is FreestyleActionCard {
   )
 }
 
-function isPracticeActionCard(card: FreestyleCard): card is FreestyleActionCard {
-  return isActionCard(card) && card.content_type === 'practice'
-}
-
 function isEnabledFillActionCard(
   card: FreestyleCard,
   config: TodayTrainingConfig,
@@ -203,19 +197,6 @@ export function buildTodayTrainingQueue(
   )
   appendUnique(
     queue,
-    sortActionsByPriority(sources.practiceCards.filter(isPracticeActionCard)),
-    seenCardIds,
-  )
-  appendUnique(
-    queue,
-    orderQuizCards(
-      sources.practiceCards.filter(isQuizCard),
-      resolvedQuestionIds,
-    ),
-    seenCardIds,
-  )
-  appendUnique(
-    queue,
     orderQuizCards(
       sources.fillCards.filter(isQuizCard),
       resolvedQuestionIds,
@@ -239,7 +220,6 @@ export function restoreTodayTrainingQueue(
   const cardsById = new Map<string, FreestyleCard>()
   const sourceCards = [
     ...sources.dueCards,
-    ...sources.practiceCards,
     ...sources.fillCards,
   ]
   sourceCards.forEach((card) => {
@@ -308,12 +288,10 @@ export function nextTodayTrainingSeed(seed: number) {
 
 export function todayFeedContentTypes(config: TodayTrainingConfig): {
   due: FreestyleContentType[]
-  practice: FreestyleContentType[]
   fill: FreestyleContentType[]
 } {
   return {
     due: ['quiz_question', 'review'],
-    practice: ['quiz_question', 'practice'],
     fill: [
       'quiz_question',
       ...(config.includeEnglish ? (['english'] as const) : []),

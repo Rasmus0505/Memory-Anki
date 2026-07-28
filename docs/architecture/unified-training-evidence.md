@@ -1,40 +1,19 @@
-# Unified Training Evidence Boundary
+# Training Evidence Boundary
 
-## Product boundary
+## Product Boundary
 
-Memory Anki uses one learning loop: confirmed mind-map structure produces training content; training sessions produce auditable evidence; evidence produces explainable mastery and next actions. Existing review, practice, mini-palace, freestyle, and quiz URLs remain compatible while their session behavior converges.
+The primary navigation is exactly `随心`, `知识`, `英语`, `创建`, and `洞察`. Settings remain a system/profile surface.
 
-The primary navigation is intentionally limited to four destinations: `今日`, `知识`, `创建`, and `洞察`. Settings remain available through system/profile surfaces and are not a fifth learning destination.
+## Palace Review Evidence
 
-## Recall evidence
+Palace review records one effective four-level rating per unit encounter: `1=忘记`, `2=困难`, `3=记得`, `4=轻松`. The operation stores stable session, unit revision, encounter, and operation identity together with before/after unit state. Before the learner leaves, an amended rating replaces the effective operation from the same frozen baseline. Undo is LIFO and only available while the encounter is open.
 
-Formal mind-map review records three normalized ratings:
+There is no node recall evidence, inferred node rating, subtree rating inheritance, node mastery projection, or node FSRS state. Migration `0051_remove_node_review_history` removes the retired node event tables after creating a database backup.
 
-- `1`: forgot
-- `2`: fuzzy
-- `3`: remembered
+## Quiz Evidence
 
-Legacy rating `5` remains readable as remembered. New clients do not emit it.
+Quiz attempts remain question-owned evidence with correctness, answer payload, source, and stable question identity. Node bindings classify a question against palace content but never turn a quiz attempt into a palace unit rating.
 
-Every recall event records whether it was `manual` or `inferred`. Inferred events require a confidence value and carry stable session/node/round operation identity. Response duration, hint count, and retry count are evidence attributes, not scheduling commands.
+## Independent English Evidence
 
-Corrections append a new event through `supersedes_event_id`; history is never destructively rewritten. Automatic inference is low-confidence and must be replaceable by a manual correction.
-
-## Mastery projection
-
-`mindmap_learning` owns the explainable projection. It outputs status, numeric score, evidence counts, reason, recent events, and a suggested training category. Manual evidence has full weight; inferred evidence has capped weight. A single remembered event cannot produce stable mastery.
-
-The projection does not replace the existing review scheduler. AI may evaluate or coach, but it cannot directly own persisted mastery or scheduling.
-
-## UI ownership
-
-- `features/review/hooks/useMindMapRecallRatings.ts` owns optimistic evidence writes, legacy normalization, and correction linkage.
-- `widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx` owns shared flip-card rendering, keyboard/touch capture, node progression, and viewport preservation for Palace learning and formal Review.
-- Global rating shortcuts are disabled for editable targets and open dialogs.
-- `1/2/3` and `J/K/L` submit manual ratings; moving forward without rating submits a low-confidence fuzzy inference; `Backspace` returns to the latest rated node for correction.
-
-## FSRS rating evidence
-
-The current evidence contract uses four direct ratings: `1=忘记`, `2=困难`, `3=记得`, `4=轻松`. Subtree operations append one event per affected non-root node; the selected node is `direct`, descendants are `batch_inherited`, and every event carries a stable operation identity and scope. A later single-node event supersedes the effective rating for that node without rewriting history.
-
-Reviews consumes this public evidence capability and owns FSRS state, scheduling, due queues, and palace-level projections. Legacy Ebbinghaus schedules were dropped by migration `0039`; formal review and vocabulary scheduling are FSRS-only.
+English topic patterns and English Reading vocabulary are independent FSRS cards. Their evidence and schedule do not read or mutate palace review-unit state.

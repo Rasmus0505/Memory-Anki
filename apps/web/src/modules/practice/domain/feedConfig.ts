@@ -5,29 +5,10 @@ import type {
   FreestyleMixMode,
   FreestyleMixRatio,
   FreestylePalaceOrder,
-  FreestyleProgressScope,
   FreestyleQuestionTypeFilter,
-  FreestyleWithinPalaceOrder,
 } from '@/shared/api/contracts'
 
 export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
-
-/** Stable order for storage / equality (matches backend PROGRESS_SCOPE_ORDER). */
-export const FREESTYLE_PROGRESS_SCOPE_ORDER: FreestyleProgressScope[] = [
-  'overdue',
-  'due',
-  'calendar_today',
-  'reinforcement',
-  'new',
-]
-
-/** Default: clock-due formal + same-day restudy + first-learn; calendar_today opt-in. */
-export const DEFAULT_FREESTYLE_PROGRESS_SCOPES: FreestyleProgressScope[] = [
-  'overdue',
-  'due',
-  'reinforcement',
-  'new',
-]
 
 export const FREESTYLE_MIX_MODES: FreestyleMixMode[] = [
   'mindmap_only',
@@ -62,16 +43,12 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   },
   bound_quiz_placement: 'follow_unit',
   palace_order: 'finish_palace_then_next',
-  within_palace_order: 'tree_order',
   // Mind-map cards are formal-due only; expand still fills with quizzes when enabled.
   due_policy: 'due_only',
-  node_limit: 12,
   queue_length: 20,
   specific_palace_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
-  progress_scopes: [...DEFAULT_FREESTYLE_PROGRESS_SCOPES],
-  include_calendar_today_due: false,
   seed: 17,
 }
 
@@ -100,10 +77,6 @@ function asIdList(value: unknown) {
 
 function asPalaceOrder(value: unknown): FreestylePalaceOrder {
   return value === 'interleave_palaces' ? 'interleave_palaces' : 'finish_palace_then_next'
-}
-
-function asWithinOrder(value: unknown): FreestyleWithinPalaceOrder {
-  return value === 'deterministic_shuffle' ? 'deterministic_shuffle' : 'tree_order'
 }
 
 function asDuePolicy(value: unknown): FreestyleDuePolicy {
@@ -183,31 +156,6 @@ function inferMixMode(
   return 'ratio'
 }
 
-const PROGRESS_SCOPE_SET = new Set<string>(FREESTYLE_PROGRESS_SCOPE_ORDER)
-
-function asProgressScopes(
-  value: unknown,
-  includeCalendarTodayDue: boolean,
-): FreestyleProgressScope[] {
-  const selected = new Set<FreestyleProgressScope>()
-  if (Array.isArray(value)) {
-    value.forEach((item) => {
-      const key = String(item ?? '').trim()
-      if (PROGRESS_SCOPE_SET.has(key)) {
-        selected.add(key as FreestyleProgressScope)
-      }
-    })
-  }
-  if (includeCalendarTodayDue) {
-    selected.add('calendar_today')
-  }
-  if (selected.size === 0) {
-    DEFAULT_FREESTYLE_PROGRESS_SCOPES.forEach((scope) => selected.add(scope))
-    if (includeCalendarTodayDue) selected.add('calendar_today')
-  }
-  return FREESTYLE_PROGRESS_SCOPE_ORDER.filter((scope) => selected.has(scope))
-}
-
 export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const contentRaw = raw.content && typeof raw.content === 'object' ? (raw.content as Record<string, unknown>) : {}
@@ -240,8 +188,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     quiz_question: quiz ? weights.quiz_question : 0,
   }
 
-  const legacyCalendar = asBoolean(raw.include_calendar_today_due, false)
-  const progress_scopes = asProgressScopes(raw.progress_scopes, legacyCalendar)
   return {
     content,
     weights: syncedWeights,
@@ -249,15 +195,11 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     mix_ratio,
     bound_quiz_placement: asBoundPlacement(raw.bound_quiz_placement),
     palace_order: asPalaceOrder(raw.palace_order),
-    within_palace_order: asWithinOrder(raw.within_palace_order),
     due_policy: asDuePolicy(raw.due_policy),
-    node_limit: asInt(raw.node_limit, 12, 3, 50),
     queue_length: asInt(raw.queue_length, 20, 5, 100),
     specific_palace_ids: asIdList(raw.specific_palace_ids),
     question_type: asQuestionType(raw.question_type),
     weak_quiz_priority: asBoolean(raw.weak_quiz_priority, true),
-    progress_scopes,
-    include_calendar_today_due: progress_scopes.includes('calendar_today'),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
   }
 }

@@ -42,7 +42,7 @@ import {
   getPalaceCatalogScopeTitle,
 } from '@/modules/content/ui/palace-catalog/model/palaceCatalog'
 
-export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSession?: (reviewId: number) => void }) {
+export default function PalaceList() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -109,10 +109,8 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
   }, [queryClient])
 
   const cardActions = usePalaceListCardActions({
-    allPalaces,
     fetchData,
     navigate,
-    prefetchReviewSession,
   })
 
   const renderPalaceCard = useCallback(
@@ -124,9 +122,6 @@ export default function PalaceList({ prefetchReviewSession }: { prefetchReviewSe
         searchQuery={search}
         defaultExpanded
         onPalaceReview={cardActions.onPalaceReview}
-        onWarmPalaceReview={cardActions.onWarmPalaceReview}
-        onSegmentReview={cardActions.onSegmentReview}
-        onWarmSegmentReview={cardActions.onWarmSegmentReview}
         onDelete={cardActions.onDelete}
       />
     ),

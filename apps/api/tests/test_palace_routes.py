@@ -365,16 +365,6 @@ class TestPalaceSegments:
 
         assert isinstance(segment_id, int)
 
-    def test_get_segment_detail(self, client, palace_id):
-        segment_id = create_segment(client, palace_id)
-        response = client.get(f"/api/v1/palace-segments/{segment_id}")
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["item"]["id"] == segment_id
-        assert body["palace"]["id"] == palace_id
-        assert "editor_doc" in body
-
     def test_update_segment(self, client, palace_id):
         segment_id = create_segment(client, palace_id)
         response = client.put(
@@ -406,27 +396,14 @@ class TestPalaceSegments:
         assert first.json()["item"]["node_uids"] == ["child-1"]
         assert second.json()["item"]["node_uids"] == ["child-1"]
 
-    def test_segment_needs_practice_can_be_toggled(self, client, palace_id):
-        segment_id = create_segment(client, palace_id)
-        response = client.put(
-            f"/api/v1/palace-segments/{segment_id}",
-            json={"needs_practice": True},
-        )
-
-        # Manual needs_practice is retired for FSRS-only; update still succeeds.
-        assert response.status_code == 200
-        item = response.json()["item"]
-        assert item.get("id") == segment_id
-        assert item.get("needs_practice") in (None, False, True)
-
     def test_delete_segment(self, client, palace_id):
         segment_id = create_segment(client, palace_id)
 
         assert client.delete(f"/api/v1/palace-segments/{segment_id}").json() == {"ok": True}
-        assert_missing(client.get(f"/api/v1/palace-segments/{segment_id}"))
+        listed = client.get(f"/api/v1/palaces/{palace_id}/segments").json()["items"]
+        assert all(item.get("id") != segment_id for item in listed)
 
     def test_segment_missing_branches(self, client):
-        assert_missing(client.get("/api/v1/palace-segments/99999"))
         assert_missing(client.put("/api/v1/palace-segments/99999", json={"name": "x"}))
         assert_missing(client.delete("/api/v1/palace-segments/99999"))
 
@@ -568,62 +545,7 @@ class TestPalaceAttachments:
         assert not list(tmp_path.glob(f".{filename}.deleting-*"))
 
 
-class TestPracticeSession:
-    def test_get_progress_empty(self, client, palace_id):
-        response = client.get(f"/api/v1/practice/session/{palace_id}")
-
-        assert response.status_code == 200
-        assert response.json() == {"progress": None}
-
-    def test_upsert_then_get_progress(self, client, palace_id):
-        payload = {
-            "reveal_map": {"uid-1": "revealed"},
-            "red_node_ids": ["uid-2"],
-            "completed": False,
-        }
-        response = client.put(f"/api/v1/practice/session/{palace_id}", json=payload)
-
-        assert response.status_code == 200
-        assert response.json()["progress"]["reveal_map"] == payload["reveal_map"]
-        saved = client.get(f"/api/v1/practice/session/{palace_id}").json()
-        assert saved["progress"]["red_node_ids"] == payload["red_node_ids"]
-
-    def test_delete_progress(self, client, palace_id):
-        client.put(
-            f"/api/v1/practice/session/{palace_id}",
-            json={"reveal_map": {"uid-1": "revealed"}},
-        )
-
-        assert client.delete(f"/api/v1/practice/session/{palace_id}").json() == {"ok": True}
-        assert client.get(f"/api/v1/practice/session/{palace_id}").json() == {"progress": None}
-
-    def test_progress_missing_palace(self, client):
-        assert_missing(client.get("/api/v1/practice/session/99999"))
-        assert_missing(client.put("/api/v1/practice/session/99999", json={}))
-
-
 class TestPalaceMisc:
-    def test_review_plan_main_and_missing(self, client, palace_id):
-        response = client.get(f"/api/v1/palaces/{palace_id}/review-plan")
-
-        assert response.status_code == 200
-        assert response.json()["palace_id"] == palace_id
-        assert_missing(client.get("/api/v1/palaces/99999/review-plan"))
-
-    def test_practice_flag_sets_needs_practice(self, client, palace_id):
-        response = client.put(
-            f"/api/v1/palaces/{palace_id}/practice-flag",
-            json={"needs_practice": True},
-        )
-
-        # Compatibility no-op endpoint: still returns the palace payload.
-        assert response.status_code == 200
-        item = response.json()["item"]
-        assert item["id"] == palace_id
-
-    def test_practice_flag_missing(self, client):
-        assert_missing(client.put("/api/v1/palaces/99999/practice-flag", json={}))
-
     def test_archive_endpoint_persists_and_hides_from_lists(
         self, client, session_factory, palace_id
     ):

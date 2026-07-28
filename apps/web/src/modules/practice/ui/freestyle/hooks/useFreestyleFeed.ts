@@ -78,14 +78,10 @@ export function useFreestyleFeed({
     setFeedError('')
     try {
       const contentTypes = todayFeedContentTypes(nextConfig)
-      const [dueResponse, practiceResponse, fillResponse] = await Promise.all([
+      const [dueResponse, fillResponse] = await Promise.all([
         getFreestyleFeedApi({
           range: 'due',
           contentTypes: contentTypes.due,
-        }),
-        getFreestyleFeedApi({
-          range: 'needs_practice',
-          contentTypes: contentTypes.practice,
         }),
         getFreestyleFeedApi({
           range: 'all',
@@ -94,12 +90,10 @@ export function useFreestyleFeed({
       ])
       setTodaySources({
         dueCards: dueResponse.cards || [],
-        practiceCards: practiceResponse.cards || [],
         fillCards: fillResponse.cards || [],
       })
       setFeedCards([
         ...(dueResponse.cards || []),
-        ...(practiceResponse.cards || []),
         ...(fillResponse.cards || []),
       ])
     } catch (error) {

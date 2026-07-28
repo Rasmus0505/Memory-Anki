@@ -145,9 +145,9 @@ class PalaceChapterBindingTests(RouterTestCase):
         self.assertNotIn("editor_doc", palace_payload)
         self.assertNotIn("segments", palace_payload)
         self.assertNotIn("mini_palaces", palace_payload)
-        self.assertIn("review_stages", palace_payload)
-        # FSRS path keeps stage list empty; total is a legacy progress denominator.
-        self.assertEqual(len(palace_payload["review_stages"]), 0)
+        self.assertEqual(palace_payload["review_status"], "marking_required")
+        self.assertEqual(palace_payload["review_unit_count"], 0)
+        self.assertEqual(palace_payload["due_review_unit_count"], 0)
 
     def test_chapter_detail_includes_palace_review_status(self):
         self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})
@@ -158,12 +158,10 @@ class PalaceChapterBindingTests(RouterTestCase):
         palace_payload = response.json()["palaces"][0]
         self.assertEqual(palace_payload["id"], self.palace_id)
         self.assertIn("pegs", palace_payload)
-        self.assertEqual(palace_payload["mastered"], False)
         self.assertEqual(palace_payload["archived"], False)
-        # Chapter cards expose mastery percent on the old stage fields (0..100).
-        self.assertEqual(palace_payload["review_stage_total"], 100)
-        self.assertGreaterEqual(int(palace_payload["review_stage_completed"]), 0)
-        self.assertIsNone(palace_payload.get("next_due_date"))
+        self.assertEqual(palace_payload["review_status"], "marking_required")
+        self.assertEqual(palace_payload["review_unit_count"], 0)
+        self.assertIsNone(palace_payload["next_review_date"])
 
     def test_delete_bound_chapter_requires_force_and_reports_impact(self):
         self.bind({"chapter_ids": [self.chapter10_section1_id], "primary_chapter_id": self.chapter10_section1_id})

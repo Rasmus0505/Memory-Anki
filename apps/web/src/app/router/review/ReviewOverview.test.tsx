@@ -1,97 +1,55 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ReviewOverview from '@/app/router/review/ReviewOverview'
+import { describe, expect, it, vi } from 'vitest'
+import ReviewOverview, { groupDueUnitsByPalace } from '@/app/router/review/ReviewOverview'
+import type { ReviewUnitDto } from '@/modules/practice/public'
 
-const queue = vi.fn()
-vi.mock('@/modules/practice/ui/review/api', () => ({
-  getReviewQueueApi: () => queue(), getChapterReviewQueueApi: () => queue(),
-  getReviewSessionApi: vi.fn(), getReviewSessionProgressApi: vi.fn(),
-}))
-vi.mock('@/shared/api/studySessionWarmup', () => ({ prefetchStudySession: vi.fn() }))
-vi.mock('@/modules/practice/ui/review/components/ReviewLoadCalendar', () => ({ ReviewLoadCalendar: () => <div>负荷预测</div> }))
-vi.mock('@/modules/practice/ui/review/components/TodayPlanCard', () => ({ TodayPlanCard: () => <div>今日任务</div>, formatDeferReason: () => '' }))
+const getDueUnits = vi.fn()
+vi.mock('@/modules/practice/public', async () => {
+  const actual = await vi.importActual<typeof import('@/modules/practice/public')>('@/modules/practice/public')
+  return { ...actual, getDueReviewUnitsApi: () => getDueUnits() }
+})
 
-function palaceRow(
-  id: number,
-  title: string,
-  nextDue: string,
-  dueNodes: number,
-  overdueNodes: number,
-  todayReviewCount = 0,
-) {
+function unit(id: string, palaceId: number, dueDate: string): ReviewUnitDto {
   return {
     id,
-    palace_id: id,
-    algorithm_used: 'FSRS',
-    completed: false,
-    review_type: 'fsrs',
-    due_at: nextDue,
-    next_due_at: nextDue,
-    due_node_count: dueNodes,
-    overdue_node_count: overdueNodes,
-    schedule_count: dueNodes,
-    overdue_schedule_count: overdueNodes,
-    next_due_date: nextDue.slice(0, 10),
-    today_review_count: todayReviewCount,
-    palace: {
-      id,
-      title,
-      description: '',
-      archived: false,
-      mastered: false,
-      editor_doc: null,
-      pegs: [],
-      attachments: [],
-      chapters: [],
-    },
+    palace_id: palaceId,
+    anchor_uid: id,
+    unit_kind: 'marked',
+    title: `单元 ${id}`,
+    node_uids: [id],
+    revision: 1,
+    stage_index: 0,
+    interval_days: 1,
+    has_passed: false,
+    due_date: dueDate,
+    due: true,
+    session_status: 'pending',
+    retry_count: 0,
+    hard_count: 0,
+    again_count: 0,
+    final_rating: null,
+    encounter: null,
   }
 }
 
-describe('ReviewOverview FSRS queue', () => {
-  beforeEach(() => {
-    queue.mockResolvedValue({
-      due_count: 6,
-      later_today_count: 0,
-      overdue_count: 4,
-      smoothed_count: 0,
-      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
-      chapter: null,
-      later_today_reviews: [],
-      // Deliberately reverse of due order — UI must re-sort earliest first.
-      reviews: [
-        palaceRow(9, '较新逾期', '2026-07-18T10:00:00Z', 1, 1),
-        palaceRow(7, '拖最久', '2026-07-01T10:00:00Z', 3, 3),
-        palaceRow(8, '中间', '2026-07-10T10:00:00Z', 2, 0),
-      ],
-    })
+describe('ReviewOverview unit queue', () => {
+  it('groups by palace and sorts by earliest due date', () => {
+    const result = groupDueUnitsByPalace([
+      unit('b', 2, '2026-07-27'),
+      unit('a', 1, '2026-07-20'),
+      unit('c', 1, '2026-07-25'),
+    ])
+    expect(result.map((item) => item.palaceId)).toEqual([1, 2])
+    expect(result[0].units.map((item) => item.id)).toEqual(['a', 'c'])
   })
 
-  it('shows node counts and today review ordinal instead of stages and intervals', async () => {
-    queue.mockResolvedValueOnce({
-      due_count: 3,
-      later_today_count: 0,
-      overdue_count: 3,
-      smoothed_count: 0,
-      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
-      chapter: null,
-      later_today_reviews: [],
-      reviews: [palaceRow(7, '拖最久', '2026-07-01T10:00:00Z', 3, 3, 2)],
-    })
+  it('shows only permanent-mark units', async () => {
+    getDueUnits.mockResolvedValueOnce([unit('a', 1, '2026-07-27')])
     render(<MemoryRouter><ReviewOverview /></MemoryRouter>)
-    expect(await screen.findByText('拖最久')).toBeTruthy()
-    expect(screen.getByText(/到期 3 · 逾期 3/)).toBeTruthy()
-    expect(screen.getByText('今日第 3 次')).toBeTruthy()
-    expect(screen.queryByText(/间隔/)).toBeNull()
-  })
-
-  it('lists earliest-due palace first by default', async () => {
-    render(<MemoryRouter><ReviewOverview /></MemoryRouter>)
-    await screen.findByText('拖最久')
-    const titles = screen.getAllByText(/拖最久|中间|较新逾期/).map((node) => node.textContent)
-    expect(titles[0]).toBe('拖最久')
-    expect(titles.indexOf('拖最久')).toBeLessThan(titles.indexOf('中间'))
-    expect(titles.indexOf('中间')).toBeLessThan(titles.indexOf('较新逾期'))
-    expect(screen.getByTestId('review-queue-sort')).toBeTruthy()
+    expect(await screen.findByText('单元 a')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '立即复习' })).toBeTruthy()
+    expect(screen.queryByText(/FSRS/)).toBeNull()
+    expect(screen.queryByText(/波次/)).toBeNull()
   })
 })

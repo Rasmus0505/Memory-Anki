@@ -40,7 +40,6 @@ export const FREESTYLE_PROGRESS_STORAGE_KEY = 'memory-anki.freestyle.progress'
 export const FREESTYLE_CONTENT_TYPES: FreestyleContentType[] = [
   'quiz_question',
   'review',
-  'practice',
   'english',
   'english_reading',
 ]
@@ -50,7 +49,6 @@ export const DEFAULT_FREESTYLE_CONFIG: FreestyleConfig = {
   contentTypes: {
     quiz_question: true,
     review: true,
-    practice: true,
     english: true,
     english_reading: true,
   },
@@ -121,7 +119,6 @@ export function sanitizeFreestyleConfig(value: unknown): FreestyleConfig {
   )
   const range =
     raw.range === 'due' ||
-    raw.range === 'needs_practice' ||
     raw.range === 'specific_palaces' ||
     raw.range === 'wrong'
       ? raw.range

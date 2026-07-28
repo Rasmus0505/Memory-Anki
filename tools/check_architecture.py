@@ -189,6 +189,12 @@ BASELINE_PERSONAL_PATH_TOOLS = {
     "tools/import_manual_quiz_texts.py",
 }
 BASELINE_OVERSIZED_FILES = {
+    # Registered follow-up refactors in docs/architecture/README.md.
+    "apps/web/src/shared/ui/mindmap-canvas/layout.ts",
+    "apps/web/src/shared/ui/mindmap-canvas/NodeCard.tsx",
+    "apps/web/src/shared/ui/mindmap-canvas/useMindMapCanvasState.ts",
+    "apps/web/src/pages/create/PalaceEditorPage.tsx",
+    "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
     "apps/web/src/modules/quiz/ui/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
@@ -237,6 +243,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     ),
     "0039_unify_fsrs_drop_legacy_schedules.py": (
         "Retires ReviewSchedule/stage tables and Ebbinghaus history; formal review and vocabulary are FSRS-only."
+    ),
+    "0051_remove_node_review_history.py": (
+        "User-approved removal of retired node recall tables after an in-migration SQLite backup."
     ),
 }
 REQUIRED_STORAGE_KEYS = {
@@ -1290,7 +1299,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
         "english": {"session"},
-        "english_reading": {"memory", "session"},
+        "english_reading": {"english", "memory", "session"},
         "quiz": {"backups"},
         "content": {"backups", "session"},
         "memory": {"session"},
@@ -1775,15 +1784,6 @@ def check_unified_training_evidence(errors: list[str]) -> None:
             f"{nav_path.relative_to(REPO_ROOT)}: settings/profile must not return as a primary learning destination."
         )
 
-    table_path = API_SRC / "infrastructure" / "db" / "_tables" / "mindmap.py"
-    table_content = table_path.read_text(encoding="utf-8")
-    for field in ("rating_source", "inference_confidence", "response_ms", "operation_id"):
-        if field not in table_content:
-            errors.append(
-                f"{table_path.relative_to(REPO_ROOT)}: recall evidence must retain `{field}`."
-            )
-
-
 def check_removed_focus_practice(errors: list[str]) -> None:
     forbidden = (
         "focus-practice",
@@ -1958,14 +1958,12 @@ def check_retired_palace_knowledge_binding(errors: list[str]) -> None:
 
 
 
-def check_fsrs_review_frontend(errors: list[str]) -> None:
+def check_unit_review_boundary(errors: list[str]) -> None:
     guarded = {
-        "widgets/mindmap-review-flow/ReviewSessionContainer.tsx": ("StageSelectDialog", "target_review_number", "needs_practice"),
-        "app/router/review/ReviewOverview.tsx": ("spreadOverdue", "formatReviewStage", "interval_days"),
-        "app/router/review/ReviewCompletion.tsx": ("completed_stage", "next_stage", "needs_practice"),
-        "modules/content/ui/palace-catalog/components/palace-list/PalaceListCard.tsx": ("PalaceStageProgress", "review_stages", "stage_labels"),
-        "modules/settings/ui/profile/ProfileSettingsPage.tsx": ("repairReviewStageProgress", "复习阶段"),
-        "modules/practice/ui/review/api/reviewApi.ts": ("spread-overdue", "repair-stage-progress", "stage-progress-health"),
+        "app/router/review/ReviewOverview.tsx": ("FSRS", "wave", "node_count", "startReviewWaveSessionApi"),
+        "app/router/review/ReviewSession.tsx": ("rateNode", "bulk", "stability", "memory_health"),
+        "app/router/review/ReviewCompletion.tsx": ("FSRS", "mastery", "rated_node", "ReviewLog"),
+        "modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView.tsx": ("TemporaryMarkDialog", "临时标记"),
     }
     for relative, forbidden in guarded.items():
         path = WEB_SRC / relative
@@ -1974,79 +1972,92 @@ def check_fsrs_review_frontend(errors: list[str]) -> None:
         source = path.read_text(encoding="utf-8")
         for marker in forbidden:
             if marker in source:
-                errors.append(f"FSRS review runtime must not contain {marker!r}: {path.relative_to(REPO_ROOT)}")
+                errors.append(f"unit review runtime must not contain {marker!r}: {path.relative_to(REPO_ROOT)}")
 
     retired_components = (
         "modules/practice/ui/review/components/StageSelectDialog.tsx",
         "modules/content/ui/palace-catalog/components/palace-list/PalaceStageEditDialog.tsx",
         "modules/content/ui/palace-catalog/components/palace-list/PalaceStageProgress.tsx",
         "entities/review/api/stageAdjustmentApi.ts",
+        "modules/practice/ui/freestyle/components/TemporaryMarkDialog.tsx",
     )
     for relative in retired_components:
         path = WEB_SRC / relative
         if path.exists():
             errors.append(f"retired stage UI/API module must not return: {path.relative_to(REPO_ROOT)}")
 
-    router_path = API_SRC / "modules/memory/presentation/router.py"
-    router_source = router_path.read_text(encoding="utf-8")
-    for marker in ("/review/spread-overdue", "/review/stage-progress-health", "/review/repair-stage-progress", "stage-adjustment"):
-        if marker in router_source:
-            errors.append(f"retired review runtime route must not return: {marker}")
-
-    # Queue lifecycle vs settlement are split; complete lives in settlement.
-    formal_review_sources = {
-        "get_fsrs_queue_payload": API_SRC
-        / "modules/memory/application/formal_review_service.py",
-        "get_fsrs_load_forecast": API_SRC
-        / "modules/memory/application/formal_review_service.py",
-        "complete_formal_review": API_SRC
-        / "modules/memory/application/formal_review_settlement.py",
-    }
-    for function_name, service_path in formal_review_sources.items():
-        service_source = service_path.read_text(encoding="utf-8")
-        marker = f"def {function_name}"
-        if marker not in service_source:
+    retired_backend = (
+        "modules/practice/domain/branch_units.py",
+        "modules/memory/application/temporary_mark_unify.py",
+    )
+    for relative in retired_backend:
+        path = API_SRC / relative
+        if path.exists():
             errors.append(
-                f"FSRS formal review must define {function_name} in "
-                f"{service_path.relative_to(REPO_ROOT)}"
+                f"retired palace review module must not return: {path.relative_to(REPO_ROOT)}"
             )
-            continue
-        function_start = service_source.index(marker)
-        next_function = service_source.find("\ndef ", function_start + 1)
-        function_source = service_source[function_start: next_function if next_function >= 0 else None]
-        if "ReviewSchedule" in function_source:
-            errors.append(f"{function_name} must not read or write legacy ReviewSchedule")
 
-    wave_service_path = API_SRC / "modules/memory/application/wave_service.py"
-    wave_session_path = API_SRC / "modules/memory/application/wave_session_service.py"
-    if wave_service_path.exists() and wave_session_path.exists():
-        wave_service_source = wave_service_path.read_text(encoding="utf-8")
-        wave_session_source = wave_session_path.read_text(encoding="utf-8")
-        for function_name in (
-            "pause_formal_wave",
-            "resume_formal_wave",
-            "complete_formal_wave",
-            "start_reinforcement_wave_session",
-        ):
-            marker = f"def {function_name}"
-            if marker in wave_service_source or marker not in wave_session_source:
+    forbidden_runtime_markers = {
+        API_SRC / "modules/practice/domain/queue_builder.py": (
+            "split_branch_units",
+            "temporary_root_uids",
+            "node_limit",
+            "due_node_count",
+            "ratable_node_uids",
+        ),
+        API_SRC / "modules/practice/domain/feed_config.py": (
+            "reinforcement",
+            "progress_scopes",
+            "node_limit",
+        ),
+        WEB_SRC / "shared/api/contracts/freestyle.ts": (
+            "segment_practice",
+            "needs_practice",
+            "reinforcement",
+            "progress_scopes",
+            "node_limit",
+        ),
+    }
+    for path, markers in forbidden_runtime_markers.items():
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker in source:
                 errors.append(
-                    f"review wave execution lifecycle must define {function_name} in "
-                    "wave_session_service.py, not wave_service.py"
+                    f"retired palace review marker must not return: {marker!r} in "
+                    f"{path.relative_to(REPO_ROOT)}"
                 )
 
-    settlement_path = API_SRC / "modules/memory/application/formal_review_settlement.py"
-    if settlement_path.exists():
-        settlement_source = settlement_path.read_text(encoding="utf-8")
-        if "memory_anki.modules.practice.application" in settlement_source:
-            errors.append(
-                "formal review settlement must consume temporary-mark lifecycle through "
-                "memory_anki.modules.practice.api"
-            )
-
-    warmup_path = API_SRC / "app/startup_warmup.py"
-    if warmup_path.exists() and "review_schedules" in warmup_path.read_text(encoding="utf-8"):
-        errors.append("startup warmup must use review_node_states, not legacy review_schedules")
+    router_path = API_SRC / "modules/memory/presentation/router.py"
+    router_source = router_path.read_text(encoding="utf-8")
+    for marker in ("/review/waves", "/calibration/", "node-ratings", "subtree", "rate-unrated"):
+        if marker in router_source:
+            errors.append(f"retired review runtime route must not return: {marker}")
+    required = {
+        API_SRC / "modules/memory/application/unit_review_projection.py": (
+            "def reconcile_palace_units",
+        ),
+        API_SRC / "modules/memory/application/unit_review_service.py": (
+            "def open_unit_review_encounter",
+            "def rate_review_unit",
+            "def close_unit_review_encounter",
+            "def undo_unit_rating",
+        ),
+        API_SRC / "modules/memory/application/unit_scheduler.py": (
+            "INTERVAL_DAYS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120, 240, 365)",
+        ),
+        API_SRC / "modules/mindmap_document/split_units.py": ("def split_scheduling_units",),
+        API_SRC / "modules/practice/domain/review_units.py": (
+            "class ReviewUnitCandidate",
+            "def candidate_from_projection",
+        ),
+    }
+    for path, markers in required.items():
+        source = path.read_text(encoding="utf-8") if path.exists() else ""
+        for marker in markers:
+            if marker not in source:
+                errors.append(f"permanent-mark review invariant missing {marker!r}: {path.relative_to(REPO_ROOT)}")
 
 
 def check_english_reading_gap_loop(errors: list[str]) -> None:
@@ -2105,7 +2116,7 @@ def main() -> int:
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
-    check_fsrs_review_frontend(errors)
+    check_unit_review_boundary(errors)
     check_english_reading_gap_loop(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)

@@ -7,6 +7,7 @@ import {
   filterMutedPalaces,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   markCompleted,
+  markIncomplete,
   mergeQueuePreservingHistory,
   mergeRefreshQueue,
   moveCardToTail,
@@ -18,11 +19,13 @@ import {
   resolveRebuildIndex,
   saveFreestyleFeedConfig,
   saveQueueState,
+  setUnitEncounterState,
   applySkip,
   sanitizeFreestyleFeedConfig,
   startNewRound,
   undoSkip,
   type FreestyleSkipState,
+  type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { onAppEvent } from '@/shared/events/appEvents'
@@ -76,6 +79,51 @@ export function useImmersiveQueue() {
         ...queueStateRef.current,
         currentCardId: normalized,
       })
+    },
+    [persistQueueState],
+  )
+
+  const ensureUnitEncounter = useCallback(
+    (cardId: string, unitRevision: number, allowRenew: boolean) => {
+      const existing = queueStateRef.current.unitEncountersByCardId[cardId]
+      if (
+        existing
+        && existing.unitRevision === unitRevision
+        && !(allowRenew && existing.status === 'closed' && existing.passed === false)
+      ) {
+        return existing
+      }
+      const next: FreestyleUnitEncounterState = {
+        encounterId: createOperationId(),
+        unitRevision,
+        status: 'pending',
+        sessionId: null,
+        selectedRating: null,
+        passed: null,
+        retryAfterCards: 0,
+      }
+      persistQueueState(setUnitEncounterState(queueStateRef.current, cardId, next))
+      return next
+    },
+    [persistQueueState],
+  )
+
+  const updateUnitEncounter = useCallback(
+    (cardId: string, encounter: FreestyleUnitEncounterState) => {
+      const current = queueStateRef.current.unitEncountersByCardId[cardId]
+      if (
+        current
+        && current.encounterId === encounter.encounterId
+        && current.unitRevision === encounter.unitRevision
+        && current.status === encounter.status
+        && current.sessionId === encounter.sessionId
+        && current.selectedRating === encounter.selectedRating
+        && current.passed === encounter.passed
+        && current.retryAfterCards === encounter.retryAfterCards
+      ) {
+        return
+      }
+      persistQueueState(setUnitEncounterState(queueStateRef.current, cardId, encounter))
     },
     [persistQueueState],
   )
@@ -277,7 +325,7 @@ export function useImmersiveQueue() {
   )
 
   /**
-   * Formal completion (mind-map FSRS settle): mark completedIds and silently rebuild
+   * Unit rating outcome: update completed membership and silently rebuild
    * due projections, but keep the card under the viewport so the user can review
    * results and advance manually. Do not use for quiz — use acknowledgeCard.
    *
@@ -287,20 +335,32 @@ export function useImmersiveQueue() {
    * leaves (see goToIndex / skip paths).
    */
   const completeCard = useCallback(
-    (cardId: string, options?: { restudy?: boolean }) => {
+    (cardId: string, options?: { restudy?: boolean; cleared?: boolean }) => {
       // Pin the settled unit under the viewport before the async rebuild returns.
       // Do not bump currentIndex forward under any settle path.
       const settledIndex = cardsRef.current.findIndex((card) => card.id === cardId)
       if (settledIndex >= 0) {
         applyCurrentIndex(settledIndex)
       }
+      if (options?.cleared) {
+        pendingRestudyByIdRef.current.delete(cardId)
+        const incomplete = persistQueueState(markIncomplete(queueStateRef.current, cardId))
+        void buildQueue(configRef.current, {
+          preserveCompleted: true,
+          completedIds: incomplete.completedIds,
+          silent: true,
+          preferCardId: cardId,
+        })
+        return
+      }
       if (options?.restudy) {
+        const incomplete = persistQueueState(markIncomplete(queueStateRef.current, cardId))
         // Remember settle index for gap placement when the user swipes away.
         const anchor = settledIndex >= 0 ? settledIndex : currentIndexRef.current
         pendingRestudyByIdRef.current.set(cardId, anchor)
         void buildQueue(configRef.current, {
           preserveCompleted: true,
-          completedIds: queueStateRef.current.completedIds,
+          completedIds: incomplete.completedIds,
           silent: true,
           restudyCardId: cardId,
           preferCardId: cardId,
@@ -310,7 +370,7 @@ export function useImmersiveQueue() {
       // Graduated: clear any pending restudy bookkeeping for this unit.
       pendingRestudyByIdRef.current.delete(cardId)
       const next = persistQueueState(markCompleted(queueStateRef.current, cardId))
-      // Silent rebuild refreshes due sets so later cards never open with stale FSRS scopes.
+      // Silent rebuild refreshes unit due projections so later cards cannot open stale revisions.
       // preferCardId + order-preserving merge keep the finished unit in place.
       void buildQueue(configRef.current, {
         preserveCompleted: true,
@@ -538,6 +598,8 @@ export function useImmersiveQueue() {
     refreshQueue,
     reshuffleQueue: reshuffleQueueWithRestudyClear,
     completeCard,
+    ensureUnitEncounter,
+    updateUnitEncounter,
     acknowledgeCard,
     dropStaleCard,
     skipCurrent,

@@ -359,11 +359,11 @@ describe('KnowledgePage mind map host refresh behavior', () => {
         {
           id: 9,
           title: '教育史宫殿',
-          mastered: false,
           archived: false,
-          review_stage_completed: 2,
-          review_stage_total: 5,
-          next_due_date: '2026-07-10',
+          review_status: 'scheduled',
+          review_unit_count: 5,
+          due_review_unit_count: 0,
+          next_review_date: '2026-07-10',
         },
       ],
     })
@@ -387,8 +387,8 @@ describe('KnowledgePage mind map host refresh behavior', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '选中测试章节' }))
     await screen.findByText('教育史宫殿')
-    expect(screen.getByText('复习 2/5')).toBeTruthy()
-    expect(screen.getByText('下次 2026-07-10')).toBeTruthy()
+    expect(screen.getByText('7月10日复习')).toBeTruthy()
+    expect(screen.getByText('0/5 单元到期')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '删除章节' }))
 
@@ -407,19 +407,18 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       palaces: [{
         id: 9,
         title: '教育史宫殿',
-        mastered: false,
         archived: false,
-        review_stage_completed: 2,
-        review_stage_total: 5,
-        next_due_date: '2026-07-10',
+        review_status: 'scheduled' as const,
+        review_unit_count: 5,
+        due_review_unit_count: 0,
+        next_review_date: '2026-07-10',
       }],
     }
     const refreshed = {
       ...initial,
       palaces: [{
         ...initial.palaces[0],
-        review_stage_completed: 3,
-        next_due_date: '2026-07-15',
+        next_review_date: '2026-07-15',
       }],
     }
     vi.mocked(knowledgeApi.getChapterApi)
@@ -432,22 +431,14 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       </MemoryRouter>,
     )
     fireEvent.click(await screen.findByRole('button', { name: '选中测试章节' }))
-    await screen.findByText('复习 2/5')
+    await screen.findByText('7月10日复习')
 
     act(() => {
-      emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, {
-        palaceId: 9,
-        chapterId: 42,
-        completedStageCount: 3,
-        totalStageCount: 5,
-        mastered: false,
-        nextReviewAt: '2026-07-15T10:00:00',
-      })
+      emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
     })
 
-    // Mid-session rating events only patch local chapter detail — no extra refetch.
-    expect(await screen.findByText('复习 3/5')).toBeTruthy()
-    await waitFor(() => expect(knowledgeApi.getChapterApi).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('7月15日复习')).toBeTruthy()
+    await waitFor(() => expect(knowledgeApi.getChapterApi).toHaveBeenCalledTimes(2))
   })
 
 })

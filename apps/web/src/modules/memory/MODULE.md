@@ -1,10 +1,10 @@
 # Module: memory
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+migrated — client contracts for permanent-mark unit review.
 
 ## Owns
-FSRS projections, wave APIs, rating commands (client)
+Unit session DTOs, fixed-ladder rating commands, encounters, undo, and completion queries.
 
 ## Public entry
 `public.ts` — only cross-module import path.
@@ -12,4 +12,4 @@ FSRS projections, wave APIs, rating commands (client)
 ## Rules
 - Do not import other modules' internal paths.
 - Domain code is framework-free (no React).
-- Workflows (XState) live under application/workflows.
+- Palace node FSRS, waves, calibration, temporary marks, and node ratings must not return.

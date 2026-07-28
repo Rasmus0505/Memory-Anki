@@ -7,30 +7,13 @@ import {
 import type {
   FreestyleMindMapBranchCard,
   MindMapEditorState,
-  ReviewCompletionSummary,
 } from '@/shared/api/contracts'
-import { startReviewSessionApi } from '@/widgets/mindmap-review-flow'
-import {
-  formatNextReviewDetailLabel,
-  formatReviewAbsolute,
-} from '@/modules/memory/public'
+import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
-import { clipEditorStateToBranchUnit } from '@/modules/practice/ui/freestyle/model/clipBranchUnitEditor'
-import type { ReviewSessionSubmitResponse } from '@/shared/api/contracts'
 import type { ReviewFlowSnapshot } from '@/modules/memory/public'
 
-/** Compact settle receipt shown as a floating bubble (not a full-screen takeover). */
-export type BranchSettleFlash = {
-  nextReviewAbsolute: string
-  nextReviewDetail: string
-  restudy: boolean
-}
-
-export type BranchSession = {
-  id: string
-  reviewScopeNodeUids: string[]
-}
+export { FlipCardMindMapPanel }
 
 /**
  * Freestyle swipe remounts cards outside the mount window. Cache flip/reveal
@@ -69,12 +52,6 @@ export function plainContextLabel(
 }
 
 export const palaceEditorCache = new Map<number, Promise<MindMapEditorState>>()
-export const branchSessionCache = new Map<string, Promise<BranchSession>>()
-
-export function isStaleDueError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || '')
-  return /no due FSRS nodes|没有可结算的正式复习|palace has no due/i.test(message)
-}
 
 export function loadPalaceEditor(palaceId: number) {
   const cached = palaceEditorCache.get(palaceId)
@@ -87,93 +64,6 @@ export function loadPalaceEditor(palaceId: number) {
     })
   palaceEditorCache.set(palaceId, promise)
   return promise
-}
-
-export function clipBranchUnit(
-  fullState: MindMapEditorState,
-  card: FreestyleMindMapBranchCard,
-) {
-  // Real palace-root → unit spine (original node titles). Context path stays in
-  // the card header only — never concatenated onto a synthetic flip root.
-  return clipEditorStateToBranchUnit(fullState, card.branch_uid)
-}
-
-export function loadBranchSession(card: FreestyleMindMapBranchCard) {
-  const key = card.id
-  const cached = branchSessionCache.get(key)
-  if (cached) return cached
-  const unitDue = (card.due_node_uids || []).filter(Boolean)
-  if (!unitDue.length) {
-    const empty = Promise.reject(new Error('palace has no due FSRS nodes'))
-    branchSessionCache.set(
-      key,
-      empty.catch((error) => {
-        branchSessionCache.delete(key)
-        throw error
-      }) as Promise<BranchSession>,
-    )
-    return branchSessionCache.get(key)!
-  }
-  const promise = startReviewSessionApi(card.palace_id, {
-    entry_mode: 'node',
-    branch_uid: card.branch_uid,
-    scope_node_uids: unitDue,
-  }).then((session) => {
-    const frozen = (session.frozen_due_node_uids ?? []).filter(Boolean)
-    const unitSet = new Set(card.ratable_node_uids || [])
-    const scoped = (frozen.length ? frozen : unitDue).filter((uid) => unitSet.has(uid))
-    if (!scoped.length) {
-      throw new Error('palace has no due FSRS nodes')
-    }
-    return {
-      id: String(session.session_id ?? session.id),
-      reviewScopeNodeUids: scoped,
-    }
-  })
-  branchSessionCache.set(
-    key,
-    promise.catch((error) => {
-      branchSessionCache.delete(key)
-      throw error
-    }),
-  )
-  return branchSessionCache.get(key)!
-}
-
-export function settleFlashFromResult(
-  result: ReviewSessionSubmitResponse | ReviewCompletionSummary | null | undefined,
-  restudy: boolean,
-): BranchSettleFlash {
-  const nextReviewAt = result?.next_review_at ?? null
-  return {
-    nextReviewAbsolute: formatReviewAbsolute(nextReviewAt),
-    nextReviewDetail: restudy
-      ? '有忘记/困难节点 · 最多隔 3 张再练 · 不会自动翻页'
-      : formatNextReviewDetailLabel({
-          nextReviewAt,
-          nextReviewNodeCount:
-            result?.next_review_node_count ?? result?.remaining_due_node_count,
-          nextReviewEntryMode: result?.next_review_entry_mode,
-          nextReviewEntryLabel: result?.next_review_entry_label,
-        }),
-    restudy,
-  }
-}
-
-export function finishBranchCard(
-  cardId: string,
-  reducedMotion: boolean,
-  onBranchComplete: (cardId: string, options?: { restudy?: boolean }) => void,
-  setSettleFlash: (value: BranchSettleFlash | null) => void,
-  flash: BranchSettleFlash,
-  options?: { restudy?: boolean },
-) {
-  setSettleFlash(flash)
-  onBranchComplete(cardId, options)
-  const delay = reducedMotion ? 1400 : 2800
-  window.setTimeout(() => {
-    setSettleFlash(null)
-  }, delay)
 }
 
 export async function persistPalaceEditor(

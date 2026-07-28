@@ -6,7 +6,6 @@ import {
   getPracticeSessionProgressApi,
   invalidatePalaceCatalogCache,
   savePracticeSessionProgressApi,
-  updatePalacePracticeFlagApi,
 } from '@/modules/content/public'
 import {
   PracticeSessionRoute,
@@ -47,8 +46,7 @@ export default function PalacePracticePage() {
           ),
         getFlowKey: (palace, resetVersion) => `${palace.id}-${resetVersion}`,
         getPersistKey: (palace) => `practice:palace:${palace.id}`,
-        completePractice: async (palace) => {
-          await updatePalacePracticeFlagApi(palace.id, { needs_practice: false })
+        completePractice: async () => {
           invalidatePalaceCatalogCache()
         },
       }}

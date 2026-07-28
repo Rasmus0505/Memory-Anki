@@ -14,7 +14,6 @@ import { cn } from '@/shared/lib/utils'
 import { AiSplitWorkbench } from '@/modules/content/public'
 import { PalaceAttachmentPanel } from '@/modules/content/public'
 import { PalaceMetaPanel } from '@/modules/content/public'
-import { PalaceSegmentsPanel } from '@/modules/content/public'
 import { PalaceTemplateDialog } from '@/modules/content/public'
 import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/modules/content/public'
@@ -105,6 +104,12 @@ export default function PalaceEdit() {
   const [ankiEditMode, setAnkiEditMode] = useState(false)
   /** When true in Anki mode, click cycles front/back/none instead of normal select. */
   const [ankiRolePen, setAnkiRolePen] = useState(false)
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('mode') === 'permanent-mark') {
+      setPermanentMarkMode(true)
+    }
+  }, [])
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -215,29 +220,6 @@ export default function PalaceEdit() {
     [page],
   )
   const recallModeActive = page.editorMode === 'recall'
-  const segmentToolbarOptions = useMemo(
-    () =>
-      page.segments
-        .filter((segment) => !segment.is_virtual_default)
-        .map((segment) => ({
-          id: segment.id,
-          name: segment.name,
-        })),
-    [page.segments],
-  )
-  const mindMapSegments = useMemo(
-    () =>
-      page.segments
-        .filter((segment) => !segment.is_virtual_default)
-        .map((segment) => ({
-          id: segment.id,
-          name: segment.name,
-          color: segment.color,
-          created_at: segment.created_at,
-          node_uids: segment.node_uids,
-        })),
-    [page.segments],
-  )
   const showTemplateCreateAction = useMemo(() => {
     if (!page.palaceId || !page.editorState?.editor_doc) return false
     const editorDoc = page.editorState.editor_doc
@@ -287,7 +269,6 @@ export default function PalaceEdit() {
     | 'taskControl'
     | 'searchControl'
     | 'focusAction'
-    | 'segmentControl'
     | 'moreActions'
     | 'importMindMapAction'
   > = {
@@ -313,23 +294,6 @@ export default function PalaceEdit() {
       ? {
           label: '聚焦节点',
           onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid),
-        }
-      : null,
-    segmentControl: mindMapExperience.task === 'build'
-      ? {
-          active: page.isSegmentRangeMode,
-          targetSegmentId: page.rangeTargetSegmentId,
-          options: segmentToolbarOptions,
-          onToggle: () => page.handleSegmentRangeModeToggle({
-            active: !page.isSegmentRangeMode,
-            targetSegmentId: page.rangeTargetSegmentId || 'new',
-          }),
-          onTargetChange: (targetSegmentId) => page.handleSegmentRangeModeToggle({
-            active: true,
-            targetSegmentId,
-          }),
-          onConfirm: page.handleConfirmSegmentRange,
-          onCancel: () => page.handleSegmentRangeModeToggle({ active: false, targetSegmentId: null }),
         }
       : null,
     moreActions: [
@@ -383,23 +347,6 @@ export default function PalaceEdit() {
       },
       ...mindMapFileTransfer.toolbarActions,
       quizBindingsHost.moreAction,
-      ...(selectedNodeUid
-        ? [
-            {
-              label: '标记为薄弱',
-              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'weak') },
-              separatorBefore: true,
-            },
-            {
-              label: '标记为已掌握',
-              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, 'mastered') },
-            },
-            {
-              label: '清除手动标记',
-              onClick: () => { void mindMapExperience.setNodeManualLabel(selectedNodeUid, null) },
-            },
-          ]
-        : []),
     ],
     importMindMapAction: {
       label: '转脑图',
@@ -548,33 +495,6 @@ export default function PalaceEdit() {
             onEstablishCreatedAt={page.handleEstablishCreatedAt}
           />
 
-          <PalaceSegmentsPanel
-            segments={page.segments}
-            selectedNodeCount={page.isSegmentRangeMode ? page.selectedRangeNodeCount : page.selectedNodes.length}
-            activeSegmentId={page.activeSegmentId}
-            segmentDialogOpen={page.segmentDialogOpen}
-            segmentName={page.segmentName}
-            setSegmentName={page.setSegmentName}
-            segmentColor={page.segmentColor}
-            setSegmentColor={page.setSegmentColor}
-            segmentCreatedAt={page.segmentCreatedAt}
-            setSegmentCreatedAt={page.setSegmentCreatedAt}
-            editingSegmentId={page.editingSegmentId}
-            segmentSaving={page.segmentSaving}
-            segmentMergingId={page.segmentMergingId}
-            segmentError={page.segmentError}
-            isSegmentRangeMode={page.isSegmentRangeMode}
-            rangeTargetSegmentId={page.rangeTargetSegmentId}
-            onOpenDialog={page.handleOpenCreateSegment}
-            onOpenEdit={page.handleOpenEditSegment}
-            onOpenChange={page.setSegmentDialogOpen}
-            onSave={page.handleSaveSegment}
-            onTogglePractice={page.handleToggleSegmentPractice}
-            onDelete={page.handleDeleteSegment}
-            onAdjustRange={page.handleAdjustSegmentRange}
-            onMerge={page.handleMergeSegment}
-          />
-
           <PalaceAttachmentPanel
             palace={page.palace}
             onUpload={page.handleAttachmentUpload}
@@ -599,10 +519,9 @@ export default function PalaceEdit() {
               {activeFrameEditorState ? (
                 <div className="flex h-full min-h-0 flex-col gap-3">
                   {mindMapExperience.task === 'learn' ? (
-                    <div className="grid gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
                       <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
-                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate('/reviews')}><div className="font-medium">正式复习</div><div className="mt-1 text-xs text-muted-foreground">进入复习队列并记录节点评分</div></button>
-                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" disabled={!mindMapExperience.weakItems.length} onClick={() => { const item = mindMapExperience.weakItems[0]; if (item) mindMapFrameRef.current?.focusNode(item.node_uid) }}><div className="font-medium">薄弱训练 · {mindMapExperience.weakItems.length}</div><div className="mt-1 text-xs text-muted-foreground">优先定位薄弱和需巩固节点</div></button>
+                      <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate('/reviews')}><div className="font-medium">正式复习</div><div className="mt-1 text-xs text-muted-foreground">进入永久标记单元的到期队列</div></button>
                       <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
                     </div>
                   ) : null}
@@ -618,7 +537,6 @@ export default function PalaceEdit() {
                     hidePresentationOverflowActions
                     visibleEditorState={activeFrameEditorState}
                     editableEditorState={page.editorState}
-                    ratingTreeEditorState={page.editorState}
                     visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
                     hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}:${page.aiSplitAppliedSyncVersion}`}
                     hostExternalSyncKey={mindMapImport.importExternalSyncKey}
@@ -640,20 +558,10 @@ export default function PalaceEdit() {
                         : mindMapExperience.highlightedNodeUids
                     }
                     ankiEditMode={ankiEditMode && !recallModeActive}
-                    masteryByNodeUid={mindMapExperience.masteryByNodeUid}
                     countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
                     onCountBadgeClick={quizBindingsHost.openNodeQuiz}
                     confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
                     aiSplitBusy={page.aiSplitBusy}
-                    segments={mindMapSegments}
-                    activeSegmentId={page.activeSegmentId}
-                    segmentColorMode="all-with-active-emphasis"
-                    segmentRangeDraft={{
-                      active: page.isSegmentRangeMode,
-                      targetSegmentId: page.rangeTargetSegmentId,
-                      selectedNodeUids: page.selectedRangeNodeUids,
-                      overriddenConflictNodeUids: page.overriddenConflictNodeUids,
-                    }}
                     focusRequestNodeUid={page.modeFocusRequestNodeUid}
                     focusRequestNonce={page.modeFocusRequestNonce}
                     onEditorStateChange={page.handleMindMapEditorStateChange}
@@ -665,17 +573,10 @@ export default function PalaceEdit() {
                         ? handlePermanentMarkClick
                         : ankiEditMode && ankiRolePen && !recallModeActive
                           ? handleAnkiRoleCycleClick
-                          : page.isSegmentRangeMode
-                            ? page.handleSegmentRangeNodeClick
-                            : undefined
+                          : undefined
                     }
                     onAiSplitRequest={page.handleAiSplitRequest}
                     onQuizBreakOpen={handleOpenQuizPage}
-                    onSegmentSelect={page.setActiveSegmentId}
-                    onCreateSegmentFromSelection={page.handleOpenCreateSegment}
-                    onSegmentRangeDraftChange={page.handleSegmentRangeDraftChange}
-                    onSegmentRangeModeToggle={page.handleSegmentRangeModeToggle}
-                    onSegmentRangeConfirm={page.handleConfirmSegmentRange}
                     onNativeFullscreenChange={setMindMapNativeFullscreen}
                     onToggleFullscreen={page.toggleMindMapFullscreen}
                     onUiClearedChange={setMindMapUiCleared}

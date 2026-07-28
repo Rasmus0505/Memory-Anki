@@ -8,9 +8,7 @@ import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/modules/content/public'
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { cn } from "@/shared/lib/utils";
-import { toast } from "@/shared/feedback/toast";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
-import { useMindMapRecallRatings } from '@/modules/practice/public';
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = [];
 
@@ -33,11 +31,8 @@ export function useMindMapReviewFlowController({
   title,
   palaceId,
   sessionKind,
-  studySessionId = null,
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
-  reviewScopeNodeUids,
-  autoRevealNonDueCards = false,
   displayMode = "review",
   persistKey = null,
   reviewEditorState,
@@ -53,7 +48,6 @@ export function useMindMapReviewFlowController({
 }: MindMapReviewFlowProps) {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
   const [activeNodes, setActiveNodes] = React.useState<MindMapSelection[]>([]);
-  const [ratingMode, setRatingMode] = React.useState(false);
   const [comboBurst, setComboBurst] = React.useState<{
     milestoneStep: number;
     comboCount: number;
@@ -62,14 +56,7 @@ export function useMindMapReviewFlowController({
   } | null>(null);
   const selectedNode = activeNodes[0] ?? null;
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null;
-  const recallRatings = useMindMapRecallRatings({ palaceId, studySessionId, enabled: Boolean(studySessionId), sourceScene: sessionKind === 'review' ? 'formal_review' : 'practice' });
-  const reviewScopeKey = React.useMemo(
-    () => JSON.stringify(reviewScopeNodeUids ?? null),
-    [reviewScopeNodeUids],
-  );
   const reviewNodeUids = React.useMemo(() => {
-    const scoped = (JSON.parse(reviewScopeKey) as string[] | null)?.filter(Boolean) ?? [];
-    if (scoped.length > 0) return scoped;
     const doc = normalizeEditorDocTree(reviewEditorState.editor_doc);
     const result: string[] = [];
     const walk = (node: NonNullable<typeof doc.root>, isRoot = false) => {
@@ -80,7 +67,7 @@ export function useMindMapReviewFlowController({
     };
     if (doc.root) walk(doc.root, true);
     return result;
-  }, [reviewEditorState.editor_doc, reviewScopeKey]);
+  }, [reviewEditorState.editor_doc]);
 
 
   const flow = useReviewFlowSession({
@@ -89,9 +76,7 @@ export function useMindMapReviewFlowController({
     sessionKind,
     revealMode,
     checkpointNodeUids,
-    // Default false: every card is hidden → 待回忆 → content (formal + freestyle).
-    // true is a legacy opt-in that auto-opens non-due via focusNodeIds.
-    focusNodeUids: autoRevealNonDueCards ? reviewScopeNodeUids : EMPTY_CHECKPOINT_NODE_UIDS,
+    focusNodeUids: EMPTY_CHECKPOINT_NODE_UIDS,
     persistKey,
     editorState: reviewEditorState,
     onComplete,
@@ -106,8 +91,6 @@ export function useMindMapReviewFlowController({
     flow.timer.registerActivity("practice_interaction", { source: "review_node_navigation" });
     setActiveNodes(nodes);
   }, [flow.timer]);
-  // weakNodeUids / firstRatings stay on recallRatings for chips & AI; no auto
-  // weak-retry re-hide — rating mode never mutates flip/placeholder state.
   const inlineEditEnabled =
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
@@ -179,13 +162,13 @@ React.useEffect(() => {
 
 
   const handleShortcutHideChildCards = React.useCallback((): boolean => {
-    if (isInlineEditMode || ratingMode) return false;
+    if (isInlineEditMode) return false;
     if (isBlockingDialogOpen()) return false;
     const node = activeNodes[0];
     if (!node?.uid) return false;
     flow.handleNodeContextMenu([node]);
     return true;
-  }, [activeNodes, flow, isInlineEditMode, ratingMode]);
+  }, [activeNodes, flow, isInlineEditMode]);
 
   // Refs keep A/S handlers current without rebinding window listeners every render.
   // Do not gate on React hover state: it lags behind hoveredNodeIdRef and is cleared
@@ -194,8 +177,6 @@ React.useEffect(() => {
   selectedNodeUidRef.current = selectedNodeUid;
   const isInlineEditModeRef = React.useRef(isInlineEditMode);
   isInlineEditModeRef.current = isInlineEditMode;
-  const ratingModeRef = React.useRef(ratingMode);
-  ratingModeRef.current = ratingMode;
   const flowCompletedRef = React.useRef(flow.completed);
   flowCompletedRef.current = flow.completed;
   const handleBulkRevealSubtreeRef = React.useRef(flow.handleBulkRevealSubtree);
@@ -204,7 +185,7 @@ React.useEffect(() => {
   handleBulkRevealDirectChildrenRef.current = flow.handleBulkRevealDirectChildren;
 
   const handleShortcutFlipSubtree = React.useCallback((): boolean => {
-    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) {
+    if (isInlineEditModeRef.current || flowCompletedRef.current) {
       return false;
     }
     if (isBlockingDialogOpen()) return false;
@@ -213,7 +194,7 @@ React.useEffect(() => {
   }, []);
 
   const handleShortcutFlipDirectChildren = React.useCallback((): boolean => {
-    if (isInlineEditModeRef.current || ratingModeRef.current || flowCompletedRef.current) {
+    if (isInlineEditModeRef.current || flowCompletedRef.current) {
       return false;
     }
     if (isBlockingDialogOpen()) return false;
@@ -266,11 +247,8 @@ React.useEffect(() => {
   const handleSpacePourRef = React.useRef(flow.handleSpacePour)
   handleSpacePourRef.current = flow.handleSpacePour
 
-  // Keep rating mode after settlement so the learner can undo/re-rate mistakes
-  // and re-run 结算 without leaving the page.
-  const canUseRatingMode = Boolean(palaceId && studySessionId && !isInlineEditMode)
   React.useEffect(() => {
-    if (canUseRatingMode || isInlineEditMode || !isCheckpointMode) return
+    if (isInlineEditMode || !isCheckpointMode) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || (event.key !== ' ' && event.code !== 'Space')) return
       if (isEditableKeyboardTarget(event.target)) return
@@ -280,10 +258,10 @@ React.useEffect(() => {
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [canUseRatingMode, isCheckpointMode, isInlineEditMode])
+  }, [isCheckpointMode, isInlineEditMode])
 
   React.useEffect(() => {
-    if (canUseRatingMode || isInlineEditMode || isCheckpointMode) return
+    if (isInlineEditMode || isCheckpointMode) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key !== ' ' && event.code !== 'Space') return
@@ -294,34 +272,7 @@ React.useEffect(() => {
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [canUseRatingMode, handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode])
-
-  React.useEffect(() => {
-    if (!canUseRatingMode && ratingMode) setRatingMode(false)
-  }, [canUseRatingMode, ratingMode])
-
-  const handleToggleRatingMode = React.useCallback(() => {
-    if (!canUseRatingMode) return
-    setRatingMode((current) => {
-      const next = !current
-      toast.success(next ? '已进入评分模式，点击节点即可评分' : '已退出评分模式')
-      return next
-    })
-  }, [canUseRatingMode])
-
-  React.useEffect(() => {
-    if (!canUseRatingMode) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-      if (event.key !== ' ' && event.code !== 'Space') return
-      if (isEditableKeyboardTarget(event.target) || isBlockingDialogOpen(event.target)) return
-      event.preventDefault()
-      event.stopPropagation()
-      handleToggleRatingMode()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [canUseRatingMode, handleToggleRatingMode])
+  }, [handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode])
 
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
@@ -431,15 +382,10 @@ React.useEffect(() => {
     handleToggleFeedbackAnimation,
     handleToggleFeedbackSurprise,
     handleShortcutAdvanceReview,
-    recallRatings,
-    ratingMode,
-    canUseRatingMode,
-    handleToggleRatingMode,
   };
 }
 
 export type MindMapReviewFlowController = ReturnType<
   typeof useMindMapReviewFlowController
 >;
-
 

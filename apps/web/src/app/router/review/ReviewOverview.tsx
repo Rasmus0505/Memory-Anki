@@ -1,287 +1,122 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowDownUp, ArrowRight, Brain, CalendarClock, Zap } from 'lucide-react'
-import type { ReviewQueueResponse } from '@/shared/api/contracts'
-import { getChapterReviewQueueApi, getReviewQueueApi, startReviewSessionApi, startReviewWaveSessionApi } from '@/modules/practice/public'
-import { ConsolidateCard } from '@/modules/practice/ui/review/components/ConsolidateCard'
+import { useNavigate } from 'react-router-dom'
+import { CalendarClock, Layers3 } from 'lucide-react'
 import {
-  DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
-  isReviewQueueSortMode,
-  isReviewQueueViewSettings,
-  REVIEW_QUEUE_SORT_OPTIONS,
-  REVIEW_QUEUE_VIEW_SETTINGS_KEY,
-  sortReviewQueueItems,
-  type ReviewQueueSortMode,
-  type ReviewQueueViewSettings,
+  getDueReviewUnitsApi,
+  startUnitReviewSessionApi,
+  type ReviewUnitDto,
 } from '@/modules/practice/public'
 import { buildReviewSessionPath } from '@/modules/memory/public'
-import { formatDuration } from '@/modules/session/public'
+import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/state-placeholders'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select'
-import { ReviewLoadCalendar, TodayPlanCard } from '@/modules/practice/public'
-import { ReviewEntryTooltip } from '@/modules/memory/public'
-import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
-import { useLocalStorageState } from '@/shared/lib/localStorage'
-import { cn } from '@/shared/lib/utils'
 
-function formatReviewTime(value?: string | null) {
-  if (!value) return '现在'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+interface PalaceDueGroup {
+  palaceId: number
+  palaceTitle: string
+  units: ReviewUnitDto[]
 }
 
-function entryButtonClass(mode?: string | null) {
-  if (mode === 'node') {
-    return 'border-warning bg-warning text-white hover:bg-warning/80'
+export function groupDueUnitsByPalace(units: ReviewUnitDto[]): PalaceDueGroup[] {
+  const groups = new Map<number, ReviewUnitDto[]>()
+  for (const unit of units) {
+    const current = groups.get(unit.palace_id) ?? []
+    current.push(unit)
+    groups.set(unit.palace_id, current)
   }
-  return undefined
-}
-
-function entryButtonLabel(mode?: string | null, fallback = '开始复习') {
-  if (mode === 'node') return '节点复习'
-  if (mode === 'palace') return '开始复习'
-  return fallback
+  return [...groups.entries()]
+    .map(([palaceId, palaceUnits]) => ({
+      palaceId,
+      palaceTitle: palaceUnits[0]?.palace_title || `宫殿 #${palaceId}`,
+      units: palaceUnits.sort((left, right) => left.due_date.localeCompare(right.due_date)),
+    }))
+    .sort((left, right) => left.units[0].due_date.localeCompare(right.units[0].due_date))
 }
 
 export default function ReviewOverview() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const rawChapterId = searchParams.get('chapterId')
-  const chapterId = rawChapterId ? Number(rawChapterId) : null
-  const [queue, setQueue] = useState<ReviewQueueResponse | null>(null)
+  const [units, setUnits] = useState<ReviewUnitDto[] | null>(null)
+  const [startingPalaceId, setStartingPalaceId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [startingWaveId, setStartingWaveId] = useState<string | null>(null)
-  const [startingBatchKey, setStartingBatchKey] = useState<string | null>(null)
-  const [viewSettings, setViewSettings] = useLocalStorageState<ReviewQueueViewSettings>(
-    REVIEW_QUEUE_VIEW_SETTINGS_KEY,
-    DEFAULT_REVIEW_QUEUE_VIEW_SETTINGS,
-    isReviewQueueViewSettings,
-    'review_queue_view_settings',
-  )
-  const sortMode = viewSettings.sortMode
 
   useEffect(() => {
     let active = true
-    const request = chapterId ? getChapterReviewQueueApi(chapterId) : getReviewQueueApi()
-    void request.then((result) => { if (active) setQueue(result) }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : '加载复习队列失败') })
-    return () => { active = false }
-  }, [chapterId])
-
-  const sortedReviews = useMemo(
-    () => (queue ? sortReviewQueueItems(queue.reviews, sortMode) : []),
-    [queue, sortMode],
-  )
-  const sortedLaterToday = useMemo(
-    () => (queue ? sortReviewQueueItems(queue.later_today_reviews, sortMode) : []),
-    [queue, sortMode],
-  )
-
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <InsightsSectionNav />
-        <ErrorState title="复习队列加载失败" description={error} />
-      </div>
-    )
-  }
-  if (!queue) {
-    return (
-      <div className="space-y-4">
-        <InsightsSectionNav />
-        <LoadingState text="正在读取 FSRS 到期节点…" />
-      </div>
-    )
-  }
-
-  const handleSortChange = (value: string) => {
-    if (!isReviewQueueSortMode(value)) return
-    setViewSettings({ sortMode: value as ReviewQueueSortMode })
-  }
-
-  const handleStartBatch = async (review: ReviewQueueResponse['reviews'][number]) => {
-    const batchKey = review.batch_key ?? String(review.palace_id)
-    setStartingBatchKey(batchKey)
-    try {
-      const session = await startReviewSessionApi(review.palace_id, {
-        entry_mode: review.review_entry_mode === 'node' ? 'node' : 'palace',
-        scope_node_uids: review.batch_due_node_uids,
+    void getDueReviewUnitsApi()
+      .then((items) => {
+        if (active) setUnits(items)
       })
-      navigate(buildReviewSessionPath(session.id, chapterId))
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '无法开始本批复习')
-    } finally {
-      setStartingBatchKey(null)
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : '加载单元复习队列失败')
+      })
+    return () => {
+      active = false
     }
-  }
+  }, [])
 
-  const handleStartReinforcement = async (waveId: string) => {
-    setStartingWaveId(waveId)
+  const groups = useMemo(() => groupDueUnitsByPalace(units ?? []), [units])
+
+  async function start(palaceId: number) {
+    setStartingPalaceId(palaceId)
+    setError(null)
     try {
-      const session = await startReviewWaveSessionApi(waveId)
+      const session = await startUnitReviewSessionApi(palaceId)
       navigate(buildReviewSessionPath(session.id))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '无法开始本轮补刷')
+      setError(reason instanceof Error ? reason.message : '创建单元复习会话失败')
     } finally {
-      setStartingWaveId(null)
+      setStartingPalaceId(null)
     }
   }
+
+  if (error && !units) return <ErrorState title="复习队列加载失败" description={error} />
+  if (!units) return <LoadingState text="正在读取到期复习单元…" />
 
   return (
     <div className="space-y-5">
       <InsightsSectionNav />
       <PageIntro
-        eyebrow="FSRS"
-        title={chapterId ? '章节复习' : '今日复习'}
-        description="默认按最早到期排列（拖最久的优先）；可在队列标题旁切换节点数、逾期数或名称排序。"
-        compact
+        eyebrow="永久标记单元"
+        title="复习安排"
+        description="每座宫殿按永久标记边界切分；困难或忘记的单元会留在本轮继续重练。"
       />
-      {!chapterId ? <><TodayPlanCard /><ConsolidateCard /></> : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">当前到期节点</div><b className="text-2xl">{queue.due_count}</b></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">逾期节点</div><b className="text-2xl">{queue.overdue_count}</b></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">本周复习时长</div><b className="text-2xl">{formatDuration(queue.stats.review_duration_seconds)}</b></CardContent></Card>
-      </div>
-      {queue.reinforcement_waves?.length ? (
-        <Card className="border-warning/35 bg-warning/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="size-5 text-warning" />
-              本轮补刷（{queue.reinforcement_waves.reduce((sum, wave) => sum + (wave.pending_count ?? wave.item_count), 0)} 个节点）
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {queue.reinforcement_waves.map((wave) => (
-              <div key={wave.id} className="flex items-center justify-between gap-4 rounded-2xl border border-warning/25 bg-background/80 px-4 py-4">
-                <div>
-                  <div className="font-semibold">{wave.palace_title || '未命名宫殿'}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    忘记/困难后的队尾补刷 · 待复习 {wave.pending_count ?? wave.item_count} 张
-                  </div>
+      {error ? <ErrorState title="无法开始复习" description={error} /> : null}
+      {groups.length === 0 ? (
+        <EmptyState
+          icon={<CalendarClock className="size-8" />}
+          title="当前没有到期单元"
+          description="没有永久标记的宫殿不会进入这里；请先在知识书架完成标记。"
+        />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {groups.map((group) => (
+            <Card key={group.palaceId}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Layers3 className="size-5 text-primary" />
+                  {group.palaceTitle}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-sm text-muted-foreground">
+                  {group.units.length} 个到期单元 · 最早 {group.units[0].due_date}
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={startingWaveId === wave.id}
-                  onClick={() => void handleStartReinforcement(wave.id)}
-                >
-                  {startingWaveId === wave.id ? '正在进入…' : '开始补刷'}
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2">
-              <Brain className="size-5 text-primary" />
-              现在到期（{queue.due_count} 个节点）
-            </span>
-            <label className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
-              <ArrowDownUp className="size-4 shrink-0" aria-hidden />
-              <span className="sr-only sm:not-sr-only sm:inline">排列</span>
-              <Select value={sortMode} onValueChange={handleSortChange}>
-                <SelectTrigger
-                  className="h-8 w-[11.5rem] bg-background"
-                  aria-label="复习队列排序"
-                  data-testid="review-queue-sort"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {REVIEW_QUEUE_SORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} title={option.description}>
-                      {option.label}
-                    </SelectItem>
+                <div className="flex flex-wrap gap-2">
+                  {group.units.map((unit) => (
+                    <span key={unit.id} className="rounded-md border bg-muted/30 px-2 py-1 text-xs">
+                      {unit.title || '剩余水流单元'}
+                    </span>
                   ))}
-                </SelectContent>
-              </Select>
-            </label>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {sortedReviews.length ? sortedReviews.map((review) => {
-            const mode = review.review_entry_mode
-            const label = entryButtonLabel(mode, review.review_entry_label ?? '开始复习')
-            return (
-              <div key={review.batch_key ?? `${review.palace_id}:${review.next_due_at ?? review.due_at}`}>
-                <div className="flex items-center justify-between gap-4 rounded-2xl border bg-background/80 px-4 py-4 transition hover:border-primary/35">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="font-semibold">{review.palace?.title || '未命名宫殿'}</div>
-                      <span className="rounded-full border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        今日第 {(review.today_review_count ?? 0) + 1} 次
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      到期 {review.due_node_count} · 逾期 {review.overdue_node_count} · 最早 {formatReviewTime(review.next_due_at ?? review.due_at)}
-                    </div>
-                  </div>
-                  <ReviewEntryTooltip
-                    branches={review.review_branch_summaries}
-                    nextReviewAt={review.next_due_at ?? review.due_at}
-                    dueNodeCount={review.due_node_count}
-                    entryMode={mode === 'none' ? null : mode}
-                  >
-                    <Button size="sm" className={cn(entryButtonClass(mode))} disabled={startingBatchKey === (review.batch_key ?? String(review.palace_id))} onClick={() => void handleStartBatch(review)}>
-                      {startingBatchKey === (review.batch_key ?? String(review.palace_id)) ? '正在进入…' : label}
-                      <ArrowRight className="ml-2 size-4" />
-                    </Button>
-                  </ReviewEntryTooltip>
                 </div>
-              </div>
-            )
-          }) : <EmptyState variant="review" title="今天没有到期的正式复习" description="有节点到期时，FSRS 会自动将宫殿加入这里。" />}
-        </CardContent>
-      </Card>
-      {sortedLaterToday.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="size-5 text-warning" />
-              今日稍后到期（{queue.later_today_count} 个节点）
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {sortedLaterToday.map((review) => (
-              <div key={review.batch_key ?? `${review.palace_id}:${review.next_due_at ?? review.due_at}`}>
-                <div className="flex items-center justify-between rounded-2xl border border-warning/25 bg-warning/5 px-4 py-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <b>{review.palace?.title || '未命名宫殿'}</b>
-                      <span className="rounded-full border bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        今日第 {(review.today_review_count ?? 0) + 1} 次
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatReviewTime(review.next_due_at ?? review.due_at)} · {review.due_node_count} 个节点
-                    </div>
-                  </div>
-                  <ReviewEntryTooltip
-                    branches={review.review_branch_summaries}
-                    nextReviewAt={review.next_due_at ?? review.due_at}
-                    dueNodeCount={0}
-                    entryMode={review.review_entry_mode === 'none' ? null : review.review_entry_mode}
-                  >
-                    <Button size="sm" variant="outline" disabled={startingBatchKey === (review.batch_key ?? String(review.palace_id))} onClick={() => void handleStartBatch(review)}>提前复习</Button>
-                  </ReviewEntryTooltip>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-      {!chapterId ? <ReviewLoadCalendar /> : null}
+                <Button className="w-full" disabled={startingPalaceId === group.palaceId} onClick={() => void start(group.palaceId)}>
+                  {startingPalaceId === group.palaceId ? '正在创建会话…' : '立即复习'}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

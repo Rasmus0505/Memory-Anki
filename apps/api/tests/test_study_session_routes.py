@@ -110,7 +110,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-review",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=1),
@@ -130,7 +130,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-negative",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=3),
@@ -140,7 +140,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-active",
                         status="active",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=4),
@@ -149,7 +149,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-deleted",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         started_at=today_start + timedelta(hours=5),
@@ -192,7 +192,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-recovered-review",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         title="Recovered formal review",
@@ -203,7 +203,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-same-day-review",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         title="Same-day formal review",
@@ -214,7 +214,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="stats-still-active-old",
                         status="active",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="palace",
                         palace_id=self.palace_id,
                         title="Still active",
@@ -450,7 +450,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="analytics-review",
                         status="completed",
-                        scene="segment_review",
+                        scene="formal_unit_review",
                         target_type="none",
                         title="Review",
                         # Started earlier, finished two days ago → count on end day.
@@ -461,7 +461,7 @@ class StudySessionRouteTests(RouterTestCase):
                     StudySession(
                         id="analytics-recovered-today",
                         status="completed",
-                        scene="review",
+                        scene="formal_unit_review",
                         target_type="none",
                         title="Recovered today",
                         started_at=today_start - timedelta(days=3),

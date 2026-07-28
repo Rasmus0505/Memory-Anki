@@ -24,7 +24,6 @@ interface PalaceMeta {
   id: number
   title: string
   description: string
-  mastered: boolean
   attachments: Array<{ id: number; original_name: string }>
   chapters: Array<{ id: number; name: string; subject?: { id: number; name: string } | null }>
 }
@@ -230,7 +229,6 @@ export default function PalaceView() {
               <CardTitle className="text-base">概要</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              {palace.mastered ? <Badge variant="secondary">已掌握</Badge> : null}
               <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
                 {palace.description || '当前宫殿没有补充描述。'}
               </div>

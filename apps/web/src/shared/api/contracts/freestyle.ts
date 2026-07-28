@@ -3,14 +3,12 @@ import type { PalaceQuizQuestion, PalaceQuizQuestionType } from './quiz'
 export type FreestyleRange =
   | 'all'
   | 'due'
-  | 'needs_practice'
   | 'specific_palaces'
   | 'wrong'
 
 export type FreestyleContentType =
   | 'quiz_question'
   | 'review'
-  | 'practice'
   | 'english'
   | 'english_reading'
 
@@ -20,16 +18,7 @@ export type FreestyleDuePolicy =
   | 'all_content_due_weighted'
 
 /** Mutually exclusive freestyle progress buckets (multi-select). */
-export type FreestyleProgressScope =
-  | 'overdue'
-  | 'due'
-  | 'calendar_today'
-  | 'reinforcement'
-  | 'new'
-
 export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces'
-
-export type FreestyleWithinPalaceOrder = 'tree_order' | 'deterministic_shuffle'
 
 /** How palace-side cards and quiz cards are ordered relative to each other. */
 export type FreestyleMixMode =
@@ -79,27 +68,15 @@ export interface FreestyleFeedConfig {
   /** How quizzes bound to nodes are placed relative to units. */
   bound_quiz_placement: FreestyleBoundQuizPlacement
   palace_order: FreestylePalaceOrder
-  within_palace_order: FreestyleWithinPalaceOrder
   /**
    * Which quiz pool fills the queue after priority/due selection.
    * No longer controls map-vs-quiz interleave (see mix_mode).
    */
   due_policy: FreestyleDuePolicy
-  node_limit: number
   queue_length: number
   specific_palace_ids: number[]
   question_type: FreestyleQuestionTypeFilter
   weak_quiz_priority: boolean
-  /**
-   * Which memory progress buckets enter freestyle mind-map units.
-   * Multi-select: overdue / due / calendar_today / reinforcement / new.
-   */
-  progress_scopes: FreestyleProgressScope[]
-  /**
-   * Derived mirror of progress_scopes including calendar_today.
-   * Kept for older clients; prefer progress_scopes.
-   */
-  include_calendar_today_due: boolean
   seed: number
 }
 
@@ -110,34 +87,42 @@ export interface FreestyleContextPathItem {
 
 export type FreestyleMindMapPresentation = 'palace' | 'anki'
 
-export interface FreestyleMindMapBranchCard {
+interface FreestylePalaceCardBase {
   id: string
-  type: 'mindmap_branch' | 'anki_card'
-  content_type: 'mindmap_branch' | 'anki_card'
-  /** How the freestyle card should render: palace flip vs Anki front/back. */
-  presentation?: FreestyleMindMapPresentation
   palace_id: number
   palace_title?: string
-  branch_uid: string
+  anchor_uid: string
   context_path: FreestyleContextPathItem[]
-  ratable_node_uids: string[]
-  due_node_uids: string[]
-  /** Anki: front node uid when presentation is anki. */
-  anki_front_uid?: string
-  /** Anki: back node uids for multi-placeholder reveal. */
-  anki_back_uids?: string[]
+  node_uids: string[]
   node_count: number
-  over_limit_delta: number
-  due_node_count?: number
-  selection_reason?: string
   phase?: string
   palace_context?: FreestylePalaceContext | null
 }
 
+export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
+  type: 'mindmap_branch'
+  content_type: 'mindmap_branch'
+  presentation?: 'palace'
+  unit_id: string
+  unit_revision: number
+}
+
+export interface FreestyleAnkiCard extends FreestylePalaceCardBase {
+  type: 'anki_card'
+  content_type: 'anki_card'
+  presentation: 'anki'
+  unit_id?: never
+  unit_revision?: never
+  /** Anki: front node uid when presentation is anki. */
+  anki_front_uid?: string
+  /** Anki: back node uids for multi-placeholder reveal. */
+  anki_back_uids?: string[]
+}
+
+export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard | FreestyleAnkiCard
+
 export type FreestyleActionKind =
   | 'review'
-  | 'practice'
-  | 'segment_practice'
   | 'english'
   | 'english_reading'
 
@@ -164,7 +149,6 @@ export interface FreestylePalaceContext {
   } | null
   primary_chapter?: FreestyleChapterContext | null
   parent_chapter?: FreestyleChapterContext | null
-  needs_practice?: boolean
 }
 
 export interface FreestyleSegmentContext {
@@ -172,7 +156,6 @@ export interface FreestyleSegmentContext {
   palace_id: number
   name: string
   sort_order?: number
-  needs_practice?: boolean
 }
 
 export interface FreestyleQuizCard {

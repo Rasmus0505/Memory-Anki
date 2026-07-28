@@ -1,8 +1,6 @@
 import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { AiLearningWorkbench } from "./AiLearningWorkbench";
-import { QuickSettleHoldButton } from "./QuickSettleHoldButton";
-import { PalaceCalibrationDrawer } from "@/modules/practice/public";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
@@ -22,8 +20,6 @@ import { getReviewFeedbackEffectiveVolume } from "@/shared/feedback/reviewFeedba
 import { toast } from "@/shared/feedback/toast";
 import { cn } from "@/shared/lib/utils";
 import * as React from "react";
-import type { MindMapRecallRating, MindMapRecallRound } from "@/shared/api/contracts";
-import type { RatingConflictPolicy } from "@/modules/practice/public";
 
 export type { ReviewFlowSnapshot } from "@/modules/memory/public";
 export type {
@@ -58,7 +54,6 @@ export function MindMapReviewFlow({
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
   const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = React.useState(0);
-  const [calibrationOpen, setCalibrationOpen] = React.useState(false);
   const flipShortcutScene =
     props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
   // Badge counts must use the full palace mindmap (not the flip-reveal visible
@@ -68,7 +63,6 @@ export function MindMapReviewFlow({
   const editorDocForBindings =
     (
       props.editEditorState ??
-      props.ratingTreeEditorState ??
       props.reviewEditorState ??
       review.mapEditorState ??
       review.flow.visibleEditorState
@@ -115,10 +109,6 @@ export function MindMapReviewFlow({
       modeToggleLabels={props.modeToggleLabels}
       visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
       editableEditorState={props.editEditorState}
-      ratingTreeEditorState={
-        // Prefer the explicit full rating tree over reveal-filtered visible state.
-        props.ratingTreeEditorState ?? props.editEditorState ?? props.reviewEditorState
-      }
       visibleEditorSyncKey={review.mapVisibleSyncKey}
       currentPalaceId={props.palaceId}
       reviewFxSignal={review.flow.feedback.reviewFxSignal}
@@ -140,65 +130,6 @@ export function MindMapReviewFlow({
       onQuizBreakOpen={review.handleQuizBreakOpen}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
       onCountBadgeClick={handleOpenNodeQuiz}
-      // Always merge first + weak_retry so entering the retry round
-      // never blanks already-scored chips (记得/困难/轻松).
-      recallRatings={review.recallRatings.displayRatings}
-      recallRound={review.recallRatings.round}
-      weakNodeUids={review.recallRatings.weakNodeUids}
-      directRatedUids={review.recallRatings.directRatedUids}
-      sessionRatedUids={review.recallRatings.sessionRatedUids}
-      rateableNodeUids={
-        // Explicit scope (formal frozen due / freestyle unit) only soft-dims
-        // non-due cards. Any non-root node remains rateable.
-        // Unscoped practice keeps full opacity (null).
-        Array.isArray(props.reviewScopeNodeUids) &&
-        props.reviewScopeNodeUids.length > 0
-          ? review.reviewNodeUids
-          : props.sessionKind === 'review' && review.reviewNodeUids.length > 0
-            ? review.reviewNodeUids
-            : null
-      }
-      onRateNode={
-        props.studySessionId
-          ? (
-              nodeUid: string,
-              rating: MindMapRecallRating,
-              round: MindMapRecallRound,
-              scope?: 'single' | 'subtree' | 'bulk_mark',
-              evidence?: {
-                source?: 'manual' | 'inferred'
-                confidence?: number | null
-                responseMs?: number | null
-              },
-              conflictPolicy?: RatingConflictPolicy,
-              cascadeNodeUids?: string[],
-            ) => {
-              void review.recallRatings
-                .rateNode(
-                  nodeUid,
-                  rating,
-                  round,
-                  scope,
-                  evidence,
-                  conflictPolicy,
-                  cascadeNodeUids,
-                )
-                .catch((error: unknown) => {
-                  toast.error(
-                    error instanceof Error && error.message
-                      ? error.message
-                      : '节点评分保存失败',
-                  )
-                })
-            }
-          : undefined
-      }
-      onUndoRating={props.studySessionId ? review.recallRatings.undoLastRating : undefined}
-      onOpenPalaceCalibration={
-        props.palaceId ? () => setCalibrationOpen(true) : undefined
-      }
-      ratingMode={review.ratingMode}
-      onToggleRatingMode={review.canUseRatingMode ? review.handleToggleRatingMode : undefined}
     />
   );
 
@@ -208,13 +139,12 @@ export function MindMapReviewFlow({
       onOpenChange={setAiWorkbenchOpen}
       title={props.title}
       palaceId={props.palaceId}
-      reviewSessionId={props.studySessionId ? Number(props.studySessionId) : null}
+      reviewSessionId={null}
       editorState={review.mapEditorState ?? review.flow.visibleEditorState}
       sourceRevision={(review.mapEditorState ?? review.flow.visibleEditorState).editor_fingerprint ?? String(modeSyncVersion)}
       activeNodeUid={review.selectedNodeUid}
       reviewNodeUids={review.reviewNodeUids}
       redNodeUids={[...review.flow.redNodeIds]}
-      ratings={new Map([...review.recallRatings.firstRatings, ...review.recallRatings.retryRatings])}
       fullscreen={review.flow.fullscreen}
     />
   );
@@ -319,42 +249,21 @@ export function MindMapReviewFlow({
               >
                 <Bot className="size-4" />
               </Button>
-              {props.onQuickSettle ? (
-                <QuickSettleHoldButton
-                  disabled={
-                    submitting ||
-                    review.flow.feedback.completionCeremonyActive ||
-                    false
-                  }
-                  allClearReady={review.flow.feedback.allClearReady}
-                  className={review.completeButtonClassName}
-                  onComplete={() => {
-                    void review.flow.finishFlow("manual_complete");
-                  }}
-                  onQuickSettle={(rating) => {
-                    void review.flow.finishFlowWithPayload(
-                      "manual_complete",
-                      (payload) => props.onQuickSettle?.(rating, payload),
-                    );
-                  }}
-                />
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={submitting || review.flow.feedback.completionCeremonyActive || false}
-                  className={cn(
-                    "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
-                    review.completeButtonClassName,
-                  )}
-                  onClick={() => {
-                    void review.flow.finishFlow("manual_complete");
-                  }}
-                >
-                  <SquareCheckBig className="mr-1 size-3.5" />
-                  {review.flow.feedback.allClearReady ? "结算" : "完成"}
-                </Button>
-              )}
+              <Button
+                type="button"
+                size="sm"
+                disabled={submitting || review.flow.feedback.completionCeremonyActive}
+                className={cn(
+                  "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
+                  review.completeButtonClassName,
+                )}
+                onClick={() => {
+                  void review.flow.finishFlow("manual_complete");
+                }}
+              >
+                <SquareCheckBig className="mr-1 size-3.5" />
+                {review.flow.feedback.allClearReady ? "结算" : "完成"}
+              </Button>
             </div>
           ) : null}
           <div
@@ -535,15 +444,6 @@ export function MindMapReviewFlow({
       </div>
       )}
 
-      {props.palaceId ? (
-        <PalaceCalibrationDrawer
-          open={calibrationOpen}
-          onOpenChange={setCalibrationOpen}
-          palaceId={props.palaceId}
-          selectedNodeUid={review.selectedNodeUid}
-        />
-      ) : null}
-
       <NodeBoundQuizDialog
         open={nodeQuizOpen}
         onOpenChange={setNodeQuizOpen}
@@ -565,7 +465,6 @@ export function MindMapReviewFlow({
     </div>
   );
 }
-
 
 
 

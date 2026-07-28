@@ -13,7 +13,6 @@ const getRuntimeInfoApi = vi.fn()
 const prefetchPalaceSubjectShelfApi = vi.fn()
 const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
-const prefetchReviewQueueApi = vi.fn()
 const preloadPracticeRoutes = vi.fn()
 const preloadReviewRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
@@ -41,10 +40,6 @@ vi.mock('@/modules/content/domain/palace-entity/api', () => ({
 
 vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   prefetchDashboardApi: () => prefetchDashboardApi(),
-}))
-
-vi.mock('@/modules/practice/ui/review/api', () => ({
-  prefetchReviewQueueApi: () => prefetchReviewQueueApi(),
 }))
 
 vi.mock('@/app/router/appRoutes', () => ({
@@ -80,7 +75,6 @@ describe('AppShell', () => {
     prefetchPalaceSubjectShelfApi.mockClear()
     prefetchPalacesGroupedSummaryApi.mockClear()
     prefetchDashboardApi.mockClear()
-    prefetchReviewQueueApi.mockClear()
     preloadPracticeRoutes.mockClear()
     preloadReviewRoutes.mockClear()
     preloadEnglishWorkspacePage.mockClear()
@@ -371,7 +365,6 @@ describe('AppShell', () => {
       expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
       expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
       expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
-      expect(prefetchReviewQueueApi).toHaveBeenCalledTimes(1)
       expect(preloadPracticeRoutes).toHaveBeenCalledTimes(1)
       expect(preloadReviewRoutes).toHaveBeenCalledTimes(1)
       expect(preloadFreestylePage).toHaveBeenCalledTimes(1)

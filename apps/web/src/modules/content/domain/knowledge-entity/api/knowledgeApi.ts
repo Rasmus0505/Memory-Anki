@@ -34,11 +34,11 @@ export interface ChapterDetailResponse {
   palaces: Array<{
     id: number
     title: string
-    mastered: boolean
     archived: boolean
-    review_stage_completed: number
-    review_stage_total: number
-    next_due_date: string | null
+    review_status: 'marking_required' | 'due' | 'scheduled'
+    review_unit_count: number
+    due_review_unit_count: number
+    next_review_date: string | null
   }>
 }
 

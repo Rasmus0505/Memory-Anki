@@ -69,7 +69,7 @@ def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory
 
     assert body["due_count"] == 1
     assert body["reviews"][0]["palace_id"] == palace_id
-    assert body["reviews"][0]["due_unit_count"] == 1
+    assert body["reviews"][0]["node_count"] >= 1
     assert body["recent_palaces"][0]["title"] == "P1"
     assert body["today_new_palace_count"] == 1
 
@@ -81,7 +81,7 @@ def test_duration_month_mode_returns_selected_total(client, session_factory):
             StudySession(
                 id="session-1",
                 status="completed",
-                scene="review",
+                scene="formal_unit_review",
                 target_type="palace",
                 title="formal review",
                 started_at=now,

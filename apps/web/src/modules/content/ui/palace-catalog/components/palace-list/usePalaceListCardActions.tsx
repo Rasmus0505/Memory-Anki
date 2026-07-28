@@ -3,22 +3,19 @@ import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type {
   PalaceGroupedItem,
   PalaceGroupedListResponse,
-  PalaceSegmentSummary,
 } from '@/shared/api/contracts'
 import { deletePalaceApi } from '@/modules/content/domain/palace-entity/api'
 import { buildReviewSessionPath } from '@/modules/memory/public'
+import { startUnitReviewSessionApi } from '@/modules/practice/public'
 
 interface UsePalaceListCardActionsOptions {
-  allPalaces: PalaceGroupedItem[]
   fetchData: () => Promise<PalaceGroupedListResponse>
   navigate: (to: string) => void
-  prefetchReviewSession?: (reviewId: number) => void
 }
 
 export function usePalaceListCardActions({
   fetchData,
   navigate,
-  prefetchReviewSession,
 }: UsePalaceListCardActionsOptions) {
   const handleDelete = async (id: number, title: string) => {
     const confirmed = await appConfirm(
@@ -39,36 +36,22 @@ export function usePalaceListCardActions({
     }
   }
 
-  const handlePalaceReview = (palace: PalaceGroupedItem) => {
-    navigate(buildReviewSessionPath(palace.id))
-  }
-
-  const handleWarmPalaceReview = (palace: PalaceGroupedItem) => {
-    prefetchReviewSession?.(palace.id)
-  }
-
-  const handleSegmentReview = (segment: PalaceSegmentSummary) => {
-    if (segment.current_review_schedule_id) {
-      navigate(buildReviewSessionPath(segment.current_review_schedule_id))
+  const handlePalaceReview = async (palace: PalaceGroupedItem) => {
+    if (palace.review_status === 'marking_required') {
+      navigate(`/palaces/${palace.id}/edit?mode=permanent-mark`)
       return
     }
-    // Virtual default / whole-palace segment → formal FSRS by palace id.
-    navigate(buildReviewSessionPath(segment.palace_id))
-  }
-
-  const handleWarmSegmentReview = (segment: PalaceSegmentSummary) => {
-    if (segment.current_review_schedule_id) {
-      prefetchReviewSession?.(segment.current_review_schedule_id)
-      return
+    if (palace.review_status !== 'due') return
+    try {
+      const session = await startUnitReviewSessionApi(palace.id)
+      navigate(buildReviewSessionPath(session.id))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '创建单元复习会话失败')
     }
-    prefetchReviewSession?.(segment.palace_id)
   }
 
   return {
     onPalaceReview: (palace: PalaceGroupedItem) => void handlePalaceReview(palace),
-    onWarmPalaceReview: handleWarmPalaceReview,
-    onSegmentReview: (segment: PalaceSegmentSummary) => void handleSegmentReview(segment),
-    onWarmSegmentReview: handleWarmSegmentReview,
     onDelete: (id: number, title: string) => void handleDelete(id, title),
   }
 }

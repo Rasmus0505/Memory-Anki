@@ -70,7 +70,12 @@ function actionCard(
     id,
     type: 'action',
     content_type: contentType,
-    action_kind: contentType === 'practice' ? 'practice' : contentType === 'english' ? 'english' : contentType === 'english_reading' ? 'english_reading' : 'review',
+    action_kind:
+      contentType === 'english'
+        ? 'english'
+        : contentType === 'english_reading'
+          ? 'english_reading'
+          : 'review',
     title: id,
     subtitle: '',
     href: '/review/session/1',
@@ -280,7 +285,7 @@ describe('today training queue model', () => {
     window.localStorage.clear()
   })
 
-  it('orders due actions, due quiz, practice cards, then fill quiz', () => {
+  it('orders due actions, due quiz, then fill quiz', () => {
     const queue = buildTodayTrainingQueue(
       {
         dueCards: [
@@ -288,11 +293,7 @@ describe('today training queue model', () => {
           actionCard('due-low', 10),
           actionCard('due-high', 50),
         ],
-        practiceCards: [
-          quizCard(2, 'palace:2', 2),
-          actionCard('practice-action', 20, 'practice'),
-        ],
-        fillCards: [quizCard(3, 'palace:3', 3)],
+        fillCards: [quizCard(2, 'palace:2', 2), quizCard(3, 'palace:3', 3)],
       },
       DEFAULT_TODAY_TRAINING_CONFIG,
     )
@@ -301,7 +302,6 @@ describe('today training queue model', () => {
       'due-high',
       'due-low',
       'quiz:1',
-      'practice-action',
       'quiz:2',
       'quiz:3',
     ])
@@ -314,7 +314,6 @@ describe('today training queue model', () => {
     const queue = buildTodayTrainingQueue(
       {
         dueCards: [fillCards[0]],
-        practiceCards: [fillCards[0], fillCards[1]],
         fillCards,
       },
       DEFAULT_TODAY_TRAINING_CONFIG,
@@ -328,8 +327,7 @@ describe('today training queue model', () => {
     const restored = restoreTodayTrainingQueue(
       {
         dueCards: [quizCard(1, 'palace:1'), actionCard('due-review', 20)],
-        practiceCards: [quizCard(2, 'palace:2', 2)],
-        fillCards: [quizCard(3, 'palace:3', 3)],
+        fillCards: [quizCard(2, 'palace:2', 2), quizCard(3, 'palace:3', 3)],
       },
       ['quiz:3', 'missing-card', 'due-review', 'quiz:1', 'quiz:3'],
     )

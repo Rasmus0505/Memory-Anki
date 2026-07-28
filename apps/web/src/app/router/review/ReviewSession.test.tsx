@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeReviewSessionContainerSession } from '@/widgets/mindmap-review-flow/ReviewSessionContainer'
-import {
-  buildReviewEditorState,
-  buildReviewEyebrow,
-  buildReviewTitle,
-  toContainerSession,
-} from './ReviewSession'
-import type { ReviewScheduleSummary } from '@/shared/api/contracts'
+import { buildNextUnitQueue, buildUnitReviewEditorState } from './ReviewSession'
+import type { ReviewUnitDto, UnitReviewSessionDto } from '@/modules/practice/public'
 
 const fullDoc = {
   root: {
@@ -24,97 +18,45 @@ const fullDoc = {
   },
 }
 
-function baseSession(overrides: Partial<ReviewScheduleSummary> = {}): ReviewScheduleSummary {
+function baseSession(overrides: Partial<UnitReviewSessionDto> = {}): UnitReviewSessionDto {
   return {
     id: 'review-uuid',
     palace_id: 9,
-    algorithm_used: 'FSRS',
-    review_type: 'fsrs',
-    completed: false,
-    due_at: null,
-    due_node_count: 2,
-    overdue_node_count: 0,
-    schedule_count: 2,
-    overdue_schedule_count: 0,
-    next_due_date: '2026-01-01',
-    frozen_due_node_uids: ['branch-a', 'a1'],
-    review_entry_mode: 'node',
-    review_entry_label: '节点复习',
-    primary_branch_uid: 'branch-a',
-    primary_branch_title: 'Branch A',
+    title: '宫殿',
+    status: 'active',
+    pending_unit_count: 1,
+    completed_unit_count: 0,
+    units: [],
     palace: {
       id: 9,
       title: '宫殿',
-      description: '',
-      archived: false,
       editor_doc: fullDoc,
-      pegs: [],
-      attachments: [],
-      chapters: [],
     },
     ...overrides,
   }
 }
 
-describe('ReviewSession FSRS normalization', () => {
-  it('preserves the stable UUID and frozen due scope', () => {
-    const result = normalizeReviewSessionContainerSession({
-      id: 'review-uuid',
-      palace_id: 9,
-      algorithm_used: 'FSRS',
-      review_type: 'fsrs',
-      review_number: 0,
-      frozen_due_node_uids: ['a', 'b'],
-      due_node_count: 2,
-      palace: {
-        id: 9,
-        title: '宫殿',
-        description: '',
-        archived: false,
-        editor_doc: null,
-        pegs: [],
-        attachments: [],
-        chapters: [],
-      },
-    })
-    expect(result.id).toBe('review-uuid')
-    expect(result.frozen_due_node_uids).toEqual(['a', 'b'])
-    expect(result.due_node_count).toBe(2)
-  })
-
-  it('maps entry metadata through toContainerSession', () => {
-    const result = toContainerSession(baseSession())
-    expect(result.review_entry_mode).toBe('node')
-    expect(result.primary_branch_uid).toBe('branch-a')
-    expect(result.primary_branch_title).toBe('Branch A')
-    expect(result.frozen_due_node_uids).toEqual(['branch-a', 'a1'])
-  })
-
-  it('keeps the full palace document in node mode (only due cards need manual flip)', () => {
-    const session = toContainerSession(baseSession())
-    const editorState = buildReviewEditorState(session)
+describe('ReviewSession unit behavior', () => {
+  it('keeps the full palace document while unit membership controls rating scope', () => {
+    const editorState = buildUnitReviewEditorState(baseSession())
     const doc = editorState.editor_doc as typeof fullDoc
-    // Full tree remains visible context; frozen due scope controls flip targets, not clipping.
     expect(doc.root.children.map((child) => child.data.uid)).toEqual(['branch-a', 'branch-b'])
     expect(doc).toEqual(fullDoc)
   })
 
-  it('keeps the full document for palace mode', () => {
-    const session = toContainerSession(
-      baseSession({
-        review_entry_mode: 'palace',
-        primary_branch_uid: null,
-        primary_branch_title: null,
-        review_entry_label: '开始复习',
-      }),
-    )
-    const editorState = buildReviewEditorState(session)
-    expect(editorState.editor_doc).toEqual(fullDoc)
+  it('requeues failed units after at most three other units', () => {
+    const current = {
+      id: 'a',
+      session_status: 'retry',
+    } as ReviewUnitDto
+    expect(buildNextUnitQueue(['a', 'b', 'c', 'd', 'e'], current)).toEqual(['b', 'c', 'd', 'a', 'e'])
   })
 
-  it('labels node sessions with branch context', () => {
-    const session = toContainerSession(baseSession())
-    expect(buildReviewEyebrow(session)).toBe('节点复习')
-    expect(buildReviewTitle(session)).toBe('宫殿 · Branch A')
+  it('requeues a single failed unit immediately', () => {
+    const current = {
+      id: 'a',
+      session_status: 'retry',
+    } as ReviewUnitDto
+    expect(buildNextUnitQueue(['a'], current)).toEqual(['a'])
   })
 })

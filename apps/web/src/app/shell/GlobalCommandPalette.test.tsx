@@ -13,10 +13,6 @@ vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   prefetchDashboardApi: vi.fn(),
 }))
 
-vi.mock('@/modules/practice/ui/review/api', () => ({
-  prefetchReviewQueueApi: vi.fn(),
-}))
-
 vi.mock('@/modules/search/public', () => ({
   globalSearchApi: vi.fn(),
 }))

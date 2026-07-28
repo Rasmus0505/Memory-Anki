@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { FreestyleMindMapBranchCard, MindMapEditorState, MindMapRecallRating } from '@/shared/api/contracts'
+import type { FreestyleAnkiCard, MindMapEditorState } from '@/shared/api/contracts'
 import {
   collectAnkiCards,
   parseMindMapDocument,
@@ -11,7 +11,9 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { cn } from '@/shared/lib/utils'
 import { Button } from '@/shared/components/ui/button'
 
-const RATING_OPTIONS: Array<{ rating: MindMapRecallRating; label: string; className: string }> = [
+export type FreestyleAnkiRating = 1 | 2 | 3 | 4
+
+const RATING_OPTIONS: Array<{ rating: FreestyleAnkiRating; label: string; className: string }> = [
   { rating: 1, label: '忘记', className: 'bg-rose-600 hover:bg-rose-500 text-white' },
   { rating: 2, label: '困难', className: 'bg-amber-600 hover:bg-amber-500 text-white' },
   { rating: 3, label: '记得', className: 'bg-emerald-600 hover:bg-emerald-500 text-white' },
@@ -54,10 +56,10 @@ function nodeTextMap(editorState: MindMapEditorState | null): Record<string, str
 }
 
 function resolveAnkiBinding(
-  card: FreestyleMindMapBranchCard,
+  card: FreestyleAnkiCard,
   editorState: MindMapEditorState | null,
 ) {
-  const frontUid = card.anki_front_uid || card.branch_uid
+  const frontUid = card.anki_front_uid || card.anchor_uid
   let backUids = card.anki_back_uids || []
   if ((!backUids.length || !frontUid) && editorState?.editor_doc) {
     const doc = parseMindMapDocument(editorState.editor_doc)
@@ -81,13 +83,13 @@ export function FreestyleAnkiFlipPanel({
   onRateGroup,
   onRateSingle,
 }: {
-  card: FreestyleMindMapBranchCard
+  card: FreestyleAnkiCard
   editorState: MindMapEditorState | null
   busy?: boolean
   /** Default: rate front + all backs with the same rating, then settle. */
-  onRateGroup: (rating: MindMapRecallRating) => void | Promise<void>
+  onRateGroup: (rating: FreestyleAnkiRating) => void | Promise<void>
   /** Optional single-node score (front or one back). */
-  onRateSingle: (rating: MindMapRecallRating, nodeUid: string) => void | Promise<void>
+  onRateSingle: (rating: FreestyleAnkiRating, nodeUid: string) => void | Promise<void>
 }) {
   const texts = useMemo(() => nodeTextMap(editorState), [editorState])
   const { frontUid, backUids } = useMemo(
@@ -117,14 +119,14 @@ export function FreestyleAnkiFlipPanel({
   }, [])
 
   const handleGroupRate = useCallback(
-    (rating: MindMapRecallRating) => {
+    (rating: FreestyleAnkiRating) => {
       void onRateGroup(rating)
     },
     [onRateGroup],
   )
 
   const handleSingleRate = useCallback(
-    (rating: MindMapRecallRating) => {
+    (rating: FreestyleAnkiRating) => {
       const target = focusUid || frontUid
       if (!target) return
       void onRateSingle(rating, target)

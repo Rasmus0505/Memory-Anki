@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/modules/content/ui/palace-catalog/PalaceListPage'
 import { PALACE_LIST_VIEW_SETTINGS_KEY } from '@/modules/settings/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
-import { updateClientPreferencesApi } from '@/modules/settings/public'
 import { buildPalaceCatalogGroupedQueryKey } from '@/modules/content/ui/palace-catalog/model/palaceCatalog'
 
 const navigate = vi.fn()
@@ -53,10 +52,7 @@ vi.mock('@/modules/content/domain/palace-segment-entity/api', () => ({
 vi.mock('@/modules/settings/public', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/settings/public')>()),
   getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
-  updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
 }))
-
-const mockUpdateClientPreferencesApi = vi.mocked(updateClientPreferencesApi)
 
 const duePalace = {
   id: 1,
@@ -65,15 +61,11 @@ const duePalace = {
   description: '',
   created_at: '2026-05-11T00:00:00',
   chapters: [],
-  mastered: false,
-  has_due_review: false,
-  current_review_schedule_id: null,
-  next_review_at: null,
-  review_stage_completed: 0,
-  review_stage_total: 9,
-  review_stage_progress: 0,
-  review_stages: [],
-  stage_labels: [],
+  review_status: 'due',
+  review_unit_count: 1,
+  due_review_unit_count: 1,
+  permanent_mark_count: 1,
+  next_review_date: '2026-05-11',
   title_mode: 'sync',
   manual_title: '',
   grouping_mode: 'auto',
@@ -112,6 +104,9 @@ const duePalace = {
 
 const reviewedPalace = {
   ...duePalace,
+  review_status: 'scheduled',
+  due_review_unit_count: 0,
+  next_review_date: '2026-05-18',
   segments: [
       {
         ...duePalace.segments[0],
@@ -161,7 +156,6 @@ describe('PalaceListPage', () => {
     searchParams.delete('uncategorized')
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
-    mockUpdateClientPreferencesApi.mockClear()
     getPalacesGroupedApi
       .mockResolvedValueOnce({
         groups: [],
@@ -202,7 +196,7 @@ describe('PalaceListPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders single-segment palaces in compact two-line mode without default segment label', async () => {
+  it('renders due unit status without retired segment progress', async () => {
     renderPalaceListPage()
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
@@ -212,23 +206,23 @@ describe('PalaceListPage', () => {
     // 选中书架时页面标题显示书架名（无书架时才回退为「记忆宫殿」）。
     expect(screen.getAllByRole('heading', { name: '中国近代史' }).length).toBeGreaterThan(0)
     expect(screen.queryByText('第 1 部分')).toBeNull()
-    expect(screen.getAllByText('预计 1分 40秒').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: /开始复习/ })).toBeTruthy()
+    expect(screen.queryByText(/预计 1分 40秒/)).toBeNull()
+    expect(screen.getByRole('button', { name: '立即复习' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
   it('refreshes palace cards when the catalog invalidation event fires', async () => {
     renderPalaceListPage()
 
-    expect(await screen.findByRole('button', { name: /开始复习/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '立即复习' })).toBeTruthy()
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
 
     await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.queryByRole('button', { name: /开始复习/ })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('button', { name: '立即复习' })).toBeNull())
     expect(queryClient.getQueryState(buildPalaceCatalogGroupedQueryKey({ subject_id: '1' }))?.dataUpdateCount).toBe(2)
   })
 
-  it('opens formal review sessions for virtual default palace progress', async () => {
+  it('opens permanent marking for an unmarked palace', async () => {
     getPalacesGroupedApi.mockReset()
     getPalacesGroupedApi.mockResolvedValue({
       groups: [],
@@ -242,16 +236,11 @@ describe('PalaceListPage', () => {
               palaces: [
                 {
                   ...duePalace,
-                  segments: [
-                    {
-                      ...duePalace.segments[0],
-                      id: 0,
-                      is_virtual_default: true,
-                      current_review_schedule_id: 88,
-                      has_due_review: true,
-                      active_review_progress: 0.5,
-                    },
-                  ],
+                  review_status: 'marking_required',
+                  review_unit_count: 0,
+                  due_review_unit_count: 0,
+                  permanent_mark_count: 0,
+                  next_review_date: null,
                 },
               ],
             },
@@ -263,11 +252,10 @@ describe('PalaceListPage', () => {
 
     renderPalaceListPage()
 
-    const startButton = await screen.findByRole('button', { name: /开始复习/ })
-    expect(screen.getByRole('progressbar', { name: '复习进度 50%' })).toBeTruthy()
+    const startButton = await screen.findByRole('button', { name: '开始标记' })
     fireEvent.click(startButton)
 
-    expect(navigate).toHaveBeenCalledWith('/review/session/88')
+    expect(navigate).toHaveBeenCalledWith('/palaces/1/edit?mode=permanent-mark')
   })
 
   it('defaults to chapter-double and keeps local view settings after switching', async () => {
@@ -282,14 +270,6 @@ describe('PalaceListPage', () => {
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')
     expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('compact')
     expect(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)).toBeNull()
-    await waitFor(() => {
-      expect(mockUpdateClientPreferencesApi).toHaveBeenLastCalledWith({
-        palace_list_view_settings: {
-          layoutMode: 'chapter-card-grid',
-          densityMode: 'compact',
-        },
-      })
-    })
   })
 
   it('clears search without dropping current subject context', async () => {

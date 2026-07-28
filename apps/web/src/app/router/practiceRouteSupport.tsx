@@ -30,12 +30,6 @@ interface PracticeCompletionResult {
   persistTimeRecord?: boolean
 }
 
-export interface PracticeStageTarget {
-  id: number
-  review_stage_total?: number | null
-  review_stage_completed?: number | null
-  current_review_schedule_id?: number | null
-}
 interface PracticeRouteSession<TData> {
   data: TData
   title: string
@@ -57,16 +51,12 @@ interface PracticeRouteConfig<TData, TSession> {
   renderBadge: (data: TData, hasResumeProgress: boolean) => ReactNode
   getFlowKey: (data: TData, resetVersion: number) => string
   getPersistKey: (data: TData) => string
-  completePractice?: (
+  completePractice: (
     data: TData,
     payload: CompleteFlowPayload,
     note: string,
     options: { mutationId: string },
   ) => Promise<PracticeCompletionResult | void>
-  getStageTarget?: (data: TData) => PracticeStageTarget
-  refreshStageTarget?: (data: TData) => Promise<PracticeRouteSession<TData>>
-  completeWithoutStage?: (data: TData, payload: CompleteFlowPayload, options: { mutationId: string }) => Promise<PracticeCompletionResult | void>
-  submitStage?: (data: TData, payload: CompleteFlowPayload, targetReviewNumber: number, needsPractice: boolean, note: string, options: { mutationId: string }) => Promise<PracticeCompletionResult | void>
   flowProps?: (data: TData) => Partial<MindMapReviewFlowProps>
   computeInitialSnapshot?: (
     session: PracticeRouteSession<TData>,
@@ -142,9 +132,9 @@ export function PracticeSessionRoute<TData, TSession>({
       return session
     },
     submit: async ({ target, input, payload, operationId }) => {
-      const result = config.completePractice
-        ? await config.completePractice(target.data, payload, input.note, { mutationId: operationId })
-        : await config.completeWithoutStage?.(target.data, payload, { mutationId: operationId })
+      const result = await config.completePractice(target.data, payload, input.note, {
+        mutationId: operationId,
+      })
       return { result: undefined, persistTimeRecord: resolvePersistTimeRecord(result) }
     },
     onCompleted: () => setHasResumeProgress(false),
@@ -182,7 +172,6 @@ export function PracticeSessionRoute<TData, TSession>({
         title={session.title}
         palaceId={session.palaceId}
         sessionKind="practice"
-        studySessionId={`practice:${session.palaceId}:${resetVersion}`}
         displayMode={displayMode}
         persistKey={config.getPersistKey(data)}
         reviewEditorState={session.reviewEditorState}

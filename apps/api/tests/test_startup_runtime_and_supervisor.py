@@ -95,7 +95,7 @@ class StartupModeTests(unittest.TestCase):
 
         log_exception.assert_called_once_with("startup warmup failed")
 
-    def test_startup_warmup_reads_node_due_index_without_stage_health_check(self):
+    def test_startup_warmup_reads_unit_due_index(self):
         from memory_anki.app import startup_warmup
 
         session = MagicMock()
@@ -110,8 +110,8 @@ class StartupModeTests(unittest.TestCase):
             startup_warmup.run_startup_warmup()
 
         executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
-        self.assertTrue(any("FROM review_node_states" in sql for sql in executed_sql))
-        self.assertTrue(all("review_schedules" not in sql for sql in executed_sql))
+        self.assertTrue(any("FROM review_unit_states" in sql for sql in executed_sql))
+        self.assertTrue(all("review_node_states" not in sql for sql in executed_sql))
         session.close.assert_called_once()
 
     def test_lifespan_does_not_start_warmup_in_healthcheck_mode(self):
@@ -133,16 +133,16 @@ class StartupModeTests(unittest.TestCase):
 
         asyncio.run(run_lifespan())
 
-    def test_study_startup_indexes_are_declared_on_review_node_state_table(self):
-        from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+    def test_study_startup_indexes_are_declared_on_review_unit_state_table(self):
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
         self.assertIn(
-            "ix_review_node_states_due",
-            {index.name for index in ReviewNodeState.__table__.indexes},
+            "ix_review_unit_states_due",
+            {index.name for index in ReviewUnitState.__table__.indexes},
         )
         self.assertIn(
-            "ix_review_node_states_palace_due",
-            {index.name for index in ReviewNodeState.__table__.indexes},
+            "ix_review_unit_states_palace",
+            {index.name for index in ReviewUnitState.__table__.indexes},
         )
 
 

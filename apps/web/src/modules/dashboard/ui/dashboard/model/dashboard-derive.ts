@@ -26,7 +26,7 @@ export const dashboardLearningLegend = [
 export type TodayTodoTone = 'destructive' | 'warning' | 'success'
 
 export interface TodayTodoBucket {
-  key: 'overdue' | 'today' | 'practice'
+  key: 'overdue' | 'today'
   label: string
   helper: string
   count: number
@@ -60,13 +60,9 @@ export const todayTodoToneClassName: Record<TodayTodoTone, {
 }
 
 export function buildTodayTodoBuckets(data: DashboardResponse): TodayTodoBucket[] {
-  const reviewOverdueCount = data.reviews.reduce(
-    (sum, review) => sum + Math.max(0, review.overdue_schedule_count ?? 0),
-    0,
-  )
+  const reviewOverdueCount = data.overdue_count ?? 0
   const dueNowCount = data.due_count ?? 0
   const dueLaterTodayCount = data.due_later_today_count ?? 0
-  const needsPracticeCount = data.needs_practice_count ?? 0
   const overdueCount = reviewOverdueCount > 0 ? reviewOverdueCount : dueNowCount
   const todayCount = Math.max(0, dueNowCount - overdueCount) + dueLaterTodayCount
 
@@ -84,13 +80,6 @@ export function buildTodayTodoBuckets(data: DashboardResponse): TodayTodoBucket[
       helper: '按时推进',
       count: todayCount,
       tone: 'warning',
-    },
-    {
-      key: 'practice',
-      label: '可选提前巩固',
-      helper: '状态维护',
-      count: needsPracticeCount,
-      tone: 'success',
     },
   ]
 }

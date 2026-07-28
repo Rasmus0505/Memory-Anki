@@ -26,18 +26,18 @@ Each facade is intentionally narrow: recent English course continuation, recent 
 
 `POST /api/v1/freestyle/queue/build` composes a finite immersive queue:
 
-- **Palaces facade**: stable tree structure, first-level branch units, node counts (`list_active_palace_tree_structures`, `stable_tree_order`, `subtree_node_uids`).
-- **Reviews facade**: node due sets and memory projections (`list_due_nodes`, `get_palace_memory_projection`); FSRS writes remain owned by Reviews.
+- **Palaces facade**: stable tree structure used only to render the complete palace and resolve context paths (`list_active_palace_tree_structures`).
+- **Reviews facade**: active permanent-mark units, stable membership, revision, stage, and due date (`get_palace_unit_projection`). Reviews owns all palace scheduling writes.
 - **Palace Quiz facade**: published questions, node bindings, mastery profiles (`list_published_questions_for_palaces`, `list_node_bindings_for_palaces`, `list_mastery_profiles_for_palaces` / `build_mastery_profile`).
 
-Branch units are complete single-rooted subtrees. Split from root children using a best-fit rule against `node_limit`: keep a parent when its size is closer to the limit than its children; recurse when any child is still over limit or a child is a better fit. When a parent is drilled into, it is folded into the first descendant unit's ratable set (never a size-1 residual card) so every non-root node remains in exactly one unit's ratable set. Wide flat branches (leaf-only children) stay as complete over-limit units — never truncate siblings. Context ancestors above the highest folded / unit root are header display-only for queue metadata. Queue building is seed-deterministic. Requests carry `operation_id`; clients ignore stale responses. The freestyle mind-map card clips to a real palace-root single-child spine + unit subtree (original titles; never a concatenated path-string root) and freezes due/rating focus with `scope_node_uids` / unit ratable UIDs. Formal due units settle like palace review (completion summary + FSRS dialog; submit only when frozen due nodes are fully rated).
+Practice does not split palace documents. It maps each Reviews projection to one revisioned queue card and uses the member UIDs only for highlighting and quiz binding. Queue requests carry `operation_id`; clients ignore stale responses. A due unit always keeps its palace review card even when standalone Anki cards are generated from nodes inside that unit. Anki and quiz cards never carry review-unit rating identity.
 
 Frontend ownership:
 
 - Domain/config/skip/refresh: `apps/web/src/modules/practice` via `public.ts`
 - Immersive page/widgets: `features/freestyle` + thin `pages/today/ImmersiveFreestylePage`
 - Primary nav first item is **随心** (`/freestyle`); legacy `/freestyle/session` redirects there
-- Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to FSRS
+- Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to palace unit scheduling
 
 ## Study Sessions
 
@@ -47,10 +47,6 @@ Cross-context session reads, review-session creation, and resumable progress ope
 
 Settings metrics consume backup catalog data through `backups.api`. This keeps Settings eligible for eventual platform ownership and prevents operational dashboards from binding to backup lifecycle implementation modules.
 
-## English Reading Vocabulary
+## Independent English FSRS
 
-Vocabulary scheduling consumes reusable review policy and schedule-draft capabilities through `reviews.api`. English Reading owns vocabulary notes; Reviews owns the scheduling policy. The vocabulary service must not import `reviews.application.schedule_policy` directly.
-
-## English Topic Patterns (句模)
-
-Pattern sentence FSRS scheduling also consumes reusable scheduler helpers through `reviews.api` (`build_scheduler`, `load_fsrs_settings`, `normalize_rating`). English owns topic patterns, prompts, and viewpoint sentences; Reviews owns the scheduling policy only. Pattern services must not import `reviews.application` internals.
+English owns the shared FSRS runtime behind `english.api`. English Reading vocabulary consumes that narrow public capability; both tracks remain independent FSRS cards. They do not share palace review-unit state and must not call palace unit rating commands.

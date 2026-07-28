@@ -15,24 +15,12 @@ export function getPracticeSessionProgressApi(id: number) {
   return getSessionProgressApi('practice', id)
 }
 
-export function getSegmentPracticeSessionProgressApi(id: number) {
-  return getSessionProgressApi('segment-practice', id)
-}
-
 export function savePracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
   return saveSessionProgressApi('practice', id, data, 'Save practice progress')
 }
 
 export function clearPracticeSessionProgressApi(id: number) {
   return clearSessionProgressApi('practice', id, 'Clear practice progress')
-}
-
-export function saveSegmentPracticeSessionProgressApi(id: number, data: SessionProgressPayload) {
-  return saveSessionProgressApi('segment-practice', id, data, 'Save segment practice progress')
-}
-
-export function clearSegmentPracticeSessionProgressApi(id: number) {
-  return clearSessionProgressApi('segment-practice', id, 'Clear segment practice progress')
 }
 
 export function getPalaceVersionsApi(id: number) {

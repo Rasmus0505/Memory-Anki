@@ -35,39 +35,26 @@ describe('freestyle feed config', () => {
   it('sanitizes bounds and re-enables empty content', () => {
     const config = sanitizeFreestyleFeedConfig({
       node_limit: 99,
+      progress_scopes: ['reinforcement'],
+      include_calendar_today_due: true,
+      within_palace_order: 'deterministic_shuffle',
       queue_length: 2,
       content: { mindmap_branch: false, quiz_question: false, anki_card: false },
       seed: 0,
     })
-    expect(config.node_limit).toBe(50)
     expect(config.queue_length).toBe(5)
     expect(config.seed).toBe(1)
     expect(config.content.mindmap_branch).toBe(true)
     expect(config.content.anki_card).toBe(true)
     expect(config.content.quiz_question).toBe(true)
+    expect(config).not.toHaveProperty('node_limit')
+    expect(config).not.toHaveProperty('progress_scopes')
+    expect(config).not.toHaveProperty('include_calendar_today_due')
+    expect(config).not.toHaveProperty('within_palace_order')
   })
 
   it('keeps defaults for empty input', () => {
     expect(sanitizeFreestyleFeedConfig(null)).toEqual(DEFAULT_FREESTYLE_FEED_CONFIG)
-  })
-
-  it('defaults progress_scopes and derives include_calendar_today_due', () => {
-    const empty = sanitizeFreestyleFeedConfig({})
-    expect(empty.progress_scopes).toEqual(['overdue', 'due', 'reinforcement', 'new'])
-    expect(empty.include_calendar_today_due).toBe(false)
-
-    const withCalendar = sanitizeFreestyleFeedConfig({ include_calendar_today_due: true })
-    expect(withCalendar.progress_scopes).toContain('calendar_today')
-    expect(withCalendar.include_calendar_today_due).toBe(true)
-
-    const onlyCalendar = sanitizeFreestyleFeedConfig({
-      progress_scopes: ['calendar_today'],
-    })
-    expect(onlyCalendar.progress_scopes).toEqual(['calendar_today'])
-    expect(onlyCalendar.include_calendar_today_due).toBe(true)
-
-    const emptyScopes = sanitizeFreestyleFeedConfig({ progress_scopes: [] })
-    expect(emptyScopes.progress_scopes).toEqual(['overdue', 'due', 'reinforcement', 'new'])
   })
 
   it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {
@@ -214,6 +201,37 @@ describe('freestyle queue skip rules', () => {
     expect(startNewRound({ ...sanitized, completedIds: ['a'] }).currentCardId).toBeNull()
   })
 
+  it('persists one stable unit encounter per card and clears it for a new round', () => {
+    const sanitized = sanitizeQueueState({
+      ...DEFAULT_QUEUE_STATE,
+      unitEncountersByCardId: {
+        'review-unit:a': {
+          encounterId: ' encounter-a ',
+          unitRevision: 4,
+          status: 'open',
+          sessionId: ' session-a ',
+          selectedRating: 3,
+          passed: true,
+          retryAfterCards: 9,
+        },
+        invalid: { encounterId: '', unitRevision: 0, status: 'broken' },
+      },
+    })
+
+    expect(sanitized.unitEncountersByCardId).toEqual({
+      'review-unit:a': {
+        encounterId: 'encounter-a',
+        unitRevision: 4,
+        status: 'open',
+        sessionId: 'session-a',
+        selectedRating: 3,
+        passed: true,
+        retryAfterCards: 3,
+      },
+    })
+    expect(startNewRound(sanitized).unitEncountersByCardId).toEqual({})
+  })
+
   it('resolveRebuildIndex resumes the persisted card after remount (no live viewport)', () => {
     const nextCards = [{ id: 'a' }, { id: 'b' }, { id: 'resume-me' }, { id: 'd' }]
     // Cold start / remount: no in-memory user card, only the saved currentCardId.
@@ -225,6 +243,17 @@ describe('freestyle queue skip rules', () => {
         fallbackIndex: 0,
       }),
     ).toBe(2)
+  })
+
+  it('falls back to the first available card when the persisted resume card is gone', () => {
+    expect(
+      resolveRebuildIndex({
+        nextCards: [{ id: 'new-first' }, { id: 'later' }],
+        preferCardId: 'removed-card',
+        userCardId: 'removed-card',
+        fallbackIndex: 0,
+      }),
+    ).toBe(0)
   })
 
   it('resolveRebuildIndex follows the user when they leave a just-finished card', () => {

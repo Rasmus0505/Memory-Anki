@@ -1,11 +1,21 @@
 import type { ChapterSummary, SubjectSummary } from './palace'
-import type { ReviewScheduleSummary } from './review'
+
+export interface DashboardReviewUnit {
+  id: string
+  palace_id: number
+  palace_title: string
+  unit_title: string
+  due_date: string
+  interval_days: number
+  node_count: number
+  overdue: boolean
+}
 
 export interface DashboardResponse {
   due_count: number
+  overdue_count: number
   due_later_today_count: number
-  needs_practice_count: number
-  reviews: ReviewScheduleSummary[]
+  reviews: DashboardReviewUnit[]
   stats: {
     total: number
     review_count: number

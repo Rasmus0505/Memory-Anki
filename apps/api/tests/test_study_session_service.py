@@ -5,11 +5,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db.models import Base, StudySession
+from memory_anki.modules.session.application.study_session_bridge import (
+    reclassify_ghost_formal_review_time_sessions,
+)
 from memory_anki.modules.session.application.study_session_service import (
     create_completed_study_session_from_time_payload,
     list_study_sessions,
     patch_study_session,
-    reclassify_ghost_formal_review_time_sessions,
     summarize_study_sessions_by_client_source,
 )
 

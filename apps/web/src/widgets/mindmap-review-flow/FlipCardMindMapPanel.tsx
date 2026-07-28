@@ -8,9 +8,8 @@ import {
   type MindMapPageToolbarProps,
   type MindMapSelection,
 } from '@/modules/content/public'
-import type { MindMapEditorState, MindMapRecallRating, MindMapRecallRound } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapReviewFxPayload } from '@/modules/content/public'
-import { listMindMapNodeMasteryApi } from '@/modules/content/public'
 import { cn } from '@/shared/lib/utils'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -22,13 +21,6 @@ import {
   getGuidedPath,
   toGuidedSelection,
 } from './flipCardGuidedModel'
-import { RatingSubtreeConflictOverlay } from './RatingSubtreeConflictOverlay'
-import { CardScheduleExplain } from '@/modules/practice/ui/review/components/CardScheduleExplain'
-import { useIntervalPreviews } from '@/modules/practice/ui/review/hooks/useIntervalPreviews'
-import {
-  useFlipCardRatingControls,
-  type FlipCardRateNodeHandler,
-} from './useFlipCardRatingControls'
 import { useMindMapEnglishMode } from './useMindMapEnglishMode'
 
 type FlipCardToolbarExtensions = Pick<
@@ -38,7 +30,6 @@ type FlipCardToolbarExtensions = Pick<
   | 'searchControl'
   | 'focusAction'
   | 'fitAction'
-  | 'ratingAction'
   | 'moreActions'
   | 'segmentControl'
   | 'importMindMapAction'
@@ -97,11 +88,6 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   }
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
-  /**
-   * Full palace document used only for rating scope / subtree cascade.
-   * Must not be the reveal-filtered visible tree, or unrevealed children are treated as leaves.
-   */
-  ratingTreeEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
   /** Shared host identity across build/learn so ReactFlow/fullscreen are not rebuilt on mode switch. */
   hostForceSyncKey?: string | number | null
@@ -121,27 +107,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   onQuizBreakOpen?: () => void
   onNativeFullscreenChange?: (active: boolean) => void
   onUiClearedChange?: (active: boolean) => void
-  recallRatings?: Map<string, MindMapRecallRating>
-  recallRound?: MindMapRecallRound
-  weakNodeUids?: string[]
-  directRatedUids?: ReadonlySet<string>
-  /** Any node scored this round (direct or batch_inherited); drives 避开 conflict counts. */
-  sessionRatedUids?: ReadonlySet<string>
   /**
-   * Formal due-scope UIDs for this review round. When set:
-   * - non-due nodes are soft-dimmed (opacity) even while flipping,
-   *   except ancestors of due nodes (path context stays full opacity)
-   * - any non-root card may still be rated (scope is visual only)
-   * Parent subtree cascade still walks the full rating tree (including
-   * unrevealed due children) and follows backend formal-review behavior.
+   * Current permanent-mark unit membership. Nodes outside the unit are dimmed,
+   * while ancestors remain visible as path context.
    */
-  rateableNodeUids?: string[] | null
-  onRateNode?: FlipCardRateNodeHandler
-  onUndoRating?: () => { node_uid: string } | null
-  /** Opens palace-level FSRS/wave calibration (not session rating history). */
-  onOpenPalaceCalibration?: () => void
-  ratingMode?: boolean
-  onToggleRatingMode?: () => void
+  activeUnitNodeUids?: string[] | null
 }
 
 export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
@@ -160,7 +130,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   modeToggleLabels,
   visibleEditorState,
   editableEditorState = null,
-  ratingTreeEditorState = null,
   visibleEditorSyncKey = null,
   hostForceSyncKey = null,
   hostExternalSyncKey = null,
@@ -194,17 +163,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onSegmentRangeDraftChange,
   onSegmentRangeModeToggle,
   onSegmentRangeConfirm,
-  recallRatings = new Map(),
-  recallRound = 'first',
-  weakNodeUids = [],
-  directRatedUids,
-  sessionRatedUids,
-  rateableNodeUids = null,
-  onRateNode,
-  onUndoRating,
-  onOpenPalaceCalibration,
-  ratingMode = false,
-  onToggleRatingMode,
+  activeUnitNodeUids = null,
   segments,
   activeSegmentId,
   segmentColorMode,
@@ -226,9 +185,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const [uiCleared, setUiCleared] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const [activeGuidedUid, setActiveGuidedUid] = useState<string | null>(null)
-  const [longTermMasteryByUid, setLongTermMasteryByUid] = useState<
-    Record<string, { masteryScore: number; status: string }>
-  >({})
   const isEditMode = displayMode === 'edit'
   const {
     englishModeActive,
@@ -241,7 +197,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   } = useMindMapEnglishMode()
   const sceneChrome = resolveMindMapSceneChrome({
     mode: isEditMode ? 'edit' : sessionKind === 'review' ? 'review' : 'practice',
-    ratingMode: !isEditMode && ratingMode,
+    ratingMode: false,
   })
 
   useImperativeHandle(forwardedRef, () => ({
@@ -268,14 +224,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const frameForceSyncIntent = forceSyncIntent ?? 'soft'
   const frameSceneTransitionKey = `${sceneChrome}:${isEditMode ? 'edit' : 'review'}:${sessionKind}`
   const guidedModel = useMemo(() => buildGuidedMindMapModel(frameEditorState), [frameEditorState])
-  // Rating cascade must walk the full document, not the reveal-filtered visible tree.
-  const ratingTreeModel = useMemo(
-    () =>
-      buildGuidedMindMapModel(
-        ratingTreeEditorState ?? editableEditorState ?? frameEditorState,
-      ),
-    [editableEditorState, frameEditorState, ratingTreeEditorState],
-  )
   const guidedCurrentUid =
     activeGuidedUid && guidedModel.byUid.has(activeGuidedUid)
       ? activeGuidedUid
@@ -306,27 +254,19 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     if (node) onNodeActive?.([toGuidedSelection(node)])
   }, [guidedModel.byUid, onNodeActive])
 
-  const rateableUidSet = useMemo(() => {
-    if (!rateableNodeUids || rateableNodeUids.length === 0) return null
-    return new Set(rateableNodeUids.filter(Boolean))
-  }, [rateableNodeUids])
+  const activeUnitUidSet = useMemo(() => {
+    if (!activeUnitNodeUids || activeUnitNodeUids.length === 0) return null
+    return new Set(activeUnitNodeUids.filter(Boolean))
+  }, [activeUnitNodeUids])
 
-  // Soft-dim non-root nodes outside formal due/rateable scope while flipping
-  // or rating (not only in rating mode). Edit mode keeps full opacity.
-  // Ancestors of due nodes stay full opacity: they sit on the path to due
-  // children and must not look "out of scope" when only leaves are due.
-  const ratingScopeMutedUids = useMemo(() => {
-    if (isEditMode || !rateableUidSet) return [] as string[]
-    // Walk the full rating tree so parents of unrevealed due children stay unmuted.
-    const parentByUid =
-      ratingTreeModel.byUid.size > 0 ? ratingTreeModel.byUid : guidedModel.byUid
-    const keepFullOpacity = new Set<string>(rateableUidSet)
-    for (const uid of rateableUidSet) {
-      let current = parentByUid.get(uid) ?? guidedModel.byUid.get(uid)
+  const unitScopeMutedUids = useMemo(() => {
+    if (isEditMode || !activeUnitUidSet) return [] as string[]
+    const keepFullOpacity = new Set<string>(activeUnitUidSet)
+    for (const uid of activeUnitUidSet) {
+      let current = guidedModel.byUid.get(uid)
       while (current?.parentUid) {
         keepFullOpacity.add(current.parentUid)
-        current =
-          parentByUid.get(current.parentUid) ?? guidedModel.byUid.get(current.parentUid)
+        current = guidedModel.byUid.get(current.parentUid)
       }
     }
     return guidedModel.nodes
@@ -336,153 +276,20 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     guidedModel.byUid,
     guidedModel.nodes,
     guidedModel.rootUid,
+    activeUnitUidSet,
     isEditMode,
-    rateableUidSet,
-    ratingTreeModel.byUid,
   ])
 
   const resolvedMutedNodeUids = useMemo(() => {
-    if (!mutedNodeUidsProp?.length) return ratingScopeMutedUids
-    if (!ratingScopeMutedUids.length) return mutedNodeUidsProp
-    return [...new Set([...mutedNodeUidsProp, ...ratingScopeMutedUids])]
-  }, [mutedNodeUidsProp, ratingScopeMutedUids])
-
-  const upcomingPreviewUids = useMemo(() => {
-    if (!ratingMode || isEditMode || !onRateNode) return [] as string[]
-    const ordered = guidedModel.nodes
-      .map((node) => node.uid)
-      .filter((uid) => uid !== guidedModel.rootUid && (!rateableUidSet || rateableUidSet.has(uid)))
-    const currentIndex = guidedCurrentUid ? ordered.indexOf(guidedCurrentUid) : -1
-    return ordered.slice(currentIndex + 1, currentIndex + 1 + 6)
-  }, [guidedCurrentUid, guidedModel.nodes, guidedModel.rootUid, isEditMode, onRateNode, rateableUidSet, ratingMode])
-
-  const intervalPreviews = useIntervalPreviews({
-    palaceId: currentPalaceId,
-    nodeUid: guidedCurrentUid,
-    upcomingNodeUids: upcomingPreviewUids,
-    enabled: ratingMode && !isEditMode && Boolean(onRateNode && currentPalaceId),
-  })
-
-  const ratingControls = useFlipCardRatingControls({
-    ratingMode,
-    isEditMode,
-    guidedNodes: ratingTreeModel.nodes,
-    rootUid: ratingTreeModel.rootUid,
-    byUid: guidedModel.byUid,
-    guidedCurrentNode,
-    recallRound,
-    directRatedUids,
-    sessionRatedUids,
-    onRateNode,
-    onUndoRating,
-    onNodeActive,
-    selectGuidedNode,
-    getIntervalPreviewDisplay: intervalPreviews.getPreviewDisplay,
-  })
-
-  const ratingMasteryByNodeUid = useMemo(() => {
-    const hasLongTerm = Object.keys(longTermMasteryByUid).length > 0
-    if (!hasLongTerm) {
-      // Keep host mastery identity stable — a fresh {} every render rebuilds graphData.
-      return masteryByNodeUid
-    }
-    const next = { ...(masteryByNodeUid ?? {}) }
-    Object.entries(longTermMasteryByUid).forEach(([uid, item]) => {
-      next[uid] = {
-        ...(next[uid] ?? {}),
-        status: next[uid]?.status ?? item.status,
-        masteryScore: item.masteryScore,
-      }
-    })
-    return next
-  }, [longTermMasteryByUid, masteryByNodeUid])
-
-  const guidedEligibleNodes = useMemo(() => {
-    const nonRoot = guidedModel.nodes.filter((node) => node.uid !== guidedModel.rootUid)
-    const roundScoped =
-      recallRound === 'weak_retry'
-        ? nonRoot.filter((node) => weakNodeUids.includes(node.uid))
-        : nonRoot
-    if (!rateableUidSet) return roundScoped
-    return roundScoped.filter((node) => rateableUidSet.has(node.uid))
-  }, [guidedModel.nodes, guidedModel.rootUid, rateableUidSet, recallRound, weakNodeUids])
-
-  const statusChipsByNodeUid = useMemo(() => {
-    if (!ratingMode || isEditMode) return hostStatusChipsByNodeUid
-    const chips: Record<
-      string,
-      Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
-    > = {}
-    const sessionTone = (rating: MindMapRecallRating) =>
-      rating === 1 ? 'danger' as const : rating === 2 ? 'warning' as const : rating === 3 ? 'info' as const : 'success' as const
-    const sessionLabel = (rating: MindMapRecallRating) =>
-      rating === 1 ? '忘记' : rating === 2 ? '困难' : rating === 3 ? '记得' : '轻松'
-    const scoreTone = (score: number) =>
-      score < 40 ? 'danger' as const : score < 70 ? 'warning' as const : 'success' as const
-
-    guidedModel.nodes.forEach((node) => {
-      const nodeChips: Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }> = []
-      const sessionRating = recallRatings.get(node.uid)
-      if (sessionRating) {
-        nodeChips.push({ text: sessionLabel(sessionRating), tone: sessionTone(sessionRating), style: 'filled' })
-      }
-      const longTerm = longTermMasteryByUid[node.uid] ?? (
-        typeof masteryByNodeUid?.[node.uid]?.masteryScore === 'number'
-          ? { masteryScore: masteryByNodeUid[node.uid]!.masteryScore as number, status: masteryByNodeUid[node.uid]?.status ?? 'unknown' }
-          : null
-      )
-      if (longTerm && Number.isFinite(longTerm.masteryScore)) {
-        nodeChips.push({
-          text: String(Math.round(longTerm.masteryScore)),
-          tone: scoreTone(longTerm.masteryScore),
-          style: 'outline',
-        })
-      }
-      if (nodeChips.length) chips[node.uid] = nodeChips
-    })
-    if (hostStatusChipsByNodeUid) {
-      for (const [uid, hostChips] of Object.entries(hostStatusChipsByNodeUid)) {
-        chips[uid] = [...(chips[uid] ?? []), ...hostChips]
-      }
-    }
-    return Object.keys(chips).length ? chips : undefined
-  }, [hostStatusChipsByNodeUid, guidedModel.nodes, isEditMode, longTermMasteryByUid, masteryByNodeUid, ratingMode, recallRatings])
-
-  useEffect(() => {
-    if (!ratingMode || isEditMode || !currentPalaceId) {
-      if (!ratingMode) setLongTermMasteryByUid({})
-      return
-    }
-    let active = true
-    void listMindMapNodeMasteryApi(currentPalaceId)
-      .then((response) => {
-        if (!active) return
-        const next: Record<string, { masteryScore: number; status: string }> = {}
-        response.items.forEach((item) => {
-          if (typeof item.mastery_score === 'number' && item.evidence_summary?.event_count > 0) {
-            next[item.node_uid] = { masteryScore: item.mastery_score, status: item.status }
-          }
-        })
-        setLongTermMasteryByUid(next)
-      })
-      .catch(() => {
-        if (active) setLongTermMasteryByUid({})
-      })
-    return () => {
-      active = false
-    }
-  }, [currentPalaceId, isEditMode, ratingMode])
+    if (!mutedNodeUidsProp?.length) return unitScopeMutedUids
+    if (!unitScopeMutedUids.length) return mutedNodeUidsProp
+    return [...new Set([...mutedNodeUidsProp, ...unitScopeMutedUids])]
+  }, [mutedNodeUidsProp, unitScopeMutedUids])
 
   useEffect(() => {
     if (!guidedCurrentUid || activeGuidedUid === guidedCurrentUid) return
     setActiveGuidedUid(guidedCurrentUid)
   }, [activeGuidedUid, guidedCurrentUid])
-
-  useEffect(() => {
-    if (!onRateNode || activeGuidedUid) return
-    const first = guidedEligibleNodes[0]
-    if (first) selectGuidedNode(first.uid)
-  }, [activeGuidedUid, guidedEligibleNodes, onRateNode, selectGuidedNode])
 
   const handleGuidedGlobal = useCallback(() => {
     selectGuidedNode(guidedModel.rootUid, { syncCanvas: true })
@@ -501,14 +308,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }, [guidedNextNode, selectGuidedNode])
 
   const handlePanelNodeClick = useCallback((nodes: MindMapSelection[]) => {
-    // English mode: card click is not flip / reveal; words handle lookup themselves.
     if (englishModeActive) return
-    if (ratingMode && nodes[0]?.uid) {
-      selectGuidedNode(String(nodes[0].uid))
-      return
-    }
     onNodeClick(nodes)
-  }, [englishModeActive, onNodeClick, ratingMode, selectGuidedNode])
+  }, [englishModeActive, onNodeClick])
 
   const handleNodeActive = useCallback(
     (nodes: MindMapSelection[]) => {
@@ -545,13 +347,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const handleSurfaceReadyTimeout = useCallback(() => {
     setHostReadyTimedOut(true)
   }, [])
-
-  const ratingConflictOverlay = ratingControls.pendingSubtreeRating ? (
-    <RatingSubtreeConflictOverlay
-      conflictCount={ratingControls.pendingSubtreeRating.conflictCount}
-      onResolve={ratingControls.resolvePendingSubtreeRating}
-    />
-  ) : null
 
   const compactChrome = chromeDensity === 'compact'
 
@@ -641,12 +436,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           <Badge className="bg-warning text-white hover:bg-warning">宿主超时</Badge>
         </div>
       ) : null}
-      {!isEditMode && sessionKind === 'review' && currentPalaceId && guidedCurrentUid ? (
-        <div className="mb-1 flex shrink-0 justify-end">
-          {/* "为什么是今天"：懒加载调度解释（展开时才请求 schedule-detail）。 */}
-          <CardScheduleExplain palaceId={currentPalaceId} nodeUid={guidedCurrentUid} />
-        </div>
-      ) : null}
       <div
         ref={readingContentRef}
         className="flex min-h-0 flex-1 flex-col"
@@ -667,7 +456,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         toolbarContent={buildFlipCardToolbar({
           toolbarExtensions,
           isEditMode,
-          ratingMode,
           englishModeActive,
           fullscreen,
           uiCleared,
@@ -677,12 +465,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           currentPalaceId,
           modeToggleLabels,
           frameRef,
-          onToggleRatingMode,
           onToggleMode,
           onToggleEnglishMode: handleToggleEnglishMode,
           onOpenQuizPage: handleOpenQuizPage,
           onToggleFullscreen,
-          onOpenPalaceCalibration,
         })}
         syncOnPropChange
         syncIntent="soft"
@@ -704,13 +490,11 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         highlightedNodeUids={highlightedNodeUids}
         ankiEditMode={ankiEditMode}
         mutedNodeUids={resolvedMutedNodeUids}
-        masteryByNodeUid={ratingMasteryByNodeUid}
-        statusChipsByNodeUid={statusChipsByNodeUid}
+        masteryByNodeUid={masteryByNodeUid}
+        statusChipsByNodeUid={hostStatusChipsByNodeUid}
         countBadgeByNodeUid={countBadgeByNodeUid}
         onCountBadgeClick={onCountBadgeClick}
-        buildSelectionToolbarActions={ratingMode && onRateNode ? ratingControls.buildSelectionToolbarActions : undefined}
         selectionToolbarPreferPosition="bottom"
-        frameOverlay={ratingConflictOverlay}
         focusRequestNodeUid={focusRequestNodeUid}
         focusRequestNonce={focusRequestNonce}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
@@ -720,9 +504,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onNodeContextMenu={
           isEditMode
             ? onEditNodeContextMenu
-            : ratingMode
-              ? undefined
-              : onNodeContextMenu
+            : onNodeContextMenu
         }
         onNodeHover={isEditMode ? undefined : onNodeHover}
         onSegmentSelect={onSegmentSelect}

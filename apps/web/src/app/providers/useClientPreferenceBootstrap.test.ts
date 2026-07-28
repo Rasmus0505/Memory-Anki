@@ -32,7 +32,6 @@ function emptyPreferences(): ClientPreferences {
     study_goals: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
-    review_queue_view_settings: null,
     time_record_tags: null,
     freestyle_feed_config: null,
   }
@@ -93,7 +92,6 @@ describe('bootstrapClientPreferences', () => {
       content: { mindmap_branch: true, quiz_question: false },
       weights: { mindmap_branch: 3, quiz_question: 0 },
       palace_order: 'interleave_palaces',
-      within_palace_order: 'tree_order',
       due_policy: 'due_only',
       node_limit: 8,
       queue_length: 15,
@@ -109,7 +107,6 @@ describe('bootstrapClientPreferences', () => {
     expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
       expect.objectContaining({
         freestyle_feed_config: expect.objectContaining({
-          node_limit: 8,
           queue_length: 15,
           seed: 42,
           content: expect.objectContaining({ mindmap_branch: true, quiz_question: false }),
@@ -117,6 +114,10 @@ describe('bootstrapClientPreferences', () => {
         }),
       }),
     )
+    const saved = vi.mocked(clientPreferencesApi.updateClientPreferencesApi).mock.calls
+      .map(([payload]) => payload.freestyle_feed_config)
+      .find(Boolean)
+    expect(saved).not.toHaveProperty('node_limit')
     expect(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)).toBeNull()
   })
 })

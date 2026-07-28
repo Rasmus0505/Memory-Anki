@@ -1,6 +1,6 @@
 """Local latency / payload audit for hot DB read paths.
 
-Measures freestyle feed, FSRS queue, palace list, and dashboard against the
+Measures freestyle feed, unit review queue, palace list, and dashboard against the
 configured app-home database (USB or local). Does not start HTTP.
 
 Usage:
@@ -115,8 +115,8 @@ def main() -> int:
     from memory_anki.modules.content.application.title_sync_service import (
         get_explicit_chapter_ids_by_palace,
     )
-    from memory_anki.modules.memory.application.formal_review_service import (
-        get_fsrs_queue_payload,
+    from memory_anki.modules.memory.application.unit_review_summary import (
+        get_review_queue_summary,
     )
 
     db_path = Path(DB_PATH)
@@ -184,19 +184,12 @@ def main() -> int:
             }
 
         def queue():
-            return get_fsrs_queue_payload(
-                session,
-                include_stats=True,
-                include_items=True,
-            )
+            return get_review_queue_summary(session)
 
         def queue_meta(payload: dict[str, Any]) -> dict[str, Any]:
             return {
                 "due_count": payload.get("due_count"),
-                "later_today_count": payload.get("later_today_count"),
-                "overdue_count": payload.get("overdue_count"),
                 "review_items": len(payload.get("reviews") or []),
-                "later_items": len(payload.get("later_today_reviews") or []),
             }
 
         def palace_list():

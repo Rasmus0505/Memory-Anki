@@ -5,7 +5,6 @@ import type {
   PalaceGroupedListResponse,
   PalaceGroupedSummaryListResponse,
   PalaceListItem,
-  PalaceReviewPlanResponse,
   PalaceSubjectShelfResponse,
   PalaceTemplateSummary,
 } from '@/shared/api/contracts'
@@ -112,10 +111,6 @@ export function prefetchPalaceSubjectShelfApi(params?: Record<string, string>) {
 
 export function getPalaceApi(id: number) {
   return request<PalaceEditorMeta>(`/palaces/${id}`)
-}
-
-export function getPalaceReviewPlanApi(id: number) {
-  return request<PalaceReviewPlanResponse>(`/palaces/${id}/review-plan`)
 }
 
 export function createPalaceApi(data: PalaceMutationPayload) {

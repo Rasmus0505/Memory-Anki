@@ -330,10 +330,6 @@ export function useReviewFlowSession({
   }, [reveal.completed, reveal.handleSpacePour, revealMode, timer.registerActivity])
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  /** @deprecated No-op: rating mode must not change flip/placeholder reveal state. */
-  const startWeakRetryRound = React.useCallback(() => {
-    // Intentionally empty — weak scores only affect FSRS scheduling, not the map face.
-  }, [])
   const handleRestart = React.useCallback(async () => {
     const shouldRestart = await onRestart?.()
     if (shouldRestart === false) return
@@ -372,10 +368,8 @@ export function useReviewFlowSession({
     hoveredNodeId: reveal.hoveredNodeId,
     handleRestart,
     handleSpacePour,
-    startWeakRetryRound,
     finishFlowWithPayload,
     finishFlow,
     screenGlowClass,
   }
 }
-

@@ -150,6 +150,20 @@ def test_migration_guard_does_not_accept_comment_marker(
     assert "destructive migration pattern `drop_table(...)`" in errors[0]
 
 
+def test_migration_guard_accepts_review_history_retirement(tmp_path: Path, monkeypatch) -> None:
+    versions = tmp_path / "versions"
+    monkeypatch.setattr(check_architecture, "ALEMBIC_VERSIONS", versions)
+    write_file(
+        versions / "0051_remove_node_review_history.py",
+        "def upgrade():\n    op.drop_table('mindmap_recall_events')\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_forward_compatible_migrations(errors)
+
+    assert errors == []
+
+
 def test_mindmap_architecture_blocks_process_identity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -956,6 +970,29 @@ def test_english_reading_must_use_reviews_public_facade(
     ]
 
 
+def test_english_reading_must_use_english_public_facade(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    path = api_src / "modules" / "english_reading" / "application" / "vocabulary.py"
+    write_file(
+        path,
+        "from memory_anki.modules.english.application.fsrs_runtime import "
+        "build_scheduler\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_consumer_context_public_facades(errors)
+
+    assert errors == [
+        "apps/api/src/memory_anki/modules/english_reading/application/vocabulary.py: "
+        "english_reading must consume english through "
+        "memory_anki.modules.english.api or .public."
+    ]
+
+
 def test_reviews_must_use_sessions_public_facade(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -1308,85 +1345,103 @@ def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, m
     assert any("auto" in error for error in errors)
 
 
-def test_fsrs_review_boundary_rejects_legacy_runtime_routes_and_schedule_reads(
+def test_unit_review_boundary_rejects_waves_and_node_rating_routes(
     tmp_path: Path, monkeypatch
 ) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
     router = api_src / "modules/memory/presentation/router.py"
-    service = api_src / "modules/memory/application/formal_review_service.py"
-    settlement = api_src / "modules/memory/application/formal_review_settlement.py"
-    warmup = api_src / "app/startup_warmup.py"
-    write_file(router, '@router.post("/review/spread-overdue")\ndef retired(): pass\n')
-    write_file(
-        service,
-        "def get_fsrs_queue_payload():\n    return ReviewSchedule\n\n"
-        "def get_fsrs_load_forecast():\n    return None\n",
-    )
-    write_file(settlement, "def complete_formal_review():\n    return None\n")
-    write_file(warmup, "SELECT * FROM review_schedules")
+    write_file(router, '@router.post("/review/waves/x")\ndef retired(): pass\n')
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
-    check_architecture.check_fsrs_review_frontend(errors)
+    check_architecture.check_unit_review_boundary(errors)
 
     assert any("retired review runtime route" in error for error in errors)
-    assert any("get_fsrs_queue_payload" in error for error in errors)
-    assert any("startup warmup" in error for error in errors)
 
 
-def test_fsrs_review_boundary_requires_practice_public_facade(
+def test_unit_review_boundary_rejects_temporary_mark_ui(
     tmp_path: Path, monkeypatch
 ) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
     write_file(api_src / "modules/memory/presentation/router.py", "")
     write_file(
-        api_src / "modules/memory/application/formal_review_service.py",
-        "def get_fsrs_queue_payload(): pass\ndef get_fsrs_load_forecast(): pass\n",
-    )
-    write_file(
-        api_src / "modules/memory/application/formal_review_settlement.py",
-        "from memory_anki.modules.practice.application.temporary_marks import mark_temporary_roots_completed_on_settlement\n"
-        "def complete_formal_review(): pass\n",
+        web_src / "modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView.tsx",
+        "TemporaryMarkDialog\n临时标记\n",
     )
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
-    check_architecture.check_fsrs_review_frontend(errors)
+    check_architecture.check_unit_review_boundary(errors)
 
-    assert any("practice.api" in error for error in errors)
+    assert any("TemporaryMarkDialog" in error for error in errors)
+    assert any("临时标记" in error for error in errors)
 
 
-def test_fsrs_review_boundary_keeps_wave_execution_in_session_service(
+def test_unit_review_boundary_requires_scheduler_service_and_topology(
     tmp_path: Path, monkeypatch
 ) -> None:
     api_src = tmp_path / "apps/api/src/memory_anki"
     web_src = tmp_path / "apps/web/src"
-    application = api_src / "modules/memory/application"
     write_file(api_src / "modules/memory/presentation/router.py", "")
-    write_file(
-        application / "formal_review_service.py",
-        "def get_fsrs_queue_payload(): pass\ndef get_fsrs_load_forecast(): pass\n",
-    )
-    write_file(
-        application / "formal_review_settlement.py",
-        "def complete_formal_review(): pass\n",
-    )
-    write_file(application / "wave_service.py", "def pause_formal_wave(): pass\n")
-    write_file(application / "wave_session_service.py", "")
+    write_file(api_src / "modules/memory/application/unit_review_service.py", "def rate_review_unit(): pass\n")
+    write_file(api_src / "modules/memory/application/unit_review_projection.py", "")
+    write_file(api_src / "modules/memory/application/unit_scheduler.py", "INTERVAL_DAYS = (1, 3)\n")
+    write_file(api_src / "modules/mindmap_document/split_units.py", "")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
-    check_architecture.check_fsrs_review_frontend(errors)
+    check_architecture.check_unit_review_boundary(errors)
 
-    assert any("wave execution lifecycle" in error for error in errors)
+    assert any("reconcile_palace_units" in error for error in errors)
+    assert any("INTERVAL_DAYS" in error for error in errors)
+    assert any("split_scheduling_units" in error for error in errors)
+
+
+def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    write_file(api_src / "modules/memory/presentation/router.py", "")
+    write_file(
+        api_src / "modules/memory/application/unit_review_projection.py",
+        "def reconcile_palace_units(): pass\n",
+    )
+    write_file(
+        api_src / "modules/memory/application/unit_review_service.py",
+        "def open_unit_review_encounter(): pass\n"
+        "def rate_review_unit(): pass\n"
+        "def close_unit_review_encounter(): pass\n"
+        "def undo_unit_rating(): pass\n",
+    )
+    write_file(
+        api_src / "modules/memory/application/unit_scheduler.py",
+        "INTERVAL_DAYS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120, 240, 365)\n",
+    )
+    write_file(
+        api_src / "modules/mindmap_document/split_units.py",
+        "def split_scheduling_units(): pass\n",
+    )
+    write_file(
+        api_src / "modules/practice/domain/review_units.py",
+        "class ReviewUnitCandidate: pass\ndef candidate_from_projection(): pass\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_unit_review_boundary(errors)
+
+    assert errors == []
 
 
 def test_english_reading_gap_loop_rejects_retired_colored_flow(

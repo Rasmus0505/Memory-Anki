@@ -149,7 +149,6 @@ class FreestyleRouteTests(RouterTestCase):
         content_types = {card["content_type"] for card in payload["cards"]}
         self.assertIn("quiz_question", content_types)
         self.assertIn("review", content_types)
-        # needs_practice action cards are retired; practice may be absent from the feed.
         self.assertIn("english", content_types)
         self.assertIn("english_reading", content_types)
         stems = [
@@ -251,14 +250,13 @@ class FreestyleRouteTests(RouterTestCase):
         )
         self.assertNotIn("english", {card["content_type"] for card in cards})
 
-    def test_due_range_keeps_due_palace_work_and_skips_practice_actions(self):
+    def test_due_range_keeps_due_palace_work(self):
         response = self.client.get("/api/v1/freestyle/feed?range=due")
 
         self.assertEqual(response.status_code, 200)
         cards = response.json()["cards"]
         content_types = {card["content_type"] for card in cards}
         self.assertIn("review", content_types)
-        self.assertNotIn("practice", content_types)
         self.assertNotIn("english", content_types)
         self.assertTrue(
             all(
@@ -282,7 +280,7 @@ class FreestyleRouteTests(RouterTestCase):
         payload = response.json()
         self.assertEqual(
             set(payload["counts"].keys()),
-            {"quiz_question", "review", "practice", "english", "english_reading"},
+            {"quiz_question", "review", "english", "english_reading"},
         )
         self.assertEqual([card["content_type"] for card in payload["cards"]], ["quiz_question"])
         self.assertEqual(payload["cards"][0]["question"]["stem"], "细胞宫殿题")

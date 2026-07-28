@@ -18,7 +18,6 @@ vi.mock('@/modules/settings/public', () => ({
       study_goals: data.study_goals ?? null,
       palace_list_view_settings: data.palace_list_view_settings ?? null,
       palace_shelf_view_settings: data.palace_shelf_view_settings ?? null,
-      review_queue_view_settings: data.review_queue_view_settings ?? null,
       time_record_tags: data.time_record_tags ?? null,
       freestyle_feed_config: data.freestyle_feed_config ?? null,
     },

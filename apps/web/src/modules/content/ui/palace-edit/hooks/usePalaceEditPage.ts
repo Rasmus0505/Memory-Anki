@@ -9,11 +9,9 @@ import { readTimerAutomationConfig } from '@/shared/components/session/timer-aut
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
-import { parseMindMapDoc } from '@/modules/content/ui/palace-edit/model/mindmap-editor'
 import { usePalaceEditorDocument } from '@/modules/content/ui/palace-edit/hooks/usePalaceEditorDocument'
 import { usePalaceMetaController } from '@/modules/content/ui/palace-edit/hooks/usePalaceMetaController'
 import { usePalacePracticeMode } from '@/modules/content/ui/palace-edit/hooks/usePalacePracticeMode'
-import { usePalaceSegmentsController } from '@/modules/content/ui/palace-edit/hooks/usePalaceSegmentsController'
 import { usePalaceVersionsController } from '@/modules/content/ui/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 import { getEnglishContinueCourseApi } from '@/modules/english/public'
@@ -61,11 +59,6 @@ export function usePalaceEditPage() {
   const palaceTitle = palace?.title || '未命名宫殿'
   const selectedNode = selectedNodes[0] ?? null
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
-  const parsedEditorDoc = useMemo(
-    () => parseMindMapDoc(documentState.editorState?.editor_doc ?? null),
-    [documentState.editorState?.editor_doc],
-  )
-
   const meta = usePalaceMetaController({
     palace,
     reload: documentState.reload,
@@ -84,14 +77,6 @@ export function usePalaceEditPage() {
     palaceId,
     editorState: documentState.editorState,
     title: meta.title || palaceTitle,
-    timer,
-  })
-
-  const segments = usePalaceSegmentsController({
-    palaceId,
-    palace,
-    parsedEditorDoc,
-    selectedNodes,
     timer,
   })
 
@@ -388,29 +373,6 @@ export function usePalaceEditPage() {
     previewVersionDetail: versions.previewVersionDetail,
     previewLoading: versions.previewLoading,
     previewError: versions.previewError,
-    segments: segments.segments,
-    segmentDialogOpen: segments.segmentDialogOpen,
-    setSegmentDialogOpen: segments.setSegmentDialogOpen,
-    segmentName: segments.segmentName,
-    setSegmentName: segments.setSegmentName,
-    segmentColor: segments.segmentColor,
-    setSegmentColor: segments.setSegmentColor,
-    segmentCreatedAt: segments.segmentCreatedAt,
-    setSegmentCreatedAt: segments.setSegmentCreatedAt,
-    editingSegmentId: segments.editingSegmentId,
-    activeSegmentId: segments.activeSegmentId,
-    setActiveSegmentId: segments.setActiveSegmentId,
-    activeSegment: segments.activeSegment,
-    segmentSaving: segments.segmentSaving,
-    segmentMergingId: segments.segmentMergingId,
-    segmentError: segments.segmentError,
-    isSegmentRangeMode: segments.isSegmentRangeMode,
-    rangeTargetSegmentId: segments.rangeTargetSegmentId,
-    selectedRangeNodeUids: segments.selectedRangeNodeUids,
-    overriddenConflictNodeUids: segments.overriddenConflictNodeUids,
-    selectedRangeNodeCount: segments.selectedRangeNodeCount,
-    currentRangeTargetSegment: segments.currentRangeTargetSegment,
-    subtreeUidMap: segments.subtreeUidMap,
     editorState: documentState.editorState,
     applyImportedPalaceEditorState: documentState.applyImportedPalaceEditorState as (
       nextState: MindMapEditorState,
@@ -449,17 +411,6 @@ export function usePalaceEditPage() {
     handleAiSplitRequest,
     restartInlinePractice: practice.restartInlinePractice,
     handleOpenVersions: versions.handleOpenVersions,
-    handleOpenCreateSegment: segments.handleOpenCreateSegment,
-    handleOpenEditSegment: segments.handleOpenEditSegment,
-    handleAdjustSegmentRange: segments.handleAdjustSegmentRange,
-    handleSegmentRangeModeToggle: segments.handleSegmentRangeModeToggle,
-    handleSegmentRangeDraftChange: segments.handleSegmentRangeDraftChange,
-    handleSegmentRangeNodeClick: segments.handleSegmentRangeNodeClick,
-    handleConfirmSegmentRange: segments.handleConfirmSegmentRange,
-    handleSaveSegment: segments.handleSaveSegment,
-    handleToggleSegmentPractice: segments.handleToggleSegmentPractice,
-    handleDeleteSegment: segments.handleDeleteSegment,
-    handleMergeSegment: segments.handleMergeSegment,
     handlePreviewVersion: versions.handlePreviewVersion,
     handleCloseVersions: versions.handleCloseVersions,
     handleRestoreVersion: versions.handleRestoreVersion,

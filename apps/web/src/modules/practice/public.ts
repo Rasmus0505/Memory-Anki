@@ -2,9 +2,7 @@ export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {
   DEFAULT_FREESTYLE_FEED_CONFIG,
-  DEFAULT_FREESTYLE_PROGRESS_SCOPES,
   FREESTYLE_FEED_CONFIG_STORAGE_KEY,
-  FREESTYLE_PROGRESS_SCOPE_ORDER,
   createOperationId as createDeterministicOperationId,
   sanitizeFreestyleFeedConfig,
 } from './domain/feedConfig'
@@ -27,6 +25,7 @@ export {
   filterMutedPalaces,
   findNextPalaceIndex,
   markCompleted,
+  markIncomplete,
   mergeQueuePreservingHistory,
   mergeRefreshQueue,
   moveCardToTail,
@@ -39,6 +38,7 @@ export {
   resolveRebuildIndex,
   resolveRestudyPreferCardId,
   sanitizeQueueState,
+  setUnitEncounterState,
   startNewRound,
   undoSkip,
   visibleMountIndices,
@@ -47,25 +47,12 @@ export {
   popViewHistory,
   canPopViewHistory,
   type FreestyleSkipState,
+  type FreestyleUnitEncounterState,
 } from './domain/queueState'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
 export * from './ui/review/api'
-export * from './ui/review/components/FsrsCompletionDialog'
-export * from './ui/review/components/MasteryDeltaBadge'
-export * from './ui/review/components/MindMapRatingHistoryDrawer'
-export * from './ui/review/components/PalaceCalibrationDrawer'
 export * from './ui/review/components/PracticeCompletionDialog'
-export * from './ui/review/components/ReviewLoadForecastCard'
-export * from './ui/review/components/ReviewLoadCalendar'
-export * from './ui/review/components/TodayPlanCard'
-export * from './ui/review/components/ConsolidateCard'
-export * from './ui/review/components/CardScheduleExplain'
-export * from './ui/review/components/PalaceAggregationSettingsSection'
-export * from './ui/review/hooks/reviewInsightQueries'
-export * from './ui/review/hooks/useIntervalPreviews'
-export * from './ui/review/hooks/useMindMapRecallRatings'
 export * from './ui/review/hooks/useReviewCompletionCoordinator'
 export * from './ui/review/hooks/useReviewFlowSession'
 export * from './ui/review/model/mind-map-review-flow'
-export * from './ui/review/model/reviewQueueSort'
 export * from './ui/review/ReviewSessionSkeleton'

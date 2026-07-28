@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceShelfPage from '@/modules/content/ui/palace-catalog/PalaceShelfPage'
 import { PALACE_SHELF_VIEW_SETTINGS_KEY } from '@/modules/settings/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
-import { updateClientPreferencesApi } from '@/modules/settings/public'
 
 const navigate = vi.fn()
 const searchParams = new URLSearchParams()
@@ -45,11 +44,8 @@ vi.mock('@/modules/settings/public', async (importOriginal) => {
   return {
     ...actual,
     getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
-    updateClientPreferencesApi: vi.fn(async (data: Record<string, unknown>) => ({ items: data })),
   }
 })
-
-const mockUpdateClientPreferencesApi = vi.mocked(updateClientPreferencesApi)
 
 function buildShelfItem(overrides: Record<string, unknown> = {}) {
   return {
@@ -61,7 +57,6 @@ function buildShelfItem(overrides: Record<string, unknown> = {}) {
     has_due_later_today: false,
     due_now_count: 1,
     due_later_today_count: 0,
-    needs_practice_count: 0,
     ...overrides,
   }
 }
@@ -97,8 +92,12 @@ function buildGroupedResponse() {
                 created_at: '2026-06-03T09:00:00',
                 description: '',
                 archived: false,
+                review_status: 'marking_required',
+                review_unit_count: 0,
+                due_review_unit_count: 0,
+                permanent_mark_count: 0,
+                next_review_date: null,
                 mastered: false,
-                needs_practice: true,
                 next_scheduled_date: '2026-06-03',
                 next_review_at: dueIso,
                 has_due_review: false,
@@ -143,7 +142,6 @@ function buildGroupedResponse() {
                     created_at: '2026-06-03T09:00:00',
                     updated_at: '2026-06-03T10:00:00',
                     is_empty: false,
-                    needs_practice: true,
                     estimated_review_seconds: 90,
                     review_stage_total: 9,
                     review_stage_completed: 0,
@@ -165,7 +163,6 @@ function buildGroupedResponse() {
                     created_at: '2026-06-03T09:00:00',
                     updated_at: '2026-06-03T10:00:00',
                     is_empty: false,
-                    needs_practice: false,
                     estimated_review_seconds: 80,
                     review_stage_total: 9,
                     review_stage_completed: 1,
@@ -199,7 +196,6 @@ describe('PalaceShelfPage', () => {
     searchParams.delete('search')
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
-    mockUpdateClientPreferencesApi.mockClear()
   })
 
   it('renders subject shelf cards and navigates by subject id', async () => {
@@ -224,7 +220,6 @@ describe('PalaceShelfPage', () => {
           has_due_later_today: false,
           due_now_count: 0,
           due_later_today_count: 0,
-          needs_practice_count: 0,
         }),
       ],
     })
@@ -249,7 +244,7 @@ describe('PalaceShelfPage', () => {
     })
   })
 
-  it('uses double layout by default and persists custom shelf view settings', async () => {
+  it('uses double layout by default and applies custom shelf view settings', async () => {
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
@@ -260,17 +255,9 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('single')
     expect(screen.getByTestId('shelf-grid').dataset.densityMode).toBe('compact')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
-    expect(mockUpdateClientPreferencesApi).toHaveBeenLastCalledWith({
-      palace_shelf_view_settings: {
-        displayMode: 'shelf',
-        layoutMode: 'single',
-        expandedLayoutMode: 'chapter-double',
-        densityMode: 'compact',
-      },
-    })
   })
 
-  it('switches to expanded mode and persists expanded layout settings', async () => {
+  it('switches to expanded mode and applies expanded layout settings', async () => {
     render(<PalaceShelfPage />)
 
     await screen.findByText('中国近代史')
@@ -280,24 +267,16 @@ describe('PalaceShelfPage', () => {
 
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-    expect(screen.getAllByRole('button', { name: '开始复习' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '开始标记' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: '开始复习' })[0])
-    expect(navigate).toHaveBeenCalledWith('/review/session/501')
+    fireEvent.click(screen.getAllByRole('button', { name: '开始标记' })[0])
+    expect(navigate).toHaveBeenCalledWith('/palaces/101/edit?mode=permanent-mark')
     fireEvent.click(screen.getByRole('button', { name: '知识点流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
-    expect(mockUpdateClientPreferencesApi).toHaveBeenLastCalledWith({
-      palace_shelf_view_settings: {
-        displayMode: 'expanded',
-        layoutMode: 'double',
-        expandedLayoutMode: 'flow',
-        densityMode: 'standard',
-      },
-    })
   })
 
 

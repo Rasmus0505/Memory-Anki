@@ -142,6 +142,6 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 学科文档在宫殿宿主中仍由 Knowledge API 读写；Palace 只注入章节关联 capability，并拥有宫殿—学科、宫殿—章节的一致性命令。
 - `PalaceKnowledgeOutlinePanel`、`PalaceChapterPanel` 和页面自行推导“第一个学科”的实现已经退役，不得重建。
 
-## Node identity and memory state
+## Node identity and review units
 
-A palace document has one stable node UID per node. Reviews indexes memory state by `palace_id + node_uid`; all non-root nodes are independent FSRS cards. Text or note changes invalidate the content fingerprint and reset only that node, while movement, style, and layout changes preserve the card. New nodes immediately join the progress denominator; deleted nodes stop scheduling while historical evidence remains.
+A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` applies the water-pour topology and returns complete unit memberships; it contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions. A content change makes only the affected unit immediately due and lowers it one fixed-ladder level. Practice and Knowledge consume the Reviews projection and must not derive a second topology or node schedule.

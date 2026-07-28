@@ -22,6 +22,7 @@ def test_queue_build_echoes_operation_and_sanitized_config(make_client):
             "operation_id": "op-test-1",
             "config": {
                 "node_limit": 12,
+                "progress_scopes": ["reinforcement"],
                 "queue_length": 20,
                 "seed": 7,
                 "content": {"mindmap_branch": True, "quiz_question": True},
@@ -33,7 +34,8 @@ def test_queue_build_echoes_operation_and_sanitized_config(make_client):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["operation_id"] == "op-test-1"
-    assert payload["config"]["node_limit"] == 12
+    assert "node_limit" not in payload["config"]
+    assert "progress_scopes" not in payload["config"]
     assert payload["config"]["queue_length"] == 20
     assert "cards" in payload
     assert "phase_stats" in payload

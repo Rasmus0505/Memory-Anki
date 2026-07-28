@@ -9,10 +9,7 @@ import {
   type StudySessionTargetType,
 } from '@/modules/session/domain/study-session-entity/api'
 
-export type SessionProgressMode =
-  | 'practice'
-  | 'segment-practice'
-  | 'review'
+export type SessionProgressMode = 'practice'
 
 export interface SessionProgressPayload {
   reveal_map: Record<string, 'hidden' | 'placeholder' | 'revealed'>
@@ -33,8 +30,6 @@ function modeToStudyTarget(mode: SessionProgressMode, id: number): {
   targetType: StudySessionTargetType
   targetId: number
 } {
-  if (mode === 'segment-practice') return { scene: 'segment_practice', targetType: 'palace_segment', targetId: id }
-  if (mode === 'review') return { scene: 'review', targetType: 'review_schedule', targetId: id }
   return { scene: 'practice', targetType: 'palace', targetId: id }
 }
 
@@ -43,10 +38,8 @@ function studySessionToProgress(item: StudySessionItem | null): SessionProgressS
   const progress = item.progress || {}
   return {
     id: Number.parseInt(item.id.replace(/\D+/g, ''), 10) || 0,
-    session_kind: item.scene.replace(/-/g, '_') as SessionProgressSnapshot['session_kind'],
+    session_kind: 'practice',
     palace_id: item.palace_id,
-    review_schedule_id: item.target_type === 'review_schedule' ? item.target_id : null,
-    palace_segment_id: item.palace_segment_id,
     reveal_map: (progress.reveal_map || {}) as SessionProgressSnapshot['reveal_map'],
     red_node_ids: (progress.red_node_ids || []) as string[],
     completed: Boolean(progress.completed),
