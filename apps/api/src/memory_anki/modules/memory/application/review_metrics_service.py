@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.session.api import (
     STUDY_DASHBOARD_SCENES,
     get_study_session_duration_seconds,
 )
+
+ReviewLog: Any = StudySession
 
 
 def get_palace_stats(session: Session, palace_id: int) -> dict:

@@ -5,10 +5,11 @@
 另外禁止 `memory/application -> content`。这里只有纯树拓扑，无调度语义、
 无队列语义、无持久化。
 
-**倒水模型**：从宫殿根往下浇水。水流经未标记节点不截流；碰到标记点**停住**
-并起一个单元，该单元拥有标记本身及其全部后代，直到下一个更深的标记（更深
-标记的子树被挖出来自成单元）。标记之上未被认领的祖先折叠进该标记单元
-（先认领者得）。
+**倒水模型**：从宫殿根往下浇水。水流经未标记节点不截流；碰到永久标记时，
+标记节点及其下游被隔离成独立单元，直到下一个更深的永久标记。所有没有落入
+标记区域的节点共同组成根部剩余水流单元。永久标记只负责隔离，不负责选择
+复习范围；宫殿只要存在至少一个永久标记，所有非根节点都必须且只属于一个
+复习单元。
 
 两个消费方的差别只在第二阶段：
 - 调度单元（`split_scheduling_units`）：残余区整体为一个单元（宫殿整体调度）
@@ -211,8 +212,6 @@ def permanent_mark_uids_from_nodes(
         for uid, node in nodes.items()
         if node.get("permanent_split_mark") is True
     }
-    if root_uid is not None:
-        marks.discard(str(root_uid))
     return marks
 
 
@@ -222,11 +221,13 @@ def split_scheduling_units(
     root_uid: str | None,
     permanent_mark_uids: Sequence[str] | set[str] | None = None,
 ) -> list[SplitUnit]:
-    """Scheduling units: whole palace, or one unit per permanent mark + residual.
+    """Split one palace into permanent-mark isolation units.
 
-    Unlike the freestyle splitter this does **not** apply ``node_limit`` best-fit
-    — a palace without permanent marks is scheduled as a single unit, which is
-    the whole point of palace-level cohesion.
+    No permanent mark means no review units. A root mark makes the root water
+    flow itself a unit; deeper marks are carved out from it. Without a root
+    mark, every marked region is carved out and all remaining nodes form one
+    residual root unit. Unmarked ancestors never fold into an arbitrary marked
+    unit.
     """
     if not root_uid or root_uid not in nodes:
         return []
@@ -235,41 +236,37 @@ def split_scheduling_units(
     def _title(uid: str) -> str:
         return str(nodes.get(uid, {}).get("text") or "")
 
-    marks = {
-        str(uid)
-        for uid in (permanent_mark_uids or [])
-        if str(uid) in nodes and str(uid) != root
-    }
+    marks = {str(uid) for uid in (permanent_mark_uids or []) if str(uid) in nodes}
     all_non_root = [uid for uid in subtree_uids(nodes, root, include_self=True) if uid != root]
     if not marks:
-        if not all_non_root:
-            return []
-        return [
-            SplitUnit(
-                unit_root_uid=root,
-                kind=UNIT_KIND_PALACE,
-                title=_title(root),
-                node_uids=tuple(all_non_root),
-            )
-        ]
+        return []
 
-    claimed: set[str] = {root}
+    preorder = subtree_uids(nodes, root, include_self=True)
+    preorder_index = {uid: index for index, uid in enumerate(preorder)}
+    ordered_marks = sorted(
+        marks,
+        key=lambda uid: (
+            node_depth(nodes, uid, root_uid=root),
+            preorder_index.get(uid, 10**9),
+        ),
+    )
+    claimed: set[str] = set()
     units: list[SplitUnit] = []
-    for mark_uid, region, folded in iter_mark_regions(
-        nodes, root_uid=root, mark_uids=marks, claimed=claimed
-    ):
-        members = tuple(uid for uid in (*folded, *region) if uid != root)
+    for mark_uid in ordered_marks:
+        members = tuple(
+            uid for uid in mark_region_uids(nodes, mark_uid, marks) if uid != root
+        )
         if not members:
             continue
         units.append(
             SplitUnit(
                 unit_root_uid=mark_uid,
-                kind=UNIT_KIND_MARK,
+                kind=UNIT_KIND_PALACE if mark_uid == root else UNIT_KIND_MARK,
                 title=_title(mark_uid),
                 node_uids=members,
-                folded_ancestor_uids=folded,
             )
         )
+        claimed.update(members)
 
     residual = tuple(uid for uid in all_non_root if uid not in claimed)
     if residual:

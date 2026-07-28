@@ -22,7 +22,10 @@ from memory_anki.modules.content.application.title_sync_service import (
     resolve_palace_subject,
     resolve_palace_title,
 )
-from memory_anki.modules.memory.api import get_palace_due_rollup, project_due_rollups_batch
+from memory_anki.modules.memory.api import (
+    get_palace_review_summary,
+    project_palace_review_summaries,
+)
 
 
 def _loaded_collection(obj: Any, name: str) -> list[Any]:
@@ -40,7 +43,7 @@ def batch_palace_due_rollups(session: Session, palaces: list[Any]) -> dict[int, 
     """Precompute due rollups for a palace list in one batch (catalog/list paths)."""
     if not palaces:
         return {}
-    return project_due_rollups_batch(session, list(palaces), now=None, include_nodes=False)
+    return project_palace_review_summaries(session, list(palaces))
 
 _EMPTY_MEMORY: dict[str, Any] = {
     "node_count": 0,
@@ -113,6 +116,10 @@ def _memory_fields(memory_projection: dict) -> dict:
         "severe_weak_node_count": memory_projection["severe_weak_node_count"],
         "review_entry_mode": memory_projection.get("review_entry_mode") or "none",
         "review_entry_label": memory_projection.get("review_entry_label"),
+        "review_status": memory_projection.get("review_status") or "marking_required",
+        "review_unit_count": int(memory_projection.get("unit_count") or 0),
+        "due_review_unit_count": int(memory_projection.get("due_unit_count") or 0),
+        "next_review_date": memory_projection.get("next_review_date"),
         "primary_branch_uid": memory_projection.get("primary_branch_uid"),
         "primary_branch_title": memory_projection.get("primary_branch_title"),
         "due_branch_count": memory_projection.get("due_branch_count") or 0,
@@ -142,7 +149,7 @@ def palace_json(
     if precomputed_memory_projection is not None:
         memory_projection = precomputed_memory_projection
     elif session is not None:
-        memory_projection = get_palace_due_rollup(session, p.id)
+        memory_projection = get_palace_review_summary(session, p.id)
     else:
         memory_projection = dict(_EMPTY_MEMORY)
     default_segment = (
@@ -284,7 +291,7 @@ def palace_summary_json(
     if precomputed_memory_projection is not None:
         memory_projection = precomputed_memory_projection
     elif session is not None:
-        memory_projection = get_palace_due_rollup(session, p.id)
+        memory_projection = get_palace_review_summary(session, p.id)
     else:
         memory_projection = dict(_EMPTY_MEMORY)
     primary_chapter = getattr(p, "primary_chapter", None)

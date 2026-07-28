@@ -8,14 +8,13 @@ cross-domain back-references resolve against the shared ``Base.metadata``.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
-    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -25,7 +24,6 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -121,11 +119,6 @@ class Palace(Base):
     )
     attachments: Mapped[list[Attachment]] = relationship(
         "Attachment",
-        back_populates="palace",
-        cascade="all, delete-orphan",
-    )
-    review_logs: Mapped[list[ReviewLog]] = relationship(
-        "ReviewLog",
         back_populates="palace",
         cascade="all, delete-orphan",
     )
@@ -294,91 +287,6 @@ class PalaceMiniPalace(Base):
     quiz_questions: Mapped[list[PalaceQuizQuestion]] = relationship(
         "PalaceQuizQuestion",
         back_populates="mini_palace",
-    )
-
-
-class ReviewLog(Base):
-    __tablename__ = "review_logs"
-    __table_args__ = (
-        Index("ix_review_logs_palace_date_id", "palace_id", "review_date", "id"),
-        Index("ix_review_logs_date", "review_date"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    palace_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("palaces.id", ondelete="CASCADE"),
-    )
-    review_date: Mapped[date | None] = mapped_column(Date, default=date.today)
-    score: Mapped[int] = mapped_column(Integer, default=0)
-    review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
-    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
-    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
-
-    palace: Mapped[Palace] = relationship("Palace", back_populates="review_logs")
-
-
-class SessionProgress(Base):
-    __tablename__ = "session_progress"
-    __table_args__ = (
-        Index(
-            "ix_session_progress_practice",
-            "session_kind",
-            "palace_id",
-            unique=True,
-            sqlite_where=text("session_kind = 'practice' AND palace_id IS NOT NULL"),
-        ),
-        Index(
-            "ix_session_progress_review",
-            "session_kind",
-            "review_schedule_id",
-            unique=True,
-            sqlite_where=text("session_kind = 'review' AND review_schedule_id IS NOT NULL"),
-        ),
-        Index(
-            "ix_session_progress_segment_practice",
-            "session_kind",
-            "palace_segment_id",
-            unique=True,
-            sqlite_where=text(
-                "session_kind = 'segment_practice' AND palace_segment_id IS NOT NULL"
-            ),
-        ),
-        Index(
-            "ix_session_progress_mini_practice",
-            "session_kind",
-            "mini_palace_id",
-            unique=True,
-            sqlite_where=text("session_kind = 'mini_practice' AND mini_palace_id IS NOT NULL"),
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_kind: Mapped[str] = mapped_column(String(20), nullable=False)
-    palace_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palaces.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    # Legacy schedule id retained as optional int without FK (review_schedules dropped).
-    review_schedule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    palace_segment_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palace_segments.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    mini_palace_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("palace_mini_palaces.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    reveal_map: Mapped[str] = mapped_column(Text, default="{}")
-    red_node_ids: Mapped[str] = mapped_column(Text, default="[]")
-    completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        default=utc_now_naive,
-        onupdate=utc_now_naive,
     )
 
 

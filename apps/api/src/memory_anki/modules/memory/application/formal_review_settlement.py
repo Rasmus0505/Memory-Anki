@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.mindmap import MindMapRecallEvent
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.reviews import ReviewRatingOperation
 from memory_anki.modules.memory.application.formal_review_service import (
     _json,
@@ -33,6 +33,8 @@ from memory_anki.modules.memory.application.review_queue_extras import (
     next_review_scope_from_projection,
     today_review_counts_by_palace,
 )
+
+ReviewLog: Any = StudySession
 
 
 def _effective_ratings(session: Session, row: StudySession, scope: set[str]) -> dict[str, int]:
@@ -457,50 +459,6 @@ def complete_formal_review(
         session, int(palace.id)
     )
 
-    # Temporary freestyle marks: clear a root when this unit settled with Good/Easy.
-    temporary_completed: list[str] = []
-    try:
-        from memory_anki.modules.practice.api import mark_temporary_roots_completed_on_settlement
-
-        # `ratings` was popped earlier for score; still in local scope.
-        good_or_easy = any(int(v) >= 3 for v in (ratings or {}).values())
-        if not good_or_easy and isinstance(summary, dict):
-            rating_counts = summary.get("rating_counts")
-            if isinstance(rating_counts, dict):
-                for key, value in rating_counts.items():
-                    label = str(key)
-                    if label in {"记得", "轻松", "good", "easy", "3", "4"} and int(value or 0) > 0:
-                        good_or_easy = True
-                        break
-        scope_uids = set(_scope(row) or [])
-        # Prefer explicit freeze/scope; also include branch_uid from session summary if present.
-        if isinstance(summary, dict):
-            for key in ("scope_node_uids", "due_node_uids", "ratable_node_uids"):
-                vals = summary.get(key)
-                if isinstance(vals, list):
-                    scope_uids.update(str(v) for v in vals)
-            branch_uid = summary.get("branch_uid") or summary.get("primary_branch_uid") or existing.get("branch_uid") or existing.get("primary_branch_uid")
-            if branch_uid:
-                scope_uids.add(str(branch_uid))
-        branch_from_session = existing.get("branch_uid") or existing.get("scope_branch_uid")
-        if branch_from_session:
-            scope_uids.add(str(branch_from_session))
-        # Freestyle unit branch_uid is the temporary root even when not due-frozen.
-        progress = existing if isinstance(existing, dict) else {}
-        for key in ("branch_uid", "scope_branch_uid", "unit_branch_uid", "primary_branch_uid"):
-            value = progress.get(key)
-            if value:
-                scope_uids.add(str(value))
-        temporary_completed = mark_temporary_roots_completed_on_settlement(
-            session,
-            palace_id=int(palace.id),
-            branch_or_scope_uids=scope_uids,
-            had_good_or_easy=good_or_easy,
-        )
-    except Exception:
-        # Settlement must not fail because of temporary-mark bookkeeping.
-        temporary_completed = []
-
     receipt = {
         "ok": True,
         "completion_mode": completion_mode,
@@ -512,7 +470,6 @@ def complete_formal_review(
         "duration_seconds": duration,
         "today_review_count": today_review_count,
         "pending_reinforcement": pending_reinforcement,
-        "temporary_marks_completed": temporary_completed,
         **summary,
     }
     row.status = "completed"

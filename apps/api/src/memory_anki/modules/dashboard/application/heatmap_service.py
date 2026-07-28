@@ -8,7 +8,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
 
 MAX_HEATMAP_DAYS = 366
 DEFAULT_HEATMAP_DAYS = 182
@@ -20,19 +19,15 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
     start = today - timedelta(days=days - 1)
     start_dt = datetime.combine(start, time.min)
 
+    review_day = func.date(StudySession.ended_at)
     review_rows = (
-        session.query(
-            ReviewLog.review_date,
-            func.count(ReviewLog.id),
-            func.coalesce(func.sum(ReviewLog.duration_seconds), 0),
-        )
-        .join(Palace, Palace.id == ReviewLog.palace_id)
+        session.query(review_day, func.count(StudySession.id))
         .filter(
-            ReviewLog.review_date >= start,
-            ReviewLog.review_date <= today,
-            Palace.deleted_at.is_(None),
+            StudySession.scene == "formal_unit_review",
+            StudySession.status == "completed",
+            StudySession.ended_at >= start_dt,
         )
-        .group_by(ReviewLog.review_date)
+        .group_by(review_day)
         .all()
     )
     session_day = func.date(StudySession.started_at)
@@ -51,13 +46,12 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
     )
 
     by_day: dict[str, dict] = {}
-    for review_date, count, duration in review_rows:
+    for review_date, count in review_rows:
         if review_date is None:
             continue
         key = review_date.isoformat()
         entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})
         entry["review_count"] = int(count)
-        entry["study_seconds"] += int(duration)
     for day_value, seconds in session_rows:
         key = str(day_value)
         entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})

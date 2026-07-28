@@ -28,7 +28,6 @@ def _list_loader_options():
 def _catalog_loader_options():
     return (
         *_list_loader_options(),
-        selectinload(Palace.review_logs),
         selectinload(Palace.segments),
     )
 
@@ -153,4 +152,3 @@ class PalaceRepository:
 
     def flush(self) -> None:
         self._session.flush()
-

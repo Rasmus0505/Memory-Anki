@@ -38,12 +38,3 @@ class FreestyleQueueBuildRequest(BaseModel):
     config: dict[str, Any] | None = None
     completed_ids: list[str] = Field(default_factory=list)
     hidden_ids: list[str] = Field(default_factory=list)
-
-
-class FreestyleTemporaryMarksReplaceRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    node_uids: list[str] = Field(default_factory=list)
-    unify_progress: bool = False
-    operation_id: str | None = None
-

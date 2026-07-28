@@ -129,6 +129,12 @@ def save_palace_editor_state(
 
     create_effective_palace_version(session, palace, "editor_save")
 
+    if doc_input is not None:
+        from memory_anki.modules.memory.public.commands import reconcile_palace_units
+
+        session.flush()
+        reconcile_palace_units(session, palace.id)
+
     transaction.commit()
     transaction.refresh(palace)
     return get_palace_editor_state(palace)

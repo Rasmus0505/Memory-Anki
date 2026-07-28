@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import ReviewLog
 
 from .serialization import _int_or_none, _parse_datetime
 
@@ -221,41 +220,8 @@ def create_review_study_session(
 
 
 def ensure_review_log_study_sessions(session: Session) -> int:
-    review_logs = (
-        session.query(ReviewLog)
-        .filter(ReviewLog.duration_seconds > 0)
-        .order_by(ReviewLog.id.asc())
-        .all()
-    )
-    created_count = 0
-    for log in review_logs:
-        session_id = f"review-log-{log.id}"
-        existing = session.query(StudySession.id).filter_by(id=session_id).first()
-        if existing is not None:
-            continue
-        duration_seconds = max(0, int(log.duration_seconds or 0))
-        started_at = datetime.combine(log.review_date or date.today(), time.min)
-        created = create_review_study_session(
-            session,
-            session_id=session_id,
-            scene="review",
-            target_type="palace" if log.palace_id is not None else "none",
-            target_id=log.palace_id,
-            palace_id=log.palace_id,
-            title=log.palace.title if log.palace and log.palace.title else "复习",
-            ended_at=started_at + timedelta(seconds=duration_seconds),
-            duration_seconds=duration_seconds,
-            completion_method="migrated_review_log",
-            summary={
-                "migrated_from": "review_logs",
-                "review_log_id": log.id,
-                "review_mode": log.review_mode,
-                "score": log.score,
-            },
-        )
-        if created is not None:
-            created_count += 1
-    return created_count
+    del session
+    return 0
 
 
 def reclassify_ghost_formal_review_time_sessions(session: Session) -> int:

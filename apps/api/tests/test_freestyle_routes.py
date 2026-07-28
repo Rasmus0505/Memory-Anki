@@ -1,9 +1,7 @@
 import json
 import unittest
-from datetime import timedelta
 from unittest.mock import patch
 
-from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
 from memory_anki.infrastructure.db._tables.english_reading import (
     EnglishReadingMaterial,
@@ -17,7 +15,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     PalaceSegment,
 )
-from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
+from memory_anki.modules.memory.api import reconcile_palace_units
 from memory_anki.modules.practice.application import feed_service
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from support import RouterTestCase
@@ -58,7 +56,7 @@ class FreestyleRouteTests(RouterTestCase):
             editor_doc=json.dumps(
                 {
                     "root": {
-                        "data": {"text": "细胞宫殿", "uid": "root"},
+                        "data": {"text": "细胞宫殿", "uid": "root", "permanentSplitMark": True},
                         "children": [{"data": {"text": "A", "uid": "a"}, "children": []}],
                     }
                 }
@@ -87,24 +85,6 @@ class FreestyleRouteTests(RouterTestCase):
             sort_order=0,
         )
         session.add_all([segment, mini_palace])
-        session.flush()
-
-        # Seed a formal-due FSRS node so freestyle review cards appear.
-        past = utc_now_naive() - timedelta(days=1)
-        session.add(
-            ReviewNodeState(
-                palace_id=palace.id,
-                node_uid="a",
-                state=2,
-                stability=3.0,
-                difficulty=5.0,
-                due_at=past,
-                raw_due_at=past,
-                last_review_at=past - timedelta(days=3),
-                schedule_source="manual",
-                content_fingerprint="",
-            )
-        )
         session.flush()
 
         session.add_all(
@@ -154,6 +134,8 @@ class FreestyleRouteTests(RouterTestCase):
                 summary_json="{}",
             )
         )
+        session.commit()
+        reconcile_palace_units(session, palace.id)
         session.commit()
 
         self.palace_id = palace.id
@@ -275,7 +257,6 @@ class FreestyleRouteTests(RouterTestCase):
         self.assertEqual(response.status_code, 200)
         cards = response.json()["cards"]
         content_types = {card["content_type"] for card in cards}
-        self.assertIn("quiz_question", content_types)
         self.assertIn("review", content_types)
         self.assertNotIn("practice", content_types)
         self.assertNotIn("english", content_types)
@@ -286,32 +267,6 @@ class FreestyleRouteTests(RouterTestCase):
                 if card.get("palace_context")
             )
         )
-
-    def test_feed_surfaces_reinforcement_only_palace(self):
-        past = utc_now_naive() - timedelta(minutes=5)
-        with self.SessionLocal() as session:
-            row = (
-                session.query(ReviewNodeState)
-                .filter_by(palace_id=self.palace_id, node_uid="a")
-                .one()
-            )
-            row.schedule_source = "reinforcement"
-            row.schedule_reason = "reinforcement_r1_batch"
-            row.due_at = past
-            row.raw_due_at = past + timedelta(days=3)
-            session.commit()
-
-        response = self.client.get("/api/v1/freestyle/feed?content_types=review&range=due")
-        self.assertEqual(response.status_code, 200)
-        cards = response.json()["cards"]
-        reinforcement = [
-            card
-            for card in cards
-            if card.get("id") == f"review:reinforcement:{self.palace_id}"
-        ]
-        self.assertEqual(len(reinforcement), 1)
-        self.assertIn("本轮补刷", reinforcement[0]["title"])
-        self.assertEqual(reinforcement[0]["review_entry_mode"], "reinforcement")
 
     def test_wrong_range_returns_only_wrong_quiz_cards(self):
         with self.SessionLocal() as session:

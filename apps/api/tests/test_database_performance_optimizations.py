@@ -20,9 +20,9 @@ from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
     Peg,
-    ReviewLog,
     chapter_palace_table,
 )
+from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.backups.application import backup_lifecycle, storage_backup
 from memory_anki.modules.content.application.palace_maintenance import (
     restore_all_archived_palaces,
@@ -67,10 +67,9 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         )
         self.assertEqual(_index_columns(Attachment, "ix_attachments_palace_id"), ["palace_id"])
         self.assertEqual(
-            _index_columns(ReviewLog, "ix_review_logs_palace_date_id"),
-            ["palace_id", "review_date", "id"],
+            _index_columns(ReviewUnitState, "ix_review_unit_states_due"),
+            ["active", "due_date", "palace_id"],
         )
-        self.assertEqual(_index_columns(ReviewLog, "ix_review_logs_date"), ["review_date"])
         self.assertEqual(_index_columns(Chapter, "ix_chapters_subject_sort"), ["subject_id", "sort_order"])
         self.assertEqual(_index_columns(Chapter, "ix_chapters_parent_sort"), ["parent_id", "sort_order"])
         self.assertEqual(
@@ -192,11 +191,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         return
 
 
-    def test_weekly_report_uses_sql_aggregate_for_review_logs(self):
-        from datetime import date
-
-        today = date.today()
-        week_start_date = today - timedelta(days=today.weekday() + 7)
+    def test_weekly_report_uses_sql_aggregate_for_unit_review_sessions(self):
         week_start, _week_end = current_week_bounds()
         week_start = week_start - timedelta(days=7)
         with self.SessionLocal() as session:
@@ -207,16 +202,21 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             )
             session.add(palace)
             session.flush()
-            session.add_all(
-                [
-                    ReviewLog(
-                        palace_id=palace.id,
-                        review_date=week_start_date + timedelta(days=index % 7),
-                        score=index % 5,
-                    )
-                    for index in range(80)
-                ]
-            )
+            session.add_all([
+                StudySession(
+                    id=f"unit-review-{index}",
+                    status="completed",
+                    scene="formal_unit_review",
+                    target_type="palace",
+                    target_id=palace.id,
+                    palace_id=palace.id,
+                    title="unit review",
+                    started_at=week_start + timedelta(minutes=index),
+                    ended_at=week_start + timedelta(minutes=index + 1),
+                    effective_seconds=60,
+                )
+                for index in range(80)
+            ])
             session.commit()
 
             statements: list[str] = []
@@ -232,7 +232,6 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 event.remove(self.engine, "before_cursor_execute", record_select)
 
         self.assertEqual(payload["review_count"], 80)
-        self.assertEqual(payload["average_score"], 2.0)
         self.assertEqual(payload["new_palace_count"], 1)
         self.assertLessEqual(len(statements), 3)
 

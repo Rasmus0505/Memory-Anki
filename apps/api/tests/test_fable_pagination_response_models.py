@@ -130,9 +130,6 @@ class FablePaginationResponseModelTests(RouterTestCase):
             "RuntimeHealthResponse",
             "RuntimeInfoResponse",
             "SettingsResponse",
-            "ReviewQueueResponse",
-            "GroupedReviewScheduleItem",
-            "SubmitReviewResponse",
             "PalaceSummaryResponse",
             "PaginatedPalaceListResponse",
         ):
@@ -140,4 +137,4 @@ class FablePaginationResponseModelTests(RouterTestCase):
 
         review_response = self.client.get("/api/v1/review/queue")
         self.assertEqual(review_response.status_code, 200)
-        self.assertIn("reviews", review_response.json())
+        self.assertIn("items", review_response.json())

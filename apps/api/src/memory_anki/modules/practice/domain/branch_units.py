@@ -60,6 +60,8 @@ class BranchUnit:
     node_count: int
     over_limit_delta: int
     selection_reason: str = "branch_unit"
+    unit_id: str | None = None
+    unit_revision: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +72,8 @@ class BranchUnit:
             "node_count": self.node_count,
             "over_limit_delta": self.over_limit_delta,
             "selection_reason": self.selection_reason,
+            "unit_id": self.unit_id,
+            "unit_revision": self.unit_revision,
         }
 
 

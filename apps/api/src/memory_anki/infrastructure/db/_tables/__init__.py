@@ -11,11 +11,10 @@ from . import (  # noqa: F401
     english,
     english_reading,
     knowledge,
-    mindmap,
     misc,
     palaces,
     quiz_generation,
-    reviews,
+    unit_reviews,
 )
 from ._base import Base, engine, get_session, init_db
 

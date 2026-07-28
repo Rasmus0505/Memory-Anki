@@ -6,10 +6,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.infrastructure.db._tables.misc import Config
-from memory_anki.infrastructure.db._tables.palaces import Palace, Peg, ReviewLog
+from memory_anki.infrastructure.db._tables.misc import Config, StudySession
+from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.content.public.queries import build_today_new_palace_outline
-from memory_anki.modules.memory.public.queries import get_fsrs_queue_payload, get_weekly_stats
+from memory_anki.modules.memory.public.queries import (
+    get_review_queue_summary,
+    get_unit_review_weekly_stats,
+)
 from memory_anki.modules.session.public.queries import (
     FORMAL_REVIEW_SCENES,
     STUDY_DASHBOARD_SCENES,
@@ -58,7 +61,7 @@ def build_dashboard_payload(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    queue = get_fsrs_queue_payload(session, include_stats=True, include_items=True)
+    queue = get_review_queue_summary(session)
     today_start, today_end = today_bounds()
     recent = (
         session.query(Palace)
@@ -112,19 +115,20 @@ def build_dashboard_payload(
                 "id": item["palace_id"],
                 "palace_id": item["palace_id"],
                 "palace": item.get("palace"),
-                "scheduled_date": item.get("next_due_date") or item.get("scheduled_date"),
-                "interval_days": None,
-                "algorithm_used": "FSRS",
+                "scheduled_date": item.get("due_date"),
+                "interval_days": item.get("interval_days"),
+                "algorithm_used": "fixed_ladder",
                 "review_number": 0,
                 "completed": False,
-                "schedule_count": item.get("due_node_count") or 0,
-                "overdue_schedule_count": item.get("overdue_node_count") or 0,
-                "next_due_date": item.get("next_due_date"),
-                "due_node_count": item.get("due_node_count") or 0,
-                "overdue_node_count": item.get("overdue_node_count") or 0,
-                "review_entry_mode": item.get("review_entry_mode"),
-                "review_entry_label": item.get("review_entry_label"),
-                "primary_branch_title": item.get("primary_branch_title"),
+                "schedule_count": 1,
+                "overdue_schedule_count": 1,
+                "next_due_date": item.get("due_date"),
+                "due_node_count": len(item.get("node_uids") or []),
+                "due_unit_count": 1,
+                "overdue_node_count": len(item.get("node_uids") or []),
+                "review_entry_mode": "unit",
+                "review_entry_label": "立即复习",
+                "primary_branch_title": item.get("title"),
             }
         )
 
@@ -133,7 +137,7 @@ def build_dashboard_payload(
         "due_later_today_count": int(queue.get("later_today_count") or 0),
         "needs_practice_count": 0,
         "reviews": reviews,
-        "stats": get_weekly_stats(session),
+        "stats": get_unit_review_weekly_stats(session),
         "today_review_duration_seconds": get_study_session_duration_seconds(
             session,
             scenes=FORMAL_REVIEW_SCENES,
@@ -244,21 +248,18 @@ def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> d
         start=week_start,
         end=week_end,
     )
-    review_count, average_score = (
-        session.query(
-            func.count(ReviewLog.id),
-            func.avg(func.coalesce(ReviewLog.score, 0)),
-        )
-        .join(Palace, Palace.id == ReviewLog.palace_id)
+    review_count = int(
+        session.query(func.count(StudySession.id))
         .filter(
-            ReviewLog.review_date >= week_start_date,
-            ReviewLog.review_date < week_end_date,
-            Palace.deleted_at.is_(None),
+            StudySession.scene == "formal_unit_review",
+            StudySession.status == "completed",
+            StudySession.ended_at >= week_start,
+            StudySession.ended_at < week_end,
         )
-        .one()
+        .scalar()
+        or 0
     )
-    review_count = int(review_count or 0)
-    average_score = round(float(average_score or 0), 1) if review_count else 0
+    average_score = 0
     new_palace_count = (
         session.query(func.count(Palace.id))
         .filter(

@@ -46,6 +46,7 @@ from .split_units import (
     split_scheduling_units,
     subtree_uids,
 )
+from .tree import build_document_tree
 
 __all__ = [
     "SplitUnit",
@@ -74,6 +75,7 @@ __all__ = [
     "assert_expected_fingerprint",
     "build_editor_state",
     "build_editor_state_fingerprint",
+    "build_document_tree",
     "coerce_editor_int",
     "coerce_editor_local_config",
     "collect_node_descendants",

@@ -6,9 +6,10 @@ import pytest
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
+from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.dashboard.application.service import build_weekly_report_payload
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
+from memory_anki.modules.memory.api import reconcile_palace_units
 
 EDITOR_DOC = json.dumps(
     {
@@ -47,44 +48,28 @@ def test_invalid_month_returns_400(client):
     assert response.status_code == 400
 
 
-def test_seeded_palace_with_fsrs_nodes_shows_up(client, session_factory):
-    from memory_anki.infrastructure.db._tables.reviews import ReviewNodeState
-
+def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory):
     with session_factory() as session:
         now = utc_now_naive()
-        past = now - timedelta(days=1)
         palace = Palace(
             title="P1",
             description="",
-            editor_doc=EDITOR_DOC,
+            editor_doc=EDITOR_DOC.replace('"uid": "root"', '"uid": "root", "permanentSplitMark": true'),
             created_at=now,
             updated_at=now,
         )
         session.add(palace)
         session.flush()
         palace_id = palace.id
-        for uid in ("a", "b"):
-            session.add(
-                ReviewNodeState(
-                    palace_id=palace_id,
-                    node_uid=uid,
-                    state=2,
-                    stability=3.0,
-                    difficulty=5.0,
-                    due_at=past,
-                    raw_due_at=past,
-                    last_review_at=past - timedelta(days=3),
-                    schedule_source="manual",
-                    content_fingerprint="",
-                )
-            )
+        session.commit()
+        reconcile_palace_units(session, palace_id)
         session.commit()
 
     body = client.get("/api/v1/dashboard").json()
 
-    assert body["due_count"] == 2
+    assert body["due_count"] == 1
     assert body["reviews"][0]["palace_id"] == palace_id
-    assert body["reviews"][0]["due_node_count"] == 2
+    assert body["reviews"][0]["due_unit_count"] == 1
     assert body["recent_palaces"][0]["title"] == "P1"
     assert body["today_new_palace_count"] == 1
 
@@ -119,16 +104,19 @@ def test_weekly_report_payload(session_factory):
         palace = Palace(title="Weekly", editor_doc=EDITOR_DOC)
         session.add(palace)
         session.flush()
-        session.add(
-            ReviewLog(
-                palace_id=palace.id,
-                review_date=previous_week_day,
-                score=4,
-                review_mode="fsrs",
-                duration_seconds=60,
-                note="ok",
-            )
-        )
+        previous_week_at = datetime.combine(previous_week_day, datetime.min.time())
+        session.add(StudySession(
+            id="previous-week-unit-review",
+            status="completed",
+            scene="formal_unit_review",
+            target_type="palace",
+            target_id=palace.id,
+            palace_id=palace.id,
+            title="unit review",
+            started_at=previous_week_at,
+            ended_at=previous_week_at + timedelta(minutes=1),
+            effective_seconds=60,
+        ))
         session.commit()
         payload = build_weekly_report_payload(session, offset_weeks=1)
 

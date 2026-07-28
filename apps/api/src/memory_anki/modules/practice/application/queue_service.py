@@ -7,20 +7,19 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.content.public.queries import list_active_palace_tree_structures
-from memory_anki.modules.memory.public.queries import get_palace_memory_projection, list_due_nodes
+from memory_anki.modules.memory.public.queries import get_palace_unit_projection
 from memory_anki.modules.quiz.public.queries import (
     list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
 
+from ..domain.branch_units import BranchUnit, ancestor_path
 from ..domain.feed_config import sanitize_feed_config
 from ..domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
-    build_palace_units,
 )
-from .temporary_marks import list_active_temporary_roots
 
 
 def build_freestyle_queue(
@@ -51,45 +50,42 @@ def build_freestyle_queue(
     mastery_by_palace: dict[int, float] = {}
     recent_practice_rank: dict[int, int] = {}
 
-    temporary_by_palace = list_active_temporary_roots(session)
-
     for tree in trees:
         palace_id = int(tree["palace_id"])
         palace_meta[palace_id] = {
             "title": str(tree.get("title") or ""),
         }
         nodes = tree["nodes"]
-        permanent_marks = [
-            str(uid)
-            for uid, node in nodes.items()
-            if isinstance(node, dict) and node.get("permanent_split_mark")
-        ]
-        units_by_palace[palace_id] = build_palace_units(
-            palace_id=palace_id,
-            nodes=nodes,
-            root_uid=tree.get("root_uid"),
-            node_limit=int(config["node_limit"]),
-            within_palace_order=str(config["within_palace_order"]),
-            seed=int(config["seed"]),
-            permanent_mark_uids=permanent_marks,
-            temporary_root_uids=list(temporary_by_palace.get(palace_id) or []),
-        )
         try:
-            # Progress scopes select which memory buckets enter freestyle units
-            # (overdue / due / calendar_today / reinforcement / new).
-            due_by_palace[palace_id] = set(
-                list_due_nodes(
-                    session,
-                    palace_id,
-                    progress_scopes=list(config.get("progress_scopes") or []),
+            projection = get_palace_unit_projection(session, palace_id)
+            projected_units = list(projection.get("units") or [])
+            units_by_palace[palace_id] = [
+                BranchUnit(
+                    palace_id=palace_id,
+                    branch_uid=str(item["anchor_uid"]),
+                    context_path=tuple(ancestor_path(nodes, str(item["anchor_uid"]))),
+                    ratable_node_uids=tuple(item.get("node_uids") or []),
+                    node_count=len(item.get("node_uids") or []),
+                    over_limit_delta=0,
+                    selection_reason="permanent_review_unit",
+                    unit_id=str(item["id"]),
+                    unit_revision=int(item["revision"]),
                 )
+                for item in projected_units
+            ]
+            due_by_palace[palace_id] = {
+                uid
+                for item in projected_units
+                if item.get("due")
+                for uid in item.get("node_uids") or []
+            }
+            mastery_by_palace[palace_id] = (
+                sum(int(item.get("stage_index") or 0) for item in projected_units)
+                / max(1, len(projected_units) * 8)
             )
         except ValueError:
+            units_by_palace[palace_id] = []
             due_by_palace[palace_id] = set()
-        try:
-            projection = get_palace_memory_projection(session, palace_id)
-            mastery_by_palace[palace_id] = float(projection.get("mastery_progress") or 0.5)
-        except ValueError:
             mastery_by_palace[palace_id] = 0.5
 
     # Quiz projections only when enabled.

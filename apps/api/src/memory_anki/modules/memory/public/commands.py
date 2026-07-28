@@ -1,27 +1,23 @@
-"""Write commands for memory (ratings / wave lifecycle)."""
-
-from __future__ import annotations
+"""Write commands for permanent-mark review units."""
 
 from memory_anki.modules.memory.api import (
-    diagnose_palace,
-    merge_new_due_into_wave,
-    pause_formal_wave,
-    preview_or_apply_calibration,
-    rate_nodes,
-    resume_formal_wave,
-    start_or_resume_formal_review,
-    undo_calibration,
-    undo_rating_operation,
+    close_unit_review_encounter,
+    complete_unit_review_session,
+    open_unit_review_encounter,
+    rate_review_unit,
+    reconcile_palace_units,
+    start_freestyle_unit_review_session,
+    start_unit_review_session,
+    undo_unit_rating,
 )
 
 __all__ = [
-    "diagnose_palace",
-    "merge_new_due_into_wave",
-    "pause_formal_wave",
-    "preview_or_apply_calibration",
-    "rate_nodes",
-    "resume_formal_wave",
-    "start_or_resume_formal_review",
-    "undo_calibration",
-    "undo_rating_operation",
+    "close_unit_review_encounter",
+    "complete_unit_review_session",
+    "open_unit_review_encounter",
+    "rate_review_unit",
+    "reconcile_palace_units",
+    "start_freestyle_unit_review_session",
+    "start_unit_review_session",
+    "undo_unit_rating",
 ]

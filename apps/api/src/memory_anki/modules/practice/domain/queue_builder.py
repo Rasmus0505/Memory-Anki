@@ -199,6 +199,8 @@ def attach_questions_to_units(
 
 
 def unit_key(unit: BranchUnit) -> str:
+    if unit.unit_id:
+        return f"review_unit:{unit.unit_id}:r{unit.unit_revision or 0}"
     return f"mindmap_branch:{unit.palace_id}:{unit.branch_uid}"
 
 
@@ -389,6 +391,8 @@ def mindmap_card_payload(
         "over_limit_delta": unit.over_limit_delta,
         "due_node_count": len(due_in_unit),
         "selection_reason": unit.selection_reason,
+        "unit_id": unit.unit_id,
+        "unit_revision": unit.unit_revision,
         "phase": phase,
         "palace_context": {
             "id": unit.palace_id,

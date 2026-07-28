@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -39,6 +40,15 @@ def _node_anki_fields(raw: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+def _node_content_fingerprint(raw: dict[str, Any]) -> str:
+    value = raw.get("data")
+    data = dict(value) if isinstance(value, dict) else {}
+    for key in ("expand", "isActive", "permanentSplitMark", "permanent_split_mark"):
+        data.pop(key, None)
+    payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def build_tree_from_editor_doc(editor_doc: Any) -> tuple[str | None, dict[str, dict[str, Any]]]:
     """Return (root_uid, nodes) with children ordered as stored in the document."""
     document = editor_doc
@@ -67,6 +77,7 @@ def build_tree_from_editor_doc(editor_doc: Any) -> tuple[str | None, dict[str, d
             "parent_uid": parent_uid,
             "children": children,
             "text": _node_text(raw),
+            "content_fingerprint": _node_content_fingerprint(raw),
             **_node_anki_fields(raw),
         }
         return uid

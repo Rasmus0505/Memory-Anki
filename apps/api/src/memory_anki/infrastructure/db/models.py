@@ -9,14 +9,13 @@ from memory_anki.infrastructure.db import _tables  # noqa: F401  (registers all 
 from memory_anki.infrastructure.db._tables._base import Base, engine, get_session, init_db
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
 from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import Palace, ReviewLog
+from memory_anki.infrastructure.db._tables.palaces import Palace
 
 __all__ = [
     "Base",
     "EnglishCourse",
     "EnglishCourseProgress",
     "Palace",
-    "ReviewLog",
     "StudySession",
     "engine",
     "get_session",

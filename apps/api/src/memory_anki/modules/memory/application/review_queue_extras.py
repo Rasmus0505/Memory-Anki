@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.palaces import ReviewLog
+from memory_anki.infrastructure.db._tables.misc import StudySession
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -99,13 +99,18 @@ def today_review_counts_by_palace(
     if not palace_ids:
         return {}
     today = date.today()
+    day_start = datetime.combine(today, datetime.min.time())
+    day_end = datetime.combine(today, datetime.max.time())
     rows = (
-        session.query(ReviewLog.palace_id, func.count(ReviewLog.id))
+        session.query(StudySession.palace_id, func.count(StudySession.id))
         .filter(
-            ReviewLog.palace_id.in_(palace_ids),
-            ReviewLog.review_date == today,
+            StudySession.palace_id.in_(palace_ids),
+            StudySession.scene == "formal_unit_review",
+            StudySession.status == "completed",
+            StudySession.ended_at >= day_start,
+            StudySession.ended_at <= day_end,
         )
-        .group_by(ReviewLog.palace_id)
+        .group_by(StudySession.palace_id)
         .all()
     )
     return {int(palace_id): int(count) for palace_id, count in rows}

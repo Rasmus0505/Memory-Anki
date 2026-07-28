@@ -1,68 +1,53 @@
+"""Public facade for permanent-mark review units."""
 
-"""Public review context facade for cross-context composition."""
-
-from .application.calibration_service import (
-    diagnose_palace,
-    preview_or_apply_calibration,
-    undo_calibration,
+from .application.unit_review_summary import (
+    get_palace_review_summary,
+    get_review_queue_summary,
+    get_unit_review_weekly_stats,
+    project_palace_review_summaries,
 )
-from .application.formal_review_service import (
-    get_fsrs_queue_payload,
-    start_or_resume_formal_review,
+from .application.unit_review_service import (
+    close_unit_review_encounter,
+    complete_unit_review_session,
+    get_palace_unit_projection,
+    get_unit_review_completion,
+    get_unit_review_session,
+    list_due_units,
+    open_unit_review_encounter,
+    rate_review_unit,
+    reconcile_palace_units,
+    resolve_unit_definitions,
+    start_freestyle_unit_review_session,
+    start_unit_review_session,
+    undo_unit_rating,
 )
-from .application.fsrs_runtime import (
+from .application.unit_scheduler import (
+    INTERVAL_DAYS,
     RATING_LABELS,
     VALID_RATINGS,
-    build_scheduler,
-    load_fsrs_settings,
     normalize_rating,
-)
-from .application.node_due_rollup_batch import project_due_rollups_batch
-from .application.node_memory_service import (
-    due_node_uids_for_entry,
-    get_completion_summary,
-    get_palace_due_rollup,
-    get_palace_mastery_trend,
-    get_palace_memory_projection,
-    list_due_nodes,
-    rate_nodes,
-    undo_rating_operation,
-)
-from .application.review_metrics_service import get_weekly_stats
-from .application.temporary_mark_unify import unify_fsrs_progress_for_node_groups
-from .application.wave_service import (
-    get_wave_detail,
-    list_palace_waves,
-    merge_new_due_into_wave,
-    pause_formal_wave,
-    resume_formal_wave,
 )
 
 __all__ = [
+    "INTERVAL_DAYS",
     "RATING_LABELS",
     "VALID_RATINGS",
-    "build_scheduler",
-    "diagnose_palace",
-    "due_node_uids_for_entry",
-    "get_completion_summary",
-    "get_fsrs_queue_payload",
-    "get_palace_due_rollup",
-    "get_palace_mastery_trend",
-    "get_palace_memory_projection",
-    "get_wave_detail",
-    "get_weekly_stats",
-    "list_due_nodes",
-    "list_palace_waves",
-    "load_fsrs_settings",
-    "merge_new_due_into_wave",
+    "close_unit_review_encounter",
+    "complete_unit_review_session",
+    "get_palace_unit_projection",
+    "get_palace_review_summary",
+    "get_review_queue_summary",
+    "get_unit_review_weekly_stats",
+    "get_unit_review_completion",
+    "get_unit_review_session",
+    "list_due_units",
     "normalize_rating",
-    "pause_formal_wave",
-    "preview_or_apply_calibration",
-    "project_due_rollups_batch",
-    "rate_nodes",
-    "resume_formal_wave",
-    "start_or_resume_formal_review",
-    "undo_calibration",
-    "undo_rating_operation",
-    "unify_fsrs_progress_for_node_groups",
+    "open_unit_review_encounter",
+    "rate_review_unit",
+    "reconcile_palace_units",
+    "resolve_unit_definitions",
+    "project_palace_review_summaries",
+    "start_freestyle_unit_review_session",
+    "start_unit_review_session",
+    "undo_unit_rating",
 ]

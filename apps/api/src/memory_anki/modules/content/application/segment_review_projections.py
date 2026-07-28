@@ -12,7 +12,7 @@ from memory_anki.modules.content.application.segment_nodes import (
     parse_segment_node_uids,
     remaining_unclaimed_node_uids,
 )
-from memory_anki.modules.memory.api import get_palace_memory_projection
+from memory_anki.modules.memory.api import get_palace_review_summary
 
 from .segment_review_support import (
     palace_stage_progress,
@@ -50,14 +50,6 @@ def estimate_segment_review_seconds(segment: PalaceSegment) -> int:
 
 
 def estimate_palace_review_seconds(palace: Palace) -> int:
-    logs = [
-        log
-        for log in (palace.review_logs or [])
-        if getattr(log, "review_mode", "") == "review"
-    ]
-    total_duration = sum(max(0, int(log.duration_seconds or 0)) for log in logs)
-    if total_duration > 0 and logs:
-        return max(60, round(total_duration / len(logs)))
     descendants, _ = collect_doc_nodes_with_descendants(palace.editor_doc)
     node_count = len(descendants)
     if node_count > 0:
@@ -163,7 +155,7 @@ def build_palace_default_segment_summary(
     next_review_at = None
     has_due_review = False
     try:
-        projection = get_palace_memory_projection(session, palace.id)
+        projection = get_palace_review_summary(session, palace.id)
         next_review_at = projection.get("next_review_at")
         has_due_review = bool(projection.get("has_due_review"))
     except ValueError:
