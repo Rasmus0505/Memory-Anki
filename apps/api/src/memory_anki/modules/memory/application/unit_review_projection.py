@@ -54,6 +54,12 @@ def resolve_unit_definitions(
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None or palace.archived:
         raise ValueError(f"palace not found: {palace_id}")
+    return _definitions_for_palace(palace)
+
+
+def _definitions_for_palace(
+    palace: Palace,
+) -> tuple[dict[str, Any], list[UnitDefinition]]:
     root_uid, nodes = build_document_tree(palace.editor_doc)
     tree = {
         "palace_id": palace.id,
@@ -268,17 +274,34 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
         ReviewUnitState.due_date.asc(),
         ReviewUnitState.palace_id.asc(),
     ).all()
-    definitions_by_palace: dict[int, dict[str, UnitDefinition]] = {}
+    palace_ids = sorted({row.palace_id for row in rows})
+    palaces = (
+        session.query(Palace)
+        .filter(
+            Palace.id.in_(palace_ids),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+        .all()
+        if palace_ids
+        else []
+    )
+    definitions_by_palace = {
+        palace.id: {
+            item.anchor_uid: item
+            for item in _definitions_for_palace(palace)[1]
+        }
+        for palace in palaces
+    }
+    palace_by_id = {palace.id: palace for palace in palaces}
     result: list[dict[str, Any]] = []
     for row in rows:
-        if row.palace_id not in definitions_by_palace:
-            _, definitions = resolve_unit_definitions(session, row.palace_id)
-            definitions_by_palace[row.palace_id] = {
-                item.anchor_uid: item for item in definitions
-            }
-        definition = definitions_by_palace[row.palace_id].get(row.anchor_uid)
+        definition = definitions_by_palace.get(row.palace_id, {}).get(row.anchor_uid)
         if definition is not None and definition.membership_hash == row.membership_hash:
-            result.append(unit_payload(row, definition))
+            payload = unit_payload(row, definition)
+            palace = palace_by_id.get(row.palace_id)
+            payload["palace_title"] = palace.title if palace is not None else ""
+            result.append(payload)
     return result
 
 

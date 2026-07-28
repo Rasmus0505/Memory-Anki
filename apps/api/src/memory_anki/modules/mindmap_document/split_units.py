@@ -11,9 +11,8 @@
 复习范围；宫殿只要存在至少一个永久标记，所有非根节点都必须且只属于一个
 复习单元。
 
-两个消费方的差别只在第二阶段：
-- 调度单元（`split_scheduling_units`）：残余区整体为一个单元（宫殿整体调度）
-- 随心队列（`practice.branch_units`）：残余区按 node_limit 最佳拟合再切
+`split_scheduling_units` 是唯一单元拓扑函数。Reviews 持久化并调和它的结果；
+正式复习与随心队列都只消费 Reviews 的公共单元投影，不自行再次切分。
 """
 
 from __future__ import annotations

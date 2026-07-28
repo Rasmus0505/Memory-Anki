@@ -1,6 +1,6 @@
 """Simple synchronous in-process event bus.
 
-Used for write-time projection updates (e.g. NodesRated -> due rollup refresh).
+Used for local write-time projection updates.
 Not a distributed message queue.
 """
 

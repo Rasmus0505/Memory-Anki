@@ -1,11 +1,5 @@
 """Public facade for permanent-mark review units."""
 
-from .application.unit_review_summary import (
-    get_palace_review_summary,
-    get_review_queue_summary,
-    get_unit_review_weekly_stats,
-    project_palace_review_summaries,
-)
 from .application.unit_review_service import (
     close_unit_review_encounter,
     complete_unit_review_session,
@@ -20,6 +14,12 @@ from .application.unit_review_service import (
     start_freestyle_unit_review_session,
     start_unit_review_session,
     undo_unit_rating,
+)
+from .application.unit_review_summary import (
+    get_palace_review_summary,
+    get_review_queue_summary,
+    get_unit_review_weekly_stats,
+    project_palace_review_summaries,
 )
 from .application.unit_scheduler import (
     INTERVAL_DAYS,

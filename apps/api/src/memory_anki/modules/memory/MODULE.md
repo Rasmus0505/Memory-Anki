@@ -1,13 +1,16 @@
 # Module: memory
 
 ## Status
-scaffolding — public surface path for concentrated refactor (branch 7.22-refactor-optimize).
+migrated — permanent-mark unit scheduling is the only palace review runtime.
 
 ## Owns
-FSRS, ReviewWave, ratings, due rollups, calibration
+- permanent-mark unit state and topology reconciliation
+- fixed-ladder scheduling and local-day due dates
+- review sessions, encounters, atomic amendments, close locking, and undo
 
-## Migrates from
-- reviews (incl. wave_*, calibration, node_memory_*, fsrs_runtime)
+## Retired
+- node ratings and node FSRS state
+- waves, calibration, aggregation, daily plans, and temporary marks
 
 ## Forbids
 Must not import palace application internals; read trees via content.public
@@ -15,8 +18,6 @@ Must not import palace application internals; read trees via content.public
 ## Public surface
 - `public/commands.py` — write intents
 - `public/queries.py` — read intents
-- `public/events.py` — domain events this module emits
-- `public/projections.py` — stable read DTOs for other modules
 
 ## Cross-module rule
 Import only `memory_anki.modules.memory.public`. Never import another module's application/infrastructure/presentation.
