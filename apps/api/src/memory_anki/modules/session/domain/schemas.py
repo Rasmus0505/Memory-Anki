@@ -63,11 +63,3 @@ class StudySessionBulkDelete(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     ids: list[Any] = Field(default_factory=list)
-
-
-class PracticeProgressUpsert(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    reveal_map: dict[str, Any] | None = None
-    red_node_ids: list[Any] | None = None
-    completed: bool | None = None

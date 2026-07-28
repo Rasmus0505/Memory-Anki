@@ -455,12 +455,3 @@ def _filtered_study_sessions_query(
 from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
     create_completed_study_session_from_time_payload as create_completed_study_session_from_time_payload,
 )
-from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
-    create_review_study_session as create_review_study_session,
-)
-from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
-    ensure_review_log_study_sessions as ensure_review_log_study_sessions,
-)
-from .study_session_bridge import (  # noqa: E402  (compatibility re-exports)
-    reclassify_ghost_formal_review_time_sessions as reclassify_ghost_formal_review_time_sessions,
-)
