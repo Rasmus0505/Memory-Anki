@@ -30,6 +30,7 @@ import { appPrompt } from '@/shared/components/ui/native-dialog'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
+import { PalaceReviewUnitsPanel } from '@/modules/practice/public'
 import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
 import {
   cycleMindMapAnkiRole,
@@ -104,6 +105,7 @@ export default function PalaceEdit() {
   const [ankiEditMode, setAnkiEditMode] = useState(false)
   /** When true in Anki mode, click cycles front/back/none instead of normal select. */
   const [ankiRolePen, setAnkiRolePen] = useState(false)
+  const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('mode') === 'permanent-mark') {
@@ -192,10 +194,14 @@ export default function PalaceEdit() {
       const doc = page.editorState.editor_doc as EditorDoc
       const result = togglePermanentMarkInDoc(doc, String(uid))
       if (result.doc === doc) return
+      // Arm mark_change on the next save; backend also reconciles when permanent-mark set changes.
+      page.armNextSaveOverride({ sync_reason: 'mark_change' })
       page.handleMindMapEditorStateChange({
         ...page.editorState,
         editor_doc: result.doc,
       })
+      // Flush after scheduleSave has marked dirty (same-tick dirtyRef is already true).
+      void page.flushSave()
       toast.success(result.marked ? '已添加永久标记（层级自动）' : '已取消永久标记')
     },
     [page],
@@ -309,6 +315,16 @@ export default function PalaceEdit() {
             )
             return next
           })
+        },
+      },
+      {
+        label: '复习进度',
+        onClick: () => {
+          if (!page.palaceId) {
+            toast.message('当前没有可查看的宫殿')
+            return
+          }
+          setReviewUnitsPanelOpen(true)
         },
       },
       {
@@ -717,6 +733,14 @@ export default function PalaceEdit() {
       />
 
       {quizBindingsHost.dialogs}
+
+      {page.palaceId ? (
+        <PalaceReviewUnitsPanel
+          open={reviewUnitsPanelOpen}
+          palaceId={page.palaceId}
+          onClose={() => setReviewUnitsPanelOpen(false)}
+        />
+      ) : null}
 
     </div>
   )

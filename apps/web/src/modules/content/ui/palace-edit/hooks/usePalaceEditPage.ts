@@ -242,8 +242,12 @@ export function usePalaceEditPage() {
   useEffect(() => {
     return () => {
       if (hardUnloadRef.current) return
+      if (!palaceId) return
+      // Soft route leave (SPA navigation): palace-only reconcile flush.
+      // Capture-phase leave arming covers tab hide/pagehide via the shared session flush.
+      void documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
     }
-  }, [])
+  }, [palaceId])
 
   useEffect(() => {
     if (!mindMapFullscreen) return
@@ -392,6 +396,9 @@ export function usePalaceEditPage() {
     setEditorState: documentState.setEditorState,
     hasUnsavedChanges: documentState.hasUnsavedChanges,
     saveStatus: documentState.saveStatus,
+    flushSave: documentState.flushSave,
+    flushSaveWithReconcile: documentState.flushSaveWithReconcile,
+    armNextSaveOverride: documentState.armNextSaveOverride,
     saveError: documentState.error,
     isLoadError: documentState.isLoadError,
     isCreatingDraft: documentState.isCreatingDraft,

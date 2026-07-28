@@ -6,7 +6,11 @@ import {
   savePalaceEditorWithOptionsApi,
 } from '@/modules/content/domain/palace-entity/api'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
-import type { MindMapEditorState, PalaceEditorResponse } from '@/shared/api/contracts'
+import type {
+  MindMapEditorState,
+  PalaceEditorResponse,
+  PalaceEditorSavePayload,
+} from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import {
   applyProgrammaticEditorState,
@@ -23,6 +27,18 @@ import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { readMindMapEditorState } from '@/modules/content/domain/mindmap-document-entity'
 
 type ImportApplyGuardPhase = 'saving' | 'reloading' | 'awaiting_sync'
+
+/** One-shot flags injected into the next palace save only (not knowledge subjects). */
+export type PalaceEditorSaveOverride = {
+  sync_reason?: string | null
+  reconcile_units?: boolean
+}
+
+export type PalaceEditorReconcileSyncReason =
+  | 'editor_leave'
+  | 'editor_idle'
+  | 'mark_change'
+  | 'return_to_review'
 
 interface ImportApplyGuardState {
   expectedFingerprint: string
@@ -47,6 +63,17 @@ export function usePalaceEditorDocument({
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
   const importApplyGuardRef = useRef<ImportApplyGuardState | null>(null)
   const importApplyGuardTimerRef = useRef<number | null>(null)
+  /** Consumed once by the next adapter save; normal autosave leaves this null. */
+  const nextSaveOverrideRef = useRef<PalaceEditorSaveOverride | null>(null)
+
+  const saveWithOptionalOverride = useCallback(
+    async (id: number, data: MindMapEditorState & { expected_editor_fingerprint?: string | null }) => {
+      const override = nextSaveOverrideRef.current
+      nextSaveOverrideRef.current = null
+      return savePalaceEditorApi(id, applyPalaceSaveOverride(data, override))
+    },
+    [],
+  )
 
   const {
     meta,
@@ -66,7 +93,7 @@ export function usePalaceEditorDocument({
     entityId: palaceId,
     adapter: {
       load: getPalaceEditorApi,
-      save: savePalaceEditorApi,
+      save: saveWithOptionalOverride,
       selectMeta: (response) => response.palace as PalaceMeta,
       selectEditorState: readMindMapEditorState,
     },
@@ -80,6 +107,60 @@ export function usePalaceEditorDocument({
     },
   })
   const effectivePalaceTitle = (meta as PalaceMeta | null)?.title || '未命名宫殿'
+
+  const armNextSaveOverride = useCallback((override: PalaceEditorSaveOverride) => {
+    nextSaveOverrideRef.current = override
+  }, [])
+
+  /**
+   * Flush pending palace editor changes with optional unit reconcile.
+   * Normal autosave never sets these flags — backend still reconciles on permanent-mark set delta.
+   * Override is consumed by the next adapter save only (including session visibility flush if armed first).
+   * Keep the arm across in-flight → follow-up saves; clear on consume / tab visible / palaceId change.
+   */
+  const flushSaveWithReconcile = useCallback(
+    async (reason: PalaceEditorReconcileSyncReason, options?: { reconcileUnits?: boolean }) => {
+      const reconcileUnits = options?.reconcileUnits ?? reason === 'editor_leave'
+      nextSaveOverrideRef.current = {
+        sync_reason: reason,
+        ...(reconcileUnits ? { reconcile_units: true } : {}),
+      }
+      await flushSave()
+    },
+    [flushSave],
+  )
+
+  // Capture-phase: arm leave flags before useMindMapDocumentSession's bubble flush listeners run.
+  useEffect(() => {
+    // Drop arms from a previous palace id so knowledge-unrelated autosaves stay clean.
+    nextSaveOverrideRef.current = null
+    if (!palaceId) return
+    const armEditorLeave = () => {
+      nextSaveOverrideRef.current = {
+        sync_reason: 'editor_leave',
+        reconcile_units: true,
+      }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        armEditorLeave()
+        return
+      }
+      // Tab visible again with no save having consumed the leave arm — drop so later autosave stays clean.
+      if (nextSaveOverrideRef.current?.sync_reason === 'editor_leave') {
+        nextSaveOverrideRef.current = null
+      }
+    }
+    const onPageHide = () => {
+      armEditorLeave()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange, true)
+    window.addEventListener('pagehide', onPageHide, true)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange, true)
+      window.removeEventListener('pagehide', onPageHide, true)
+    }
+  }, [palaceId])
 
   const clearImportApplyGuardTimer = useCallback(() => {
     if (importApplyGuardTimerRef.current != null) {
@@ -315,6 +396,8 @@ export function usePalaceEditorDocument({
     error,
     reload,
     flushSave,
+    flushSaveWithReconcile,
+    armNextSaveOverride,
     isCreatingDraft,
     setIsCreatingDraft,
     applyImportedPalaceEditorState,
@@ -326,4 +409,17 @@ export function usePalaceEditorDocument({
 async function createDraftPalace(options: { title: string; subjectIds: number[] }) {
   const created = await createPalaceApi({ title: options.title, subject_ids: options.subjectIds, description: '', pegs: [] })
   return created.id as number
+}
+
+/** Pure merge used by the palace save adapter; exported for unit tests. */
+export function applyPalaceSaveOverride(
+  data: MindMapEditorState & { expected_editor_fingerprint?: string | null },
+  override: PalaceEditorSaveOverride | null,
+): PalaceEditorSavePayload {
+  if (!override) return { ...data }
+  return {
+    ...data,
+    ...(override.sync_reason != null ? { sync_reason: override.sync_reason } : {}),
+    ...(override.reconcile_units ? { reconcile_units: true } : {}),
+  }
 }
