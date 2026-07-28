@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.memory.api import (
+    adjust_unit_schedule,
     close_unit_review_encounter,
     complete_unit_review_session,
     get_palace_unit_projection,
@@ -18,6 +19,7 @@ from memory_anki.modules.memory.api import (
     reconcile_palace_units,
     start_freestyle_unit_review_session,
     start_unit_review_session,
+    undo_content_schedule_batch,
     undo_unit_rating,
 )
 
@@ -45,6 +47,55 @@ def palace_units(palace_id: int, session: Session = Depends(session_dep)):
 def reconcile_units(palace_id: int, session: Session = Depends(session_dep)):
     try:
         item = reconcile_palace_units(session, palace_id)
+        session.commit()
+        return {"item": item}
+    except ValueError as exc:
+        session.rollback()
+        raise _bad_request(exc) from exc
+
+
+@router.patch("/review/units/{unit_id}/schedule")
+def patch_unit_schedule(
+    unit_id: str,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    try:
+        payload = data if isinstance(data, dict) else {}
+        stage_raw = payload.get("stage_index", payload.get("stageIndex"))
+        due_raw = payload.get("due_date", payload.get("dueDate"))
+        passed_raw = payload.get("has_passed", payload.get("hasPassed"))
+        item = adjust_unit_schedule(
+            session,
+            unit_id=unit_id,
+            operation_id=str(payload.get("operation_id") or payload.get("operationId") or ""),
+            stage_index=None if stage_raw is None else int(stage_raw),
+            due_date=None if due_raw is None else due_raw,
+            has_passed=None if passed_raw is None else bool(passed_raw),
+            reason=str(payload.get("reason") or "manual_adjust"),
+        )
+        session.commit()
+        return {"item": item}
+    except (TypeError, ValueError) as exc:
+        session.rollback()
+        raise _bad_request(ValueError(str(exc))) from exc
+
+
+@router.post("/review/palaces/{palace_id}/schedule-batches/{batch_id}/undo")
+def undo_schedule_batch(
+    palace_id: int,
+    batch_id: str,
+    data: dict | None = Body(default=None),
+    session: Session = Depends(session_dep),
+):
+    try:
+        payload = data if isinstance(data, dict) else {}
+        item = undo_content_schedule_batch(
+            session,
+            batch_id,
+            palace_id=palace_id,
+            operation_id=payload.get("operation_id") or payload.get("operationId"),
+        )
         session.commit()
         return {"item": item}
     except ValueError as exc:

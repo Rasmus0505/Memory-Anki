@@ -182,9 +182,34 @@ class ReviewSessionUnit(Base):
     )
 
 
+class ReviewUnitScheduleBatch(Base):
+    """Checkpoint of schedule demotions from content reconcile, for later undo."""
+
+    __tablename__ = "review_unit_schedule_batches"
+    __table_args__ = (
+        Index(
+            "ix_review_unit_schedule_batches_palace",
+            "palace_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    palace_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("palaces.id", ondelete="CASCADE"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="content_reconcile")
+    entries_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utc_now_naive
+    )
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 __all__ = [
     "ReviewSessionUnit",
     "ReviewUnitEncounter",
     "ReviewUnitRatingOperation",
+    "ReviewUnitScheduleBatch",
     "ReviewUnitState",
 ]

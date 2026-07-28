@@ -15,9 +15,11 @@ from memory_anki.modules.mindmap_document.api import (
     EDITOR_FINGERPRINT_KEY,
     EditorStateConflictError,
     assert_expected_fingerprint,
+    build_document_tree,
     build_editor_state,
     ensure_editor_dict,
     normalize_editor_doc,
+    permanent_mark_uids_from_nodes,
     resolve_local_config,
     serialize_editor_payload,
     sync_editor_root_payload,
@@ -35,6 +37,34 @@ SAFE_EXPLICIT_OVERWRITE_SOURCES = {
     "import_apply",
 }
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
+# Autosave text edits skip schedule reconcile; these leave/idle/mark events still run it.
+RECONCILE_SYNC_REASONS = frozenset(
+    {"editor_leave", "editor_idle", "mark_change", "return_to_review"}
+)
+
+
+def _permanent_mark_uids(editor_doc: Any) -> set[str]:
+    root_uid, nodes = build_document_tree(editor_doc)
+    if not root_uid:
+        return set()
+    return permanent_mark_uids_from_nodes(nodes, root_uid=str(root_uid))
+
+
+def _should_reconcile_units(
+    *,
+    payload: dict[str, Any],
+    editor_source: str,
+    sync_reason: str | None,
+    previous_doc: Any,
+    next_doc: Any,
+) -> bool:
+    if bool(payload.get("reconcile_units")):
+        return True
+    if editor_source != "palace_edit_autosave":
+        return True
+    if sync_reason in RECONCILE_SYNC_REASONS:
+        return True
+    return _permanent_mark_uids(previous_doc) != _permanent_mark_uids(next_doc)
 
 
 def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
@@ -79,8 +109,10 @@ def save_palace_editor_state(
 
     local_config = resolve_local_config(palace.editor_local_config, local_input, lang_input)
 
+    unit_reconcile: dict[str, Any] | None = None
     if doc_input is not None:
-        existing_node_count = count_editor_doc_nodes(palace.editor_doc)
+        previous_doc = palace.editor_doc
+        existing_node_count = count_editor_doc_nodes(previous_doc)
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
         doc = sanitize_palace_editor_doc(palace, doc)
         next_node_count = count_editor_doc_nodes(doc)
@@ -120,8 +152,17 @@ def save_palace_editor_state(
             raise ValueError(
                 "检测到危险结构变更：新导图节点数骤减，已拒绝保存。请在正式编辑中确认后再执行。"
             )
+        should_reconcile = _should_reconcile_units(
+            payload=payload,
+            editor_source=editor_source,
+            sync_reason=sync_reason,
+            previous_doc=previous_doc,
+            next_doc=doc,
+        )
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = serialize_editor_payload(doc)
+    else:
+        should_reconcile = False
     if config_input is not None:
         palace.editor_config = serialize_editor_payload(ensure_editor_dict(config_input))
     if local_config is not None:
@@ -129,15 +170,18 @@ def save_palace_editor_state(
 
     create_effective_palace_version(session, palace, "editor_save")
 
-    if doc_input is not None:
+    if doc_input is not None and should_reconcile:
         from memory_anki.modules.memory.public.commands import reconcile_palace_units
 
         session.flush()
-        reconcile_palace_units(session, palace.id)
+        unit_reconcile = reconcile_palace_units(session, palace.id)
 
     transaction.commit()
     transaction.refresh(palace)
-    return get_palace_editor_state(palace)
+    result = get_palace_editor_state(palace)
+    if unit_reconcile is not None:
+        result["unit_reconcile"] = unit_reconcile
+    return result
 
 
 def sync_palace_editor_root(palace: Palace) -> None:

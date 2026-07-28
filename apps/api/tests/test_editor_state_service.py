@@ -283,5 +283,172 @@ class SubjectEditorStateSyncTests(RouterTestCase):
                 )
 
 
+class PalaceEditorReconcileGateTests(RouterTestCase):
+    def _marked_doc(self, node_text: str = "节点 A", *, mark: bool = True) -> dict:
+        root_data = {
+            "uid": "root",
+            "text": "复习门控宫殿",
+            "memoryAnkiRootKind": "palace",
+        }
+        if mark:
+            root_data["permanentSplitMark"] = True
+        return {
+            "root": {
+                "data": root_data,
+                "children": [
+                    {
+                        "data": {"uid": "node-a", "text": node_text},
+                        "children": [],
+                    }
+                ],
+            }
+        }
+
+    def _seed_unit(self, session, *, stage_index: int = 3, due_date=None):
+        from datetime import date, timedelta
+
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+
+        palace = Palace(title="复习门控宫殿", description="")
+        session.add(palace)
+        session.flush()
+        save_palace_editor_state(
+            session,
+            palace,
+            {
+                "editor_doc": self._marked_doc(),
+                "editor_source": "palace_edit",
+            },
+        )
+        session.expire_all()
+        palace = session.get(Palace, palace.id)
+        assert palace is not None
+        unit = (
+            session.query(ReviewUnitState)
+            .filter_by(palace_id=palace.id, active=True)
+            .one()
+        )
+        unit.stage_index = stage_index
+        unit.has_passed = True
+        unit.due_date = due_date or (date.today() + timedelta(days=14))
+        unit.revision += 1
+        session.commit()
+        return palace, unit
+
+    def test_autosave_text_change_skips_reconcile_and_keeps_stage(self):
+        from datetime import date
+
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+
+        with self.SessionLocal() as session:
+            palace, unit = self._seed_unit(session, stage_index=3)
+            due_before = unit.due_date
+            stage_before = unit.stage_index
+            content_hash_before = unit.content_hash
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc("节点 A 已改字"),
+                    "editor_source": "palace_edit_autosave",
+                },
+            )
+            session.expire_all()
+            unit = session.get(ReviewUnitState, unit.id)
+            assert unit is not None
+
+            self.assertNotIn("unit_reconcile", result)
+            self.assertEqual(unit.stage_index, stage_before)
+            self.assertEqual(unit.due_date, due_before)
+            self.assertEqual(unit.content_hash, content_hash_before)
+            self.assertGreater(unit.due_date, date.today())
+
+    def test_reconcile_flag_or_editor_leave_demotes_and_returns_changes(self):
+        from datetime import date
+
+        from memory_anki.infrastructure.db._tables.unit_reviews import (
+            ReviewUnitScheduleBatch,
+            ReviewUnitState,
+        )
+
+        with self.SessionLocal() as session:
+            palace, unit = self._seed_unit(session, stage_index=3)
+            stage_before = unit.stage_index
+            due_before = unit.due_date
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc("节点 A 离开时保存"),
+                    "editor_source": "palace_edit_autosave",
+                    "sync_reason": "editor_leave",
+                },
+            )
+            session.expire_all()
+            unit = session.get(ReviewUnitState, unit.id)
+            assert unit is not None
+            reconcile = result.get("unit_reconcile") or {}
+            changes = reconcile.get("changes") or []
+
+            self.assertTrue(reconcile.get("changed"))
+            self.assertEqual(unit.stage_index, stage_before - 1)
+            self.assertEqual(unit.due_date, date.today())
+            self.assertEqual(unit.due_date.isoformat() != due_before.isoformat(), True)
+            self.assertTrue(any(item.get("action") == "content_demoted" for item in changes))
+            self.assertTrue(reconcile.get("undo_token"))
+            batch = session.get(ReviewUnitScheduleBatch, reconcile["undo_token"])
+            self.assertIsNotNone(batch)
+            self.assertEqual(batch.reason, "content_reconcile")
+
+            # Explicit reconcile_units also demotes even without leave reason.
+            unit.stage_index = 2
+            unit.due_date = date.today().replace(year=date.today().year + 1)
+            session.commit()
+            flagged = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc("节点 A 显式 reconcile"),
+                    "editor_source": "palace_edit_autosave",
+                    "reconcile_units": True,
+                },
+            )
+            session.expire_all()
+            unit = session.get(ReviewUnitState, unit.id)
+            assert unit is not None
+            self.assertEqual(unit.stage_index, 1)
+            self.assertEqual(unit.due_date, date.today())
+            self.assertTrue((flagged.get("unit_reconcile") or {}).get("changes"))
+
+    def test_mark_toggle_on_autosave_runs_membership_reconcile(self):
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+
+        with self.SessionLocal() as session:
+            palace, unit = self._seed_unit(session, stage_index=2)
+            unit_id = unit.id
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc(mark=False),
+                    "editor_source": "palace_edit_autosave",
+                },
+            )
+            session.expire_all()
+            unit = session.get(ReviewUnitState, unit_id)
+            assert unit is not None
+            reconcile = result.get("unit_reconcile") or {}
+            changes = reconcile.get("changes") or []
+
+            self.assertFalse(unit.active)
+            self.assertTrue(reconcile.get("changed"))
+            self.assertTrue(any(item.get("action") == "deactivated" for item in changes))
+            self.assertEqual(reconcile.get("unit_count"), 0)
+            self.assertTrue(reconcile.get("mark_required"))
+
+
 if __name__ == "__main__":
     unittest.main()

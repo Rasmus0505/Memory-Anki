@@ -21,11 +21,13 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 )
 
 from .unit_review_projection import (
+    adjust_unit_schedule,
     get_palace_unit_projection,
     json_load_list,
     list_due_units,
     reconcile_palace_units,
     resolve_unit_definitions,
+    undo_content_schedule_batch,
     unit_payload,
 )
 from .unit_scheduler import INTERVAL_DAYS, RATING_LABELS, normalize_rating, rate_unit
@@ -701,6 +703,7 @@ def get_unit_review_completion(session: Session, study_session_id: str) -> dict[
 
 
 __all__ = [
+    "adjust_unit_schedule",
     "complete_unit_review_session",
     "close_unit_review_encounter",
     "get_palace_unit_projection",
@@ -713,5 +716,6 @@ __all__ = [
     "resolve_unit_definitions",
     "start_unit_review_session",
     "start_freestyle_unit_review_session",
+    "undo_content_schedule_batch",
     "undo_unit_rating",
 ]
