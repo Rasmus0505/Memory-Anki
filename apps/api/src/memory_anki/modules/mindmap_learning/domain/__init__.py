@@ -1,1 +1,0 @@
-"""Mind-map learning module."""
