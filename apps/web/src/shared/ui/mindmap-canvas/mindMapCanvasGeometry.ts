@@ -64,3 +64,47 @@ export function findNearestNodeIdToViewportCenter(
   }
   return bestId
 }
+
+/**
+ * Whether a card's screen-space AABB intersects the canvas viewport.
+ * `marginPx` expands (positive) or shrinks (negative) the hit box — use a small
+ * negative margin so barely-clipped cards still count as visible.
+ */
+export function nodeIntersectsViewport(
+  node: Node,
+  viewport: Viewport,
+  canvasSize: { width: number; height: number },
+  measuredSizes?: NodeSizeMap,
+  marginPx = 0,
+): boolean {
+  if (canvasSize.width <= 0 || canvasSize.height <= 0 || viewport.zoom === 0) {
+    return false
+  }
+  const size = getResolvedNodeSize(node, undefined, measuredSizes)
+  const left = node.position.x * viewport.zoom + viewport.x
+  const top = node.position.y * viewport.zoom + viewport.y
+  const right = left + size.width * viewport.zoom
+  const bottom = top + size.height * viewport.zoom
+  return !(
+    right < -marginPx
+    || bottom < -marginPx
+    || left > canvasSize.width + marginPx
+    || top > canvasSize.height + marginPx
+  )
+}
+
+/** True when at least one laid-out card intersects the current camera. */
+export function anyNodeIntersectsViewport(
+  nodes: readonly Node[],
+  viewport: Viewport,
+  canvasSize: { width: number; height: number },
+  measuredSizes?: NodeSizeMap,
+  marginPx = 0,
+): boolean {
+  for (const node of nodes) {
+    if (nodeIntersectsViewport(node, viewport, canvasSize, measuredSizes, marginPx)) {
+      return true
+    }
+  }
+  return false
+}

@@ -593,6 +593,57 @@ describe('MindMapCanvas recovery', () => {
     expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
   })
 
+  it('re-centers when preserve-camera reflow leaves every card off-screen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      render(
+        <MindMapCanvas
+          graphData={siblingGraphData}
+          selectedNodeId={null}
+          onNodeSelect={vi.fn()}
+          onAddChild={vi.fn()}
+          onAddSibling={vi.fn()}
+          onDelete={vi.fn()}
+          practiceModeActive
+          contentChangeViewportPolicy="preserve"
+        />,
+      )
+
+      await waitFor(() => expect(screen.getByTestId('node-root')).toBeTruthy())
+
+      // Park the controlled camera far from the laid-out forest so the map looks empty.
+      const farViewport = { x: -8000, y: -8000, zoom: 1 }
+      act(() => {
+        const onViewportChange = reactFlowMockState.reactFlowProps?.onViewportChange as
+          | ((viewport: { x: number; y: number; zoom: number }) => void)
+          | undefined
+        onViewportChange?.(farViewport)
+      })
+      reactFlowMockState.viewport = { ...farViewport }
+      reactFlowMockState.setCenter.mockClear()
+      reactFlowMockState.fitView.mockClear()
+
+      // Measure reflow under a frozen far camera — safety net must re-anchor.
+      const measuredNode = reactFlowMockState.nodes.find((node) => node.id === 'child-a')
+      const onMeasure = measuredNode?.data?.onMeasure as
+        | ((nodeId: string, size: { width: number; height: number }) => void)
+        | undefined
+      act(() => {
+        onMeasure?.('child-a', { width: 240, height: 180 })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200)
+      })
+
+      expect(
+        reactFlowMockState.setCenter.mock.calls.length + reactFlowMockState.fitView.mock.calls.length,
+      ).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('restores programmatic viewport movement during practice card changes', async () => {
     const props = {
       selectedNodeId: null,

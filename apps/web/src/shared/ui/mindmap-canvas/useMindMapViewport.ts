@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react'
 import type { GraphData } from './adapter'
 import {
+  anyNodeIntersectsViewport,
   findNearestNodeIdToViewportCenter,
   getEventFeedbackPoint,
   hasMeaningfulSizeChange,
@@ -97,11 +98,19 @@ export function useMindMapViewport({
   const lastStableCenterNodeIdRef = useRef<string | null>(null)
   /** After a scene switch, re-center this node once layout is ready. */
   const pendingSceneRecenterNodeIdRef = useRef<string | null>(null)
+  /**
+   * Last known flow-space center of the stable focus card. When preserve-camera
+   * reflow moves that card, pan by the same delta so the user keeps looking at it
+   * (flip-card growth used to leave root/siblings off-screen until 刷新脑图).
+   */
+  const lastFocusFlowCenterRef = useRef<{ id: string; x: number; y: number } | null>(null)
   /** Blocks preserve-camera restores while a scene re-center is in flight. */
   const sceneRecenterLockRef = useRef(false)
   const sceneRecenterLockTimeoutRef = useRef<number | null>(null)
   const previousSceneTransitionKeyRef = useRef<string | null>(null)
   const handledHostRefreshEpochRef = useRef(0)
+  /** Debounce off-screen safety so multi-frame measure cascades settle first. */
+  const offscreenRecoverTimerRef = useRef<number | null>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -122,7 +131,7 @@ export function useMindMapViewport({
   const restorePreservedViewport = useCallback((currentViewport?: Viewport) => {
     if (!preserveViewport || explicitViewportChangeRef.current) return
     if (manualViewportGestureRef.current) return
-    // Scene re-center intentionally moves the camera to the previous center card.
+    // Scene re-center / focus-delta pan intentionally move the camera.
     if (sceneRecenterLockRef.current || pendingSceneRecenterNodeIdRef.current) return
     const current = currentViewport ?? getViewport()
     const preserved = preservedViewportRef.current
@@ -381,13 +390,64 @@ export function useMindMapViewport({
     sceneRecenterLockRef.current = true
   }, [resolveViewportCenterNodeId, sceneTransitionKey])
 
+  const rememberFocusFlowCenter = useCallback((nodeId: string | null | undefined) => {
+    if (!nodeId) return
+    const target = nodes.find((node) => node.id === nodeId)
+    if (!target) return
+    const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
+    lastFocusFlowCenterRef.current = {
+      id: nodeId,
+      x: target.position.x + size.width / 2,
+      y: target.position.y + size.height / 2,
+    }
+  }, [measuredNodeSizesRef, nodes])
+
   // Track which card sits at the viewport center while the scene is stable.
+  // Do NOT rewrite lastFocusFlowCenter on layoutFingerprint — reflow compensation
+  // needs the pre-reflow flow center to compute the pan delta.
   useLayoutEffect(() => {
     if (!isCanvasReady || pendingSceneRecenterNodeIdRef.current) return
     if (manualViewportGestureRef.current || explicitViewportChangeRef.current) return
+    if (sceneRecenterLockRef.current) return
     const centerId = resolveViewportCenterNodeId()
-    if (centerId) lastStableCenterNodeIdRef.current = centerId
-  }, [controlledViewport, isCanvasReady, layoutFingerprint, resolveViewportCenterNodeId])
+    if (!centerId) return
+    lastStableCenterNodeIdRef.current = centerId
+    const previous = lastFocusFlowCenterRef.current
+    // Seed or switch anchor id only; same-id position updates belong to reflow pan.
+    if (!previous || previous.id !== centerId) {
+      rememberFocusFlowCenter(centerId)
+    }
+  }, [
+    controlledViewport,
+    isCanvasReady,
+    rememberFocusFlowCenter,
+    resolveViewportCenterNodeId,
+  ])
+
+  const holdSceneRecenterLock = useCallback((anchorId: string, duration = 180) => {
+    sceneRecenterLockRef.current = true
+    if (sceneRecenterLockTimeoutRef.current !== null) {
+      window.clearTimeout(sceneRecenterLockTimeoutRef.current)
+    }
+    centerNodeInCanvas(anchorId, duration)
+    sceneRecenterLockTimeoutRef.current = window.setTimeout(() => {
+      sceneRecenterLockRef.current = false
+      sceneRecenterLockTimeoutRef.current = null
+      lastStableCenterNodeIdRef.current = anchorId
+      rememberFocusFlowCenter(anchorId)
+    }, duration + 50)
+  }, [centerNodeInCanvas, rememberFocusFlowCenter])
+
+  const resolveFallbackRootId = useCallback(() => {
+    return (
+      graphNodes.find((node) => node.parentId == null)?.id
+      ?? nodes.find((node) => {
+        const graphParent = graphNodes.find((item) => item.id === node.id)?.parentId
+        return graphParent == null
+      })?.id
+      ?? null
+    )
+  }, [graphNodes, nodes])
 
   // Apply deferred re-center once the post-switch layout has nodes.
   useLayoutEffect(() => {
@@ -400,13 +460,7 @@ export function useMindMapViewport({
     // because node positions re-layout while the old camera stays far away.
     let anchorId = requestedAnchorId
     if (!requestedExists) {
-      const rootGraphId =
-        graphNodes.find((node) => node.parentId == null)?.id
-        ?? nodes.find((node) => {
-          const graphParent = graphNodes.find((item) => item.id === node.id)?.parentId
-          return graphParent == null
-        })?.id
-        ?? null
+      const rootGraphId = resolveFallbackRootId()
       if (!rootGraphId || !nodes.some((node) => node.id === rootGraphId)) {
         pendingSceneRecenterNodeIdRef.current = null
         sceneRecenterLockRef.current = false
@@ -417,24 +471,155 @@ export function useMindMapViewport({
       anchorId = rootGraphId
     }
     pendingSceneRecenterNodeIdRef.current = null
-    sceneRecenterLockRef.current = true
-    if (sceneRecenterLockTimeoutRef.current !== null) {
-      window.clearTimeout(sceneRecenterLockTimeoutRef.current)
-    }
-    centerNodeInCanvas(anchorId, 180)
-    // Hold the lock until setCenter finishes updating the controlled viewport.
-    sceneRecenterLockTimeoutRef.current = window.setTimeout(() => {
-      sceneRecenterLockRef.current = false
-      sceneRecenterLockTimeoutRef.current = null
-      lastStableCenterNodeIdRef.current = anchorId
-    }, 230)
+    holdSceneRecenterLock(anchorId, 180)
   }, [
-    centerNodeInCanvas,
-    graphNodes,
+    holdSceneRecenterLock,
     isCanvasReady,
     isDraggingNodeRef,
     layoutFingerprint,
     nodes,
+    resolveFallbackRootId,
+    runFitView,
+  ])
+
+  /**
+   * Preserve-camera reflow compensation: when flip/reveal/measure rewrites absolute
+   * node positions, pan so the previous focus card stays at the same screen point.
+   * Pure restore of {x,y,zoom} freezes the camera in flow space and leaves a partial
+   * on-screen cluster (the bug that only 刷新脑图 fixed).
+   */
+  useLayoutEffect(() => {
+    if (!preserveViewport || !isCanvasReady) return
+    if (isDraggingNodeRef.current) return
+    if (manualViewportGestureRef.current) return
+    if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
+    if (explicitViewportChangeRef.current) return
+    if (nodes.length === 0) return
+
+    const previous = lastFocusFlowCenterRef.current
+    const focusId =
+      (previous && nodes.some((node) => node.id === previous.id) ? previous.id : null)
+      ?? (lastStableCenterNodeIdRef.current
+        && nodes.some((node) => node.id === lastStableCenterNodeIdRef.current)
+        ? lastStableCenterNodeIdRef.current
+        : null)
+
+    if (focusId && previous && previous.id === focusId) {
+      const target = nodes.find((node) => node.id === focusId)
+      if (target) {
+        const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
+        const nextX = target.position.x + size.width / 2
+        const nextY = target.position.y + size.height / 2
+        const dx = nextX - previous.x
+        const dy = nextY - previous.y
+        // Ignore sub-pixel noise from measure thrash.
+        if (Math.abs(dx) >= 1 || Math.abs(dy) >= 1) {
+          const viewport = getViewport()
+          const nextViewport: Viewport = {
+            x: viewport.x - dx * viewport.zoom,
+            y: viewport.y - dy * viewport.zoom,
+            zoom: viewport.zoom,
+          }
+          // Mark explicit so restorePreservedViewport does not yank us back.
+          runExplicitViewportChange(() => {
+            void setViewport(nextViewport, { duration: 0 })
+          }, 0)
+          lastFocusFlowCenterRef.current = { id: focusId, x: nextX, y: nextY }
+          return
+        }
+        lastFocusFlowCenterRef.current = { id: focusId, x: nextX, y: nextY }
+        return
+      }
+    }
+
+    // Focus card disappeared from the visible doc (unit switch / hide branch):
+    // seed a new anchor from whatever is now nearest center, without jumping.
+    if (!focusId) {
+      const fallback =
+        resolveViewportCenterNodeId()
+        ?? resolveFallbackRootId()
+      if (fallback) {
+        lastStableCenterNodeIdRef.current = fallback
+        rememberFocusFlowCenter(fallback)
+      }
+    } else if (!previous || previous.id !== focusId) {
+      rememberFocusFlowCenter(focusId)
+    }
+  }, [
+    getViewport,
+    isCanvasReady,
+    isDraggingNodeRef,
+    layoutFingerprint,
+    measuredNodeSizesRef,
+    nodes,
+    preserveViewport,
+    rememberFocusFlowCenter,
+    resolveFallbackRootId,
+    resolveViewportCenterNodeId,
+    runExplicitViewportChange,
+    setViewport,
+  ])
+
+  // Safety net: if reflow still left every card off-screen (bad first camera,
+  // lost focus id, extreme jump), re-center once — not on every measure tick.
+  useLayoutEffect(() => {
+    if (!preserveViewport || !isCanvasReady) return
+    if (isDraggingNodeRef.current) return
+    if (manualViewportGestureRef.current) return
+    if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
+    if (explicitViewportChangeRef.current) return
+    if (nodes.length === 0) return
+
+    if (offscreenRecoverTimerRef.current !== null) {
+      window.clearTimeout(offscreenRecoverTimerRef.current)
+    }
+    offscreenRecoverTimerRef.current = window.setTimeout(() => {
+      offscreenRecoverTimerRef.current = null
+      if (isDraggingNodeRef.current || manualViewportGestureRef.current) return
+      if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
+      if (explicitViewportChangeRef.current) return
+      const viewport = getViewport()
+      if (
+        anyNodeIntersectsViewport(
+          nodes,
+          viewport,
+          canvasSize,
+          measuredNodeSizesRef.current,
+          -8,
+        )
+      ) {
+        return
+      }
+      const anchorId =
+        (lastStableCenterNodeIdRef.current
+          && nodes.some((node) => node.id === lastStableCenterNodeIdRef.current)
+          ? lastStableCenterNodeIdRef.current
+          : null)
+        ?? resolveFallbackRootId()
+      if (anchorId && nodes.some((node) => node.id === anchorId)) {
+        holdSceneRecenterLock(anchorId, 120)
+        return
+      }
+      runFitView(120)
+    }, 140)
+
+    return () => {
+      if (offscreenRecoverTimerRef.current !== null) {
+        window.clearTimeout(offscreenRecoverTimerRef.current)
+        offscreenRecoverTimerRef.current = null
+      }
+    }
+  }, [
+    canvasSize,
+    getViewport,
+    holdSceneRecenterLock,
+    isCanvasReady,
+    isDraggingNodeRef,
+    layoutFingerprint,
+    measuredNodeSizesRef,
+    nodes,
+    preserveViewport,
+    resolveFallbackRootId,
     runFitView,
   ])
 
@@ -444,7 +629,9 @@ export function useMindMapViewport({
   }, [isCanvasReady, preserveViewport, restorePreservedViewport])
 
   useLayoutEffect(() => {
-    // Structure / graph payload changes re-layout nodes; keep the user's camera.
+    // Structure / graph payload changes re-layout nodes; keep the user's camera
+    // in screen space via the focus-delta pan above (not a raw flow freeze alone).
+    if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
     restorePreservedViewport()
   }, [graphContentSignature, restorePreservedViewport])
 
@@ -453,6 +640,9 @@ export function useMindMapViewport({
     if (isDraggingNodeRef.current) return
     // Never fight the user mid pan/zoom/wheel — that causes a one-frame camera flash.
     if (manualViewportGestureRef.current) return
+    if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
+    // Focus-delta pan already owns layoutFingerprint camera writes when nodes move.
+    if (explicitViewportChangeRef.current) return
     restorePreservedViewport()
   }, [isCanvasReady, isDraggingNodeRef, layoutFingerprint, preserveViewport, restorePreservedViewport])
 
@@ -722,6 +912,9 @@ export function useMindMapViewport({
       }
       if (sceneRecenterLockTimeoutRef.current !== null) {
         window.clearTimeout(sceneRecenterLockTimeoutRef.current)
+      }
+      if (offscreenRecoverTimerRef.current !== null) {
+        window.clearTimeout(offscreenRecoverTimerRef.current)
       }
     }
   }, [])
