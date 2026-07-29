@@ -19,6 +19,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
     ReviewUnitState,
 )
+from memory_anki.modules.mindmap_document.api import deserialize_editor_payload
 
 from .unit_review_projection import (
     adjust_unit_schedule,
@@ -162,7 +163,10 @@ def get_unit_review_session(session: Session, study_session_id: str) -> dict[str
         "palace": {
             "id": palace.id,
             "title": palace.title or "",
-            "editor_doc": palace.editor_doc,
+            # Always return a parsed object. Raw SQLite TEXT would arrive as a JSON
+            # string on the client and break permanent-mark chip/toggle helpers that
+            # expect editor_doc.root (L1/L2 invisible, click no-ops).
+            "editor_doc": deserialize_editor_payload(palace.editor_doc, {}),
         }
         if palace is not None
         else None,

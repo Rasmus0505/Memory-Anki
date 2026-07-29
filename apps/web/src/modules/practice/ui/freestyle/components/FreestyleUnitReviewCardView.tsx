@@ -18,6 +18,7 @@ import type {
 } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
+import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
@@ -86,9 +87,14 @@ function loadSession(
 }
 
 function buildEditorState(session: UnitReviewSessionDto): MindMapEditorState | null {
-  if (!session.palace?.editor_doc) return null
+  // Session payloads may still ship editor_doc as a JSON string; permanent-mark
+  // chip/toggle logic needs a real document object with `.root`.
+  const editorDoc = coerceEditorDoc(
+    session.palace?.editor_doc as Parameters<typeof coerceEditorDoc>[0],
+  )
+  if (!editorDoc) return null
   return {
-    editor_doc: session.palace.editor_doc as MindMapEditorState['editor_doc'],
+    editor_doc: editorDoc as MindMapEditorState['editor_doc'],
     editor_config: {},
     editor_local_config: {},
     lang: 'zh',

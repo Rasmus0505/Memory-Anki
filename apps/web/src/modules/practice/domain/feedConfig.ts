@@ -6,6 +6,8 @@ import type {
   FreestyleMixRatio,
   FreestylePalaceOrder,
   FreestyleQuestionTypeFilter,
+  FreestyleQuizMasteryBucket,
+  FreestyleQuizScope,
 } from '@/shared/api/contracts'
 
 export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
@@ -25,6 +27,25 @@ export const FREESTYLE_BOUND_QUIZ_PLACEMENTS: FreestyleBoundQuizPlacement[] = [
   'quiz_stream',
 ]
 
+export const FREESTYLE_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
+  'unseen',
+  'weak',
+  'reinforce',
+  'stable',
+]
+
+export const FREESTYLE_QUIZ_SCOPES: FreestyleQuizScope[] = [
+  'cross_palace_random',
+  'single_palace_random',
+]
+
+/** Default: new + weak + reinforce (exclude already-stable). */
+export const DEFAULT_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
+  'unseen',
+  'weak',
+  'reinforce',
+]
+
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   content: {
     mindmap_branch: true,
@@ -41,10 +62,13 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     mindmap: 2,
     quiz: 1,
   },
-  bound_quiz_placement: 'follow_unit',
+  // Bound quizzes participate in N:M so mix_ratio is not an empty free stream.
+  bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
-  // Mind-map cards are formal-due only; expand still fills with quizzes when enabled.
+  // Mind-map cards are formal-due only; quiz membership uses quiz_mastery_buckets.
   due_policy: 'due_only',
+  quiz_mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
+  quiz_scope: 'cross_palace_random',
   queue_length: 20,
   specific_palace_ids: [],
   question_type: 'all',
@@ -107,9 +131,44 @@ function asMixMode(value: unknown): FreestyleMixMode | null {
 }
 
 function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
+  // Missing -> new default into_mix (bound quizzes count toward mix_ratio).
+  if (value === undefined || value === null || value === '') {
+    return DEFAULT_FREESTYLE_FEED_CONFIG.bound_quiz_placement
+  }
   return FREESTYLE_BOUND_QUIZ_PLACEMENTS.includes(value as FreestyleBoundQuizPlacement)
     ? (value as FreestyleBoundQuizPlacement)
-    : 'follow_unit'
+    : DEFAULT_FREESTYLE_FEED_CONFIG.bound_quiz_placement
+}
+
+function asQuizScope(value: unknown): FreestyleQuizScope {
+  return value === 'single_palace_random' ? 'single_palace_random' : 'cross_palace_random'
+}
+
+/**
+ * Multi-select mastery buckets. Empty / invalid -> default.
+ * Legacy: when field missing, map due_policy expand modes to include stable.
+ */
+function asQuizMasteryBuckets(
+  value: unknown,
+  duePolicy: FreestyleDuePolicy,
+  hasExplicitField: boolean,
+): FreestyleQuizMasteryBucket[] {
+  if (Array.isArray(value)) {
+    const seen = new Set<FreestyleQuizMasteryBucket>()
+    const result: FreestyleQuizMasteryBucket[] = []
+    value.forEach((item) => {
+      if (!FREESTYLE_QUIZ_MASTERY_BUCKETS.includes(item as FreestyleQuizMasteryBucket)) return
+      const scope = item as FreestyleQuizMasteryBucket
+      if (seen.has(scope)) return
+      seen.add(scope)
+      result.push(scope)
+    })
+    if (result.length > 0) return result
+  }
+  if (!hasExplicitField && (duePolicy === 'due_first_then_expand' || duePolicy === 'all_content_due_weighted')) {
+    return [...DEFAULT_QUIZ_MASTERY_BUCKETS, 'stable']
+  }
+  return [...DEFAULT_QUIZ_MASTERY_BUCKETS]
 }
 
 function asMixRatio(
@@ -187,6 +246,8 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     anki_card: anki ? weights.anki_card : 0,
     quiz_question: quiz ? weights.quiz_question : 0,
   }
+  const due_policy = asDuePolicy(raw.due_policy)
+  const hasExplicitBuckets = Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets')
 
   return {
     content,
@@ -195,7 +256,9 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     mix_ratio,
     bound_quiz_placement: asBoundPlacement(raw.bound_quiz_placement),
     palace_order: asPalaceOrder(raw.palace_order),
-    due_policy: asDuePolicy(raw.due_policy),
+    due_policy,
+    quiz_mastery_buckets: asQuizMasteryBuckets(raw.quiz_mastery_buckets, due_policy, hasExplicitBuckets),
+    quiz_scope: asQuizScope(raw.quiz_scope),
     queue_length: asInt(raw.queue_length, 20, 5, 100),
     specific_palace_ids: asIdList(raw.specific_palace_ids),
     question_type: asQuestionType(raw.question_type),

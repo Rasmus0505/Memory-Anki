@@ -23,3 +23,18 @@ Temporary marks do not exist. Practice must not persist, merge, clear, or schedu
 Quiz, English, English Reading, and standalone Anki cards retain their own evidence. Their completion must not change a palace review unit. An Anki card may supplement a due unit card, but it never replaces that card and never carries `unit_id` or `unit_revision`.
 
 Practice receives topology only through `memory.public.get_palace_unit_projection`. It must not import the mind-map split function, apply node-count limits, or derive due state from member nodes.
+
+## Quiz pool config (feed settings)
+
+Immersive queue config (`FreestyleFeedConfig` / `sanitize_feed_config`) owns quiz membership and draw order separately from palace due policy:
+
+| Field | Role |
+|---|---|
+| `quiz_mastery_buckets` | Multi-select mastery buckets that may enter the quiz stream: `unseen` / `weak` / `reinforce` / `stable`. Default omits `stable`. |
+| `quiz_scope` | `cross_palace_random` shuffles all in-pool quizzes across palaces; `single_palace_random` finishes one palace's quiz pool before the next. |
+| `mix_mode` + `mix_ratio` | Palace-side vs quiz interleave (e.g. 2:1). |
+| `bound_quiz_placement` | Default `into_mix` so node-bound quizzes count toward `mix_ratio`. `follow_unit` re-attaches after the owning branch and weakens ratio predictability. |
+| `due_policy` | Gates **mind-map unit** fill only. Quiz entry is not controlled by due_policy. |
+| `weak_quiz_priority` | Sort within the already-scoped quiz pool; does not decide membership. |
+
+Settings UI groups quiz controls under a dedicated「题目刷题」section in `FreestyleFeedSettingsDialog`.

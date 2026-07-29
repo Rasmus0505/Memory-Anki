@@ -51,7 +51,7 @@ def _assemble(
                 "queue_length": 20,
             }
         ),
-        palace_meta={1: {"title": "测试宫殿"}},
+        palace_meta={1: {"title": "Test Palace"}},
         units_by_palace={1: units},
         due_by_palace={1: due_uids},
         mastery_by_palace={1: 0.0},
@@ -168,3 +168,147 @@ def test_new_revision_is_not_hidden_by_completed_old_revision():
         completed_ids=["review_unit:review-a:r7"],
     )
     assert [card["id"] for card in result.cards] == ["review_unit:review-a:r8"]
+
+
+def test_mix_ratio_includes_bound_quizzes_when_into_mix():
+    """Bound quizzes must participate in N:M so the free stream is not empty."""
+    units = [
+        _unit("a", ("a", "a1"), unit_id="u-a"),
+        _unit("b", ("b", "b1"), unit_id="u-b"),
+        _unit("c", ("c", "c1"), unit_id="u-c"),
+        _unit("d", ("d", "d1"), unit_id="u-d"),
+    ]
+    quizzes = [
+        QuizCandidate(101, 1, ("a1",), 0.1, "weak", {"id": 101, "palace_id": 1}),
+        QuizCandidate(102, 1, ("b1",), 0.1, "weak", {"id": 102, "palace_id": 1}),
+        QuizCandidate(103, 1, ("c1",), 0.1, "unseen", {"id": 103, "palace_id": 1}),
+        QuizCandidate(104, 1, ("d1",), 0.1, "unseen", {"id": 104, "palace_id": 1}),
+    ]
+    result = _assemble(
+        units=units,
+        due_uids={"a", "a1", "b", "b1", "c", "c1", "d", "d1"},
+        quizzes=quizzes,
+        config={
+            "content": {
+                "mindmap_branch": True,
+                "anki_card": False,
+                "quiz_question": True,
+            },
+            "mix_mode": "ratio",
+            "mix_ratio": {"mindmap": 2, "quiz": 1},
+            "bound_quiz_placement": "into_mix",
+            "due_policy": "due_only",
+            "quiz_mastery_buckets": ["unseen", "weak", "reinforce"],
+            "queue_length": 20,
+            "seed": 7,
+        },
+    )
+    types = [card["type"] for card in result.cards]
+    assert types.count("mindmap_branch") == 4
+    assert types.count("quiz_question") == 4
+    # While both streams still have items, ratio should interleave ~2 maps then 1 quiz.
+    prefix = types[:6]
+    assert prefix.count("mindmap_branch") == 4
+    assert prefix.count("quiz_question") == 2
+
+
+def test_quiz_mastery_buckets_exclude_stable_by_default():
+    unit = _unit("a", ("a", "a1"))
+    quizzes = [
+        QuizCandidate(1, 1, (), 0.9, "stable", {"id": 1, "palace_id": 1}),
+        QuizCandidate(2, 1, (), 0.1, "unseen", {"id": 2, "palace_id": 1}),
+        QuizCandidate(3, 1, (), 0.2, "weak", {"id": 3, "palace_id": 1}),
+    ]
+    result = _assemble(
+        units=[unit],
+        due_uids={"a", "a1"},
+        quizzes=quizzes,
+        config={
+            "content": {
+                "mindmap_branch": True,
+                "anki_card": False,
+                "quiz_question": True,
+            },
+            "mix_mode": "quiz_only",
+            "quiz_mastery_buckets": ["unseen", "weak", "reinforce"],
+            "queue_length": 20,
+        },
+    )
+    ids = [card["id"] for card in result.cards]
+    assert "quiz_question:1" not in ids
+    assert "quiz_question:2" in ids
+    assert "quiz_question:3" in ids
+
+
+def test_quiz_mastery_buckets_can_include_only_unseen():
+    unit = _unit("a", ("a",))
+    quizzes = [
+        QuizCandidate(1, 1, (), 0.1, "weak", {"id": 1, "palace_id": 1}),
+        QuizCandidate(2, 1, (), 0.35, "unseen", {"id": 2, "palace_id": 1}),
+    ]
+    result = _assemble(
+        units=[unit],
+        due_uids={"a"},
+        quizzes=quizzes,
+        config={
+            "content": {
+                "mindmap_branch": False,
+                "anki_card": False,
+                "quiz_question": True,
+            },
+            "mix_mode": "quiz_only",
+            "quiz_mastery_buckets": ["unseen"],
+            "queue_length": 10,
+        },
+    )
+    assert [card["id"] for card in result.cards] == ["quiz_question:2"]
+
+
+def test_single_palace_quiz_scope_keeps_palace_blocks():
+    units = [
+        _unit("a", ("a",), palace_id=1, unit_id="u1"),
+        _unit("b", ("b",), palace_id=2, unit_id="u2"),
+    ]
+    quizzes = [
+        QuizCandidate(11, 1, (), 0.1, "unseen", {"id": 11, "palace_id": 1}),
+        QuizCandidate(12, 1, (), 0.1, "unseen", {"id": 12, "palace_id": 1}),
+        QuizCandidate(21, 2, (), 0.1, "unseen", {"id": 21, "palace_id": 2}),
+        QuizCandidate(22, 2, (), 0.1, "unseen", {"id": 22, "palace_id": 2}),
+    ]
+    result = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "content": {
+                    "mindmap_branch": False,
+                    "anki_card": False,
+                    "quiz_question": True,
+                },
+                "mix_mode": "quiz_only",
+                "quiz_scope": "single_palace_random",
+                "quiz_mastery_buckets": ["unseen", "weak", "reinforce"],
+                "palace_order": "finish_palace_then_next",
+                "queue_length": 20,
+                "seed": 3,
+            }
+        ),
+        palace_meta={1: {"title": "Palace A"}, 2: {"title": "Palace B"}},
+        units_by_palace={1: [units[0]], 2: [units[1]]},
+        due_by_palace={1: {"a"}, 2: {"b"}},
+        mastery_by_palace={1: 0.0, 2: 0.0},
+        recent_practice_rank={},
+        quizzes=quizzes,
+        nodes_by_palace={1: {}, 2: {}},
+    )
+    ids = [card["id"] for card in result.cards]
+    # All palace-1 quizzes appear contiguously before palace-2 (order within palace may shuffle).
+    first_block = ids[:2]
+    second_block = ids[2:]
+    assert set(first_block) == {"quiz_question:11", "quiz_question:12"}
+    assert set(second_block) == {"quiz_question:21", "quiz_question:22"}
+
+
+def test_sanitize_defaults_bound_quiz_into_mix_and_mastery_buckets():
+    config = sanitize_feed_config({})
+    assert config["bound_quiz_placement"] == "into_mix"
+    assert config["quiz_mastery_buckets"] == ["unseen", "weak", "reinforce"]
+    assert config["quiz_scope"] == "cross_palace_random"

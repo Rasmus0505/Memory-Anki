@@ -35,6 +35,16 @@ export type FreestyleBoundQuizPlacement =
   | 'into_mix'
   | 'quiz_stream'
 
+/** Multi-select mastery buckets that may enter the freestyle quiz pool. */
+export type FreestyleQuizMasteryBucket = 'unseen' | 'weak' | 'reinforce' | 'stable'
+
+/**
+ * How quiz cards are drawn across palaces (independent of palace-side order).
+ * - cross_palace_random: shuffle all in-pool quizzes across palaces
+ * - single_palace_random: finish one palace's quiz pool (shuffled) before the next
+ */
+export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
+
 export interface FreestyleMixRatio {
   /** Palace-side cards per cycle (mindmap + anki stream). */
   mindmap: number
@@ -60,22 +70,33 @@ export interface FreestyleFeedConfig {
   }
   /**
    * Primary control for palace vs quiz appearance.
-   * Default ratio ≈ previous weight-based interleave.
+   * Default ratio approximates previous weight-based interleave.
    */
   mix_mode: FreestyleMixMode
   /** Used when mix_mode is ratio (N palace-side : M quiz). */
   mix_ratio: FreestyleMixRatio
-  /** How quizzes bound to nodes are placed relative to units. */
+  /**
+   * How quizzes bound to nodes are placed relative to units.
+   * Default `into_mix` so mix_ratio actually includes bound quizzes.
+   */
   bound_quiz_placement: FreestyleBoundQuizPlacement
   palace_order: FreestylePalaceOrder
   /**
-   * Which quiz pool fills the queue after priority/due selection.
-   * No longer controls map-vs-quiz interleave (see mix_mode).
+   * Which mind-map unit pool fills after due selection.
+   * Quiz pool entry is controlled by quiz_mastery_buckets (not this field).
    */
   due_policy: FreestyleDuePolicy
+  /**
+   * Which mastery labels may enter the quiz stream (multi-select).
+   * Empty after sanitize is replaced by the default buckets.
+   */
+  quiz_mastery_buckets: FreestyleQuizMasteryBucket[]
+  /** Cross-palace vs single-palace quiz draw order. */
+  quiz_scope: FreestyleQuizScope
   queue_length: number
   specific_palace_ids: number[]
   question_type: FreestyleQuestionTypeFilter
+  /** Pool-internal sort only; does not decide membership (see quiz_mastery_buckets). */
   weak_quiz_priority: boolean
   seed: number
 }

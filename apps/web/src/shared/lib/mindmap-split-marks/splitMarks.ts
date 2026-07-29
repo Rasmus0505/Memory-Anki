@@ -41,13 +41,37 @@ export type EditorDoc = {
 
 export type SplitMarkChipTone = 'warning' | 'info' | 'success' | 'danger' | 'neutral'
 
+/**
+ * Unit-review / freestyle sessions historically returned editor_doc as a raw JSON
+ * string. Permanent-mark helpers need an object with `.root`; coerce here so L1/L2
+ * chips and click-to-toggle still work when a host forgets to parse.
+ */
+export function coerceEditorDoc(doc: EditorDoc | string | null | undefined): EditorDoc | null {
+  if (doc == null) return null
+  if (typeof doc === 'string') {
+    const trimmed = doc.trim()
+    if (!trimmed) return null
+    try {
+      const parsed = JSON.parse(trimmed) as EditorDoc
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }
+  if (typeof doc === 'object') return doc
+  return null
+}
+
 function nodeUid(node: EditorDocNode, fallback: string): string {
   const data = node.data && typeof node.data === 'object' ? node.data : {}
   return String(data.uid || data.memoryAnkiId || fallback).trim()
 }
 
-export function collectPermanentMarkUids(doc: EditorDoc | null | undefined): string[] {
-  if (!doc?.root) return []
+export function collectPermanentMarkUids(
+  doc: EditorDoc | string | null | undefined,
+): string[] {
+  const resolved = coerceEditorDoc(doc)
+  if (!resolved?.root) return []
   const result: string[] = []
   const walk = (node: EditorDocNode, fallback: string) => {
     const uid = nodeUid(node, fallback)
@@ -58,14 +82,17 @@ export function collectPermanentMarkUids(doc: EditorDoc | null | undefined): str
       if (child && typeof child === 'object') walk(child, `${fallback}-${index}`)
     })
   }
-  walk(doc.root, 'root')
+  walk(resolved.root, 'root')
   return result
 }
 
 /** Build parent map uid -> parentUid from editor doc. */
-export function buildEditorParentMap(doc: EditorDoc | null | undefined): Map<string, string | null> {
+export function buildEditorParentMap(
+  doc: EditorDoc | string | null | undefined,
+): Map<string, string | null> {
   const map = new Map<string, string | null>()
-  if (!doc?.root) return map
+  const resolved = coerceEditorDoc(doc)
+  if (!resolved?.root) return map
   const walk = (node: EditorDocNode, parent: string | null, fallback: string) => {
     const uid = nodeUid(node, fallback)
     map.set(uid, parent)
@@ -74,7 +101,7 @@ export function buildEditorParentMap(doc: EditorDoc | null | undefined): Map<str
       if (child && typeof child === 'object') walk(child, uid, `${fallback}-${index}`)
     })
   }
-  walk(doc.root, null, 'root')
+  walk(resolved.root, null, 'root')
   return map
 }
 
@@ -136,10 +163,14 @@ export function buildSplitMarkStatusChips(
 
 /** Toggle permanentSplitMark on a node by uid; returns new doc clone. */
 export function togglePermanentMarkInDoc(
-  doc: EditorDoc,
+  doc: EditorDoc | string,
   targetUid: string,
 ): { doc: EditorDoc; marked: boolean } {
-  const clone = structuredClone(doc) as EditorDoc
+  const resolved = coerceEditorDoc(doc)
+  if (!resolved) {
+    return { doc: typeof doc === 'object' && doc ? doc : { root: null }, marked: false }
+  }
+  const clone = structuredClone(resolved) as EditorDoc
   let marked = false
   let found = false
   const walk = (node: EditorDocNode, fallback: string): boolean => {
@@ -162,13 +193,15 @@ export function togglePermanentMarkInDoc(
     return false
   }
   if (clone.root) walk(clone.root, 'root')
-  if (!found) return { doc, marked: false }
+  if (!found) return { doc: resolved, marked: false }
   return { doc: clone, marked }
 }
 
 /** Clear all permanentSplitMark flags; returns new doc clone. */
-export function clearPermanentMarksInDoc(doc: EditorDoc): EditorDoc {
-  const clone = structuredClone(doc) as EditorDoc
+export function clearPermanentMarksInDoc(doc: EditorDoc | string): EditorDoc {
+  const resolved = coerceEditorDoc(doc)
+  if (!resolved) return { root: null }
+  const clone = structuredClone(resolved) as EditorDoc
   const walk = (node: EditorDocNode) => {
     if (node.data && typeof node.data === 'object' && node.data.permanentSplitMark === true) {
       const data = { ...node.data }
@@ -184,8 +217,9 @@ export function clearPermanentMarksInDoc(doc: EditorDoc): EditorDoc {
   return clone
 }
 
-export function collectRootUid(doc: EditorDoc | null | undefined): string | null {
-  if (!doc?.root?.data || typeof doc.root.data !== 'object') return null
-  const data = doc.root.data as Record<string, unknown>
+export function collectRootUid(doc: EditorDoc | string | null | undefined): string | null {
+  const resolved = coerceEditorDoc(doc)
+  if (!resolved?.root?.data || typeof resolved.root.data !== 'object') return null
+  const data = resolved.root.data as Record<string, unknown>
   return String(data.uid || data.memoryAnkiId || 'root')
 }

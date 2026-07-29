@@ -69,4 +69,18 @@ describe('splitMarks levels', () => {
     expect(cleared.marked).toBe(false)
     expect(collectPermanentMarkUids(cleared.doc)).toEqual(['a'])
   })
+
+  it('accepts editor_doc JSON strings (unit-review session shape)', () => {
+    const raw = JSON.stringify(sampleDoc())
+    expect(collectPermanentMarkUids(raw)).toEqual(['b'])
+    const chips = buildSplitMarkStatusChips(
+      collectPermanentMarkUids(raw),
+      buildEditorParentMap(raw),
+      collectRootUid(raw),
+    )
+    expect(chips.b?.[0]?.text).toBe('L1')
+    const toggled = togglePermanentMarkInDoc(raw, 'a')
+    expect(toggled.marked).toBe(true)
+    expect(collectPermanentMarkUids(toggled.doc).sort()).toEqual(['a', 'b'])
+  })
 })

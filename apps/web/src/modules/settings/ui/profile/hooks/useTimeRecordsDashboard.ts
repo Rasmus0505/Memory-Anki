@@ -26,7 +26,14 @@ import {
   updateStudySessionRecord,
 } from '@/modules/session/public'
 
-export type TimeRecordRangePreset = 'all' | '6h' | '24h' | '3d' | '7d' | 'custom'
+export type TimeRecordRangePreset =
+  | 'all'
+  | 'today'
+  | '6h'
+  | '24h'
+  | '3d'
+  | '7d'
+  | 'custom'
 
 const EMPTY_SOURCE_SUMMARY: TimeRecordSourceSummary = {
   totalEffectiveSeconds: 0,
@@ -61,6 +68,14 @@ function resolveRangeBounds(
     }
   }
   const now = new Date()
+  if (preset === 'today') {
+    // Local calendar day: [today 00:00:00, now]
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return {
+      startedFrom: formatUtcApiDateTime(from),
+      startedTo: formatUtcApiDateTime(now),
+    }
+  }
   const hours =
     preset === '6h' ? 6 : preset === '24h' ? 24 : preset === '3d' ? 72 : 168
   const from = new Date(now.getTime() - hours * 60 * 60 * 1000)

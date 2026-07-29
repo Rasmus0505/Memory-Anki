@@ -107,11 +107,14 @@ export default function PalaceEdit() {
   const [ankiRolePen, setAnkiRolePen] = useState(false)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
 
+  // Re-read on every residency activation: keep-alive can remount search without
+  // remounting this component, so a bare [] would miss later ?mode=permanent-mark.
   useEffect(() => {
+    if (!isActive) return
     if (new URLSearchParams(window.location.search).get('mode') === 'permanent-mark') {
       setPermanentMarkMode(true)
     }
-  }, [])
+  }, [becameActiveAt, isActive])
 
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
@@ -304,13 +307,19 @@ export default function PalaceEdit() {
       : null,
     moreActions: [
       {
-        label: permanentMarkMode ? '退出永久标记' : '永久标记',
+        label: permanentMarkMode
+          ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
+          : permanentMarkHighlights.length
+            ? `永久标记（已标 ${permanentMarkHighlights.length}）`
+            : '永久标记',
         onClick: () => {
           setPermanentMarkMode((current) => {
             const next = !current
             toast.success(
               next
-                ? '永久标记：点击卡片标记/取消；层级按祖先自动推导并分色'
+                ? permanentMarkHighlights.length
+                  ? `永久标记中：已显示 ${permanentMarkHighlights.length} 个 L 级标记，点击卡片可标记/取消`
+                  : '永久标记：点击卡片标记/取消；层级按祖先自动推导并分色'
                 : '已退出永久标记',
             )
             return next

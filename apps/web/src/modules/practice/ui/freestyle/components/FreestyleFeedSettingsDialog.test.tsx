@@ -22,9 +22,11 @@ const baseConfig: FreestyleFeedConfig = {
   },
   mix_mode: 'ratio',
   mix_ratio: { mindmap: 2, quiz: 1 },
-  bound_quiz_placement: 'follow_unit',
+  bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
   due_policy: 'due_only',
+  quiz_mastery_buckets: ['unseen', 'weak', 'reinforce'],
+  quiz_scope: 'cross_palace_random',
   queue_length: 20,
   specific_palace_ids: [],
   question_type: 'all',
@@ -46,21 +48,21 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       subjects: [
         {
           id: 1,
-          name: '学科',
+          name: 'Subject',
           color: null,
           chapter_groups: [],
           ungrouped_palaces: [
             {
               id: 11,
-              title: '宫殿甲',
-              resolved_title: '宫殿甲',
+              title: 'Palace A',
+              resolved_title: 'Palace A',
               resolved_subject: null,
               primary_chapter: null,
             },
             {
               id: 22,
-              title: '宫殿乙',
-              resolved_title: '宫殿乙',
+              title: 'Palace B',
+              resolved_title: 'Palace B',
               resolved_subject: null,
               primary_chapter: null,
             },
@@ -70,7 +72,7 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
     })
   })
 
-  it('toggles all palaces with a single 全选 button', async () => {
+  it('toggles all palaces with a single select-all button', async () => {
     const onSave = vi.fn()
     render(
       <FreestyleFeedSettingsDialog
@@ -81,9 +83,12 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       />,
     )
 
-    expect(await screen.findByText('宫殿甲')).toBeTruthy()
+    expect(await screen.findByText('Palace A')).toBeTruthy()
     const selectAll = screen.getByRole('button', { name: '全选' })
     expect(selectAll.getAttribute('aria-pressed')).toBe('false')
+
+    const palaceCheckbox = (title: string) =>
+      screen.getByText(title).closest('label')!.querySelector('input') as HTMLInputElement
 
     fireEvent.click(selectAll)
 
@@ -91,26 +96,23 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       expect(selectAll.getAttribute('aria-pressed')).toBe('true')
     })
     expect(screen.getByText('已选 2 个宫殿')).toBeTruthy()
-    expect(
-      screen.getAllByRole('checkbox').every((input) => (input as HTMLInputElement).checked),
-    ).toBe(true)
+    expect(palaceCheckbox('Palace A').checked).toBe(true)
+    expect(palaceCheckbox('Palace B').checked).toBe(true)
 
-    // second click clears everything back to unrestricted
     fireEvent.click(selectAll)
 
     await waitFor(() => {
       expect(selectAll.getAttribute('aria-pressed')).toBe('false')
     })
     expect(screen.getByText('不勾选 = 全部宫殿都可以出现')).toBeTruthy()
-    expect(
-      screen.getAllByRole('checkbox').every((input) => !(input as HTMLInputElement).checked),
-    ).toBe(true)
+    expect(palaceCheckbox('Palace A').checked).toBe(false)
+    expect(palaceCheckbox('Palace B').checked).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: '保存并重排剩余队列' }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ specific_palace_ids: [] }))
   })
 
-  it('marks 全选 as pressed when every palace is already selected', async () => {
+  it('marks select-all as pressed when every palace is already selected', async () => {
     render(
       <FreestyleFeedSettingsDialog
         open
@@ -120,7 +122,7 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       />,
     )
 
-    expect(await screen.findByText('宫殿甲')).toBeTruthy()
+    expect(await screen.findByText('Palace A')).toBeTruthy()
     const selectAll = screen.getByRole('button', { name: '全选' })
     expect(selectAll.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText('已选 2 个宫殿')).toBeTruthy()
@@ -145,8 +147,39 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       expect.objectContaining({
         mix_mode: 'random',
         mix_ratio: { mindmap: 2, quiz: 1 },
-        bound_quiz_placement: 'follow_unit',
+        bound_quiz_placement: 'into_mix',
       }),
     )
+  })
+
+  it('exposes quiz practice section and persists mastery buckets + quiz scope', async () => {
+    const onSave = vi.fn()
+    render(
+      <FreestyleFeedSettingsDialog
+        open
+        config={buildConfig()}
+        onOpenChange={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    expect(await screen.findByText('题目刷题')).toBeTruthy()
+    expect(screen.getByText('刷什么题')).toBeTruthy()
+    expect(screen.getByText('没做过')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '错的 / 薄弱' }))
+
+    const scopeSelect = screen.getByDisplayValue('跨宫殿随机')
+    fireEvent.change(scopeSelect, { target: { value: 'single_palace_random' } })
+
+    fireEvent.click(screen.getByRole('button', { name: '保存并重排剩余队列' }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quiz_scope: 'single_palace_random',
+        quiz_mastery_buckets: expect.arrayContaining(['unseen', 'reinforce']),
+      }),
+    )
+    const saved = onSave.mock.calls[0][0] as FreestyleFeedConfig
+    expect(saved.quiz_mastery_buckets).not.toContain('weak')
   })
 })

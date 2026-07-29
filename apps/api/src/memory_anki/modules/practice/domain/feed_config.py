@@ -30,6 +30,20 @@ BOUND_QUIZ_FOLLOW_UNIT = "follow_unit"
 BOUND_QUIZ_INTO_MIX = "into_mix"
 BOUND_QUIZ_STREAM = "quiz_stream"
 
+QUIZ_SCOPE_CROSS = "cross_palace_random"
+QUIZ_SCOPE_SINGLE = "single_palace_random"
+
+QUIZ_MASTERY_UNSEEN = "unseen"
+QUIZ_MASTERY_WEAK = "weak"
+QUIZ_MASTERY_REINFORCE = "reinforce"
+QUIZ_MASTERY_STABLE = "stable"
+
+DEFAULT_QUIZ_MASTERY_BUCKETS = [
+    QUIZ_MASTERY_UNSEEN,
+    QUIZ_MASTERY_WEAK,
+    QUIZ_MASTERY_REINFORCE,
+]
+
 DUE_POLICIES = {
     DUE_POLICY_DUE_FIRST,
     DUE_POLICY_DUE_ONLY,
@@ -65,6 +79,18 @@ QUESTION_TYPES = {
     "ordering",
     "categorization",
     "short_answer",
+}
+
+QUIZ_MASTERY_BUCKETS = {
+    QUIZ_MASTERY_UNSEEN,
+    QUIZ_MASTERY_WEAK,
+    QUIZ_MASTERY_REINFORCE,
+    QUIZ_MASTERY_STABLE,
+}
+
+QUIZ_SCOPES = {
+    QUIZ_SCOPE_CROSS,
+    QUIZ_SCOPE_SINGLE,
 }
 
 
@@ -112,7 +138,7 @@ def _infer_mix_mode(
         return MIX_MODE_MINDMAP_ONLY
     if not map_on and quiz_enabled:
         return MIX_MODE_QUIZ_ONLY
-    # Previous default: weighted interleave ≈ ratio.
+    # Previous default: weighted interleave approx ratio.
     return MIX_MODE_RATIO
 
 
@@ -152,10 +178,46 @@ def _as_mix_ratio(
 
 
 def _as_bound_placement(value: Any) -> str:
-    key = str(value or "").strip()
+    """Missing placement defaults to into_mix so bound quizzes join mix_ratio."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return BOUND_QUIZ_INTO_MIX
+    key = str(value).strip()
     if key in BOUND_QUIZ_PLACEMENTS:
         return key
-    return BOUND_QUIZ_FOLLOW_UNIT
+    return BOUND_QUIZ_INTO_MIX
+
+
+def _as_quiz_scope(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in QUIZ_SCOPES:
+        return key
+    return QUIZ_SCOPE_CROSS
+
+
+def _as_quiz_mastery_buckets(
+    value: Any,
+    *,
+    due_policy: str,
+    has_explicit_field: bool,
+) -> list[str]:
+    if isinstance(value, list):
+        result: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            key = str(item or "").strip()
+            if key not in QUIZ_MASTERY_BUCKETS or key in seen:
+                continue
+            seen.add(key)
+            result.append(key)
+        if result:
+            return result
+    # Legacy expand policies implied "also pull stable / fill" quizzes.
+    if not has_explicit_field and due_policy in {
+        DUE_POLICY_DUE_FIRST,
+        DUE_POLICY_ALL_WEIGHTED,
+    }:
+        return [*DEFAULT_QUIZ_MASTERY_BUCKETS, QUIZ_MASTERY_STABLE]
+    return list(DEFAULT_QUIZ_MASTERY_BUCKETS)
 
 
 def sanitize_feed_config(raw: Any) -> dict[str, Any]:
@@ -196,7 +258,8 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         palace_order = PALACE_ORDER_SEQUENTIAL
 
     # Default due_only: freestyle mind-map cards are due Reviews units only
-    # (no zero-due practice fill). Expand policies still only emit due mindmaps.
+    # (no zero-due practice fill). Expand policies still only emit due mindmaps
+    # in phase1; fill phase adds non-due units when enabled.
     due_policy = str(data.get("due_policy") or DUE_POLICY_DUE_ONLY)
     if due_policy not in DUE_POLICIES:
         due_policy = DUE_POLICY_DUE_ONLY
@@ -219,6 +282,12 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         has_explicit_weights=isinstance(raw_weights, dict) and bool(raw_weights),
     )
     bound_quiz_placement = _as_bound_placement(data.get("bound_quiz_placement"))
+    quiz_scope = _as_quiz_scope(data.get("quiz_scope"))
+    quiz_mastery_buckets = _as_quiz_mastery_buckets(
+        data.get("quiz_mastery_buckets"),
+        due_policy=due_policy,
+        has_explicit_field="quiz_mastery_buckets" in data,
+    )
 
     # Legacy weights stay independent; mix_ratio is the interleave source of truth.
     # Zero out disabled content streams for older weight readers.
@@ -242,6 +311,8 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "bound_quiz_placement": bound_quiz_placement,
         "palace_order": palace_order,
         "due_policy": due_policy,
+        "quiz_mastery_buckets": quiz_mastery_buckets,
+        "quiz_scope": quiz_scope,
         "queue_length": _as_int(
             data.get("queue_length"), DEFAULT_QUEUE_LENGTH, minimum=5, maximum=100
         ),
@@ -262,6 +333,7 @@ __all__ = [
     "DEFAULT_MIX_RATIO_MINDMAP",
     "DEFAULT_MIX_RATIO_QUIZ",
     "DEFAULT_QUEUE_LENGTH",
+    "DEFAULT_QUIZ_MASTERY_BUCKETS",
     "DEFAULT_QUIZ_WEIGHT",
     "DEFAULT_SEED",
     "DUE_POLICIES",
@@ -279,5 +351,13 @@ __all__ = [
     "PALACE_ORDER_SEQUENTIAL",
     "PALACE_ORDERS",
     "QUESTION_TYPES",
+    "QUIZ_MASTERY_REINFORCE",
+    "QUIZ_MASTERY_BUCKETS",
+    "QUIZ_MASTERY_STABLE",
+    "QUIZ_MASTERY_UNSEEN",
+    "QUIZ_MASTERY_WEAK",
+    "QUIZ_SCOPE_CROSS",
+    "QUIZ_SCOPE_SINGLE",
+    "QUIZ_SCOPES",
     "sanitize_feed_config",
 ]

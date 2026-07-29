@@ -9,6 +9,8 @@ from typing import Any
 from .anki_cards import collect_anki_cards, resolve_effective_role
 from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
+    BOUND_QUIZ_INTO_MIX,
+    DEFAULT_QUIZ_MASTERY_BUCKETS,
     DUE_POLICY_ALL_WEIGHTED,
     DUE_POLICY_DUE_FIRST,
     DUE_POLICY_DUE_ONLY,
@@ -20,6 +22,15 @@ from .feed_config import (
     MIX_MODE_SEQUENTIAL_QUIZ_MAP,
     PALACE_ORDER_INTERLEAVE,
     PALACE_ORDER_SEQUENTIAL,
+    QUIZ_MASTERY_BUCKETS,
+    QUIZ_SCOPE_CROSS,
+    QUIZ_SCOPE_SINGLE,
+)
+from .quiz_stream import (
+    deterministic_shuffle,
+    filter_quizzes_by_mastery_buckets,
+    order_quiz_stream_by_scope,
+    stable_mix as _stable_mix,
 )
 from .review_units import ReviewUnitCandidate
 
@@ -38,6 +49,11 @@ class QuizCandidate:
     def is_priority_mastery(self) -> bool:
         return self.mastery_label in {"weak", "reinforce", "unseen"}
 
+    @property
+    def normalized_mastery_label(self) -> str:
+        label = str(self.mastery_label or "unseen").strip()
+        return label if label in QUIZ_MASTERY_BUCKETS else "unseen"
+
 
 @dataclass
 class QueueBuildResult:
@@ -52,16 +68,6 @@ def _unit_due_count(unit: ReviewUnitCandidate, due_uids: set[str]) -> int:
 
 def _unit_has_due(unit: ReviewUnitCandidate, due_uids: set[str]) -> bool:
     return _unit_due_count(unit, due_uids) > 0
-
-
-def _stable_mix(*parts: Any) -> int:
-    value = 2_166_136_261
-    for part in parts:
-        text = str(part)
-        for char in text:
-            value ^= ord(char)
-            value = (value * 16_777_619) & 0xFFFFFFFF
-    return value
 
 
 def partition_units_by_due(
@@ -207,7 +213,7 @@ def deterministic_random_merge(
     *,
     seed: int,
 ) -> list[dict[str, Any]]:
-    """Seed-stable merge of two streams (same inputs → same order)."""
+    """Seed-stable merge of two streams (same inputs yield same order)."""
     items: list[tuple[int, int, int, dict[str, Any]]] = []
     for index, card in enumerate(mindmap_cards):
         items.append(
@@ -400,8 +406,16 @@ def assemble_queue(
     )
     mix_ratio_quiz = int(raw_mix_ratio.get("quiz") or max(1, quiz_weight) or 1)
     bound_quiz_placement = str(
-        config.get("bound_quiz_placement") or BOUND_QUIZ_FOLLOW_UNIT
+        config.get("bound_quiz_placement") or BOUND_QUIZ_INTO_MIX
     )
+    raw_scopes = config.get("quiz_mastery_buckets")
+    if isinstance(raw_scopes, Sequence) and not isinstance(raw_scopes, (str, bytes)):
+        quiz_mastery_buckets = [str(item) for item in raw_scopes]
+    else:
+        quiz_mastery_buckets = list(DEFAULT_QUIZ_MASTERY_BUCKETS)
+    quiz_scope = str(config.get("quiz_scope") or QUIZ_SCOPE_CROSS)
+    if quiz_scope not in {QUIZ_SCOPE_CROSS, QUIZ_SCOPE_SINGLE}:
+        quiz_scope = QUIZ_SCOPE_CROSS
     # Combine mindmap streams for interleave against quiz (legacy fallback).
     map_stream_weight = max(mindmap_weight, 0) + max(anki_weight, 0)
     if map_stream_weight <= 0:
@@ -439,18 +453,22 @@ def assemble_queue(
             recent_practice_rank,
         )
 
-    priority_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
-    fill_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
+    # Quiz membership is driven by quiz_mastery_buckets (not due_policy).
+    # All in-scope quizzes ride phase1 with due units so mix_ratio can fire even
+    # when due_policy is due_only (which only gates mind-map fill units).
+    scoped_quizzes = filter_quizzes_by_mastery_buckets(quizzes, quiz_mastery_buckets)
+    scoped_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
+    empty_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
     for palace_id in palace_ids:
-        palace_quizzes = [quiz for quiz in quizzes if quiz.palace_id == palace_id]
-        priority_quizzes_by_palace[palace_id] = sort_quiz_candidates(
-            [quiz for quiz in palace_quizzes if quiz.is_priority_mastery],
+        palace_quizzes = [quiz for quiz in scoped_quizzes if quiz.palace_id == palace_id]
+        scoped_quizzes_by_palace[palace_id] = sort_quiz_candidates(
+            palace_quizzes,
             weak_priority=weak_priority,
         )
-        fill_quizzes_by_palace[palace_id] = sort_quiz_candidates(
-            [quiz for quiz in palace_quizzes if not quiz.is_priority_mastery],
-            weak_priority=False,
-        )
+        empty_quizzes_by_palace[palace_id] = []
+    # Keep legacy names for phase wiring / stats.
+    priority_quizzes_by_palace = scoped_quizzes_by_palace
+    fill_quizzes_by_palace = empty_quizzes_by_palace
 
     def unit_cards(
         units: Sequence[ReviewUnitCandidate], phase: str
@@ -623,7 +641,13 @@ def assemble_queue(
             return result
 
         map_side = order_palace_cards(map_by_palace)
-        quiz_side = order_palace_cards(quiz_by_palace)
+        # Quiz draw order is controlled by quiz_scope (cross vs single palace).
+        quiz_side = order_quiz_stream_by_scope(
+            quiz_by_palace,
+            palace_ids,
+            quiz_scope=quiz_scope,
+            seed=seed + (0 if phase == "due" else 11),
+        )
         mixed = merge_streams_by_mix_mode(
             map_side,
             quiz_side,
@@ -683,6 +707,9 @@ def assemble_queue(
             "due_policy": due_policy,
             "mix_mode": mix_mode,
             "bound_quiz_placement": bound_quiz_placement,
+            "quiz_scope": quiz_scope,
+            "quiz_mastery_buckets": ",".join(quiz_mastery_buckets),
+            "scoped_quiz_count": len(scoped_quizzes),
         },
         operation_id=operation_id,
     )
@@ -694,10 +721,13 @@ __all__ = [
     "assemble_queue",
     "attach_questions_to_units",
     "deterministic_random_merge",
+    "deterministic_shuffle",
     "filter_completed",
+    "filter_quizzes_by_mastery_buckets",
     "interleave_by_weights",
     "merge_streams_by_mix_mode",
     "mindmap_card_payload",
+    "order_quiz_stream_by_scope",
     "partition_units_by_due",
     "quiz_card_payload",
     "quiz_key",

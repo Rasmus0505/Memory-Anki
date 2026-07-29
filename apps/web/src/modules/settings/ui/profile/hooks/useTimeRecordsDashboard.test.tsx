@@ -88,6 +88,34 @@ describe('useTimeRecordsDashboard', () => {
     expect(result.current.page).toBe(1)
   })
 
+  it('filters by local calendar day when today preset is selected', async () => {
+    const fixedNow = new Date(2026, 6, 29, 15, 30, 0)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(fixedNow)
+
+    try {
+      const { result } = renderHook(() => useTimeRecordsDashboard())
+      await waitFor(() => expect(mocks.listRecords).toHaveBeenCalledTimes(1))
+
+      act(() => result.current.setRangePreset('today'))
+      await waitFor(() => {
+        const lastCall = mocks.listRecords.mock.calls.at(-1)?.[0] as {
+          startedFrom?: string
+          startedTo?: string
+        }
+        expect(lastCall.startedFrom).toBe(
+          new Date(2026, 6, 29, 0, 0, 0).toISOString(),
+        )
+        expect(lastCall.startedTo).toEqual(expect.any(String))
+        expect(new Date(lastCall.startedTo as string).getTime()).toBeGreaterThanOrEqual(
+          fixedNow.getTime(),
+        )
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('ignores a stale list response after a newer request completes', async () => {
     const { result } = renderHook(() => useTimeRecordsDashboard())
     await waitFor(() => expect(mocks.listRecords).toHaveBeenCalledTimes(1))

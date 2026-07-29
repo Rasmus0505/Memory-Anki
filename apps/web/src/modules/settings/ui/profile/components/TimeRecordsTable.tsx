@@ -31,6 +31,7 @@ import { cn } from '@/shared/lib/utils'
 
 const RANGE_PRESETS: Array<{ value: TimeRecordRangePreset; label: string }> = [
   { value: 'all', label: '全部' },
+  { value: 'today', label: '今日' },
   { value: '6h', label: '6 小时' },
   { value: '24h', label: '24 小时' },
   { value: '3d', label: '3 天' },
