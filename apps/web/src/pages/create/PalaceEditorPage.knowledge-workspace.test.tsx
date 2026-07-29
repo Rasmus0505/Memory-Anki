@@ -124,6 +124,7 @@ describe('Palace knowledge workspace', () => {
 
     renderPalaceEditPage()
     await screen.findByText('绑定章节')
+    fireEvent.click(await screen.findByRole('button', { name: '管理章节绑定' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: '关联章节 第一章 总论' }))
 
     await waitFor(() =>

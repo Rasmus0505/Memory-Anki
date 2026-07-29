@@ -11,28 +11,25 @@ export function PalaceEditorSkeleton() {
       {/* Header with back + title */}
       <SkeletonPageHeader titleClassName="h-7 w-36" withIcon />
 
-      {/* Editor layout: sidebar + main */}
-      <div className="grid xl:grid-cols-[300px_minmax(0,1fr)] gap-4">
-        {/* Left: chapter/binding sidebar */}
+      {/* Editor layout: left binding/meta + right mind-map */}
+      <div className="grid min-h-[420px] gap-3 xl:h-[calc(100vh-11rem)] xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]">
         <div className="space-y-3">
-          <div className="rounded-lg border p-4 space-y-3">
-            <Skeleton className="h-5 w-16" />
-            <SkeletonBlockRows rows={5} />
+          <div className="space-y-3 rounded-lg border p-4">
+            <Skeleton className="h-5 w-28" />
+            <SkeletonBlockRows rows={4} />
           </div>
-          <div className="rounded-lg border p-4 space-y-3">
+          <div className="space-y-3 rounded-lg border p-4">
             <Skeleton className="h-5 w-20" />
             <SkeletonPanel heightClassName="h-20 rounded-md" />
           </div>
         </div>
-
-        {/* Right: editor / mind-map area */}
-        <div className="rounded-lg border p-4 space-y-3">
+        <div className="flex min-h-0 flex-col space-y-3 rounded-lg border p-4">
           <div className="flex items-center gap-2">
             <Skeleton className="size-8 rounded-md" />
             <Skeleton className="size-8 rounded-md" />
             <Skeleton className="size-8 rounded-md" />
           </div>
-          <SkeletonPanel heightClassName="h-[450px]" />
+          <SkeletonPanel heightClassName="min-h-[360px] flex-1 rounded-md" />
         </div>
       </div>
     </div>
