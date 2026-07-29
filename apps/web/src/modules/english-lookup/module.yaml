@@ -1,0 +1,24 @@
+{
+  "name": "english-lookup",
+  "owns": [
+    "Saladict-style dual dictionary panel",
+    "token click and selection anchor lookup",
+    "pronunciation audio manager"
+  ],
+  "forbids": [
+    "private cross-module imports",
+    "xxapi dictionary contracts",
+    "sentence LLM translation UI"
+  ],
+  "publicEntry": "src/modules/english-lookup/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "lookup accepts 1-5 English words only",
+    "default pronunciation is US then UK",
+    "one audio track at a time"
+  ],
+  "requiredTests": []
+}

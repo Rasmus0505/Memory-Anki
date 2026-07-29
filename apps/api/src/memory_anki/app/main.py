@@ -40,6 +40,7 @@ from memory_anki.modules.batch_generation.presentation import router as batch_ge
 from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
+from memory_anki.modules.english_lookup.presentation import router as english_lookup_router
 from memory_anki.modules.english_reading.presentation import router as english_reading_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.memory.presentation import router as review_router
@@ -165,6 +166,7 @@ app.include_router(import_router.router, prefix="/api/v1")
 app.include_router(pdf_library_router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
+app.include_router(english_lookup_router, prefix="/api/v1")
 app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
