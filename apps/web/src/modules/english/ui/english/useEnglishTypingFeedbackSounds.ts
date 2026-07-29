@@ -132,9 +132,10 @@ export function useEnglishTypingFeedbackSounds(sound: { enabled: boolean; master
   const chimeRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    const keyUrl = createToneWavBlobUrl({ frequency: 800, durationMs: 25, gain: 0.08, type: 'triangle' })
-    const wrongUrl = createToneWavBlobUrl({ frequency: 220, durationMs: 150, gain: 0.12, type: 'triangle' })
-    const correctUrl = createToneWavBlobUrl({ frequency: 660, durationMs: 120, gain: 0.1, type: 'triangle' })
+    // Key: soft click. Wrong: low thump. Correct: short high tick. Chime: sentence done.
+    const keyUrl = createToneWavBlobUrl({ frequency: 920, durationMs: 18, gain: 0.06, type: 'triangle' })
+    const wrongUrl = createToneWavBlobUrl({ frequency: 180, durationMs: 140, gain: 0.14, type: 'triangle' })
+    const correctUrl = createToneWavBlobUrl({ frequency: 740, durationMs: 70, gain: 0.09, type: 'triangle' })
     const chimeUrl = createChimeWavBlobUrl()
 
     const key = new Audio(keyUrl)

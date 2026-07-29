@@ -87,6 +87,7 @@ export default function EnglishCoursePage() {
   const playbackTokenRef = useRef(0)
   const playbackStateRef = useRef<PlaybackState | null>(null)
   const autoPreviewKeyRef = useRef('')
+  const localCompletionKeyRef = useRef('')
   const pendingSubmissionIndexesRef = useRef<Set<number>>(new Set())
 
   const [course, setCourse] = useState<EnglishCourseDetail | null>(null)
@@ -378,6 +379,7 @@ export default function EnglishCoursePage() {
       const currentCourse = courseRef.current
       stopSegmentPlayback()
       autoPreviewKeyRef.current = ''
+      localCompletionKeyRef.current = ''
       setTypingSentenceIndex(sentenceIndex)
       setTranslationSentenceIndex(
         currentCourse ? findLastCompletedSentenceIndex(currentCourse, sentenceIndex) : null,
@@ -443,15 +445,28 @@ export default function EnglishCoursePage() {
     (source = 'english_replay') => {
       const sentence = courseRef.current?.sentences[typingSentenceIndexRef.current] ?? null
       if (!sentence) return false
-      setSentencePhase('listening_wait_input')
+      const alreadyResolved =
+        sentencePhaseRef.current === 'locally_completed' ||
+        localCompletionKeyRef.current === `${courseRef.current?.id ?? ''}:${sentence.index}`
+      // Re-listen only: do not re-arm typing completion while the sentence is already solved.
+      setSentencePhase(alreadyResolved ? 'locally_completed' : 'listening_wait_input')
       setStatusNotice(null)
-      return startPlaybackWindow({
-        startSentence: sentence,
-        endSentence: sentence,
-        source,
-      })
+
+      const playOnce = (playSource: string): boolean =>
+        startPlaybackWindow({
+          startSentence: sentence,
+          endSentence: sentence,
+          source: playSource,
+          onEnded: () => {
+            if (!practiceSettingsRef.current.replay.singleSentenceLoopEnabled) return
+            if (typingSentenceIndexRef.current !== sentence.index) return
+            playOnce('english_single_loop')
+          },
+        })
+
+      return playOnce(source)
     },
-    [courseRef, startPlaybackWindow, typingSentenceIndexRef],
+    [courseRef, practiceSettingsRef, sentencePhaseRef, startPlaybackWindow, typingSentenceIndexRef],
   )
 
   const handleLocalSentenceCompletion = useCallback(
@@ -460,44 +475,119 @@ export default function EnglishCoursePage() {
       const sentence = currentCourse?.sentences[sentenceIndex] ?? null
       if (!currentCourse || !sentence) return
 
+      const completionKey = `${currentCourse.id}:${sentenceIndex}`
+      if (localCompletionKeyRef.current === completionKey) return
+      localCompletionKeyRef.current = completionKey
+
       const nextSentence = currentCourse.sentences[sentenceIndex + 1] ?? null
+      const { autoAdvanceOnPass } = practiceSettingsRef.current.flow
+      const { autoReplayOnPass, singleSentenceLoopEnabled } = practiceSettingsRef.current.replay
+
       setFeedback(null)
       playSentenceComplete()
       setTranslationSentenceIndex(sentenceIndex)
-      setStatusNotice({
-        kind: 'success',
-        text: nextSentence ? '本句已完整显示，正在重播本句并衔接下一句。' : '本句已完整显示，正在重播本句。',
-      })
 
-      if (nextSentence) {
-        autoPreviewKeyRef.current = `${currentCourse.id}:${nextSentence.index}`
-        setSentencePhase('chain_playing')
-        startPlaybackWindow({
-          startSentence: sentence,
-          endSentence: nextSentence,
-          source: 'english_completion_chain',
-          nextSentenceSwitchSec: nextSentence.startMs / 1000,
-          onNextSentenceStart: () => {
-            setTypingSentenceIndex(nextSentence.index)
-            setTranslationSentenceIndex(sentenceIndex)
-            setSentencePhase('chain_playing')
-          },
-          onEnded: () => {
-            setTypingSentenceIndex(nextSentence.index)
-            setSentencePhase('listening_wait_input')
-            setStatusNotice(null)
-          },
+      const stayOnSentence = (message: string) => {
+        setSentencePhase('locally_completed')
+        setStatusNotice({
+          kind: 'success',
+          text: message,
         })
-      } else {
+      }
+
+      const loopOrStay = (message: string) => {
+        if (singleSentenceLoopEnabled) {
+          setSentencePhase('locally_completed')
+          setStatusNotice({ kind: 'success', text: message })
+          const playLoop = (playSource: string) => {
+            startPlaybackWindow({
+              startSentence: sentence,
+              endSentence: sentence,
+              source: playSource,
+              onEnded: () => {
+                if (!practiceSettingsRef.current.replay.singleSentenceLoopEnabled) {
+                  stayOnSentence(message)
+                  return
+                }
+                if (typingSentenceIndexRef.current !== sentence.index) return
+                playLoop('english_single_loop')
+              },
+            })
+          }
+          playLoop('english_completion_loop')
+          return
+        }
+        stayOnSentence(message)
+      }
+
+      if (autoReplayOnPass && autoAdvanceOnPass) {
+        setStatusNotice({
+          kind: 'success',
+          text: nextSentence
+            ? '本句已完整显示，正在重播本句并衔接下一句。'
+            : '本句已完整显示，正在重播本句。',
+        })
+        if (nextSentence) {
+          autoPreviewKeyRef.current = `${currentCourse.id}:${nextSentence.index}`
+          setSentencePhase('chain_playing')
+          startPlaybackWindow({
+            startSentence: sentence,
+            endSentence: nextSentence,
+            source: 'english_completion_chain',
+            nextSentenceSwitchSec: nextSentence.startMs / 1000,
+            onNextSentenceStart: () => {
+              setTypingSentenceIndex(nextSentence.index)
+              setTranslationSentenceIndex(sentenceIndex)
+              setSentencePhase('chain_playing')
+            },
+            onEnded: () => {
+              setTypingSentenceIndex(nextSentence.index)
+              setSentencePhase('listening_wait_input')
+              setStatusNotice(null)
+            },
+          })
+        } else {
+          setSentencePhase('chain_playing')
+          startPlaybackWindow({
+            startSentence: sentence,
+            endSentence: sentence,
+            source: 'english_final_sentence_replay',
+            onEnded: () => {
+              setSentencePhase('locally_completed')
+              setStatusNotice(null)
+              if (
+                courseRef.current &&
+                courseRef.current.progress.currentSentenceIndex >= courseRef.current.sentences.length
+              ) {
+                setTypingSentenceIndex(courseRef.current.sentences.length)
+              }
+            },
+          })
+        }
+      } else if (autoReplayOnPass && !autoAdvanceOnPass) {
+        setStatusNotice({
+          kind: 'success',
+          text: nextSentence
+            ? '本句完成，正在重播。结束后可手动进入下一句。'
+            : '本句完成，正在重播。',
+        })
         setSentencePhase('chain_playing')
         startPlaybackWindow({
           startSentence: sentence,
           endSentence: sentence,
-          source: 'english_final_sentence_replay',
+          source: 'english_completion_replay_only',
           onEnded: () => {
-            setSentencePhase('locally_completed')
-            setStatusNotice(null)
+            if (practiceSettingsRef.current.replay.singleSentenceLoopEnabled) {
+              loopOrStay(
+                nextSentence ? '本句完成。单句循环中，或手动进入下一句。' : '本句完成。单句循环中。',
+              )
+              return
+            }
+            stayOnSentence(
+              nextSentence ? '本句完成。可重播或进入下一句。' : '本句完成。',
+            )
             if (
+              !nextSentence &&
               courseRef.current &&
               courseRef.current.progress.currentSentenceIndex >= courseRef.current.sentences.length
             ) {
@@ -505,11 +595,55 @@ export default function EnglishCoursePage() {
             }
           },
         })
+      } else if (!autoReplayOnPass && autoAdvanceOnPass) {
+        if (nextSentence) {
+          setStatusNotice({
+            kind: 'success',
+            text: '本句完成，正在进入下一句。',
+          })
+          autoPreviewKeyRef.current = ''
+          setTypingSentenceIndex(nextSentence.index)
+          setTranslationSentenceIndex(sentenceIndex)
+          setSentencePhase('listening_wait_input')
+        } else {
+          stayOnSentence('本句完成。')
+          if (
+            courseRef.current &&
+            courseRef.current.progress.currentSentenceIndex >= courseRef.current.sentences.length
+          ) {
+            setTypingSentenceIndex(courseRef.current.sentences.length)
+          }
+        }
+      } else {
+        loopOrStay(
+          nextSentence
+            ? singleSentenceLoopEnabled
+              ? '本句完成。单句循环中，或手动进入下一句。'
+              : '本句完成。可重播或进入下一句。'
+            : singleSentenceLoopEnabled
+              ? '本句完成。单句循环中。'
+              : '本句完成。',
+        )
+        if (
+          !nextSentence &&
+          !singleSentenceLoopEnabled &&
+          courseRef.current &&
+          courseRef.current.progress.currentSentenceIndex >= courseRef.current.sentences.length
+        ) {
+          setTypingSentenceIndex(courseRef.current.sentences.length)
+        }
       }
 
       void submitCurrentSentence(sentenceIndex, inputText)
     },
-    [courseRef, playSentenceComplete, startPlaybackWindow, submitCurrentSentence],
+    [
+      courseRef,
+      playSentenceComplete,
+      practiceSettingsRef,
+      startPlaybackWindow,
+      submitCurrentSentence,
+      typingSentenceIndexRef,
+    ],
   )
 
   const handleNavigateSentence = useCallback(
@@ -535,6 +669,7 @@ export default function EnglishCoursePage() {
       if (targetIndex === currentIndex) return
 
       autoPreviewKeyRef.current = ''
+      localCompletionKeyRef.current = ''
       stopSegmentPlayback()
       timer.registerActivity('practice_interaction', {
         source: delta > 0 ? 'english_next_sentence' : 'english_previous_sentence',

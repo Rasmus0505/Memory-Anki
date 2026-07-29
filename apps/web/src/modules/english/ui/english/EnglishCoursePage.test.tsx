@@ -311,6 +311,47 @@ describe('EnglishCoursePage', () => {
     expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
   })
 
+  it('stays on the completed sentence when auto replay and auto advance are both off', async () => {
+    window.localStorage.setItem(
+      'memory-anki-english-practice-settings-v2',
+      JSON.stringify({
+        flow: { autoAdvanceOnPass: false },
+        replay: { autoReplayOnPass: false, singleSentenceLoopEnabled: false },
+        sound: { enabled: false, masterVolume: 0 },
+      }),
+    )
+    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
+    mocks.checkEnglishSentenceApiMock.mockResolvedValue(buildPassedCheckResponse())
+    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
+      buildProgress({
+        currentSentenceIndex: 1,
+        completedSentenceIndexes: [0],
+      }),
+    )
+
+    renderPage()
+
+    const { input } = await finishInitialPreview()
+    mocks.mediaPlayMock.mockClear()
+
+    await typeLetters(input, 'helloworld')
+
+    expect(await screen.findByText('本句完成。可重播或进入下一句。')).toBeTruthy()
+    expect(screen.getByText('Sentence 1 / 2')).toBeTruthy()
+    expect(mocks.mediaPlayMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
+  })
+
+  it('renders a caret on the active empty letter slot', async () => {
+    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
+    renderPage()
+    await finishInitialPreview()
+
+    const activeWord = screen.getByTestId('english-word-0')
+    expect(activeWord.getAttribute('data-active-word')).toBe('true')
+    expect(activeWord.querySelector('[data-caret="true"]')).toBeTruthy()
+  })
+
   it('chain plays the current sentence into the next sentence and pauses at the end of the next sentence', async () => {
     mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
     mocks.checkEnglishSentenceApiMock.mockResolvedValue(buildPassedCheckResponse())

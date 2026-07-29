@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { CheckCircle2, Sparkles, XCircle } from 'lucide-react'
 import type { EnglishSentenceCheckResponse } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
@@ -49,13 +50,33 @@ export function WordRail({
   wordStatuses,
   wordRevealComparableIndices,
   density = 'regular',
+  activeWordIndex = -1,
 }: {
   expectedTokens: string[]
   wordInputs: string[]
   wordStatuses: string[]
   wordRevealComparableIndices: number[][]
   density?: WordRailDensity
+  activeWordIndex?: number
 }) {
+  const activeWordRef = useRef<HTMLSpanElement | null>(null)
+  const resolvedActiveIndex =
+    activeWordIndex >= 0
+      ? activeWordIndex
+      : wordStatuses.findIndex((status) => status === 'active')
+  const activeWordStatus = resolvedActiveIndex >= 0 ? wordStatuses[resolvedActiveIndex] : undefined
+
+  useEffect(() => {
+    if (resolvedActiveIndex < 0) return
+    const node = activeWordRef.current
+    if (!node || typeof node.scrollIntoView !== 'function') return
+    node.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+      behavior: 'smooth',
+    })
+  }, [resolvedActiveIndex, activeWordStatus])
+
   if (!expectedTokens.length) {
     return (
       <div className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-center text-sm text-muted-foreground">
@@ -67,75 +88,102 @@ export function WordRail({
   const densityClassName =
     density === 'dense'
       ? {
-          rail: 'gap-x-2.5 gap-y-2',
-          token: 'px-1 py-0.5 text-lg tracking-[0.08em]',
+          rail: 'gap-x-2 gap-y-2',
+          token: 'gap-0.5 px-1.5 py-1',
+          slot: 'min-w-[0.85rem] text-base sm:text-lg',
         }
       : density === 'compact'
         ? {
-            rail: 'gap-x-3.5 gap-y-2.5',
-            token: 'px-1.5 py-1 text-xl tracking-[0.1em]',
+            rail: 'gap-x-3 gap-y-2.5',
+            token: 'gap-0.5 px-2 py-1.5',
+            slot: 'min-w-[1rem] text-xl',
           }
         : {
-            rail: 'gap-x-5 gap-y-3',
-            token: 'px-1.5 py-1 text-2xl tracking-[0.14em] sm:text-[1.7rem]',
+            rail: 'gap-x-4 gap-y-3',
+            token: 'gap-1 px-2.5 py-2',
+            slot: 'min-w-[1.15rem] text-2xl sm:text-[1.7rem]',
           }
 
   return (
     <div
-      className={cn('flex flex-wrap items-center content-start', densityClassName.rail)}
+      className={cn('flex flex-wrap items-center content-center justify-center', densityClassName.rail)}
       data-testid="english-word-rail"
       data-density={density}
     >
       {expectedTokens.map((token, index) => {
         const status = wordStatuses[index] || 'pending'
+        const isActiveWord = index === resolvedActiveIndex || status === 'active'
         const slots = buildLetterSlots(
           token,
           wordInputs[index] || '',
           wordRevealComparableIndices[index] || [],
         )
+        const caretSlotKey =
+          isActiveWord
+            ? slots.find((slot) => slot.state === 'empty' && !slot.extra)?.key ?? null
+            : null
 
         const containerStyle =
           status === 'active'
-            ? 'ring-2 ring-info/40 bg-info/10 shadow-soft'
+            ? 'ring-2 ring-info/45 bg-info/10 shadow-soft'
             : status === 'wrong'
-              ? 'ring-2 ring-destructive/35 bg-destructive/5'
+              ? 'ring-2 ring-destructive/40 bg-destructive/10 english-word-shake'
               : status === 'correct'
-                ? 'bg-success/5'
-                : 'bg-muted/30'
+                ? 'bg-success/10 ring-1 ring-success/20 english-word-correct-flash'
+                : 'bg-muted/25'
 
-        const wordOpacity = status === 'pending' ? 'opacity-45' : ''
+        const wordOpacity = status === 'pending' ? 'opacity-40' : ''
 
         return (
           <span
             key={`${token}-${index}`}
+            ref={isActiveWord ? activeWordRef : undefined}
             data-testid={`english-word-${index}`}
             data-status={status}
+            data-active-word={isActiveWord ? 'true' : 'false'}
             className={cn(
-              'inline-flex items-center gap-0.5 rounded-xl font-mono transition-colors',
+              'inline-flex items-end rounded-2xl font-mono transition-[background-color,box-shadow,opacity] duration-150',
               densityClassName.token,
               containerStyle,
               wordOpacity,
             )}
           >
             {slots.map((slot) => {
+              const showCaret = caretSlotKey === slot.key
               const slotColor =
                 slot.state === 'empty'
-                  ? 'text-muted-foreground/45'
+                  ? 'border-muted-foreground/35 text-transparent'
                   : slot.state === 'correct'
-                    ? 'text-success'
+                    ? 'border-success/55 text-success english-letter-pop'
                     : slot.state === 'revealed'
-                      ? 'text-warning'
+                      ? 'border-warning/60 text-warning english-letter-pop'
                       : slot.state === 'wrong' && slot.extra
-                        ? 'text-destructive/70 line-through decoration-1'
+                        ? 'border-destructive/50 text-destructive/70 line-through decoration-1'
                         : slot.state === 'wrong'
-                          ? 'text-destructive'
+                          ? 'border-destructive/70 text-destructive english-letter-pop'
                           : slot.state === 'fixed'
-                            ? 'font-semibold text-foreground'
-                            : 'text-muted-foreground/45'
+                            ? 'border-transparent font-semibold text-foreground'
+                            : 'border-muted-foreground/35 text-transparent'
 
               return (
-                <span key={slot.key} data-slot-state={slot.state} className={slotColor}>
-                  {slot.state === 'empty' ? '_' : slot.char}
+                <span
+                  key={slot.key}
+                  data-slot-state={slot.state}
+                  data-caret={showCaret ? 'true' : undefined}
+                  className={cn(
+                    'relative inline-flex h-[1.35em] items-center justify-center border-b-2 pb-0.5 leading-none tracking-normal',
+                    densityClassName.slot,
+                    slot.state === 'fixed' ? 'border-b-0 px-0.5' : 'rounded-sm',
+                    slotColor,
+                  )}
+                >
+                  {slot.state === 'empty' ? '\u00A0' : slot.char}
+                  {showCaret ? (
+                    <span
+                      aria-hidden
+                      className="english-caret absolute bottom-0 left-1/2 h-[1.05em] w-[2px] -translate-x-1/2 rounded-full bg-info"
+                    />
+                  ) : null}
                 </span>
               )
             })}
