@@ -89,6 +89,11 @@ def test_freestyle_start_restores_active_session_and_open_encounter(db_session):
     assert resumed["units"][0]["encounter"]["id"] == "encounter-first"
     assert db_session.query(StudySession).filter_by(scene="freestyle_unit_review").count() == 1
     assert db_session.query(ReviewUnitEncounter).count() == 1
+    # Resume must keep the open glance so an in-flight rate with the original
+    # encounter_id does not 400 with "open review encounter required".
+    rated = _rate(db_session, resumed, state, "encounter-first", "rating-after-resume", 3)
+    assert rated["encounter"]["id"] == "encounter-first"
+    assert rated["passed"] is True
     # editor_doc must be a parsed object (not raw SQLite TEXT) so freestyle permanent-mark
     # chips/toggles can read permanentSplitMark on node data.
     editor_doc = first["palace"]["editor_doc"]
@@ -149,7 +154,7 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
 
     assert closed["session_status"] == "completed"
     assert state.stage_index == 1
-    assert state.due_date == date.today() + timedelta(days=3)
+    assert state.due_date == date.today() + timedelta(days=1)
     with pytest.raises(ValueError, match="active unit review session required"):
         _rate(db_session, review_session, state, "encounter-pass", "rating-too-late", 4)
     with pytest.raises(ValueError, match="current open encounter"):
@@ -208,7 +213,8 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
     )
 
     assert remembered["passed"] is True
-    assert remembered["unit"]["stage_index"] == 0
+    assert remembered["unit"]["stage_index"] == 1
+    assert remembered["unit"]["due_date"] == (date.today() + timedelta(days=1)).isoformat()
     assert remembered["unit"]["due_date"] == (date.today() + timedelta(days=1)).isoformat()
 
 

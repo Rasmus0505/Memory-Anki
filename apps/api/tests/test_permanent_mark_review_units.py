@@ -72,8 +72,18 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         had_failure_in_encounter=True,
         today=today,
     )
-    assert remembered_after_hard.stage_index == 0
+    assert remembered_after_hard.stage_index == 1
     assert remembered_after_hard.due_date == date(2026, 7, 28)
+
+    first_remembered = rate_unit(
+        stage_index=0,
+        has_passed=False,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=today,
+    )
+    assert first_remembered.stage_index == 1
+    assert first_remembered.due_date == date(2026, 7, 28)
 
     easy_after_failure = rate_unit(
         stage_index=3,
@@ -83,7 +93,7 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         today=today,
     )
     assert easy_after_failure.stage_index == 4
-    assert easy_after_failure.due_date == date(2026, 8, 26)
+    assert easy_after_failure.due_date == date(2026, 8, 10)
 
     capped = rate_unit(
         stage_index=len(INTERVAL_DAYS) - 1,
@@ -98,6 +108,6 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
 
 def test_legacy_intervals_map_down_to_fixed_ladder():
     assert stage_from_legacy_interval_days(0.2) == 0
-    assert stage_from_legacy_interval_days(6.9) == 1
-    assert stage_from_legacy_interval_days(7) == 2
+    assert stage_from_legacy_interval_days(6.9) == 2
+    assert stage_from_legacy_interval_days(7) == 3
     assert stage_from_legacy_interval_days(999) == len(INTERVAL_DAYS) - 1

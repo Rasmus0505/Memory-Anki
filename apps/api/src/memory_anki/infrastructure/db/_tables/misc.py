@@ -16,6 +16,7 @@ class StudySession(Base):
     __tablename__ = "study_sessions"
     __table_args__ = (
         Index("ix_study_sessions_status_updated", "status", "updated_at"),
+        Index("ix_study_sessions_freestyle_active", "scene", "status", "updated_at"),
         Index("ix_study_sessions_scene_started", "scene", "started_at"),
         Index(
             "ix_study_sessions_target_status",

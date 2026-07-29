@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import sqlite3
 import uuid
 from datetime import UTC, date, datetime
@@ -22,12 +21,25 @@ from memory_anki.modules.mindmap_document.api import (
     permanent_mark_uids_from_nodes,
     split_scheduling_units,
 )
-from memory_anki.modules.memory.application.unit_scheduler import stage_from_legacy_interval_days
 
 revision = "0049_permanent_mark_review_units"
 down_revision = "0048_scheduling_units"
 branch_labels = None
 depends_on = None
+
+_UNIT_INTERVAL_DAYS_AT_REVISION_0049 = (1, 3, 7, 14, 30, 60, 120, 240, 365)
+
+
+def _stage_from_legacy_interval_days(value: float | int | None) -> int:
+    if value is None:
+        return 0
+    days = max(0.0, float(value))
+    selected = 0
+    for index, interval in enumerate(_UNIT_INTERVAL_DAYS_AT_REVISION_0049):
+        if interval > days:
+            break
+        selected = index
+    return selected
 
 
 def _digest(values: list[str]) -> str:
@@ -175,7 +187,7 @@ def upgrade() -> None:
                         due_dates.clear()
                         break
                     interval = max(0.0, (raw_due - last_review).total_seconds() / 86400)
-                    stages.append(stage_from_legacy_interval_days(interval))
+                    stages.append(_stage_from_legacy_interval_days(interval))
                     due = _local_date(row["due_at"])
                     if due is not None:
                         due_dates.append(due)

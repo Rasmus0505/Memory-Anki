@@ -36,7 +36,7 @@ const sampleUnit = {
   title: '核心概念单元',
   node_uids: ['n1', 'n2'],
   revision: 1,
-  stage_index: 2,
+  stage_index: 3,
   interval_days: 7,
   has_passed: false,
   due_date: '2026-08-01',
@@ -60,15 +60,15 @@ describe('PalaceReviewUnitsPanel', () => {
     apiMocks.adjustUnitScheduleApi.mockResolvedValue({
       operation_id: 'op-1',
       reason: 'manual_adjust',
-      unit: { ...sampleUnit, stage_index: 3, interval_days: 14, due_date: '2026-08-10' },
+      unit: { ...sampleUnit, stage_index: 4, interval_days: 14, due_date: '2026-08-10' },
       before: {
-        stage_index: 2,
+        stage_index: 3,
         interval_days: 7,
         due_date: '2026-08-01',
         has_passed: false,
       },
       after: {
-        stage_index: 3,
+        stage_index: 4,
         interval_days: 14,
         due_date: '2026-08-10',
         has_passed: false,
@@ -114,15 +114,15 @@ describe('PalaceReviewUnitsPanel', () => {
 
     await screen.findByText('核心概念单元')
     fireEvent.click(screen.getByText('核心概念单元'))
-    const stageSelect = await screen.findByDisplayValue('2 · 7天级')
-    fireEvent.change(stageSelect, { target: { value: '3' } })
+    const stageSelect = await screen.findByDisplayValue('3 · 7天级')
+    fireEvent.change(stageSelect, { target: { value: '4' } })
     fireEvent.click(screen.getByRole('button', { name: '保存进度' }))
 
     await waitFor(() => {
       expect(apiMocks.adjustUnitScheduleApi).toHaveBeenCalled()
     })
     const [, payload] = apiMocks.adjustUnitScheduleApi.mock.calls[0] as [string, { stage_index: number; operation_id: string }]
-    expect(payload.stage_index).toBe(3)
+    expect(payload.stage_index).toBe(4)
     expect(payload.operation_id).toBeTruthy()
     await waitFor(() => expect(onScheduleChanged).toHaveBeenCalled())
   })
@@ -154,13 +154,13 @@ describe('PalaceReviewUnitsPanel', () => {
           title: '核心概念单元',
           action: 'demote',
           before: {
-            stage_index: 3,
+            stage_index: 4,
             interval_days: 14,
             due_date: '2026-08-10',
             has_passed: true,
           },
           after: {
-            stage_index: 2,
+            stage_index: 3,
             interval_days: 7,
             due_date: '2026-08-01',
             has_passed: false,

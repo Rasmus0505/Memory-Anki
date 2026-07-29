@@ -16,7 +16,11 @@ import {
 } from '../api'
 
 /** Ebbinghaus-style interval ladder used by unit review stages. */
-export const UNIT_INTERVAL_LADDER_DAYS = [1, 3, 7, 14, 30, 60, 120, 240, 365] as const
+export const UNIT_INTERVAL_LADDER_DAYS = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365] as const
+
+function intervalStageLabel(days: number) {
+  return days === 0 ? '首学' : `${days}天级`
+}
 
 export type PalaceReviewUnitChangeHighlight = {
   unit_id: string
@@ -395,7 +399,7 @@ export function PalaceReviewUnitsPanel({
                       <div className="truncate text-sm font-medium">{titleText}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                         <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
-                          {unit.interval_days}天级
+                          {intervalStageLabel(unit.interval_days)}
                         </span>
                         <span>到期 {formatDueLabel(unit.due_date)}</span>
                         {unit.due ? (
@@ -436,7 +440,7 @@ export function PalaceReviewUnitsPanel({
                           >
                             {UNIT_INTERVAL_LADDER_DAYS.map((days, index) => (
                               <option key={days} value={index}>
-                                {index} · {days}天级
+                                {index} · {intervalStageLabel(days)}
                               </option>
                             ))}
                           </select>

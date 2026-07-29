@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-INTERVAL_DAYS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120, 240, 365)
+# Stage 0 is the initial-learning state. A successful first "remember" moves
+# to stage 1, whose one-day interval guarantees a review on the next day.
+INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
 RATING_LABELS: dict[int, str] = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
 VALID_RATINGS = frozenset(RATING_LABELS)
 RETRY_AFTER_CARDS = 3
@@ -57,7 +59,10 @@ def rate_unit(
         return UnitScheduleResult(penalized, current_day, False, RETRY_AFTER_CARDS)
 
     if had_failure_in_encounter:
-        passed_stage = current_stage if normalized == 3 else clamp_stage(current_stage + 1)
+        if not has_passed:
+            passed_stage = 1 if normalized == 3 else 2
+        else:
+            passed_stage = current_stage if normalized == 3 else clamp_stage(current_stage + 1)
     elif not has_passed:
         passed_stage = 1 if normalized == 3 else 2
     else:
