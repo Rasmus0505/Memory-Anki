@@ -1424,7 +1424,7 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     )
     write_file(
         api_src / "modules/memory/application/unit_scheduler.py",
-        "INTERVAL_DAYS: tuple[int, ...] = (1, 3, 7, 14, 30, 60, 120, 240, 365)\n",
+        "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)\n",
     )
     write_file(
         api_src / "modules/mindmap_document/split_units.py",
