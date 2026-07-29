@@ -40,6 +40,8 @@ export type UnifiedTimerAction =
 export interface UnifiedTimerSnapshot {
   mode: UnifiedTimerMode
   status: UnifiedTimerStatus
+  /** Stable owner used by the desktop shell to resume only the timer it paused. */
+  ownerSessionId?: string | null
   title: string
   scene: string
   displaySeconds: number | null

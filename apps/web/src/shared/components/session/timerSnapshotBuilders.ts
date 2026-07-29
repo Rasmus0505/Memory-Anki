@@ -103,6 +103,7 @@ export function buildStudyTimerSnapshot({
   return {
     mode: 'study',
     status,
+    ownerSessionId: activeEntry?.sessionId ?? null,
     title: activeEntry?.title ?? '待开始',
     scene: sceneLabel,
     displaySeconds: effectiveSeconds,
@@ -173,6 +174,7 @@ export function buildBreakTimerSnapshot({
     return {
       mode: 'break',
       status: 'prompting',
+      ownerSessionId: null,
       title: '要开始休息吗？',
       scene: '休息询问',
       displaySeconds: null,
@@ -192,6 +194,7 @@ export function buildBreakTimerSnapshot({
     return {
       mode: 'break',
       status: 'expired',
+      ownerSessionId: null,
       title: '该回来了',
       scene: '休息到点',
       displaySeconds: 0,
@@ -210,6 +213,7 @@ export function buildBreakTimerSnapshot({
   return {
     mode: 'break',
     status: paused ? 'paused' : 'running',
+    ownerSessionId: null,
     title: paused ? '休息已暂停' : '休息倒计时',
     scene: '休息中',
     displaySeconds,

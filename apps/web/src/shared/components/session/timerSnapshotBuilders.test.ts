@@ -62,6 +62,7 @@ describe('buildStudyTimerSnapshot', () => {
     })
 
     expect(snapshot.displaySeconds).toBe(1_502)
+    expect(snapshot.ownerSessionId).toBe('session-1')
     expect(snapshot.studyPhase).toBe('goal_reached')
     expect(snapshot.roundElapsedSeconds).toBe(1_502)
     expect(snapshot.roundTargetSeconds).toBe(1_500)
@@ -103,6 +104,18 @@ describe('buildStudyTimerSnapshot', () => {
     expect(snapshot.displaySeconds).toBe(1_620)
     expect(snapshot.roundElapsedSeconds).toBe(120)
     expect(snapshot.roundIndex).toBe(2)
+  })
+
+  it('does not expose a resume owner when no study session is active', () => {
+    const snapshot = buildStudyTimerSnapshot({
+      activeEntry: null,
+      focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
+      automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
+      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
+    })
+
+    expect(snapshot.ownerSessionId).toBeNull()
+    expect(snapshot.status).toBe('idle')
   })
 })
 

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
+const { createDesktopPauseOwnership } = require('./desktopPauseOwnership.cjs')
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
 const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
@@ -17,6 +18,7 @@ let mainWindowLoaded = false
 let timerWindowLoaded = false
 
 const FLUSH_TIMEOUT_MS = 1800
+const desktopPauseOwnership = createDesktopPauseOwnership()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 function writeDesktopReady() {
@@ -113,6 +115,10 @@ function scheduleExternalMainBlurPrompt() {
     if (mainWindow.isFocused()) return
     const focusedWindow = BrowserWindow.getFocusedWindow()
     if (focusedWindow && focusedWindow === timerWindow) return
+    const pausedOwnerId = desktopPauseOwnership.armForExternalBlur(lastTimerSnapshot)
+    if (pausedOwnerId) {
+      mainWindow.webContents.send('memory-anki-desktop-pause-active-timer')
+    }
     mainWindow.webContents.send('memory-anki-main-window-blur')
     mainWindow.webContents.send('memory-anki-timer-command', { type: 'promptBreak' })
   }, 100)
@@ -126,6 +132,7 @@ function createMainWindow() {
     minHeight: 680,
     title: 'Memory Anki',
     backgroundColor: '#fffaf2',
+    show: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -134,9 +141,22 @@ function createMainWindow() {
     },
   })
 
+  // Parent launchers sometimes start Electron with SW_HIDE; force the main
+  // window onto the desktop as soon as Chromium has a surface ready.
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
   mainWindow.loadURL(APP_URL)
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindowLoaded = true
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
     writeDesktopReady()
   })
   mainWindow.on('close', (event) => {
@@ -149,6 +169,9 @@ function createMainWindow() {
   })
   mainWindow.on('focus', () => {
     clearMainBlurPromptTimer()
+    if (desktopPauseOwnership.consumeResume(lastTimerSnapshot)) {
+      mainWindow?.webContents.send('memory-anki-timer-command', { type: 'resume' })
+    }
     mainWindow?.webContents.send('memory-anki-timer-command', { type: 'returnToStudy' })
   })
   mainWindow.on('closed', () => {
@@ -244,10 +267,12 @@ ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
 
 ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
   lastTimerSnapshot = snapshot
+  desktopPauseOwnership.observeSnapshot(snapshot)
   timerWindow?.webContents.send('memory-anki-timer-snapshot', snapshot)
 })
 
 ipcMain.on('memory-anki-timer-command', (_event, command) => {
+  desktopPauseOwnership.clearForCommand(command)
   if (command?.type === 'collapse') {
     const collapsed = Boolean(command.collapsed)
     if (timerWindow) {
@@ -298,5 +323,6 @@ app.on('activate', () => {
 
 app.on('will-quit', () => {
   clearMainBlurPromptTimer()
+  desktopPauseOwnership.clear()
   globalShortcut.unregisterAll()
 })
