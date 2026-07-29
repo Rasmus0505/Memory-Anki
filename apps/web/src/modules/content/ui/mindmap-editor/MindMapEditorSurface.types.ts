@@ -64,6 +64,8 @@ export interface MindMapEditorSurfaceProps {
    */
   sceneTransitionKey?: string | null
   toolbarContent?: ReactNode
+  /** Injected after canvas tool icons; hosts own product UI. */
+  toolbarCenterContent?: ReactNode
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'

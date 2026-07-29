@@ -99,6 +99,8 @@ export interface MindMapCanvasProps {
   readonly?: boolean
   showToolbar?: boolean
   toolbarContent?: ReactNode
+  /** Product host chrome after canvas tools (e.g. ladder progress). */
+  toolbarCenterContent?: ReactNode
   onNodeActivate?: (nodeId: string) => void
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
@@ -332,6 +334,7 @@ function MindMapCanvasInner({
           canRedo={state.canRedo}
           showHistoryControls={state.canShowHistoryControls}
           leadingContent={props.toolbarContent}
+          centerContent={props.toolbarCenterContent}
           onRefreshHost={onHostRefresh}
           onFitWholeTree={() => state.runFitView(240)}
           onFitSelectionBranch={state.fitSelectionBranch}

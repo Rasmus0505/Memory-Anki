@@ -28,6 +28,11 @@ interface MindMapCanvasToolbarProps {
   canRedo: boolean
   showHistoryControls: boolean
   leadingContent?: ReactNode
+  /**
+   * Fills remaining toolbar width after canvas tools (e.g. palace ladder progress).
+   * Hosts inject product UI; generic canvas stays free of palace/stage fields.
+   */
+  centerContent?: ReactNode
   /** Remount host and fit the tree after ready. */
   onRefreshHost: () => void
   /** Fit the whole currently visible (collapse-aware) tree into the viewport. */
@@ -62,6 +67,7 @@ export function MindMapCanvasToolbar({
   canRedo,
   showHistoryControls,
   leadingContent,
+  centerContent,
   onRefreshHost,
   onFitWholeTree,
   onFitSelectionBranch,
@@ -189,6 +195,12 @@ export function MindMapCanvasToolbar({
         >
           <Redo2 className="size-4" />
         </button>
+      ) : null}
+      {centerContent ? (
+        <>
+          <div className="mx-1 h-5 w-px shrink-0 bg-border" />
+          <div className="flex min-w-0 flex-1 items-center">{centerContent}</div>
+        </>
       ) : null}
     </div>
   )

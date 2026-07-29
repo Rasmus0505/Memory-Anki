@@ -61,6 +61,14 @@ function getEditorFingerprint(state: MindMapEditorState | null | undefined) {
     : ''
 }
 
+/** Ignore revision-token rotation when deciding whether the canvas needs a sync. */
+function sameEditorContent(
+  left: MindMapEditorState | null | undefined,
+  right: MindMapEditorState | null | undefined,
+) {
+  return stableMindMapEditorContentFingerprint(left) === stableMindMapEditorContentFingerprint(right)
+}
+
 function isConflictError(error: Error) {
   return /冲突|fingerprint|stale|服务端已有更新/.test(error.message)
 }
@@ -334,14 +342,14 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
               dirtyOwnerIdRef.current = operation.ownerId
             }
             if (canPublishSaveToSession(operation)) {
-              const currentFingerprint = stableSerialize(editorStateRef.current)
-              const nextFingerprint = stableSerialize(nextEditorState)
               dispatch({
                 type: 'save-succeeded',
                 ownerId: operation.ownerId,
                 operationId: operation.operationId,
                 meta: operation.selectMeta(response),
-                editorState: !hasNewerChanges && currentFingerprint !== nextFingerprint ? nextEditorState : undefined,
+                editorState: !hasNewerChanges && !sameEditorContent(editorStateRef.current, nextEditorState)
+                  ? nextEditorState
+                  : undefined,
                 dirty: hasNewerChanges,
               })
             }
@@ -487,6 +495,21 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       if (!isCurrentLoadRequest(requestId, entityId)) return
       const nextEditorState = selectEditorStateRef.current(response)
       if (shouldIgnoreIncomingState(nextEditorState)) {
+        return
+      }
+
+      // Never let a reload replace a locally dirty or in-flight canvas with an older server snapshot.
+      const hasLocalWorkForOwner =
+        (dirtyRef.current && dirtyOwnerIdRef.current === entityId)
+        || pendingSnapshotRef.current?.ownerId === entityId
+        || activeSaveOperationRef.current?.ownerId === entityId
+      if (hasLocalWorkForOwner) {
+        dispatch({
+          type: 'load-local-state-preserved',
+          ownerId: entityId,
+          operationId: requestId,
+          meta: selectMetaRef.current(response),
+        })
         return
       }
 

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, CornerUpLeft, Eye, Network } from 'lucide-react'
 import {
@@ -74,6 +74,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   className?: string
   surfaceClassName?: string
   toolbarExtensions?: FlipCardToolbarExtensions
+  /** Host chrome after canvas tools (e.g. palace ladder progress). */
+  toolbarCenterContent?: ReactNode
   /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
   hidePresentationOverflowActions?: boolean
   /**
@@ -124,6 +126,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   className,
   surfaceClassName,
   toolbarExtensions,
+  toolbarCenterContent,
   hidePresentationOverflowActions = false,
   chromeDensity = 'default',
   onToggleFullscreen,
@@ -466,6 +469,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           onOpenQuizPage: handleOpenQuizPage,
           onToggleFullscreen,
         })}
+        toolbarCenterContent={toolbarCenterContent}
         syncOnPropChange
         syncIntent="soft"
         preserveViewOnSync={framePreserveViewOnSync}

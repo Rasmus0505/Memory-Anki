@@ -71,6 +71,24 @@ describe('MindMapCanvasToolbar', () => {
     expect(onCollapseDeepBranches).toHaveBeenCalledTimes(1)
   })
 
+  it('renders center content after canvas tools', () => {
+    render(
+      <MindMapCanvasToolbar
+        focusMode={false}
+        canUndo={false}
+        canRedo={false}
+        showHistoryControls={false}
+        centerContent={<div data-testid="ladder-slot">阶梯</div>}
+        onRefreshHost={vi.fn()}
+        onToggleFocusMode={vi.fn()}
+      />,
+    )
+
+    const slot = screen.getByTestId('ladder-slot')
+    const fullscreen = screen.getByTitle('进入全屏')
+    expect(fullscreen.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('places webpage fullscreen to the right of system fullscreen with distinct icons', () => {
     const onToggleSystem = vi.fn()
     const onToggleWebpage = vi.fn()

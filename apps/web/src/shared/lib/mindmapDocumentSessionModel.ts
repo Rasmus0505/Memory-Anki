@@ -17,6 +17,12 @@ export type MindMapSessionAction<TMeta> =
   | { type: 'owner-cleared'; ownerId: number | null }
   | { type: 'load-started'; ownerId: number; operationId: number }
   | { type: 'load-succeeded'; ownerId: number; operationId: number; meta: TMeta; editorState: MindMapEditorState }
+  /**
+   * A read completed while this owner has local work that is newer than the
+   * response. Keep the canvas state, but still settle the loading indicator
+   * and refresh metadata from the server.
+   */
+  | { type: 'load-local-state-preserved'; ownerId: number; operationId: number; meta: TMeta }
   | { type: 'load-failed'; ownerId: number; operationId: number; error: string }
   | { type: 'editor-changed'; editorState: MindMapEditorState }
   | { type: 'editor-replaced'; editorState: MindMapEditorState | null }
@@ -53,6 +59,15 @@ export function mindMapSessionReducer<TMeta>(
     case 'load-succeeded':
       if (state.ownerId !== action.ownerId || state.loadOperationId !== action.operationId) return state
       return { ...state, loadOperationId: null, status: 'ready', meta: action.meta, editorState: action.editorState, dirty: false, error: null }
+    case 'load-local-state-preserved':
+      if (state.ownerId !== action.ownerId || state.loadOperationId !== action.operationId) return state
+      return {
+        ...state,
+        loadOperationId: null,
+        status: state.saveOperationId == null ? 'ready' : 'saving',
+        meta: action.meta,
+        error: null,
+      }
     case 'load-failed':
       if (state.ownerId !== action.ownerId || state.loadOperationId !== action.operationId) return state
       return { ...state, loadOperationId: null, status: 'error', error: action.error }

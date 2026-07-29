@@ -575,6 +575,76 @@ describe('useMindMapDocumentSession', () => {
     vi.useRealTimers()
   })
 
+  it('keeps the live document visible when a reload returns while autosave is in flight', async () => {
+    const inFlightSave = createDeferred<TestResponse>()
+    const reloadResponse = createDeferred<TestResponse>()
+    let loadCount = 0
+    const saver = vi.fn((id: number, data: MindMapEditorState) =>
+      inFlightSave.promise.then(() => ({
+        entity: { id, title: '已保存' },
+        ...data,
+        editor_fingerprint: 'fingerprint-after-save',
+      })),
+    )
+    const fetcher = vi.fn(() => {
+      loadCount += 1
+      return loadCount === 1
+        ? Promise.resolve(buildResponse(15, '服务端初始内容'))
+        : reloadResponse.promise
+    })
+
+    const { result } = renderHook(() =>
+      useMindMapDocumentSession<TestResponse, TestMeta>({
+        entityId: 15,
+        fetcher,
+        saver,
+        selectMeta: (response) => response.entity,
+        selectEditorState: (response) => ({
+          editor_doc: response.editor_doc,
+          editor_config: response.editor_config,
+          editor_local_config: response.editor_local_config,
+          lang: response.lang,
+          editor_fingerprint: response.editor_fingerprint,
+        }),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.editorState).not.toBeNull()
+    })
+
+    vi.useFakeTimers()
+    act(() => {
+      result.current.setEditorState(buildResponse(15, '本地正在编辑'))
+      vi.advanceTimersByTime(450)
+    })
+    await act(async () => {
+      await flushAsyncWork()
+    })
+    expect(saver).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      void result.current.reload()
+    })
+    await act(async () => {
+      reloadResponse.resolve(buildResponse(15, '旧的服务端内容'))
+      await flushAsyncWork()
+    })
+
+    expect((result.current.editorState?.editor_doc as { root?: { data?: { text?: string } } })?.root?.data?.text)
+      .toBe('本地正在编辑')
+
+    await act(async () => {
+      inFlightSave.resolve({
+        entity: { id: 15, title: '已保存' },
+        ...buildResponse(15, '本地正在编辑'),
+        editor_fingerprint: 'fingerprint-after-save',
+      })
+      await flushAsyncWork()
+    })
+    vi.useRealTimers()
+  })
+
   it('writes a local draft on edit and recovers it when server is older', async () => {
     const draftKey = buildMindMapEditorDraftKey('persisted-mindmap', 11)
     const recovered = buildResponse(11, '本地未同步的修改三')
@@ -672,5 +742,4 @@ describe('useMindMapDocumentSession', () => {
     })
   })
 })
-
 

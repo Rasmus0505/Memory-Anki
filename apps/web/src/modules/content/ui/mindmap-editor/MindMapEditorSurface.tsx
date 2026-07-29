@@ -74,6 +74,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   sceneChrome = 'default',
   sceneTransitionKey = null,
   toolbarContent,
+  toolbarCenterContent,
   segments = EMPTY_SEGMENTS,
   activeSegmentId = null,
   segmentColorMode = 'all',
@@ -659,6 +660,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         showSystemFullscreenControl={showSystemFullscreenControl}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
+        toolbarCenterContent={toolbarCenterContent}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
