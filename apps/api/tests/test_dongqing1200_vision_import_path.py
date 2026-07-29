@@ -12,7 +12,6 @@ import json
 import re
 import unicodedata
 
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

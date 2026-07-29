@@ -36,6 +36,10 @@
         "status": "migrated",
         "publicEntry": "memory_anki.modules.english.api"
       },
+      "english_lookup": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.english_lookup.api"
+      },
       "english_reading": {
         "status": "migrated",
         "publicEntry": "memory_anki.modules.english_reading.api"
@@ -146,8 +150,10 @@
         "session",
         "settings"
       ],
+      "english_lookup": [],
       "english_reading": [
         "english",
+        "english_lookup",
         "memory",
         "session",
         "settings"
@@ -384,6 +390,9 @@
       },
       "english": {
         "publicEntry": "src/modules/english/public.ts"
+      },
+      "english-lookup": {
+        "publicEntry": "src/modules/english-lookup/public.ts"
       },
       "english-reading": {
         "publicEntry": "src/modules/english-reading/public.ts"

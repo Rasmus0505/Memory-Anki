@@ -34,8 +34,8 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 
 ## Scheduling Invariants
 
-- The only interval ladder is `1, 3, 7, 14, 30, 60, 120, 240, 365` local calendar days.
-- `记得` advances one level and `轻松` advances two. `困难` moves back one and `忘记` resets to level zero.
+- The only interval ladder is `0 (initial learning), 1, 3, 7, 14, 30, 60, 120, 240, 365` local calendar days. A unit that has never passed occupies the initial-learning stage; its first `记得` always schedules the one-day stage for tomorrow.
+- `记得` advances one level and `轻松` advances two. `困难` moves back one and `忘记` resets to the initial-learning stage.
 - Only `记得` and `轻松` pass the current encounter. `困难` and `忘记` remain immediately due and return after at most three other units.
 - One encounter has one effective rating. Before leaving, another rating atomically replaces it from the frozen pre-encounter baseline; the replaced choice has no scheduling effect.
 - Closing a `困难` or `忘记` encounter preserves its penalty in the next encounter. A later `记得` settles at that penalized level; a later `轻松` recovers only one level.
