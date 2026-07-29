@@ -361,6 +361,29 @@ export async function closeUnitReviewEncounterApi(
   return response.item
 }
 
+export async function cancelUnratedUnitReviewEncounterApi(
+  sessionId: string,
+  unitId: string,
+  encounterId: string,
+) {
+  const response = await request<{
+    item: {
+      session_status: string
+      cancelled: boolean
+      abandoned?: boolean
+      study_session_id?: string
+      reason?: string
+    }
+  }>(
+    `/review/session/${sessionId}/units/${unitId}/encounters/${encounterId}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    },
+  )
+  return response.item
+}
+
 export async function undoReviewUnitRatingApi(operationId: string) {
   const response = await request<{ item: UndoUnitRatingResultDto }>(`/review/ratings/${operationId}/undo`, { method: 'POST' })
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)

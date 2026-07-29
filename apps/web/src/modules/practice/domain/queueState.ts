@@ -8,6 +8,8 @@ export type FreestyleUnitEncounterState = {
   selectedRating: number | null
   passed: boolean | null
   retryAfterCards: number
+  cancelled?: boolean
+  abandoned?: boolean
 }
 
 export type FreestyleSkipState = {

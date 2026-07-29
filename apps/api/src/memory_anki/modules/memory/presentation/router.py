@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.memory.api import (
     adjust_unit_schedule,
+    cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     complete_unit_review_session,
     get_palace_unit_projection,
@@ -220,6 +221,30 @@ def close_encounter(
                 unit_id=unit_id,
                 encounter_id=encounter_id,
                 operation_id=str(data.get("operation_id") or ""),
+            )
+        }
+    except ValueError as exc:
+        session.rollback()
+        raise _bad_request(exc) from exc
+
+
+@router.post(
+    "/review/session/{study_session_id}/units/{unit_id}/encounters/{encounter_id}/cancel"
+)
+def cancel_unrated_encounter(
+    study_session_id: str,
+    unit_id: str,
+    encounter_id: str,
+    session: Session = Depends(session_dep),
+):
+    """Drop an unrated freestyle glance so it cannot inflate later wall-clock duration."""
+    try:
+        return {
+            "item": cancel_unrated_unit_review_encounter(
+                session,
+                study_session_id=study_session_id,
+                unit_id=unit_id,
+                encounter_id=encounter_id,
             )
         }
     except ValueError as exc:

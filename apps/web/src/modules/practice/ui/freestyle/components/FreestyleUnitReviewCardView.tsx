@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, RotateCcw } from 'lucide-react'
 import {
+  cancelUnratedUnitReviewEncounterApi,
   closeUnitReviewEncounterApi,
   getUnitReviewSessionApi,
   rateReviewUnitApi,
@@ -239,13 +240,47 @@ export function FreestyleUnitReviewCardView({
       || !currentUnit
       || !currentEncounter
       || currentEncounter.status !== 'open'
-      || currentEncounter.selected_rating == null
     ) {
       return Promise.resolve(null)
     }
     if (closeRequestRef.current?.encounterId === currentEncounter.id) {
       return closeRequestRef.current.promise
     }
+
+    // Unrated leave must cancel the glance. Leaving the open encounter alive made
+    // the later pass bill wall clock from first scroll-past (parallel palace rows).
+    if (currentEncounter.selected_rating == null) {
+      const promise = cancelUnratedUnitReviewEncounterApi(
+        currentSession.id,
+        currentUnit.id,
+        currentEncounter.id,
+      ).then((result) => {
+        sessionRef.current = null
+        unitRef.current = null
+        setSession(null)
+        setLastOperationId(null)
+        onEncounterChange(card.id, {
+          encounterId: currentEncounter.id,
+          unitRevision: currentUnit.revision,
+          status: 'closed',
+          sessionId: result.abandoned ? null : currentSession.id,
+          selectedRating: null,
+          passed: null,
+          retryAfterCards: 0,
+        })
+        return result
+      }).catch(() => {
+        // Best-effort: next freestyle start also releases competing unrated sessions.
+        return null
+      }).finally(() => {
+        if (closeRequestRef.current?.encounterId === currentEncounter.id) {
+          closeRequestRef.current = null
+        }
+      })
+      closeRequestRef.current = { encounterId: currentEncounter.id, promise }
+      return promise
+    }
+
     const closeOperation = closeOperationRef.current?.encounterId === currentEncounter.id
       ? closeOperationRef.current.operationId
       : operationId()

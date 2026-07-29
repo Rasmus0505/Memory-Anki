@@ -2,6 +2,7 @@
 
 from memory_anki.modules.memory.api import (
     adjust_unit_schedule,
+    cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     complete_unit_review_session,
     open_unit_review_encounter,
@@ -15,6 +16,7 @@ from memory_anki.modules.memory.api import (
 
 __all__ = [
     "adjust_unit_schedule",
+    "cancel_unrated_unit_review_encounter",
     "close_unit_review_encounter",
     "complete_unit_review_session",
     "open_unit_review_encounter",

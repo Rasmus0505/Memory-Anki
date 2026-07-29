@@ -35,11 +35,18 @@ from .unit_scheduler import INTERVAL_DAYS, RATING_LABELS, normalize_rating, rate
 
 SESSION_ACTIVE = "active"
 SESSION_COMPLETED = "completed"
+SESSION_ABANDONED = "abandoned"
 ITEM_PENDING = "pending"
 ITEM_RETRY = "retry"
 ITEM_PASSED = "passed"
 ENCOUNTER_OPEN = "open"
 ENCOUNTER_CLOSED = "closed"
+# Freestyle used to keep one StudySession.started_at from the first card glance
+# until eventual pass, so scrolling past three cards in 7s then finishing later
+# minted three overlapping wall-clock rows. Rated closed encounters are the only
+# billable intervals; unrated glances are cancelled on leave.
+FREESTYLE_UNIT_REVIEW_SCENE = "freestyle_unit_review"
+
 
 def _normalize_unit_review_client_source(value: Any) -> str | None:
     """Align with study-session time-record client_source buckets."""
@@ -57,6 +64,149 @@ def _load_study_summary(study: StudySession) -> dict[str, Any]:
     except (TypeError, json.JSONDecodeError):
         raw = {}
     return raw if isinstance(raw, dict) else {}
+
+
+def _encounter_billable_seconds(encounter: ReviewUnitEncounter) -> int:
+    """Wall seconds the card was open for a rated attempt (created → closed)."""
+    if encounter.status != ENCOUNTER_CLOSED or encounter.selected_rating is None:
+        return 0
+    if encounter.created_at is None or encounter.closed_at is None:
+        return 0
+    return max(0, int((encounter.closed_at - encounter.created_at).total_seconds()))
+
+
+def _sum_billable_encounter_seconds(session: Session, study_session_id: str) -> int:
+    rows = (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.study_session_id == study_session_id,
+            ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
+        )
+        .all()
+    )
+    return sum(_encounter_billable_seconds(row) for row in rows)
+
+
+def _first_billable_encounter_started_at(
+    session: Session, study_session_id: str
+) -> datetime | None:
+    row = (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.study_session_id == study_session_id,
+            ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
+            ReviewUnitEncounter.selected_rating.isnot(None),
+        )
+        .order_by(ReviewUnitEncounter.created_at.asc())
+        .first()
+    )
+    return row.created_at if row is not None else None
+
+
+def _delete_open_unrated_encounters(session: Session, study_session_id: str) -> int:
+    rows = (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.study_session_id == study_session_id,
+            ReviewUnitEncounter.status == ENCOUNTER_OPEN,
+            ReviewUnitEncounter.selected_rating.is_(None),
+        )
+        .all()
+    )
+    deleted = 0
+    for row in rows:
+        session.delete(row)
+        deleted += 1
+    return deleted
+
+
+def _session_has_billable_progress(session: Session, study_session_id: str) -> bool:
+    rated_closed = (
+        session.query(ReviewUnitEncounter.id)
+        .filter(
+            ReviewUnitEncounter.study_session_id == study_session_id,
+            ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
+            ReviewUnitEncounter.selected_rating.isnot(None),
+        )
+        .first()
+    )
+    if rated_closed is not None:
+        return True
+    passed_item = (
+        session.query(ReviewSessionUnit.id)
+        .filter(
+            ReviewSessionUnit.study_session_id == study_session_id,
+            ReviewSessionUnit.status == ITEM_PASSED,
+        )
+        .first()
+    )
+    return passed_item is not None
+
+
+def _abandon_freestyle_study_session(
+    session: Session,
+    study: StudySession,
+    *,
+    reason: str,
+) -> None:
+    """Drop a freestyle unit session that never earned billable study time."""
+    _delete_open_unrated_encounters(session, study.id)
+    now = utc_now_naive()
+    study.status = SESSION_ABANDONED
+    study.ended_at = now
+    study.completion_method = reason
+    study.effective_seconds = _sum_billable_encounter_seconds(session, study.id)
+    summary = _load_study_summary(study)
+    summary["abandoned_reason"] = reason
+    summary["abandoned_at"] = to_api_datetime(now)
+    study.summary_json = json.dumps(summary, ensure_ascii=False)
+
+
+def _release_competing_freestyle_unit_sessions(
+    session: Session,
+    *,
+    keep_unit_id: str | None,
+    keep_study_id: str | None = None,
+) -> int:
+    """Ensure at most one freestyle unit-review session stays active.
+
+    Rapid freestyle scrolling used to leave an active StudySession per card with
+    the original started_at; later passes then billed the entire wall span.
+    Unrated competing sessions are abandoned; rated-but-incomplete sessions keep
+    their closed encounter history and only lose the open unrated glance.
+    """
+    rows = (
+        session.query(StudySession)
+        .filter(
+            StudySession.scene == FREESTYLE_UNIT_REVIEW_SCENE,
+            StudySession.status == SESSION_ACTIVE,
+        )
+        .all()
+    )
+    released = 0
+    for study in rows:
+        if keep_study_id is not None and study.id == keep_study_id:
+            continue
+        unit_ids = {
+            unit_id
+            for (unit_id,) in session.query(ReviewSessionUnit.unit_id)
+            .filter(ReviewSessionUnit.study_session_id == study.id)
+            .all()
+        }
+        if keep_unit_id is not None and keep_unit_id in unit_ids and len(unit_ids) == 1:
+            continue
+        _delete_open_unrated_encounters(session, study.id)
+        if not _session_has_billable_progress(session, study.id):
+            _abandon_freestyle_study_session(
+                session,
+                study,
+                reason="superseded_by_other_unit",
+            )
+            released += 1
+        else:
+            # Keep retry state, but stop accruing an abandoned open glance.
+            released += 1
+    return released
 
 
 def start_unit_review_session(
@@ -381,11 +531,15 @@ def start_freestyle_unit_review_session(
     if int(unit_revision) != int(state.revision):
         raise ValueError("review unit changed; rebuild the queue")
 
+    # Drop competing freestyle sessions from other units / clients before opening
+    # this card. Prevents multi-palace wall-clock rows that all share one start.
+    _release_competing_freestyle_unit_sessions(session, keep_unit_id=state.id)
+
     study = (
         session.query(StudySession)
         .join(ReviewSessionUnit, ReviewSessionUnit.study_session_id == StudySession.id)
         .filter(
-            StudySession.scene == "freestyle_unit_review",
+            StudySession.scene == FREESTYLE_UNIT_REVIEW_SCENE,
             StudySession.status == SESSION_ACTIVE,
             ReviewSessionUnit.unit_id == state.id,
         )
@@ -398,7 +552,7 @@ def start_freestyle_unit_review_session(
         created = start_unit_review_session(
             session,
             state.palace_id,
-            scene="freestyle_unit_review",
+            scene=FREESTYLE_UNIT_REVIEW_SCENE,
             unit_ids=[state.id],
             client_source=client_source,
         )
@@ -413,6 +567,9 @@ def start_freestyle_unit_review_session(
             if summary.get("client_source") not in {"desktop", "pwa"}:
                 summary["client_source"] = normalized_source
                 study.summary_json = json.dumps(summary, ensure_ascii=False)
+        # A previous unrated glance must not keep billing from its created_at.
+        _delete_open_unrated_encounters(session, study.id)
+        session.commit()
 
     return open_unit_review_encounter(
         session,
@@ -422,6 +579,64 @@ def start_freestyle_unit_review_session(
         encounter_id=encounter_id,
         round_id=round_id,
     )
+
+
+def cancel_unrated_unit_review_encounter(
+    session: Session,
+    *,
+    study_session_id: str,
+    unit_id: str,
+    encounter_id: str,
+) -> dict[str, Any]:
+    """Cancel a freestyle glance that never received a rating.
+
+    Leaving a card without scoring used to leave the open encounter + active
+    StudySession in place; the eventual pass then billed wall clock from first
+    open. Cancelling drops the unrated encounter and abandons empty sessions.
+    """
+    requested_encounter_id = str(encounter_id or "").strip()
+    if not requested_encounter_id:
+        raise ValueError("encounter_id is required")
+    study = session.get(StudySession, study_session_id)
+    encounter = session.get(ReviewUnitEncounter, requested_encounter_id)
+    if (
+        study is None
+        or encounter is None
+        or encounter.study_session_id != study.id
+        or encounter.unit_id != unit_id
+    ):
+        raise ValueError("review encounter not found")
+    if encounter.status == ENCOUNTER_CLOSED:
+        return {
+            "session_status": study.status,
+            "cancelled": False,
+            "reason": "already_closed",
+        }
+    if encounter.selected_rating is not None:
+        raise ValueError("rated encounters must be closed, not cancelled")
+    if encounter.status != ENCOUNTER_OPEN:
+        raise ValueError("open review encounter required")
+
+    session.delete(encounter)
+    abandoned = False
+    if (
+        study.scene == FREESTYLE_UNIT_REVIEW_SCENE
+        and study.status == SESSION_ACTIVE
+        and not _session_has_billable_progress(session, study.id)
+    ):
+        _abandon_freestyle_study_session(
+            session,
+            study,
+            reason="unrated_leave",
+        )
+        abandoned = True
+    session.commit()
+    return {
+        "session_status": study.status,
+        "cancelled": True,
+        "abandoned": abandoned,
+        "study_session_id": study.id,
+    }
 
 
 def _apply_rating_from_snapshot(
@@ -628,7 +843,7 @@ def close_unit_review_encounter(
     encounter.close_operation_id = close_operation_id
     encounter.closed_at = utc_now_naive()
     completion = None
-    if encounter.passed and study.scene == "freestyle_unit_review":
+    if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:
         completion = _complete_unit_review_session(session, study)
     session.commit()
     return {
@@ -652,10 +867,18 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
     if not items or any(item.status != ITEM_PASSED for item in items):
         raise ValueError("all review units must pass before completion")
     now = utc_now_naive()
+    # Bill only rated closed encounters (card-visible intervals). Never use
+    # bare (now - started_at): freestyle leaves sessions open across other cards.
+    duration = _sum_billable_encounter_seconds(session, study.id)
+    first_billable_at = _first_billable_encounter_started_at(session, study.id)
+    if first_billable_at is not None:
+        # Align list "开始时间" with first real attempt, not a prior unrated glance
+        # that may have been cancelled — or an earlier scroll-past on another unit
+        # that shared a clock second in the inflated historical rows.
+        study.started_at = first_billable_at
     study.status = SESSION_COMPLETED
     study.ended_at = now
     study.completion_method = "all_units_passed"
-    duration = max(0, int((now - study.started_at).total_seconds()))
     next_due = (
         session.query(ReviewUnitState)
         .filter(
@@ -668,12 +891,15 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
     # Merge completion receipt into existing summary so client_source stamped at
     # start (desktop/pwa freestyle or formal review) is not wiped to 未知端.
     prior = _load_study_summary(study)
+    wall_span = max(0, int((now - study.started_at).total_seconds())) if study.started_at else duration
     summary = {
         **prior,
         "study_session_id": study.id,
         "palace_id": study.palace_id,
         "completed_unit_count": len(items),
         "duration_seconds": duration,
+        "wall_span_seconds": wall_span,
+        "duration_basis": "rated_closed_encounters",
         "hard_retry_count": sum(item.hard_count for item in items),
         "again_retry_count": sum(item.again_count for item in items),
         "next_review_date": next_due.due_date.isoformat() if next_due else None,
@@ -708,6 +934,7 @@ def get_unit_review_completion(session: Session, study_session_id: str) -> dict[
 
 __all__ = [
     "adjust_unit_schedule",
+    "cancel_unrated_unit_review_encounter",
     "complete_unit_review_session",
     "close_unit_review_encounter",
     "get_palace_unit_projection",

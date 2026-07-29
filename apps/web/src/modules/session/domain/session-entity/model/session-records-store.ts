@@ -293,6 +293,7 @@ export function formatCompletionMethod(method: SessionCompletionMethod) {
   if (method === 'auto_complete') return '自动完成'
   if (method === 'restart') return '重新开始'
   if (method === 'saved') return '保存结束'
+  if (method === 'all_units_passed') return '单元复习完成'
   return '离开页面'
 }
 

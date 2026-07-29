@@ -12,6 +12,7 @@ export type SessionCompletionMethod =
   | 'restart'
   | 'left_page'
   | 'saved'
+  | 'all_units_passed'
 
 export type SessionEventType =
   | 'start'
