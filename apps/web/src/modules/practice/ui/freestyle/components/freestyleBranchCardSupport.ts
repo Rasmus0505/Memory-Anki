@@ -89,9 +89,10 @@ function readUnitReconcile(response: unknown): PalaceUnitReconcileResult | null 
 
 /**
  * Persist freestyle inline palace edits.
- * - No options → plain autosave (`savePalaceEditorApi`, no force reconcile).
- * - With options → `savePalaceEditorWithOptionsApi` so mark/leave can set
- *   `sync_reason` / `reconcile_units` without changing the default path.
+ * - No options → plain autosave (`savePalaceEditorApi`, no force reconcile),
+ *   including mid-pass permanent-mark toggles.
+ * - With options → `savePalaceEditorWithOptionsApi` so finished mark pass /
+ *   leave / return-to-review can set `sync_reason` / `reconcile_units`.
  */
 export async function persistPalaceEditor(
   palaceId: number,

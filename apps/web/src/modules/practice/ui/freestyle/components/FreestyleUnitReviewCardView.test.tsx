@@ -24,6 +24,7 @@ const apiMocks = vi.hoisted(() => ({
   startFreestyleUnitReviewSessionApi: vi.fn(),
   rateReviewUnitApi: vi.fn(),
   undoReviewUnitRatingApi: vi.fn(),
+  cancelUnratedUnitReviewEncounterApi: vi.fn(),
 }))
 
 const persistMocks = vi.hoisted(() => ({
@@ -53,6 +54,7 @@ vi.mock('@/modules/practice/public', () => ({
   startFreestyleUnitReviewSessionApi: apiMocks.startFreestyleUnitReviewSessionApi,
   rateReviewUnitApi: apiMocks.rateReviewUnitApi,
   undoReviewUnitRatingApi: apiMocks.undoReviewUnitRatingApi,
+  cancelUnratedUnitReviewEncounterApi: apiMocks.cancelUnratedUnitReviewEncounterApi,
 }))
 
 vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => ({
@@ -444,7 +446,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(await screen.findByTestId('palace-review-units-panel-mock')).toBeTruthy()
   })
 
-  it('saves permanent mark toggles with mark_change reconcile flags', async () => {
+  it('saves permanent mark toggles as plain autosave and reconciles only after exiting mark mode', async () => {
     const card = buildCard('unit-mark-reconcile')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
     renderCard(card)
@@ -465,17 +467,42 @@ describe('FreestyleUnitReviewCardView', () => {
     ) => void
     expect(typeof onEditNodeClick).toBe('function')
 
-    act(() => onEditNodeClick([selection('unit-node', '当前单元')]))
+    vi.useFakeTimers()
+    try {
+      act(() => onEditNodeClick([selection('unit-node', '当前单元')]))
+      act(() => onEditNodeClick([selection('other-unit', '其他单元')]))
+      // Mid-pass toggles only debounce plain autosave — no reconcile yet.
+      expect(persistMocks.persistPalaceEditor).not.toHaveBeenCalled()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(800)
+      })
+      expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(1)
+      expect(persistMocks.persistPalaceEditor).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({ editor_doc: expect.any(Object) }),
+        undefined,
+      )
+    } finally {
+      vi.useRealTimers()
+    }
 
-    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalled())
-    expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ editor_doc: expect.any(Object) }),
-      expect.objectContaining({
-        reconcileUnits: true,
-        syncReason: 'mark_change',
-      }),
-    )
+    const markMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    const exitMark = markMore?.moreActions?.find((item) => item.label.startsWith('退出永久标记'))
+    expect(exitMark).toBeTruthy()
+    act(() => exitMark!.onClick())
+
+    await waitFor(() => {
+      expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ editor_doc: expect.any(Object) }),
+        expect.objectContaining({
+          reconcileUnits: true,
+          syncReason: 'mark_change',
+        }),
+      )
+    })
   })
 
   it('flushes leave edit with return_to_review reconcile flags', async () => {

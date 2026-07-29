@@ -31,12 +31,19 @@ describe('applyPalaceSaveOverride', () => {
     })
   })
 
-  it('injects mark_change without forcing reconcile_units (backend mark-delta covers it)', () => {
+  it('injects mark_change; finished mark pass may also set reconcile_units from flush options', () => {
     const override: PalaceEditorSaveOverride = {
       sync_reason: 'mark_change',
     }
     const payload = applyPalaceSaveOverride(baseState, override)
     expect(payload.sync_reason).toBe('mark_change')
     expect(payload.reconcile_units).toBeUndefined()
+
+    const withForce = applyPalaceSaveOverride(baseState, {
+      sync_reason: 'mark_change',
+      reconcile_units: true,
+    })
+    expect(withForce.sync_reason).toBe('mark_change')
+    expect(withForce.reconcile_units).toBe(true)
   })
 })

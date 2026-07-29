@@ -90,6 +90,8 @@ export function FreestyleUnitReviewFlipPanel({
   const editBaselineRef = useRef(editorState)
   const editEditorStateRef = useRef(editorState)
   const displayModeRef = useRef<'review' | 'edit'>('review')
+  /** Mark-pass reconcile may finish while still editing; rebuild freestyle only after leaving edit. */
+  const pendingQueueRebuildRef = useRef(false)
   const isEditMode = displayMode === 'edit'
   editEditorStateRef.current = editEditorState
   displayModeRef.current = displayMode
@@ -105,26 +107,45 @@ export function FreestyleUnitReviewFlipPanel({
     onEditingChange?.(isEditMode)
   }, [isEditMode, onEditingChange])
 
-  const notifyUnitReconcile = useCallback((unitReconcile: PalaceUnitReconcileResult | null | undefined) => {
-    if (!unitReconcile?.changed) return
-    const token = unitReconcile.undo_token ?? unitReconcile.schedule_batch_id ?? null
-    if (token) setLastUndoToken(token)
-    if (Array.isArray(unitReconcile.changes) && unitReconcile.changes.length > 0) {
-      setRecentUnitChanges(
-        unitReconcile.changes.flatMap((item) => {
-          const row = item as PalaceReviewUnitChangeHighlight & { unit_id?: string }
-          if (!row.unit_id) return []
-          return [{
-            unit_id: row.unit_id,
-            action: row.action || 'update',
-            before: row.before ?? null,
-            after: row.after ?? null,
-          }]
-        }),
-      )
+  const notifyUnitReconcile = useCallback((
+    unitReconcile: PalaceUnitReconcileResult | null | undefined,
+    options?: { rebuildQueue?: boolean },
+  ) => {
+    const rebuildQueue = options?.rebuildQueue !== false
+    if (unitReconcile?.changed) {
+      const token = unitReconcile.undo_token ?? unitReconcile.schedule_batch_id ?? null
+      if (token) setLastUndoToken(token)
+      if (Array.isArray(unitReconcile.changes) && unitReconcile.changes.length > 0) {
+        setRecentUnitChanges(
+          unitReconcile.changes.flatMap((item) => {
+            const row = item as PalaceReviewUnitChangeHighlight & { unit_id?: string }
+            if (!row.unit_id) return []
+            return [{
+              unit_id: row.unit_id,
+              action: row.action || 'update',
+              before: row.before ?? null,
+              after: row.after ?? null,
+            }]
+          }),
+        )
+      }
+      if (!rebuildQueue) {
+        // Stay in inline edit after a finished mark pass: keep card mounted and
+        // rebuild freestyle only when returning to review / leaving the card.
+        pendingQueueRebuildRef.current = true
+        toast.message('复习进度已更新（返回学习后同步队列）')
+        return
+      }
+      pendingQueueRebuildRef.current = false
+      toast.message('复习进度已更新')
+      onUnitsReconciled?.()
+      return
     }
-    toast.message('复习进度已更新')
-    onUnitsReconciled?.()
+    if (rebuildQueue && pendingQueueRebuildRef.current) {
+      pendingQueueRebuildRef.current = false
+      toast.message('复习进度已更新')
+      onUnitsReconciled?.()
+    }
   }, [onUnitsReconciled])
 
   const persistEdit = useCallback(async (
@@ -147,7 +168,14 @@ export function FreestyleUnitReviewFlipPanel({
       }
       // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
       if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
-        notifyUnitReconcile(result.unitReconcile)
+        // mark_change while still editing must not rebuild freestyle mid-pass.
+        const stayEditingAfterMarkFlush = (
+          persistOptions.syncReason === 'mark_change'
+          && displayModeRef.current === 'edit'
+        )
+        notifyUnitReconcile(result.unitReconcile, {
+          rebuildQueue: !stayEditingAfterMarkFlush,
+        })
       }
       return result
     } catch (error) {
@@ -248,24 +276,42 @@ export function FreestyleUnitReviewFlipPanel({
     schedulePersist(nextState)
   }, [schedulePersist])
 
+  /**
+   * Permanent-mark toggles stay local + plain debounced autosave while the user
+   * is still marking. Reconcile only when exiting mark mode / returning to review /
+   * leaving the card — so continuous mark edits do not rebuild freestyle mid-pass.
+   */
   const handlePermanentMarkClick = useCallback((nodes: MindMapSelection[]) => {
     const uid = nodes[0]?.uid
     if (!uid) return
-    const doc = editEditorState.editor_doc as EditorDoc
+    const doc = editEditorStateRef.current.editor_doc as EditorDoc
     const result = togglePermanentMarkInDoc(doc, String(uid))
     if (result.doc === doc) return
-    const nextState = { ...editEditorState, editor_doc: result.doc }
+    const nextState = { ...editEditorStateRef.current, editor_doc: result.doc }
     setEditEditorState(nextState)
     editBaselineRef.current = nextState
     editEditorStateRef.current = nextState
-    // Mark toggle must reconcile units immediately (not plain typing autosave).
-    clearPersistTimer()
-    void persistEdit(nextState, {
-      reconcileUnits: true,
-      syncReason: 'mark_change',
-    })
+    schedulePersist(nextState)
     toast.success(result.marked ? '已添加永久标记（层级自动）' : '已取消永久标记')
-  }, [clearPersistTimer, editEditorState, persistEdit])
+  }, [schedulePersist])
+
+  const handleTogglePermanentMarkMode = useCallback(() => {
+    setPermanentMarkMode((current) => {
+      const next = !current
+      if (current && !next) {
+        // Finished this mark pass: one reconcile for the whole batch.
+        void flushPersistWithReconcile('mark_change', editEditorStateRef.current, true)
+        toast.success('已退出永久标记；复习进度整理中')
+      } else {
+        toast.success(
+          next
+            ? '永久标记：点击卡片标记/取消；改完后再退出，才会整理复习进度'
+            : '已退出永久标记',
+        )
+      }
+      return next
+    })
+  }, [flushPersistWithReconcile])
 
   const permanentMarkChips = useMemo(() => {
     const doc = editEditorState.editor_doc as EditorDoc
@@ -329,23 +375,26 @@ export function FreestyleUnitReviewFlipPanel({
     ]
     if (isEditMode) {
       actions.push({
-        label: permanentMarkMode ? '退出永久标记' : '永久标记',
-        onClick: () => {
-          setPermanentMarkMode((current) => {
-            const next = !current
-            toast.success(
-              next
-                ? '永久标记：点击卡片标记/取消；层级按祖先自动推导并分色'
-                : '已退出永久标记',
-            )
-            return next
-          })
-        },
+        label: permanentMarkMode
+          ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
+          : permanentMarkHighlights.length
+            ? `永久标记（已标 ${permanentMarkHighlights.length}）`
+            : '永久标记',
+        onClick: handleTogglePermanentMarkMode,
+        // Keep mark mode usable while a plain autosave is in flight.
+        disabled: permanentMarkMode ? false : savingEdit,
         separatorBefore: true,
       })
     }
     return actions
-  }, [handleToggleMode, isEditMode, permanentMarkMode, savingEdit])
+  }, [
+    handleToggleMode,
+    handleTogglePermanentMarkMode,
+    isEditMode,
+    permanentMarkHighlights.length,
+    permanentMarkMode,
+    savingEdit,
+  ])
 
   return (
     <>

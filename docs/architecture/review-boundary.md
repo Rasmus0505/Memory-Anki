@@ -21,14 +21,14 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Nodes outside marked regions form one residual root-flow unit.
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
 - Every non-root node belongs to exactly one active unit.
-- Permanent mark / membership changes reconcile immediately. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
+- Permanent mark / membership changes reconcile when the mark pass finishes (exit permanent-mark mode), on editor leave/idle, or on return-to-review — not on every mid-pass toggle autosave. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
 - Deleting the final mark deactivates every unit. A later first mark starts a new schedule.
 
 ## Content Save vs Schedule Reconcile
 
-- Content autosave may persist `editor_doc` without reconciling schedule. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/level updates.
-- Permanent mark and membership-affecting changes still reconcile immediately (same transaction or immediate post-save reconcile).
-- Content-only edits that demote affected units may batch demotion to leave / idle / explicit reconcile. At most one content demotion is applied per edit session for a unit, even across many interim autosaves.
+- Content autosave may persist `editor_doc` without reconciling schedule — including mid-pass permanent-mark toggles. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/level updates between continuous mark clicks.
+- Permanent mark / membership reconcile runs on finished mark pass (`mark_change`), leave, idle, return-to-review, or explicit `reconcile_units` — one batch for the whole pass.
+- Content-only edits that demote affected units may batch demotion to leave / idle / explicit reconcile. At most one content demotion is applied per edit session for a unit, even across many interim autosaves. Due/projection paths still heal lagging unit hashes if a session dies mid-edit.
 - Reconcile returns unit-level before/after changes (identity, membership, revision, due, ladder level). Content demotions create an undoable schedule batch while keeping document content as saved.
 - Manual schedule adjust and undo of a content-demote batch are Reviews write commands. Content must not invent a parallel schedule-write API.
 

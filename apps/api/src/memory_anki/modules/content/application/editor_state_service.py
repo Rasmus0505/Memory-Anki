@@ -15,11 +15,9 @@ from memory_anki.modules.mindmap_document.api import (
     EDITOR_FINGERPRINT_KEY,
     EditorStateConflictError,
     assert_expected_fingerprint,
-    build_document_tree,
     build_editor_state,
     ensure_editor_dict,
     normalize_editor_doc,
-    permanent_mark_uids_from_nodes,
     resolve_local_config,
     serialize_editor_payload,
     sync_editor_root_payload,
@@ -37,17 +35,11 @@ SAFE_EXPLICIT_OVERWRITE_SOURCES = {
     "import_apply",
 }
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
-# Autosave text edits skip schedule reconcile; these leave/idle/mark events still run it.
+# Autosave (including mid-pass permanent-mark toggles) skips schedule reconcile.
+# Explicit leave / idle / finished-mark-pass / return-to-review still run it.
 RECONCILE_SYNC_REASONS = frozenset(
     {"editor_leave", "editor_idle", "mark_change", "return_to_review"}
 )
-
-
-def _permanent_mark_uids(editor_doc: Any) -> set[str]:
-    root_uid, nodes = build_document_tree(editor_doc)
-    if not root_uid:
-        return set()
-    return permanent_mark_uids_from_nodes(nodes, root_uid=str(root_uid))
 
 
 def _should_reconcile_units(
@@ -55,16 +47,22 @@ def _should_reconcile_units(
     payload: dict[str, Any],
     editor_source: str,
     sync_reason: str | None,
-    previous_doc: Any,
-    next_doc: Any,
 ) -> bool:
+    """Decide whether this save should reconcile review units.
+
+    Pure ``palace_edit_autosave`` never reconciles mid-edit — including permanent-mark
+    set changes — so the user can toggle many marks continuously. Mark / membership
+    reconcile runs only when the client sends an explicit leave/idle/mark_change /
+    return_to_review reason, ``reconcile_units``, or a non-autosave editor source.
+    Due/projection paths still heal lagging unit hashes if a session dies mid-edit.
+    """
     if bool(payload.get("reconcile_units")):
         return True
     if editor_source != "palace_edit_autosave":
         return True
     if sync_reason in RECONCILE_SYNC_REASONS:
         return True
-    return _permanent_mark_uids(previous_doc) != _permanent_mark_uids(next_doc)
+    return False
 
 
 def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
@@ -156,8 +154,6 @@ def save_palace_editor_state(
             payload=payload,
             editor_source=editor_source,
             sync_reason=sync_reason,
-            previous_doc=previous_doc,
-            next_doc=doc,
         )
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = serialize_editor_payload(doc)

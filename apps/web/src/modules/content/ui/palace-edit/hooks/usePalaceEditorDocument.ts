@@ -114,7 +114,8 @@ export function usePalaceEditorDocument({
 
   /**
    * Flush pending palace editor changes with optional unit reconcile.
-   * Normal autosave never sets these flags — backend still reconciles on permanent-mark set delta.
+   * Normal autosave never sets these flags — including mid-pass permanent-mark toggles.
+   * Mark/membership reconcile runs on finished mark pass (`mark_change`), leave, or idle.
    * Override is consumed by the next adapter save only (including session visibility flush if armed first).
    * Keep the arm across in-flight → follow-up saves; clear on consume / tab visible / palaceId change.
    */

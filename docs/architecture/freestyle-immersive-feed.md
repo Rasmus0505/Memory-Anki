@@ -14,7 +14,7 @@ Freestyle is a consumer of public learning projections. It does not own palace r
 
 ## Permanent Marks
 
-Permanent marks are edited in the palace document. Mark / membership changes call Content and reconcile Reviews immediately; content-only autosaves may persist `editor_doc` without schedule reconcile. When reconcile runs (immediate mark path, or batched leave/idle/explicit for content demotion), the state-change event invalidates formal, shelf, Today, and freestyle queues.
+Permanent marks are edited in the palace document. While the user is still in permanent-mark mode, toggles only update `editor_doc` (plain autosave) so many marks can be changed continuously without rebuilding freestyle. Schedule reconcile runs when the mark pass finishes (exit permanent-mark mode / `mark_change`), when returning to review, or on editor leave/idle. Content-only autosaves never reconcile schedule. When reconcile runs, freestyle queue rebuild is deferred until the card leaves inline edit (`return_to_review` / leave) so continuous mark editing is not interrupted mid-pass.
 
 Temporary marks do not exist. Practice must not persist, merge, clear, or schedule any alternative mark lifecycle.
 

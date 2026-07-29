@@ -422,14 +422,16 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             self.assertEqual(unit.due_date, date.today())
             self.assertTrue((flagged.get("unit_reconcile") or {}).get("changes"))
 
-    def test_mark_toggle_on_autosave_runs_membership_reconcile(self):
+    def test_mark_toggle_on_plain_autosave_defers_membership_reconcile(self):
+        """Mid-pass mark toggles only persist doc; schedule waits for mark_change/leave."""
         from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
         with self.SessionLocal() as session:
             palace, unit = self._seed_unit(session, stage_index=2)
             unit_id = unit.id
+            stage_before = unit.stage_index
 
-            result = save_palace_editor_state(
+            plain = save_palace_editor_state(
                 session,
                 palace,
                 {
@@ -440,7 +442,24 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             session.expire_all()
             unit = session.get(ReviewUnitState, unit_id)
             assert unit is not None
-            reconcile = result.get("unit_reconcile") or {}
+
+            self.assertNotIn("unit_reconcile", plain)
+            self.assertTrue(unit.active)
+            self.assertEqual(unit.stage_index, stage_before)
+
+            finished = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc(mark=False),
+                    "editor_source": "palace_edit_autosave",
+                    "sync_reason": "mark_change",
+                },
+            )
+            session.expire_all()
+            unit = session.get(ReviewUnitState, unit_id)
+            assert unit is not None
+            reconcile = finished.get("unit_reconcile") or {}
             changes = reconcile.get("changes") or []
 
             self.assertFalse(unit.active)
