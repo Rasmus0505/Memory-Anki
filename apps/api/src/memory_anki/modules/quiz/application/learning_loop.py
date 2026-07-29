@@ -151,46 +151,61 @@ def build_mastery_profile(
     questions = query.limit(max(1, min(limit, 500))).all()
     result: list[dict[str, Any]] = []
     now = utc_now_naive()
-    for question in questions:
-        events = (
-            session.query(QuizAttemptEvent)
-            .filter(QuizAttemptEvent.question_id == question.id)
-            .order_by(QuizAttemptEvent.created_at.desc())
+    if questions:
+        qids = [q.id for q in questions]
+        # Window query for last 20 attempts per question
+        events_query = (
+            session.query(
+                QuizAttemptEvent.question_id,
+                QuizAttemptEvent.is_correct,
+                QuizAttemptEvent.hint_count,
+                QuizAttemptEvent.retry_count,
+                QuizAttemptEvent.confidence,
+                QuizAttemptEvent.created_at,
+            )
+            .filter(QuizAttemptEvent.question_id.in_(qids))
+            .order_by(QuizAttemptEvent.question_id, QuizAttemptEvent.created_at.desc())
             .limit(20)
             .all()
         )
-        if not events:
-            score, label, reason = 0.35, "unseen", "尚无统一作答事件"
-        else:
-            weighted = 0.0
-            weight_total = 0.0
-            for index, event in enumerate(events):
-                recency_weight = 1.0 / (1.0 + index * 0.15)
-                value = 1.0 if event.is_correct else 0.0
-                if event.hint_count:
-                    value -= min(0.35, event.hint_count * 0.12)
-                if event.retry_count:
-                    value -= min(0.25, event.retry_count * 0.1)
-                if event.confidence is not None:
-                    value += (event.confidence - 3) * 0.05
-                weighted += max(0.0, min(1.0, value)) * recency_weight
-                weight_total += recency_weight
-            score = weighted / weight_total if weight_total else 0.0
-            latest = events[0]
-            if latest.created_at and now - latest.created_at > timedelta(days=14):
-                score *= 0.85
-            label = "stable" if score >= 0.8 else "reinforce" if score >= 0.5 else "weak"
-            reason = "综合正确率、提示、重试、信心和近期性计算"
-        result.append(
-            {
-                "question_id": question.id,
-                "palace_id": question.palace_id,
-                "score": round(score, 3),
-                "label": label,
-                "reason": reason,
-                "question": serialize_question(question),
-            }
-        )
+        events_by_qid = {}
+        for e in events_query:
+            events_by_qid.setdefault(e.question_id, []).append(e)
+        for question in questions:
+            qid = question.id
+            events = events_by_qid.get(qid, [])
+            if not events:
+                score, label, reason = 0.35, "unseen", "尚无统一作答事件"
+            else:
+                weighted = 0.0
+                weight_total = 0.0
+                for index, event in enumerate(events):
+                    recency_weight = 1.0 / (1.0 + index * 0.15)
+                    value = 1.0 if event.is_correct else 0.0
+                    if event.hint_count:
+                        value -= min(0.35, event.hint_count * 0.12)
+                    if event.retry_count:
+                        value -= min(0.25, event.retry_count * 0.1)
+                    if event.confidence is not None:
+                        value += (event.confidence - 3) * 0.05
+                    weighted += max(0.0, min(1.0, value)) * recency_weight
+                    weight_total += recency_weight
+                score = weighted / weight_total if weight_total else 0.0
+                latest = events[0]
+                if latest.created_at and now - latest.created_at > timedelta(days=14):
+                    score *= 0.85
+                label = "stable" if score >= 0.8 else "reinforce" if score >= 0.5 else "weak"
+                reason = "综合正确率、提示、重试、信心和近期性计算"
+            result.append(
+                {
+                    "question_id": qid,
+                    "palace_id": question.palace_id,
+                    "score": round(score, 3),
+                    "label": label,
+                    "reason": reason,
+                    "question": serialize_question(question),
+                }
+            )
     return sorted(result, key=lambda item: (item["score"], item["question_id"]))
 
 

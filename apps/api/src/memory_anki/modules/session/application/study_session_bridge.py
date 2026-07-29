@@ -376,6 +376,8 @@ def _scene_segments_sum_seconds(summary: dict[str, Any]) -> int | None:
         if not isinstance(segment, dict):
             continue
         raw = segment.get("effectiveSeconds", segment.get("effective_seconds"))
+        if raw is None:
+            continue
         try:
             value = int(raw)
         except (TypeError, ValueError):

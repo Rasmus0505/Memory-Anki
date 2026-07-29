@@ -236,17 +236,61 @@ function sessionKindToStudyScene(
 }
 
 export function formatTimeRecordTagLabel(
+  record: Pick<
+    TimeSessionRecord,
+    | 'kind'
+    | 'title'
+    | 'sourceKind'
+    | 'palaceId'
+    | 'englishCourseId'
+    | 'activityTag'
+    | 'activityTagLabel'
+    | 'sceneSegments'
+  >,
+) {
+  const routeLabel = resolveTimeRecordRouteLabel(record)
+  const behaviorLabel = resolveTimeRecordBehaviorLabel(record)
+  return routeLabel ? `${routeLabel}-${behaviorLabel}` : behaviorLabel
+}
+
+function resolveTimeRecordBehaviorLabel(
   record: Pick<TimeSessionRecord, 'kind' | 'activityTag' | 'activityTagLabel'>,
 ) {
   if (record.activityTagLabel?.trim()) return record.activityTagLabel.trim()
   if (record.activityTag?.trim()) {
     const tag = record.activityTag.trim()
     if (tag === 'review' || tag === 'practice' || tag === 'quiz' || tag === 'palace_edit') {
-      return formatSessionKind(tag)
+      return formatTimeRecordBehavior(tag)
     }
     return tag
   }
-  return formatSessionKind(record.kind)
+  return formatTimeRecordBehavior(record.kind)
+}
+
+function formatTimeRecordBehavior(kind: SessionKind | string) {
+  if (kind === 'practice' || kind === 'review') return '翻卡'
+  return formatSessionKind(kind)
+}
+
+function resolveTimeRecordRouteLabel(
+  record: Pick<
+    TimeSessionRecord,
+    'kind' | 'title' | 'sourceKind' | 'palaceId' | 'englishCourseId' | 'sceneSegments'
+  >,
+) {
+  const scene = record.sceneSegments?.at(-1)?.scene
+  if (scene === 'freestyle' || /随心/.test(record.title)) return '随心'
+  if (scene === 'english_reading' || record.sourceKind === 'english_reading') return '英语阅读'
+  if (scene === 'english' || record.sourceKind === 'english' || record.englishCourseId != null) {
+    return '英语'
+  }
+  if (scene === 'quiz') return '宫殿'
+  if (scene === 'review') return '复习'
+  if (scene === 'practice' || record.sourceKind === 'palace' || record.palaceId != null) {
+    return '宫殿'
+  }
+  if (scene === 'palace_edit' || record.kind === 'palace_edit') return '宫殿'
+  return null
 }
 
 export function formatDuration(totalSeconds: number) {
