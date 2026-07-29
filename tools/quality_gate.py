@@ -105,7 +105,7 @@ def main() -> int:
     parser.add_argument(
         "--launchers",
         action="store_true",
-        help="Run disruptive Windows smoke tests for start-pwa.bat and start-desktop.bat.",
+        help="Run disruptive Windows smoke tests for start-all.bat (PWA smoke + Desktop).",
     )
     args = parser.parse_args()
     return run_steps(build_steps(area=args.area, full=args.full, launchers=args.launchers))

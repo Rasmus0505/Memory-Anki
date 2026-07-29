@@ -112,8 +112,7 @@ def _current_update_fingerprints() -> dict[str, str]:
             REPO_ROOT / "tools" / "pwa_server.py",
             REPO_ROOT / "tools" / "pwa_tray.ps1",
             REPO_ROOT / "tools" / "windows_runtime.ps1",
-            REPO_ROOT / "start-desktop.bat",
-            REPO_ROOT / "start-pwa.bat",
+            REPO_ROOT / "start-all.bat",
             REPO_ROOT / ".env.example",
         ]
     )

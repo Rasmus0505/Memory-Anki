@@ -81,6 +81,9 @@ def main() -> int:
     print("[i] Launching Memory Anki desktop + timer overlay ...")
     log_file = log_path.open("a", encoding="utf-8")
     try:
+        # Use console-hide flags only. DETACHED + SW_HIDE (hidden_process_kwargs)
+        # can make the Electron BrowserWindow start with WS_VISIBLE cleared, so
+        # the launcher reports "ready" while the main window never appears.
         process = subprocess.Popen(
             [npm, "run", "desktop:timer"],
             cwd=str(WEB_DIR),
@@ -88,7 +91,7 @@ def main() -> int:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
-            **dev_server.hidden_process_kwargs(),
+            **dev_server.hidden_console_kwargs(),
         )
     finally:
         log_file.close()

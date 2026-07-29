@@ -402,8 +402,7 @@ def test_desktop_launch_rechecks_and_repairs_electron_runtime():
 
 def test_all_batch_entrypoints_use_diagnostic_runner():
     batch_paths = [
-        ROOT / "start-desktop.bat",
-        ROOT / "start-pwa.bat",
+        ROOT / "start-all.bat",
         TOOLS_DIR / "configure-tailscale-pwa.bat",
         TOOLS_DIR / "install-pwa-autostart.bat",
         TOOLS_DIR / "stop-pwa.bat",
@@ -416,14 +415,20 @@ def test_all_batch_entrypoints_use_diagnostic_runner():
 
 
 def test_start_entrypoints_prepare_before_launching():
-    pwa = (ROOT / "start-pwa.bat").read_text(encoding="utf-8")
-    desktop = (ROOT / "start-desktop.bat").read_text(encoding="utf-8")
+    launcher = (ROOT / "start-all.bat").read_text(encoding="utf-8-sig")
 
-    assert 'pwa_launcher.ps1" Update' in pwa
-    assert pwa.index('pwa_launcher.ps1" Update') < pwa.index('pwa_launcher.ps1" Start')
-    assert 'pwa_launcher.ps1" Update' in desktop
-    assert desktop.index('pwa_launcher.ps1" Update') < desktop.index('desktop_launcher.ps1" -ChildSta Start')
+    # Double-click defaults to both: shared update, then PWA + Desktop.
+    assert 'pwa_launcher.ps1" Update' in launcher
+    assert 'pwa_launcher.ps1" Start' in launcher
+    assert 'desktop_launcher.ps1" -ChildSta Start' in launcher
+    assert "choice" not in launcher.lower()
+    assert "Select mode" not in launcher
+    assert launcher.index('pwa_launcher.ps1" Update') < launcher.index('pwa_launcher.ps1" Start')
+    assert launcher.index('pwa_launcher.ps1" Update') < launcher.index('desktop_launcher.ps1" -ChildSta Start')
+    assert launcher.index('pwa_launcher.ps1" Start') < launcher.index('desktop_launcher.ps1" -ChildSta Start')
     assert not (ROOT / "update.bat").exists()
+    assert not (ROOT / "start-pwa.bat").exists()
+    assert not (ROOT / "start-desktop.bat").exists()
 
 def test_diagnostic_runner_writes_fixed_ai_debug_artifacts():
     runner = (TOOLS_DIR / "run_with_diagnostics.ps1").read_text(encoding="utf-8")
@@ -461,14 +466,14 @@ def test_tray_and_autostart_launch_shared_service_through_diagnostic_runner():
 
 
 def test_manual_batch_start_keeps_launcher_console_visible():
-    desktop_batch = (ROOT / "start-desktop.bat").read_text(encoding="utf-8")
-    pwa_batch = (ROOT / "start-pwa.bat").read_text(encoding="utf-8")
+    batch = (ROOT / "start-all.bat").read_text(encoding="utf-8-sig")
     launcher = (TOOLS_DIR / "pwa_launcher.ps1").read_text(encoding="utf-8")
 
-    assert "-WindowStyle Hidden" not in desktop_batch
-    assert "start " not in desktop_batch.lower()
-    assert "pwa_launcher.ps1" in pwa_batch
-    assert "-WindowStyle Hidden" not in pwa_batch
+    assert "-WindowStyle Hidden" not in batch
+    # PWA is detached so Desktop can continue in the same console.
+    assert batch.lower().count('start "memory anki pwa"') == 1
+    assert "pwa_launcher.ps1" in batch
+    assert "desktop_launcher.ps1" in batch
     assert 'MEMORY_ANKI_VISIBLE_BACKEND = "1"' in launcher
     assert "-WindowStyle Hidden" not in launcher
 
@@ -519,8 +524,8 @@ def test_quality_gate_exposes_real_launcher_smoke_option():
 
     assert '"--launchers"' in quality_gate
     assert 'QualityStep("Windows launcher smoke"' in quality_gate
-    assert '"start-pwa.bat", "--smoke-test"' in launcher_smoke
-    assert '"start-desktop.bat"' in launcher_smoke
+    assert '"start-all.bat", "--smoke-test"' in launcher_smoke
+    assert '"start-all.bat", "--desktop"' in launcher_smoke
     assert "OPENAPI_URL" in launcher_smoke
     assert "_electron_pids" in launcher_smoke
 
@@ -529,5 +534,4 @@ def test_agent_rules_require_launcher_smoke_for_runtime_changes():
     rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
     assert "python tools/quality_gate.py --launchers" in rules
-    assert "start-pwa.bat" in rules
-    assert "start-desktop.bat" in rules
+    assert "start-all.bat" in rules

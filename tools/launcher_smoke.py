@@ -75,15 +75,15 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
 
 
 def _run_pwa_smoke() -> None:
-    print("[launcher-smoke] Running start-pwa.bat --smoke-test", flush=True)
+    print("[launcher-smoke] Running start-all.bat --smoke-test", flush=True)
     completed = subprocess.run(
-        ["cmd.exe", "/d", "/c", "start-pwa.bat", "--smoke-test"],
+        ["cmd.exe", "/d", "/c", "start-all.bat", "--smoke-test"],
         cwd=REPO_ROOT,
         timeout=300,
         check=False,
     )
     if completed.returncode != 0:
-        raise RuntimeError(f"start-pwa.bat failed with exit code {completed.returncode}")
+        raise RuntimeError(f"start-all.bat --smoke-test failed with exit code {completed.returncode}")
     _wait_for_openapi()
     print("[launcher-smoke] PWA launcher ready", flush=True)
 
@@ -91,10 +91,10 @@ def _run_pwa_smoke() -> None:
 def _run_desktop_smoke() -> None:
     before = _electron_pids()
     started_at = time.time()
-    print("[launcher-smoke] Running start-desktop.bat", flush=True)
+    print("[launcher-smoke] Running start-all.bat --desktop", flush=True)
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     process = subprocess.Popen(
-        ["cmd.exe", "/d", "/c", "start-desktop.bat"],
+        ["cmd.exe", "/d", "/c", "start-all.bat", "--desktop"],
         cwd=REPO_ROOT,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -116,7 +116,7 @@ def _run_desktop_smoke() -> None:
                 print("[launcher-smoke] Desktop Electron window and shared service ready", flush=True)
                 return
             if process.poll() not in (None, 0):
-                raise RuntimeError(f"start-desktop.bat exited with code {process.returncode}")
+                raise RuntimeError(f"start-all.bat --desktop exited with code {process.returncode}")
             time.sleep(1)
         raise RuntimeError("Desktop Electron process did not appear within 180 seconds")
     finally:

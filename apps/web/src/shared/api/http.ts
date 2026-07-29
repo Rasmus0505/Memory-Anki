@@ -136,7 +136,7 @@ function buildNetworkFailureMessage(input: {
     if (isLocalDesktopRuntime(runtime.currentUrl, runtime.userAgent)) {
       lines.push(
         '这通常表示本机共享服务尚未启动、正在重启或暂时无法连接。',
-        '请重新运行 start-desktop.bat；如果只使用手机 PWA，也可以运行 start-pwa.bat。桌面端与手机端会共用同一个本机服务。',
+        '请重新运行 start-all.bat（可选 --desktop / --pwa / --both）。桌面端与手机端会共用同一个本机服务。',
       )
     } else {
       lines.push(
