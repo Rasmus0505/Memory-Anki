@@ -418,7 +418,7 @@ export function FreestyleUnitReviewFlipPanel({
             : reveal.visibleEditorSyncKey
         }
         currentPalaceId={session.palace_id}
-        activeUnitNodeUids={isEditMode ? null : unit.node_uids}
+        activeUnitNodeUids={isEditMode ? null : [...new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))]}
         countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
         onCountBadgeClick={handleOpenNodeQuiz}
         onEditorStateChange={isEditMode ? handleEditorStateChange : undefined}
