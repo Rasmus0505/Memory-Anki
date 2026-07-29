@@ -11,6 +11,7 @@ from memory_anki.modules.memory.api import (
     cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     complete_unit_review_session,
+    get_palace_ladder_progress,
     get_palace_unit_projection,
     get_unit_review_completion,
     get_unit_review_session,
@@ -40,6 +41,26 @@ def review_queue(session: Session = Depends(session_dep)):
 def palace_units(palace_id: int, session: Session = Depends(session_dep)):
     try:
         return {"item": get_palace_unit_projection(session, palace_id)}
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/review/palaces/{palace_id}/ladder-progress")
+def palace_ladder_progress(
+    palace_id: int,
+    range: str = "all",
+    unit_id: str | None = None,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return {
+            "item": get_palace_ladder_progress(
+                session,
+                palace_id,
+                unit_id=unit_id,
+                range_key=range,
+            )
+        }
     except ValueError as exc:
         raise _bad_request(exc) from exc
 

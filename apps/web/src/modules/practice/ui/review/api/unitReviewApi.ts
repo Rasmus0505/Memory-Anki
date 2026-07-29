@@ -206,6 +206,69 @@ export async function getPalaceReviewUnitsApi(palaceId: number) {
   return response.item
 }
 
+export type LadderProgressRange = 'today' | 'last3days' | 'week' | 'all'
+
+export interface LadderStageStatsDto {
+  stage_index: number
+  interval_days: number
+  pass_count: number
+  last_at: string | null
+  seconds: number
+}
+
+export interface LadderRangeStatsDto {
+  range: LadderProgressRange
+  per_stage: LadderStageStatsDto[]
+  total_reviews: number
+  total_seconds: number
+  rating_share: {
+    forgot: number
+    hard: number
+    remember: number
+    easy: number
+  }
+}
+
+export interface PalaceLadderProgressDto {
+  palace_id: number
+  title: string
+  ladder: number[]
+  scope: 'unit' | 'palace'
+  current: {
+    unit_id: string
+    title: string
+    stage_index: number
+    interval_days: number
+    due_date: string | null
+    due: boolean
+    has_passed: boolean
+  } | null
+  palace: {
+    unit_count: number
+    due_count: number
+    weakest_stage_index: number | null
+    stage_histogram: number[]
+    next_review_date: string | null
+    review_status: string
+    mark_required: boolean
+  }
+  unit_range_stats: LadderRangeStatsDto
+  palace_range_stats: LadderRangeStatsDto
+}
+
+export async function getPalaceLadderProgressApi(
+  palaceId: number,
+  options?: { range?: LadderProgressRange; unitId?: string | null },
+) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('range', options?.range ?? 'all')
+  if (options?.unitId) searchParams.set('unit_id', options.unitId)
+  const response = await request<{ item: PalaceLadderProgressDto }>(
+    `/review/palaces/${palaceId}/ladder-progress?${searchParams.toString()}`,
+  )
+  return response.item
+}
+
 export async function reconcilePalaceUnitsApi(palaceId: number) {
   const response = await request<{ item: ReconcilePalaceUnitsResultDto }>(
     `/review/palaces/${palaceId}/units/reconcile`,

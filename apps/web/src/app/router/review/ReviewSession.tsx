@@ -14,6 +14,7 @@ import {
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
+import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -37,11 +38,12 @@ function retryLabel(count: number) {
 
 function effectLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
   if (!effect.passed) {
+    const targetStage = effect.target_interval_days === 0 ? '首学阶段' : `${effect.target_interval_days}天级`
     const stage = effect.rating === 1
-      ? `重置${effect.target_interval_days}天级`
+      ? `重置到${targetStage}`
       : effect.stage_action === 'lower'
-        ? `降至${effect.target_interval_days}天级`
-        : `保持${effect.target_interval_days}天级`
+        ? `降至${targetStage}`
+        : `保持${targetStage}`
     return `${retryLabel(retryAfterCards)} · ${stage}`
   }
   const [, month, day] = effect.target_due_date.split('-').map(Number)
@@ -241,6 +243,13 @@ export default function ReviewSession() {
         currentPalaceId={session.palace_id}
         activeUnitNodeUids={current.node_uids}
         mutedNodeUids={mutedNodeUids}
+        toolbarCenterContent={
+          <PalaceLadderProgress
+            palaceId={session.palace_id}
+            unitId={current.id}
+            refreshKey={`${current.id}:${current.stage_index}:${current.due_date}:${current.encounter?.id ?? ''}`}
+          />
+        }
         onNodeClick={() => undefined}
         onNodeContextMenu={() => undefined}
         onNodeActive={() => undefined}

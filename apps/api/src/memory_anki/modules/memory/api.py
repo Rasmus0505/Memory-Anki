@@ -1,5 +1,6 @@
 """Public facade for permanent-mark review units."""
 
+from .application.unit_ladder_progress import get_palace_ladder_progress
 from .application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
@@ -40,6 +41,7 @@ __all__ = [
     "close_unit_review_encounter",
     "complete_unit_review_session",
     "get_palace_unit_projection",
+    "get_palace_ladder_progress",
     "get_palace_review_summary",
     "get_review_queue_summary",
     "get_unit_review_weekly_stats",
