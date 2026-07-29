@@ -593,7 +593,9 @@ describe('MindMapCanvas recovery', () => {
     expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
   })
 
-  it('re-centers when preserve-camera reflow leaves every card off-screen', async () => {
+  it('freezes the camera on measure reflow even when every card is off-screen', async () => {
+    // Product rule: content flip/measure never moves the view — only user pan/zoom
+    // or explicit toolbar 适应/刷新脑图 may change the camera.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       render(
@@ -622,8 +624,9 @@ describe('MindMapCanvas recovery', () => {
       reactFlowMockState.viewport = { ...farViewport }
       reactFlowMockState.setCenter.mockClear()
       reactFlowMockState.fitView.mockClear()
+      reactFlowMockState.setViewport.mockClear()
 
-      // Measure reflow under a frozen far camera — safety net must re-anchor.
+      // Measure reflow under a frozen far camera — must NOT auto re-anchor.
       const measuredNode = reactFlowMockState.nodes.find((node) => node.id === 'child-a')
       const onMeasure = measuredNode?.data?.onMeasure as
         | ((nodeId: string, size: { width: number; height: number }) => void)
@@ -636,11 +639,64 @@ describe('MindMapCanvas recovery', () => {
         await vi.advanceTimersByTimeAsync(200)
       })
 
-      expect(
-        reactFlowMockState.setCenter.mock.calls.length + reactFlowMockState.fitView.mock.calls.length,
-      ).toBeGreaterThan(0)
+      expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
+      expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+      // restorePreservedViewport may re-assert the locked far camera, but must not invent a new one.
+      for (const call of reactFlowMockState.setViewport.mock.calls) {
+        expect(call[0]).toEqual(farViewport)
+      }
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('does not invent a new camera when flip-style content expands under preserve policy', async () => {
+    const props = {
+      selectedNodeId: null as string | null,
+      onNodeSelect: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      practiceModeActive: true,
+      mobileViewPolicy: 'map' as const,
+      nodeClickViewportPolicy: 'preserve' as const,
+      contentChangeViewportPolicy: 'preserve' as const,
+    }
+    const { rerender } = render(
+      <MindMapCanvas graphData={graphData} {...props} />,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('node-root')).toBeTruthy())
+
+    const userViewport = { x: 64, y: -40, zoom: 0.9 }
+    act(() => {
+      const onMoveStart = reactFlowMockState.reactFlowProps?.onMoveStart as
+        | ((event: MouseEvent, viewport: typeof userViewport) => void)
+        | undefined
+      const onViewportChange = reactFlowMockState.reactFlowProps?.onViewportChange as
+        | ((viewport: typeof userViewport) => void)
+        | undefined
+      const onMoveEnd = reactFlowMockState.reactFlowProps?.onMoveEnd as
+        | ((event: MouseEvent, viewport: typeof userViewport) => void)
+        | undefined
+      const gesture = new MouseEvent('pointermove')
+      onMoveStart?.(gesture, userViewport)
+      onViewportChange?.(userViewport)
+      onMoveEnd?.(gesture, userViewport)
+    })
+    reactFlowMockState.viewport = { ...userViewport }
+    reactFlowMockState.setCenter.mockClear()
+    reactFlowMockState.fitView.mockClear()
+    reactFlowMockState.setViewport.mockClear()
+
+    // Reveal-style expansion (root → root+child) must not pan/fit/center.
+    rerender(<MindMapCanvas graphData={expandedGraphData} {...props} />)
+    await waitFor(() => expect(screen.getByTestId('node-child')).toBeTruthy())
+
+    expect(reactFlowMockState.setCenter).not.toHaveBeenCalled()
+    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+    for (const call of reactFlowMockState.setViewport.mock.calls) {
+      expect(call[0]).toEqual(userViewport)
     }
   })
 

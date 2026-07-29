@@ -360,11 +360,11 @@ export default function ImmersiveFreestylePage() {
   /**
    * Route residency hides inactive pages with `display: none`, which often resets
    * scrollTop to 0. Remounts also start the scroller at the top even when
-   * `currentIndex` was restored from queue state. Re-align only for those cases —
-   * never while the user is scrolling (that used to fight snap and look like
+   * `currentIndex` was restored from queue state. Re-align only for route /
+   * load / index identity — never on silent rebuild card-id churn, and never
+   * while the user is scrolling (that used to fight snap and look like
    * auto page-turn after settle rebuilds).
    */
-  const currentCardId = cards[currentIndex]?.id
   useLayoutEffect(() => {
     if (!isActive || loading || cards.length === 0) return
     if (userScrollingRef.current || programmaticScrollRef.current) return
@@ -381,10 +381,10 @@ export default function ImmersiveFreestylePage() {
     isActive,
     becameActiveAt,
     loading,
-    cards.length,
     currentIndex,
-    currentCardId,
     scrollToIndex,
+    // cards.length only gates the early return; silent rebuilds must not re-scroll.
+    cards.length,
   ])
 
   const acknowledgeQuizCard = useCallback(
