@@ -30,6 +30,8 @@ from .quiz_stream import (
     deterministic_shuffle,
     filter_quizzes_by_mastery_buckets,
     order_quiz_stream_by_scope,
+)
+from .quiz_stream import (
     stable_mix as _stable_mix,
 )
 from .review_units import ReviewUnitCandidate
@@ -409,7 +411,7 @@ def assemble_queue(
         config.get("bound_quiz_placement") or BOUND_QUIZ_INTO_MIX
     )
     raw_scopes = config.get("quiz_mastery_buckets")
-    if isinstance(raw_scopes, Sequence) and not isinstance(raw_scopes, (str, bytes)):
+    if isinstance(raw_scopes, Sequence) and not isinstance(raw_scopes, str | bytes):
         quiz_mastery_buckets = [str(item) for item in raw_scopes]
     else:
         quiz_mastery_buckets = list(DEFAULT_QUIZ_MASTERY_BUCKETS)

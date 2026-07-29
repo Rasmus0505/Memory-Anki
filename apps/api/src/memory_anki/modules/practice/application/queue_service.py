@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.content.public.queries import list_active_palace_tree_structures
-from memory_anki.modules.memory.public.queries import get_palace_unit_projection
+from memory_anki.modules.memory.public.queries import project_palace_review_summaries
 from memory_anki.modules.quiz.public.queries import (
     list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
@@ -50,14 +50,16 @@ def build_freestyle_queue(
     mastery_by_palace: dict[int, float] = {}
     recent_practice_rank: dict[int, int] = {}
 
-    for tree in trees:
-        palace_id = int(tree["palace_id"])
-        palace_meta[palace_id] = {
-            "title": str(tree.get("title") or ""),
-        }
-        nodes = tree["nodes"]
-        try:
-            projection = get_palace_unit_projection(session, palace_id)
+    if palace_ids:
+        # Batch path expects palace ids (or Palace rows); never raw tree dicts.
+        projections = project_palace_review_summaries(session, palace_ids)
+        for tree in trees:
+            palace_id = int(tree["palace_id"])
+            palace_meta[palace_id] = {
+                "title": str(tree.get("title") or ""),
+            }
+            nodes = tree["nodes"]
+            projection = projections.get(palace_id, {"units": []})
             projected_units = list(projection.get("units") or [])
             units_by_palace[palace_id] = [
                 candidate_from_projection(
@@ -77,10 +79,6 @@ def build_freestyle_queue(
                 sum(int(item.get("stage_index") or 0) for item in projected_units)
                 / max(1, len(projected_units) * 8)
             )
-        except ValueError:
-            units_by_palace[palace_id] = []
-            due_by_palace[palace_id] = set()
-            mastery_by_palace[palace_id] = 0.5
 
     # Quiz projections only when enabled.
     quizzes: list[QuizCandidate] = []

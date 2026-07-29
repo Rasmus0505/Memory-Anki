@@ -567,9 +567,11 @@ def start_freestyle_unit_review_session(
             if summary.get("client_source") not in {"desktop", "pwa"}:
                 summary["client_source"] = normalized_source
                 study.summary_json = json.dumps(summary, ensure_ascii=False)
-        # A previous unrated glance must not keep billing from its created_at.
-        _delete_open_unrated_encounters(session, study.id)
-        session.commit()
+                session.commit()
+        # Keep any still-open encounter. Deleting it here raced with an in-flight
+        # rate that still held the old encounter_id ("open review encounter required").
+        # Unrated leave is cancelled explicitly via cancel_unrated_unit_review_encounter;
+        # competing sessions are released above / on other-unit start.
 
     return open_unit_review_encounter(
         session,

@@ -254,6 +254,8 @@ class TestPalaceEditor:
         )
 
         assert response.status_code == 200
+        assert "pegs" not in response.json()["palace"]
+        assert "segments" not in response.json()["palace"]
         saved = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
         assert saved["editor_doc"]["root"]["children"][0]["data"]["text"] == "Child Text"
 
