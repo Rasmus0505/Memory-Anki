@@ -48,60 +48,12 @@ def prepare_english_reading_runtime(session: Session) -> dict[str, Any]:
 
 
 def get_dictionary_entry(session: Session, *, word: str) -> dict[str, Any]:
+    """Deprecated live xxapi path. Popup lookup uses english-lookup instead."""
+    del session  # no longer touches cache or upstream dictionary
     safe_word = _svc.normalize_dictionary_query_word(word)
     if not safe_word:
         raise EnglishReadingError("请提供要查询的英文单词。")
-    cached_entry = _svc.load_cached_dictionary_entry(session, safe_word)
-    if cached_entry is not None:
-        return cached_entry
-
-    candidate_words: list[str] = []
-    seen_words: set[str] = set()
-    for candidate in [safe_word, *_svc.basic_lemma_candidates(safe_word)]:
-        normalized_candidate = _svc.normalize_dictionary_query_word(candidate)
-        if not normalized_candidate or normalized_candidate in seen_words:
-            continue
-        seen_words.add(normalized_candidate)
-        candidate_words.append(normalized_candidate)
-
-    last_upstream_error: EnglishReadingError | None = None
-    for candidate_word in candidate_words:
-        try:
-            payload = _svc.fetch_xxapi_dictionary_payload(candidate_word)
-            entry_payload = _svc.build_xxapi_dictionary_entry_payload(
-                payload,
-                query_word=safe_word,
-                requested_word=candidate_word,
-            )
-        except EnglishReadingError as exc:
-            if "未找到单词" in str(exc):
-                continue
-            last_upstream_error = exc
-            break
-
-        if entry_payload is None:
-            continue
-
-        cache_keys = {safe_word}
-        lemma_key = _svc.normalize_dictionary_query_word(str(entry_payload["lemma"] or ""))
-        if lemma_key:
-            cache_keys.add(lemma_key)
-        _svc.upsert_dictionary_cache(
-            session,
-            normalized_surfaces=cache_keys,
-            payload=entry_payload,
-        )
-        cached = _svc.load_cached_dictionary_entry(session, safe_word)
-        if cached is not None:
-            return cached
-        return {
-            **entry_payload,
-            "cachedAt": utc_now_naive().isoformat(),
-        }
-
-    if last_upstream_error is not None:
-        raise last_upstream_error
-    raise EnglishReadingError(f"未找到单词“{safe_word}”的词典结果。")
+    raise EnglishReadingError("已迁移到 /api/v1/english-lookup/search")
 
 
 def _resolve_legacy_dashscope_runtime(

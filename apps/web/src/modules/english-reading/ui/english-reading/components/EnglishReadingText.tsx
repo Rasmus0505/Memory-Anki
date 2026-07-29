@@ -46,6 +46,7 @@ export function ReadingLookupText({
             role="button"
             tabIndex={0}
             data-reading-word="true"
+            data-lookup-token="true"
             className="cursor-pointer rounded-md px-0.5 text-inherit transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
             onClick={(event) => onLookupWord(part.value, event)}
           >

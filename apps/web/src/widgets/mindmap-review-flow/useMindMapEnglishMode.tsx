@@ -1,49 +1,33 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
-  useEnglishDictionaryLookup,
-  useEnglishSentenceSelectionActions,
-} from '@/modules/english/public'
-import { useAiRunConfigDialog } from '@/modules/settings/public'
-import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
-import { MindMapEnglishModeChrome } from './MindMapEnglishModeChrome'
-
-/** English reading hooks require a timer; mind-map English mode only needs activity no-ops. */
-const ENGLISH_MODE_NOOP_TIMER = {
-  registerActivity: () => undefined,
-} as unknown as TimedSessionController
+  EnglishLookupPanel,
+  LookupAnchor,
+  useEnglishLookup,
+} from '@/modules/english-lookup/public'
+import { createEnglishReadingVocabularyNoteApi } from '@/modules/english-reading/public'
+import { toast } from '@/shared/feedback/toast'
 
 /**
  * Host-side English interaction mode for flip-card mind maps:
- * word lookup + long-press sentence selection / AI translation.
+ * Saladict-style dual dictionary lookup (no sentence LLM translation).
  */
 export function useMindMapEnglishMode() {
   const [englishModeActive, setEnglishModeActive] = useState(false)
-  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
-  const dictionary = useEnglishDictionaryLookup({
+  const readingContentRef = useRef<HTMLDivElement | null>(null)
+  const lookup = useEnglishLookup({
     isActive: englishModeActive,
-    timer: ENGLISH_MODE_NOOP_TIMER,
-  })
-  const sentenceTranslation = useEnglishSentenceSelectionActions({
-    isActive: englishModeActive,
-    timer: ENGLISH_MODE_NOOP_TIMER,
-    promptForAiOptions,
-    dictionaryPanelRef: dictionary.dictionaryPanelRef,
+    onActivity: () => undefined,
   })
 
-  const handleLookupWordRef = useRef(dictionary.handleLookupWord)
-  handleLookupWordRef.current = dictionary.handleLookupWord
-  const resetDictionaryRef = useRef(dictionary.resetDictionaryInteractions)
-  resetDictionaryRef.current = dictionary.resetDictionaryInteractions
-  const resetSentenceTranslationRef = useRef(
-    sentenceTranslation.resetSentenceTranslationInteractions,
-  )
-  resetSentenceTranslationRef.current =
-    sentenceTranslation.resetSentenceTranslationInteractions
+  const handleLookupWordRef = useRef(lookup.handleTokenClick)
+  handleLookupWordRef.current = lookup.handleTokenClick
+  const resetRef = useRef(lookup.reset)
+  resetRef.current = lookup.reset
 
   const handleEnglishWordClick = useCallback(
     (word: string, event: ReactMouseEvent<HTMLElement>) => {
-      void handleLookupWordRef.current(word, event)
+      handleLookupWordRef.current(word, event)
     },
     [],
   )
@@ -51,48 +35,40 @@ export function useMindMapEnglishMode() {
   const handleToggleEnglishMode = useCallback(() => {
     setEnglishModeActive((current) => {
       const next = !current
-      if (!next) {
-        resetDictionaryRef.current()
-        resetSentenceTranslationRef.current()
-      }
+      if (!next) resetRef.current()
       return next
     })
   }, [])
 
+  const handleFavorite = useCallback(async (query: string, summary: string) => {
+    try {
+      await createEnglishReadingVocabularyNoteApi({
+        word: query,
+        definitionZh: summary || undefined,
+        note: '',
+      })
+      toast.success('已收藏生词')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '收藏失败')
+    }
+  }, [])
+
   const englishChrome: ReactNode = englishModeActive ? (
-    <MindMapEnglishModeChrome
-      sentenceTranslationTrigger={sentenceTranslation.sentenceTranslationTrigger}
-      sentenceTranslationTriggerRef={sentenceTranslation.sentenceTranslationTriggerRef}
-      onConfirmSentenceTranslation={sentenceTranslation.handleConfirmSentenceTranslation}
-      dictionaryPanel={dictionary.dictionaryPanel}
-      dictionaryPanelRef={dictionary.dictionaryPanelRef}
-      onCloseDictionaryPanel={() => dictionary.setDictionaryPanel(null)}
-      onDictionaryHeaderPointerDown={dictionary.handleDictionaryHeaderPointerDown}
-      onDictionaryHeaderMouseDown={dictionary.handleDictionaryHeaderMouseDown}
-      onToggleDictionaryPin={dictionary.handleToggleDictionaryPin}
-      playDictionaryPronunciation={dictionary.playDictionaryPronunciation}
-      supportsSpeechSynthesis={dictionary.supportsSpeechSynthesis}
-      sentenceTranslationPanel={sentenceTranslation.sentenceTranslationPanel}
-      sentenceTranslationPanelRef={sentenceTranslation.sentenceTranslationPanelRef}
-      onCloseSentenceTranslationPanel={() => sentenceTranslation.setSentenceTranslationPanel(null)}
-      onSentenceTranslationHeaderPointerDown={
-        sentenceTranslation.handleSentenceTranslationHeaderPointerDown
-      }
-      onSentenceTranslationHeaderMouseDown={
-        sentenceTranslation.handleSentenceTranslationHeaderMouseDown
-      }
-      onToggleSentenceTranslationPin={sentenceTranslation.handleToggleSentenceTranslationPin}
-      onLookupWord={handleEnglishWordClick}
-    />
+    <>
+      <LookupAnchor anchor={lookup.anchor} onClick={lookup.handleAnchorClick} />
+      <EnglishLookupPanel lookup={lookup} onFavorite={handleFavorite} />
+    </>
   ) : null
 
   return {
     englishModeActive,
     handleToggleEnglishMode,
     handleEnglishWordClick,
-    readingContentRef: sentenceTranslation.readingContentRef,
-    handleReadingContentPointerDown: sentenceTranslation.handleReadingContentPointerDown,
+    readingContentRef,
+    handleReadingContentPointerDown: undefined as
+      | ((event: React.PointerEvent<HTMLElement>) => void)
+      | undefined,
     englishChrome,
-    aiRunConfigDialog,
+    aiRunConfigDialog: null as ReactNode,
   }
 }

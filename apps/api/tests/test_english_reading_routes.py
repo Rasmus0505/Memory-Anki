@@ -8,7 +8,6 @@ import fitz
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.english_reading import (
-    EnglishReadingDictionaryCache,
     EnglishReadingLexiconCache,
     EnglishReadingVocabularyNote,
 )
@@ -54,7 +53,6 @@ class EnglishReadingRouteTests(RouterTestCase):
     def setUp(self):
         self.original_runtime = reading_service.get_english_reading_runtime()
         self.original_call_chat_completion_text = reading_service.call_chat_completion_text
-        self.original_fetch_xxapi_dictionary_payload = reading_service.fetch_xxapi_dictionary_payload
         self.original_api_key = reading_service.DASHSCOPE_API_KEY
         self.original_text_model = reading_service.DASHSCOPE_TEXT_MODEL
         self.original_cefr_path = reading_service.ENGLISH_READING_CEFR_PATH
@@ -105,7 +103,6 @@ class EnglishReadingRouteTests(RouterTestCase):
     def tearDown(self):
         reading_service.configure_english_reading_runtime(self.original_runtime)
         reading_service.call_chat_completion_text = self.original_call_chat_completion_text
-        reading_service.fetch_xxapi_dictionary_payload = self.original_fetch_xxapi_dictionary_payload
         reading_service.DASHSCOPE_API_KEY = self.original_api_key
         reading_service.DASHSCOPE_TEXT_MODEL = self.original_text_model
         reading_service.ENGLISH_READING_CEFR_PATH = self.original_cefr_path
@@ -250,20 +247,6 @@ class EnglishReadingRouteTests(RouterTestCase):
                     ],
                 }
             ]
-        raise reading_service.EnglishReadingError(f"未找到单词“{word}”的词典结果。")
-
-    def mock_xxapi_dictionary_payload(self, word: str):
-        normalized = reading_service.normalize_dictionary_query_word(word)
-        if normalized in {"cancel", "cancels"}:
-            return {
-                "word": "cancel",
-                "usphone": "'kænsl",
-                "usspeech": "https://dict.youdao.com/dictvoice?audio=cancel&type=2",
-                "translations": [
-                    {"pos": "v", "tran_cn": "取消；删去"},
-                    {"pos": "n", "tran_cn": "取消，撤销"},
-                ],
-            }
         raise reading_service.EnglishReadingError(f"未找到单词“{word}”的词典结果。")
 
     def test_profile_get_and_update(self):
@@ -712,76 +695,20 @@ class EnglishReadingRouteTests(RouterTestCase):
         self.assertGreaterEqual(int(reviewed_payload["intervalDays"] or 0), 0)
         self.assertFalse(reviewed_payload["isDue"])
 
-    def test_xxapi_lookup_returns_chinese_and_caches_result(self):
-        reading_service.fetch_xxapi_dictionary_payload = self.mock_xxapi_dictionary_payload
+    def test_legacy_dictionary_route_returns_gone_migration(self):
         response = self.client.get(
             "/api/v1/english-reading/dictionary",
             params={"word": "cancel"},
         )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["word"], "cancel")
-        self.assertEqual(payload["lemma"], "cancel")
-        self.assertEqual(payload["phoneticUs"], "/'kænsl/")
-        self.assertEqual(
-            payload["audioUsUrl"],
-            "https://dict.youdao.com/dictvoice?audio=cancel&type=2",
-        )
-        self.assertEqual(payload["partsOfSpeech"], ["v", "n"])
-        self.assertEqual(payload["summaryZh"], ["取消；删去", "取消，撤销"])
-        self.assertEqual(payload["senses"][0]["definitionZh"], "取消；删去")
-        self.assertEqual(payload["senses"][0]["definition"], "")
+        self.assertEqual(response.status_code, 410)
+        self.assertIn("english-lookup/search", response.json()["detail"])
 
-        with self.SessionLocal() as session:
-            cached_row = (
-                session.query(EnglishReadingDictionaryCache)
-                .filter_by(normalized_surface="cancel")
-                .first()
-            )
-            self.assertIsNotNone(cached_row)
-            self.assertEqual(cached_row.source, "xxapi")
-            self.assertEqual(json.loads(cached_row.summary_zh_json), ["取消；删去", "取消，撤销"])
-
-        reading_service.fetch_xxapi_dictionary_payload = lambda _word: (_ for _ in ()).throw(
-            AssertionError("cache should have been used")
-        )
-        cached_response = self.client.get(
+        blank = self.client.get(
             "/api/v1/english-reading/dictionary",
-            params={"word": "cancel"},
+            params={"word": "   "},
         )
-        self.assertEqual(cached_response.status_code, 200)
-        self.assertEqual(cached_response.json()["summaryZh"], ["取消；删去", "取消，撤销"])
-
-    def test_dictionary_lookup_falls_back_to_lemma_candidates(self):
-        reading_service.fetch_xxapi_dictionary_payload = self.mock_xxapi_dictionary_payload
-
-        response = self.client.get(
-            "/api/v1/english-reading/dictionary",
-            params={"word": "cancels"},
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["word"], "cancels")
-        self.assertEqual(payload["lemma"], "cancel")
-        self.assertEqual(payload["partsOfSpeech"], ["v", "n"])
-
-        with self.SessionLocal() as session:
-            cached_surfaces = {
-                row.normalized_surface
-                for row in session.query(EnglishReadingDictionaryCache).all()
-            }
-            self.assertIn("cancels", cached_surfaces)
-            self.assertIn("cancel", cached_surfaces)
-
-    def test_dictionary_lookup_returns_not_found(self):
-        reading_service.fetch_xxapi_dictionary_payload = self.mock_xxapi_dictionary_payload
-
-        response = self.client.get(
-            "/api/v1/english-reading/dictionary",
-            params={"word": "zzzzword"},
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertIn("未找到单词", response.json()["detail"])
+        self.assertEqual(blank.status_code, 400)
+        self.assertIn("英文单词", blank.json()["detail"])
 
     def test_sentence_translation_uses_translation_options_and_normalizes_text(self):
         captured: dict[str, object] = {}

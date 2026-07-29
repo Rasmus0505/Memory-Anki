@@ -413,17 +413,24 @@ def api_get_english_reading_version(material_id: int, session: Session = Depends
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/english-reading/dictionary")
+@router.get(
+    "/english-reading/dictionary",
+    deprecated=True,
+    summary="Deprecated xxapi dictionary (use english-lookup)",
+)
 def api_get_english_reading_dictionary(
     word: str,
     session: Session = Depends(session_dep),
 ):
+    """Deprecated. Use GET /api/v1/english-lookup/search instead of live xxapi lookup."""
     try:
         return get_dictionary_entry(session, word=word)
     except EnglishReadingError as exc:
         message = str(exc)
         status_code = 400
-        if "未找到单词" in message:
+        if "已迁移" in message:
+            status_code = 410
+        elif "未找到单词" in message:
             status_code = 404
         elif "词典服务暂时不可用" in message:
             status_code = 502

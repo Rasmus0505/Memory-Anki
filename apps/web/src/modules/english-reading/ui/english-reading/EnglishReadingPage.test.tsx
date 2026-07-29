@@ -10,16 +10,17 @@ const api = vi.hoisted(() => ({
   createTarget: vi.fn(),
   updateProfile: vi.fn(),
   explainTarget: vi.fn(),
+  searchLookup: vi.fn(),
 }))
 
 vi.mock('@/modules/english-reading/ui/english-reading/api', () => ({
   getEnglishReadingProfileApi: api.getProfile,
   listEnglishReadingArticlesApi: api.listArticles,
   getEnglishReadingArticleApi: api.getArticle,
-  getEnglishReadingDictionaryApi: vi.fn().mockResolvedValue({ lemma: 'learn', phoneticUs: '/lɜːrn/' }),
   createEnglishReadingTargetApi: api.createTarget,
   updateEnglishReadingProfileApi: api.updateProfile,
   createEnglishReadingArticleApi: vi.fn(),
+  createEnglishReadingVocabularyNoteApi: vi.fn(),
   deleteEnglishReadingArticleApi: vi.fn(),
   deleteEnglishReadingTargetApi: vi.fn(),
   explainEnglishReadingTargetApi: api.explainTarget,
@@ -28,7 +29,25 @@ vi.mock('@/modules/english-reading/ui/english-reading/api', () => ({
   updateEnglishReadingTargetApi: vi.fn(),
 }))
 
+vi.mock('@/modules/english-lookup/public', async () => {
+  const actual = await vi.importActual<typeof import('@/modules/english-lookup/public')>(
+    '@/modules/english-lookup/public',
+  )
+  return {
+    ...actual,
+    searchEnglishLookupApi: api.searchLookup,
+  }
+})
+
+vi.mock('@/modules/english-lookup/api', () => ({
+  searchEnglishLookupApi: (...args: unknown[]) => api.searchLookup(...args),
+}))
+
 vi.mock('@/modules/english/ui/english-shell', () => ({
+  EnglishZoneLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/modules/english/public', () => ({
   EnglishZoneLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
@@ -55,17 +74,46 @@ const article = {
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/english/reading/materials/1']}>
-      <Routes><Route path="/english/reading/materials/:materialId" element={<EnglishReadingPage />} /></Routes>
+      <Routes>
+        <Route path="/english/reading/materials/:materialId" element={<EnglishReadingPage />} />
+      </Routes>
     </MemoryRouter>,
   )
 }
 
-describe('EnglishReadingPage gap loop', () => {
+describe('EnglishReadingPage lookup cleanup', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
     api.getProfile.mockResolvedValue({ declaredCefr: 'B1' })
-    api.listArticles.mockResolvedValue({ items: [article], tree: [{ ...article, children: [] }] })
+    api.listArticles.mockResolvedValue({ items: [], tree: [] })
     api.getArticle.mockResolvedValue(article)
+    api.updateProfile.mockResolvedValue({ declaredCefr: 'B2' })
+    api.searchLookup.mockResolvedValue({
+      query: 'Learning',
+      wordCount: 1,
+      vocabulary: {
+        status: 'ok',
+        short: 'short def',
+        long: 'long def',
+        error: null,
+        sourceUrl: 'https://www.vocabulary.com/dictionary/Learning',
+      },
+      cambridge: {
+        status: 'ok',
+        entries: [{ id: 'e0', html: '<div>cam</div>' }],
+        audio: { us: 'https://a/us.mp3', uk: null },
+        error: null,
+        sourceUrl: null,
+      },
+      audio: { us: 'https://a/us.mp3', uk: null },
+      google: {
+        status: 'ok',
+        translation: '示例',
+        detectedLanguage: 'en',
+        error: null,
+        sourceUrl: null,
+      },
+      sourceUrls: { vocabulary: null, cambridge: null, google: null },
+    })
     api.createTarget.mockImplementation(async (_articleId, payload) => ({
       id: 9,
       articleId: 1,
@@ -78,19 +126,6 @@ describe('EnglishReadingPage gap loop', () => {
       explanations: [],
       linkedArticles: [],
     }))
-    Object.defineProperty(window, 'speechSynthesis', {
-      configurable: true,
-      value: { cancel: vi.fn(), speak: vi.fn(), getVoices: vi.fn(() => []) },
-    })
-    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
-      configurable: true,
-      value: class {
-        lang = ''
-        voice = null
-        text: string
-        constructor(text: string) { this.text = text }
-      },
-    })
   })
 
   it('renders plain text without legacy CEFR feedback controls', async () => {
@@ -100,25 +135,15 @@ describe('EnglishReadingPage gap loop', () => {
     expect(screen.queryByText('i+1')).toBeNull()
   })
 
-  it('opens a nearby bubble without auto-creating or queuing a target', async () => {
+  it('word click opens Saladict lookup only (no legacy bubble / no TTS)', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Learning' }))
-    expect(await screen.findByTestId('reading-action-bubble')).not.toBeNull()
-    expect(await screen.findByText('加入文章')).not.toBeNull()
-    expect(window.speechSynthesis.speak).toHaveBeenCalled()
+    expect(screen.queryByTestId('reading-action-bubble')).toBeNull()
+    expect(screen.queryByText('加入文章')).toBeNull()
+    expect(screen.queryByTestId('dictionary-popup-panel')).toBeNull()
+    await waitFor(() => expect(api.searchLookup).toHaveBeenCalled())
+    expect(await screen.findByTestId('english-lookup-panel')).not.toBeNull()
     expect(api.createTarget).not.toHaveBeenCalled()
-    expect(screen.getAllByText('Learning').length).toBeGreaterThan(0)
-    expect(screen.getByText('还没有加入待生成目标。在气泡里点“加入文章”。')).not.toBeNull()
-  })
-
-  it('creates a target only after clicking 加入文章', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Learning' }))
-    fireEvent.click(await screen.findByText('加入文章'))
-    await waitFor(() => expect(api.createTarget).toHaveBeenCalledWith(1, {
-      type: 'word', startOffset: 0, endOffset: 8, quote: 'Learning',
-    }))
-    expect(await screen.findByText('已加入文章')).not.toBeNull()
   })
 
   it('keeps CEFR under explicit user control', async () => {

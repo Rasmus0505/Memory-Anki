@@ -3,11 +3,9 @@ import { readSseResultResponse } from '@/shared/api/sseResponse'
 import type {
   ReadingGenerateStreamStatusEvent,
   ReadingCompletionResponse,
-  ReadingDictionaryEntry,
   ReadingGenerateRequest,
   ReadingMaterial,
   ReadingProfile,
-  ReadingSentenceTranslationResponse,
   ReadingVersion,
   ReadingVocabularyNote,
   ReadingVocabularyNoteCreateRequest,
@@ -256,24 +254,6 @@ export function deleteEnglishReadingMaterialApi(materialId: number) {
 
 export function getEnglishReadingVersionApi(materialId: number) {
   return request<ReadingVersion>(`/english-reading/materials/${materialId}/version`)
-}
-
-export function getEnglishReadingDictionaryApi(
-  word: string,
-) {
-  return request<ReadingDictionaryEntry>(
-    `/english-reading/dictionary?word=${encodeURIComponent(word)}`,
-  )
-}
-
-export function translateEnglishReadingSentenceApi(
-  text: string,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return request<ReadingSentenceTranslationResponse>('/english-reading/sentence-translation', {
-    method: 'POST',
-    body: JSON.stringify({ text, ai_options: aiOptions }),
-  })
 }
 
 export function completeEnglishReadingMaterialApi(

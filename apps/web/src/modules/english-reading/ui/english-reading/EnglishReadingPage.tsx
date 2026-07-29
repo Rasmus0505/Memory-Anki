@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, ChevronRight, FilePlus2, LoaderCircle, Sparkles, Trash2, Volume2, X } from 'lucide-react'
+import { BookOpen, ChevronRight, FilePlus2, LoaderCircle, Sparkles, Trash2, X } from 'lucide-react'
 import { EnglishZoneLayout } from '@/modules/english/public'
 import {
   DEFAULT_READING_GENERATION_CONFIG,
@@ -16,13 +16,16 @@ import {
   toggleReadingTarget,
 } from '@/modules/english-reading/domain/gapLoop'
 import {
+  EnglishLookupPanel,
+  useEnglishLookup,
+} from '@/modules/english-lookup/public'
+import {
   createEnglishReadingArticleApi,
   createEnglishReadingTargetApi,
   deleteEnglishReadingArticleApi,
   deleteEnglishReadingTargetApi,
   explainEnglishReadingTargetApi,
   generateTargetedEnglishReadingArticleApi,
-  getEnglishReadingDictionaryApi,
   getEnglishReadingArticleApi,
   getEnglishReadingProfileApi,
   listEnglishReadingArticlesApi,
@@ -39,7 +42,6 @@ import type {
   ReadingArticle,
   ReadingArticleGenerationConfig,
   ReadingArticleTreeItem,
-  ReadingDictionaryEntry,
   ReadingExplanation,
   ReadingTarget,
 } from '@/shared/api/contracts'
@@ -58,21 +60,10 @@ type SelectionBubble = {
   left: number
   top: number
   targetId: number | null
-  dictionary: ReadingDictionaryEntry | null
 }
 
 function operationId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
-}
-
-function speakAmerican(text: string) {
-  if (!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance) return
-  window.speechSynthesis.cancel()
-  const utterance = new window.SpeechSynthesisUtterance(text)
-  utterance.lang = 'en-US'
-  const voice = window.speechSynthesis.getVoices().find((item) => item.lang.toLowerCase().startsWith('en-us'))
-  if (voice) utterance.voice = voice
-  window.speechSynthesis.speak(utterance)
 }
 
 function resolveBubblePosition(rect: DOMRect) {
@@ -94,6 +85,7 @@ export default function EnglishReadingPage() {
   const navigate = useNavigate()
   const { materialId } = useParams()
   const articleId = Number(materialId || 0)
+  const lookup = useEnglishLookup({ isActive: true })
   const readerRef = useRef<HTMLDivElement | null>(null)
   const bubbleRef = useRef<HTMLDivElement | null>(null)
   const [article, setArticle] = useState<ReadingArticle | null>(null)
@@ -145,7 +137,12 @@ export default function EnglishReadingPage() {
       const target = event.target
       if (!(target instanceof Node)) return
       if (bubbleRef.current?.contains(target)) return
-      if (target instanceof HTMLElement && target.closest('[data-reading-word="true"]')) return
+      if (lookup.panelRef.current?.contains(target)) return
+      if (target instanceof HTMLElement) {
+        if (target.closest('[data-reading-word="true"]')) return
+        if (target.closest('[data-lookup-token="true"]')) return
+        if (target.closest('[data-lookup-anchor="true"]')) return
+      }
       setBubble(null)
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -157,7 +154,7 @@ export default function EnglishReadingPage() {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [bubble])
+  }, [bubble, lookup.panelRef])
 
   const activeTarget = useMemo(() => {
     if (!article || bubble?.targetId == null) return null
@@ -181,7 +178,7 @@ export default function EnglishReadingPage() {
   }, [article])
 
   const openBubble = useCallback((
-    input: Omit<SelectionBubble, 'dictionary' | 'left' | 'top'> & { rect: DOMRect },
+    input: Omit<SelectionBubble, 'left' | 'top'> & { rect: DOMRect },
   ) => {
     const position = resolveBubblePosition(input.rect)
     setBubble({
@@ -192,51 +189,18 @@ export default function EnglishReadingPage() {
       targetId: input.targetId,
       left: position.left,
       top: position.top,
-      dictionary: null,
     })
   }, [])
 
-  const handleWord = useCallback(async (
+  /** Word click → Saladict dual lookup only (no legacy action bubble / TTS). */
+  const handleWord = useCallback((
     word: string,
-    startOffset: number,
-    endOffset: number,
+    _startOffset: number,
+    _endOffset: number,
     event: ReactMouseEvent<HTMLButtonElement>,
   ) => {
-    speakAmerican(word)
-    const rect = event.currentTarget.getBoundingClientRect()
-    const existing = article?.targets.find((target) => (
-      target.type === 'word'
-      && target.startOffset === startOffset
-      && target.endOffset === endOffset
-    )) ?? article?.targets.find((target) => (
-      target.linkedArticles.length > 0
-      && startOffset >= target.startOffset
-      && endOffset <= target.endOffset
-    )) ?? null
-
-    openBubble({
-      type: 'word',
-      quote: word,
-      startOffset,
-      endOffset,
-      targetId: existing?.id ?? null,
-      rect,
-    })
-
-    try {
-      const dictionary = await getEnglishReadingDictionaryApi(word)
-      setBubble((current) => (
-        current
-        && current.type === 'word'
-        && current.startOffset === startOffset
-        && current.endOffset === endOffset
-          ? { ...current, dictionary }
-          : current
-      ))
-    } catch {
-      // dictionary is optional enrichment
-    }
-  }, [article, openBubble])
+    lookup.handleTokenClick(word, event)
+  }, [lookup])
 
   const handleSelection = useCallback(async () => {
     if (!article || !readerRef.current) return
@@ -374,12 +338,13 @@ export default function EnglishReadingPage() {
           key={`${start}-${word}`}
           type="button"
           data-reading-word="true"
+          data-lookup-token="true"
           className={cn(
             'rounded px-0.5 text-left hover:bg-primary/10',
             linked ? 'bg-amber-200/80 dark:bg-amber-500/30' : '',
             active ? 'bg-primary/15 ring-1 ring-primary/40' : '',
           )}
-          onClick={(event) => void handleWord(word, start, end, event)}
+          onClick={(event) => handleWord(word, start, end, event)}
         >{word}</button>,
       )
       cursor = end
@@ -410,7 +375,7 @@ export default function EnglishReadingPage() {
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{article.kind === 'source' ? 'Source article' : `Generated · depth ${article.depth}`}</div>
                   <h2 className="text-2xl font-semibold">{article.title}</h2>
-                  <p className="text-sm text-muted-foreground">{article.wordCount} words · 点击单词后弹出操作气泡</p>
+                  <p className="text-sm text-muted-foreground">{article.wordCount} words · 点击单词查词；拖选句子弹出目标气泡</p>
                 </div>
                 <Button variant="outline" onClick={async () => {
                   const title = window.prompt('新的文章标题', article.title)?.trim()
@@ -443,7 +408,7 @@ export default function EnglishReadingPage() {
               </select>
             </div>
             <p className="text-sm text-muted-foreground">
-              点击阅读区单词，或在阅读区拖选句子，会在选中位置附近弹出操作气泡。只有手动点“加入文章”才会进入待生成列表。
+              点击单词打开双词典查词与发音。拖选句子弹出目标气泡（英文解释 / 加入文章）；只有手动点「加入文章」才会进入待生成列表。
             </p>
           </section>
 
@@ -530,6 +495,8 @@ export default function EnglishReadingPage() {
           />
         </div>
       ) : null}
+
+      <EnglishLookupPanel lookup={lookup} />
     </EnglishZoneLayout>
   )
 }
@@ -562,19 +529,8 @@ function TargetBubble({
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{bubble.type}</div>
           <div className="truncate font-semibold">{bubble.quote}</div>
-          {bubble.dictionary ? (
-            <div className="text-sm text-muted-foreground">
-              {bubble.dictionary.lemma}
-              {bubble.dictionary.phoneticUs ? ` · ${bubble.dictionary.phoneticUs}` : ''}
-            </div>
-          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {bubble.type === 'word' ? (
-            <Button size="icon" variant="ghost" onClick={() => speakAmerican(bubble.quote)} aria-label="美式发音">
-              <Volume2 className="size-4" />
-            </Button>
-          ) : null}
           <Button size="icon" variant="ghost" onClick={onClose} aria-label="关闭">
             <X className="size-4" />
           </Button>
