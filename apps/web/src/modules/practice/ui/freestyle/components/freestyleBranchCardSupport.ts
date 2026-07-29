@@ -11,11 +11,12 @@ import type {
   PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
+import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { ReviewFlowSnapshot } from '@/modules/memory/public'
 
-export { FlipCardMindMapPanel }
+export { FlipCardMindMapPanel, NodeBoundQuizDialog }
 
 /**
  * Freestyle swipe remounts cards outside the mount window. Cache flip/reveal

@@ -24,6 +24,7 @@ export {
   deferPalace,
   filterMutedPalaces,
   findNextPalaceIndex,
+  findPreviousPalaceIndex,
   markCompleted,
   markIncomplete,
   mergeQueuePreservingHistory,
@@ -54,6 +55,7 @@ export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFrees
 export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/PalaceReviewUnitsPanel'
+export * from './ui/review/components/PalaceLadderProgress'
 export * from './ui/review/hooks/useReviewCompletionCoordinator'
 export * from './ui/review/hooks/useReviewFlowSession'
 export * from './ui/review/model/mind-map-review-flow'

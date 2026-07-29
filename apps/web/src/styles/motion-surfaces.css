@@ -27,6 +27,79 @@
   animation: card-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+@keyframes english-letter-pop {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes english-word-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes english-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes english-word-correct-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, #22c55e) 28%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent);
+  }
+}
+
+.english-letter-pop {
+  animation: english-letter-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.english-word-shake {
+  animation: english-word-shake 0.22s ease-in-out both;
+}
+
+.english-word-correct-flash {
+  animation: english-word-correct-flash 0.36s ease-out both;
+}
+
+.english-caret {
+  animation: english-caret-blink 1s steps(1, end) infinite;
+}
+
 /* 尊重 prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .memory-anki-combo-burst-particle,
@@ -39,9 +112,17 @@
   .memory-anki-timer-screen-pulse,
   .memory-anki-break-guard-card-expired,
   .memory-anki-break-guard-layer-expired,
-  .freestyle-card-enter {
+  .freestyle-card-enter,
+  .english-letter-pop,
+  .english-word-shake,
+  .english-word-correct-flash,
+  .english-caret {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
+  }
+
+  .english-caret {
+    opacity: 1 !important;
   }
 }
 

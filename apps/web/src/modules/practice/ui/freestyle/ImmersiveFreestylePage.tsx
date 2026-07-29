@@ -11,6 +11,7 @@ import {
 import {
   ChevronDown,
   ChevronUp,
+  ChevronsUp,
   History,
   MoreHorizontal,
   RefreshCw,
@@ -40,6 +41,8 @@ import {
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   canPopViewHistory,
+  findNextPalaceIndex,
+  findPreviousPalaceIndex,
   popViewHistory,
   pushViewHistory,
   visibleMountIndices,
@@ -507,6 +510,15 @@ export default function ImmersiveFreestylePage() {
     })
   }, [cards, currentIndex, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
+  const handleGoToPreviousPalace = useCallback(() => {
+    const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
+    if (previousPalaceIndex == null) return
+    navigateToIndex(previousPalaceIndex, { skipHistory: true, historical: true })
+  }, [cards, currentIndex, navigateToIndex])
+
+  const canGoPreviousPalace = findPreviousPalaceIndex(cards, currentIndex) != null
+  const canGoNextPalace = findNextPalaceIndex(cards, currentIndex) != null
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       const target = event.target
@@ -883,9 +895,21 @@ export default function ImmersiveFreestylePage() {
             </button>
             <button
               type="button"
+              className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
+              title="上个宫殿：回到前一组宫殿内容"
+              aria-label="上个宫殿"
+              disabled={!canGoPreviousPalace}
+              onClick={handleGoToPreviousPalace}
+            >
+              <ChevronsUp className="size-4 shrink-0" />
+              <span className="leading-none">上个</span>
+            </button>
+            <button
+              type="button"
               className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
               title="下个宫殿：本宫殿剩余内容移到队尾"
               aria-label="下个宫殿"
+              disabled={!canGoNextPalace}
               onClick={handleSkipToNextPalace}
             >
               <Waypoints className="size-4 shrink-0" />

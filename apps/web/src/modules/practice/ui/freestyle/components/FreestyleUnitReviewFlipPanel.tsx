@@ -3,6 +3,7 @@ import {
   PalaceReviewUnitsPanel,
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
+import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession } from '@/modules/memory/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
@@ -12,6 +13,7 @@ import type {
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import type { ReviewUnitDto, UnitReviewSessionDto } from '@/modules/practice/public'
+import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { toast } from '@/shared/feedback/toast'
 import {
   buildEditorParentMap,
@@ -21,9 +23,9 @@ import {
   togglePermanentMarkInDoc,
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
-import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
 import {
   FlipCardMindMapPanel,
+  NodeBoundQuizDialog,
   persistPalaceEditor,
   type PersistPalaceEditorOptions,
   readBranchRevealSnapshot,
@@ -41,6 +43,7 @@ export function FreestyleUnitReviewFlipPanel({
   onEditingChange,
   onSaveFailed,
   onUnitsReconciled,
+  onRevealProgressChange,
 }: {
   card: FreestyleReviewUnitCard
   session: UnitReviewSessionDto
@@ -55,6 +58,8 @@ export function FreestyleUnitReviewFlipPanel({
   onSaveFailed?: (message: string) => void
   /** Optional silent freestyle queue rebuild after unit reconcile changes. */
   onUnitsReconciled?: () => void
+  /** Live flip progress for the card header chip (revealed / flippable total). */
+  onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
 }) {
   // A weak rating creates a new encounter when this unit returns to the queue.
   // Its reveal state must start at the root; only a remount of the same encounter
@@ -77,6 +82,18 @@ export function FreestyleUnitReviewFlipPanel({
       completed: reveal.completed,
     })
   }, [reveal.completed, reveal.redNodeIds, reveal.revealMap, revealSnapshotKey])
+
+  // Header chip: this unit's membership only (not whole-palace node count).
+  useEffect(() => {
+    onRevealProgressChange?.(
+      countUnitFlipProgress(reveal.revealMap, unit.node_uids, unit.anchor_uid),
+    )
+  }, [
+    onRevealProgressChange,
+    reveal.revealMap,
+    unit.anchor_uid,
+    unit.node_uids,
+  ])
 
   const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [editEditorState, setEditEditorState] = useState<MindMapEditorState>(editorState)
@@ -443,6 +460,13 @@ export function FreestyleUnitReviewFlipPanel({
             : undefined
         }
         toolbarExtensions={{ moreActions }}
+        toolbarCenterContent={
+          <PalaceLadderProgress
+            palaceId={session.palace_id}
+            unitId={unit.id}
+            refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
+          />
+        }
         onNodeActive={() => undefined}
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
         preserveViewOnSync

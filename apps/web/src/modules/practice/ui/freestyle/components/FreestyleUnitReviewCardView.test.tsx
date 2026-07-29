@@ -24,7 +24,7 @@ const apiMocks = vi.hoisted(() => ({
   startFreestyleUnitReviewSessionApi: vi.fn(),
   rateReviewUnitApi: vi.fn(),
   undoReviewUnitRatingApi: vi.fn(),
-  cancelUnratedUnitReviewEncounterApi: vi.fn(),
+  cancelUnratedUnitReviewEncounterApi: vi.fn().mockResolvedValue({ abandoned: false }),
 }))
 
 const persistMocks = vi.hoisted(() => ({
@@ -129,7 +129,7 @@ const effects: UnitRatingEffectDto[] = [
     label: '忘记',
     passed: false,
     target_stage_index: 0,
-    target_interval_days: 1,
+    target_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
     stage_action: 'reset',
@@ -139,7 +139,7 @@ const effects: UnitRatingEffectDto[] = [
     label: '困难',
     passed: false,
     target_stage_index: 0,
-    target_interval_days: 1,
+    target_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
     stage_action: 'keep',
@@ -149,8 +149,8 @@ const effects: UnitRatingEffectDto[] = [
     label: '记得',
     passed: true,
     target_stage_index: 1,
-    target_interval_days: 3,
-    target_due_date: '2026-07-30',
+    target_interval_days: 1,
+    target_due_date: '2026-07-28',
     retry_after_cards: 0,
     stage_action: 'advance',
   },
@@ -159,8 +159,8 @@ const effects: UnitRatingEffectDto[] = [
     label: '轻松',
     passed: true,
     target_stage_index: 2,
-    target_interval_days: 7,
-    target_due_date: '2026-08-03',
+    target_interval_days: 3,
+    target_due_date: '2026-07-30',
     retry_after_cards: 0,
     stage_action: 'advance',
   },
@@ -214,7 +214,7 @@ function buildSession(unitId: string, revision = 3, encounter = buildEncounter()
       node_uids: ['unit-node', 'unit-child'],
       revision,
       stage_index: 0,
-      interval_days: 1,
+      interval_days: 0,
       has_passed: false,
       due_date: '2026-07-27',
       due: true,
@@ -341,6 +341,7 @@ describe('FreestyleUnitReviewCardView', () => {
       session_status: 'active',
       completion: null,
     })
+    apiMocks.cancelUnratedUnitReviewEncounterApi.mockResolvedValue({ abandoned: false })
     persistMocks.persistPalaceEditor.mockReset()
     persistMocks.persistPalaceEditor.mockImplementation(async (_palaceId, state) => ({
       state,
@@ -381,6 +382,18 @@ describe('FreestyleUnitReviewCardView', () => {
         editor_doc: { root: { data: { uid: string } } }
       }).editor_doc.root.data.uid,
     ).toBe('root')
+  })
+
+  it('shows flip progress badge next to the unit title (empty tone at start)', async () => {
+    const card = buildCard('unit-flip-progress')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const badge = await screen.findByTestId('flip-progress-badge')
+    // Unit membership only (unit-node + unit-child), not whole-palace node count.
+    expect(badge.textContent).toBe('0/2')
+    expect(badge.getAttribute('data-tone')).toBe('empty')
   })
 
   it('opens node-bound quiz from the corner question badge', async () => {
@@ -626,8 +639,8 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(retryPositionLabel(1)).toBe('1张后重练')
     expect(retryPositionLabel(2)).toBe('2张后重练')
     expect(retryPositionLabel(3)).toBe('3张后重练')
-    expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 重置1天级')
-    expect(ratingEffectLabel(effects[2], 3)).toBe('3天后复习 · 7月30日')
+    expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 重置到首学阶段')
+    expect(ratingEffectLabel(effects[2], 3)).toBe('1天后复习 · 7月28日')
   })
 
   it('stays on the card, ignores the same rating, and atomically amends another rating', async () => {
@@ -641,14 +654,14 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    const remembered = screen.getByRole('button', { name: /记得：3天后复习/ })
+    const remembered = screen.getByRole('button', { name: /记得：1天后复习/ })
     fireEvent.click(remembered)
-    await screen.findByText('已选记得 · 3天后复习 · 7月30日')
+    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
     fireEvent.click(remembered)
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: /轻松：7天后复习/ }))
-    await screen.findByText('已选轻松 · 7天后复习 · 8月3日')
+    fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
+    await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { restudy: false })
     expect(screen.getByTestId('flip-card-mind-map-panel')).not.toBeNull()
@@ -713,7 +726,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.getUnitReviewSessionApi).toHaveBeenCalledWith(`session:${card.unit_id}`)
     expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
     expect(
-      (screen.getByRole('button', { name: /记得：3天后复习/ }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /记得：1天后复习/ }) as HTMLButtonElement).disabled,
     ).toBe(true)
   })
 
@@ -740,7 +753,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
     // Still shows loading placeholder until parent unmounts after onStaleDrop;
     // permanent load-failure toast path must not run.
-    expect(screen.getByText('正在加载永久标记单元...')).toBeTruthy()
+    expect(screen.getByText('正在加载单元...')).toBeTruthy()
   })
 
   it('drops silently when active unit review session is required', async () => {

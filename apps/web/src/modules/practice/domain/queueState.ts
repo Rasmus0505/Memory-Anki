@@ -492,6 +492,32 @@ export function findNextPalaceIndex(
 }
 
 /**
+ * Index of the first card in the closest earlier palace group.
+ * Returns ``null`` when the current palace is already the first group.
+ */
+export function findPreviousPalaceIndex(
+  cards: FreestyleCard[],
+  currentIndex: number,
+): number | null {
+  if (!cards.length) return null
+  const clamped = Math.max(0, Math.min(currentIndex, cards.length - 1))
+  const currentPalace = cardPalaceId(cards[clamped])
+
+  for (let index = clamped - 1; index >= 0; index -= 1) {
+    const palaceId = cardPalaceId(cards[index])
+    const isPreviousPalace = currentPalace == null || palaceId !== currentPalace
+    if (!isPreviousPalace) continue
+
+    let groupStart = index
+    while (groupStart > 0 && cardPalaceId(cards[groupStart - 1]) === palaceId) {
+      groupStart -= 1
+    }
+    return groupStart
+  }
+  return null
+}
+
+/**
  * Record a palace as deferred (「下个宫殿」). Later rebuilds keep its incomplete
  * cards at the tail. Re-deferring moves it to the end of the defer list.
  */
@@ -548,9 +574,9 @@ export function applyDeferredPalaceOrder(
  * Move the current card and every later card from the same palace to the tail
  * so the queue lands on the next palace. Earlier cards (history) stay put.
  *
- * When no other palace remains in the queue, remaining cards of this palace are
- * removed from the local feed (still tracked via deferredPalaceIds so rebuilds
- * put them last instead of reappearing at the front).
+ * When no other palace remains, keep the current group in place. Removing it
+ * used to turn a final "next palace" press into an empty viewport while a
+ * silent rebuild was pending.
  */
 export function moveRemainingPalaceToTail(
   cards: FreestyleCard[],
@@ -579,13 +605,12 @@ export function moveRemainingPalaceToTail(
     rest.push(card)
   })
 
-  // No other palace left: drop remaining same-palace cards for now (deferred list
-  // will restore them at the tail on the next rebuild).
+  // No other palace left: there is nowhere meaningful to navigate to.
   if (rest.length === 0) {
     return {
-      cards: head,
-      nextIndex: head.length === 0 ? 0 : Math.min(clamped, head.length - 1),
-      deferredPalaceId: currentPalace,
+      cards,
+      nextIndex: clamped,
+      deferredPalaceId: null,
     }
   }
 

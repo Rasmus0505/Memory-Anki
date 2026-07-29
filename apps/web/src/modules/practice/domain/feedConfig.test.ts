@@ -486,9 +486,9 @@ describe('freestyle queue skip rules', () => {
     ] as FreestyleCard[]
     expect(findNextPalaceIndex(cards, 0)).toBe(null)
     const skipped = moveRemainingPalaceToTail(cards, 0)
-    expect(skipped.cards).toEqual([])
+    expect(skipped.cards).toBe(cards)
     expect(skipped.nextIndex).toBe(0)
-    expect(skipped.deferredPalaceId).toBe(9)
+    expect(skipped.deferredPalaceId).toBeNull()
   })
 
   it('keeps deferred palaces at the tail after rebuild order', () => {

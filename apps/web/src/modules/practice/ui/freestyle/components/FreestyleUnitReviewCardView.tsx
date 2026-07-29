@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, RotateCcw } from 'lucide-react'
 import {
+  flipProgressLabel,
+  flipProgressTitle,
+  flipProgressTone,
+  flipProgressToneClass,
+  type FlipProgress,
+} from '../model/flipProgressBadge'
+import {
   cancelUnratedUnitReviewEncounterApi,
   closeUnitReviewEncounterApi,
   getUnitReviewSessionApi,
@@ -17,7 +24,6 @@ import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
 } from '@/shared/api/contracts'
-import { toast } from '@/shared/feedback/toast'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
@@ -139,11 +145,12 @@ export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: 
   if (effect.passed) {
     return `${effect.target_interval_days}天后复习 · ${localDateLabel(effect.target_due_date)}`
   }
+  const targetStage = effect.target_interval_days === 0 ? '首学阶段' : `${effect.target_interval_days}天级`
   const stage = effect.rating === 1
-    ? `重置${effect.target_interval_days}天级`
+    ? `重置到${targetStage}`
     : effect.stage_action === 'lower'
-      ? `降至${effect.target_interval_days}天级`
-      : `保持${effect.target_interval_days}天级`
+      ? `降至${targetStage}`
+      : `保持${targetStage}`
   return `${retryPositionLabel(retryAfterCards)} · ${stage}`
 }
 
@@ -219,19 +226,48 @@ export function FreestyleUnitReviewCardView({
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [inlineEditing, setInlineEditing] = useState(false)
+  const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
   const activeRef = useRef(active)
+  const busyRef = useRef(false)
   const sessionRef = useRef<UnitReviewSessionDto | null>(null)
   const unitRef = useRef<ReviewUnitDto | null>(null)
   const closeRequestRef = useRef<{ encounterId: string; promise: Promise<unknown> } | null>(null)
   const closeOperationRef = useRef<{ encounterId: string; operationId: string } | null>(null)
+  // Track which card identity already opened a live session so encounter updates
+  // (pending→open, rating amend) do not re-enter start and race an in-flight rate.
+  const openedForKeyRef = useRef<string | null>(null)
 
   activeRef.current = active
+  busyRef.current = busy
   sessionRef.current = session
   const unit = session?.units.find((item) => item.id === card.unit_id) ?? null
   unitRef.current = unit
   const editorState = useMemo(() => session ? buildEditorState(session) : null, [session])
+  // Keyed so a new card/encounter hides the chip until FlipPanel reports (no parent reset race).
+  const flipProgressKey = `${card.id}:${unit?.encounter?.id ?? 'none'}`
+  const activeFlipProgress =
+    flipProgress && flipProgress.key === flipProgressKey ? flipProgress : null
+  const cardUnitKey =
+    card.unit_id && card.unit_revision != null
+      ? `${card.id}:${card.unit_id}:${card.unit_revision}:${roundId}`
+      : null
+
+  const handleRevealProgressChange = useCallback((progress: FlipProgress) => {
+    setFlipProgress((current) => (
+      current
+      && current.key === flipProgressKey
+      && current.revealed === progress.revealed
+      && current.total === progress.total
+        ? current
+        : { key: flipProgressKey, ...progress }
+    ))
+  }, [flipProgressKey])
 
   const closeCurrentEncounter = useCallback(() => {
+    // Rating in flight owns the encounter; finish first, then leave-close.
+    if (busyRef.current) {
+      return Promise.resolve(null)
+    }
     const currentSession = sessionRef.current
     const currentUnit = unitRef.current
     const currentEncounter = currentUnit?.encounter
@@ -259,6 +295,7 @@ export function FreestyleUnitReviewCardView({
         unitRef.current = null
         setSession(null)
         setLastOperationId(null)
+        openedForKeyRef.current = null
         onEncounterChange(card.id, {
           encounterId: currentEncounter.id,
           unitRevision: currentUnit.revision,
@@ -321,12 +358,36 @@ export function FreestyleUnitReviewCardView({
 
   useEffect(() => {
     if (!active) return
-    if (!card.unit_id || card.unit_revision == null) {
+    if (!card.unit_id || card.unit_revision == null || !cardUnitKey) {
       onStaleDrop(card.id)
       return
     }
     const identity = onEnsureEncounter(card.id, card.unit_revision, !readOnly)
     if (readOnly && identity.status !== 'closed') return
+    const liveEncounter = unitRef.current?.encounter
+    // Same live glance already loaded: skip. Do NOT key off parent `encounter` updates
+    // (pending→open / rating amend) or start races cancel/rate mid-score.
+    // Restudy renew (new pending id after a closed fail) must still reload.
+    const sameOpenGlance = Boolean(
+      openedForKeyRef.current === cardUnitKey
+      && sessionRef.current
+      && liveEncounter
+      && liveEncounter.status === 'open'
+      && (
+        liveEncounter.id === identity.encounterId
+        || identity.status === 'open'
+      ),
+    )
+    const sameClosedView = Boolean(
+      openedForKeyRef.current === cardUnitKey
+      && sessionRef.current
+      && liveEncounter
+      && identity.status === 'closed'
+      && liveEncounter.id === identity.encounterId,
+    )
+    if (sameOpenGlance || sameClosedView) {
+      return
+    }
     let mounted = true
     void loadSession(card, identity, roundId).then((value) => {
       if (!mounted) return
@@ -339,6 +400,7 @@ export function FreestyleUnitReviewCardView({
         onStaleDrop(card.id)
         return
       }
+      openedForKeyRef.current = cardUnitKey
       setSession(value)
       setLastOperationId(nextUnit.encounter.effective_operation_id)
       onEncounterChange(
@@ -359,7 +421,11 @@ export function FreestyleUnitReviewCardView({
   }, [
     active,
     card,
-    encounter,
+    cardUnitKey,
+    // Only the stable identity fields — not selectedRating/passed — so a mid-score
+    // parent patch cannot re-enter start/cancel.
+    encounter?.encounterId,
+    encounter?.status,
     onEncounterChange,
     onEnsureEncounter,
     onSaveFailed,
@@ -399,6 +465,7 @@ export function FreestyleUnitReviewCardView({
       return
     }
     setBusy(true)
+    busyRef.current = true
     const id = operationId()
     try {
       const result = await rateReviewUnitApi(
@@ -426,7 +493,6 @@ export function FreestyleUnitReviewCardView({
         encounterState(session.id, nextUnit.revision, result.encounter),
       )
       onBranchComplete(card.id, { restudy: !result.passed })
-      if (!activeRef.current) void closeCurrentEncounter()
     } catch (error) {
       if (isStaleUnitError(error)) {
         onStaleDrop(card.id)
@@ -434,7 +500,11 @@ export function FreestyleUnitReviewCardView({
         onSaveFailed(error instanceof Error ? error.message : '评分失败')
       }
     } finally {
+      busyRef.current = false
       setBusy(false)
+      // Close only after the rate finishes so cancel/close cannot delete the
+      // encounter the POST still references.
+      if (!activeRef.current) void closeCurrentEncounter()
     }
   }
 
@@ -476,7 +546,7 @@ export function FreestyleUnitReviewCardView({
     return (
       <div className="flex h-full items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] text-sm text-zinc-400">
         <LoaderCircle className="mr-2 size-4 animate-spin" />
-        正在加载永久标记单元...
+        正在加载单元...
       </div>
     )
   }
@@ -490,6 +560,15 @@ export function FreestyleUnitReviewCardView({
   const titleText = stripMindMapHtml(
     unit.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )
+  const flipTone = activeFlipProgress
+    ? flipProgressTone(activeFlipProgress.revealed, activeFlipProgress.total)
+    : null
+  const flipLabel = activeFlipProgress
+    ? flipProgressLabel(activeFlipProgress.revealed, activeFlipProgress.total)
+    : null
+  const flipTitle = activeFlipProgress
+    ? flipProgressTitle(activeFlipProgress.revealed, activeFlipProgress.total)
+    : null
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-1.5 sm:gap-3" aria-label="永久标记复习单元">
@@ -499,9 +578,25 @@ export function FreestyleUnitReviewCardView({
           title="永久标记"
           aria-label="永久标记"
         />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-100 sm:text-base">
+        <h1 className="min-w-0 truncate text-sm font-semibold text-zinc-100 sm:text-base">
           {titleText}
         </h1>
+        {flipTone && flipLabel && flipTitle ? (
+          <span
+            role="status"
+            aria-label={flipTitle}
+            title={flipTitle}
+            data-testid="flip-progress-badge"
+            data-tone={flipTone}
+            className={cn(
+              'inline-flex h-6 shrink-0 items-center rounded-full border px-2 font-mono text-[11px] font-semibold tabular-nums tracking-tight sm:h-7 sm:px-2.5 sm:text-xs',
+              flipProgressToneClass(flipTone),
+            )}
+          >
+            {flipLabel}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1" />
         {lastOperationId && !locked ? (
           <button
             type="button"
@@ -528,6 +623,7 @@ export function FreestyleUnitReviewCardView({
           onEditingChange={setInlineEditing}
           onSaveFailed={onSaveFailed}
           onUnitsReconciled={onUnitsReconciled}
+          onRevealProgressChange={handleRevealProgressChange}
         />
 
         {ratingVisible && !inlineEditing ? (
