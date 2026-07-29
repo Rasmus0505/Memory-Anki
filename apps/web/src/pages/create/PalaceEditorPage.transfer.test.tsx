@@ -140,7 +140,7 @@ describe('PalaceEditorPage mind-map file transfer', () => {
       editor_fingerprint: 'revision-current',
       editor_source: 'import_apply',
       sync_reason: 'import_apply',
-      allow_stale_overwrite: true,
+      expected_editor_fingerprint: 'revision-current',
     }))
   })
 

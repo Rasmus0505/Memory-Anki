@@ -244,9 +244,10 @@ export function usePalaceEditorDocument({
         ...nextState,
         confirm_dangerous_change: true,
         editor_source: 'palace_edit',
+        expected_editor_fingerprint: editorState?.editor_fingerprint ?? null,
       })
     },
-    [palaceId],
+    [editorState?.editor_fingerprint, palaceId],
   )
 
   const confirmDangerousPalaceSave = useCallback(
@@ -305,7 +306,7 @@ export function usePalaceEditorDocument({
               ...nextState,
               editor_source: 'import_apply',
               sync_reason: context?.source === 'import' ? 'import_apply' : 'programmatic_apply',
-              allow_stale_overwrite: true,
+              expected_editor_fingerprint: editorState?.editor_fingerprint ?? null,
             })
             syncImportApplyGuardWithSavedState(buildPalaceEditorStateFromResponse(response))
             return response

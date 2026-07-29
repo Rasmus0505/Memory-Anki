@@ -12,7 +12,6 @@ from memory_anki.modules.content.application.editor_state_service import (
 )
 from memory_anki.modules.content.application.palace_serializer import (
     palace_editor_meta_json,
-    palace_json,
 )
 from memory_anki.modules.content.application.palace_service import get_palace
 from memory_anki.modules.content.presentation.errors import raise_not_found
@@ -89,7 +88,7 @@ def api_update_editor(palace_id: int, data: dict, s: Session = Depends(session_d
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _maybe_create_rolling_backup("rolling-editor-save")
     return {
-        "palace": palace_json(palace, s),
+        "palace": palace_editor_meta_json(palace, s),
         **state,
     }
 

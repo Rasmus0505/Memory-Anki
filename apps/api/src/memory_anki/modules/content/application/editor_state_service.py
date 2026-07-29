@@ -34,6 +34,9 @@ SAFE_EXPLICIT_OVERWRITE_SOURCES = {
     "backup_restore",
     "import_apply",
 }
+# Stale fingerprints may only be bypassed by an explicit restore operation.
+# Normal editor saves and imports must still prove which server revision they edit.
+STALE_OVERWRITE_SOURCES = {"version_restore", "backup_restore"}
 DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 # Autosave (including mid-pass permanent-mark toggles) skips schedule reconcile.
 # Explicit leave / idle / finished-mark-pass / return-to-review still run it.
@@ -94,6 +97,10 @@ def save_palace_editor_state(
     editor_source = str(payload.get("editor_source") or "unknown").strip() or "unknown"
     sync_reason = str(payload.get("sync_reason") or "").strip() or None
     allow_stale_overwrite = bool(payload.get("allow_stale_overwrite"))
+    if allow_stale_overwrite and editor_source not in STALE_OVERWRITE_SOURCES:
+        raise ValueError(
+            "已拒绝普通编辑器保存绕过版本校验；请重新加载当前宫殿后再保存。"
+        )
     current_state = get_palace_editor_state(palace)
     try:
         assert_expected_fingerprint(

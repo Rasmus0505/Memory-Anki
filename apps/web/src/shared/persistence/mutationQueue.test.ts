@@ -149,10 +149,11 @@ describe('mutationQueue', () => {
 
     const [, confirmedInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
     expect(JSON.parse((confirmedInit?.body as string) || '{}')).toMatchObject({
-      allow_stale_overwrite: true,
       confirm_dangerous_change: true,
       editor_source: 'palace_edit',
+      expected_editor_fingerprint: 'server-before-local-edit',
     })
+    expect(JSON.parse((confirmedInit?.body as string) || '{}')).not.toHaveProperty('allow_stale_overwrite')
     expect(await readQueuedMutations()).toHaveLength(0)
   })
 })

@@ -378,9 +378,16 @@ export async function confirmQueuedMutationOverwrite(id: string) {
   } catch {
     return null
   }
-  delete body.expected_editor_fingerprint
+  const expectedFingerprint = body.expected_editor_fingerprint
+  if (typeof expectedFingerprint !== 'string' || !expectedFingerprint.trim()) {
+    return updateMutation(item, {
+      status: 'manual',
+      errorMessage: '这条脑图保存没有版本指纹，已停止自动覆盖；请重新打开宫殿后保存。',
+      nextAttemptAt: Number.POSITIVE_INFINITY,
+    })
+  }
   body.confirm_dangerous_change = true
-  body.allow_stale_overwrite = true
+  delete body.allow_stale_overwrite
   if (!body.editor_source || body.editor_source === 'palace_edit_autosave') {
     body.editor_source = 'palace_edit'
   }

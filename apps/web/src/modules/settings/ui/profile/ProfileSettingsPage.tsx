@@ -90,9 +90,9 @@ export default function ProfileSettingsPage({
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2" aria-label="固定复习间隔">
-                {[1, 3, 7, 14, 30, 60, 120, 240, 365].map((days) => (
+                {[0, 1, 3, 7, 14, 30, 60, 120, 240, 365].map((days) => (
                   <span key={days} className="rounded-md border bg-muted px-2.5 py-1 text-sm tabular-nums">
-                    {days} 天
+                    {days === 0 ? '首学' : `${days} 天`}
                   </span>
                 ))}
               </div>

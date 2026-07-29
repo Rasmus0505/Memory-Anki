@@ -223,6 +223,7 @@ class SubjectEditorStateSyncTests(RouterTestCase):
             }
             palace.editor_doc = str(fresh_doc).replace("'", '"')
             session.commit()
+            expected_fingerprint = get_palace_editor_state(palace)["editor_fingerprint"]
 
             result = save_palace_editor_state(
                 session,
@@ -231,13 +232,36 @@ class SubjectEditorStateSyncTests(RouterTestCase):
                     "editor_doc": imported_doc,
                     "editor_source": "import_apply",
                     "sync_reason": "import_apply",
-                    "allow_stale_overwrite": True,
+                    "expected_editor_fingerprint": expected_fingerprint,
+                    "confirm_dangerous_change": True,
                 },
             )
 
             self.assertEqual(
                 result["editor_doc"]["root"]["children"][0]["data"]["text"], "导入节点1"
             )
+
+    def test_save_palace_editor_state_rejects_stale_bypass_from_normal_editor(self):
+        with self.SessionLocal() as session:
+            palace = Palace(title="古罗马教育", description="")
+            session.add(palace)
+            session.flush()
+
+            with self.assertRaisesRegex(ValueError, "拒绝普通编辑器保存绕过版本校验"):
+                save_palace_editor_state(
+                    session,
+                    palace,
+                    {
+                        "editor_doc": {
+                            "root": {
+                                "data": {"text": "古罗马教育"},
+                                "children": [],
+                            }
+                        },
+                        "editor_source": "palace_edit",
+                        "allow_stale_overwrite": True,
+                    },
+                )
 
     def test_save_palace_editor_state_rejects_stale_expected_fingerprint(self):
         with self.SessionLocal() as session:

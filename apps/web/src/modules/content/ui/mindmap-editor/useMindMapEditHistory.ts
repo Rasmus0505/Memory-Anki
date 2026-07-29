@@ -92,8 +92,11 @@ export function useMindMapEditHistory(
   }, [])
 
   const publish = useCallback((editorDoc: EditorDoc) => {
+    const docFingerprint = fingerprint(editorDoc)
     currentEditorDocRef.current = editorDoc
-    pendingLocalFingerprintsRef.current.add(fingerprint(editorDoc))
+    // This set identifies later controlled-state echoes. It must not suppress
+    // an intentional publish of a previously visited snapshot (for example redo).
+    pendingLocalFingerprintsRef.current.add(docFingerprint)
     if (pendingLocalFingerprintsRef.current.size > HISTORY_LIMIT * 2) {
       const oldest = pendingLocalFingerprintsRef.current.values().next().value
       if (typeof oldest === 'string') pendingLocalFingerprintsRef.current.delete(oldest)
