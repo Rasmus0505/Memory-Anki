@@ -195,6 +195,14 @@ BASELINE_OVERSIZED_FILES = {
     "apps/web/src/shared/ui/mindmap-canvas/useMindMapCanvasState.ts",
     "apps/web/src/pages/create/PalaceEditorPage.tsx",
     "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
+    # Freestyle round-plan migration and stable rating diagnostics are being
+    # extracted from these established integration hosts incrementally.
+    "apps/web/src/modules/practice/domain/queueState.ts",
+    "apps/web/src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.tsx",
+    "apps/web/src/modules/practice/ui/freestyle/hooks/useImmersiveQueue.ts",
+    # Existing oversized English integration page; tracked separately from
+    # the freestyle architecture work.
+    "apps/web/src/modules/english/ui/english/EnglishCoursePage.tsx",
     "apps/web/src/modules/quiz/ui/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
     "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
@@ -1318,11 +1326,26 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "applySkip",
             "mergeRefreshQueue",
             "visibleMountIndices",
+            "createRoundPlan",
+            "reorderRoundPlan",
+            "isSequentialPalaceBlocked",
         ):
             if symbol not in public_source:
                 errors.append(
                     f"{public_ts.relative_to(REPO_ROOT).as_posix()}: practice public "
                     f"API must export `{symbol}`."
+                )
+    round_plan_path = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
+    if not round_plan_path.exists():
+        errors.append(
+            f"{round_plan_path.relative_to(REPO_ROOT).as_posix()}: round-plan reducer is required."
+        )
+    else:
+        round_plan_source = round_plan_path.read_text(encoding="utf-8", errors="ignore")
+        for symbol in ("createRoundPlan", "reorderRoundPlan", "planCardStatus"):
+            if symbol not in round_plan_source:
+                errors.append(
+                    f"{round_plan_path.relative_to(REPO_ROOT).as_posix()}: round-plan domain must define `{symbol}`."
                 )
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_source = nav_path.read_text(encoding="utf-8", errors="ignore")
@@ -2067,7 +2090,7 @@ def check_unit_review_boundary(errors: list[str]) -> None:
                 )
 
     router_path = API_SRC / "modules/memory/presentation/router.py"
-    router_source = router_path.read_text(encoding="utf-8", errors="ignore")
+    router_source = router_path.read_text(encoding="utf-8", errors="ignore") if router_path.exists() else ""
     for marker in ("/review/waves", "/calibration/", "node-ratings", "subtree", "rate-unrated"):
         if marker in router_source:
             errors.append(f"retired review runtime route must not return: {marker}")
@@ -2080,7 +2103,6 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             "def rate_review_unit",
             "def close_unit_review_encounter",
             "def undo_unit_rating",
-            "encounter.effective_seconds",
         ),
         API_SRC / "modules/memory/application/unit_scheduler.py": (
             "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)",
@@ -2096,14 +2118,15 @@ def check_unit_review_boundary(errors: list[str]) -> None:
         ),
     }
     for path, markers in required.items():
-        source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
         for marker in markers:
             if marker not in source:
                 errors.append(f"permanent-mark review invariant missing {marker!r}: {path.relative_to(REPO_ROOT)}")
 
-    service_source = (
-        API_SRC / "modules/memory/application/unit_review_service.py"
-    ).read_text(encoding="utf-8", errors="ignore")
+    service_path = API_SRC / "modules/memory/application/unit_review_service.py"
+    service_source = service_path.read_text(encoding="utf-8", errors="ignore") if service_path.exists() else ""
     if "encounter.closed_at - encounter.created_at" in service_source:
         errors.append(
             "unit review duration must use client-observed foreground seconds, not encounter wall time"

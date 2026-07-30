@@ -22,6 +22,42 @@ def write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def test_freestyle_facade_requires_round_plan_public_surface(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "queue_service.py",
+        "\n".join(
+            [
+                "from memory_anki.modules.content.public import x",
+                "from memory_anki.modules.memory.public import y",
+                "from memory_anki.modules.quiz.public import z",
+                "def build_freestyle_queue(): pass",
+            ]
+        ),
+    )
+    write_file(
+        web_src / "modules" / "practice" / "public.ts",
+        "sanitizeFreestyleFeedConfig applySkip mergeRefreshQueue visibleMountIndices "
+        "createRoundPlan reorderRoundPlan isSequentialPalaceBlocked\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
+        "createRoundPlan reorderRoundPlan planCardStatus\n",
+    )
+    write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_queue_facade_surface(errors)
+
+    assert errors == []
+
+
 def test_frontend_generated_api_boundary_blocks_direct_production_imports(
     tmp_path: Path, monkeypatch
 ) -> None:

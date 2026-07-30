@@ -1,6 +1,29 @@
 # Freestyle Immersive Feed
 
 Freestyle is a consumer of public learning projections. It does not own palace review scheduling.
+`FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
+older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
+
+## Round Plan State
+
+Each local freestyle round has a stable `roundId` and a persisted round plan owned by the
+practice domain. The plan records card IDs, palace grouping, order, rating/retry state,
+completion and current-round exclusions. Queue responses also expose `candidate_count`,
+`scheduled_count`, `queue_limit`, and `limit_reached`; the page renders these separately so
+`5/5` cannot be mistaken for a configured limit of five.
+
+The plan reducer is the only place that reconciles rebuilds and manual ordering. Rebuilds keep
+completed, excluded, retry, and stale entries visible in the plan; a card that returns after a
+stale rebuild is reset to pending. Exclude/restore and drag operations affect only this round,
+never the underlying review schedule. “Finish palace then next” is a gate over all planned
+review-unit cards in the current palace: a failed/hard card remains retry work and cannot permit
+the next palace to become active. Retry placement targets at most three usable intervening cards,
+with an explicit shorter-gap explanation when fewer cards remain.
+
+The top HUD opens a large two-pane “本轮安排” dialog. The left pane groups stable plan entries by
+palace and supports jump, drag, batch exclude/restore, and reset-round. The right pane edits the
+complete `FreestyleFeedConfig`; saving preserves finished/excluded records and only reorders
+unstarted work. Configuration and round state remain client-local per device/day.
 
 ## Palace Review Cards
 
@@ -9,6 +32,9 @@ Freestyle is a consumer of public learning projections. It does not own palace r
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
 - `困难` and `忘记` reinsert the unit after at most three cards. `记得` and `轻松` finish it for the current encounter.
+- `due_first_then_expand` and `all_content_due_weighted` mark fill cards explicitly; their freestyle
+  session start carries `allow_not_due` so the shared review service does not reject a configured
+  non-due card. Formal review calls keep the default due-only guard.
 - Queue rebuilds exclude palaces without permanent marks.
 - Stale encounter or `unit_revision` mismatch is rebuildable: drop/rebuild the card or open a fresh encounter from the current Reviews projection. Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
 
@@ -37,4 +63,4 @@ Immersive queue config (`FreestyleFeedConfig` / `sanitize_feed_config`) owns qui
 | `due_policy` | Gates **mind-map unit** fill only. Quiz entry is not controlled by due_policy. |
 | `weak_quiz_priority` | Sort within the already-scoped quiz pool; does not decide membership. |
 
-Settings UI groups quiz controls under a dedicated「题目刷题」section in `FreestyleFeedSettingsDialog`.
+Settings UI groups quiz controls under a dedicated「题目刷题」section in the round-plan dialog.
