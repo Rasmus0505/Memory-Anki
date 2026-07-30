@@ -49,7 +49,7 @@ export function NodeCardStatusChrome({
           title={visual.badge.title}
         />
       ) : null}
-      {visual.countBadge && !isRoot ? (
+      {visual.countBadge ? (
         <NodeCountBadge
           countBadge={visual.countBadge}
           onClick={() => onCountBadgeClick?.(nodeId)}

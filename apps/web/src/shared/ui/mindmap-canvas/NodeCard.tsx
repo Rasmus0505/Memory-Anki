@@ -690,6 +690,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
               scrollbarWidth: 'none',
             }}
           />
+          <NodeCardStatusChrome
+            visual={visual}
+            isRoot={isRoot}
+            nodeId={id}
+            onCountBadgeClick={nodeData.onCountBadgeClick}
+          />
           {extract.showExtractHandle ? (
             <button
               type="button"

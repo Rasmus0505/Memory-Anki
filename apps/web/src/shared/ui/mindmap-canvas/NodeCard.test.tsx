@@ -154,6 +154,26 @@ describe('NodeCard', () => {
     expect(document.querySelector('[data-node-mode="editing"]')).toBeTruthy()
   })
 
+  it('keeps the question count badge visible while editing', () => {
+    const onCountBadgeClick = vi.fn()
+    renderNodeCard({
+      editing: true,
+      editText: '正在编辑',
+      label: '正在编辑',
+      metadata: {
+        depth: 1,
+        layoutRole: 'branch',
+        visual: { countBadge: { text: '12', title: '12 道题', tone: 'info' } },
+      },
+      onCountBadgeClick,
+    })
+
+    const badge = screen.getByRole('button', { name: '12' })
+    expect(badge.className).toContain('-bottom-2')
+    fireEvent.click(badge)
+    expect(onCountBadgeClick).toHaveBeenCalledWith('peg-1')
+  })
+
   it('renders selection toolbar actions for a selected node', () => {
     const onRate = vi.fn()
     renderNodeCard({
@@ -603,4 +623,3 @@ describe('NodeCard', () => {
     expect(button.className).toContain('blur-[3px]')
   })
 })
-
