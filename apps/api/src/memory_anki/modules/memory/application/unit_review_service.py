@@ -67,12 +67,12 @@ def _load_study_summary(study: StudySession) -> dict[str, Any]:
 
 
 def _encounter_billable_seconds(encounter: ReviewUnitEncounter) -> int:
-    """Wall seconds the card was open for a rated attempt (created → closed)."""
+    """Client-observed foreground seconds for a rated, closed card encounter."""
     if encounter.status != ENCOUNTER_CLOSED or encounter.selected_rating is None:
         return 0
-    if encounter.created_at is None or encounter.closed_at is None:
+    if encounter.effective_seconds is None:
         return 0
-    return max(0, int((encounter.closed_at - encounter.created_at).total_seconds()))
+    return max(0, int(encounter.effective_seconds))
 
 
 def _sum_billable_encounter_seconds(session: Session, study_session_id: str) -> int:
@@ -428,6 +428,7 @@ def _encounter_payload(encounter: ReviewUnitEncounter) -> dict[str, Any]:
         "passed": encounter.passed,
         "retry_after_cards": encounter.retry_after_cards,
         "effective_operation_id": encounter.effective_operation_id,
+        "effective_seconds": encounter.effective_seconds,
         "closed_at": to_api_datetime(encounter.closed_at),
         "rating_effects": _rating_effects(snapshot),
     }
@@ -812,6 +813,7 @@ def close_unit_review_encounter(
     unit_id: str,
     encounter_id: str,
     operation_id: str,
+    effective_seconds: int | None = None,
 ) -> dict[str, Any]:
     close_operation_id = str(operation_id or "").strip()
     if not close_operation_id:
@@ -843,6 +845,10 @@ def close_unit_review_encounter(
         raise ValueError("rate the review unit before leaving it")
     encounter.status = ENCOUNTER_CLOSED
     encounter.close_operation_id = close_operation_id
+    normalized_seconds = 0 if effective_seconds is None else int(effective_seconds)
+    if normalized_seconds < 0:
+        raise ValueError("effective_seconds must be non-negative")
+    encounter.effective_seconds = normalized_seconds
     encounter.closed_at = utc_now_naive()
     completion = None
     if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:

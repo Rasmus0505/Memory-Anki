@@ -6,6 +6,7 @@ import json
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive, to_api_datetime
@@ -14,6 +15,8 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
     ReviewUnitState,
 )
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import FreestyleQuizAttempt
 
 from .unit_review_projection import get_palace_unit_projection
 from .unit_review_service import _encounter_billable_seconds
@@ -171,6 +174,104 @@ def _build_range_stats(
     }
 
 
+def _summary_seconds_for_palace(row: StudySession, palace_id: int | None) -> int:
+    """Return a completed session's trusted seconds for an optional palace scope.
+
+    A completed timed session may contain several scene segments.  When those
+    segments are present they are the only safe way to attribute a multi-palace
+    freestyle session; never add the top-level duration a second time.
+    """
+    total = max(0, int(row.effective_seconds or 0))
+    if palace_id is None:
+        return total
+    try:
+        summary = json.loads(row.summary_json or "{}")
+    except (TypeError, ValueError):
+        summary = {}
+    segments = summary.get("scene_segments") if isinstance(summary, dict) else None
+    if isinstance(segments, list) and segments:
+        attributed = 0
+        valid = False
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            raw_palace = segment.get("palaceId", segment.get("palace_id"))
+            raw_seconds = segment.get("effectiveSeconds", segment.get("effective_seconds"))
+            try:
+                if int(raw_palace) != palace_id:
+                    continue
+                seconds = max(0, int(raw_seconds or 0))
+            except (TypeError, ValueError):
+                continue
+            valid = True
+            attributed += seconds
+        # Corrupt segment payloads must not inflate the session total.
+        if valid and attributed <= total:
+            return attributed
+        if valid:
+            return 0
+    return total if row.palace_id == palace_id else 0
+
+
+def _build_learning_summary(
+    session: Session,
+    *,
+    range_key: str,
+    since: datetime | None,
+    palace_id: int | None,
+) -> dict[str, Any]:
+    """Stats for the toolbar's global range or current-palace all-time node."""
+    op_query = session.query(ReviewUnitRatingOperation).filter(
+        ReviewUnitRatingOperation.undone_at.is_(None),
+        ReviewUnitRatingOperation.replaced_at.is_(None),
+    )
+    if palace_id is not None:
+        op_query = op_query.filter(ReviewUnitRatingOperation.palace_id == palace_id)
+    if since is not None:
+        op_query = op_query.filter(ReviewUnitRatingOperation.created_at >= since)
+    operations = op_query.all()
+    unit_count = len({operation.unit_id for operation in operations})
+
+    freestyle_ratings = (
+        session.query(ReviewUnitRatingOperation.id)
+        .join(StudySession, StudySession.id == ReviewUnitRatingOperation.study_session_id)
+        .filter(
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+            StudySession.scene == "freestyle_unit_review",
+        )
+    )
+    if palace_id is not None:
+        freestyle_ratings = freestyle_ratings.filter(ReviewUnitRatingOperation.palace_id == palace_id)
+    if since is not None:
+        freestyle_ratings = freestyle_ratings.filter(ReviewUnitRatingOperation.created_at >= since)
+    rating_count = freestyle_ratings.count()
+
+    quiz_query = session.query(FreestyleQuizAttempt.id)
+    if palace_id is not None:
+        quiz_query = quiz_query.filter(FreestyleQuizAttempt.palace_id == palace_id)
+    if since is not None:
+        quiz_query = quiz_query.filter(FreestyleQuizAttempt.created_at >= since)
+    quiz_count = quiz_query.count()
+
+    attributed_at = func.coalesce(StudySession.ended_at, StudySession.started_at)
+    sessions = session.query(StudySession).filter(
+        StudySession.status == "completed",
+        StudySession.deleted_at.is_(None),
+        StudySession.effective_seconds > 0,
+    )
+    if since is not None:
+        sessions = sessions.filter(attributed_at >= since)
+    total_seconds = sum(_summary_seconds_for_palace(row, palace_id) for row in sessions.all())
+    return {
+        "range": range_key,
+        "unit_count": unit_count,
+        "total_seconds": total_seconds,
+        "freestyle_rating_count": rating_count,
+        "quiz_count": quiz_count,
+    }
+
+
 def get_palace_ladder_progress(
     session: Session,
     palace_id: int,
@@ -246,6 +347,12 @@ def get_palace_ladder_progress(
         range_key=key,
         since=since,
     )
+    selected_range_summary = _build_learning_summary(
+        session, range_key=key, since=since, palace_id=None
+    )
+    palace_all_time_summary = _build_learning_summary(
+        session, range_key="all", since=None, palace_id=palace_id
+    )
 
     return {
         "palace_id": palace_id,
@@ -264,6 +371,8 @@ def get_palace_ladder_progress(
         },
         "unit_range_stats": unit_range,
         "palace_range_stats": palace_range,
+        "selected_range_summary": selected_range_summary,
+        "palace_all_time_summary": palace_all_time_summary,
     }
 
 

@@ -1,5 +1,5 @@
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -12,6 +12,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_review_service import (
+    adjust_unit_schedule,
     close_unit_review_encounter,
     rate_review_unit,
     reconcile_palace_units,
@@ -101,6 +102,26 @@ def test_freestyle_start_restores_active_session_and_open_encounter(db_session):
     assert editor_doc["root"]["data"]["permanentSplitMark"] is True
 
 
+def test_invalidating_a_freestyle_session_closes_its_open_encounter(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-invalidated")
+
+    adjust_unit_schedule(
+        db_session,
+        unit_id=state.id,
+        operation_id="invalidate-open-encounter",
+        stage_index=state.stage_index,
+    )
+    db_session.commit()
+
+    study = db_session.get(StudySession, review_session["id"])
+    encounter = db_session.get(ReviewUnitEncounter, "encounter-invalidated")
+    assert study.status == "invalidated"
+    assert encounter.status == "closed"
+    assert encounter.selected_rating is None
+    assert encounter.closed_at is not None
+
+
 def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-amend")
@@ -186,6 +207,52 @@ def test_freestyle_complete_preserves_client_source_in_summary(db_session):
     assert summary["completed_unit_count"] == 1
 
 
+def test_close_uses_client_observed_foreground_seconds(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-foreground")
+    _rate(db_session, review_session, state, "encounter-foreground", "rating-foreground", 3)
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-foreground").one()
+    encounter.created_at = datetime.now() - timedelta(hours=12)
+    db_session.commit()
+
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-foreground",
+        operation_id="close-foreground",
+        effective_seconds=7,
+    )
+
+    assert closed["session_status"] == "completed"
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-foreground").one()
+    study = db_session.get(StudySession, review_session["id"])
+    assert encounter.effective_seconds == 7
+    assert study.effective_seconds == 7
+    assert closed["completion"]["duration_seconds"] == 7
+
+
+def test_close_without_observed_seconds_does_not_bill_wall_clock(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-no-clock")
+    _rate(db_session, review_session, state, "encounter-no-clock", "rating-no-clock", 3)
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-no-clock").one()
+    encounter.created_at = datetime.now() - timedelta(hours=12)
+    db_session.commit()
+
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-no-clock",
+        operation_id="close-no-clock",
+    )
+
+    study = db_session.get(StudySession, review_session["id"])
+    assert study.effective_seconds == 0
+    assert closed["completion"]["duration_seconds"] == 0
+
+
 def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-hard")
@@ -261,7 +328,9 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     closed = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
-        json={"operation_id": "http-close"},
+        json={"operation_id": "http-close", "effective_seconds": 9},
     )
     assert closed.status_code == 200
     assert closed.json()["item"]["encounter"]["status"] == "closed"
+    assert closed.json()["item"]["encounter"]["effective_seconds"] == 9
+    assert closed.json()["item"]["completion"]["duration_seconds"] == 9

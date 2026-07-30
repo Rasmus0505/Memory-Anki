@@ -100,6 +100,9 @@ class ReviewUnitEncounter(Base):
     close_operation_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, unique=True
     )
+    # Client-observed foreground seconds for this card. Nullable keeps legacy
+    # encounters readable; new clients must submit this on close.
+    effective_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_now_naive

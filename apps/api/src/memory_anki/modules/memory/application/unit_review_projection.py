@@ -15,6 +15,7 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
+    ReviewUnitEncounter,
     ReviewUnitScheduleBatch,
     ReviewUnitState,
 )
@@ -166,6 +167,23 @@ def _invalidate_active_sessions(session: Session, palace_id: int) -> int:
         row.status = "invalidated"
         row.ended_at = now
         row.completion_method = "unit_topology_changed"
+        # An invalidated session is never resumable. Leaving an encounter open
+        # made reloads look like a live card even though its frozen unit topology
+        # had already changed. Close it without assigning a rating or duration.
+        (
+            session.query(ReviewUnitEncounter)
+            .filter(
+                ReviewUnitEncounter.study_session_id == row.id,
+                ReviewUnitEncounter.status == "open",
+            )
+            .update(
+                {
+                    ReviewUnitEncounter.status: "closed",
+                    ReviewUnitEncounter.closed_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
     return len(rows)
 
 

@@ -85,11 +85,8 @@ def _pass_once(
         unit_id=state.id,
         encounter_id=encounter_id,
         operation_id=f"close-{operation_id}",
+        effective_seconds=elapsed_seconds,
     )
-    encounter = session.get(ReviewUnitEncounter, encounter_id)
-    if encounter is not None and encounter.closed_at is not None and elapsed_seconds > 0:
-        encounter.created_at = encounter.closed_at - timedelta(seconds=elapsed_seconds)
-        session.commit()
     session.refresh(state)
     return review
 

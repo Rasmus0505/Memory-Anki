@@ -70,6 +70,8 @@ export interface TimeSessionRecord {
   activityTag?: string | null
   /** Display label snapshot for custom tags. */
   activityTagLabel?: string | null
+  /** Legacy table or source named by the migration that imported this row. */
+  importedFrom?: string | null
   deletedAt?: string | null
   deletedReason?: 'manual' | null
   events: SessionEventRecord[]
@@ -80,6 +82,7 @@ export interface DailyTrendPoint {
   dateKey: string
   label: string
   seconds: number
+  records?: number
 }
 
 export type TimeRecordChartRange = 7 | 30 | 90 | 'all'

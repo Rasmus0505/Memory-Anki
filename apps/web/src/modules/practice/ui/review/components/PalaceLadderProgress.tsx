@@ -23,6 +23,13 @@ const RANGE_LABELS: Record<LadderProgressRange, string> = {
 const RANGE_STORAGE_KEY = 'memory-anki.ladder-progress.range'
 const TOOLTIP_Z = 10_000
 const DEFAULT_LADDER = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365] as const
+const EMPTY_SUMMARY = {
+  range: 'all' as LadderProgressRange,
+  unit_count: 0,
+  total_seconds: 0,
+  freestyle_rating_count: 0,
+  quiz_count: 0,
+}
 
 function readStoredRange(): LadderProgressRange {
   try {
@@ -110,6 +117,7 @@ export function PalaceLadderProgress({
   const [error, setError] = useState<string | null>(null)
   const [hoverStage, setHoverStage] = useState<number | null>(null)
   const [hoverTrack, setHoverTrack] = useState(false)
+  const [hoverSummary, setHoverSummary] = useState<'range' | 'palace' | null>(null)
   const [floatPos, setFloatPos] = useState<FloatingPos | null>(null)
   const trackRef = useRef<HTMLDivElement | null>(null)
   const hideTimerRef = useRef<number | null>(null)
@@ -125,6 +133,7 @@ export function PalaceLadderProgress({
     clearHideTimer()
     setHoverStage(null)
     setHoverTrack(false)
+    setHoverSummary(null)
     setFloatPos(null)
   }, [clearHideTimer])
 
@@ -134,6 +143,7 @@ export function PalaceLadderProgress({
       hideTimerRef.current = null
       setHoverStage(null)
       setHoverTrack(false)
+      setHoverSummary(null)
       setFloatPos(null)
     }, 80)
   }, [clearHideTimer])
@@ -169,7 +179,7 @@ export function PalaceLadderProgress({
     currentStage == null ? 0 : Math.max(0, Math.min(1, currentStage / lastIndex))
 
   useEffect(() => {
-    if (hoverStage == null && !hoverTrack) return
+    if (hoverStage == null && !hoverTrack && !hoverSummary) return
     const reposition = () => {
       if (hoverStage != null) {
         const days = ladder[hoverStage]
@@ -180,6 +190,10 @@ export function PalaceLadderProgress({
         return
       }
       if (hoverTrack && trackRef.current) setFloatPos(positionBelow(trackRef.current, 300))
+      if (hoverSummary) {
+        const node = document.querySelector<HTMLElement>(`[data-testid="ladder-summary-${hoverSummary}"]`)
+        if (node) setFloatPos(positionBelow(node, 260))
+      }
     }
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
@@ -187,7 +201,7 @@ export function PalaceLadderProgress({
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('resize', reposition)
     }
-  }, [hoverStage, hoverTrack, ladder])
+  }, [hoverStage, hoverSummary, hoverTrack, ladder])
 
   const handleRangeChange = (next: LadderProgressRange) => {
     setRange(next)
@@ -237,7 +251,7 @@ export function PalaceLadderProgress({
   }, [currentDue, currentStage, data, hoverStage, ladder, range])
 
   const trackTooltip = useMemo(() => {
-    if (!hoverTrack || hoverStage != null || !data) return null
+    if (!hoverTrack || hoverStage != null || hoverSummary != null || !data) return null
     const histogram = data.palace.stage_histogram || []
     const distribution = ladder
       .map((days, index) => {
@@ -262,34 +276,55 @@ export function PalaceLadderProgress({
           : ''),
       distribution: `等级分布：${distribution || '暂无分布'}`,
       reviews: data.palace_range_stats.total_reviews > 0 || data.palace_range_stats.total_seconds > 0
-        ? `${rangeLabel}：复习 ${data.palace_range_stats.total_reviews} 次 · 有效学习 ${formatSeconds(data.palace_range_stats.total_seconds)}`
+        ? `${rangeLabel}：${data.palace_range_stats.total_reviews} 次 · 学习总时长 ${formatSeconds(data.palace_range_stats.total_seconds)}`
         : `${rangeLabel}：无复习明细`,
       ratings: `评分：忘记 ${share.forgot} · 困难 ${share.hard} · 记得 ${share.remember} · 轻松 ${share.easy}`,
       scope: data.scope === 'unit' ? '当前单元' : '整宫最弱',
     }
-  }, [data, hoverStage, hoverTrack, ladder, range])
+  }, [data, hoverStage, hoverSummary, hoverTrack, ladder, range])
+
+  const summaryTooltip = useMemo(() => {
+    if (!hoverSummary || !data) return null
+    const stats = (hoverSummary === 'range'
+      ? data.selected_range_summary
+      : data.palace_all_time_summary) ?? EMPTY_SUMMARY
+    return {
+      title: hoverSummary === 'range' ? `${RANGE_LABELS[range]}学习情况` : '当前宫殿 · 全部学习情况',
+      stats,
+    }
+  }, [data, hoverSummary, range])
 
   const openStage = (index: number, el: HTMLElement) => {
     clearHideTimer()
     setHoverStage(index)
     setHoverTrack(false)
+    setHoverSummary(null)
     setFloatPos(positionBelow(el))
   }
 
   const openTrack = (el: HTMLElement) => {
     clearHideTimer()
     setHoverTrack(true)
+    setHoverSummary(null)
     if (hoverStage == null) setFloatPos(positionBelow(el, 300))
+  }
+
+  const openSummary = (scope: 'range' | 'palace', el: HTMLElement) => {
+    clearHideTimer()
+    setHoverStage(null)
+    setHoverTrack(false)
+    setHoverSummary(scope)
+    setFloatPos(positionBelow(el, 260))
   }
 
   if (!palaceId) return null
 
   const floating =
-    floatPos && (stageTooltip || trackTooltip) && typeof document !== 'undefined'
+    floatPos && (stageTooltip || trackTooltip || summaryTooltip) && typeof document !== 'undefined'
       ? createPortal(
           <div
             role="tooltip"
-            data-testid={stageTooltip ? 'ladder-stage-tooltip' : 'ladder-track-tooltip'}
+            data-testid={stageTooltip ? 'ladder-stage-tooltip' : summaryTooltip ? 'ladder-summary-tooltip' : 'ladder-track-tooltip'}
             className="pointer-events-none w-max max-w-[280px] rounded-lg border border-border bg-popover px-2.5 py-2 text-left text-[11px] text-popover-foreground shadow-xl"
             style={{
               position: 'fixed',
@@ -311,14 +346,22 @@ export function PalaceLadderProgress({
                 {stageTooltip.hasDetails ? (
                   <>
                     <div className="text-muted-foreground">
-                      {stageTooltip.rangeLabel} · 直接通过 {stageTooltip.passCount} 次
+                      {stageTooltip.rangeLabel}：{stageTooltip.passCount} 次
                     </div>
                     <div className="text-muted-foreground">最近通过：{stageTooltip.lastAt}</div>
-                    <div className="text-muted-foreground">有效学习：{stageTooltip.seconds}</div>
+                    <div className="text-muted-foreground">学习总时长：{stageTooltip.seconds}</div>
                   </>
                 ) : (
                   <div className="text-muted-foreground">{stageTooltip.emptyText}</div>
                 )}
+              </>
+            ) : summaryTooltip ? (
+              <>
+                <div className="font-semibold">{summaryTooltip.title}</div>
+                <div className="mt-1 text-muted-foreground">学习单元数：{summaryTooltip.stats.unit_count}</div>
+                <div className="text-muted-foreground">学习总时长：{formatSeconds(summaryTooltip.stats.total_seconds)}</div>
+                <div className="text-muted-foreground">随心刷卡次数：{summaryTooltip.stats.freestyle_rating_count} 次</div>
+                <div className="text-muted-foreground">刷题数量：{summaryTooltip.stats.quiz_count} 题</div>
               </>
             ) : trackTooltip ? (
               <>
@@ -347,6 +390,28 @@ export function PalaceLadderProgress({
       className={cn('flex min-w-0 flex-1 items-center gap-2', className)}
       data-testid="palace-ladder-progress"
     >
+      <div className="flex shrink-0 items-center gap-1" aria-label="学习情况汇总">
+        <button
+          type="button"
+          data-testid="ladder-summary-range"
+          aria-label={`${RANGE_LABELS[range]}学习情况汇总`}
+          className="size-4 rounded-full border-2 border-violet-400 bg-violet-500/80 shadow-sm transition-colors hover:bg-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50"
+          onMouseEnter={(event) => openSummary('range', event.currentTarget)}
+          onMouseLeave={scheduleHide}
+          onFocus={(event) => openSummary('range', event.currentTarget)}
+          onBlur={hideFloating}
+        />
+        <button
+          type="button"
+          data-testid="ladder-summary-palace"
+          aria-label="当前宫殿全部学习情况汇总"
+          className="size-4 rounded-full border-2 border-cyan-400 bg-cyan-500/80 shadow-sm transition-colors hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+          onMouseEnter={(event) => openSummary('palace', event.currentTarget)}
+          onMouseLeave={scheduleHide}
+          onFocus={(event) => openSummary('palace', event.currentTarget)}
+          onBlur={hideFloating}
+        />
+      </div>
       <div
         ref={trackRef}
         className="relative min-h-8 min-w-[120px] flex-1 overflow-visible px-1"

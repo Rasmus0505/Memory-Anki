@@ -13,6 +13,12 @@ from .application.study_session_service import (
     get_today_palace_learning_breakdown,
     month_bounds,
     today_bounds,
+    build_time_record_read_model,
+    count_time_records,
+    get_time_record_daily_totals,
+    get_time_record_duration_seconds,
+    time_record_kind,
+    valid_time_records_query,
 )
 
 __all__ = [
@@ -29,4 +35,10 @@ __all__ = [
     "get_today_palace_learning_breakdown",
     "month_bounds",
     "today_bounds",
+    "build_time_record_read_model",
+    "count_time_records",
+    "get_time_record_daily_totals",
+    "get_time_record_duration_seconds",
+    "time_record_kind",
+    "valid_time_records_query",
 ]

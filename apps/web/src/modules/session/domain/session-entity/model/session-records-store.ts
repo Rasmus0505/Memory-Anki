@@ -9,10 +9,13 @@ import {
   createStudySessionFromTimeRecordApi,
   deleteStudySessionApi,
   getStudySessionAnalyticsApi,
+  getTimeRecordReadModelApi,
   listStudySessionsApi,
   patchStudySessionApi,
   type StudySessionPayload,
   type StudySessionItem,
+  type TimeRecordKind,
+  type TimeRecordRangeMode,
 } from '@/modules/session/domain/study-session-entity/api'
 
 export interface TimeRecordSourceSummary {
@@ -20,6 +23,57 @@ export interface TimeRecordSourceSummary {
   desktopEffectiveSeconds: number
   pwaEffectiveSeconds: number
   unknownEffectiveSeconds: number
+}
+
+export interface UnifiedTimeRecordReadOptions {
+  rangeMode: TimeRecordRangeMode
+  month?: string
+  rollingDays?: 7 | 30 | 90
+  startDate?: string
+  endDate?: string
+  keyword?: string
+  kind?: TimeRecordKind
+  sortBy: 'started_at' | 'effective_seconds' | 'title'
+  sortOrder: 'asc' | 'desc'
+  limit: number
+  offset: number
+}
+
+export async function readUnifiedTimeRecords(options: UnifiedTimeRecordReadOptions) {
+  const result = await getTimeRecordReadModelApi(options)
+  return {
+    items: result.items.map(studySessionToTimeRecord),
+    total: result.total,
+    limit: result.limit,
+    offset: result.offset,
+    range: {
+      mode: result.range.mode,
+      month: result.range.month,
+      rollingDays: result.range.rolling_days,
+      startDate: result.range.start_date,
+      endDate: result.range.end_date,
+    },
+    sourceSummary: {
+      totalEffectiveSeconds: result.summary.total_effective_seconds,
+      desktopEffectiveSeconds: result.summary.desktop_effective_seconds,
+      pwaEffectiveSeconds: result.summary.pwa_effective_seconds,
+      unknownEffectiveSeconds: result.summary.unknown_effective_seconds,
+    },
+    recordCount: result.summary.record_count,
+    trend: result.trend.map((item) => ({
+      dateKey: item.date_key,
+      label: item.label,
+      seconds: item.seconds,
+      records: item.records,
+    })),
+    breakdown: result.kind_breakdown.map((item) => ({
+      kind: item.kind,
+      label: item.label,
+      seconds: item.seconds,
+      sessions: item.sessions,
+      isBuiltin: item.is_builtin,
+    })),
+  }
 }
 
 export async function listStudySessionRecords(options: {
@@ -128,6 +182,7 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
     clientSource: normalizeClientSource(summary.client_source),
     activityTag,
     activityTagLabel,
+    importedFrom: readOptionalString(summary.migrated_from),
     deletedAt: item.deleted_at,
     deletedReason: item.deleted_reason === 'manual' ? 'manual' : null,
     events: item.events as TimeSessionRecord['events'],
@@ -155,7 +210,13 @@ function readSceneSegments(summary: Record<string, unknown>): TimeSessionRecord[
 function studySceneToSessionKind(scene: string): SessionKind {
   if (scene === 'palace_edit') return 'palace_edit'
   if (scene === 'quiz') return 'quiz'
-  if (scene === 'review' || scene === 'segment_review' || scene === 'mini_review') return 'review'
+  if (
+    scene === 'review' ||
+    scene === 'formal_unit_review' ||
+    scene === 'freestyle_unit_review' ||
+    scene === 'segment_review' ||
+    scene === 'mini_review'
+  ) return 'review'
   if (scene === 'custom') return 'custom'
   return 'practice'
 }

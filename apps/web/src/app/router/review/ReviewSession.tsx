@@ -12,6 +12,7 @@ import {
   type UnitRating,
   type UnitRatingEffectDto,
   type UnitReviewSessionDto,
+  useForegroundEncounterClock,
 } from '@/modules/practice/public'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
@@ -96,6 +97,11 @@ export default function ReviewSession() {
     () => session?.units.find((unit) => unit.id === currentId) ?? null,
     [currentId, session],
   )
+  const { getEffectiveSeconds, clear: clearEncounterClock } = useForegroundEncounterClock({
+    encounterId: current?.encounter?.id ?? null,
+    active: current?.encounter?.status === 'open',
+    open: current?.encounter?.status === 'open',
+  })
   const allUnitNodes = useMemo(() => new Set(session?.units.flatMap((unit) => unit.node_uids) ?? []), [session])
   const mutedNodeUids = useMemo(
     () => current ? [...allUnitNodes].filter((uid) => !current.node_uids.includes(uid)) : [],
@@ -173,7 +179,9 @@ export default function ReviewSession() {
       current.id,
       current.encounter.id,
       operationId(),
+      getEffectiveSeconds(),
     )
+    clearEncounterClock()
     return reload()
   }
 

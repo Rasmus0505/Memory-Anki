@@ -27,9 +27,11 @@ import type {
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
+import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
+const SESSION_LOAD_TIMEOUT_MS = 15_000
 const ratings: Array<{
   value: UnitRating
   label: string
@@ -91,6 +93,30 @@ function loadSession(
   }
   void promise.then(clear, clear)
   return promise
+}
+
+function loadSessionWithTimeout(
+  card: FreestyleReviewUnitCard,
+  encounter: FreestyleUnitEncounterState,
+  roundId: string,
+) {
+  return new Promise<UnitReviewSessionDto>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      // Do not let a hung request poison retry with the same in-flight cache key.
+      inFlightSessionLoads.delete(sessionCacheKey(card.id, encounter))
+      reject(new Error('加载单元超时，请重试或重建队列。'))
+    }, SESSION_LOAD_TIMEOUT_MS)
+    void loadSession(card, encounter, roundId).then(
+      (value) => {
+        window.clearTimeout(timeout)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      },
+    )
+  })
 }
 
 function buildEditorState(session: UnitReviewSessionDto): MindMapEditorState | null {
@@ -227,6 +253,8 @@ export function FreestyleUnitReviewCardView({
   const [fullscreen, setFullscreen] = useState(false)
   const [inlineEditing, setInlineEditing] = useState(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const activeRef = useRef(active)
   const busyRef = useRef(false)
   const sessionRef = useRef<UnitReviewSessionDto | null>(null)
@@ -236,12 +264,19 @@ export function FreestyleUnitReviewCardView({
   // Track which card identity already opened a live session so encounter updates
   // (pending→open, rating amend) do not re-enter start and race an in-flight rate.
   const openedForKeyRef = useRef<string | null>(null)
+  const loadOperationRef = useRef<string | null>(null)
 
   activeRef.current = active
   busyRef.current = busy
   sessionRef.current = session
   const unit = session?.units.find((item) => item.id === card.unit_id) ?? null
   unitRef.current = unit
+  const { getEffectiveSeconds: getEncounterSeconds, clear: clearEncounterClock } =
+    useForegroundEncounterClock({
+      encounterId: unit?.encounter?.id ?? null,
+      active,
+      open: unit?.encounter?.status === 'open',
+    })
   const editorState = useMemo(() => session ? buildEditorState(session) : null, [session])
   // Keyed so a new card/encounter hides the chip until FlipPanel reports (no parent reset race).
   const flipProgressKey = `${card.id}:${unit?.encounter?.id ?? 'none'}`
@@ -251,6 +286,14 @@ export function FreestyleUnitReviewCardView({
     card.unit_id && card.unit_revision != null
       ? `${card.id}:${card.unit_id}:${card.unit_revision}:${roundId}`
       : null
+
+  const retryLoad = useCallback(() => {
+    openedForKeyRef.current = null
+    loadOperationRef.current = null
+    setSession(null)
+    setLoadError(null)
+    setLoadAttempt((value) => value + 1)
+  }, [])
 
   const handleRevealProgressChange = useCallback((progress: FlipProgress) => {
     setFlipProgress((current) => (
@@ -291,6 +334,7 @@ export function FreestyleUnitReviewCardView({
         currentUnit.id,
         currentEncounter.id,
       ).then((result) => {
+        clearEncounterClock()
         sessionRef.current = null
         unitRef.current = null
         setSession(null)
@@ -327,7 +371,9 @@ export function FreestyleUnitReviewCardView({
       currentUnit.id,
       currentEncounter.id,
       closeOperation,
+      getEncounterSeconds(),
     ).then((result) => {
+      clearEncounterClock()
       const nextUnit = { ...currentUnit, encounter: result.encounter }
       const nextSession = {
         ...updateSessionUnit(currentSession, nextUnit),
@@ -351,7 +397,7 @@ export function FreestyleUnitReviewCardView({
     })
     closeRequestRef.current = { encounterId: currentEncounter.id, promise }
     return promise
-  }, [card.id, onEncounterChange, onSaveFailed])
+  }, [card.id, clearEncounterClock, getEncounterSeconds, onEncounterChange, onSaveFailed])
 
   const closeCurrentEncounterRef = useRef(closeCurrentEncounter)
   closeCurrentEncounterRef.current = closeCurrentEncounter
@@ -388,9 +434,12 @@ export function FreestyleUnitReviewCardView({
     if (sameOpenGlance || sameClosedView) {
       return
     }
+    const requestIdentity = `${cardUnitKey}:${identity.encounterId}:${loadAttempt}:${operationId()}`
+    loadOperationRef.current = requestIdentity
     let mounted = true
-    void loadSession(card, identity, roundId).then((value) => {
-      if (!mounted) return
+    setLoadError(null)
+    void loadSessionWithTimeout(card, identity, roundId).then((value) => {
+      if (!mounted || loadOperationRef.current !== requestIdentity) return
       const nextUnit = value.units.find((item) => item.id === card.unit_id)
       if (!matchesCardUnit(card, nextUnit) || !nextUnit?.encounter) {
         onStaleDrop(card.id)
@@ -402,18 +451,21 @@ export function FreestyleUnitReviewCardView({
       }
       openedForKeyRef.current = cardUnitKey
       setSession(value)
+      setLoadError(null)
       setLastOperationId(nextUnit.encounter.effective_operation_id)
       onEncounterChange(
         card.id,
         encounterState(value.id, nextUnit.revision, nextUnit.encounter),
       )
     }).catch((error) => {
-      if (!mounted) return
+      if (!mounted || loadOperationRef.current !== requestIdentity) return
       if (isStaleUnitError(error)) {
         onStaleDrop(card.id)
         return
       }
-      onSaveFailed(error instanceof Error ? error.message : '创建单元复习失败')
+      const message = error instanceof Error ? error.message : '创建单元复习失败'
+      setLoadError(message)
+      onSaveFailed(message)
     })
     return () => {
       mounted = false
@@ -432,6 +484,7 @@ export function FreestyleUnitReviewCardView({
     onStaleDrop,
     readOnly,
     roundId,
+    loadAttempt,
   ])
 
   const wasActiveRef = useRef(false)
@@ -543,6 +596,21 @@ export function FreestyleUnitReviewCardView({
   }
 
   if (!editorState || !session || !unit || !unit.encounter) {
+    if (loadError) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 rounded-3xl border border-rose-400/25 bg-rose-950/20 px-5 text-center text-sm text-rose-100">
+          <p>单元加载失败：{loadError}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={retryLoad}>
+              重试加载
+            </button>
+            <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={() => onStaleDrop(card.id)}>
+              重建队列
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex h-full items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] text-sm text-zinc-400">
         <LoaderCircle className="mr-2 size-4 animate-spin" />

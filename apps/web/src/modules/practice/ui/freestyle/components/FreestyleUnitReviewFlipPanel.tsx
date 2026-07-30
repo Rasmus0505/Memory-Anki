@@ -28,6 +28,7 @@ import {
   NodeBoundQuizDialog,
   persistPalaceEditor,
   type PersistPalaceEditorOptions,
+  type PersistPalaceEditorResult,
   readBranchRevealSnapshot,
   writeBranchRevealSnapshot,
 } from './freestyleBranchCardSupport'
@@ -104,6 +105,7 @@ export function FreestyleUnitReviewFlipPanel({
   const [lastUndoToken, setLastUndoToken] = useState<string | null>(null)
   const [recentUnitChanges, setRecentUnitChanges] = useState<PalaceReviewUnitChangeHighlight[]>([])
   const saveTimerRef = useRef<number | null>(null)
+  const saveQueueRef = useRef<Promise<PersistPalaceEditorResult | null>>(Promise.resolve(null))
   const editBaselineRef = useRef(editorState)
   const editEditorStateRef = useRef(editorState)
   const displayModeRef = useRef<'review' | 'edit'>('review')
@@ -170,39 +172,45 @@ export function FreestyleUnitReviewFlipPanel({
     options?: PersistPalaceEditorOptions & { quiet?: boolean },
   ) => {
     setSavingEdit(true)
-    try {
-      const { quiet, ...persistOptions } = options ?? {}
-      const result = await persistPalaceEditor(
-        session.palace_id,
-        state,
-        persistOptions && Object.keys(persistOptions).length > 0 ? persistOptions : undefined,
-      )
-      setEditEditorState(result.state)
-      editBaselineRef.current = result.state
-      editEditorStateRef.current = result.state
-      if (!quiet) {
-        toast.success('已保存宫殿编辑')
-      }
-      // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
-      if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
-        // mark_change while still editing must not rebuild freestyle mid-pass.
-        const stayEditingAfterMarkFlush = (
-          persistOptions.syncReason === 'mark_change'
-          && displayModeRef.current === 'edit'
+    const previous = saveQueueRef.current.catch(() => null)
+    const queued = previous.then(async () => {
+      try {
+        const { quiet, ...persistOptions } = options ?? {}
+        const result = await persistPalaceEditor(
+          session.palace_id,
+          state,
+          persistOptions && Object.keys(persistOptions).length > 0 ? persistOptions : undefined,
         )
-        notifyUnitReconcile(result.unitReconcile, {
-          rebuildQueue: !stayEditingAfterMarkFlush,
-        })
+        setEditEditorState(result.state)
+        editBaselineRef.current = result.state
+        editEditorStateRef.current = result.state
+        if (!quiet) {
+          toast.success('已保存宫殿编辑')
+        }
+        // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
+        if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
+          // mark_change while still editing must not rebuild freestyle mid-pass.
+          const stayEditingAfterMarkFlush = (
+            persistOptions.syncReason === 'mark_change'
+            && displayModeRef.current === 'edit'
+          )
+          notifyUnitReconcile(result.unitReconcile, {
+            rebuildQueue: !stayEditingAfterMarkFlush,
+          })
+        }
+        return result
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '保存宫殿失败'
+        onSaveFailed?.(message)
+        toast.error(message)
+        return null
       }
-      return result
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '保存宫殿失败'
-      onSaveFailed?.(message)
-      toast.error(message)
-      return null
-    } finally {
-      setSavingEdit(false)
-    }
+    })
+    saveQueueRef.current = queued
+    void queued.finally(() => {
+      if (saveQueueRef.current === queued) setSavingEdit(false)
+    })
+    return queued
   }, [notifyUnitReconcile, onSaveFailed, session.palace_id])
 
   const clearPersistTimer = useCallback(() => {
@@ -270,21 +278,23 @@ export function FreestyleUnitReviewFlipPanel({
   }, [])
 
   const handleToggleMode = useCallback(() => {
-    setDisplayMode((current) => {
-      const next = current === 'edit' ? 'review' : 'edit'
-      if (next === 'edit') {
-        setEditEditorState(editBaselineRef.current)
-        setPermanentMarkMode(false)
-      } else {
-        setPermanentMarkMode(false)
-        // Leaving edit: always reconcile (even if autosave already wrote the doc).
-        // Quiet save toast — only surface "复习进度已更新" when units actually changed.
-        void flushPersistWithReconcile('return_to_review', editEditorStateRef.current, true)
-      }
-      return next
-    })
-    setModeSyncVersion((value) => value + 1)
-  }, [flushPersistWithReconcile])
+    if (!isEditMode) {
+      setEditEditorState(editBaselineRef.current)
+      setPermanentMarkMode(false)
+      setDisplayMode('edit')
+      setModeSyncVersion((value) => value + 1)
+      return
+    }
+    setPermanentMarkMode(false)
+    // Return only after the latest pending autosave and this reconcile flush have
+    // settled. A failed save leaves the editor usable instead of trapping it.
+    void flushPersistWithReconcile('return_to_review', editEditorStateRef.current, true)
+      .then((result) => {
+        if (!result) return
+        setDisplayMode('review')
+        setModeSyncVersion((value) => value + 1)
+      })
+  }, [flushPersistWithReconcile, isEditMode])
 
   const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
     setEditEditorState(nextState)

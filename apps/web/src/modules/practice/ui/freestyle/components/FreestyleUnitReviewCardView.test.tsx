@@ -192,6 +192,7 @@ function buildEncounter(overrides: Record<string, unknown> = {}) {
     passed: null,
     retry_after_cards: 0,
     effective_operation_id: null,
+    effective_seconds: null,
     closed_at: null,
     rating_effects: effects,
     ...overrides,
@@ -702,6 +703,7 @@ describe('FreestyleUnitReviewCardView', () => {
       card.unit_id,
       'encounter-1',
       expect.any(String),
+      expect.any(Number),
     ))
   })
 
@@ -738,6 +740,18 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
+  })
+
+  it('shows recovery actions instead of an endless loading state for a non-stale load failure', async () => {
+    const card = buildCard('unit-load-failure')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue(new Error('temporary API failure'))
+    const { onSaveFailed, onStaleDrop } = renderCard(card)
+
+    await screen.findByText(/单元加载失败：temporary API failure/)
+    expect(onSaveFailed).toHaveBeenCalledWith('temporary API failure')
+    expect(screen.getByRole('button', { name: '重试加载' })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '重建队列' }))
+    expect(onStaleDrop).toHaveBeenCalledWith(card.id)
   })
 
   it('drops silently when encounter_id belongs to another review unit', async () => {

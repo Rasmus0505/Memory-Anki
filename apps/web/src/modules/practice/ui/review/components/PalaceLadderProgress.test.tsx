@@ -60,6 +60,20 @@ function samplePayload(overrides: Record<string, unknown> = {}) {
       total_seconds: 300,
       rating_share: { forgot: 1, hard: 1, remember: 2, easy: 1 },
     },
+    selected_range_summary: {
+      range: 'all' as const,
+      unit_count: 4,
+      total_seconds: 420,
+      freestyle_rating_count: 6,
+      quiz_count: 2,
+    },
+    palace_all_time_summary: {
+      range: 'all' as const,
+      unit_count: 2,
+      total_seconds: 600,
+      freestyle_rating_count: 5,
+      quiz_count: 3,
+    },
     ...overrides,
   }
 }
@@ -97,9 +111,9 @@ describe('PalaceLadderProgress', () => {
     expect(tip.textContent).toContain('7天阶段 · 当前')
     expect(tip.textContent).toContain('单元：单元')
     expect(tip.textContent).toContain('下次复习：8月1日')
-    expect(tip.textContent).toContain('全部记录 · 直接通过 3 次')
+    expect(tip.textContent).toContain('全部记录：3 次')
     expect(tip.textContent).toContain('最近通过：7月28日')
-    expect(tip.textContent).toContain('有效学习：2分')
+    expect(tip.textContent).toContain('学习总时长：2分')
   })
 
   it('explains missing history instead of showing misleading zero values', async () => {
@@ -122,8 +136,26 @@ describe('PalaceLadderProgress', () => {
     const tip = await screen.findByTestId('ladder-track-tooltip')
     expect(tip.textContent).toContain('当前单元 · 7天阶段')
     expect(tip.textContent).toContain('宫殿：2 个单元 · 1 个到期')
-    expect(tip.textContent).toContain('全部记录：复习 5 次 · 有效学习 5分')
+    expect(tip.textContent).toContain('全部记录：5 次 · 学习总时长 5分')
     expect(tip.textContent).toContain('评分：忘记 1 · 困难 1 · 记得 2 · 轻松 1')
+  })
+
+  it('shows range and palace learning summaries from the leading nodes', async () => {
+    render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
+    await screen.findByTestId('ladder-summary-range')
+
+    fireEvent.mouseEnter(screen.getByTestId('ladder-summary-range'))
+    const rangeTip = await screen.findByTestId('ladder-summary-tooltip')
+    expect(rangeTip.textContent).toContain('全部记录学习情况')
+    expect(rangeTip.textContent).toContain('学习单元数：4')
+    expect(rangeTip.textContent).toContain('学习总时长：7分')
+    expect(rangeTip.textContent).toContain('随心刷卡次数：6 次')
+    expect(rangeTip.textContent).toContain('刷题数量：2 题')
+
+    fireEvent.mouseEnter(screen.getByTestId('ladder-summary-palace'))
+    const palaceTip = await screen.findByTestId('ladder-summary-tooltip')
+    expect(palaceTip.textContent).toContain('当前宫殿 · 全部学习情况')
+    expect(palaceTip.textContent).toContain('学习总时长：10分')
   })
 
   it('refetches when range changes', async () => {

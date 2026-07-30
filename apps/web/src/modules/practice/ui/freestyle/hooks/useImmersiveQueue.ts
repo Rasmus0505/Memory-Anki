@@ -30,6 +30,50 @@ import {
 } from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { onAppEvent } from '@/shared/events/appEvents'
+import { logAppError } from '@/shared/logs/model/appLogs'
+
+const QUEUE_BUILD_TIMEOUT_MS = 15_000
+
+function queueBuildDiagnostic(input: {
+  operationId: string
+  elapsedMs: number
+  reason: string
+  config: FreestyleFeedConfig
+  error: unknown
+}) {
+  const message = input.error instanceof Error ? input.error.message : String(input.error || '未知错误')
+  const selectedPalaces = input.config.specific_palace_ids.length
+    ? input.config.specific_palace_ids.join(', ')
+    : '全部宫殿'
+  return [
+    '随心队列重建失败',
+    `操作 ID: ${input.operationId}`,
+    `触发原因: ${input.reason}`,
+    `耗时: ${input.elapsedMs}ms`,
+    `宫殿筛选: ${selectedPalaces}`,
+    `内容: 宫殿=${input.config.content.mindmap_branch}，正反面=${input.config.content.anki_card}，题目=${input.config.content.quiz_question}`,
+    `目标队列长度: ${input.config.queue_length}`,
+    `错误: ${message}`,
+  ].join('\n')
+}
+
+function buildQueueWithTimeout(payload: Parameters<typeof buildFreestyleQueueApi>[0]) {
+  return new Promise<Awaited<ReturnType<typeof buildFreestyleQueueApi>>>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error(`队列构建超过 ${QUEUE_BUILD_TIMEOUT_MS / 1000} 秒仍未完成`))
+    }, QUEUE_BUILD_TIMEOUT_MS)
+    void buildFreestyleQueueApi(payload).then(
+      (response) => {
+        window.clearTimeout(timeout)
+        resolve(response)
+      },
+      (error) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      },
+    )
+  })
+}
 
 function sameFeedConfig(left: FreestyleFeedConfig, right: FreestyleFeedConfig) {
   try {
@@ -152,6 +196,8 @@ export function useImmersiveQueue() {
         silent?: boolean
         /** Prefer keeping this card under the viewport after rebuild. */
         preferCardId?: string | null
+        /** Included in a user-copyable error report. */
+        reason?: string
         /**
          * Weak-rated unit still due for same-session restudy: leave out of
          * completedIds (caller). Gap re-insertion is applied when the learner
@@ -161,6 +207,7 @@ export function useImmersiveQueue() {
       },
     ) => {
       const operationId = createOperationId()
+      const startedAt = Date.now()
       operationIdRef.current = operationId
       const silent = Boolean(options?.silent)
       if (!silent) {
@@ -174,7 +221,7 @@ export function useImmersiveQueue() {
         const hiddenIds =
           options?.hiddenIds ??
           (options?.preserveCompleted === false ? [] : queueStateRef.current.hiddenIds)
-        const response = await buildFreestyleQueueApi({
+        const response = await buildQueueWithTimeout({
           operation_id: operationId,
           config: nextConfig,
           completed_ids: completedIds,
@@ -250,9 +297,23 @@ export function useImmersiveQueue() {
         applyCurrentIndex(resolved, nextCards)
       } catch (err) {
         if (operationIdRef.current !== operationId) return
+        const diagnostic = queueBuildDiagnostic({
+          operationId,
+          elapsedMs: Date.now() - startedAt,
+          reason: options?.reason ?? 'unknown',
+          config: nextConfig,
+          error: err,
+        })
+        logAppError({
+          feature: '随心队列重建',
+          stage: 'queue_build_failed',
+          error: diagnostic,
+          requestSummary: `POST /freestyle/queue/build (${options?.reason ?? 'unknown'})`,
+          meta: { operationId, elapsedMs: Date.now() - startedAt, config: nextConfig },
+        })
         // Silent rebuild failures must not blank the feed mid-session.
         if (!silent) {
-          setError(err instanceof Error ? err.message : '构建随心队列失败。')
+          setError(diagnostic)
         }
       } finally {
         if (operationIdRef.current === operationId && !silent) {
@@ -264,7 +325,7 @@ export function useImmersiveQueue() {
   )
 
   useEffect(() => {
-    void buildQueue(config, { preserveCompleted: true })
+    void buildQueue(config, { preserveCompleted: true, reason: 'initial_load' })
     // Initial load only; subsequent rebuilds are explicit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -276,7 +337,7 @@ export function useImmersiveQueue() {
       if (sameFeedConfig(next, configRef.current)) return
       configRef.current = next
       setConfig(next)
-      void buildQueue(next, { preserveCompleted: true })
+      void buildQueue(next, { preserveCompleted: true, reason: 'config_event' })
     })
   }, [buildQueue])
 
@@ -290,13 +351,13 @@ export function useImmersiveQueue() {
       const saved = saveFreestyleFeedConfig(next)
       configRef.current = saved
       setConfig(saved)
-      void buildQueue(saved, { preserveCompleted: true })
+      void buildQueue(saved, { preserveCompleted: true, reason: 'settings_save' })
     },
     [buildQueue],
   )
 
   const refreshQueue = useCallback(() => {
-    void buildQueue(config, { preserveCompleted: true })
+    void buildQueue(config, { preserveCompleted: true, reason: 'manual_refresh' })
   }, [buildQueue, config])
 
   /** Reshuffle + clear this round's completed/hidden so still-due units can return. */

@@ -24,6 +24,7 @@ export interface UnitReviewEncounterDto {
   passed: boolean | null
   retry_after_cards: number
   effective_operation_id: string | null
+  effective_seconds?: number | null
   closed_at: string | null
   rating_effects: UnitRatingEffectDto[]
 }
@@ -229,6 +230,14 @@ export interface LadderRangeStatsDto {
   }
 }
 
+export interface LadderLearningSummaryDto {
+  range: LadderProgressRange
+  unit_count: number
+  total_seconds: number
+  freestyle_rating_count: number
+  quiz_count: number
+}
+
 export interface PalaceLadderProgressDto {
   palace_id: number
   title: string
@@ -254,6 +263,8 @@ export interface PalaceLadderProgressDto {
   }
   unit_range_stats: LadderRangeStatsDto
   palace_range_stats: LadderRangeStatsDto
+  selected_range_summary: LadderLearningSummaryDto
+  palace_all_time_summary: LadderLearningSummaryDto
 }
 
 export async function getPalaceLadderProgressApi(
@@ -406,12 +417,16 @@ export async function closeUnitReviewEncounterApi(
   unitId: string,
   encounterId: string,
   operationId: string,
+  effectiveSeconds?: number,
 ) {
   const response = await request<{ item: CloseUnitEncounterResultDto }>(
     `/review/session/${sessionId}/units/${unitId}/encounters/${encounterId}/close`,
     {
       method: 'POST',
-      body: JSON.stringify({ operation_id: operationId }),
+      body: JSON.stringify({
+        operation_id: operationId,
+        ...(effectiveSeconds == null ? {} : { effective_seconds: Math.max(0, Math.round(effectiveSeconds)) }),
+      }),
       persistence: {
         resourceKey: `review-unit-encounter-close:${operationId}`,
         description: 'Close review unit encounter',
