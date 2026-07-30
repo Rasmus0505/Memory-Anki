@@ -39,15 +39,6 @@ def test_empty_database_returns_200(client):
     assert body["today_new_palace_count"] == 0
 
 
-def test_invalid_month_returns_400(client):
-    response = client.get(
-        "/api/v1/dashboard",
-        params={"duration_mode": "month", "month": "not-a-month"},
-    )
-
-    assert response.status_code == 400
-
-
 def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory):
     with session_factory() as session:
         now = utc_now_naive()
@@ -74,7 +65,7 @@ def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory
     assert body["today_new_palace_count"] == 1
 
 
-def test_duration_month_mode_returns_selected_total(client, session_factory):
+def test_dashboard_duration_is_not_a_separate_filterable_read_model(client, session_factory):
     now = datetime.now()
     with session_factory() as session:
         session.add(
@@ -91,9 +82,9 @@ def test_duration_month_mode_returns_selected_total(client, session_factory):
         )
         session.commit()
 
-    response = client.get("/api/v1/dashboard", params={"duration_mode": "month"})
+    response = client.get("/api/v1/dashboard")
     assert response.status_code == 200
-    assert response.json()["selected_total_review_duration_seconds"] >= 0
+    assert "selected_total_review_duration_seconds" not in response.json()
 
 
 def test_weekly_report_payload(session_factory):
@@ -128,7 +119,7 @@ def test_weekly_report_payload(session_factory):
 def test_heatmap_excludes_active_checkpoint_seconds(session_factory):
     from memory_anki.modules.dashboard.application.heatmap_service import build_heatmap_payload
 
-    now = datetime.now().replace(microsecond=0)
+    now = utc_now_naive().replace(microsecond=0)
     with session_factory() as session:
         session.add(
             StudySession(

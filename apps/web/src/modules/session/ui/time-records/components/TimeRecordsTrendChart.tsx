@@ -1,5 +1,5 @@
 import { Suspense, memo } from 'react'
-import type { DailyTrendPoint } from '@/modules/session/public'
+import type { DailyTrendPoint } from '@/modules/session/domain/session-entity/model/session-records'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 
 // recharts 只在图表真正渲染时加载，避免经 settings/public 桶进入首屏静态依赖图。

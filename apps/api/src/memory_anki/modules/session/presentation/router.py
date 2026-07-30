@@ -13,6 +13,7 @@ from memory_anki.modules.session.application.study_session_commands import (
     create_study_session_from_time_record_command,
 )
 from memory_anki.modules.session.application.study_session_service import (
+    build_time_record_read_model,
     build_study_session_stats,
     build_time_record_analytics,
     bulk_delete_study_sessions,
@@ -24,6 +25,9 @@ from memory_anki.modules.session.application.study_session_service import (
     list_study_sessions,
     patch_study_session,
     summarize_study_sessions_by_client_source,
+)
+from memory_anki.modules.session.application.time_record_read_model import (
+    TimeRecordQueryError,
 )
 from memory_anki.modules.session.domain.schemas import (
     StudySessionAbandon,
@@ -96,6 +100,49 @@ def api_time_record_analytics(
         trend_range='all' if trend_range == 'all' else int(trend_range),
         breakdown_range='all' if breakdown_range == 'all' else int(breakdown_range),
     )
+
+
+@router.get("/study-sessions/time-records")
+def api_time_records(
+    range_mode: Literal["month", "rolling", "custom", "all"] = "month",
+    month: str | None = Query(default=None, max_length=7),
+    rolling_days: Literal[7, 30, 90] | None = None,
+    start_date: str | None = Query(default=None, max_length=10),
+    end_date: str | None = Query(default=None, max_length=10),
+    keyword: str | None = Query(default=None, max_length=300),
+    kind: Literal[
+        "review",
+        "practice",
+        "quiz",
+        "palace_edit",
+        "english",
+        "english_reading",
+        "custom",
+    ]
+    | None = None,
+    sort_by: Literal["started_at", "effective_seconds", "title"] = "started_at",
+    sort_order: Literal["asc", "desc"] = "desc",
+    limit: int = Query(default=20, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(session_dep),
+):
+    try:
+        return build_time_record_read_model(
+            session,
+            range_mode=range_mode,
+            month=month,
+            rolling_days=rolling_days,
+            start_date=start_date,
+            end_date=end_date,
+            keyword=keyword,
+            kind=kind,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            offset=offset,
+        )
+    except TimeRecordQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/study-sessions/by-target")

@@ -41,12 +41,24 @@ export const getWeeklyReportApi = vi.fn();
 export const saveStudyGoalsApi = vi.fn();
 
 export const timeRecordsDashboardMock = {
-  thresholdInput: "0",
-  setThresholdInput: vi.fn(),
-  showBelowThreshold: false,
-  setShowBelowThreshold: vi.fn(),
-  showDeleted: false,
-  setShowDeleted: vi.fn(),
+  filter: {
+    version: 2 as const,
+    rangeMode: "month" as const,
+    month: "2026-07",
+    rollingDays: 30 as const,
+    startDate: "",
+    endDate: "",
+    keyword: "",
+    kind: "all" as const,
+    sortBy: "started_at" as const,
+    sortOrder: "desc" as const,
+    pageSize: 20,
+  },
+  setRangeMode: vi.fn(),
+  setMonth: vi.fn(),
+  setRollingDays: vi.fn(),
+  setStartDate: vi.fn(),
+  setEndDate: vi.fn(),
   kindFilter: "all" as const,
   setKindFilter: vi.fn(),
   keyword: "",
@@ -55,16 +67,10 @@ export const timeRecordsDashboardMock = {
   setSortBy: vi.fn(),
   sortOrder: "desc" as const,
   setSortOrder: vi.fn(),
-  rangePreset: "all" as const,
-  setRangePreset: vi.fn(),
-  customRangeFrom: "",
-  setCustomRangeFrom: vi.fn(),
-  customRangeTo: "",
-  setCustomRangeTo: vi.fn(),
   sourceSummary: {
-    totalEffectiveSeconds: 0,
-    desktopEffectiveSeconds: 0,
-    pwaEffectiveSeconds: 0,
+    totalEffectiveSeconds: 267350,
+    desktopEffectiveSeconds: 222979,
+    pwaEffectiveSeconds: 44371,
     unknownEffectiveSeconds: 0,
   },
   page: 1,
@@ -91,7 +97,6 @@ export const timeRecordsDashboardMock = {
   allSelectableChecked: false,
   hasSelectedRecords: false,
   refreshRecords: vi.fn(),
-  applyThreshold: vi.fn(),
   openCreateDialog: vi.fn(),
   openEditDialog: vi.fn(),
   handleDeleteRecord: vi.fn(),
@@ -144,33 +149,30 @@ vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   },
 }));
 
-vi.mock("@/modules/settings/ui/profile/hooks/useTimeRecordsDashboard", () => ({
-  useTimeRecordsDashboard: (options: {
-    trendRange?: 7 | 30 | 90 | "all";
-    breakdownRange?: 7 | 30 | 90 | "all";
-  }) => ({
+vi.mock("@/modules/session/ui/time-records/hooks/useTimeRecordsDashboard", () => ({
+  useTimeRecordsDashboard: () => ({
     ...timeRecordsDashboardMock,
     trend: [{
-      dateKey: `trend-${options.trendRange ?? 7}`,
-      label: `trend-${options.trendRange ?? 7}`,
+      dateKey: "2026-07-01",
+      label: "7/1",
       seconds: 1,
     }],
     breakdown: [{
       kind: "review",
-      label: `breakdown-${options.breakdownRange ?? "all"}`,
+      label: "复习",
       seconds: 1,
       sessions: 1,
     }],
   }),
 }));
 
-vi.mock("@/modules/settings/ui/profile/components/TimeRecordsTrendChart", () => ({
+vi.mock("@/modules/session/ui/time-records/components/TimeRecordsTrendChart", () => ({
   TimeRecordsTrendChart: ({ trend }: { trend: Array<{ label: string }> }) => (
     <div data-testid="trend-chart">{trend[0]?.label ?? ""}</div>
   ),
 }));
 
-vi.mock("@/modules/settings/ui/profile/components/TimeRecordsBreakdownChart", () => ({
+vi.mock("@/modules/session/ui/time-records/components/TimeRecordsBreakdownChart", () => ({
   TimeRecordsBreakdownChart: ({
     breakdown,
   }: {
@@ -178,15 +180,17 @@ vi.mock("@/modules/settings/ui/profile/components/TimeRecordsBreakdownChart", ()
   }) => <div data-testid="breakdown-chart">{breakdown[0]?.label ?? ""}</div>,
 }));
 
-vi.mock("@/modules/settings/ui/profile/components/TimeRecordsTable", () => ({
-  TimeRecordsTable: () => <div data-testid="records-table" />,
+vi.mock("@/modules/session/ui/time-records/components/TimeRecordsTable", () => ({
+  TimeRecordsTable: ({ filter }: { filter: { rangeMode: string; month: string } }) => (
+    <div data-testid="records-table">{filter.rangeMode}:{filter.month}</div>
+  ),
 }));
 
-vi.mock("@/modules/settings/ui/profile/components/TimeRecordDialog", () => ({
+vi.mock("@/modules/session/ui/time-records/components/TimeRecordDialog", () => ({
   TimeRecordDialog: () => null,
 }));
 
-vi.mock("@/modules/settings/ui/profile/components/TimeRecordQuickAddDialog", () => ({
+vi.mock("@/modules/session/ui/time-records/components/TimeRecordQuickAddDialog", () => ({
   TimeRecordQuickAddDialog: () => null,
 }));
 

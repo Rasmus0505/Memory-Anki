@@ -1,5 +1,5 @@
-import type { SessionKind } from '@/modules/session/public'
-import { formatSessionKind } from '@/modules/session/public'
+import type { SessionKind } from '@/modules/session/domain/session-entity/model/session-records'
+import { formatSessionKind } from '@/modules/session/domain/session-entity/model/session-records-store'
 
 export const BUILTIN_TIME_RECORD_TAGS = [
   { id: 'review', name: '正式复习', builtin: true as const },

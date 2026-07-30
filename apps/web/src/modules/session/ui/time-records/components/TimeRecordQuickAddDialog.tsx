@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Plus } from 'lucide-react'
-import type { TimeRecordQuickAddFormState } from '@/modules/settings/ui/profile/model/time-record-form'
+import type { TimeRecordQuickAddFormState } from '@/modules/session/ui/time-records/model/time-record-form'
 import {
   QUICK_ADD_MINUTE_PRESETS,
   createCustomTimeRecordTag,
   listTimeRecordTagOptions,
   type CustomTimeRecordTag,
-} from '@/modules/settings/ui/profile/model/time-record-tags'
+} from '@/modules/session/ui/time-records/model/time-record-tags'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,

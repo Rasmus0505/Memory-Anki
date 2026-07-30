@@ -70,6 +70,24 @@ from .time_bounds import (
 from .time_bounds import (
     today_bounds as today_bounds,
 )
+from .time_record_read_model import (
+    build_time_record_read_model as build_time_record_read_model,
+)
+from .time_record_read_model import (
+    count_time_records as count_time_records,
+)
+from .time_record_read_model import (
+    get_time_record_daily_totals as get_time_record_daily_totals,
+)
+from .time_record_read_model import (
+    get_time_record_duration_seconds as get_time_record_duration_seconds,
+)
+from .time_record_read_model import (
+    time_record_kind as time_record_kind,
+)
+from .time_record_read_model import (
+    valid_time_records_query as valid_time_records_query,
+)
 
 
 def create_study_session(

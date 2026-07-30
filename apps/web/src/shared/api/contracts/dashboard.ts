@@ -25,7 +25,6 @@ export interface DashboardResponse {
   weekly_review_duration_seconds: number
   today_total_review_duration_seconds: number
   monthly_total_review_duration_seconds: number
-  selected_total_review_duration_seconds: number
   weekly_total_review_duration_seconds: number
   weekly_formal_review_duration_seconds: number
   english_stats: {

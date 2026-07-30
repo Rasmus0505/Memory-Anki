@@ -34,7 +34,6 @@ describe('TodayLearningPage', () => {
       weekly_review_duration_seconds: 3600,
       today_total_review_duration_seconds: 5400,
       monthly_total_review_duration_seconds: 12000,
-      selected_total_review_duration_seconds: 12000,
       weekly_total_review_duration_seconds: 10000,
       weekly_formal_review_duration_seconds: 3600,
       english_stats: { total_courses: 0, unfinished_courses: 0, completed_courses: 0, today_reading_seconds: 0, weekly_reading_seconds: 0, total_reading_seconds: 0, today_practice_seconds: 0, weekly_practice_seconds: 0, total_practice_seconds: 0, today_total_seconds: 0, weekly_total_seconds: 0, total_seconds: 0 },

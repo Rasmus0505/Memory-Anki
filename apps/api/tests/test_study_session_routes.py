@@ -176,8 +176,8 @@ class StudySessionRouteTests(RouterTestCase):
         self.assertEqual(
             response.json(),
             {
-                "today_total_seconds": 300,
-                "weekly_total_seconds": 300,
+                "today_total_seconds": 660,
+                "weekly_total_seconds": 660,
                 "today_review_seconds": 120,
                 "weekly_review_seconds": 120,
             },

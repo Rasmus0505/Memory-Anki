@@ -3,9 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { ArrowRight, BookOpen, Clock3, Timer, TrendingUp } from 'lucide-react'
 import type { DashboardResponse } from '@/shared/api/contracts'
 import { formatDuration } from '@/modules/session/public'
-import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 import {
   buildTodayTodoBuckets,
@@ -13,21 +11,15 @@ import {
   todayTodoToneClassName,
 } from '@/modules/dashboard/ui/dashboard/model/dashboard-derive'
 import {
-  formatSelectedDurationLabel,
-  type DashboardDurationFilterState,
-  type NormalizedDashboardDurationFilterState,
-} from '@/modules/dashboard/ui/dashboard/model/dashboard-duration-filter'
+  formatTimeRecordRangeLabel,
+  type TimeRecordFilterState,
+} from '@/modules/session/public'
+import type { TimeRecordSourceSummary } from '@/modules/session/public'
 
 interface DashboardStatCardsProps {
   data: DashboardResponse
-  durationFilter: NormalizedDashboardDurationFilterState
-  onUpdateDurationFilter: (
-    patch:
-      | Partial<DashboardDurationFilterState>
-      | ((
-          current: NormalizedDashboardDurationFilterState,
-        ) => Partial<DashboardDurationFilterState>),
-  ) => void
+  timeRecordFilter: TimeRecordFilterState
+  timeRecordSummary: TimeRecordSourceSummary
 }
 
 export function getTodayTodoTotal(data: DashboardResponse) {
@@ -36,17 +28,10 @@ export function getTodayTodoTotal(data: DashboardResponse) {
 
 export function DashboardStatCards({
   data,
-  durationFilter,
-  onUpdateDurationFilter,
+  timeRecordFilter,
+  timeRecordSummary,
 }: DashboardStatCardsProps) {
-  const {
-    mode: durationMode,
-    month: selectedMonth,
-    startDate: rangeStartDate,
-    endDate: rangeEndDate,
-  } = durationFilter
-  const selectedDurationLabel = formatSelectedDurationLabel(durationMode, selectedMonth, rangeStartDate, rangeEndDate)
-  const isRangeInvalid = Boolean(rangeStartDate && rangeEndDate && rangeStartDate > rangeEndDate)
+  const selectedDurationLabel = formatTimeRecordRangeLabel(timeRecordFilter)
   const todayTodoBuckets = buildTodayTodoBuckets(data)
   const todayTodoTotal = todayTodoBuckets.reduce((sum, bucket) => sum + bucket.count, 0)
   const activeTodayTodoBuckets = todayTodoBuckets.filter((bucket) => bucket.count > 0).length
@@ -130,75 +115,10 @@ export function DashboardStatCards({
     },
     {
       label: '总时长',
-      value: formatDuration(data.selected_total_review_duration_seconds),
+      value: formatDuration(timeRecordSummary.totalEffectiveSeconds),
       icon: Timer,
       color: '',
       subtitle: selectedDurationLabel,
-      extra: (
-        <div className="mt-3 space-y-2">
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant={durationMode === 'month' ? 'default' : 'outline'}
-              className="h-7 px-2"
-              onClick={() => onUpdateDurationFilter({ mode: 'month' })}
-            >
-              月份
-            </Button>
-            <Button
-              size="sm"
-              variant={durationMode === 'range' ? 'default' : 'outline'}
-              className="h-7 px-2"
-              onClick={() => onUpdateDurationFilter({ mode: 'range' })}
-            >
-              自定义范围
-            </Button>
-            <Button
-              size="sm"
-              variant={durationMode === 'all' ? 'default' : 'outline'}
-              className="h-7 px-2"
-              onClick={() => onUpdateDurationFilter({ mode: 'all' })}
-            >
-              显示全部
-            </Button>
-          </div>
-          {durationMode === 'month' ? (
-            <Input
-              aria-label="选择月份"
-              className="h-8 text-xs"
-              type="month"
-              value={selectedMonth}
-              onChange={(event) =>
-                onUpdateDurationFilter({ month: event.target.value })
-              }
-            />
-          ) : durationMode === 'range' ? (
-            <div className="flex flex-col gap-2">
-              <Input
-                aria-label="开始日期"
-                className="h-8 text-xs"
-                type="date"
-                value={rangeStartDate}
-                onChange={(event) =>
-                  onUpdateDurationFilter({ startDate: event.target.value })
-                }
-              />
-              <Input
-                aria-label="结束日期"
-                className="h-8 text-xs"
-                type="date"
-                value={rangeEndDate}
-                onChange={(event) =>
-                  onUpdateDurationFilter({ endDate: event.target.value })
-                }
-              />
-              {isRangeInvalid ? (
-                <p className="text-[11px] text-destructive">开始日期不能晚于结束日期。</p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ),
     },
   ]
 

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive
+from memory_anki.modules.session.public.queries import get_time_record_daily_totals
 
 MAX_HEATMAP_DAYS = 366
 DEFAULT_HEATMAP_DAYS = 182
@@ -17,46 +17,19 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
     days = max(7, min(int(days), MAX_HEATMAP_DAYS))
     today = date.today()
     start = today - timedelta(days=days - 1)
-    start_dt = datetime.combine(start, time.min)
-
-    review_day = func.date(StudySession.ended_at)
-    review_rows = (
-        session.query(review_day, func.count(StudySession.id))
-        .filter(
-            StudySession.scene == "formal_unit_review",
-            StudySession.status == "completed",
-            StudySession.ended_at >= start_dt,
-        )
-        .group_by(review_day)
-        .all()
+    start_dt = local_calendar_day_start_as_utc_naive(start)
+    end_dt = local_calendar_day_start_as_utc_naive(today + timedelta(days=1))
+    review_rows = get_time_record_daily_totals(
+        session, start=start_dt, end=end_dt, kind="review"
     )
-    # Match dashboard duration stats: only completed positive seconds, day by
-    # coalesce(ended_at, started_at). Active autosave checkpoints must not inflate
-    # the heatmap (they previously did when status was unfiltered).
-    session_day = func.date(func.coalesce(StudySession.ended_at, StudySession.started_at))
-    session_rows = (
-        session.query(
-            session_day,
-            func.coalesce(func.sum(StudySession.effective_seconds), 0),
-        )
-        .filter(
-            StudySession.deleted_at.is_(None),
-            StudySession.status == "completed",
-            StudySession.effective_seconds > 0,
-            func.coalesce(StudySession.ended_at, StudySession.started_at) >= start_dt,
-        )
-        .group_by(session_day)
-        .all()
-    )
+    session_rows = get_time_record_daily_totals(session, start=start_dt, end=end_dt)
 
     by_day: dict[str, dict] = {}
-    for review_date, count in review_rows:
-        if review_date is None:
-            continue
-        key = review_date.isoformat()
+    for review_date, _seconds, count in review_rows:
+        key = str(review_date)
         entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})
         entry["review_count"] = int(count)
-    for day_value, seconds in session_rows:
+    for day_value, seconds, _records in session_rows:
         key = str(day_value)
         entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})
         entry["study_seconds"] += int(seconds)

@@ -9,14 +9,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import {
-  formatDuration,
-  type SessionKindBreakdownItem,
-} from '@/modules/session/public'
+import type { SessionKindBreakdownItem } from '@/modules/session/domain/session-entity/model/session-records'
+import { formatDuration } from '@/modules/session/domain/session-entity/model/session-records-store'
 import {
   getTimeRecordChartColor,
   timeRecordChartConfig,
-} from '@/modules/session/public'
+} from '@/modules/session/domain/session-entity/model/time-record-visuals'
 import { ChartContainer, ChartTooltipContent } from '@/shared/components/ui/chart'
 
 interface TimeRecordsBreakdownChartViewProps {

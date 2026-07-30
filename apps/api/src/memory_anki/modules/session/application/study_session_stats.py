@@ -20,6 +20,12 @@ from .study_session_constants import (
     TIME_RECORD_KIND_LABELS,
 )
 from .time_bounds import current_week_bounds, today_bounds
+from .time_record_read_model import (
+    build_time_record_read_model,
+    get_time_record_duration_seconds,
+    time_record_kind,
+    valid_time_records_query,
+)
 
 
 def _local_calendar_date_expr(column):
@@ -92,14 +98,9 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
     start, end = today_bounds()
     attributed_at = _session_attribution_at()
     rows = (
-        session.query(StudySession)
+        valid_time_records_query(session, start=start, end=end)
         .filter(
-            StudySession.deleted_at.is_(None),
-            StudySession.status == "completed",
-            StudySession.scene.in_(STUDY_DASHBOARD_SCENES),
             StudySession.palace_id.is_not(None),
-            attributed_at >= start,
-            attributed_at < end,
         )
         .order_by(attributed_at.asc(), StudySession.id.asc())
         .all()
@@ -126,11 +127,12 @@ def get_today_palace_learning_breakdown(session: Session) -> list[dict[str, Any]
         )
         seconds = max(0, int(row.effective_seconds or 0))
         payload["total_seconds"] += seconds
-        if row.scene in FORMAL_REVIEW_SCENES:
+        kind, _, _ = time_record_kind(row.scene, row.summary_json)
+        if kind == "review":
             payload["review_seconds"] += seconds
-        elif row.scene == "quiz":
+        elif kind == "quiz":
             payload["quiz_seconds"] += seconds
-        elif row.scene == "palace_edit":
+        elif kind == "palace_edit":
             payload["palace_edit_seconds"] += seconds
         else:
             payload["practice_seconds"] += seconds
@@ -141,17 +143,17 @@ def build_study_session_stats(session: Session) -> dict[str, int]:
     today_start, today_end = today_bounds()
     week_start, week_end = current_week_bounds()
     return {
-        "today_total_seconds": get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=today_start, end=today_end
+        "today_total_seconds": get_time_record_duration_seconds(
+            session, start=today_start, end=today_end
         ),
-        "weekly_total_seconds": get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=week_start, end=week_end
+        "weekly_total_seconds": get_time_record_duration_seconds(
+            session, start=week_start, end=week_end
         ),
-        "today_review_seconds": get_study_session_duration_seconds(
-            session, scenes=FORMAL_REVIEW_SCENES, start=today_start, end=today_end
+        "today_review_seconds": get_time_record_duration_seconds(
+            session, start=today_start, end=today_end, kind="review"
         ),
-        "weekly_review_seconds": get_study_session_duration_seconds(
-            session, scenes=FORMAL_REVIEW_SCENES, start=week_start, end=week_end
+        "weekly_review_seconds": get_time_record_duration_seconds(
+            session, start=week_start, end=week_end, kind="review"
         ),
     }
 
@@ -163,21 +165,23 @@ def build_time_record_analytics(
     breakdown_range: int | str,
     reference_date: date | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
-    today = reference_date or date.today()
-    range_end = local_calendar_day_start_as_utc_naive(today + timedelta(days=1))
+    trend_model = build_time_record_read_model(
+        session,
+        range_mode="all" if trend_range == "all" else "rolling",
+        rolling_days=None if trend_range == "all" else int(trend_range),
+        limit=1,
+        reference_date=reference_date,
+    )
+    breakdown_model = build_time_record_read_model(
+        session,
+        range_mode="all" if breakdown_range == "all" else "rolling",
+        rolling_days=None if breakdown_range == "all" else int(breakdown_range),
+        limit=1,
+        reference_date=reference_date,
+    )
     return {
-        "trend": _build_time_record_trend(
-            session,
-            range_value=trend_range,
-            today=today,
-            range_end=range_end,
-        ),
-        "breakdown": _build_time_record_breakdown(
-            session,
-            range_value=breakdown_range,
-            today=today,
-            range_end=range_end,
-        ),
+        "trend": trend_model["trend"],
+        "breakdown": breakdown_model["kind_breakdown"],
     }
 
 

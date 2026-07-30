@@ -22,7 +22,6 @@ export function buildDashboardResponse(
     weekly_review_duration_seconds: 0,
     today_total_review_duration_seconds: 0,
     monthly_total_review_duration_seconds: 0,
-    selected_total_review_duration_seconds: 0,
     weekly_total_review_duration_seconds: 0,
     weekly_formal_review_duration_seconds: 0,
     english_stats: {

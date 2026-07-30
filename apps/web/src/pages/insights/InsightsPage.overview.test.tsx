@@ -23,7 +23,6 @@ describe("DashboardPage overview", () => {
       weekly_review_duration_seconds: 0,
       today_total_review_duration_seconds: 5400,
       monthly_total_review_duration_seconds: 14400,
-      selected_total_review_duration_seconds: 14400,
       weekly_total_review_duration_seconds: 7200,
       weekly_formal_review_duration_seconds: 3600,
       recent_palaces: [],
@@ -81,16 +80,15 @@ describe("DashboardPage overview", () => {
     expect(screen.getByText("英语")).toBeTruthy();
     expect(screen.getByText("宫殿编辑")).toBeTruthy();
     expect(screen.getByText("练习")).toBeTruthy();
-    expect(screen.getByText("复习")).toBeTruthy();
+    expect(screen.getAllByText("复习").length).toBeGreaterThan(0);
     expect(screen.getAllByText("第五节 陈鹤琴的“活教育”探索").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1小时 0分").length).toBeGreaterThan(0);
     expect(screen.getByText("新增章节数量：2")).toBeTruthy();
     expect(screen.getByText("第五章 现代教育实验")).toBeTruthy();
     expect(screen.queryByText("第五节")).toBeNull();
     expect(screen.getByText("总时长")).toBeTruthy();
-    expect(screen.getByText("4小时 0分")).toBeTruthy();
+    expect(screen.getByText("74小时 15分")).toBeTruthy();
     expect(screen.getByText("本周时长")).toBeTruthy();
-    expect(screen.getByDisplayValue(/\d{4}-\d{2}/)).toBeTruthy();
   });
 
   it("renders dashboard triage counts and review link gating", async () => {
@@ -118,7 +116,6 @@ describe("DashboardPage overview", () => {
       weekly_review_duration_seconds: 0,
       today_total_review_duration_seconds: 5400,
       monthly_total_review_duration_seconds: 14400,
-      selected_total_review_duration_seconds: 14400,
       weekly_total_review_duration_seconds: 7200,
       weekly_formal_review_duration_seconds: 3600,
       recent_palaces: [],
@@ -148,7 +145,6 @@ describe("DashboardPage overview", () => {
       weekly_review_duration_seconds: 0,
       today_total_review_duration_seconds: 0,
       monthly_total_review_duration_seconds: 0,
-      selected_total_review_duration_seconds: 0,
       weekly_total_review_duration_seconds: 0,
       weekly_formal_review_duration_seconds: 0,
       recent_palaces: [],
@@ -204,7 +200,6 @@ describe("DashboardPage overview", () => {
       weekly_review_duration_seconds: 0,
       today_total_review_duration_seconds: 3600,
       monthly_total_review_duration_seconds: 5400,
-      selected_total_review_duration_seconds: 5400,
       weekly_total_review_duration_seconds: 3600,
       weekly_formal_review_duration_seconds: 1200,
       recent_palaces: [],
@@ -246,7 +241,6 @@ describe("DashboardPage overview", () => {
       weekly_review_duration_seconds: 0,
       today_total_review_duration_seconds: 0,
       monthly_total_review_duration_seconds: 0,
-      selected_total_review_duration_seconds: 0,
       weekly_total_review_duration_seconds: 0,
       weekly_formal_review_duration_seconds: 0,
       recent_palaces: [],

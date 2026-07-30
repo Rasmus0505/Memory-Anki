@@ -2,7 +2,7 @@ import type {
   SessionCompletionMethod,
   SessionKind,
   TimeSessionRecord,
-} from '@/modules/session/public'
+} from '@/modules/session/domain/session-entity/model/session-records'
 import {
   formatLocalDateTimeInputFromDate,
   formatLocalDateTimeInputValue,
@@ -16,7 +16,7 @@ import {
   resolveTagName,
   tagIdToSessionKind,
   type CustomTimeRecordTag,
-} from '@/modules/settings/ui/profile/model/time-record-tags'
+} from '@/modules/session/ui/time-records/model/time-record-tags'
 
 export const sessionKindOptions: SessionKind[] = [
   'review',

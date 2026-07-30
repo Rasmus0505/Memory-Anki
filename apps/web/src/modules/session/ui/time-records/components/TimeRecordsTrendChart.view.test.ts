@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DailyTrendPoint } from '@/modules/session/public'
+import type { DailyTrendPoint } from '@/modules/session/domain/session-entity/model/session-records'
 import { bucketTrendPoints } from './TimeRecordsTrendChart.view'
 
 function makeTrend(days: number, secondsPerDay = 60): DailyTrendPoint[] {

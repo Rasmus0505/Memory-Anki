@@ -5,7 +5,7 @@ import {
   normalizeCustomTimeRecordTags,
   tagIdToSessionKind,
   validateCustomTagName,
-} from '@/modules/settings/ui/profile/model/time-record-tags'
+} from '@/modules/session/ui/time-records/model/time-record-tags'
 
 describe('time-record-tags', () => {
   it('lists builtin tags before custom tags', () => {

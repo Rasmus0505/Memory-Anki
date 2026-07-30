@@ -2,15 +2,15 @@ import type { FormEvent } from 'react'
 import {
   formatCompletionMethod,
   type SessionCompletionMethod,
-} from '@/modules/session/public'
+} from '@/modules/session/domain/session-entity/model'
 import {
   completionMethodOptions,
   type TimeRecordFormState,
-} from '@/modules/settings/ui/profile/model/time-record-form'
+} from '@/modules/session/ui/time-records/model/time-record-form'
 import {
   listTimeRecordTagOptions,
   type CustomTimeRecordTag,
-} from '@/modules/settings/ui/profile/model/time-record-tags'
+} from '@/modules/session/ui/time-records/model/time-record-tags'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,

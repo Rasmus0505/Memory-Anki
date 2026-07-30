@@ -139,6 +139,64 @@ export interface StudySessionAnalyticsResult {
   }>
 }
 
+export type TimeRecordRangeMode = 'month' | 'rolling' | 'custom' | 'all'
+export type TimeRecordKind =
+  | 'review'
+  | 'practice'
+  | 'quiz'
+  | 'palace_edit'
+  | 'english'
+  | 'english_reading'
+  | 'custom'
+
+export interface TimeRecordReadOptions {
+  rangeMode: TimeRecordRangeMode
+  month?: string
+  rollingDays?: 7 | 30 | 90
+  startDate?: string
+  endDate?: string
+  keyword?: string
+  kind?: TimeRecordKind
+  sortBy?: 'started_at' | 'effective_seconds' | 'title'
+  sortOrder?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
+}
+
+export interface TimeRecordReadResult {
+  items: StudySessionItem[]
+  total: number
+  limit: number
+  offset: number
+  range: {
+    mode: TimeRecordRangeMode
+    month: string | null
+    rolling_days: number | null
+    start_date: string | null
+    end_date: string | null
+  }
+  summary: {
+    record_count: number
+    total_effective_seconds: number
+    desktop_effective_seconds: number
+    pwa_effective_seconds: number
+    unknown_effective_seconds: number
+  }
+  kind_breakdown: Array<{
+    kind: string
+    label: string
+    seconds: number
+    sessions: number
+    is_builtin: boolean
+  }>
+  trend: Array<{
+    date_key: string
+    label: string
+    seconds: number
+    records: number
+  }>
+}
+
 function listPath(options?: StudySessionListOptions) {
   const query = new URLSearchParams()
   if (options?.limit != null) query.set('limit', String(options.limit))
@@ -186,6 +244,21 @@ export function getStudySessionAnalyticsApi(options: {
   return request<StudySessionAnalyticsResult>(
     `/study-sessions/time-record-analytics?${query}`,
   )
+}
+
+export function getTimeRecordReadModelApi(options: TimeRecordReadOptions) {
+  const query = new URLSearchParams({ range_mode: options.rangeMode })
+  if (options.month) query.set('month', options.month)
+  if (options.rollingDays) query.set('rolling_days', String(options.rollingDays))
+  if (options.startDate) query.set('start_date', options.startDate)
+  if (options.endDate) query.set('end_date', options.endDate)
+  if (options.keyword?.trim()) query.set('keyword', options.keyword.trim())
+  if (options.kind) query.set('kind', options.kind)
+  if (options.sortBy) query.set('sort_by', options.sortBy)
+  if (options.sortOrder) query.set('sort_order', options.sortOrder)
+  if (options.limit != null) query.set('limit', String(options.limit))
+  if (options.offset != null) query.set('offset', String(options.offset))
+  return request<TimeRecordReadResult>(`/study-sessions/time-records?${query}`)
 }
 
 export function patchStudySessionApi(

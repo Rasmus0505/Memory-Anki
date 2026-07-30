@@ -8,8 +8,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { formatDuration, type DailyTrendPoint } from '@/modules/session/public'
-import { timeRecordChartConfig } from '@/modules/session/public'
+import type { DailyTrendPoint } from '@/modules/session/domain/session-entity/model/session-records'
+import { formatDuration } from '@/modules/session/domain/session-entity/model/session-records-store'
+import { timeRecordChartConfig } from '@/modules/session/domain/session-entity/model/time-record-visuals'
 import { ChartContainer, ChartTooltipContent } from '@/shared/components/ui/chart'
 
 interface TimeRecordsTrendChartViewProps {

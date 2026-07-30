@@ -388,6 +388,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
 
                   <div className="mt-2 flex shrink-0 items-center gap-2">
                     <p
+                      data-testid="english-course-inline-translation"
                       className={cn(
                         'flex-1 rounded-2xl px-3 py-2 text-sm leading-5 transition-colors',
                         translationMode === 'current'
@@ -458,6 +459,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                   ) : null}
                 </div>
               </div>
+            </div>
 
             <div
               className="mt-3 flex shrink-0 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-card/95 px-2 py-2 shadow-soft pb-[max(0.5rem,env(safe-area-inset-bottom))]"

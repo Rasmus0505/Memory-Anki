@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TimeSessionRecord } from '@/modules/session/public'
+import type { TimeSessionRecord } from '@/modules/session/domain/session-entity/model/session-records'
 import {
   applyTimeRecordFormPatch,
   applyTimeRecordQuickAddPatch,
@@ -13,7 +13,7 @@ import {
   parseTimeRecordFormState,
   parseTimeRecordQuickAddFormState,
   sessionKindOptions,
-} from '@/modules/settings/ui/profile/model/time-record-form'
+} from '@/modules/session/ui/time-records/model/time-record-form'
 import { formatLocalDateTimeInputValue } from '@/shared/lib/dateTime'
 
 // Absolute UTC instants; form fields show the host local wall clock.

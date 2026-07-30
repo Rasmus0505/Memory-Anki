@@ -6,7 +6,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
-from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.content.public.queries import build_today_new_palace_outline
 from memory_anki.modules.memory.public.queries import (
@@ -14,22 +13,15 @@ from memory_anki.modules.memory.public.queries import (
     get_unit_review_weekly_stats,
 )
 from memory_anki.modules.session.public.queries import (
-    FORMAL_REVIEW_SCENES,
-    STUDY_DASHBOARD_SCENES,
+    count_time_records,
     current_month_bounds,
     current_week_bounds,
     date_range_bounds,
-    get_all_time_study_session_duration_seconds,
     get_english_study_stats,
-    get_study_session_duration_seconds,
+    get_time_record_duration_seconds,
     get_today_palace_learning_breakdown,
-    month_bounds,
     today_bounds,
 )
-
-
-class DashboardQueryError(ValueError):
-    pass
 
 
 def _dashboard_palace_loader_options():
@@ -53,14 +45,7 @@ def _peg_counts_by_palace(session: Session, palace_ids: list[int]) -> dict[int, 
     return {int(palace_id): int(count) for palace_id, count in rows}
 
 
-def build_dashboard_payload(
-    session: Session,
-    *,
-    duration_mode: str | None = None,
-    month: str | None = None,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> dict:
+def build_dashboard_payload(session: Session) -> dict:
     queue = get_review_queue_summary(session)
     today_start, today_end = today_bounds()
     recent = (
@@ -87,25 +72,16 @@ def build_dashboard_payload(
 
     current_month_start, current_month_end = current_month_bounds()
     current_week_start, current_week_end = current_week_bounds()
-    monthly_total_review_duration_seconds = get_study_session_duration_seconds(
+    monthly_total_review_duration_seconds = get_time_record_duration_seconds(
         session,
-        scenes=STUDY_DASHBOARD_SCENES,
         start=current_month_start,
         end=current_month_end,
     )
-    selected_total_review_duration_seconds = _resolve_selected_duration_seconds(
+    weekly_formal_review_duration_seconds = get_time_record_duration_seconds(
         session,
-        duration_mode=duration_mode,
-        month=month,
-        start_date=start_date,
-        end_date=end_date,
-        default_seconds=monthly_total_review_duration_seconds,
-    )
-    weekly_formal_review_duration_seconds = get_study_session_duration_seconds(
-        session,
-        scenes=FORMAL_REVIEW_SCENES,
         start=current_week_start,
         end=current_week_end,
+        kind="review",
     )
 
     reviews = []
@@ -129,24 +105,21 @@ def build_dashboard_payload(
         "due_later_today_count": 0,
         "reviews": reviews,
         "stats": get_unit_review_weekly_stats(session),
-        "today_review_duration_seconds": get_study_session_duration_seconds(
+        "today_review_duration_seconds": get_time_record_duration_seconds(
             session,
-            scenes=FORMAL_REVIEW_SCENES,
             start=today_start,
             end=today_end,
+            kind="review",
         ),
         "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
-        "today_total_review_duration_seconds": get_study_session_duration_seconds(
+        "today_total_review_duration_seconds": get_time_record_duration_seconds(
             session,
-            scenes=STUDY_DASHBOARD_SCENES,
             start=today_start,
             end=today_end,
         ),
         "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
-        "selected_total_review_duration_seconds": selected_total_review_duration_seconds,
-        "weekly_total_review_duration_seconds": get_study_session_duration_seconds(
+        "weekly_total_review_duration_seconds": get_time_record_duration_seconds(
             session,
-            scenes=STUDY_DASHBOARD_SCENES,
             start=current_week_start,
             end=current_week_end,
         ),
@@ -172,58 +145,6 @@ def _palace_summary(palace: Palace, *, peg_count: int = 0) -> dict:
     }
 
 
-def _dashboard_config_value(session: Session, key: str) -> str | None:
-    row = session.query(Config).filter_by(key=key).first()
-    return row.value if row else None
-
-
-def _resolve_selected_duration_seconds(
-    session: Session,
-    *,
-    duration_mode: str | None,
-    month: str | None,
-    start_date: str | None,
-    end_date: str | None,
-    default_seconds: int,
-) -> int:
-    mode = (duration_mode or "month").strip().lower()
-    if mode == "all":
-        return get_all_time_study_session_duration_seconds(session, scenes=STUDY_DASHBOARD_SCENES)
-    if mode == "custom":
-        if not start_date or not end_date:
-            raise DashboardQueryError("custom duration requires start_date and end_date")
-        try:
-            custom_start = date.fromisoformat(str(start_date)[:10])
-            custom_end = date.fromisoformat(str(end_date)[:10])
-        except ValueError as error:
-            raise DashboardQueryError("start_date and end_date must be YYYY-MM-DD") from error
-        start, end = date_range_bounds(custom_start, custom_end)
-        return get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=start, end=end
-        )
-    if mode == "week":
-        start, end = current_week_bounds()
-        return get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=start, end=end
-        )
-    if mode == "today":
-        start, end = today_bounds()
-        return get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=start, end=end
-        )
-    if month:
-        try:
-            year_s, month_s = str(month).split("-", 1)
-            target = date(int(year_s), int(month_s), 1)
-        except (TypeError, ValueError) as error:
-            raise DashboardQueryError("month must be YYYY-MM") from error
-        start, end = month_bounds(target)
-        return get_study_session_duration_seconds(
-            session, scenes=STUDY_DASHBOARD_SCENES, start=start, end=end
-        )
-    return default_seconds
-
-
 def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> dict:
     """Summarize one calendar week of study (default: previous week). offset_weeks=0 is current week."""
     safe_offset = max(0, min(int(offset_weeks or 0), 52))
@@ -233,22 +154,16 @@ def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> d
     week_end_date = week_start_date + timedelta(days=7)
     week_start, week_end = date_range_bounds(week_start_date, week_end_date - timedelta(days=1))
 
-    study_seconds = get_study_session_duration_seconds(
+    study_seconds = get_time_record_duration_seconds(
         session,
-        scenes=STUDY_DASHBOARD_SCENES,
         start=week_start,
         end=week_end,
     )
-    review_count = int(
-        session.query(func.count(StudySession.id))
-        .filter(
-            StudySession.scene == "formal_unit_review",
-            StudySession.status == "completed",
-            StudySession.ended_at >= week_start,
-            StudySession.ended_at < week_end,
-        )
-        .scalar()
-        or 0
+    review_count = count_time_records(
+        session,
+        start=week_start,
+        end=week_end,
+        kind="review",
     )
     average_score = 0
     new_palace_count = (
