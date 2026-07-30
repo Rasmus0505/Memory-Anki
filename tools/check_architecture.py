@@ -791,7 +791,19 @@ def check_study_session_legacy_usage(errors: list[str]) -> None:
         if is_frontend_test_file(relative):
             continue
         content = path.read_text(encoding="utf-8", errors="ignore")
-        if FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN.search(content):
+        # `modules/session/ui/time-records` is the current Session-owned UI
+        # slice.  Its directory/import names intentionally retain the user
+        # term “time records”; the API boundary itself is `/study-sessions`.
+        is_session_time_record_slice = relative.startswith(
+            "modules/session/ui/time-records/"
+        ) or relative in {
+            "modules/session/public.ts",
+            "modules/session/domain/study-session-entity/api/studySessionApi.ts",
+        }
+        if (
+            not is_session_time_record_slice
+            and FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN.search(content)
+        ):
             errors.append(
                 f"{relative}: production frontend must use /study-sessions APIs instead of legacy "
                 "/time-records or /sessions/*/progress endpoints."
@@ -807,7 +819,10 @@ def check_study_session_legacy_usage(errors: list[str]) -> None:
     for root in backend_roots:
         for path in iter_files(root, (".py",)):
             relative = path.relative_to(API_SRC).as_posix()
-            if relative.startswith(BACKEND_LEGACY_TIME_RECORD_MODULE):
+            if relative.startswith(BACKEND_LEGACY_TIME_RECORD_MODULE) or relative in {
+                "modules/session/application/time_record_read_model.py",
+                "modules/session/presentation/router.py",
+            }:
                 continue
             content = path.read_text(encoding="utf-8", errors="ignore")
             if any(
@@ -1195,6 +1210,20 @@ def check_dashboard_public_facades(errors: list[str]) -> None:
                     f"{owner} capabilities through memory_anki.modules.{owner}.api."
                 )
                 break
+
+    dashboard_service = dashboard_root / "application" / "service.py"
+    dashboard_router = dashboard_root / "presentation" / "router.py"
+    for path, forbidden in (
+        (dashboard_service, "StudySession"),
+        (dashboard_service, "selected_total_review_duration_seconds"),
+        (dashboard_router, "duration_mode"),
+        (dashboard_router, "start_date"),
+    ):
+        source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+        if forbidden in source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: dashboard duration must use the Session public read queries, not a local time-record projection ({forbidden})."
+            )
 
 
 def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
@@ -2051,6 +2080,7 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             "def rate_review_unit",
             "def close_unit_review_encounter",
             "def undo_unit_rating",
+            "encounter.effective_seconds",
         ),
         API_SRC / "modules/memory/application/unit_scheduler.py": (
             "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)",
@@ -2060,12 +2090,24 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             "class ReviewUnitCandidate",
             "def candidate_from_projection",
         ),
+        WEB_SRC / "modules/practice/ui/review/hooks/useForegroundEncounterClock.ts": (
+            "document.visibilityState !== 'visible'",
+            "MAX_CONTIGUOUS_TICK_SECONDS",
+        ),
     }
     for path, markers in required.items():
         source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
         for marker in markers:
             if marker not in source:
                 errors.append(f"permanent-mark review invariant missing {marker!r}: {path.relative_to(REPO_ROOT)}")
+
+    service_source = (
+        API_SRC / "modules/memory/application/unit_review_service.py"
+    ).read_text(encoding="utf-8", errors="ignore")
+    if "encounter.closed_at - encounter.created_at" in service_source:
+        errors.append(
+            "unit review duration must use client-observed foreground seconds, not encounter wall time"
+        )
 
 
 def check_english_reading_gap_loop(errors: list[str]) -> None:

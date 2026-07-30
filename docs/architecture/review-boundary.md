@@ -48,9 +48,10 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - A formal session freezes all due units for one palace, including member UIDs and revisions.
 - Rating never auto-opens nodes, scrolls the map, or switches the current unit.
 - Leaving a card closes its encounter and locks the effective rating. Re-rendering or restoring the page resumes the same open encounter instead of opening another session.
+- Encounter duration is client-observed foreground activity: only the current open card while the document is visible accrues seconds. Browser background, suspension, lock-screen, and wall-clock gaps are never inferred from `closed_at - created_at`; close persists the stable encounter's observed `effective_seconds` and session completion sums those values.
 - A session completes only after every frozen unit passes.
 - Quiz cards and standalone Anki cards never mutate palace unit scheduling.
 
 ## Retired Runtime
 
-Node ratings, subtree/bulk fill ratings, node undo, FSRS previews, waves, calibration, daily plans, temporary marks, stability/health settlement, and review-log receipts are deleted. Migration `0049_permanent_mark_review_units` creates a complete SQLite backup before replacing their tables. Migration `0050_review_unit_encounters` adds stable per-appearance identity and backfills legacy unit operations as closed encounters.
+Node ratings, subtree/bulk fill ratings, node undo, FSRS previews, waves, calibration, daily plans, temporary marks, stability/health settlement, and review-log receipts are deleted. Migration `0049_permanent_mark_review_units` creates a complete SQLite backup before replacing their tables. Migration `0050_review_unit_encounters` adds stable per-appearance identity and backfills legacy unit operations as closed encounters. Migration `0054_encounter_effective_seconds` stores observed foreground duration on each encounter; legacy null values fail closed at zero rather than reconstructing wall-clock time.
