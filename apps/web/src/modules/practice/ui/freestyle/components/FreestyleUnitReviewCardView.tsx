@@ -86,6 +86,7 @@ function loadSession(
         { id: card.unit_id!, revision: card.unit_revision! },
         roundId,
         encounter.encounterId,
+        ...(card.phase === 'fill' ? [{ allowNotDue: true }] : []),
       )
   inFlightSessionLoads.set(key, promise)
   const clear = () => {
@@ -154,6 +155,31 @@ function isStaleUnitError(error: unknown) {
     || message.includes('no review units available')
     || message.includes('encounter_id belongs to another review unit')
     || message.includes('active unit review session required')
+}
+
+function formatUnitDiagnostic(input: {
+  error: unknown
+  card: FreestyleReviewUnitCard
+  roundId: string
+  operationId?: string | null
+  stage: string
+}) {
+  const value = input.error as {
+    message?: string
+    requestId?: string
+    status?: number
+    url?: string
+  }
+  const lines = [
+    value?.message || String(input.error || '未知错误'),
+    `页面：/freestyle · 宫殿：${input.card.palace_id} · 卡片：${input.card.id}`,
+    `单元：${input.card.unit_id || '无'} · 回合：${input.roundId}`,
+    `阶段：${input.stage} · 操作 ID：${input.operationId || '未生成'}`,
+    value?.requestId ? `请求 ID：${value.requestId}` : null,
+    value?.status != null ? `HTTP 状态：${value.status}` : null,
+    value?.url ? `接口：${value.url}` : null,
+  ].filter(Boolean)
+  return lines.join('\n')
 }
 
 function localDateLabel(value: string) {
@@ -240,7 +266,7 @@ export function FreestyleUnitReviewCardView({
   onEncounterChange: (cardId: string, encounter: FreestyleUnitEncounterState) => void
   onBranchComplete: (
     cardId: string,
-    options?: { restudy?: boolean; cleared?: boolean },
+    options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
   ) => void
   onStaleDrop: (cardId: string) => void
   onSaveFailed: (message: string) => void
@@ -254,6 +280,7 @@ export function FreestyleUnitReviewCardView({
   const [inlineEditing, setInlineEditing] = useState(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const activeRef = useRef(active)
   const busyRef = useRef(false)
@@ -292,6 +319,7 @@ export function FreestyleUnitReviewCardView({
     loadOperationRef.current = null
     setSession(null)
     setLoadError(null)
+    setActionError(null)
     setLoadAttempt((value) => value + 1)
   }, [])
 
@@ -372,6 +400,7 @@ export function FreestyleUnitReviewCardView({
       currentEncounter.id,
       closeOperation,
       getEncounterSeconds(),
+      roundId,
     ).then((result) => {
       clearEncounterClock()
       const nextUnit = { ...currentUnit, encounter: result.encounter }
@@ -397,7 +426,7 @@ export function FreestyleUnitReviewCardView({
     })
     closeRequestRef.current = { encounterId: currentEncounter.id, promise }
     return promise
-  }, [card.id, clearEncounterClock, getEncounterSeconds, onEncounterChange, onSaveFailed])
+  }, [card.id, clearEncounterClock, getEncounterSeconds, onEncounterChange, onSaveFailed, roundId])
 
   const closeCurrentEncounterRef = useRef(closeCurrentEncounter)
   closeCurrentEncounterRef.current = closeCurrentEncounter
@@ -438,6 +467,7 @@ export function FreestyleUnitReviewCardView({
     loadOperationRef.current = requestIdentity
     let mounted = true
     setLoadError(null)
+    setActionError(null)
     void loadSessionWithTimeout(card, identity, roundId).then((value) => {
       if (!mounted || loadOperationRef.current !== requestIdentity) return
       const nextUnit = value.units.find((item) => item.id === card.unit_id)
@@ -463,9 +493,17 @@ export function FreestyleUnitReviewCardView({
         onStaleDrop(card.id)
         return
       }
-      const message = error instanceof Error ? error.message : '创建单元复习失败'
+      const rawMessage = error instanceof Error ? error.message : '创建单元复习失败'
+      const message = formatUnitDiagnostic({
+        error,
+        card,
+        roundId,
+        operationId: requestIdentity,
+        stage: '加载复习会话',
+      })
       setLoadError(message)
-      onSaveFailed(message)
+      setActionError(message)
+      onSaveFailed(rawMessage)
     })
     return () => {
       mounted = false
@@ -506,17 +544,22 @@ export function FreestyleUnitReviewCardView({
 
   async function rate(rating: UnitRating) {
     const currentEncounter = unit?.encounter
-    if (
-      !session
-      || !unit
-      || !currentEncounter
-      || currentEncounter.status !== 'open'
-      || readOnly
-      || busy
-      || currentEncounter.selected_rating === rating
-    ) {
+    const blockedReason = !session || !unit || !currentEncounter
+      ? '评分按钮暂不可用：复习会话仍在加载。'
+      : busy
+        ? '评分正在提交，请稍候。'
+        : readOnly
+          ? '历史记录为只读，不能评分。'
+          : currentEncounter.status !== 'open'
+            ? '本次复习会话已关闭，请重建队列后重试。'
+            : currentEncounter.selected_rating === rating
+              ? '这张卡已经选择了相同评分。'
+              : null
+    if (blockedReason) {
+      setActionError(blockedReason)
       return
     }
+    setActionError(null)
     setBusy(true)
     busyRef.current = true
     const id = operationId()
@@ -527,6 +570,7 @@ export function FreestyleUnitReviewCardView({
         currentEncounter.id,
         rating,
         id,
+        roundId,
       )
       const nextUnit: ReviewUnitDto = {
         ...unit,
@@ -545,12 +589,19 @@ export function FreestyleUnitReviewCardView({
         card.id,
         encounterState(session.id, nextUnit.revision, result.encounter),
       )
-      onBranchComplete(card.id, { restudy: !result.passed })
+      onBranchComplete(card.id, {
+        restudy: !result.passed,
+      })
     } catch (error) {
       if (isStaleUnitError(error)) {
+        const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '评分后卡片已过期' })
+        setActionError(`${diagnostic}\n请点击“重建队列”后继续。`)
+        onSaveFailed(diagnostic)
         onStaleDrop(card.id)
       } else {
-        onSaveFailed(error instanceof Error ? error.message : '评分失败')
+        const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '提交评分' })
+        setActionError(diagnostic)
+        onSaveFailed(diagnostic)
       }
     } finally {
       busyRef.current = false
@@ -562,10 +613,13 @@ export function FreestyleUnitReviewCardView({
   }
 
   async function undo() {
-    if (!lastOperationId || !session || !unit || readOnly || busy) return
+    if (!lastOperationId || !session || !unit || readOnly || busy) {
+      setActionError(readOnly ? '历史记录为只读，不能撤销评分。' : busy ? '操作正在提交，请稍候。' : '暂无可撤销的评分。')
+      return
+    }
     setBusy(true)
     try {
-      const result = await undoReviewUnitRatingApi(lastOperationId)
+      const result = await undoReviewUnitRatingApi(lastOperationId, roundId)
       const nextUnit: ReviewUnitDto = {
         ...unit,
         ...result.unit,
@@ -589,7 +643,9 @@ export function FreestyleUnitReviewCardView({
         onBranchComplete(card.id, { restudy: !result.encounter.passed })
       }
     } catch (error) {
-      onSaveFailed(error instanceof Error ? error.message : '撤销评分失败')
+      const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: lastOperationId, stage: '撤销评分' })
+      setActionError(diagnostic)
+      onSaveFailed(diagnostic)
     } finally {
       setBusy(false)
     }
@@ -704,6 +760,18 @@ export function FreestyleUnitReviewCardView({
           >
             <div className="pointer-events-auto rounded-[1.2rem] border border-white/12 bg-zinc-950/88 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-md sm:rounded-2xl sm:p-2">
               {/* After rate, one status line shows the real schedule; buttons stay label-only. */}
+              {actionError ? (
+                <div className="mb-1.5 whitespace-pre-wrap rounded-lg border border-rose-300/25 bg-rose-400/10 px-2.5 py-1.5 text-[11px] text-rose-100" role="alert">
+                  <div>{actionError}</div>
+                  <button
+                    type="button"
+                    className="mt-1 underline underline-offset-2"
+                    onClick={() => void navigator.clipboard?.writeText(actionError)}
+                  >
+                    复制诊断
+                  </button>
+                </div>
+              ) : null}
               {selectedEffect ? (
                 <div className="mb-1.5 truncate rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 sm:text-xs">
                   已选{selectedEffect.label} · {ratingEffectLabel(selectedEffect, retryAfterCards)}
@@ -723,10 +791,10 @@ export function FreestyleUnitReviewCardView({
                     <button
                       key={item.value}
                       type="button"
-                      disabled={busy || locked}
+                      disabled={busy || locked || selected}
                       aria-pressed={selected}
                       aria-label={`${item.label}：${hint}`}
-                      title={hint}
+                      title={actionError || hint}
                       className={cn(
                         'flex min-h-11 items-center justify-center rounded-xl border px-1 py-1.5 text-center transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-2',
                         item.className,

@@ -216,18 +216,19 @@ def start_unit_review_session(
     scene: str = "formal_unit_review",
     unit_ids: list[str] | None = None,
     client_source: str | None = None,
+    allow_not_due: bool = False,
 ) -> dict[str, Any]:
     projection = get_palace_unit_projection(session, palace_id)
     if projection["mark_required"]:
         raise ValueError("permanent marks are required before review")
     definitions = {item["id"]: item for item in projection["units"]}
-    selected = [item for item in projection["units"] if item["due"]]
+    selected = [item for item in projection["units"] if item["due"] or allow_not_due]
     if unit_ids is not None:
         requested = {str(item) for item in unit_ids}
         selected = [
             definitions[item]
             for item in requested
-            if item in definitions and definitions[item]["due"]
+            if item in definitions and (definitions[item]["due"] or allow_not_due)
         ]
     if not selected:
         raise ValueError("no review units available")
@@ -525,6 +526,7 @@ def start_freestyle_unit_review_session(
     encounter_id: str,
     round_id: str,
     client_source: str | None = None,
+    allow_not_due: bool = False,
 ) -> dict[str, Any]:
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
@@ -548,7 +550,7 @@ def start_freestyle_unit_review_session(
         .first()
     )
     if study is None:
-        if state.due_date > date.today():
+        if state.due_date > date.today() and not allow_not_due:
             raise ValueError("review unit is not due")
         created = start_unit_review_session(
             session,
@@ -556,6 +558,7 @@ def start_freestyle_unit_review_session(
             scene=FREESTYLE_UNIT_REVIEW_SCENE,
             unit_ids=[state.id],
             client_source=client_source,
+            allow_not_due=allow_not_due,
         )
         study = session.get(StudySession, str(created["id"]))
         if study is None:
@@ -685,6 +688,7 @@ def rate_review_unit(
     encounter_id: str,
     operation_id: str,
     rating: int | str,
+    round_id: str | None = None,
 ) -> dict[str, Any]:
     op_id = str(operation_id or "").strip()
     if not op_id:
@@ -711,6 +715,8 @@ def rate_review_unit(
         or encounter.status != ENCOUNTER_OPEN
     ):
         raise ValueError("open review encounter required")
+    if round_id and encounter.round_id != str(round_id).strip():
+        raise ValueError("round_id does not match the active encounter")
     if encounter.unit_revision != state.revision:
         raise ValueError("review unit changed; rebuild the queue")
 
@@ -764,7 +770,7 @@ def rate_review_unit(
     return after
 
 
-def undo_unit_rating(session: Session, operation_id: str) -> dict[str, Any]:
+def undo_unit_rating(session: Session, operation_id: str, round_id: str | None = None) -> dict[str, Any]:
     operation = session.get(ReviewUnitRatingOperation, operation_id)
     if operation is None or operation.undone_at is not None:
         raise ValueError("active unit rating operation not found")
@@ -773,6 +779,8 @@ def undo_unit_rating(session: Session, operation_id: str) -> dict[str, Any]:
         raise ValueError("only the current open encounter can be undone")
     if encounter.effective_operation_id != operation.id:
         raise ValueError("only the effective rating can be undone")
+    if round_id and encounter.round_id != str(round_id).strip():
+        raise ValueError("round_id does not match the active encounter")
     state = session.get(ReviewUnitState, operation.unit_id)
     if state is None:
         raise ValueError("review unit not found")
@@ -814,6 +822,7 @@ def close_unit_review_encounter(
     encounter_id: str,
     operation_id: str,
     effective_seconds: int | None = None,
+    round_id: str | None = None,
 ) -> dict[str, Any]:
     close_operation_id = str(operation_id or "").strip()
     if not close_operation_id:
@@ -827,6 +836,8 @@ def close_unit_review_encounter(
         or encounter.unit_id != unit_id
     ):
         raise ValueError("review encounter not found")
+    if round_id and encounter.round_id != str(round_id).strip():
+        raise ValueError("round_id does not match the active encounter")
     if encounter.status == ENCOUNTER_CLOSED:
         completion = (
             json.loads(study.summary_json or "{}")

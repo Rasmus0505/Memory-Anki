@@ -704,6 +704,7 @@ describe('FreestyleUnitReviewCardView', () => {
       'encounter-1',
       expect.any(String),
       expect.any(Number),
+      'round-1',
     ))
   })
 

@@ -2,6 +2,7 @@ import { Copy, LoaderCircle, RotateCcw, Shuffle, SlidersHorizontal } from 'lucid
 import { Link } from 'react-router-dom'
 import type { FreestyleConfig } from '@/modules/practice/ui/freestyle/model/freestyle'
 import type { FreestyleMode, TodayTrainingConfig } from '@/modules/practice/ui/freestyle/model/today-training'
+import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { EmptyState } from '@/shared/components/state-placeholders'
 
@@ -35,10 +36,10 @@ export function FreestyleFeedErrorState({
 }: {
   feedError: string
   mode: FreestyleMode
-  config: FreestyleConfig
-  todayConfig: TodayTrainingConfig
-  onLoadFeed: (config: FreestyleConfig) => Promise<void>
-  onLoadTodayFeed: (config: TodayTrainingConfig) => Promise<void>
+  config: FreestyleConfig | FreestyleFeedConfig
+  todayConfig?: TodayTrainingConfig
+  onLoadFeed: (config: FreestyleConfig | FreestyleFeedConfig) => Promise<void>
+  onLoadTodayFeed?: (config: TodayTrainingConfig) => Promise<void>
   onCopyDiagnostics: () => Promise<void>
 }) {
   return (
@@ -51,7 +52,7 @@ export function FreestyleFeedErrorState({
             <Button
               type="button"
               onClick={() => {
-                if (mode === 'today') {
+                if (mode === 'today' && todayConfig && onLoadTodayFeed) {
                   void onLoadTodayFeed(todayConfig)
                 } else {
                   void onLoadFeed(config)

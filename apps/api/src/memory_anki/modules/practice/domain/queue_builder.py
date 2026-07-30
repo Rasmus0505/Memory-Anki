@@ -63,6 +63,11 @@ class QueueBuildResult:
     phase_stats: dict[str, Any] = field(default_factory=dict)
     operation_id: str = ""
 
+    @property
+    def candidate_count(self) -> int:
+        """Number of cards available after round filters, before the limit."""
+        return int(self.phase_stats.get("remaining_before_limit") or 0)
+
 
 def _unit_due_count(unit: ReviewUnitCandidate, due_uids: set[str]) -> int:
     return sum(1 for uid in unit.node_uids if uid in due_uids)
@@ -712,6 +717,10 @@ def assemble_queue(
             "quiz_scope": quiz_scope,
             "quiz_mastery_buckets": ",".join(quiz_mastery_buckets),
             "scoped_quiz_count": len(scoped_quizzes),
+            "candidate_count": len(remaining),
+            "scheduled_count": len(limited),
+            "queue_limit": queue_length,
+            "limit_reached": len(remaining) > len(limited),
         },
         operation_id=operation_id,
     )

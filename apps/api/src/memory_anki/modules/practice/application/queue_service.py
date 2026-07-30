@@ -27,6 +27,7 @@ def build_freestyle_queue(
     *,
     config_raw: dict[str, Any] | None,
     operation_id: str,
+    round_id: str = "",
     completed_ids: list[str] | None = None,
     hidden_ids: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -149,9 +150,16 @@ def build_freestyle_queue(
 
     return {
         "operation_id": result.operation_id,
+        "round_id": str(round_id or ""),
         "config": config,
         "cards": result.cards,
         "phase_stats": result.phase_stats,
+        "round_meta": {
+            "candidate_count": int(result.phase_stats.get("candidate_count") or 0),
+            "scheduled_count": int(result.phase_stats.get("scheduled_count") or 0),
+            "queue_limit": int(result.phase_stats.get("queue_limit") or config["queue_length"]),
+            "limit_reached": bool(result.phase_stats.get("limit_reached")),
+        },
         "counts": {
             "mindmap_branch": sum(1 for card in result.cards if card.get("type") == "mindmap_branch"),
             "anki_card": sum(1 for card in result.cards if card.get("type") == "anki_card"),

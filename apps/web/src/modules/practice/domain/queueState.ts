@@ -1,4 +1,5 @@
 import type { FreestyleCard } from '@/shared/api/contracts'
+import { sanitizeRoundPlan, type FreestyleRoundPlanState } from './roundPlan'
 
 export type FreestyleUnitEncounterState = {
   encounterId: string
@@ -33,6 +34,7 @@ export type FreestyleSkipState = {
    */
   currentCardId: string | null
   unitEncountersByCardId: Record<string, FreestyleUnitEncounterState>
+  roundPlan: FreestyleRoundPlanState | null
 }
 
 export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
@@ -48,6 +50,7 @@ export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
   lastSkippedAt: null,
   currentCardId: null,
   unitEncountersByCardId: {},
+  roundPlan: null,
 }
 
 export const FREESTYLE_QUEUE_STATE_STORAGE_KEY = 'memory-anki.freestyle.queue-state.v1'
@@ -74,6 +77,7 @@ export function startNewRound(
   return {
     ...createQueueRoundState(seed, now),
     mutedPalaceIds: [...state.mutedPalaceIds],
+    roundPlan: null,
   }
 }
 
@@ -174,6 +178,7 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
         ? raw.currentCardId.trim()
         : null,
     unitEncountersByCardId: asUnitEncounterMap(raw.unitEncountersByCardId),
+    roundPlan: sanitizeRoundPlan(raw.roundPlan),
   }
 }
 
@@ -268,6 +273,70 @@ export function markIncomplete(state: FreestyleSkipState, cardId: string): Frees
   }
 }
 
+export function sourceCardId(card: FreestyleCard | null | undefined): string {
+  return String(card?.source_card_id || card?.id || '').trim()
+}
+
+export function isRetryOccurrence(card: FreestyleCard | null | undefined): boolean {
+  return card?.occurrence_kind === 'retry' || Boolean(card?.source_card_id && card.source_card_id !== card.id)
+}
+
+export function createRetryOccurrence(
+  card: FreestyleCard,
+  roundId: string,
+  attempt: number,
+  retryAfterCards = 3,
+): FreestyleCard {
+  const sourceId = sourceCardId(card)
+  const retryAttempt = Math.max(1, Math.round(attempt || 1))
+  return {
+    ...card,
+    id: `retry:${roundId}:${sourceId}:${retryAttempt}`,
+    source_card_id: sourceId,
+    occurrence_kind: 'retry',
+    retry_attempt: retryAttempt,
+    retry_after_cards: Math.max(0, Math.min(3, Math.round(retryAfterCards))),
+  }
+}
+
+export function insertRetryOccurrenceAfterGap(
+  cards: FreestyleCard[],
+  occurrence: FreestyleCard,
+  currentIndex: number,
+  maxIntervening = 3,
+): FreestyleCard[] {
+  const withoutExisting = cards.filter((card) => card.id !== occurrence.id)
+  const anchor = Math.max(0, Math.min(Math.round(currentIndex), withoutExisting.length - 1))
+  const usable = withoutExisting.slice(anchor + 1).filter((card) => !isRetryOccurrence(card) || card.id !== occurrence.id)
+  const gap = Math.max(0, Math.round(maxIntervening))
+  const insertAt = Math.min(anchor + 1 + Math.min(gap, usable.length), withoutExisting.length)
+  const next = withoutExisting.slice()
+  next.splice(insertAt, 0, occurrence)
+  return next
+}
+
+export function removeRetryOccurrencesForSource(cards: FreestyleCard[], sourceId: string) {
+  const id = String(sourceId || '').trim()
+  if (!id) return cards
+  return cards.filter((card) => !(isRetryOccurrence(card) && sourceCardId(card) === id))
+}
+
+export function hideCards(state: FreestyleSkipState, cardIds: Iterable<string>): FreestyleSkipState {
+  const ids = new Set(Array.from(cardIds, (id) => String(id || '').trim()).filter(Boolean))
+  if (!ids.size) return state
+  const hiddenIds = [...state.hiddenIds]
+  ids.forEach((id) => {
+    if (!hiddenIds.includes(id)) hiddenIds.push(id)
+  })
+  return { ...state, hiddenIds }
+}
+
+export function restoreCards(state: FreestyleSkipState, cardIds: Iterable<string>): FreestyleSkipState {
+  const ids = new Set(Array.from(cardIds, (id) => String(id || '').trim()).filter(Boolean))
+  if (!ids.size) return state
+  return { ...state, hiddenIds: state.hiddenIds.filter((id) => !ids.has(id)) }
+}
+
 export function setUnitEncounterState(
   state: FreestyleSkipState,
   cardId: string,
@@ -327,6 +396,11 @@ export function mergeQueuePreservingHistory(
   previous.forEach((card) => {
     const id = card.id
     if (used.has(id)) return
+    if (isRetryOccurrence(card)) {
+      result.push(card)
+      used.add(id)
+      return
+    }
     if (completed.has(id)) {
       // Keep settled unit where the learner finished it (payload may be gone from due feed).
       result.push(card)

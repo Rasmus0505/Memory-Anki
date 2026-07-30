@@ -118,6 +118,10 @@ interface FreestylePalaceCardBase {
   node_count: number
   phase?: string
   palace_context?: FreestylePalaceContext | null
+  source_card_id?: string
+  occurrence_kind?: 'source' | 'retry'
+  retry_attempt?: number
+  retry_after_cards?: number
 }
 
 export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
@@ -188,6 +192,10 @@ export interface FreestyleQuizCard {
   segment_contexts?: FreestyleSegmentContext[]
   chapter_context?: FreestyleChapterContext | null
   group_key: string
+  source_card_id?: string
+  occurrence_kind?: 'source' | 'retry'
+  retry_attempt?: number
+  retry_after_cards?: number
 }
 
 export interface FreestyleActionCard {
@@ -208,6 +216,10 @@ export interface FreestyleActionCard {
   mini_palace_name?: string
   course?: Record<string, unknown>
   material?: Record<string, unknown>
+  source_card_id?: string
+  occurrence_kind?: 'source' | 'retry'
+  retry_attempt?: number
+  retry_after_cards?: number
 }
 
 export type FreestyleCard = FreestyleQuizCard | FreestyleActionCard | FreestyleMindMapBranchCard
@@ -220,6 +232,7 @@ export interface FreestyleFeedResponse {
 
 export interface FreestyleQueueBuildRequest {
   operation_id: string
+  round_id: string
   config: FreestyleFeedConfig
   completed_ids?: string[]
   hidden_ids?: string[]
@@ -227,9 +240,16 @@ export interface FreestyleQueueBuildRequest {
 
 export interface FreestyleQueueBuildResponse {
   operation_id: string
+  round_id?: string
   config: FreestyleFeedConfig
   cards: FreestyleCard[]
   phase_stats: Record<string, number | string>
+  round_meta: {
+    candidate_count: number
+    scheduled_count: number
+    queue_limit: number
+    limit_reached: boolean
+  }
   counts: {
     mindmap_branch: number
     quiz_question: number

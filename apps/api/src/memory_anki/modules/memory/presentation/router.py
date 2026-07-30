@@ -173,6 +173,7 @@ def start_freestyle_session(
                 encounter_id=str(data.get("encounter_id") or ""),
                 round_id=str(data.get("round_id") or ""),
                 client_source=data.get("client_source") or data.get("clientSource"),
+                allow_not_due=bool(data.get("allow_not_due") or data.get("allowNotDue")),
             )
         }
     except (TypeError, ValueError) as exc:
@@ -231,6 +232,7 @@ def rate_unit(
                 encounter_id=str(data.get("encounter_id") or ""),
                 operation_id=str(data.get("operation_id") or ""),
                 rating=rating,
+                round_id=str(data.get("round_id") or "") or None,
             )
         }
     except (TypeError, ValueError) as exc:
@@ -257,6 +259,7 @@ def close_encounter(
                 encounter_id=encounter_id,
                 operation_id=str(data.get("operation_id") or ""),
                 effective_seconds=_optional_nonnegative_seconds(data.get("effective_seconds")),
+                round_id=str(data.get("round_id") or "") or None,
             )
         }
     except ValueError as exc:
@@ -289,9 +292,9 @@ def cancel_unrated_encounter(
 
 
 @router.post("/review/ratings/{operation_id}/undo")
-def undo_rating(operation_id: str, session: Session = Depends(session_dep)):
+def undo_rating(operation_id: str, data: dict | None = None, session: Session = Depends(session_dep)):
     try:
-        return {"item": undo_unit_rating(session, operation_id)}
+        return {"item": undo_unit_rating(session, operation_id, (data or {}).get("round_id"))}
     except ValueError as exc:
         session.rollback()
         raise _bad_request(exc) from exc

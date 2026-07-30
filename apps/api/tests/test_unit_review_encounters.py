@@ -102,6 +102,25 @@ def test_freestyle_start_restores_active_session_and_open_encounter(db_session):
     assert editor_doc["root"]["data"]["permanentSplitMark"] is True
 
 
+def test_freestyle_fill_session_can_explicitly_open_a_not_due_unit(db_session):
+    state = _seed_review_unit(db_session)
+    state.due_date = date.today() + timedelta(days=3)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="not due"):
+        _start(db_session, state, "encounter-not-due")
+
+    opened = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-fill",
+        round_id="round-fill",
+        allow_not_due=True,
+    )
+    assert opened["units"][0]["encounter"]["id"] == "encounter-fill"
+
+
 def test_invalidating_a_freestyle_session_closes_its_open_encounter(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-invalidated")

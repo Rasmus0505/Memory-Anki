@@ -73,6 +73,31 @@ def test_queue_emits_only_due_review_units_with_stable_identity():
     assert result.cards[0]["unit_revision"] == 4
     assert result.cards[0]["node_uids"] == ["a", "a1"]
     assert "due_node_uids" not in result.cards[0]
+
+
+def test_queue_reports_candidate_and_scheduled_counts_when_limit_truncates():
+    result = _assemble(
+        units=[
+            _unit("a", ("a",), unit_id="review-a"),
+            _unit("b", ("b",), unit_id="review-b"),
+            _unit("c", ("c",), unit_id="review-c"),
+            _unit("d", ("d",), unit_id="review-d"),
+            _unit("e", ("e",), unit_id="review-e"),
+            _unit("f", ("f",), unit_id="review-f"),
+        ],
+        due_uids={"a", "b", "c", "d", "e", "f"},
+        config={
+            "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+            "mix_mode": "mindmap_only",
+            "due_policy": "due_only",
+            "queue_length": 5,
+        },
+    )
+    assert len(result.cards) == 5
+    assert result.phase_stats["candidate_count"] == 6
+    assert result.phase_stats["scheduled_count"] == 5
+    assert result.phase_stats["queue_limit"] == 5
+    assert result.phase_stats["limit_reached"] is True
     assert "ratable_node_uids" not in result.cards[0]
 
 

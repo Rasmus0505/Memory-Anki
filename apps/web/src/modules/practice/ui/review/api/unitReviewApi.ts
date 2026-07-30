@@ -349,6 +349,7 @@ export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
   roundId: string,
   encounterId: string,
+  options?: { allowNotDue?: boolean },
 ) {
   const response = await request<{ item: UnitReviewSessionDto }>(`/review/units/${unit.id}/sessions`, {
     method: 'POST',
@@ -357,6 +358,7 @@ export async function startFreestyleUnitReviewSessionApi(
       round_id: roundId,
       encounter_id: encounterId,
       clientSource: detectClientSource(),
+      allow_not_due: Boolean(options?.allowNotDue),
     }),
   })
   return response.item
@@ -393,6 +395,7 @@ export async function rateReviewUnitApi(
   encounterId: string,
   rating: UnitRating,
   operationId: string,
+  roundId?: string,
 ) {
   const response = await request<{ item: UnitRatingResultDto }>(
     `/review/session/${sessionId}/units/${unit.id}/ratings`,
@@ -402,6 +405,7 @@ export async function rateReviewUnitApi(
         unit_revision: unit.revision,
         encounter_id: encounterId,
         operation_id: operationId,
+        ...(roundId ? { round_id: roundId } : {}),
         rating,
       }),
       persistence: { resourceKey: `review-unit-rate:${operationId}`, description: 'Rate review unit', replayMode: 'auto' },
@@ -418,6 +422,7 @@ export async function closeUnitReviewEncounterApi(
   encounterId: string,
   operationId: string,
   effectiveSeconds?: number,
+  roundId?: string,
 ) {
   const response = await request<{ item: CloseUnitEncounterResultDto }>(
     `/review/session/${sessionId}/units/${unitId}/encounters/${encounterId}/close`,
@@ -425,6 +430,7 @@ export async function closeUnitReviewEncounterApi(
       method: 'POST',
       body: JSON.stringify({
         operation_id: operationId,
+        ...(roundId ? { round_id: roundId } : {}),
         ...(effectiveSeconds == null ? {} : { effective_seconds: Math.max(0, Math.round(effectiveSeconds)) }),
       }),
       persistence: {
@@ -462,8 +468,11 @@ export async function cancelUnratedUnitReviewEncounterApi(
   return response.item
 }
 
-export async function undoReviewUnitRatingApi(operationId: string) {
-  const response = await request<{ item: UndoUnitRatingResultDto }>(`/review/ratings/${operationId}/undo`, { method: 'POST' })
+export async function undoReviewUnitRatingApi(operationId: string, roundId?: string) {
+  const response = await request<{ item: UndoUnitRatingResultDto }>(`/review/ratings/${operationId}/undo`, {
+    method: 'POST',
+    body: JSON.stringify(roundId ? { round_id: roundId } : {}),
+  })
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
   return response.item
 }

@@ -21,12 +21,19 @@ export {
   applyDeferredPalaceOrder,
   applySkip,
   cardPalaceId,
+  sourceCardId,
+  isRetryOccurrence,
+  createRetryOccurrence,
+  insertRetryOccurrenceAfterGap,
+  removeRetryOccurrencesForSource,
   deferPalace,
   filterMutedPalaces,
   findNextPalaceIndex,
   findPreviousPalaceIndex,
   markCompleted,
   markIncomplete,
+  hideCards,
+  restoreCards,
   mergeQueuePreservingHistory,
   mergeRefreshQueue,
   moveCardToTail,
@@ -51,6 +58,19 @@ export {
   type FreestyleSkipState,
   type FreestyleUnitEncounterState,
 } from './domain/queueState'
+export {
+  applyRoundPlanOrder,
+  createRoundPlan,
+  isSequentialPalaceBlocked,
+  planCardStatus,
+  reorderRoundPlan,
+  roundPlanConfigSignature,
+  sanitizeRoundPlan,
+  updateRoundPlanCard,
+  type FreestyleRoundPlanCard,
+  type FreestyleRoundPlanCardStatus,
+  type FreestyleRoundPlanState,
+} from './domain/roundPlan'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
 export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'

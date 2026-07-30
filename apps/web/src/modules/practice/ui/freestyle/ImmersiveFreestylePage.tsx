@@ -13,15 +13,15 @@ import {
   ChevronUp,
   ChevronsUp,
   History,
+  ListChecks,
   MoreHorizontal,
   RefreshCw,
-  Settings2,
   Star,
   Waypoints,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { FreestyleFeedSettingsDialog } from '@/modules/practice/ui/freestyle/components/FreestyleFeedSettingsDialog'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
+import { FreestyleRoundPlanDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundPlanDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
 import { FreestyleUnitReviewCardView } from '@/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView'
 import { FreestyleQuizCardView } from '@/modules/practice/ui/freestyle/components/FreestyleQuizCardView'
@@ -43,6 +43,7 @@ import {
   canPopViewHistory,
   findNextPalaceIndex,
   findPreviousPalaceIndex,
+  isSequentialPalaceBlocked,
   popViewHistory,
   pushViewHistory,
   visibleMountIndices,
@@ -90,6 +91,31 @@ function StaleUnitReviewCard({
   )
 }
 
+function FreestyleRetryCornerBadge({
+  card,
+  retryAfterCards,
+}: {
+  card: FreestyleCard
+  retryAfterCards?: number
+}) {
+  const isRetry = card.occurrence_kind === 'retry'
+  const isSourceRetry = !isRetry && retryAfterCards != null
+  if (!isRetry && !isSourceRetry) return null
+  const label = isRetry
+    ? `重练第 ${Math.max(1, card.retry_attempt ?? 1)} 次`
+    : `${Math.max(0, retryAfterCards ?? 3)} 张后重练`
+  return (
+    <div
+      data-testid="freestyle-retry-corner-badge"
+      role="status"
+      className="pointer-events-none absolute bottom-20 right-4 z-30 inline-flex items-center gap-1 rounded-full border border-zinc-300/80 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-zinc-700 shadow-lg backdrop-blur-sm sm:bottom-4 dark:border-white/20 dark:bg-zinc-900/92 dark:text-zinc-100"
+    >
+      <span aria-hidden>{isRetry ? '↻' : '·'}</span>
+      {label}
+    </div>
+  )
+}
+
 export default function ImmersiveFreestylePage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const reducedMotion = usePrefersReducedMotion()
@@ -110,7 +136,7 @@ export default function ImmersiveFreestylePage() {
   const userScrollingRef = useRef(false)
   const scrollIdleTimerRef = useRef<number | null>(null)
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [ratingMode, setRatingMode] = useState(true)
   const [saveError, setSaveError] = useState('')
@@ -121,6 +147,8 @@ export default function ImmersiveFreestylePage() {
     config,
     setConfigAndPersist,
     queueState,
+    roundMeta,
+    roundPlan,
     cards,
     currentIndex,
     goToIndex,
@@ -134,6 +162,9 @@ export default function ImmersiveFreestylePage() {
     ensureUnitEncounter,
     updateUnitEncounter,
     dropStaleCard,
+    reorderPlan,
+    excludePlanCards,
+    restorePlanCards,
     skipToNextPalace,
     buildQueue,
   } = useImmersiveQueue()
@@ -249,6 +280,21 @@ export default function ImmersiveFreestylePage() {
     ) => {
       const max = Math.max(0, cards.length - 1)
       const next = Math.max(0, Math.min(index, max))
+      if (
+        isSequentialPalaceBlocked(
+          cards,
+          currentIndex,
+          next,
+          queueState.completedIds,
+          config.palace_order,
+        )
+      ) {
+        toast.info('当前宫殿还有未通过或待重练单元，完成后才能进入下一个宫殿。')
+        if (options?.scroll === false) {
+          window.requestAnimationFrame(() => scrollToIndex(currentIndex, 'auto'))
+        }
+        return
+      }
       const targetCardId = cards[next]?.id ?? null
       setReadOnlyHistoryCardId(
         options?.historical || next < currentIndex ? targetCardId : null,
@@ -289,7 +335,7 @@ export default function ImmersiveFreestylePage() {
       }
       refreshCanGoPrevious(typeof applied === 'number' ? applied : next)
     },
-    [cards, currentIndex, goToIndex, refreshCanGoPrevious, scrollToIndex],
+    [cards, config.palace_order, currentIndex, goToIndex, queueState.completedIds, refreshCanGoPrevious, scrollToIndex],
   )
 
   /**
@@ -402,15 +448,18 @@ export default function ImmersiveFreestylePage() {
   )
 
   const handleBranchComplete = useCallback(
-    (cardId: string, options?: { restudy?: boolean; cleared?: boolean }) => {
-      if (saveError) return
+    (cardId: string, options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }) => {
+      // A previous failed mutation must not disable the rest of this round.
+      // The card-level diagnostic remains visible until dismissed, while a
+      // subsequent successful settlement clears the transient banner.
+      setSaveError('')
       // Mind-map settles often stopPropagation; register here so idle timers start.
       timer.registerActivity('practice_interaction', { source: 'freestyle_branch_complete' })
       // A passed unit marks completedIds and rebuilds silently; stay on card.
       // Weak ratings (restudy) skip completedIds; never auto-flip to the next unit.
       completeCard(cardId, options)
     },
-    [completeCard, saveError, timer],
+    [completeCard, timer],
   )
 
   const handleStaleDrop = useCallback(
@@ -494,6 +543,20 @@ export default function ImmersiveFreestylePage() {
    */
   const handleSkipToNextPalace = useCallback(() => {
     setReadOnlyHistoryCardId(null)
+    const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
+    if (
+      nextPalaceIndex != null
+      && isSequentialPalaceBlocked(
+        cards,
+        currentIndex,
+        nextPalaceIndex,
+        queueState.completedIds,
+        config.palace_order,
+      )
+    ) {
+      toast.info('当前宫殿还有未通过或待重练单元，完成后才能跳到下一个宫殿。')
+      return
+    }
     const leavingId = cards[currentIndex]?.id
     if (leavingId) {
       viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
@@ -508,7 +571,7 @@ export default function ImmersiveFreestylePage() {
         requestedScrollIndexRef.current = null
       })
     })
-  }, [cards, currentIndex, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
+  }, [cards, config.palace_order, currentIndex, queueState.completedIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
   const handleGoToPreviousPalace = useCallback(() => {
     const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
@@ -517,7 +580,16 @@ export default function ImmersiveFreestylePage() {
   }, [cards, currentIndex, navigateToIndex])
 
   const canGoPreviousPalace = findPreviousPalaceIndex(cards, currentIndex) != null
-  const canGoNextPalace = findNextPalaceIndex(cards, currentIndex) != null
+  const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
+  const canGoNextPalace =
+    nextPalaceIndex != null
+    && !isSequentialPalaceBlocked(
+      cards,
+      currentIndex,
+      nextPalaceIndex,
+      queueState.completedIds,
+      config.palace_order,
+    )
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -568,11 +640,25 @@ export default function ImmersiveFreestylePage() {
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
-        <FreestyleFeedSettingsDialog
-          open={settingsOpen}
+        <FreestyleRoundPlanDialog
+          open={planOpen}
           config={config}
-          onOpenChange={setSettingsOpen}
-          onSave={setConfigAndPersist}
+          cards={cards}
+          currentIndex={currentIndex}
+          queueState={queueState}
+          roundPlan={roundPlan}
+          onOpenChange={setPlanOpen}
+          onJump={(cardId) => {
+            const index = cards.findIndex((card) => card.id === cardId)
+            if (index < 0) return
+            setPlanOpen(false)
+            navigateToIndex(index)
+          }}
+          onExclude={excludePlanCards}
+          onRestore={restorePlanCards}
+          onReorder={reorderPlan}
+          onSaveConfig={setConfigAndPersist}
+          onResetRound={reshuffleQueue}
         />
         <FreestyleHistoryDialog
           open={historyOpen}
@@ -593,7 +679,9 @@ export default function ImmersiveFreestylePage() {
           <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2">
               <span className="shrink-0 tabular-nums text-sm font-medium text-zinc-100">
-                {cards.length === 0 ? '0/0' : `${currentIndex + 1}/${cards.length}`}
+                {cards.length === 0
+                  ? `0/${roundMeta.scheduled_count} · 候选 ${roundMeta.candidate_count} · 上限 ${roundMeta.queue_limit}`
+                  : `${currentIndex + 1}/${roundMeta.scheduled_count || cards.length} · 候选 ${roundMeta.candidate_count} · 上限 ${roundMeta.queue_limit}`}
               </span>
               <span className="hidden min-w-0 truncate text-xs text-zinc-500 md:inline">
                 导图 {mindmapCount} · 题 {quizCount}
@@ -659,6 +747,15 @@ export default function ImmersiveFreestylePage() {
               >
                 <Star className={cn('size-4', ratingMode && 'fill-current')} />
               </button>
+              <button
+                type="button"
+                className={cn(hudActionClass, 'text-zinc-300 hover:text-white')}
+                title="本轮安排"
+                aria-label="本轮安排"
+                onClick={() => setPlanOpen(true)}
+              >
+                <ListChecks className="size-4" />
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -678,10 +775,6 @@ export default function ImmersiveFreestylePage() {
                   <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
                     <History className="mr-2 size-4" />
                     历史
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-                    <Settings2 className="mr-2 size-4" />
-                    设置
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -725,32 +818,8 @@ export default function ImmersiveFreestylePage() {
             <FreestyleFeedErrorState
               feedError={error}
               mode="free"
-              config={{
-                range: 'all',
-                contentTypes: {
-                  quiz_question: true,
-                  review: false,
-                  english: false,
-                  english_reading: false,
-                },
-                specificPalaceIds: config.specific_palace_ids,
-                orderMode: 'sequential',
-                questionType: config.question_type,
-                actionFrequency: 'none',
-                seed: config.seed,
-              }}
-              todayConfig={{
-                roundSize: 12,
-                includeEnglish: false,
-                includeEnglishReading: false,
-                seed: config.seed,
-              }}
-              onLoadFeed={async () => {
-                refreshQueue()
-              }}
-              onLoadTodayFeed={async () => {
-                refreshQueue()
-              }}
+              config={config}
+              onLoadFeed={async () => { refreshQueue() }}
               onCopyDiagnostics={async () => {
                 await navigator.clipboard.writeText(error)
                 toast.success('已复制诊断信息')
@@ -761,13 +830,14 @@ export default function ImmersiveFreestylePage() {
               mode="free"
               onSwitchMode={() => undefined}
               onReshuffle={reshuffleQueue}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSettings={() => setPlanOpen(true)}
               completedCount={queueState.completedIds.length}
               mutedCount={queueState.mutedPalaceIds.length}
               hiddenCount={queueState.hiddenIds.length}
             />
           ) : (
             cards.map((card, index) => {
+              const planEntry = roundPlan?.cardsById[card.id]
               if (!mounted.has(index)) {
                 return (
                   <div
@@ -781,7 +851,7 @@ export default function ImmersiveFreestylePage() {
                 <div
                   key={card.id}
                   className={cn(
-                    'box-border flex h-full min-h-full flex-col snap-start snap-always',
+                    'relative box-border flex h-full min-h-full flex-col snap-start snap-always',
                     // HUD top inset only; rating overlay floats over map bottom on mobile.
                     'px-2 pb-2 pt-[calc(3rem+env(safe-area-inset-top,0px))] sm:px-3 sm:pb-3 sm:pt-14',
                   )}
@@ -851,6 +921,10 @@ export default function ImmersiveFreestylePage() {
                       暂不支持的卡片类型
                     </div>
                   )}
+                  <FreestyleRetryCornerBadge
+                    card={card}
+                    retryAfterCards={planEntry?.status === 'retry' ? planEntry.retryAfterCards : undefined}
+                  />
                 </div>
               )
             })

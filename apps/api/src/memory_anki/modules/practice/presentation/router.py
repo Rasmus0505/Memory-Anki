@@ -53,6 +53,7 @@ def api_freestyle_queue_build(
             session,
             config_raw=data.config,
             operation_id=data.operation_id,
+            round_id=data.round_id,
             completed_ids=list(data.completed_ids or []),
             hidden_ids=list(data.hidden_ids or []),
         )
