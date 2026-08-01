@@ -1356,6 +1356,42 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
 
 
+def check_freestyle_return_save_ux(errors: list[str]) -> None:
+    """Return-to-review must not block on in-flight saves; autosave debounce is 2s."""
+    panel = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    if not panel.exists():
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: freestyle flip panel is required."
+        )
+        return
+    source = panel.read_text(encoding="utf-8", errors="ignore")
+    # Only the permanent-mark action may stay disabled while a save runs; the
+    # mode toggle must stay clickable so a click explains/queues the return.
+    if "disabled: savingEdit," in source:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: the mode-toggle action must not be "
+            "disabled by in-flight saves; only permanent-mark may stay disabled."
+        )
+    if "}, 700)" in source:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: typing autosave debounce must be "
+            "2000ms, not 700ms."
+        )
+    if "setDisplayMode('review')" not in source:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must switch "
+            "optimistically instead of waiting for the save."
+        )
+
+
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
         "english": {"session"},
@@ -2197,6 +2233,7 @@ def main() -> int:
     check_palace_quiz_palace_boundary(errors)
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
+    check_freestyle_return_save_ux(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)
