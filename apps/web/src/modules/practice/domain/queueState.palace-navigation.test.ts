@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   findPreviousPalaceIndex,
+  getFreestyleRatedCardIds,
   moveRemainingPalaceToTail,
+  createRetryOccurrence,
 } from './queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
@@ -27,5 +29,29 @@ describe('freestyle palace navigation', () => {
     expect(result.cards).toBe(finalPalace)
     expect(result.nextIndex).toBe(0)
     expect(result.deferredPalaceId).toBeNull()
+  })
+
+  it('treats weak-rated units and their retry occurrences as already rated', () => {
+    const source = cards[0]
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const rated = getFreestyleRatedCardIds(
+      [source, retry, cards[1], cards[2]],
+      [],
+      {
+        [source.id]: {
+          encounterId: 'encounter-1',
+          roundId: 'round-1',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: 'session-1',
+          selectedRating: 2,
+          passed: false,
+          retryAfterCards: 3,
+        },
+      },
+    )
+
+    expect(rated).toEqual(expect.arrayContaining([source.id, retry.id]))
+    expect(rated).not.toContain(cards[1].id)
   })
 })

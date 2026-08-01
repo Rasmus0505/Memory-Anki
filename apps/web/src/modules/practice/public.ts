@@ -22,6 +22,7 @@ export {
   applySkip,
   cardPalaceId,
   sourceCardId,
+  getFreestyleRatedCardIds,
   isRetryOccurrence,
   createRetryOccurrence,
   insertRetryOccurrenceAfterGap,
@@ -60,6 +61,7 @@ export {
 } from './domain/queueState'
 export {
   applyRoundPlanOrder,
+  countIncompletePalaceUnits,
   createRoundPlan,
   isSequentialPalaceBlocked,
   planCardStatus,

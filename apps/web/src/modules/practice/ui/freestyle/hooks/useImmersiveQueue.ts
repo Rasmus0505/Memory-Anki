@@ -165,6 +165,7 @@ export function useImmersiveQueue() {
       }
       const next: FreestyleUnitEncounterState = {
         encounterId: createOperationId(),
+        roundId: queueStateRef.current.roundId,
         unitRevision,
         status: 'pending',
         sessionId: null,
@@ -184,6 +185,7 @@ export function useImmersiveQueue() {
       if (
         current
         && current.encounterId === encounter.encounterId
+        && current.roundId === encounter.roundId
         && current.unitRevision === encounter.unitRevision
         && current.status === encounter.status
         && current.sessionId === encounter.sessionId
@@ -508,6 +510,7 @@ export function useImmersiveQueue() {
             retryOccurrence,
             settledIndex >= 0 ? settledIndex : currentIndexRef.current,
             options.retryAfterCards ?? 3,
+            configRef.current.palace_order,
           )
           cardsRef.current = inserted
           setCards(inserted)

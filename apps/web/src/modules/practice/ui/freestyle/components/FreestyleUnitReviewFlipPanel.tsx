@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import {
   PalaceReviewUnitsPanel,
   type PalaceReviewUnitChangeHighlight,
@@ -12,6 +13,7 @@ import type {
   PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
+import { copyMindMapToClipboard } from '@/modules/content/public'
 import type { ReviewUnitDto, UnitReviewSessionDto } from '@/modules/practice/public'
 import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { toast } from '@/shared/feedback/toast'
@@ -43,6 +45,7 @@ export function FreestyleUnitReviewFlipPanel({
   onToggleFullscreen,
   onEditingChange,
   onSaveFailed,
+  onEditorStateSaved,
   onUnitsReconciled,
   onRevealProgressChange,
 }: {
@@ -61,6 +64,8 @@ export function FreestyleUnitReviewFlipPanel({
   onUnitsReconciled?: () => void
   /** Live flip progress for the card header chip (revealed / flippable total). */
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
+  /** Adopt the saved doc so review shows the edited content after returning. */
+  onEditorStateSaved?: (state: MindMapEditorState) => void
 }) {
   // A weak rating creates a new encounter when this unit returns to the queue.
   // Its reveal state must start at the root; only a remount of the same encounter
@@ -101,6 +106,7 @@ export function FreestyleUnitReviewFlipPanel({
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [returnSaveState, setReturnSaveState] = useState<'idle' | 'saving' | 'failed'>('idle')
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
   const [lastUndoToken, setLastUndoToken] = useState<string | null>(null)
   const [recentUnitChanges, setRecentUnitChanges] = useState<PalaceReviewUnitChangeHighlight[]>([])
@@ -189,13 +195,13 @@ export function FreestyleUnitReviewFlipPanel({
         }
         // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
         if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
-          // mark_change while still editing must not rebuild freestyle mid-pass.
-          const stayEditingAfterMarkFlush = (
-            persistOptions.syncReason === 'mark_change'
+          // mark_change / return_to_review while still editing must not rebuild freestyle mid-pass.
+          const stayEditingAfterFlush = (
+            (persistOptions.syncReason === 'mark_change' || persistOptions.syncReason === 'return_to_review')
             && displayModeRef.current === 'edit'
           )
           notifyUnitReconcile(result.unitReconcile, {
-            rebuildQueue: !stayEditingAfterMarkFlush,
+            rebuildQueue: !stayEditingAfterFlush,
           })
         }
         return result
@@ -220,13 +226,13 @@ export function FreestyleUnitReviewFlipPanel({
     }
   }, [])
 
-  /** Typing autosave: plain path, no force reconcile. */
+  /** Typing autosave: plain path, no force reconcile, quiet toast. */
   const schedulePersist = useCallback((state: MindMapEditorState) => {
     clearPersistTimer()
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null
-      void persistEdit(state)
-    }, 700)
+      void persistEdit(state, { quiet: true })
+    }, 2000)
   }, [clearPersistTimer, persistEdit])
 
   /**
@@ -286,15 +292,24 @@ export function FreestyleUnitReviewFlipPanel({
       return
     }
     setPermanentMarkMode(false)
-    // Return only after the latest pending autosave and this reconcile flush have
-    // settled. A failed save leaves the editor usable instead of trapping it.
+    // Optimistic return: switch to review right away and save in the background.
+    // The card adopts the saved doc (onEditorStateSaved) once the flush settles;
+    // a failed save leaves the editor usable instead of trapping the user.
+    setDisplayMode('review')
+    setModeSyncVersion((value) => value + 1)
+    setReturnSaveState('saving')
     void flushPersistWithReconcile('return_to_review', editEditorStateRef.current, true)
       .then((result) => {
-        if (!result) return
-        setDisplayMode('review')
-        setModeSyncVersion((value) => value + 1)
+        if (!result) {
+          setReturnSaveState('failed')
+          setDisplayMode('edit')
+          setModeSyncVersion((value) => value + 1)
+          return
+        }
+        setReturnSaveState('idle')
+        onEditorStateSaved?.(result.state)
       })
-  }, [flushPersistWithReconcile, isEditMode])
+  }, [flushPersistWithReconcile, isEditMode, onEditorStateSaved])
 
   const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
     setEditEditorState(nextState)
@@ -392,7 +407,6 @@ export function FreestyleUnitReviewFlipPanel({
       {
         label: isEditMode ? '返回学习' : '进入编辑',
         onClick: handleToggleMode,
-        disabled: savingEdit,
       },
       {
         label: '复习进度',
@@ -401,6 +415,15 @@ export function FreestyleUnitReviewFlipPanel({
       },
     ]
     if (isEditMode) {
+      actions.push({
+        label: '复制导图',
+        onClick: () => {
+          void copyMindMapToClipboard(editorState, card.palace_title || session.title || `宫殿 ${card.palace_id}`)
+            .then(() => toast.success('脑图已复制到剪切板'))
+            .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
+        },
+        separatorBefore: true,
+      })
       actions.push({
         label: permanentMarkMode
           ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
@@ -415,16 +438,33 @@ export function FreestyleUnitReviewFlipPanel({
     }
     return actions
   }, [
+    card.palace_id,
+    card.palace_title,
+    editorState,
     handleToggleMode,
     handleTogglePermanentMarkMode,
     isEditMode,
     permanentMarkHighlights.length,
     permanentMarkMode,
     savingEdit,
+    session.title,
   ])
 
   return (
     <>
+      {returnSaveState === 'saving' ? (
+        <div
+          data-testid="freestyle-return-saving"
+          role="status"
+          className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center sm:bottom-6"
+        >
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300/80 bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur-sm dark:border-white/20 dark:bg-zinc-900/92 dark:text-zinc-100">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            正在保存宫殿…
+          </span>
+        </div>
+      ) : null}
+
       <FlipCardMindMapPanel
         fullscreen={fullscreen}
         displayMode={displayMode}

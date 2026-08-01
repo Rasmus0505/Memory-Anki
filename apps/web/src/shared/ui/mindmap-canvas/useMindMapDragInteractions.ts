@@ -67,6 +67,12 @@ export function resolveDragSourceIds(
   primaryId: string,
   selectedNodeIds: readonly string[] | undefined,
 ): string[] {
+  // The root is the handle for the whole palace. Dragging it carries every
+  // descendant along, matching the existing multi-select group-drag behavior.
+  const primaryNode = graphData.nodes.find((node) => node.id === primaryId)
+  if (primaryNode?.parentId == null) {
+    return graphData.nodes.map((node) => node.id)
+  }
   const selected = selectedNodeIds?.includes(primaryId)
     ? selectedNodeIds.filter(Boolean)
     : [primaryId]

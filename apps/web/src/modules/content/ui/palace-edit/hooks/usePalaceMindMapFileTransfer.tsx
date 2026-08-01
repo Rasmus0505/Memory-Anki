@@ -18,6 +18,21 @@ interface UsePalaceMindMapFileTransferOptions {
   ) => Promise<void>
 }
 
+export async function copyMindMapToClipboard(
+  editorState: MindMapEditorState | null,
+  palaceTitle: string,
+) {
+  if (!editorState?.editor_doc) throw new Error('当前脑图还没加载完成。')
+  const content = serializeMindMapTransferFile({
+    document: editorState.editor_doc,
+    sourceTitle: palaceTitle,
+  })
+  if (!navigator.clipboard?.writeText) {
+    throw new Error('当前环境不支持写入剪切板，请使用导出脑图。')
+  }
+  await navigator.clipboard.writeText(content)
+}
+
 export function usePalaceMindMapFileTransfer({
   editorState,
   palaceTitle,
@@ -47,6 +62,15 @@ export function usePalaceMindMapFileTransfer({
       toast.success('脑图已导出')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '导出脑图失败。')
+    }
+  }
+
+  const copyMindMap = async () => {
+    try {
+      await copyMindMapToClipboard(editorState, palaceTitle)
+      toast.success('脑图已复制到剪切板')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '复制脑图失败。')
     }
   }
 
@@ -100,10 +124,15 @@ export function usePalaceMindMapFileTransfer({
     ),
     toolbarActions: [
       {
+        label: '复制导图',
+        onClick: () => { void copyMindMap() },
+        disabled: !editorState?.editor_doc,
+        separatorBefore: true,
+      },
+      {
         label: '导出脑图',
         onClick: exportMindMap,
         disabled: !editorState?.editor_doc,
-        separatorBefore: true,
       },
       {
         label: importing ? '正在导入…' : '导入脑图',

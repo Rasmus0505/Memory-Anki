@@ -41,14 +41,16 @@ import {
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   canPopViewHistory,
+  cardPalaceId,
   findNextPalaceIndex,
   findPreviousPalaceIndex,
+  getFreestyleRatedCardIds,
   isSequentialPalaceBlocked,
   popViewHistory,
   pushViewHistory,
   visibleMountIndices,
 } from '@/modules/practice/public'
-import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
+import type { FreestyleCard, FreestyleMindMapBranchCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import {
@@ -89,6 +91,13 @@ function StaleUnitReviewCard({
       正在重建复习队列...
     </div>
   )
+}
+
+function incompleteUnitLabel(card: FreestyleMindMapBranchCard): string {
+  const path = Array.isArray(card.context_path)
+    ? card.context_path.map((item) => String(item?.text || '').trim()).filter(Boolean)
+    : []
+  return path.at(-1) || card.palace_title || (card.unit_id ? `单元 ${card.unit_id}` : `卡片 ${card.id}`)
 }
 
 function FreestyleRetryCornerBadge({
@@ -171,6 +180,27 @@ export default function ImmersiveFreestylePage() {
 
   queueRef.current = cards
   const currentCard = cards[currentIndex] ?? null
+  const ratedCardIds = useMemo(
+    () => getFreestyleRatedCardIds(cards, queueState.completedIds, queueState.unitEncountersByCardId),
+    [cards, queueState.completedIds, queueState.unitEncountersByCardId],
+  )
+
+  const getIncompleteUnitSummary = useCallback(
+    (palaceId: number | null) => {
+      const seen = new Set<string>()
+      const rated = new Set(ratedCardIds)
+      return cards
+        .filter((card): card is FreestyleMindMapBranchCard => cardPalaceId(card) === palaceId && card.type === 'mindmap_branch' && Boolean(card.unit_id))
+        .filter((card) => {
+          const sourceId = String(card.source_card_id || card.id)
+          if (rated.has(card.id) || rated.has(sourceId) || seen.has(sourceId)) return false
+          seen.add(sourceId)
+          return true
+        })
+        .map(incompleteUnitLabel)
+    },
+    [cards, ratedCardIds],
+  )
 
   const refreshCanGoPrevious = useCallback(
     (index = currentIndex, list = cards) => {
@@ -285,11 +315,12 @@ export default function ImmersiveFreestylePage() {
           cards,
           currentIndex,
           next,
-          queueState.completedIds,
+          ratedCardIds,
           config.palace_order,
         )
       ) {
-        toast.info('当前宫殿还有未通过或待重练单元，完成后才能进入下一个宫殿。')
+        const incompleteUnits = getIncompleteUnitSummary(cardPalaceId(cards[currentIndex]))
+        toast.info(`还有 ${incompleteUnits.length} 个单元未评分：${incompleteUnits.join('、')}。忘记/困难会安排稍后重练。`)
         if (options?.scroll === false) {
           window.requestAnimationFrame(() => scrollToIndex(currentIndex, 'auto'))
         }
@@ -335,7 +366,7 @@ export default function ImmersiveFreestylePage() {
       }
       refreshCanGoPrevious(typeof applied === 'number' ? applied : next)
     },
-    [cards, config.palace_order, currentIndex, goToIndex, queueState.completedIds, refreshCanGoPrevious, scrollToIndex],
+    [cards, config.palace_order, currentIndex, goToIndex, getIncompleteUnitSummary, ratedCardIds, refreshCanGoPrevious, scrollToIndex],
   )
 
   /**
@@ -550,11 +581,12 @@ export default function ImmersiveFreestylePage() {
         cards,
         currentIndex,
         nextPalaceIndex,
-        queueState.completedIds,
+        ratedCardIds,
         config.palace_order,
       )
     ) {
-      toast.info('当前宫殿还有未通过或待重练单元，完成后才能跳到下一个宫殿。')
+      const incompleteUnits = getIncompleteUnitSummary(cardPalaceId(cards[currentIndex]))
+      toast.info(`还有 ${incompleteUnits.length} 个单元未评分：${incompleteUnits.join('、')}。忘记/困难会安排稍后重练。`)
       return
     }
     const leavingId = cards[currentIndex]?.id
@@ -571,7 +603,7 @@ export default function ImmersiveFreestylePage() {
         requestedScrollIndexRef.current = null
       })
     })
-  }, [cards, config.palace_order, currentIndex, queueState.completedIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
+  }, [cards, config.palace_order, currentIndex, getIncompleteUnitSummary, ratedCardIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
   const handleGoToPreviousPalace = useCallback(() => {
     const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
@@ -587,7 +619,7 @@ export default function ImmersiveFreestylePage() {
       cards,
       currentIndex,
       nextPalaceIndex,
-      queueState.completedIds,
+      ratedCardIds,
       config.palace_order,
     )
 

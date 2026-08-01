@@ -9,10 +9,12 @@ import {
   applySkip,
   cardPalaceId,
   clearUnitEncounterState,
+  createRetryOccurrence,
   deferPalace,
   findNextPalaceIndex,
-  moveRemainingPalaceToTail,
   filterMutedPalaces,
+  insertRetryOccurrenceAfterGap,
+  moveRemainingPalaceToTail,
   mergeQueuePreservingHistory,
   needsRestudyAfterRatings,
   placeRestudyCardAtTail,
@@ -618,5 +620,75 @@ describe('freestyle queue skip rules', () => {
         completedIds: [],
       }),
     ).toBeNull()
+  })
+})
+
+describe('restudy placement stays inside the current palace', () => {
+  function branch(id: string, palaceId: number): FreestyleCard {
+    return { id, type: 'mindmap_branch', palace_id: palaceId } as FreestyleCard
+  }
+
+  it('keeps a retry occurrence inside the palace when no same-palace cards follow', () => {
+    const cards = [branch('a1', 1), branch('a2', 1), branch('b1', 2), branch('b2', 2)]
+    const occurrence = createRetryOccurrence(cards[1], 'round-1', 2, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 1, 3)
+    expect(next.map((card) => card.id)).toEqual(['a1', 'a2', occurrence.id, 'b1', 'b2'])
+  })
+
+  it('places a retry occurrence at the palace tail when fewer than gap same-palace cards remain', () => {
+    const cards = [
+      branch('a1', 1),
+      branch('a2', 1),
+      branch('a3', 1),
+      branch('a4', 1),
+      branch('b1', 2),
+      branch('b2', 2),
+      branch('b3', 2),
+    ]
+    const occurrence = createRetryOccurrence(cards[1], 'round-1', 2, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 1, 3)
+    expect(next.map((card) => card.id)).toEqual([
+      'a1',
+      'a2',
+      'a3',
+      'a4',
+      occurrence.id,
+      'b1',
+      'b2',
+      'b3',
+    ])
+  })
+
+  it('keeps the max-gap rule when enough same-palace cards remain', () => {
+    const cards = [
+      branch('a1', 1),
+      branch('a2', 1),
+      branch('a3', 1),
+      branch('a4', 1),
+      branch('a5', 1),
+      branch('b1', 2),
+    ]
+    const occurrence = createRetryOccurrence(cards[1], 'round-1', 2, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 1, 3)
+    expect(next.map((card) => card.id)).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', occurrence.id, 'b1'])
+  })
+
+  it('keeps a restudied unit inside its palace via placeRestudyCardWithMaxGap', () => {
+    const cards = [
+      branch('a1', 1),
+      branch('a2', 1),
+      branch('a3', 1),
+      branch('b1', 2),
+      branch('b2', 2),
+      branch('b3', 2),
+    ]
+    expect(placeRestudyCardWithMaxGap(cards, 'a1').map((card) => card.id)).toEqual([
+      'a2',
+      'a3',
+      'a1',
+      'b1',
+      'b2',
+      'b3',
+    ])
   })
 })

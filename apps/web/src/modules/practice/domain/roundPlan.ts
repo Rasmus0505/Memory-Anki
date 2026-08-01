@@ -279,6 +279,23 @@ export function isSequentialPalaceBlocked(
   })
 }
 
+export function countIncompletePalaceUnits(
+  cards: FreestyleCard[],
+  palaceId: number | null,
+  completedIds: Iterable<string>,
+): number {
+  if (palaceId == null) return 0
+  const completed = new Set(
+    Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
+  )
+  let count = 0
+  for (const card of cards) {
+    if (cardPalaceId(card) !== palaceId || card.type !== 'mindmap_branch' || !card.unit_id) continue
+    if (!completed.has(card.id)) count += 1
+  }
+  return count
+}
+
 export function planCardStatus(
   card: FreestyleCard,
   plan: FreestyleRoundPlanState | null,

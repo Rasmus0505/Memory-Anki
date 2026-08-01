@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import {
+  countIncompletePalaceUnits,
   createRoundPlan,
   isSequentialPalaceBlocked,
   planCardStatus,
@@ -91,6 +92,18 @@ describe('round plan reducer', () => {
     const cards = [card('a', 1), card('b', 1), card('c', 2)]
     expect(isSequentialPalaceBlocked(cards, 0, 2, [], config.palace_order)).toBe(true)
     expect(isSequentialPalaceBlocked(cards, 0, 2, ['a', 'b'], config.palace_order)).toBe(false)
+  })
+
+  it('counts incomplete units per palace including retry occurrences', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 2)]
+    expect(countIncompletePalaceUnits(cards, 1, [])).toBe(2)
+    expect(countIncompletePalaceUnits(cards, 1, ['a'])).toBe(1)
+    expect(countIncompletePalaceUnits(cards, 1, ['a', 'b'])).toBe(0)
+    expect(countIncompletePalaceUnits(cards, 2, [])).toBe(1)
+    expect(countIncompletePalaceUnits(cards, null, [])).toBe(0)
+    const retry = createRetryOccurrence(card('a', 1), 'round-1', 2, 3)
+    const withRetry = [...cards, retry]
+    expect(countIncompletePalaceUnits(withRetry, 1, ['a', 'b'])).toBe(1)
   })
 
   it('reorders only known plan entries and sanitizes corrupt persisted state', () => {

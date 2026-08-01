@@ -1,8 +1,11 @@
-import type { FreestyleCard } from '@/shared/api/contracts'
+import type { FreestyleCard } from @/shared/api/contracts
+
+import type { FreestyleFeedConfig } from ./feedConfig
 import { sanitizeRoundPlan, type FreestyleRoundPlanState } from './roundPlan'
 
 export type FreestyleUnitEncounterState = {
   encounterId: string
+  roundId?: string
   unitRevision: number
   status: 'pending' | 'open' | 'closed'
   sessionId: string | null
@@ -114,6 +117,9 @@ function asUnitEncounterMap(value: unknown) {
     if (!cardId || !item || typeof item !== 'object') return
     const raw = item as Record<string, unknown>
     const encounterId = typeof raw.encounterId === 'string' ? raw.encounterId.trim() : ''
+    const roundId = typeof raw.roundId === 'string' && raw.roundId.trim()
+      ? raw.roundId.trim()
+      : null
     const unitRevision = Number(raw.unitRevision)
     const status = raw.status
     if (
@@ -127,6 +133,7 @@ function asUnitEncounterMap(value: unknown) {
     const selectedRating = Number(raw.selectedRating)
     result[cardId] = {
       encounterId,
+      ...(roundId ? { roundId } : {}),
       unitRevision,
       status,
       sessionId: typeof raw.sessionId === 'string' && raw.sessionId.trim()
@@ -144,6 +151,10 @@ function asUnitEncounterMap(value: unknown) {
 
 export function sanitizeQueueState(value: unknown): FreestyleSkipState {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const roundId =
+    typeof raw.roundId === 'string' && raw.roundId.trim()
+      ? raw.roundId.trim()
+      : `freestyle-round-${Date.now()}`
   const skipRaw =
     raw.skipCountById && typeof raw.skipCountById === 'object'
       ? (raw.skipCountById as Record<string, unknown>)
@@ -154,10 +165,7 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
     if (key && n > 0) skipCountById[key] = n
   })
   return {
-    roundId:
-      typeof raw.roundId === 'string' && raw.roundId.trim()
-        ? raw.roundId.trim()
-        : `freestyle-round-${Date.now()}`,
+    roundId,
     startedAt:
       typeof raw.startedAt === 'number' && Number.isFinite(raw.startedAt)
         ? raw.startedAt
@@ -277,6 +285,36 @@ export function sourceCardId(card: FreestyleCard | null | undefined): string {
   return String(card?.source_card_id || card?.id || '').trim()
 }
 
+/**
+ * Cards that have already received a rating in the current freestyle round.
+ * Weak ratings intentionally remain eligible for a later retry, but should
+ * not keep the finish-palace gate closed. Retry occurrences are folded back
+ * onto their source card so one unit is never counted twice.
+ */
+export function getFreestyleRatedCardIds(
+  cards: ReadonlyArray<FreestyleCard>,
+  completedIds: Iterable<string>,
+  encounters: Record<string, FreestyleUnitEncounterState> = {},
+): string[] {
+  const completed = new Set(Array.from(completedIds, String).map((id) => id.trim()).filter(Boolean))
+  const ratedSources = new Set<string>()
+  Object.entries(encounters).forEach(([cardId, encounter]) => {
+    if (encounter?.selectedRating == null) return
+    const card = cards.find((item) => item.id === cardId)
+    ratedSources.add(sourceCardId(card) || String(cardId).trim())
+  })
+  const rated = new Set<string>()
+  cards.forEach((card) => {
+    const id = String(card.id || '').trim()
+    const sourceId = sourceCardId(card)
+    if (completed.has(id) || completed.has(sourceId) || ratedSources.has(id) || ratedSources.has(sourceId)) {
+      if (id) rated.add(id)
+      if (sourceId) rated.add(sourceId)
+    }
+  })
+  return [...rated]
+}
+
 export function isRetryOccurrence(card: FreestyleCard | null | undefined): boolean {
   return card?.occurrence_kind === 'retry' || Boolean(card?.source_card_id && card.source_card_id !== card.id)
 }
@@ -304,14 +342,36 @@ export function insertRetryOccurrenceAfterGap(
   occurrence: FreestyleCard,
   currentIndex: number,
   maxIntervening = 3,
+  palaceOrder: FreestyleFeedConfig['palace_order'] = 'sequential',
 ): FreestyleCard[] {
   const withoutExisting = cards.filter((card) => card.id !== occurrence.id)
   const anchor = Math.max(0, Math.min(Math.round(currentIndex), withoutExisting.length - 1))
-  const usable = withoutExisting.slice(anchor + 1).filter((card) => !isRetryOccurrence(card) || card.id !== occurrence.id)
+  let effectivePalace = cardPalaceId(occurrence)
+  let modifiedOccurrence = occurrence
+  if (palaceOrder === 'finish_palace_then_next') {
+    const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
+    if (nextPalaceIndex !== null) {
+      const nextPalace = cardPalaceId(cards[nextPalaceIndex])
+      if (nextPalace != null) {
+        effectivePalace = nextPalace
+        modifiedOccurrence = {
+          ...occurrence,
+          palace_id: nextPalace,
+        } as FreestyleCard
+      }
+    }
+  }
+  const usable = withoutExisting
+    .slice(anchor + 1)
+    .filter(
+      (card) =>
+        (!isRetryOccurrence(card) || card.id !== occurrence.id)
+        && (effectivePalace == null || cardPalaceId(card) === effectivePalace),
+    )
   const gap = Math.max(0, Math.round(maxIntervening))
   const insertAt = Math.min(anchor + 1 + Math.min(gap, usable.length), withoutExisting.length)
   const next = withoutExisting.slice()
-  next.splice(insertAt, 0, occurrence)
+  next.splice(insertAt, 0, modifiedOccurrence)
   return next
 }
 
@@ -492,9 +552,22 @@ export function placeRestudyCardWithMaxGap(
   const removeAt = cards[fromIndex]?.id === id ? fromIndex : found
   const next = cards.slice()
   const [card] = next.splice(removeAt, 1)
+  const palace = cardPalaceId(card)
+  // After removal, only the same-palace run may host the re-inserted card, so a
+  // weak unit near the palace end never lands beyond the boundary where the
+  // finish-palace gate (isSequentialPalaceBlocked) would make it unreachable.
+  let runEnd = next.length
+  if (palace != null) {
+    for (let index = removeAt; index < next.length; index += 1) {
+      if (cardPalaceId(next[index]) !== palace) {
+        runEnd = index
+        break
+      }
+    }
+  }
   // After removal, cards that followed the unit start at ``removeAt``.
   // Insert after up to maxIntervening of those (or at the end if fewer remain).
-  const insertAt = Math.min(removeAt + maxIntervening, next.length)
+  const insertAt = Math.min(removeAt + maxIntervening, runEnd)
   next.splice(insertAt, 0, card)
   return next
 }

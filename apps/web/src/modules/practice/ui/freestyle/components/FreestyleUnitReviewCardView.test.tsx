@@ -44,6 +44,7 @@ const quizBindingMocks = vi.hoisted(() => ({
 }))
 
 let capturedPanelProps: Record<string, unknown> | null = null
+let capturedSavedState: unknown = null
 let revealFrameCallbacks: FrameRequestCallback[] = []
 let originalRequestAnimationFrame: typeof window.requestAnimationFrame
 let originalCancelAnimationFrame: typeof window.cancelAnimationFrame
@@ -234,6 +235,7 @@ function buildSession(unitId: string, revision = 3, encounter = buildEncounter()
 function queueEncounter(overrides: Partial<FreestyleUnitEncounterState> = {}): FreestyleUnitEncounterState {
   return {
     encounterId: 'encounter-1',
+    roundId: 'round-1',
     unitRevision: 3,
     status: 'pending',
     sessionId: null,
@@ -282,6 +284,7 @@ function renderCard(
     onBranchComplete: vi.fn(),
     onStaleDrop: vi.fn(),
     onSaveFailed: vi.fn(),
+    onUnitsReconciled: vi.fn(),
   }
   const props = {
     card,
@@ -316,6 +319,7 @@ function flushRevealFrame() {
 describe('FreestyleUnitReviewCardView', () => {
   beforeEach(() => {
     capturedPanelProps = null
+    capturedSavedState = null
     branchRevealSnapshotCache.clear()
     revealFrameCallbacks = []
     originalRequestAnimationFrame = window.requestAnimationFrame
@@ -488,7 +492,7 @@ describe('FreestyleUnitReviewCardView', () => {
       // Mid-pass toggles only debounce plain autosave — no reconcile yet.
       expect(persistMocks.persistPalaceEditor).not.toHaveBeenCalled()
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(800)
+        await vi.advanceTimersByTimeAsync(2100)
       })
       expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(1)
       expect(persistMocks.persistPalaceEditor).toHaveBeenLastCalledWith(
@@ -549,6 +553,124 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
   })
 
+  it('returns to review immediately while the return save runs in the background', async () => {
+    const card = buildCard('unit-optimistic-return')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    let resolveSave!: (result: { state: unknown; unitReconcile: null }) => void
+    const gate = new Promise<{ state: unknown; unitReconcile: null }>((res) => {
+      resolveSave = res
+    })
+    persistMocks.persistPalaceEditor.mockImplementationOnce((_palaceId, state) => {
+      capturedSavedState = state
+      return gate
+    })
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMore?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
+
+    // Switches back to learning without waiting for the save to settle.
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+    expect(screen.getByTestId('freestyle-return-saving')).toBeTruthy()
+
+    await act(async () => {
+      resolveSave({ state: capturedSavedState, unitReconcile: null })
+    })
+    await waitFor(() => expect(screen.queryByTestId('freestyle-return-saving')).toBeNull())
+    // The card adopted the saved doc so review reflects the edited content.
+    // The panel adopted the saved doc (editable state) after the flush settled.
+    expect(capturedPanelProps?.editableEditorState).toBe(capturedSavedState)
+  })
+
+  it('returns to edit mode with local changes intact when the return save fails', async () => {
+    const card = buildCard('unit-return-failure')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const { onSaveFailed } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    persistMocks.persistPalaceEditor.mockRejectedValueOnce(new Error('保存宫殿失败'))
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMore?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
+
+    // The optimistic review switch falls back to edit mode when the save fails.
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+    expect(onSaveFailed).toHaveBeenCalledWith('保存宫殿失败')
+  })
+
+  it('defers freestyle queue rebuild when re-entering edit before the return save settles', async () => {
+    const card = buildCard('unit-deferred-rebuild')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const { onUnitsReconciled } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    const reconcile = { changed: true, changes: [], undo_token: 'reconcile-1' }
+    let resolveFirst!: (result: { state: unknown; unitReconcile: typeof reconcile }) => void
+    const firstGate = new Promise<{ state: unknown; unitReconcile: typeof reconcile }>((res) => {
+      resolveFirst = res
+    })
+    persistMocks.persistPalaceEditor.mockImplementationOnce((_palaceId, state) => {
+      capturedSavedState = state
+      return firstGate
+    })
+    const editMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMore?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+
+    // Re-enter edit before the first return save settles.
+    const reviewMore = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => reviewMore?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    await act(async () => {
+      resolveFirst({ state: capturedSavedState, unitReconcile: reconcile })
+    })
+    // Reconcile finished while still editing: queue rebuild is deferred.
+    expect(onUnitsReconciled).not.toHaveBeenCalled()
+
+    // Leaving again runs the return flush and rebuilds the queue.
+    let resolveSecond!: (result: { state: unknown; unitReconcile: typeof reconcile }) => void
+    const secondGate = new Promise<{ state: unknown; unitReconcile: typeof reconcile }>((res) => {
+      resolveSecond = res
+    })
+    persistMocks.persistPalaceEditor.mockImplementationOnce((_palaceId, _state) => secondGate)
+    const editMoreAgain = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => editMoreAgain?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+    await act(async () => {
+      resolveSecond({ state: capturedSavedState, unitReconcile: reconcile })
+    })
+    await waitFor(() => expect(onUnitsReconciled).toHaveBeenCalled())
+  })
+
   it('typing autosave does not force reconcile options', async () => {
     const card = buildCard('unit-type-autosave')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
@@ -579,7 +701,7 @@ describe('FreestyleUnitReviewCardView', () => {
       }
       act(() => onEditorStateChange(nextState))
       await act(async () => {
-        vi.advanceTimersByTime(800)
+        vi.advanceTimersByTime(2100)
         await Promise.resolve()
       })
       expect(persistMocks.persistPalaceEditor).toHaveBeenCalledWith(1, nextState, undefined)
@@ -697,7 +819,9 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.closeUnitReviewEncounterApi).not.toHaveBeenCalled()
 
-    view.rerenderCard({ active: false })
+    // A new queue round may be selected while the old encounter is still open.
+    // Closing must retain the encounter's server-owned round identity.
+    view.rerenderCard({ active: false, roundId: 'round-2' })
     await waitFor(() => expect(apiMocks.closeUnitReviewEncounterApi).toHaveBeenCalledWith(
       session.id,
       card.unit_id,

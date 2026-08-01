@@ -213,6 +213,7 @@ function encounterState(
 ): FreestyleUnitEncounterState {
   return {
     encounterId: encounter.id,
+    roundId: encounter.round_id,
     unitRevision,
     status: encounter.status,
     sessionId,
@@ -274,6 +275,7 @@ export function FreestyleUnitReviewCardView({
   onUnitsReconciled?: () => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
+  const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
   const [busy, setBusy] = useState(false)
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
@@ -313,6 +315,10 @@ export function FreestyleUnitReviewCardView({
     card.unit_id && card.unit_revision != null
       ? `${card.id}:${card.unit_id}:${card.unit_revision}:${roundId}`
       : null
+  // A freshly mounted unit card must not inherit a previous card's saved-doc override.
+  useEffect(() => {
+    setSavedEditorState(null)
+  }, [cardUnitKey])
 
   const retryLoad = useCallback(() => {
     openedForKeyRef.current = null
@@ -400,7 +406,7 @@ export function FreestyleUnitReviewCardView({
       currentEncounter.id,
       closeOperation,
       getEncounterSeconds(),
-      roundId,
+      currentEncounter.round_id,
     ).then((result) => {
       clearEncounterClock()
       const nextUnit = { ...currentUnit, encounter: result.encounter }
@@ -426,7 +432,7 @@ export function FreestyleUnitReviewCardView({
     })
     closeRequestRef.current = { encounterId: currentEncounter.id, promise }
     return promise
-  }, [card.id, clearEncounterClock, getEncounterSeconds, onEncounterChange, onSaveFailed, roundId])
+  }, [card.id, clearEncounterClock, getEncounterSeconds, onEncounterChange, onSaveFailed])
 
   const closeCurrentEncounterRef = useRef(closeCurrentEncounter)
   closeCurrentEncounterRef.current = closeCurrentEncounter
@@ -740,12 +746,13 @@ export function FreestyleUnitReviewCardView({
           card={card}
           session={session}
           unit={unit}
-          editorState={editorState}
+          editorState={savedEditorState ?? editorState}
           active={active}
           fullscreen={fullscreen}
           onToggleFullscreen={(next) => setFullscreen(next ?? !fullscreen)}
           onEditingChange={setInlineEditing}
           onSaveFailed={onSaveFailed}
+          onEditorStateSaved={setSavedEditorState}
           onUnitsReconciled={onUnitsReconciled}
           onRevealProgressChange={handleRevealProgressChange}
         />
