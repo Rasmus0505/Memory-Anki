@@ -1,4 +1,4 @@
-﻿import type { FreestyleCard } from @/shared/api/contracts
+﻿import type { FreestyleCard } from '@/shared/api/contracts'
 
 import { sanitizeRoundPlan, type FreestyleRoundPlanState } from './roundPlan'
 
