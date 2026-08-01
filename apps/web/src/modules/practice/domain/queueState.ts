@@ -1,6 +1,5 @@
-import type { FreestyleCard } from @/shared/api/contracts
+﻿import type { FreestyleCard } from @/shared/api/contracts
 
-import type { FreestyleFeedConfig } from ./feedConfig
 import { sanitizeRoundPlan, type FreestyleRoundPlanState } from './roundPlan'
 
 export type FreestyleUnitEncounterState = {
@@ -342,7 +341,7 @@ export function insertRetryOccurrenceAfterGap(
   occurrence: FreestyleCard,
   currentIndex: number,
   maxIntervening = 3,
-  palaceOrder: FreestyleFeedConfig['palace_order'] = 'sequential',
+  palaceOrder: string = 'sequential',
 ): FreestyleCard[] {
   const withoutExisting = cards.filter((card) => card.id !== occurrence.id)
   const anchor = Math.max(0, Math.min(Math.round(currentIndex), withoutExisting.length - 1))
