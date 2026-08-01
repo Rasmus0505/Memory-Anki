@@ -344,6 +344,14 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     assert rated.json()["item"]["unit"]["stage_index"] == 1
     assert len(rated.json()["item"]["encounter"]["rating_effects"]) == 4
 
+    wrong_round_close = client.post(
+        f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
+        "/encounters/http-encounter/close",
+        json={"operation_id": "http-close-wrong-round", "round_id": "another-round"},
+    )
+    assert wrong_round_close.status_code == 400
+    assert "round_id does not match the active encounter" in wrong_round_close.json()["detail"]
+
     closed = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",

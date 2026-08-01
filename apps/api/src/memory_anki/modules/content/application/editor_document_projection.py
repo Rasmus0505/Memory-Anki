@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.mindmap_document.api import (
     DEFAULT_EDITOR_CONFIG,
@@ -147,12 +149,16 @@ def build_palace_editor_doc(palace: Palace) -> dict[str, Any]:
     return _default_editor_doc(palace.title, "palace", root_children)
 
 
-def sanitize_palace_editor_doc(palace: Palace, doc: dict[str, Any]) -> dict[str, Any]:
+def sanitize_palace_editor_doc(
+    palace: Palace,
+    doc: dict[str, Any],
+    session: Session | None = None,
+) -> dict[str, Any]:
     clone = ensure_editor_dict(doc)
     if not _looks_like_review_overlay_doc(clone):
         return clone
 
-    peg_map = _collect_palace_peg_map(palace)
+    peg_map = _collect_palace_peg_map(palace, session=session)
     version_recovery_map = _collect_palace_version_recovery_map(palace)
 
     def visit(node: dict[str, Any], *, is_root: bool = False) -> None:
@@ -232,18 +238,39 @@ def _peg_to_editor_node(peg: Peg) -> dict[str, Any]:
     }
 
 
-def _collect_palace_peg_map(palace: Palace) -> dict[int, Peg]:
-    peg_map: dict[int, Peg] = {}
+def _collect_palace_peg_map(
+    palace: Palace,
+    session: Session | None = None,
+) -> dict[int, Peg]:
+    if session is None:
+        peg_map: dict[int, Peg] = {}
 
-    def visit(peg: Peg) -> None:
+        def visit(peg: Peg) -> None:
+            if peg.id in peg_map:
+                return
+            peg_map[peg.id] = peg
+            for child in peg.children or []:
+                visit(child)
+
+        for peg in palace.pegs or []:
+            visit(peg)
+        return peg_map
+
+    # Single-query load (no lazy `Peg.children` N+1) on the save path, where
+    # the caller already has a session — cheaper on slow (USB) storage.
+    all_pegs = session.query(Peg).filter_by(palace_id=palace.id).all()
+    by_parent: dict[int | None, list[Peg]] = {}
+    for peg in all_pegs:
+        by_parent.setdefault(peg.parent_id, []).append(peg)
+
+    peg_map = {}
+    stack = list(by_parent.get(None, []))
+    while stack:
+        peg = stack.pop()
         if peg.id in peg_map:
-            return
+            continue
         peg_map[peg.id] = peg
-        for child in peg.children or []:
-            visit(child)
-
-    for peg in palace.pegs or []:
-        visit(peg)
+        stack.extend(by_parent.get(peg.id, []))
     return peg_map
 
 

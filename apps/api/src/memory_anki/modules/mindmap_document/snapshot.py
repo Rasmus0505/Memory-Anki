@@ -48,9 +48,11 @@ def build_editor_state(
         "lang": lang,
     }
     state[EDITOR_FINGERPRINT_KEY] = build_editor_state_fingerprint(state)
+    # Keep the snapshot lightweight: the full document is already present as
+    # top-level `editor_doc`, and clients fall back to it when `snapshot.document`
+    # is absent, so the duplicate is dropped from responses.
     state["snapshot"] = {
         "schemaVersion": 1,
-        "document": doc,
         "editorPreferences": state["editor_config"],
         "localPreferences": local_config,
         "language": lang,

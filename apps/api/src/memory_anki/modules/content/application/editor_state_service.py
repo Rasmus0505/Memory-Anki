@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 from sqlalchemy.orm import Session
@@ -43,6 +44,20 @@ DANGEROUS_EDITOR_SOURCES = {"review_edit", "practice_edit", "unknown"}
 RECONCILE_SYNC_REASONS = frozenset(
     {"editor_leave", "editor_idle", "mark_change", "return_to_review"}
 )
+
+
+def _editor_doc_matches_stored(palace: Palace, doc_input: Any) -> bool:
+    """Deep equality between the incoming doc and the stored one.
+
+    The stored doc is the serialized normalized form; comparing the parsed
+    stored doc to the client doc ignores key ordering while still treating
+    child order as content.
+    """
+    try:
+        stored_doc = json.loads(palace.editor_doc or "")
+    except (TypeError, ValueError):
+        return False
+    return isinstance(stored_doc, dict) and stored_doc == doc_input
 
 
 def _should_reconcile_units(
@@ -115,11 +130,40 @@ def save_palace_editor_state(
     local_config = resolve_local_config(palace.editor_local_config, local_input, lang_input)
 
     unit_reconcile: dict[str, Any] | None = None
+
+    # Idempotent short-circuit: an identical doc (with no config/local changes)
+    # needs no tree sync, version snapshot, or commit. This makes a
+    # return-to-review flush after a same-doc autosave nearly free; schedule
+    # reconcile still runs when the caller asks for it.
+    identical_editor_doc = (
+        doc_input is not None
+        and config_input is None
+        and local_input is None
+        and lang_input is None
+        and _editor_doc_matches_stored(palace, doc_input)
+    )
+    if identical_editor_doc:
+        if _should_reconcile_units(
+            payload=payload,
+            editor_source=editor_source,
+            sync_reason=sync_reason,
+        ):
+            from memory_anki.modules.memory.public.commands import reconcile_palace_units
+
+            session.flush()
+            unit_reconcile = reconcile_palace_units(session, palace.id)
+            transaction.commit()
+            transaction.refresh(palace)
+            result = get_palace_editor_state(palace)
+            result["unit_reconcile"] = unit_reconcile
+            return result
+        return get_palace_editor_state(palace)
+
     if doc_input is not None:
         previous_doc = palace.editor_doc
         existing_node_count = count_editor_doc_nodes(previous_doc)
         doc = normalize_editor_doc(doc_input, root_text=palace.title, root_kind="palace")
-        doc = sanitize_palace_editor_doc(palace, doc)
+        doc = sanitize_palace_editor_doc(palace, doc, session=session)
         next_node_count = count_editor_doc_nodes(doc)
         node_drop = existing_node_count - next_node_count
         # Only block bootstrap/hydration echoes that replay a much smaller tree.

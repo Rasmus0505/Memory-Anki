@@ -100,7 +100,7 @@ def create_effective_palace_version(
 
 
 def should_create_editor_snapshot(session: Session, palace: Palace) -> bool:
-    candidate_signature = build_version_signature_from_palace(palace)
+    candidate_signature = build_version_signature_from_palace(session, palace)
     latest_version = get_latest_version(session, palace.id)
     if latest_version is None:
         return True
@@ -252,7 +252,10 @@ def get_latest_editor_version(session: Session, palace_id: int) -> PalaceVersion
     )
 
 
-def build_version_signature_from_palace(palace: Palace) -> tuple[str, str | None, str, str, str, str, str]:
+def build_version_signature_from_palace(
+    session: Session,
+    palace: Palace,
+) -> tuple[str, str | None, str, str, str, str, str]:
     peg_snapshot = [
         {
             "id": peg.id,
@@ -261,7 +264,7 @@ def build_version_signature_from_palace(palace: Palace) -> tuple[str, str | None
             "content": peg.content,
             "sort_order": peg.sort_order,
         }
-        for peg in sorted(collect_all_pegs(palace.pegs), key=lambda peg: (peg.sort_order, peg.id))
+        for peg in _ordered_pegs(session, palace.id)
     ]
     chapter_snapshot = [
         {"id": chapter.id, "name": chapter.name, "subject_id": chapter.subject_id}
@@ -290,13 +293,27 @@ def build_version_signature(version: PalaceVersion) -> tuple[str, str | None, st
     )
 
 
-def collect_all_pegs(pegs: list[Peg]) -> list[Peg]:
-    result: list[Peg] = []
+def _ordered_pegs(session: Session, palace_id: int) -> list[Peg]:
+    """All pegs of a palace in parent-before-child order with a single query.
 
-    def walk(items: list[Peg]) -> None:
-        for peg in items:
-            result.append(peg)
-            walk(list(peg.children or []))
+    Avoids the N+1 lazy `Peg.children` walk that previously issued one SELECT
+    per parent node — expensive on slow (USB) storage for large palaces.
+    """
+    all_pegs = session.query(Peg).filter_by(palace_id=palace_id).all()
+    by_parent: dict[int | None, list[Peg]] = {}
+    for peg in all_pegs:
+        by_parent.setdefault(peg.parent_id, []).append(peg)
 
-    walk(list(pegs or []))
-    return result
+    ordered: list[Peg] = []
+
+    def walk(parent_id: int | None) -> None:
+        children = sorted(
+            by_parent.get(parent_id, []),
+            key=lambda item: (item.sort_order, item.id),
+        )
+        for peg in children:
+            ordered.append(peg)
+            walk(peg.id)
+
+    walk(None)
+    return ordered

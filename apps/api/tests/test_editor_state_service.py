@@ -493,5 +493,192 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             self.assertTrue(reconcile.get("mark_required"))
 
 
+class PalaceEditorShortCircuitTests(RouterTestCase):
+    def _doc(self, node_count: int = 3) -> dict:
+        return {
+            "root": {
+                "data": {"text": "短路宫殿", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {"data": {"text": f"节点{i}", "uid": f"node-{i}"}, "children": []}
+                    for i in range(1, node_count + 1)
+                ],
+            }
+        }
+
+    def test_identical_doc_autosave_is_a_noop_short_circuit(self):
+        from memory_anki.infrastructure.db._tables.palaces import PalaceVersion, Peg
+
+        with self.SessionLocal() as session:
+            palace = Palace(title="短路宫殿", description="")
+            session.add(palace)
+            session.flush()
+
+            first = save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": self._doc(), "editor_source": "palace_edit_autosave"},
+            )
+            session.expire_all()
+            palace = session.get(Palace, palace.id)
+            assert palace is not None
+            peg_count = session.query(Peg).filter_by(palace_id=palace.id).count()
+            version_count = session.query(PalaceVersion).filter_by(palace_id=palace.id).count()
+            updated_at = palace.updated_at
+            stored_doc = palace.editor_doc
+
+            second = save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": first["editor_doc"], "editor_source": "palace_edit_autosave"},
+            )
+            session.expire_all()
+            palace = session.get(Palace, palace.id)
+            assert palace is not None
+
+            self.assertEqual(
+                session.query(Peg).filter_by(palace_id=palace.id).count(), peg_count
+            )
+            self.assertEqual(
+                session.query(PalaceVersion).filter_by(palace_id=palace.id).count(),
+                version_count,
+            )
+            self.assertEqual(palace.updated_at, updated_at)
+            self.assertEqual(palace.editor_doc, stored_doc)
+            self.assertEqual(second["editor_doc"], first["editor_doc"])
+            self.assertNotIn("unit_reconcile", second)
+
+    def test_editor_state_response_snapshot_has_no_duplicate_document(self):
+        with self.SessionLocal() as session:
+            palace = Palace(title="响应瘦身", description="")
+            session.add(palace)
+            session.flush()
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": self._doc(1), "editor_source": "palace_edit_autosave"},
+            )
+            self.assertIn("editor_doc", result)
+            self.assertNotIn("document", result["snapshot"])
+            self.assertEqual(result["snapshot"]["revision"], result["editor_fingerprint"])
+
+            state = get_palace_editor_state(palace)
+            self.assertNotIn("document", state["snapshot"])
+
+
+class PalaceEditorReturnToReviewTests(PalaceEditorReconcileGateTests):
+    def test_return_to_review_with_identical_doc_reconciles_without_rewriting_doc(self):
+        from memory_anki.infrastructure.db._tables.palaces import PalaceVersion, Peg
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+
+        with self.SessionLocal() as session:
+            palace, unit = self._seed_unit(session, stage_index=3)
+            stage_before = unit.stage_index
+
+            saved = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._marked_doc("节点 A 返回前已改"),
+                    "editor_source": "palace_edit_autosave",
+                },
+            )
+            session.expire_all()
+            palace = session.get(Palace, palace.id)
+            unit = session.get(ReviewUnitState, unit.id)
+            assert palace is not None and unit is not None
+            peg_count = session.query(Peg).filter_by(palace_id=palace.id).count()
+            version_count = session.query(PalaceVersion).filter_by(palace_id=palace.id).count()
+            stored_before = palace.editor_doc
+
+            result = save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": saved["editor_doc"],
+                    "editor_source": "palace_edit_autosave",
+                    "sync_reason": "return_to_review",
+                },
+            )
+            session.expire_all()
+            palace = session.get(Palace, palace.id)
+            unit = session.get(ReviewUnitState, unit.id)
+            assert palace is not None and unit is not None
+            reconcile = result.get("unit_reconcile") or {}
+            changes = reconcile.get("changes") or []
+
+            self.assertEqual(
+                session.query(Peg).filter_by(palace_id=palace.id).count(), peg_count
+            )
+            self.assertEqual(
+                session.query(PalaceVersion).filter_by(palace_id=palace.id).count(),
+                version_count,
+            )
+            self.assertEqual(palace.editor_doc, stored_before)
+            self.assertTrue(reconcile.get("changed"))
+            self.assertTrue(any(item.get("action") == "content_demoted" for item in changes))
+            self.assertEqual(unit.stage_index, stage_before - 1)
+
+
+class PalaceVersionSignatureQueryTests(RouterTestCase):
+    def test_version_signature_loads_all_pegs_in_single_query(self):
+        from sqlalchemy import event
+
+        from memory_anki.infrastructure.db._tables.palaces import Peg
+        from memory_anki.modules.backups.application.backup_palace_versions import (
+            build_version_signature_from_palace,
+        )
+
+        with self.SessionLocal() as session:
+            palace = Palace(title="深树宫殿", description="")
+            session.add(palace)
+            session.flush()
+            for root_index in range(3):
+                root = Peg(
+                    palace_id=palace.id,
+                    parent_id=None,
+                    sort_order=root_index,
+                    name=f"根{root_index}",
+                    content="",
+                )
+                session.add(root)
+                session.flush()
+                child = Peg(
+                    palace_id=palace.id,
+                    parent_id=root.id,
+                    sort_order=0,
+                    name=f"根{root_index}-子",
+                    content="",
+                )
+                session.add(child)
+                session.flush()
+                session.add(
+                    Peg(
+                        palace_id=palace.id,
+                        parent_id=child.id,
+                        sort_order=0,
+                        name=f"根{root_index}-孙",
+                        content="",
+                    )
+                )
+                session.flush()
+            session.commit()
+
+            peg_selects: list[str] = []
+
+            def count_peg_selects(conn, cursor, statement, parameters, context, executemany):
+                if "FROM PEGS" in str(statement).upper():
+                    peg_selects.append(str(statement))
+
+            bind = session.get_bind()
+            event.listen(bind, "before_cursor_execute", count_peg_selects)
+            try:
+                build_version_signature_from_palace(session, palace)
+            finally:
+                event.remove(bind, "before_cursor_execute", count_peg_selects)
+
+            self.assertEqual(len(peg_selects), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
