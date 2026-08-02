@@ -6,7 +6,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.content.public.queries import list_active_palace_tree_structures
+from memory_anki.modules.content.public.queries import (
+    list_active_palace_ids_by_subject_scope,
+    list_active_palace_tree_structures,
+)
 from memory_anki.modules.memory.public.queries import project_palace_review_summaries
 from memory_anki.modules.quiz.public.queries import (
     list_mastery_profiles_for_palaces,
@@ -37,9 +40,17 @@ def build_freestyle_queue(
         raise ValueError("operation_id is required")
 
     specific_ids = list(config.get("specific_palace_ids") or [])
+    subject_scope = str(config.get("subject_scope") or "all")
+    subject_ids = list_active_palace_ids_by_subject_scope(session, subject_scope)
+    if subject_scope != "all":
+        specific_ids = [
+            palace_id for palace_id in subject_ids
+            if not specific_ids or palace_id in specific_ids
+        ]
+    palace_filter = specific_ids if specific_ids or subject_scope != "all" else None
     trees = list_active_palace_tree_structures(
         session,
-        palace_ids=specific_ids or None,
+        palace_ids=palace_filter,
     )
     # Drop trees with no root / no stable nodes.
     trees = [tree for tree in trees if tree.get("root_uid") and tree.get("nodes")]
@@ -86,17 +97,17 @@ def build_freestyle_queue(
     if config["content"].get("quiz_question"):
         questions = list_published_questions_for_palaces(
             session,
-            palace_ids=palace_ids or None,
+            palace_ids=palace_filter,
             question_type=str(config.get("question_type") or "all"),
         )
-        bindings = list_node_bindings_for_palaces(session, palace_ids=palace_ids or None)
+        bindings = list_node_bindings_for_palaces(session, palace_ids=palace_filter)
         bound_map: dict[int, list[str]] = {}
         for row in bindings:
             qid = int(row["question_id"])
             bound_map.setdefault(qid, []).append(str(row["node_uid"]))
         mastery_rows = list_mastery_profiles_for_palaces(
             session,
-            palace_ids=palace_ids or None,
+            palace_ids=palace_filter,
         )
         mastery_by_question = {
             int(row["question_id"]): row

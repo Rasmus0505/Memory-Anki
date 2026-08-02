@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import text
 
@@ -678,6 +679,32 @@ class PalaceVersionSignatureQueryTests(RouterTestCase):
                 event.remove(bind, "before_cursor_execute", count_peg_selects)
 
             self.assertEqual(len(peg_selects), 1)
+
+    def test_recent_editor_snapshot_skips_full_signature_scan(self):
+        from memory_anki.infrastructure.db._tables.palaces import PalaceVersion
+        from memory_anki.modules.backups.application import backup_palace_versions
+
+        with self.SessionLocal() as session:
+            palace = Palace(title="近期快照宫殿", description="")
+            session.add(palace)
+            session.flush()
+            palace.editor_doc = '{"root":{"data":{"text":"近期快照宫殿"},"children":[]}}'
+            version = PalaceVersion(
+                palace_id=palace.id,
+                trigger_reason="editor_save",
+                title=palace.title,
+                editor_doc=palace.editor_doc,
+                editor_config="{}",
+                editor_local_config="{}",
+                peg_snapshot="[]",
+                chapter_snapshot="[]",
+            )
+            session.add(version)
+            session.commit()
+
+            with patch.object(backup_palace_versions, "build_version_signature_from_palace") as signature:
+                self.assertFalse(backup_palace_versions.should_create_editor_snapshot(session, palace))
+            signature.assert_not_called()
 
 
 if __name__ == "__main__":

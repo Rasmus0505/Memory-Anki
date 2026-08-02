@@ -93,6 +93,8 @@ QUIZ_SCOPES = {
     QUIZ_SCOPE_SINGLE,
 }
 
+SUBJECT_SCOPES = {"all", "english", "non_english"}
+
 
 def _as_bool(value: Any, default: bool) -> bool:
     return value if isinstance(value, bool) else default
@@ -194,6 +196,11 @@ def _as_quiz_scope(value: Any) -> str:
     return QUIZ_SCOPE_CROSS
 
 
+def _as_subject_scope(value: Any) -> str:
+    key = str(value or "").strip()
+    return key if key in SUBJECT_SCOPES else "all"
+
+
 def _as_quiz_mastery_buckets(
     value: Any,
     *,
@@ -274,6 +281,13 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         anki_enabled=anki_enabled,
         quiz_enabled=quiz_enabled,
     )
+    if mix_mode == MIX_MODE_QUIZ_ONLY:
+        mindmap_enabled = False
+        anki_enabled = False
+        quiz_enabled = True
+    elif mix_mode == MIX_MODE_MINDMAP_ONLY:
+        mindmap_enabled = True
+        quiz_enabled = False
     mix_ratio = _as_mix_ratio(
         data.get("mix_ratio"),
         mindmap_weight=mindmap_weight,
@@ -317,6 +331,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             data.get("queue_length"), DEFAULT_QUEUE_LENGTH, minimum=5, maximum=100
         ),
         "specific_palace_ids": _as_positive_ids(data.get("specific_palace_ids")),
+        "subject_scope": _as_subject_scope(data.get("subject_scope")),
         "question_type": question_type,
         "weak_quiz_priority": _as_bool(data.get("weak_quiz_priority"), True),
         "seed": _as_int(data.get("seed"), DEFAULT_SEED, minimum=1, maximum=2_147_483_647),

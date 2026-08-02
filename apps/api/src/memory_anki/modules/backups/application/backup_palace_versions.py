@@ -100,6 +100,14 @@ def create_effective_palace_version(
 
 
 def should_create_editor_snapshot(session: Session, palace: Palace) -> bool:
+    latest_editor_version = get_latest_editor_version(session, palace.id)
+    if latest_editor_version is None or latest_editor_version.created_at is None:
+        return True
+
+    now = palace.updated_at or utc_now_naive()
+    if now - latest_editor_version.created_at < EDITOR_SNAPSHOT_INTERVAL:
+        return False
+
     candidate_signature = build_version_signature_from_palace(session, palace)
     latest_version = get_latest_version(session, palace.id)
     if latest_version is None:
@@ -107,15 +115,10 @@ def should_create_editor_snapshot(session: Session, palace: Palace) -> bool:
     if build_version_signature(latest_version) == candidate_signature:
         return False
 
-    latest_editor_version = get_latest_editor_version(session, palace.id)
-    if latest_editor_version is None or latest_editor_version.created_at is None:
-        return True
-
     latest_editor_signature = build_version_signature(latest_editor_version)
     if latest_editor_signature == candidate_signature:
         return False
 
-    now = palace.updated_at or utc_now_naive()
     return now - latest_editor_version.created_at >= EDITOR_SNAPSHOT_INTERVAL
 
 

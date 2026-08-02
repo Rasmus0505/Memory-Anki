@@ -10,13 +10,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive, to_api_datetime
+from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.palaces import FreestyleQuizAttempt
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
     ReviewUnitRatingOperation,
     ReviewUnitState,
 )
-from memory_anki.infrastructure.db._tables.misc import StudySession
-from memory_anki.infrastructure.db._tables.palaces import FreestyleQuizAttempt
 
 from .unit_review_projection import get_palace_unit_projection
 from .unit_review_service import _encounter_billable_seconds

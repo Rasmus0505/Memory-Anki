@@ -259,6 +259,25 @@ class TestPalaceEditor:
         saved = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
         assert saved["editor_doc"]["root"]["children"][0]["data"]["text"] == "Child Text"
 
+    def test_put_editor_autosave_returns_lightweight_ack(self, client, palace_id):
+        response = client.put(
+            f"/api/v1/palaces/{palace_id}/editor",
+            json={
+                "editor_source": "palace_edit_autosave",
+                "response_mode": "ack",
+                "editor_doc": editor_doc("Ack Text"),
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["palace"]["id"] == palace_id
+        assert body["editor_fingerprint"] == body["snapshot"]["revision"]
+        assert "editor_doc" not in body
+        saved = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
+        assert saved["editor_doc"]["root"]["data"]["text"] == "Test Palace"
+        assert saved["editor_doc"]["root"]["children"][0]["data"]["text"] == "Child Text"
+
     def test_put_editor_invalid_payload_returns_400(self, client, palace_id, monkeypatch):
         def raise_value_error(*args, **kwargs):
             raise ValueError("invalid editor payload")

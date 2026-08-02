@@ -6,8 +6,8 @@ Revises: 0013_prune_legacy_config_keys
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0014_palace_templates"
 down_revision = "0013_prune_legacy_config_keys"

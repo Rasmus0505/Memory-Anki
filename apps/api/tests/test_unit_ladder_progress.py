@@ -8,7 +8,6 @@ from datetime import date, timedelta
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
-    ReviewUnitEncounter,
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_ladder_progress import (

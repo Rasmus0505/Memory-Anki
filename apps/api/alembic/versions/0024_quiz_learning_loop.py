@@ -1,7 +1,7 @@
 """Add quiz lifecycle, evidence, and unified attempt events."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0024_quiz_learning_loop"
 down_revision = "0023_quiz_generation_workspace"

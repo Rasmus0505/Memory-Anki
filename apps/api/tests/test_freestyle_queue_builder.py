@@ -337,3 +337,28 @@ def test_sanitize_defaults_bound_quiz_into_mix_and_mastery_buckets():
     assert config["bound_quiz_placement"] == "into_mix"
     assert config["quiz_mastery_buckets"] == ["unseen", "weak", "reinforce"]
     assert config["quiz_scope"] == "cross_palace_random"
+
+
+def test_sanitize_repairs_conflicting_quiz_only_toggles():
+    config = sanitize_feed_config(
+        {
+            "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+            "mix_mode": "quiz_only",
+        }
+    )
+    assert config["content"] == {
+        "mindmap_branch": False,
+        "anki_card": False,
+        "quiz_question": True,
+    }
+
+
+def test_sanitize_repairs_mindmap_only_toggles():
+    config = sanitize_feed_config(
+        {
+            "content": {"mindmap_branch": False, "anki_card": False, "quiz_question": True},
+            "mix_mode": "mindmap_only",
+        }
+    )
+    assert config["content"]["mindmap_branch"] is True
+    assert config["content"]["quiz_question"] is False

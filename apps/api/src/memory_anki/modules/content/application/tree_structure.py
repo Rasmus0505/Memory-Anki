@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
 
@@ -200,11 +201,35 @@ def list_active_palace_tree_structures(
     return result
 
 
+def list_active_palace_ids_by_subject_scope(session: Session, subject_scope: str) -> list[int]:
+    """Resolve the stable subject presets used by the practice queue."""
+    active = session.query(Palace.id).filter(
+        Palace.archived == False,  # noqa: E712
+        Palace.deleted_at.is_(None),
+    )
+    if subject_scope == "all":
+        return [int(row[0]) for row in active.order_by(Palace.group_sort_order.asc(), Palace.id.asc()).all()]
+
+    english_ids = {
+        int(row[0])
+        for row in active.join(Palace.subjects).filter(Subject.name == "英语").all()
+    }
+    if subject_scope == "english":
+        return sorted(english_ids)
+    return [
+        int(row[0])
+        for row in active.filter(~Palace.id.in_(english_ids) if english_ids else True)
+        .order_by(Palace.group_sort_order.asc(), Palace.id.asc())
+        .all()
+    ]
+
+
 __all__ = [
     "ancestor_path",
     "build_tree_from_editor_doc",
     "get_palace_tree_structure",
     "list_active_palace_tree_structures",
+    "list_active_palace_ids_by_subject_scope",
     "stable_tree_order",
     "subtree_node_uids",
 ]

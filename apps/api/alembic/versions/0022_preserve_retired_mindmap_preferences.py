@@ -6,7 +6,6 @@ Revises: 0021_remove_mindmap_view_preferences
 
 from __future__ import annotations
 
-
 revision = "0022_preserve_retired_mindmap_preferences"
 down_revision = "0021_remove_mindmap_view_preferences"
 branch_labels = None

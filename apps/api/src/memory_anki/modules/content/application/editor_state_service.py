@@ -17,7 +17,9 @@ from memory_anki.modules.mindmap_document.api import (
     EditorStateConflictError,
     assert_expected_fingerprint,
     build_editor_state,
+    build_editor_state_fingerprint,
     ensure_editor_dict,
+    extract_editor_lang,
     normalize_editor_doc,
     resolve_local_config,
     serialize_editor_payload,
@@ -95,6 +97,36 @@ def get_palace_editor_state(palace: Palace) -> dict[str, Any]:
     )
 
 
+def _build_editor_save_ack(
+    *,
+    editor_doc: Any,
+    editor_config: dict[str, Any],
+    editor_local_config: dict[str, Any],
+    lang: str,
+    unit_reconcile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    state = {
+        "editor_doc": editor_doc,
+        "editor_config": editor_config,
+        "editor_local_config": editor_local_config,
+        "lang": lang,
+    }
+    fingerprint = build_editor_state_fingerprint(state)
+    result: dict[str, Any] = {
+        EDITOR_FINGERPRINT_KEY: fingerprint,
+        "snapshot": {
+            "schemaVersion": 1,
+            "editorPreferences": editor_config,
+            "localPreferences": editor_local_config,
+            "language": lang,
+            "revision": fingerprint,
+        },
+    }
+    if unit_reconcile is not None:
+        result["unit_reconcile"] = unit_reconcile
+    return result
+
+
 def save_palace_editor_state(
     session: Session,
     palace: Palace,
@@ -109,6 +141,7 @@ def save_palace_editor_state(
     local_input = payload.get("editor_local_config")
     lang_input = payload.get("lang")
     allow_dangerous_delete = bool(payload.get("confirm_dangerous_change"))
+    response_mode = str(payload.get("response_mode") or "full").strip().lower()
     editor_source = str(payload.get("editor_source") or "unknown").strip() or "unknown"
     sync_reason = str(payload.get("sync_reason") or "").strip() or None
     allow_stale_overwrite = bool(payload.get("allow_stale_overwrite"))
@@ -128,6 +161,10 @@ def save_palace_editor_state(
         raise
 
     local_config = resolve_local_config(palace.editor_local_config, local_input, lang_input)
+    saved_editor_doc = current_state["editor_doc"]
+    saved_editor_config = current_state["editor_config"]
+    saved_editor_local_config = local_config
+    saved_lang = extract_editor_lang(local_config)
 
     unit_reconcile: dict[str, Any] | None = None
 
@@ -154,9 +191,24 @@ def save_palace_editor_state(
             unit_reconcile = reconcile_palace_units(session, palace.id)
             transaction.commit()
             transaction.refresh(palace)
+            if response_mode == "ack":
+                return _build_editor_save_ack(
+                    editor_doc=saved_editor_doc,
+                    editor_config=saved_editor_config,
+                    editor_local_config=saved_editor_local_config,
+                    lang=saved_lang,
+                    unit_reconcile=unit_reconcile,
+                )
             result = get_palace_editor_state(palace)
             result["unit_reconcile"] = unit_reconcile
             return result
+        if response_mode == "ack":
+            return _build_editor_save_ack(
+                editor_doc=saved_editor_doc,
+                editor_config=saved_editor_config,
+                editor_local_config=saved_editor_local_config,
+                lang=saved_lang,
+            )
         return get_palace_editor_state(palace)
 
     if doc_input is not None:
@@ -208,10 +260,12 @@ def save_palace_editor_state(
         )
         sync_palace_tree_from_doc(session, palace, doc)
         palace.editor_doc = serialize_editor_payload(doc)
+        saved_editor_doc = doc
     else:
         should_reconcile = False
     if config_input is not None:
-        palace.editor_config = serialize_editor_payload(ensure_editor_dict(config_input))
+        saved_editor_config = ensure_editor_dict(config_input)
+        palace.editor_config = serialize_editor_payload(saved_editor_config)
     if local_config is not None:
         palace.editor_local_config = serialize_editor_payload(local_config)
 
@@ -225,6 +279,14 @@ def save_palace_editor_state(
 
     transaction.commit()
     transaction.refresh(palace)
+    if response_mode == "ack":
+        return _build_editor_save_ack(
+            editor_doc=saved_editor_doc,
+            editor_config=saved_editor_config,
+            editor_local_config=saved_editor_local_config,
+            lang=saved_lang,
+            unit_reconcile=unit_reconcile,
+        )
     result = get_palace_editor_state(palace)
     if unit_reconcile is not None:
         result["unit_reconcile"] = unit_reconcile

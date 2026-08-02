@@ -88,6 +88,7 @@ def test_freestyle_start_restores_active_session_and_open_encounter(db_session):
 
     assert resumed["id"] == first["id"]
     assert resumed["units"][0]["encounter"]["id"] == "encounter-first"
+    assert resumed["units"][0]["encounter"]["round_id"] == "round-2026-07-27"
     assert db_session.query(StudySession).filter_by(scene="freestyle_unit_review").count() == 1
     assert db_session.query(ReviewUnitEncounter).count() == 1
     # Resume must keep the open glance so an in-flight rate with the original

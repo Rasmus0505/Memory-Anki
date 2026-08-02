@@ -213,7 +213,7 @@ def _build_review_cards_from_rollups(
                     action_kind="review",
                     title=f"单元复习：{palace_title}",
                     subtitle=f"{unit_title} · 到期 {due_date}",
-                    href="/review",
+                    href=f"/freestyle?palaceId={palace.id}",
                     priority=110 if overdue else 100,
                     reason="已逾期" if overdue else "今天到期",
                     palace=palace,

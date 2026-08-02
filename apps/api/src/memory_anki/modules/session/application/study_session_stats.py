@@ -16,7 +16,6 @@ from .study_session_constants import (
     ENGLISH_READING_SCENES,
     ENGLISH_SCENES,
     FORMAL_REVIEW_SCENES,
-    STUDY_DASHBOARD_SCENES,
     TIME_RECORD_KIND_LABELS,
 )
 from .time_bounds import current_week_bounds, today_bounds

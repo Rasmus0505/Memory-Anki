@@ -1,7 +1,7 @@
 """Add persistent quiz generation workspace and PDF library."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0023_quiz_generation_workspace"
 down_revision = "0022_preserve_retired_mindmap_preferences"

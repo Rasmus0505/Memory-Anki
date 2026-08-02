@@ -6,8 +6,8 @@ Revises: 0011_database_performance_indexes
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0012_freestyle_history"
 down_revision = "0011_database_performance_indexes"

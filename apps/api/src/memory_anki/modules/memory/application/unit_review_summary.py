@@ -114,7 +114,7 @@ def project_palace_review_summaries(
         state_by_palace.setdefault(row.palace_id, []).append(row)
 
     definitions_by_palace: dict[int, list[UnitDefinition]] = {}
-    for pid, palace in palace_map.items():
+    for pid, _palace in palace_map.items():
         try:
             _, defs = resolve_unit_definitions(session, pid)
             definitions_by_palace[pid] = defs
