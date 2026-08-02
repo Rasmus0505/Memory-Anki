@@ -919,7 +919,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
-        routePath="/review/session/9"
+        routePath="/freestyle?palaceId=9"
       />,
     )
 
@@ -932,12 +932,12 @@ describe('GlobalTimerProvider', () => {
     })
 
     expect(openMainTarget).toHaveBeenCalledTimes(1)
-    expect(openMainTarget).toHaveBeenCalledWith('/review/session/9')
+    expect(openMainTarget).toHaveBeenCalledWith('/freestyle?palaceId=9')
     expect(publishTimerSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
         mode: 'break',
         status: 'expired',
-        targetPath: '/review/session/9',
+        targetPath: '/freestyle?palaceId=9',
       }),
     )
     vi.useRealTimers()
@@ -971,7 +971,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
-        routePath="/review/session/9?chapterId=3#x"
+        routePath="/freestyle?palaceId=9#x"
       />,
     )
 
@@ -984,7 +984,7 @@ describe('GlobalTimerProvider', () => {
     })
 
     expect(openMainTarget).toHaveBeenCalledTimes(1)
-    expect(openMainTarget).toHaveBeenCalledWith('/review/session/9?chapterId=3#x')
+    expect(openMainTarget).toHaveBeenCalledWith('/freestyle?palaceId=9#x')
     vi.useRealTimers()
   })
 
@@ -1016,7 +1016,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
-        routePath="https://example.com/review/session/9"
+        routePath="https://example.com/freestyle?palaceId=9"
       />,
     )
 
@@ -1061,7 +1061,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
-        routePath="/review/session/9"
+        routePath="/freestyle?palaceId=9"
       />,
     )
 
@@ -1109,7 +1109,7 @@ describe('GlobalTimerProvider', () => {
         title="当前复习"
         isRouteActive
         becameActiveAt={100}
-        routePath="/review/session/9"
+        routePath="/freestyle?palaceId=9"
       />,
     )
 
@@ -1130,8 +1130,8 @@ describe('GlobalTimerProvider', () => {
     })
 
     expect(openMainTarget).toHaveBeenCalledTimes(2)
-    expect(openMainTarget).toHaveBeenNthCalledWith(1, '/review/session/9')
-    expect(openMainTarget).toHaveBeenNthCalledWith(2, '/review/session/9')
+    expect(openMainTarget).toHaveBeenNthCalledWith(1, '/freestyle?palaceId=9')
+    expect(openMainTarget).toHaveBeenNthCalledWith(2, '/freestyle?palaceId=9')
     vi.useRealTimers()
   })
 

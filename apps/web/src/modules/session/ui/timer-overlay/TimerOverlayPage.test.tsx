@@ -174,6 +174,14 @@ describe('TimerOverlayPage', () => {
     expect(screen.getByText('待开始')).toBeTruthy()
   })
 
+  it('sends a close command from the expanded overlay', () => {
+    render(<TimerOverlayPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭计时器' }))
+
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'closeOverlay' })
+  })
+
   it('updates from break copy back to study copy when the main app publishes a study snapshot', () => {
     render(<TimerOverlayPage />)
 

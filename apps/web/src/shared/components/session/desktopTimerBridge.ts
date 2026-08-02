@@ -36,6 +36,7 @@ export type UnifiedTimerAction =
   | 'continueRound'
   | 'startGoalBreak'
   | 'startStudy'
+  | 'closeOverlay'
 
 export interface UnifiedTimerSnapshot {
   mode: UnifiedTimerMode
@@ -80,6 +81,7 @@ export type UnifiedTimerCommand =
   | { type: 'continueRound' }
   | { type: 'startGoalBreak'; minutes?: number }
   | { type: 'startStudy' }
+  | { type: 'closeOverlay' }
   | { type: 'openTimerSettings' }
 
 export interface DesktopTimerBridge {

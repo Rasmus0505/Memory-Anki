@@ -273,6 +273,10 @@ ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
 
 ipcMain.on('memory-anki-timer-command', (_event, command) => {
   desktopPauseOwnership.clearForCommand(command)
+  if (command?.type === 'closeOverlay') {
+    timerWindow?.hide()
+    return
+  }
   if (command?.type === 'collapse') {
     const collapsed = Boolean(command.collapsed)
     if (timerWindow) {

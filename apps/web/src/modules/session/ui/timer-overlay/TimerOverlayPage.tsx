@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronsDown, ChevronsUp, Pause, Play, Settings2 } from 'lucide-react'
+import { ChevronsDown, ChevronsUp, Pause, Play, Settings2, X } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import {
@@ -342,6 +342,15 @@ export default function TimerOverlayPage() {
         >
           <ChevronsUp className="size-4" />
         </button>
+        <button
+          type="button"
+          className="memory-anki-timer-overlay-capsule-expand"
+          onClick={() => sendCommand({ type: 'closeOverlay' })}
+          title="关闭计时器"
+          aria-label="关闭计时器"
+        >
+          <X className="size-4" />
+        </button>
       </div>
     )
   }
@@ -369,6 +378,9 @@ export default function TimerOverlayPage() {
           </button>
           <button type="button" className="memory-anki-timer-overlay-icon-button" onClick={() => setOverlayCollapsed(true)} title="折叠为胶囊">
             <ChevronsDown className="size-4" />
+          </button>
+          <button type="button" className="memory-anki-timer-overlay-icon-button" onClick={() => sendCommand({ type: 'closeOverlay' })} title="关闭计时器" aria-label="关闭计时器">
+            <X className="size-4" />
           </button>
         </div>
       </div>
