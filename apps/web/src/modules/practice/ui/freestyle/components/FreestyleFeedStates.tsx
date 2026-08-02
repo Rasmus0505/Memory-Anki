@@ -131,8 +131,8 @@ export function FreestyleEmptyState({
                 </>
               )}
               <Button asChild variant="outline">
-                <Link to={mode === 'today' ? '/palaces/new' : '/review'}>
-                  {mode === 'today' ? '新建宫殿' : '今日复习'}
+                <Link to={mode === 'today' ? '/palaces/new' : '/freestyle'}>
+                  {mode === 'today' ? '新建宫殿' : '随心复习'}
                 </Link>
               </Button>
             </div>

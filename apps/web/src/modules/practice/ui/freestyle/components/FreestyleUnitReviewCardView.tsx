@@ -576,7 +576,7 @@ export function FreestyleUnitReviewCardView({
         currentEncounter.id,
         rating,
         id,
-        roundId,
+        currentEncounter.round_id,
       )
       const nextUnit: ReviewUnitDto = {
         ...unit,

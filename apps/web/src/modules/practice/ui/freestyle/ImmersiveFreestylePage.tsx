@@ -19,7 +19,7 @@ import {
   Star,
   Waypoints,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundPlanDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundPlanDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
@@ -33,6 +33,7 @@ import {
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
+import { parseFreestyleEntryPalaceId } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
   formatTimer,
   isMindMapBranchCard,
@@ -126,6 +127,8 @@ function FreestyleRetryCornerBadge({
 }
 
 export default function ImmersiveFreestylePage() {
+  const [searchParams] = useSearchParams()
+  const entryPalaceId = parseFreestyleEntryPalaceId(searchParams.toString())
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const reducedMotion = usePrefersReducedMotion()
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -176,7 +179,7 @@ export default function ImmersiveFreestylePage() {
     restorePlanCards,
     skipToNextPalace,
     buildQueue,
-  } = useImmersiveQueue()
+  } = useImmersiveQueue(entryPalaceId)
 
   queueRef.current = cards
   const currentCard = cards[currentIndex] ?? null

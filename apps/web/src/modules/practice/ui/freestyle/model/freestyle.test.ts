@@ -78,7 +78,7 @@ function actionCard(
           : 'review',
     title: id,
     subtitle: '',
-    href: '/review/session/1',
+    href: '/freestyle',
     priority,
     reason: '待复习',
     palace_context: {

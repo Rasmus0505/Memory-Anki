@@ -335,16 +335,6 @@ export async function undoContentScheduleBatchApi(
   return response.item
 }
 
-export async function startUnitReviewSessionApi(palaceId: number) {
-  const response = await request<{ item: UnitReviewSessionDto }>(`/review/palaces/${palaceId}/sessions`, {
-    method: 'POST',
-    body: JSON.stringify({
-      clientSource: detectClientSource(),
-    }),
-  })
-  return response.item
-}
-
 export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
   roundId: string,
@@ -474,16 +464,5 @@ export async function undoReviewUnitRatingApi(operationId: string, roundId?: str
     body: JSON.stringify(roundId ? { round_id: roundId } : {}),
   })
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
-  return response.item
-}
-
-export async function completeUnitReviewSessionApi(sessionId: string) {
-  const response = await request<{ item: UnitReviewCompletionDto }>(`/review/session/${sessionId}/complete`, { method: 'POST' })
-  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
-  return response.item
-}
-
-export async function getUnitReviewCompletionApi(sessionId: string) {
-  const response = await request<{ item: UnitReviewCompletionDto }>(`/review/completions/${sessionId}`)
   return response.item
 }

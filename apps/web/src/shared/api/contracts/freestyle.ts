@@ -45,6 +45,8 @@ export type FreestyleQuizMasteryBucket = 'unseen' | 'weak' | 'reinforce' | 'stab
  */
 export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 
+export type FreestyleSubjectScope = 'all' | 'english' | 'non_english'
+
 export interface FreestyleMixRatio {
   /** Palace-side cards per cycle (mindmap + anki stream). */
   mindmap: number
@@ -95,6 +97,7 @@ export interface FreestyleFeedConfig {
   quiz_scope: FreestyleQuizScope
   queue_length: number
   specific_palace_ids: number[]
+  subject_scope: FreestyleSubjectScope
   question_type: FreestyleQuestionTypeFilter
   /** Pool-internal sort only; does not decide membership (see quiz_mastery_buckets). */
   weak_quiz_priority: boolean

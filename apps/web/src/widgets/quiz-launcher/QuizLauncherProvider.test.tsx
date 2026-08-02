@@ -110,7 +110,7 @@ describe('QuizLauncherProvider', () => {
 
   it('previews review-based generation before saving', async () => {
     render(
-      <MemoryRouter initialEntries={['/review/session/1']}>
+      <MemoryRouter initialEntries={['/freestyle?palaceId=1']}>
         <QuizLauncherProvider>
           <LauncherHarness
             scene="review"
@@ -153,4 +153,3 @@ describe('QuizLauncherProvider', () => {
     )
   })
 })
-

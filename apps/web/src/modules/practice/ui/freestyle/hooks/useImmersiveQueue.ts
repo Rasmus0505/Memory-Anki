@@ -34,12 +34,16 @@ import {
   clearUnitEncounterState,
   applySkip,
   sanitizeFreestyleFeedConfig,
+  freestylePalaceScopeSignature,
   startNewRound,
   undoSkip,
   type FreestyleSkipState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
+import {
+  applyFreestyleEntryScope,
+} from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import { onAppEvent } from '@/shared/events/appEvents'
 import { logAppError } from '@/shared/logs/model/appLogs'
 
@@ -102,8 +106,14 @@ function sameFeedConfig(left: FreestyleFeedConfig, right: FreestyleFeedConfig) {
   }
 }
 
-export function useImmersiveQueue() {
-  const [config, setConfig] = useState<FreestyleFeedConfig>(() => readFreestyleFeedConfig())
+export function useImmersiveQueue(entryPalaceId: number | null = null) {
+  const scopeEntryConfig = useCallback(
+    (next: FreestyleFeedConfig) => applyFreestyleEntryScope(next, entryPalaceId),
+    [entryPalaceId],
+  )
+  const [config, setConfig] = useState<FreestyleFeedConfig>(() =>
+    scopeEntryConfig(readFreestyleFeedConfig()),
+  )
   const [queueState, setQueueState] = useState<FreestyleSkipState>(() => readQueueState())
   const [cards, setCards] = useState<FreestyleCard[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -251,12 +261,24 @@ export function useImmersiveQueue() {
         setError('')
       }
       try {
+        const scopeSignature = freestylePalaceScopeSignature(nextConfig)
+        const storedScopeChanged =
+          queueStateRef.current.palaceScopeSignature !== scopeSignature
+        if (storedScopeChanged) {
+          pendingRestudyByIdRef.current.clear()
+          const freshRound = persistQueueState(startNewRound(queueStateRef.current, nextConfig.seed))
+          persistQueueState({ ...freshRound, palaceScopeSignature: scopeSignature })
+        }
         const completedIds =
           options?.completedIds ??
-          (options?.preserveCompleted === false ? [] : queueStateRef.current.completedIds)
+          (options?.preserveCompleted === false || storedScopeChanged
+            ? []
+            : queueStateRef.current.completedIds)
         const hiddenIds =
           options?.hiddenIds ??
-          (options?.preserveCompleted === false ? [] : queueStateRef.current.hiddenIds)
+          (options?.preserveCompleted === false || storedScopeChanged
+            ? []
+            : queueStateRef.current.hiddenIds)
         const response = await buildQueueWithTimeout({
           operation_id: operationId,
           round_id: queueStateRef.current.roundId,
@@ -342,6 +364,7 @@ export function useImmersiveQueue() {
         nextCards = applyRoundPlanOrder(nextCards, nextPlan)
         const plannedState = {
           ...queueStateRef.current,
+          palaceScopeSignature: scopeSignature,
           roundPlan: nextPlan,
         }
         persistQueueState(plannedState)
@@ -398,30 +421,80 @@ export function useImmersiveQueue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const next = scopeEntryConfig(readFreestyleFeedConfig())
+    if (sameFeedConfig(next, configRef.current)) return
+    pendingRestudyByIdRef.current.clear()
+    const freshRound = persistQueueState({
+      ...startNewRound(queueStateRef.current, next.seed),
+      palaceScopeSignature: freestylePalaceScopeSignature(next),
+    })
+    configRef.current = next
+    setConfig(next)
+    cardsRef.current = []
+    applyCurrentIndex(0, [])
+    setCards([])
+    void buildQueue(next, {
+      preserveCompleted: false,
+      completedIds: freshRound.completedIds,
+      hiddenIds: freshRound.hiddenIds,
+      reason: 'entry_scope_changed',
+    })
+  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, scopeEntryConfig])
+
   // Backend preference bootstrap / cross-client updates can arrive after mount.
   useEffect(() => {
     return onAppEvent(FREESTYLE_FEED_CONFIG_UPDATED_EVENT, (detail) => {
-      const next = sanitizeFreestyleFeedConfig(detail)
+      const next = scopeEntryConfig(sanitizeFreestyleFeedConfig(detail))
       if (sameFeedConfig(next, configRef.current)) return
       configRef.current = next
       setConfig(next)
       void buildQueue(next, { preserveCompleted: true, reason: 'config_event' })
     })
-  }, [buildQueue])
+  }, [buildQueue, scopeEntryConfig])
 
   const setConfigAndPersist = useCallback(
     (updater: FreestyleFeedConfig | ((current: FreestyleFeedConfig) => FreestyleFeedConfig)) => {
       const current = configRef.current
-      const next =
+      const requested = scopeEntryConfig(
         typeof updater === 'function'
           ? (updater as (c: FreestyleFeedConfig) => FreestyleFeedConfig)(current)
-          : updater
-      const saved = saveFreestyleFeedConfig(next)
-      configRef.current = saved
-      setConfig(saved)
-      void buildQueue(saved, { preserveCompleted: true, reason: 'settings_save' })
+          : updater,
+      )
+      const stored = readFreestyleFeedConfig()
+      const nextToPersist = entryPalaceId == null
+        ? requested
+        : {
+            ...requested,
+            specific_palace_ids: stored.specific_palace_ids,
+            subject_scope: stored.subject_scope,
+          }
+      const saved = saveFreestyleFeedConfig(nextToPersist)
+      const next = scopeEntryConfig(saved)
+      const scopeChanged =
+        freestylePalaceScopeSignature(current) !== freestylePalaceScopeSignature(next)
+      configRef.current = next
+      setConfig(next)
+      if (scopeChanged) {
+        pendingRestudyByIdRef.current.clear()
+        const freshRound = persistQueueState({
+          ...startNewRound(queueStateRef.current, next.seed),
+          palaceScopeSignature: freestylePalaceScopeSignature(next),
+        })
+        cardsRef.current = []
+        applyCurrentIndex(0, [])
+        setCards([])
+        void buildQueue(next, {
+          preserveCompleted: false,
+          completedIds: freshRound.completedIds,
+          hiddenIds: freshRound.hiddenIds,
+          reason: 'palace_scope_changed',
+        })
+        return
+      }
+      void buildQueue(next, { preserveCompleted: true, reason: 'settings_save' })
     },
-    [buildQueue],
+    [applyCurrentIndex, buildQueue, persistQueueState, scopeEntryConfig],
   )
 
   const refreshQueue = useCallback(() => {
@@ -431,7 +504,9 @@ export function useImmersiveQueue() {
   /** Reshuffle + clear this round's completed/hidden so still-due units can return. */
   const reshuffleQueue = useCallback(() => {
     const nextSeed = config.seed + 1
-    const nextConfig = saveFreestyleFeedConfig({ ...config, seed: nextSeed })
+    const nextConfig = scopeEntryConfig(
+      saveFreestyleFeedConfig({ ...readFreestyleFeedConfig(), seed: nextSeed }),
+    )
     configRef.current = nextConfig
     setConfig(nextConfig)
     const nextState = persistQueueState(startNewRound(queueStateRef.current, nextSeed))
@@ -510,7 +585,6 @@ export function useImmersiveQueue() {
             retryOccurrence,
             settledIndex >= 0 ? settledIndex : currentIndexRef.current,
             options.retryAfterCards ?? 3,
-            configRef.current.palace_order,
           )
           cardsRef.current = inserted
           setCards(inserted)

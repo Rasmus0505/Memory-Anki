@@ -276,6 +276,7 @@ function renderCard(
     readOnly?: boolean
     encounter?: FreestyleUnitEncounterState
     ratingVisible?: boolean
+    roundId?: string
   } = {},
 ) {
   const callbacks = {
@@ -290,7 +291,7 @@ function renderCard(
     card,
     active: options.active ?? true,
     readOnly: options.readOnly ?? false,
-    roundId: 'round-1',
+    roundId: options.roundId ?? 'round-1',
     encounter: options.encounter ?? queueEncounter(),
     retryAfterCards: 3,
     ratingVisible: options.ratingVisible ?? true,
@@ -427,6 +428,8 @@ describe('FreestyleUnitReviewCardView', () => {
     const enter = moreActions?.moreActions?.find((item) => item.label === '进入编辑')
     expect(enter).toBeTruthy()
     expect(moreActions?.moreActions?.some((item) => item.label === '复习进度')).toBe(true)
+    expect(moreActions?.moreActions?.some((item) => item.label === '复制导图')).toBe(true)
+    expect(moreActions?.moreActions?.some((item) => item.label === '导出脑图')).toBe(true)
 
     act(() => enter!.onClick())
 
@@ -440,6 +443,8 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(labels).toContain('返回学习')
     expect(labels).toContain('永久标记')
     expect(labels).toContain('复习进度')
+    expect(labels).toContain('复制导图')
+    expect(labels).toContain('导出脑图')
     expect(screen.queryByRole('button', { name: /忘记/ })).toBeNull()
 
     const leave = editMore?.moreActions?.find((item) => item.label === '返回学习')
@@ -788,6 +793,24 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { restudy: false })
     expect(screen.getByTestId('flip-card-mind-map-panel')).not.toBeNull()
+  })
+
+  it('rates with the server-owned encounter round when the queue round is stale', async () => {
+    const card = buildCard('unit-server-round')
+    const session = buildSession(card.unit_id!, 3, buildEncounter({ round_id: 'round-server' }))
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId, roundId) => {
+        expect(roundId).toBe('round-server')
+        return Promise.resolve(ratingResult(session, rating, operationId))
+      },
+    )
+    renderCard(card, { roundId: 'round-stale' })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+
+    await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
   })
 
   it('closes and locks the selected rating only after leaving the card', async () => {

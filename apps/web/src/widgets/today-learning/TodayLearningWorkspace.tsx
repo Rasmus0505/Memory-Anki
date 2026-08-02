@@ -106,9 +106,9 @@ function ContinueLearningPanel({ data }: { data: DashboardResponse }) {
             </Link>
           </Button>
           <Button asChild variant="outline" className="h-10 justify-center">
-            <Link to="/review">
+            <Link to="/freestyle">
               <Settings2 />
-              查看学习选项
+              调整随心设置
             </Link>
           </Button>
         </div>
@@ -128,7 +128,7 @@ function QueuePanel({ data }: { data: DashboardResponse }) {
           <p className="mt-1 text-xs text-muted-foreground">按到期优先级聚合今天的正式复习。</p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link to="/review">开始复习</Link>
+          <Link to="/freestyle">开始随心复习</Link>
         </Button>
       </div>
       <div className="p-3">
@@ -144,7 +144,7 @@ function QueuePanel({ data }: { data: DashboardResponse }) {
               return (
                 <Link
                   key={review.id}
-                  to="/review"
+                  to={`/freestyle?palaceId=${review.palace_id}`}
                   className="group grid gap-3 px-2 py-3 transition-colors hover:bg-accent/40 sm:grid-cols-[108px_minmax(0,1fr)_96px_72px] sm:items-center"
                 >
                   <span className={cn('w-fit rounded border px-2 py-1 text-[11px]', priorityClass)}>{priority}</span>
@@ -171,7 +171,7 @@ function QueuePanel({ data }: { data: DashboardResponse }) {
             <Sparkles className="size-5 text-warning" />
           </div>
         )}
-        <Link to="/review" className="mt-2 flex items-center justify-center gap-1 py-2 text-xs text-muted-foreground hover:text-primary">
+        <Link to="/freestyle" className="mt-2 flex items-center justify-center gap-1 py-2 text-xs text-muted-foreground hover:text-primary">
           查看全部复习（{data.due_count + data.due_later_today_count}）
           <ArrowRight className="size-3" />
         </Link>

@@ -1,15 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { getPalacesGroupedApi } from '@/modules/content/public'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
 import {
   DEFAULT_QUIZ_MASTERY_BUCKETS,
   sanitizeFreestyleFeedConfig,
 } from '@/modules/practice/domain/feedConfig'
-import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import {
+  buildFreestylePalaceScopeSubjects,
+  allFreestylePalaceIdsFromSubjects,
+  type FreestylePalaceScopeSubject,
+} from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
+import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
 import type {
   FreestyleBoundQuizPlacement,
   FreestyleFeedConfig,
   FreestyleMixMode,
-  FreestylePalaceContext,
   FreestyleQuizMasteryBucket,
   FreestyleQuizScope,
 } from '@/shared/api/contracts'
@@ -219,9 +223,10 @@ export function FreestyleFeedSettingsDialog({
   onSave: (config: FreestyleFeedConfig) => void
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
-  const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
-  const allPalacesSelected =
-    palaces.length > 0 && palaces.every((palace) => draft.specific_palace_ids.includes(palace.id))
+  const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
+  const [palacePickerOpen, setPalacePickerOpen] = useState(false)
+  const allPalaceIds = useMemo(() => allFreestylePalaceIdsFromSubjects(scopeSubjects), [scopeSubjects])
+  const settingsDialogOpen = open && !palacePickerOpen
   const quizEnabled = draft.content.quiz_question && draft.mix_mode !== 'mindmap_only'
   const showRatioControls = draft.mix_mode === 'ratio' && quizEnabled
   const showBoundPlacement =
@@ -235,11 +240,27 @@ export function FreestyleFeedSettingsDialog({
     if (!open) return
     let active = true
     void getPalacesGroupedApi()
-      .then((data) => {
-        if (active) setPalaces(flattenPalaceOptions(data))
+      .then(async (data) => {
+        const subjectIds = (data.subjects ?? []).map((item) => item.subject?.id).filter((id): id is number => Boolean(id))
+        if (active) setScopeSubjects(buildFreestylePalaceScopeSubjects(data))
+        const trees = typeof getSubjectTreeApi === 'function'
+          ? await Promise.all(
+              subjectIds.map(async (id) => {
+                try {
+                  return await getSubjectTreeApi(id)
+                } catch {
+                  return null
+                }
+              }),
+            )
+          : []
+        const resolvedTrees = trees.filter((tree): tree is NonNullable<typeof tree> => Boolean(tree))
+        if (active && resolvedTrees.length > 0) {
+          setScopeSubjects(buildFreestylePalaceScopeSubjects(data, resolvedTrees))
+        }
       })
       .catch(() => {
-        if (active) setPalaces([])
+        if (active) setScopeSubjects([])
       })
     return () => {
       active = false
@@ -247,7 +268,8 @@ export function FreestyleFeedSettingsDialog({
   }, [open])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={settingsDialogOpen} onOpenChange={onOpenChange}>
       <DialogContent
         floatingId="freestyle-feed-settings"
         className="flex max-h-[min(86vh,100dvh-1.5rem)] w-[min(34rem,calc(100vw-1.5rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
@@ -560,7 +582,7 @@ export function FreestyleFeedSettingsDialog({
                   <p className="text-xs text-muted-foreground">
                     {draft.specific_palace_ids.length
                       ? `已选 ${draft.specific_palace_ids.length} 个宫殿`
-                      : '不勾选 = 全部宫殿都可以出现'}
+                      : '未指定宫殿 = 全部宫殿都可以出现'}
                   </p>
                 </div>
                 <Button
@@ -568,56 +590,13 @@ export function FreestyleFeedSettingsDialog({
                   variant="outline"
                   size="sm"
                   className="shrink-0"
-                  disabled={!palaces.length}
-                  aria-pressed={allPalacesSelected}
-                  onClick={() =>
-                    setDraft((current) => ({
-                      ...current,
-                      specific_palace_ids: allPalacesSelected
-                        ? []
-                        : palaces.map((palace) => palace.id),
-                    }))
-                  }
+                  onClick={() => { setPalacePickerOpen(true); onOpenChange(false) }}
                 >
-                  全选
+                  打开宫殿筛选器
                 </Button>
               </div>
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-background/70 p-2 sm:max-h-44">
-                {palaces.length ? (
-                  palaces.map((palace) => {
-                    const checked = draft.specific_palace_ids.includes(palace.id)
-                    return (
-                      <label
-                        key={palace.id}
-                        className={cn(
-                          'flex min-h-10 min-w-0 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors',
-                          checked
-                            ? 'border-primary/50 bg-primary/8'
-                            : 'border-transparent hover:bg-muted/50',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="size-4 shrink-0 accent-primary"
-                          checked={checked}
-                          onChange={() =>
-                            setDraft((current) => ({
-                              ...current,
-                              specific_palace_ids: checked
-                                ? current.specific_palace_ids.filter((id) => id !== palace.id)
-                                : [...current.specific_palace_ids, palace.id],
-                            }))
-                          }
-                        />
-                        <span className="min-w-0 truncate">
-                          {palace.resolved_title || palace.title}
-                        </span>
-                      </label>
-                    )
-                  })
-                ) : (
-                  <div className="px-2 py-4 text-center text-xs text-muted-foreground">暂无宫殿</div>
-                )}
+              <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                {draft.specific_palace_ids.length ? `已选宫殿 ID：${draft.specific_palace_ids.join('、')}` : `当前学科共 ${allPalaceIds.length} 个宫殿，未指定时全部可进入队列。`}
               </div>
             </div>
           </Section>
@@ -683,5 +662,13 @@ export function FreestyleFeedSettingsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <FreestylePalacePickerDialog
+      open={palacePickerOpen}
+      subjects={scopeSubjects}
+      value={draft.specific_palace_ids}
+      onOpenChange={setPalacePickerOpen}
+      onConfirm={(ids) => setDraft((current) => ({ ...current, specific_palace_ids: ids }))}
+    />
+  </>
   )
 }

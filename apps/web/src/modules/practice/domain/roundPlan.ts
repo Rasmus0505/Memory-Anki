@@ -162,18 +162,34 @@ export function createRoundPlan(
 
   const currentIds = new Set(Object.keys(nextById))
   const previousIds = new Set(previous?.orderIds ?? [])
-  const orderIds = (previous?.orderIds ?? []).filter((id) => currentIds.has(id))
-  cards.forEach((card) => {
+  // Retry occurrences are local scheduling decisions. Remove their old
+  // persisted slots first so a rebuild cannot resurrect the pre-fix tail order.
+  const retryIdsInCards = new Set(
+    cards
+      .filter((card) => card.occurrence_kind === 'retry')
+      .map((card) => String(card.id || '').trim())
+      .filter(Boolean),
+  )
+  const orderIds = (previous?.orderIds ?? []).filter(
+    (id) => currentIds.has(id) && !retryIdsInCards.has(id),
+  )
+  cards.forEach((card, cardIndex) => {
     const id = String(card.id || '').trim()
-    if (!id || previousIds.has(id) || !currentIds.has(id)) return
+    if (!id || !currentIds.has(id)) return
     if (card.occurrence_kind === 'retry' && card.source_card_id) {
-      const sourceIndex = orderIds.indexOf(card.source_card_id)
-      if (sourceIndex >= 0) {
-        const gap = Math.max(0, Math.min(3, Math.round(Number(card.retry_after_cards) || 3)))
-        orderIds.splice(Math.min(sourceIndex + 1 + gap, orderIds.length), 0, id)
-        return
-      }
+      // The queue reducer already placed this retry occurrence using the
+      // current-palace boundary. Preserve that physical position during a
+      // rebuild instead of recomputing from the source card's old plan slot.
+      const previousKnownId = cards
+        .slice(0, cardIndex)
+        .map((item) => String(item.id || '').trim())
+        .reverse()
+        .find((candidate) => candidate && orderIds.includes(candidate))
+      const previousIndex = previousKnownId ? orderIds.indexOf(previousKnownId) : -1
+      orderIds.splice(previousIndex + 1, 0, id)
+      return
     }
+    if (previousIds.has(id)) return
     orderIds.push(id)
   })
 

@@ -10,8 +10,14 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
-import { getPalacesGroupedApi } from '@/modules/content/public'
-import { DEFAULT_QUIZ_MASTERY_BUCKETS, sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
+import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
+import {
+  applyFreestyleQuickPreset,
+  DEFAULT_QUIZ_MASTERY_BUCKETS,
+  FREESTYLE_QUICK_PRESETS,
+  sanitizeFreestyleFeedConfig,
+  type FreestyleQuickPresetId,
+} from '@/modules/practice/domain/feedConfig'
 import {
   planCardStatus,
   type FreestyleRoundPlanCard,
@@ -19,6 +25,11 @@ import {
   type FreestyleRoundPlanState,
 } from '@/modules/practice/public'
 import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import {
+  buildFreestylePalaceScopeSubjects,
+  type FreestylePalaceScopeSubject,
+} from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
+import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
 import type { FreestyleCard, FreestyleFeedConfig, FreestylePalaceContext } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -71,11 +82,11 @@ function configWith(next: FreestyleFeedConfig, patch: Partial<FreestyleFeedConfi
 
 function ConfigPanel({
   config,
-  palaces,
+  onOpenPalacePicker,
   onChange,
 }: {
   config: FreestyleFeedConfig
-  palaces: FreestylePalaceContext[]
+  onOpenPalacePicker: () => void
   onChange: (next: FreestyleFeedConfig) => void
 }) {
   const set = (patch: Partial<FreestyleFeedConfig>) => onChange(configWith(config, patch))
@@ -140,11 +151,7 @@ function ConfigPanel({
       </section>
 
       <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <div className="flex items-center justify-between gap-2"><div className="text-sm font-semibold">宫殿筛选</div><span className="text-xs text-muted-foreground">{selected.size ? `已选 ${selected.size} 个` : '全部宫殿'}</span></div>
-        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-1.5">
-          {palaces.map((palace) => <label key={palace.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"><input type="checkbox" checked={selected.has(palace.id)} onChange={(event) => { const ids = new Set(config.specific_palace_ids); if (event.target.checked) ids.add(palace.id); else ids.delete(palace.id); set({ specific_palace_ids: [...ids] }) }} /><span className="truncate">{palace.resolved_title || palace.title || `宫殿 ${palace.id}`}</span></label>)}
-          {!palaces.length ? <div className="px-2 py-3 text-center text-xs text-muted-foreground">暂无宫殿</div> : null}
-        </div>
+        <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-semibold">宫殿筛选</div><span className="text-xs text-muted-foreground">{selected.size ? `已选 ${selected.size} 个` : '全部宫殿'}</span></div><Button type="button" size="sm" variant="outline" onClick={onOpenPalacePicker}>打开筛选器</Button></div>
       </section>
 
       <section className="grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-card/40 p-3">
@@ -186,9 +193,17 @@ export function FreestyleRoundPlanDialog({
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
+  const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
+  const [palacePickerOpen, setPalacePickerOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [collapsedPalaces, setCollapsedPalaces] = useState<Set<number>>(new Set())
+  const planDialogOpen = open
+
+  useEffect(() => {
+    if (!open) setPalacePickerOpen(false)
+  }, [open])
 
   useEffect(() => {
     if (open) {
@@ -200,10 +215,29 @@ export function FreestyleRoundPlanDialog({
   useEffect(() => {
     if (!open) return
     let active = true
-    void getPalacesGroupedApi().then((value) => {
-      if (active) setPalaces(flattenPalaceOptions(value))
+    void getPalacesGroupedApi().then(async (value) => {
+      const subjectIds = (value.subjects ?? []).map((item) => item.subject?.id).filter((id): id is number => Boolean(id))
+      if (active) {
+        setPalaces(flattenPalaceOptions(value))
+        setScopeSubjects(buildFreestylePalaceScopeSubjects(value))
+      }
+      const trees = typeof getSubjectTreeApi === 'function'
+        ? await Promise.all(
+            subjectIds.map(async (id) => {
+              try {
+                return await getSubjectTreeApi(id)
+              } catch {
+                return null
+              }
+            }),
+          )
+        : []
+      const resolvedTrees = trees.filter((tree): tree is NonNullable<typeof tree> => Boolean(tree))
+      if (active && resolvedTrees.length > 0) {
+        setScopeSubjects(buildFreestylePalaceScopeSubjects(value, resolvedTrees))
+      }
     }).catch(() => {
-      if (active) setPalaces([])
+      if (active) { setPalaces([]); setScopeSubjects([]) }
     })
     return () => { active = false }
   }, [open])
@@ -226,6 +260,10 @@ export function FreestyleRoundPlanDialog({
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = new Set(selectedIds)
 
+  const applyQuickPreset = (presetId: FreestyleQuickPresetId) => {
+    setDraft((current) => applyFreestyleQuickPreset(current, presetId, palaces))
+  }
+
   const moveRow = (sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
     const next = [...roundPlan.orderIds]
@@ -245,7 +283,8 @@ export function FreestyleRoundPlanDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={planDialogOpen} onOpenChange={onOpenChange}>
       <DialogContent floatingId="freestyle-round-plan" className="flex max-h-[min(92vh,100dvh-1rem)] w-[min(76rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl">
         <DialogHeader>
           <div className="min-w-0">
@@ -283,13 +322,60 @@ export function FreestyleRoundPlanDialog({
                       const liveCard = liveById.get(entry.cardId)
                       const status = liveCard ? planCardStatus(liveCard, roundPlan, queueState.completedIds, queueState.hiddenIds, currentCardId) : entry.status
                       const isSelected = selectedSet.has(entry.cardId)
-                      return <div key={entry.cardId} draggable={status !== 'completed' && status !== 'excluded'} onDragStart={() => setDraggingId(entry.cardId)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingId) moveRow(draggingId, entry.cardId); setDraggingId(null) }} className={cn('flex items-center gap-2 px-3 py-2.5 text-sm', isSelected && 'bg-primary/5', status === 'excluded' && 'opacity-65')}>
-                        <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground" aria-label="拖动调整顺序" />
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelected(entry.cardId)} aria-label={`选择${rowLabel(entry)}`} />
-                        <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-primary disabled:cursor-not-allowed" disabled={!liveCard} onClick={() => liveCard && onJump(entry.cardId)} title={rowLabel(entry)}>{rowLabel(entry)}</button>
-                        <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[11px]', STATUS_CLASSES[status])}>{STATUS_LABELS[status]}</span>
-                        {entry.occurrenceKind === 'retry' ? <span className="shrink-0 text-[11px] text-amber-700 dark:text-amber-300">来源 {entry.sourceCardId} · {entry.retryAfterCards}张后</span> : null}
-                        {status === 'completed' ? <Check className="size-4 shrink-0 text-emerald-500" /> : null}
+                      const canDrag = status !== 'completed' && status !== 'excluded'
+                      const isActive = status === 'active'
+                      return <div key={entry.cardId}>
+                        {dragOverId === entry.cardId && draggingId !== entry.cardId ? (
+                          <div data-testid="round-plan-drop-placeholder" className="mx-1 my-1 flex h-14 items-center justify-center rounded-lg border-2 border-dashed border-emerald-500/60 bg-emerald-500/8 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            放到这里
+                          </div>
+                        ) : null}
+                        <div
+                          data-testid={`round-plan-card-${entry.cardId}`}
+                          draggable={canDrag}
+                          onDragStart={(event) => {
+                            if (!canDrag) return
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', entry.cardId)
+                            setDraggingId(entry.cardId)
+                          }}
+                          onDragEnter={() => canDrag && setDragOverId(entry.cardId)}
+                          onDragOver={(event) => {
+                            if (!canDrag) return
+                            event.preventDefault()
+                            event.dataTransfer.dropEffect = 'move'
+                            setDragOverId(entry.cardId)
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault()
+                            const sourceId = draggingId || event.dataTransfer.getData('text/plain')
+                            if (sourceId) moveRow(sourceId, entry.cardId)
+                            setDraggingId(null)
+                            setDragOverId(null)
+                          }}
+                          onDragEnd={() => {
+                            setDraggingId(null)
+                            setDragOverId(null)
+                          }}
+                          className={cn(
+                            'mx-1 my-1 flex min-h-14 items-center gap-2 rounded-lg border px-2 py-2 text-sm transition-colors',
+                            isActive
+                              ? 'border-emerald-500/60 bg-emerald-500/12 shadow-sm ring-1 ring-emerald-500/20'
+                              : 'border-transparent hover:border-border/70 hover:bg-background/70',
+                            isSelected && !isActive && 'bg-primary/5',
+                            draggingId === entry.cardId && 'opacity-45',
+                            status === 'excluded' && 'opacity-65',
+                          )}
+                        >
+                          <button type="button" draggable={false} disabled={!canDrag} className="inline-flex size-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing disabled:cursor-not-allowed" aria-label={`拖动${rowLabel(entry)}`} title="拖动调整顺序">
+                            <GripVertical className="size-4" />
+                          </button>
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelected(entry.cardId)} aria-label={`选择${rowLabel(entry)}`} />
+                          <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-primary disabled:cursor-not-allowed" disabled={!liveCard} onClick={() => liveCard && onJump(entry.cardId)} title={rowLabel(entry)}>{rowLabel(entry)}</button>
+                          <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[11px]', STATUS_CLASSES[status])}>{isActive ? '当前复习' : STATUS_LABELS[status]}</span>
+                          {entry.occurrenceKind === 'retry' ? <span className="shrink-0 text-[11px] text-amber-700 dark:text-amber-300">来源 {entry.sourceCardId} · {entry.retryAfterCards}张后</span> : null}
+                          {status === 'completed' ? <Check className="size-4 shrink-0 text-emerald-500" /> : null}
+                        </div>
                       </div>
                     })}
                   </div> : null}
@@ -300,7 +386,20 @@ export function FreestyleRoundPlanDialog({
 
           <section className="min-h-0 overflow-y-auto p-4 lg:p-5">
             <div className="mb-3 flex items-center justify-between gap-2"><div><div className="text-sm font-semibold">随心配置</div><div className="text-xs text-muted-foreground">保存后保留本轮已完成和已排除状态。</div></div><ListChecks className="size-4 text-muted-foreground" /></div>
-            <ConfigPanel config={draft} palaces={palaces} onChange={setDraft} />
+            <section className="mb-3 space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+              <div>
+                <div className="text-sm font-semibold">快捷预设</div>
+                <div className="text-xs leading-5 text-muted-foreground">一键切换本轮要刷的内容范围。</div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {FREESTYLE_QUICK_PRESETS.map((preset) => (
+                  <Button key={preset.id} type="button" variant="outline" className="h-auto min-h-14 justify-start px-3 py-2 text-left" onClick={() => applyQuickPreset(preset.id)}>
+                    <span className="min-w-0"><span className="block text-sm font-semibold">{preset.label}</span><span className="block truncate text-[11px] font-normal text-muted-foreground">{preset.description}</span></span>
+                  </Button>
+                ))}
+              </div>
+            </section>
+            <ConfigPanel config={draft} onOpenPalacePicker={() => setPalacePickerOpen(true)} onChange={setDraft} />
           </section>
         </div>
 
@@ -310,5 +409,13 @@ export function FreestyleRoundPlanDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <FreestylePalacePickerDialog
+      open={palacePickerOpen}
+      subjects={scopeSubjects}
+      value={draft.specific_palace_ids}
+      onOpenChange={setPalacePickerOpen}
+      onConfirm={(ids) => setDraft((current) => configWith(current, { specific_palace_ids: ids }))}
+    />
+  </>
   )
 }

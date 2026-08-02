@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { DEFAULT_QUEUE_STATE } from '@/modules/practice/domain/queueState'
@@ -77,5 +77,86 @@ describe('FreestyleRoundPlanDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the current card green, shows a drop placeholder, and applies the quiz preset', async () => {
+    const cards = [card('one'), card('two')]
+    const plan = createRoundPlan('round-1', cards, config)
+    const onReorder = vi.fn()
+    const onSaveConfig = vi.fn()
+    render(
+      <FreestyleRoundPlanDialog
+        open
+        config={config}
+        cards={cards}
+        currentIndex={0}
+        queueState={{ ...DEFAULT_QUEUE_STATE, roundId: 'round-1', currentCardId: 'one' }}
+        roundPlan={plan}
+        onOpenChange={vi.fn()}
+        onJump={vi.fn()}
+        onExclude={vi.fn()}
+        onRestore={vi.fn()}
+        onReorder={onReorder}
+        onSaveConfig={onSaveConfig}
+        onResetRound={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('round-plan-card-one').className).toContain('bg-emerald-500/12')
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn(() => 'one'),
+    }
+    act(() => {
+      fireEvent.dragStart(screen.getByTestId('round-plan-card-two'), { dataTransfer })
+      fireEvent.dragOver(screen.getByTestId('round-plan-card-one'), { dataTransfer })
+    })
+    expect(screen.getByTestId('round-plan-drop-placeholder')).toBeTruthy()
+    act(() => {
+      fireEvent.drop(screen.getByTestId('round-plan-card-one'), { dataTransfer })
+    })
+    expect(onReorder).toHaveBeenCalledWith(['two', 'one'])
+
+    await screen.findByRole('button', { name: /^刷题/ })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^刷题/ }))
+      await Promise.resolve()
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    })
+    expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
+      mix_mode: 'quiz_only',
+      content: { mindmap_branch: false, anki_card: false, quiz_question: true },
+    })
+  })
+
+  it('opens the palace picker without closing the configuration dialog', async () => {
+    const cards = [card('one')]
+    const plan = createRoundPlan('round-1', cards, config)
+    render(
+      <FreestyleRoundPlanDialog
+        open
+        config={config}
+        cards={cards}
+        currentIndex={0}
+        queueState={{ ...DEFAULT_QUEUE_STATE, roundId: 'round-1', currentCardId: 'one' }}
+        roundPlan={plan}
+        onOpenChange={vi.fn()}
+        onJump={vi.fn()}
+        onExclude={vi.fn()}
+        onRestore={vi.fn()}
+        onReorder={vi.fn()}
+        onSaveConfig={vi.fn()}
+        onResetRound={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开筛选器' }))
+
+    expect(screen.getByRole('dialog', { name: /宫殿章节筛选/ })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: /本轮安排/ })).toBeTruthy()
   })
 })

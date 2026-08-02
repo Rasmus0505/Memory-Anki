@@ -10,6 +10,7 @@ import {
   updateRoundPlanCard,
 } from './roundPlan'
 import {
+  cardPalaceId,
   createRetryOccurrence,
   insertRetryOccurrenceAfterGap,
   removeRetryOccurrencesForSource,
@@ -56,6 +57,40 @@ describe('round plan reducer', () => {
     const plan = createRoundPlan('round-1', cards, config)
     const retryPlan = createRoundPlan('round-1', next, config, undefined, plan)
     expect(retryPlan.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
+  })
+
+  it('keeps a retry occurrence in its original palace near the next palace', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 2), card('d', 2)]
+    const retry = createRetryOccurrence(cards[1], 'round-1', 1, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, retry, 1, 3)
+
+    expect(next.map((item) => item.id)).toEqual(['a', 'b', retry.id, 'c', 'd'])
+    expect(cardPalaceId(next[2])).toBe(1)
+
+    const rebuilt = createRoundPlan('round-1', next, config, undefined, createRoundPlan('round-1', cards, config))
+    expect(rebuilt.orderIds).toEqual(['a', 'b', retry.id, 'c', 'd'])
+
+    const stalePlan = updateRoundPlanCard(
+      createRoundPlan('round-1', next, config),
+      retry.id,
+      { status: 'retry' },
+    )
+    stalePlan.orderIds = ['a', 'b', 'c', 'd', retry.id]
+    const repaired = createRoundPlan('round-1', next, config, undefined, stalePlan)
+    expect(repaired.orderIds).toEqual(['a', 'b', retry.id, 'c', 'd'])
+  })
+
+  it.each([
+    [0, ['a', 'retry', 'b', 'c', 'd', 'next']],
+    [1, ['a', 'b', 'retry', 'c', 'd', 'next']],
+    [2, ['a', 'b', 'c', 'retry', 'd', 'next']],
+    [3, ['a', 'b', 'c', 'd', 'retry', 'next']],
+  ])('places a retry after at most %i same-palace cards', (gap, expected) => {
+    const cards = [card('a', 1), card('b', 1), card('c', 1), card('d', 1), card('next', 2)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, gap)
+    const next = insertRetryOccurrenceAfterGap(cards, retry, 0, gap)
+    const expectedIds = expected.map((id) => id === 'retry' ? retry.id : id)
+    expect(next.map((item) => item.id)).toEqual(expectedIds)
   })
 
   it('keeps stable order and metadata across queue rebuilds', () => {

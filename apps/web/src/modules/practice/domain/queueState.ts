@@ -17,6 +17,7 @@ export type FreestyleUnitEncounterState = {
 
 export type FreestyleSkipState = {
   roundId: string
+  palaceScopeSignature: string
   startedAt: number
   seed: number
   skipCountById: Record<string, number>
@@ -41,6 +42,7 @@ export type FreestyleSkipState = {
 
 export const DEFAULT_QUEUE_STATE: FreestyleSkipState = {
   roundId: 'freestyle-round-default',
+  palaceScopeSignature: '',
   startedAt: 0,
   seed: 17,
   skipCountById: {},
@@ -165,6 +167,8 @@ export function sanitizeQueueState(value: unknown): FreestyleSkipState {
   })
   return {
     roundId,
+    palaceScopeSignature:
+      typeof raw.palaceScopeSignature === 'string' ? raw.palaceScopeSignature : '',
     startedAt:
       typeof raw.startedAt === 'number' && Number.isFinite(raw.startedAt)
         ? raw.startedAt
@@ -341,36 +345,34 @@ export function insertRetryOccurrenceAfterGap(
   occurrence: FreestyleCard,
   currentIndex: number,
   maxIntervening = 3,
-  palaceOrder: string = 'sequential',
 ): FreestyleCard[] {
   const withoutExisting = cards.filter((card) => card.id !== occurrence.id)
-  const anchor = Math.max(0, Math.min(Math.round(currentIndex), withoutExisting.length - 1))
-  let effectivePalace = cardPalaceId(occurrence)
-  let modifiedOccurrence = occurrence
-  if (palaceOrder === 'finish_palace_then_next') {
-    const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
-    if (nextPalaceIndex !== null) {
-      const nextPalace = cardPalaceId(cards[nextPalaceIndex])
-      if (nextPalace != null) {
-        effectivePalace = nextPalace
-        modifiedOccurrence = {
-          ...occurrence,
-          palace_id: nextPalace,
-        } as FreestyleCard
+  if (!withoutExisting.length) return [occurrence]
+  const requestedIndex = Math.round(currentIndex)
+  const anchor = Math.max(
+    0,
+    Math.min(
+      Number.isFinite(requestedIndex) ? requestedIndex : 0,
+      withoutExisting.length - 1,
+    ),
+  )
+  // A retry belongs to the palace where it was rated. Never rewrite its
+  // palace identity to make sequential navigation appear to progress: that
+  // makes the retry cross the palace boundary and can block the next palace.
+  const effectivePalace = cardPalaceId(occurrence)
+  let runEnd = withoutExisting.length
+  if (effectivePalace != null) {
+    for (let index = anchor + 1; index < withoutExisting.length; index += 1) {
+      if (cardPalaceId(withoutExisting[index]) !== effectivePalace) {
+        runEnd = index
+        break
       }
     }
   }
-  const usable = withoutExisting
-    .slice(anchor + 1)
-    .filter(
-      (card) =>
-        (!isRetryOccurrence(card) || card.id !== occurrence.id)
-        && (effectivePalace == null || cardPalaceId(card) === effectivePalace),
-    )
   const gap = Math.max(0, Math.round(maxIntervening))
-  const insertAt = Math.min(anchor + 1 + Math.min(gap, usable.length), withoutExisting.length)
+  const insertAt = Math.min(anchor + 1 + gap, runEnd)
   const next = withoutExisting.slice()
-  next.splice(insertAt, 0, modifiedOccurrence)
+  next.splice(insertAt, 0, occurrence)
   return next
 }
 

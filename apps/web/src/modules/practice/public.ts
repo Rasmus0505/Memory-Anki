@@ -2,9 +2,14 @@ export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {
   DEFAULT_FREESTYLE_FEED_CONFIG,
+  FREESTYLE_QUICK_PRESETS,
+  applyFreestyleQuickPreset,
+  freestylePalaceScopeSignature,
   FREESTYLE_FEED_CONFIG_STORAGE_KEY,
   createOperationId as createDeterministicOperationId,
   sanitizeFreestyleFeedConfig,
+  type FreestyleQuickPreset,
+  type FreestyleQuickPresetId,
 } from './domain/feedConfig'
 export {
   createOperationId,

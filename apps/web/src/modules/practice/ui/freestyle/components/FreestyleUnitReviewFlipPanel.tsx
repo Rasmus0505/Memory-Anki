@@ -13,7 +13,7 @@ import type {
   PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
-import { copyMindMapToClipboard } from '@/modules/content/public'
+import { copyMindMapToClipboard, exportMindMapToFile } from '@/modules/content/public'
 import type { ReviewUnitDto, UnitReviewSessionDto } from '@/modules/practice/public'
 import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { toast } from '@/shared/feedback/toast'
@@ -414,16 +414,29 @@ export function FreestyleUnitReviewFlipPanel({
         separatorBefore: true,
       },
     ]
+    const palaceTitle = card.palace_title || session.title || `宫殿 ${card.palace_id}`
+    actions.push({
+      label: '复制导图',
+      onClick: () => {
+        void copyMindMapToClipboard(editorState, palaceTitle)
+          .then(() => toast.success('脑图已复制到剪切板'))
+          .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
+      },
+      separatorBefore: true,
+    })
+    actions.push({
+      label: '导出脑图',
+      onClick: () => {
+        try {
+          exportMindMapToFile(editorState, palaceTitle)
+          toast.success('脑图已导出')
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : '导出脑图失败。')
+        }
+      },
+      disabled: !editorState?.editor_doc,
+    })
     if (isEditMode) {
-      actions.push({
-        label: '复制导图',
-        onClick: () => {
-          void copyMindMapToClipboard(editorState, card.palace_title || session.title || `宫殿 ${card.palace_id}`)
-            .then(() => toast.success('脑图已复制到剪切板'))
-            .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
-        },
-        separatorBefore: true,
-      })
       actions.push({
         label: permanentMarkMode
           ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
@@ -484,7 +497,7 @@ export function FreestyleUnitReviewFlipPanel({
             ? `freestyle-edit:${session.palace_id}:${modeSyncVersion}`
             : reveal.visibleEditorSyncKey
         }
-        currentPalaceId={session.palace_id}
+        unitScopeEditorState={isEditMode ? null : editorState}
         activeUnitNodeUids={isEditMode ? null : [...new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))]}
         countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
         onCountBadgeClick={handleOpenNodeQuiz}

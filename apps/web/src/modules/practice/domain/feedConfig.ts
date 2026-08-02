@@ -8,7 +8,9 @@ import type {
   FreestyleQuestionTypeFilter,
   FreestyleQuizMasteryBucket,
   FreestyleQuizScope,
+  FreestyleSubjectScope,
 } from '@/shared/api/contracts'
+import type { FreestylePalaceContext } from '@/shared/api/contracts'
 
 export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
 
@@ -46,6 +48,20 @@ export const DEFAULT_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
   'reinforce',
 ]
 
+export type FreestyleQuickPresetId = 'quiz' | 'english' | 'memory_palace'
+
+export interface FreestyleQuickPreset {
+  id: FreestyleQuickPresetId
+  label: string
+  description: string
+}
+
+export const FREESTYLE_QUICK_PRESETS: FreestyleQuickPreset[] = [
+  { id: 'quiz', label: '刷题', description: '只进入练习题' },
+  { id: 'english', label: '英语', description: '只进入英语学科宫殿' },
+  { id: 'memory_palace', label: '记忆宫殿', description: '排除英语学科，只刷宫殿卡' },
+]
+
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   content: {
     mindmap_branch: true,
@@ -71,6 +87,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   quiz_scope: 'cross_palace_random',
   queue_length: 20,
   specific_palace_ids: [],
+  subject_scope: 'all',
   question_type: 'all',
   weak_quiz_priority: true,
   seed: 17,
@@ -142,6 +159,10 @@ function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
 
 function asQuizScope(value: unknown): FreestyleQuizScope {
   return value === 'single_palace_random' ? 'single_palace_random' : 'cross_palace_random'
+}
+
+function asSubjectScope(value: unknown): FreestyleSubjectScope {
+  return value === 'english' || value === 'non_english' ? value : 'all'
 }
 
 /**
@@ -238,6 +259,19 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     quiz_question: asInt(weightsRaw.quiz_question, 1, 0, 20),
   }
   const mix_mode = inferMixMode(raw.mix_mode, content)
+  if (mix_mode === 'quiz_only') {
+    mindmap = false
+    anki = false
+    quiz = true
+  } else if (mix_mode === 'mindmap_only') {
+    mindmap = true
+    quiz = false
+  }
+  const normalizedContent = {
+    mindmap_branch: mindmap,
+    anki_card: anki,
+    quiz_question: quiz,
+  }
   const mix_ratio = asMixRatio(raw.mix_ratio, weights, { hasExplicitWeights: Boolean(raw.weights) })
   // Legacy weights stay independent; mix_ratio is the interleave source of truth.
   // Zero out disabled content streams so older weight readers stay coherent.
@@ -250,7 +284,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
   const hasExplicitBuckets = Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets')
 
   return {
-    content,
+    content: normalizedContent,
     weights: syncedWeights,
     mix_mode,
     mix_ratio,
@@ -261,10 +295,60 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     quiz_scope: asQuizScope(raw.quiz_scope),
     queue_length: asInt(raw.queue_length, 20, 5, 100),
     specific_palace_ids: asIdList(raw.specific_palace_ids),
+    subject_scope: asSubjectScope(raw.subject_scope),
     question_type: asQuestionType(raw.question_type),
     weak_quiz_priority: asBoolean(raw.weak_quiz_priority, true),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
   }
+}
+
+/** A palace-scope change starts a new local freestyle round. */
+export function freestylePalaceScopeSignature(config: FreestyleFeedConfig): string {
+  return JSON.stringify({
+    specific_palace_ids: [...config.specific_palace_ids].sort((left, right) => left - right),
+    subject_scope: config.subject_scope,
+  })
+}
+
+export function applyFreestyleQuickPreset(
+  config: FreestyleFeedConfig,
+  presetId: FreestyleQuickPresetId,
+  palaces: FreestylePalaceContext[],
+) {
+  const englishPalaceIds = palaces
+    .filter((palace) => palace.subject?.name.trim() === '英语')
+    .map((palace) => palace.id)
+  const nonEnglishPalaceIds = palaces
+    .filter((palace) => palace.subject?.name.trim() !== '英语')
+    .map((palace) => palace.id)
+
+  if (presetId === 'quiz') {
+    return sanitizeFreestyleFeedConfig({
+      ...config,
+      content: { ...config.content, mindmap_branch: false, anki_card: false, quiz_question: true },
+      mix_mode: 'quiz_only',
+      specific_palace_ids: [],
+      subject_scope: 'all',
+    })
+  }
+
+  if (presetId === 'english') {
+    return sanitizeFreestyleFeedConfig({
+      ...config,
+      content: { mindmap_branch: true, anki_card: true, quiz_question: false },
+      mix_mode: 'mindmap_only',
+      specific_palace_ids: englishPalaceIds,
+      subject_scope: 'english',
+    })
+  }
+
+  return sanitizeFreestyleFeedConfig({
+    ...config,
+    content: { mindmap_branch: true, anki_card: true, quiz_question: false },
+    mix_mode: 'mindmap_only',
+    specific_palace_ids: nonEnglishPalaceIds,
+    subject_scope: 'non_english',
+  })
 }
 
 export function createOperationId(now = Date.now(), randomPart = Math.random().toString(36).slice(2, 10)) {

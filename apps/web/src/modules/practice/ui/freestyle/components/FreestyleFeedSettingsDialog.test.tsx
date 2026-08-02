@@ -4,9 +4,11 @@ import { FreestyleFeedSettingsDialog } from './FreestyleFeedSettingsDialog'
 import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 
 const getPalacesGroupedApiMock = vi.fn()
+const getSubjectTreeApiMock = vi.fn()
 
 vi.mock('@/modules/content/public', () => ({
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
+  getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
 }))
 
 const baseConfig: FreestyleFeedConfig = {
@@ -29,6 +31,7 @@ const baseConfig: FreestyleFeedConfig = {
   quiz_scope: 'cross_palace_random',
   queue_length: 20,
   specific_palace_ids: [],
+  subject_scope: 'all',
   question_type: 'all',
   weak_quiz_priority: true,
   seed: 17,
@@ -44,12 +47,12 @@ function buildConfig(overrides: Partial<FreestyleFeedConfig> = {}): FreestyleFee
 describe('FreestyleFeedSettingsDialog palace select-all', () => {
   beforeEach(() => {
     getPalacesGroupedApiMock.mockReset()
+    getSubjectTreeApiMock.mockReset()
+    getSubjectTreeApiMock.mockResolvedValue({ chapters: [], subject: { id: 1, name: 'Subject' } })
     getPalacesGroupedApiMock.mockResolvedValue({
       subjects: [
         {
-          id: 1,
-          name: 'Subject',
-          color: null,
+          subject: { id: 1, name: 'Subject', color: null },
           chapter_groups: [],
           ungrouped_palaces: [
             {
@@ -83,12 +86,13 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       />,
     )
 
+    fireEvent.click(await screen.findByRole('button', { name: '打开宫殿筛选器' }))
     expect(await screen.findByText('Palace A')).toBeTruthy()
     const selectAll = screen.getByRole('button', { name: '全选' })
     expect(selectAll.getAttribute('aria-pressed')).toBe('false')
 
     const palaceCheckbox = (title: string) =>
-      screen.getByText(title).closest('label')!.querySelector('input') as HTMLInputElement
+      screen.getByRole('checkbox', { name: `选择宫殿${title}` }) as HTMLButtonElement
 
     fireEvent.click(selectAll)
 
@@ -96,17 +100,18 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       expect(selectAll.getAttribute('aria-pressed')).toBe('true')
     })
     expect(screen.getByText('已选 2 个宫殿')).toBeTruthy()
-    expect(palaceCheckbox('Palace A').checked).toBe(true)
-    expect(palaceCheckbox('Palace B').checked).toBe(true)
+    expect(palaceCheckbox('Palace A').getAttribute('data-state')).toBe('checked')
+    expect(palaceCheckbox('Palace B').getAttribute('data-state')).toBe('checked')
 
     fireEvent.click(selectAll)
 
     await waitFor(() => {
       expect(selectAll.getAttribute('aria-pressed')).toBe('false')
     })
-    expect(screen.getByText('不勾选 = 全部宫殿都可以出现')).toBeTruthy()
-    expect(palaceCheckbox('Palace A').checked).toBe(false)
-    expect(palaceCheckbox('Palace B').checked).toBe(false)
+    expect(palaceCheckbox('Palace A').getAttribute('data-state')).toBe('unchecked')
+    expect(palaceCheckbox('Palace B').getAttribute('data-state')).toBe('unchecked')
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
+    expect(screen.getByText(/未指定宫殿/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '保存并重排剩余队列' }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ specific_palace_ids: [] }))
@@ -122,6 +127,7 @@ describe('FreestyleFeedSettingsDialog palace select-all', () => {
       />,
     )
 
+    fireEvent.click(await screen.findByRole('button', { name: '打开宫殿筛选器' }))
     expect(await screen.findByText('Palace A')).toBeTruthy()
     const selectAll = screen.getByRole('button', { name: '全选' })
     expect(selectAll.getAttribute('aria-pressed')).toBe('true')
