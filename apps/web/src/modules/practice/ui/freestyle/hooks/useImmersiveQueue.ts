@@ -494,7 +494,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       }
       void buildQueue(next, { preserveCompleted: true, reason: 'settings_save' })
     },
-    [applyCurrentIndex, buildQueue, persistQueueState, scopeEntryConfig],
+    [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, scopeEntryConfig],
   )
 
   const refreshQueue = useCallback(() => {
@@ -516,7 +516,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       completedIds: nextState.completedIds,
       hiddenIds: nextState.hiddenIds,
     })
-  }, [applyCurrentIndex, buildQueue, config, persistQueueState])
+  }, [applyCurrentIndex, buildQueue, config, persistQueueState, scopeEntryConfig])
 
   /**
    * Mark a card done for this round without removing it from the local feed.

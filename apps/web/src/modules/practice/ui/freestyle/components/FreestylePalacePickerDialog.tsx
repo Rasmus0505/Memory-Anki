@@ -103,7 +103,7 @@ export function FreestylePalacePickerDialog({
   useEffect(() => { if (open) setDraft(value) }, [open, value])
   const allIds = allFreestylePalaceIdsFromSubjects(subjects)
   const toggle = (ids: number[], checked: boolean) => setDraft((current) => toggleFreestylePalaceGroup(current, ids, checked))
-  return <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+  return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
       layout="centered"
       floating={false}

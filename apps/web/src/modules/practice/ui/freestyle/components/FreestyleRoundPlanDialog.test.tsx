@@ -157,6 +157,7 @@ describe('FreestyleRoundPlanDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: '打开筛选器' }))
 
     expect(screen.getByRole('dialog', { name: /宫殿章节筛选/ })).toBeTruthy()
-    expect(screen.getByRole('dialog', { name: /本轮安排/ })).toBeTruthy()
+    // 内层 modal 打开时外层会被 aria-hidden（Radix 嵌套 dialog 行为），但不应卸载。
+    expect(document.querySelector('[data-dialog-title="true"]')?.textContent).toMatch(/本轮安排/)
   })
 })
