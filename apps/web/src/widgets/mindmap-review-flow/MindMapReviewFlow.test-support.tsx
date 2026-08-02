@@ -173,6 +173,7 @@ vi.mock("@/modules/content/ui/mindmap-editor", () => ({
   MindMapPageToolbar: ({
     ratingAction,
     modeToggle,
+    textAction,
     quizAction,
     miniPalaceAction,
     immersiveAction,
@@ -189,6 +190,15 @@ vi.mock("@/modules/content/ui/mindmap-editor", () => ({
       {modeToggle ? (
         <button type="button" onClick={modeToggle.onClick}>
           {modeToggle.label}
+        </button>
+      ) : null}
+      {textAction ? (
+        <button
+          type="button"
+          aria-pressed={Boolean(textAction.active)}
+          onClick={textAction.onClick}
+        >
+          {textAction.label}
         </button>
       ) : null}
       {quizAction ? (

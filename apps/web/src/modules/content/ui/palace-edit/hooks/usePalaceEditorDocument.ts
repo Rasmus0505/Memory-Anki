@@ -70,7 +70,18 @@ export function usePalaceEditorDocument({
     async (id: number, data: MindMapEditorState & { expected_editor_fingerprint?: string | null }) => {
       const override = nextSaveOverrideRef.current
       nextSaveOverrideRef.current = null
-      return savePalaceEditorApi(id, applyPalaceSaveOverride(data, override))
+      const response = await savePalaceEditorApi(id, applyPalaceSaveOverride(data, override), 'ack')
+      // Autosave only acknowledges the server revision. Keep the local canonical
+      // document in the session so a slow response cannot rebuild the canvas.
+      return {
+        palace: response.palace,
+        editor_doc: data.editor_doc,
+        editor_config: data.editor_config ?? {},
+        editor_local_config: data.editor_local_config ?? {},
+        lang: data.lang || 'zh',
+        editor_fingerprint: response.editor_fingerprint,
+        unit_reconcile: response.unit_reconcile,
+      }
     },
     [],
   )
@@ -244,7 +255,9 @@ export function usePalaceEditorDocument({
         ...nextState,
         confirm_dangerous_change: true,
         editor_source: 'palace_edit',
-        expected_editor_fingerprint: editorState?.editor_fingerprint ?? null,
+        ...(editorState?.editor_fingerprint
+          ? { expected_editor_fingerprint: editorState.editor_fingerprint }
+          : {}),
       })
     },
     [editorState?.editor_fingerprint, palaceId],

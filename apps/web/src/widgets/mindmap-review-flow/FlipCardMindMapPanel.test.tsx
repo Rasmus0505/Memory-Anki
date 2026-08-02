@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import {
   editorState,
   getLatestMindMapEditorSurfaceProps,
@@ -133,5 +133,111 @@ describe('FlipCardMindMapPanel', () => {
     )
 
     expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).toEqual(['other'])
+    expect(getLatestMindMapEditorSurfaceProps()?.outlinedNodeUids).toEqual([
+      'root',
+      'parent',
+      'unit-card',
+    ])
+  })
+
+  it('ignores empty and stale unit membership without muting or outlining the map', () => {
+    const state = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            { data: { text: 'Parent', uid: 'parent' }, children: [] },
+            { data: { text: 'Other', uid: 'other' }, children: [] },
+          ],
+        },
+      },
+    } as MindMapEditorState
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        visibleEditorState={state}
+        activeUnitNodeUids={['stale-unit']}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).toEqual([])
+    expect(getLatestMindMapEditorSurfaceProps()?.outlinedNodeUids).toEqual([])
+  })
+
+  it('keeps a hidden active card ancestor outlined before the card is revealed', () => {
+    const fullState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            {
+              data: { text: 'Unit parent', uid: 'parent' },
+              children: [{ data: { text: 'Unit card', uid: 'unit-card' }, children: [] }],
+            },
+            { data: { text: 'Other branch', uid: 'other' }, children: [] },
+          ],
+        },
+      },
+    } as MindMapEditorState
+    const visibleState = {
+      ...fullState,
+      editor_doc: {
+        root: {
+          data: { text: 'Root', uid: 'root' },
+          children: [
+            { data: { text: 'Unit parent', uid: 'parent' }, children: [] },
+            { data: { text: 'Other branch', uid: 'other' }, children: [] },
+          ],
+        },
+      },
+    } as MindMapEditorState
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        visibleEditorState={visibleState}
+        unitScopeEditorState={fullState}
+        activeUnitNodeUids={['unit-card']}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()?.mutedNodeUids).toEqual(['other'])
+    expect(getLatestMindMapEditorSurfaceProps()?.outlinedNodeUids).toEqual([
+      'root',
+      'parent',
+    ])
+  })
+
+  it('switches the visible cards to text selection mode without flipping cards', () => {
+    const visibleState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: 'Visible root', uid: 'visible-root' },
+          children: [{ data: { text: 'Visible card', uid: 'visible-card' }, children: [] }],
+        },
+      },
+    } as MindMapEditorState
+
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        visibleEditorState={visibleState}
+        unitScopeEditorState={editorState}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()?.textSelectionModeActive).toBe(false)
+    expect(getLatestMindMapEditorSurfaceProps()?.editorState).toBe(visibleState)
+    fireEvent.click(screen.getByRole('button', { name: '文字模式' }))
+
+    expect(getLatestMindMapEditorSurfaceProps()?.textSelectionModeActive).toBe(true)
+    expect(getLatestMindMapEditorSurfaceProps()?.editorState).toBe(visibleState)
+
+    fireEvent.click(screen.getByRole('button', { name: '文字模式' }))
+    expect(getLatestMindMapEditorSurfaceProps()?.textSelectionModeActive).toBe(false)
   })
 })

@@ -189,4 +189,18 @@ describe('shared api http token headers', () => {
     await expect(request('/review/session/2063')).rejects.not.toThrow(/8012|5173/)
     await expect(request('/review/session/2063')).rejects.not.toThrow(/手机 Tailscale/)
   })
+
+  it('retries a transient local GET failure while the shared service restarts', async () => {
+    vi.stubGlobal('navigator', {
+      onLine: true,
+      userAgent: 'Electron/39.8.10',
+    })
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(request('/palaces/subjects')).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

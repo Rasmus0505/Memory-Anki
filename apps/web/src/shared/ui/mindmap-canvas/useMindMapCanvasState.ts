@@ -193,6 +193,7 @@ export function useMindMapCanvasState(
     buildNodeActions: buildCustomNodeActions,
     practiceModeActive = false,
     englishInteractionActive = false,
+    textSelectionModeActive = false,
     onEnglishWordClick,
     mobileViewPolicy = 'auto',
     nodeClickViewportPolicy = 'preserve',
@@ -204,6 +205,7 @@ export function useMindMapCanvasState(
     controlledViewport,
     onControlledViewportChange,
   } = props
+  const textInteractionActive = englishInteractionActive || textSelectionModeActive
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const [markColorFlyout, setMarkColorFlyout] = useState<MarkColorFlyoutState | null>(null)
@@ -474,7 +476,7 @@ export function useMindMapCanvasState(
   const { runFitView } = viewport
   // Practice: long-press = hide branch (via contextActionOnly). Edit: long-press = desktop right-click menu.
   const touchLongPressEnabled =
-    (practiceModeActive || !readonly) && !englishInteractionActive
+    (practiceModeActive || !readonly) && !textInteractionActive
   const handleTouchLongPress = useCallback(
     (nodeId: string, point: { x: number; y: number }) => {
       menus.openNodeContext(nodeId, point)
@@ -589,14 +591,14 @@ export function useMindMapCanvasState(
       selectionToolbarPreferPosition: props.selectionToolbarPreferPosition,
       extractDropTargetId: extractDrop?.targetId ?? null,
       extractDropMode: extractDrop?.mode ?? null,
-      englishInteractionActive,
-      onEnglishWordClick,
+      englishInteractionActive: textInteractionActive,
+      onEnglishWordClick: englishInteractionActive ? onEnglishWordClick : undefined,
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
   // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, expandSubtree, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, expandSubtree, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, textInteractionActive, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)

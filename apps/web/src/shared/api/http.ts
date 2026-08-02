@@ -23,6 +23,7 @@ const LOW_INFORMATION_NETWORK_ERRORS = [
   'networkerror',
   'network request failed',
 ]
+const LOCAL_GET_RETRY_DELAYS_MS = [250, 750]
 
 export interface RequestPersistenceOptions {
   resourceKey: string
@@ -115,6 +116,34 @@ function formatCurrentUrlForMessage(currentUrl: string, userAgent: string) {
   } catch {
     return '本机应用'
   }
+}
+
+async function fetchWithTransientRetry(
+  requestUrl: string,
+  init: RequestInit,
+  method: string,
+): Promise<Response> {
+  const shouldRetry = method.toUpperCase() === 'GET'
+  let lastError: unknown
+  for (let attempt = 0; attempt <= (shouldRetry ? LOCAL_GET_RETRY_DELAYS_MS.length : 0); attempt += 1) {
+    try {
+      return await fetch(requestUrl, init)
+    } catch (error) {
+      lastError = error
+      const rawMessage = error instanceof Error ? error.message : String(error || '')
+      const runtime = readBrowserRuntimeSummary()
+      if (
+        !shouldRetry
+        || !isLocalDesktopRuntime(runtime.currentUrl, runtime.userAgent)
+        || !isLowInformationNetworkError(rawMessage)
+        || attempt >= LOCAL_GET_RETRY_DELAYS_MS.length
+      ) {
+        throw error
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, LOCAL_GET_RETRY_DELAYS_MS[attempt]))
+    }
+  }
+  throw lastError
 }
 
 function buildNetworkFailureMessage(input: {
@@ -314,10 +343,10 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   let response: Response
 
   try {
-    response = await fetch(requestUrl, {
+    response = await fetchWithTransientRetry(requestUrl, {
       ...fetchOptions,
       headers,
-    })
+    }, method)
   } catch (error) {
     const networkMessage = buildNetworkFailureMessage({
       method,

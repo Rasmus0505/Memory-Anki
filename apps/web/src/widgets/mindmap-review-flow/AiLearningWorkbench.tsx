@@ -46,7 +46,7 @@ export function AiLearningWorkbench(props: Props) {
         id: `review-ai-learning-${payload.operation_id}`,
         section: 'review',
         title: '复习 AI 学习 · 进行中',
-        navigateTarget: '/review',
+        navigateTarget: '/freestyle',
         initialDetail: '准备运行…',
         steps: [
           { id: 'prepare', label: '准备请求' },
@@ -85,7 +85,6 @@ export function AiLearningWorkbench(props: Props) {
     </aside>
   return <>{fullscreenHost ? createPortal(workbench, fullscreenHost) : workbench}{aiRunConfigDialog}</>
 }
-
 
 
 

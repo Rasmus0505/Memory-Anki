@@ -17,12 +17,26 @@ export type PalaceEditorSource =
   | 'unknown'
 export interface PalaceEditorSavePayload extends Partial<MindMapEditorState> {
   editor_source?: PalaceEditorSource
+  response_mode?: 'full' | 'ack'
   sync_reason?: string | null
   /** When true, backend demotes/reconciles review units even for palace_edit_autosave. */
   reconcile_units?: boolean
   allow_stale_overwrite?: boolean
   confirm_dangerous_change?: boolean
   expected_editor_fingerprint?: string | null
+}
+
+export interface PalaceEditorSaveAckResponse {
+  palace: import('./palace').PalaceEditorMeta
+  editor_fingerprint: string
+  snapshot: {
+    schemaVersion: 1
+    editorPreferences: Record<string, unknown>
+    localPreferences: Record<string, unknown>
+    language: string
+    revision: string
+  }
+  unit_reconcile?: PalaceUnitReconcileResult | null
 }
 
 /** Diff returned when editor save reconciles permanent-mark review units. */

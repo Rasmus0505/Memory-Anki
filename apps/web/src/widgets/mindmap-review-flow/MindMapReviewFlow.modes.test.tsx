@@ -6,7 +6,6 @@ import {
   editorState,
   getLatestMindMapEditorSurfaceProps,
   getVisibleTextsFromLatestFrame,
-  openQuizLauncherMock,
   renderInRouter,
   setupMindMapReviewFlowTest,
   timer,
@@ -35,15 +34,10 @@ describe("MindMapReviewFlow modes", () => {
     expect(screen.getByText("frame-readonly-plain")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
     expect(screen.queryByRole("button", { name: "搜索" })).toBeNull();
-    expect(screen.getByRole("button", { name: "做题" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "文字模式" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "做题" }));
-    expect(openQuizLauncherMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        palaceId: 1,
-        scene: "review",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "文字模式" }));
+    expect(getLatestMindMapEditorSurfaceProps()?.textSelectionModeActive).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "宿主半屏切换" }));
     await waitFor(() => {

@@ -34,6 +34,29 @@ describe('editorDocToGraph review edge styles', () => {
     expect(graph.edges[0].renderStyle).toEqual({ stroke: '#059669', strokeWidth: 6 })
   })
 
+  it('applies host outline emphasis without overriding range selection', () => {
+    const graph = editorDocToGraph(doc, {
+      outlinedNodeUids: ['child'],
+    })
+    const outlinedNode = graph.nodes.find((node) => node.id === 'child')
+    const rootNode = graph.nodes.find((node) => node.id === 'root')
+
+    expect(outlinedNode?.metadata.visual).toMatchObject({ borderColor: '#16a34a' })
+    expect(rootNode?.metadata.visual).toMatchObject({ borderColor: null })
+
+    const rangeSelectedGraph = editorDocToGraph(doc, {
+      outlinedNodeUids: ['child'],
+      segmentRangeDraft: {
+        active: true,
+        targetSegmentId: 'new',
+        selectedNodeUids: ['child'],
+        overriddenConflictNodeUids: [],
+      },
+    })
+    expect(rangeSelectedGraph.nodes.find((node) => node.id === 'child')?.metadata.visual)
+      .toMatchObject({ borderColor: '#0ea5e9' })
+  })
+
   it('keeps decorative branch colors in view and edit modes', () => {
     const graph = editorDocToGraph(doc)
 

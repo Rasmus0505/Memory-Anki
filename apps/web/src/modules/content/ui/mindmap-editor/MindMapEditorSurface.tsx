@@ -62,6 +62,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   practiceModeActive = false,
   englishInteractionActive = false,
   onEnglishWordClick,
+  textSelectionModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   aiSplitBusy = false,
   externalSyncKey = null,
@@ -80,6 +81,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   segmentColorMode = 'all',
   segmentRangeDraft = EMPTY_SEGMENT_RANGE_DRAFT,
   highlightedNodeUids = EMPTY_UIDS,
+  outlinedNodeUids = EMPTY_UIDS,
   ankiEditMode = false,
   mutedNodeUids = EMPTY_UIDS,
   masteryByNodeUid = EMPTY_MASTERY_BY_UID,
@@ -178,6 +180,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       segmentColorMode,
       segmentRangeDraft,
       highlightedNodeUids,
+      outlinedNodeUids,
       mutedNodeUids,
       masteryByNodeUid,
       statusChipsByNodeUid,
@@ -193,6 +196,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         }),
     [
       activeSegmentId, aiSplitBusy, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
+      outlinedNodeUids,
       mutedNodeUids, practiceModeActive, providedCapabilities, revealMap, segmentColorMode,
       segmentRangeDraft, segments, statusChipsByNodeUid,
     ],
@@ -655,6 +659,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         practiceModeActive={practiceModeActive}
         englishInteractionActive={englishInteractionActive}
         onEnglishWordClick={onEnglishWordClick}
+        textSelectionModeActive={textSelectionModeActive}
         focusMode={nativeFullscreenActive}
         presentationMode={fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}

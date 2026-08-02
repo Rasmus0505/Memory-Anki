@@ -40,6 +40,8 @@ export interface MindMapEditorSurfaceProps {
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
+  /** Host text-selection mode: keep node text selectable and disable touch actions. */
+  textSelectionModeActive?: boolean
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   presentationStrategy?: MindMapPresentationStrategy
@@ -71,6 +73,8 @@ export interface MindMapEditorSurfaceProps {
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
   highlightedNodeUids?: string[]
+  /** Explicit node outline emphasis supplied by the host (e.g. current review path). */
+  outlinedNodeUids?: string[]
   /** Color nodes / edges by Anki front/back roles while editing. */
   ankiEditMode?: boolean
   mutedNodeUids?: string[]

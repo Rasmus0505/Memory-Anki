@@ -33,6 +33,25 @@ export async function copyMindMapToClipboard(
   await navigator.clipboard.writeText(content)
 }
 
+export function exportMindMapToFile(
+  editorState: MindMapEditorState | null,
+  palaceTitle: string,
+) {
+  if (!editorState?.editor_doc) throw new Error('当前脑图还没加载完成。')
+  const content = serializeMindMapTransferFile({
+    document: editorState.editor_doc,
+    sourceTitle: palaceTitle,
+  })
+  const url = URL.createObjectURL(new Blob([content], { type: 'application/json;charset=utf-8' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = buildMindMapTransferFileName(palaceTitle)
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 export function usePalaceMindMapFileTransfer({
   editorState,
   palaceTitle,
@@ -42,23 +61,8 @@ export function usePalaceMindMapFileTransfer({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const exportMindMap = () => {
-    if (!editorState?.editor_doc) {
-      toast.error('当前脑图还没加载完成。')
-      return
-    }
     try {
-      const content = serializeMindMapTransferFile({
-        document: editorState.editor_doc,
-        sourceTitle: palaceTitle,
-      })
-      const url = URL.createObjectURL(new Blob([content], { type: 'application/json;charset=utf-8' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = buildMindMapTransferFileName(palaceTitle)
-      document.body.append(anchor)
-      anchor.click()
-      anchor.remove()
-      URL.revokeObjectURL(url)
+      exportMindMapToFile(editorState, palaceTitle)
       toast.success('脑图已导出')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '导出脑图失败。')

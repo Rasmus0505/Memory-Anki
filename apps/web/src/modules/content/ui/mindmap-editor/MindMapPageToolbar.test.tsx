@@ -76,6 +76,20 @@ describe('MindMapPageToolbar', () => {
     expect(screen.queryByRole('menuitem', { name: '英语' })).toBeNull()
   })
 
+  it('renders the text-selection mode toggle with its active state', () => {
+    const onText = vi.fn()
+    render(
+      <MindMapPageToolbar
+        textAction={{ label: '文字模式', active: true, onClick: onText }}
+      />,
+    )
+
+    const button = screen.getByRole('button', { name: '文字模式' })
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(button)
+    expect(onText).toHaveBeenCalledTimes(1)
+  })
+
   it('opens ⋯ from moreActions alone and keeps 做题 as a primary button', async () => {
     const onEdit = vi.fn()
     const onQuiz = vi.fn()

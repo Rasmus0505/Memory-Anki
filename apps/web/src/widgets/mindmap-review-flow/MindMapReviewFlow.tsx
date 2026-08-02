@@ -110,7 +110,7 @@ export function MindMapReviewFlow({
       visibleEditorState={review.mapEditorState ?? review.flow.visibleEditorState}
       editableEditorState={props.editEditorState}
       visibleEditorSyncKey={review.mapVisibleSyncKey}
-      currentPalaceId={props.palaceId}
+      unitScopeEditorState={props.reviewEditorState}
       reviewFxSignal={review.flow.feedback.reviewFxSignal}
       onEditorStateChange={review.handleEditorStateChange}
       onNodeActive={review.handleActiveNodes}
@@ -127,7 +127,6 @@ export function MindMapReviewFlow({
           },
         ],
       }}
-      onQuizBreakOpen={review.handleQuizBreakOpen}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
       onCountBadgeClick={handleOpenNodeQuiz}
     />
@@ -465,6 +464,5 @@ export function MindMapReviewFlow({
     </div>
   );
 }
-
 
 

@@ -112,6 +112,8 @@ export interface MindMapCanvasProps {
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
+  /** Host text-selection mode: keep node text selectable and disable touch actions. */
+  textSelectionModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy

@@ -17,40 +17,41 @@ type ToolbarExtensions = Pick<
   | 'importMindMapAction'
   | 'importTextAction'
   | 'englishAction'
+  | 'textAction'
 >
 
 export function buildFlipCardToolbar(options: {
   toolbarExtensions?: ToolbarExtensions
   isEditMode: boolean
   englishModeActive: boolean
+  textModeActive: boolean
   fullscreen: boolean
   uiCleared: boolean
   nativeFullscreenActive: boolean
   hidePresentationOverflowActions: boolean
   resolvedPresentationStrategy: 'native-preferred' | 'viewport-only' | string
-  currentPalaceId?: number | null
   modeToggleLabels?: { enterEdit?: string; leaveEdit?: string }
   frameRef: RefObject<MindMapEditorSurfaceHandle | null>
   onToggleMode?: () => void
   onToggleEnglishMode: () => void
-  onOpenQuizPage: () => void
+  onToggleTextMode: () => void
   onToggleFullscreen: (active?: boolean) => void
 }): ReactNode {
   const {
     toolbarExtensions,
     isEditMode,
     englishModeActive,
+    textModeActive,
     fullscreen,
     uiCleared,
     nativeFullscreenActive,
     hidePresentationOverflowActions,
     resolvedPresentationStrategy,
-    currentPalaceId,
     modeToggleLabels,
     frameRef,
     onToggleMode,
     onToggleEnglishMode,
-    onOpenQuizPage,
+    onToggleTextMode,
     onToggleFullscreen,
   } = options
 
@@ -74,7 +75,12 @@ export function buildFlipCardToolbar(options: {
         active: englishModeActive,
         onClick: onToggleEnglishMode,
       }}
-      quizAction={currentPalaceId ? { label: '做题', onClick: onOpenQuizPage } : null}
+      textAction={{
+        label: '文字模式',
+        active: !isEditMode && textModeActive,
+        disabled: isEditMode,
+        onClick: onToggleTextMode,
+      }}
       immersiveAction={
         hidePresentationOverflowActions || resolvedPresentationStrategy === 'viewport-only'
           ? null

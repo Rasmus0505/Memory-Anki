@@ -5,8 +5,6 @@ import type {
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
 import { deletePalaceApi } from '@/modules/content/domain/palace-entity/api'
-import { buildReviewSessionPath } from '@/modules/memory/public'
-import { startUnitReviewSessionApi } from '@/modules/practice/public'
 
 interface UsePalaceListCardActionsOptions {
   fetchData: () => Promise<PalaceGroupedListResponse>
@@ -36,18 +34,13 @@ export function usePalaceListCardActions({
     }
   }
 
-  const handlePalaceReview = async (palace: PalaceGroupedItem) => {
+  const handlePalaceReview = (palace: PalaceGroupedItem) => {
     if (palace.review_status === 'marking_required') {
       navigate(`/palaces/${palace.id}/edit?mode=permanent-mark`)
       return
     }
     if (palace.review_status !== 'due') return
-    try {
-      const session = await startUnitReviewSessionApi(palace.id)
-      navigate(buildReviewSessionPath(session.id))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '创建单元复习会话失败')
-    }
+    navigate(`/freestyle?palaceId=${palace.id}`)
   }
 
   return {

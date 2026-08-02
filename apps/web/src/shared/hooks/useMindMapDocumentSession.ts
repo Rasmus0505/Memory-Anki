@@ -45,7 +45,7 @@ interface AdoptExternalStateOptions {
 export type PersistedMindMapSaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
 
 const inflightEditorLoads = new Map<string, Promise<unknown>>()
-const AUTO_SAVE_DEBOUNCE_MS = 450
+const AUTO_SAVE_DEBOUNCE_MS = 800
 
 function stableSerialize(value: unknown) {
   try {

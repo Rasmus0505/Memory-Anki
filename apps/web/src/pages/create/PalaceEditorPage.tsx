@@ -563,7 +563,7 @@ export default function PalaceEdit() {
                         {mindMapExperience.task === 'learn' ? (
                           <div className="grid shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
-                            <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate('/reviews')}><div className="font-medium">正式复习</div><div className="mt-1 text-xs text-muted-foreground">进入永久标记单元的到期队列</div></button>
+                            <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate(`/freestyle?palaceId=${page.palaceId}`)}><div className="font-medium">开始随心复习</div><div className="mt-1 text-xs text-muted-foreground">在随心模式中复习当前宫殿</div></button>
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
                           </div>
                         ) : null}
@@ -586,7 +586,6 @@ export default function PalaceEdit() {
                           preserveViewOnSync
                           initialViewPolicy="preserve"
                           forceSyncIntent="soft"
-                          currentPalaceId={page.palaceId}
                           reviewFxSignal={page.reviewFxSignal}
                           feedbackFxSignal={page.feedbackFxSignal}
                           statusChipsByNodeUid={
@@ -618,7 +617,6 @@ export default function PalaceEdit() {
                                 : undefined
                           }
                           onAiSplitRequest={page.handleAiSplitRequest}
-                          onQuizBreakOpen={handleOpenQuizPage}
                           onNativeFullscreenChange={setMindMapNativeFullscreen}
                           onToggleFullscreen={page.toggleMindMapFullscreen}
                           onUiClearedChange={setMindMapUiCleared}
@@ -774,5 +772,3 @@ export default function PalaceEdit() {
     </div>
   )
 }
-
-

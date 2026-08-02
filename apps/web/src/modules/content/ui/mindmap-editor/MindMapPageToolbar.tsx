@@ -59,6 +59,8 @@ export interface MindMapPageToolbarProps {
   importTextAction?: MindMapToolbarAction | null
   /** Dedicated toggle after modeToggle (编辑右边). Not buried in overflow. */
   englishAction?: MindMapToolbarToggleAction | null
+  /** Dedicated text-selection toggle for review/practice hosts. */
+  textAction?: MindMapToolbarToggleAction | null
   quizAction?: MindMapToolbarAction | null
   immersiveAction?: MindMapToolbarToggleAction | null
   nativeFullscreenAction?: MindMapToolbarToggleAction | null
@@ -75,7 +77,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   const {
     compact = false, embedded = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null, ratingAction = null,
     moreActions = [], segmentControl = null, modeControl = null, modeToggle = null, importMindMapAction = null,
-    importTextAction = null, englishAction = null, quizAction = null,
+    importTextAction = null, englishAction = null, textAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
   // englishAction is a first-class toolbar toggle (right of 编辑); keep it out of overflow.
@@ -148,6 +150,17 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             {englishAction.label}
           </Button>
         ) : null}
+        {textAction ? (
+          <Button
+            type="button"
+            variant={textAction.active ? 'default' : 'outline'}
+            disabled={textAction.disabled}
+            aria-pressed={Boolean(textAction.active)}
+            onClick={textAction.onClick}
+          >
+            {textAction.label}
+          </Button>
+        ) : null}
         {quizAction ? (
           <Button type="button" variant="outline" disabled={quizAction.disabled} onClick={quizAction.onClick}>
             {quizAction.label}
@@ -169,4 +182,3 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     </div>
   )
 }
-

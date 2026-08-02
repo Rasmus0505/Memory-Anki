@@ -1,5 +1,4 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ArrowRight, CornerUpLeft, Eye, Network } from 'lucide-react'
 import {
   MindMapEditorSurface,
@@ -36,6 +35,7 @@ type FlipCardToolbarExtensions = Pick<
   | 'importMindMapAction'
   | 'importTextAction'
   | 'englishAction'
+  | 'textAction'
 >
 
 type FlipCardSurfaceExtensions = Pick<
@@ -45,6 +45,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'segmentColorMode'
   | 'segmentRangeDraft'
   | 'highlightedNodeUids'
+  | 'outlinedNodeUids'
   | 'statusChipsByNodeUid'
   | 'ankiEditMode'
   | 'mutedNodeUids'
@@ -98,7 +99,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   preserveViewOnSync?: boolean
   initialViewPolicy?: 'preserve' | 'reset'
   forceSyncIntent?: 'soft' | 'replace'
-  currentPalaceId?: number | null
+  /** Full palace state used to resolve hidden review-card ancestors. */
+  unitScopeEditorState?: MindMapEditorState | null
   reviewFxSignal?: MindMapReviewFxPayload | null
   onEditorStateChange?: (nextState: MindMapEditorState) => void
   onNodeClick: (nodes: MindMapSelection[]) => void
@@ -107,7 +109,6 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
-  onQuizBreakOpen?: () => void
   onNativeFullscreenChange?: (active: boolean) => void
   onUiClearedChange?: (active: boolean) => void
   /**
@@ -140,7 +141,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   preserveViewOnSync,
   initialViewPolicy,
   forceSyncIntent,
-  currentPalaceId = null,
+  unitScopeEditorState = null,
   reviewFxSignal = null,
   onEditorStateChange,
   onNodeClick,
@@ -149,7 +150,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onEditNodeContextMenu,
   onNodeActive,
   onNodeHover,
-  onQuizBreakOpen,
   onNativeFullscreenChange,
   onUiClearedChange,
   masteryByNodeUid,
@@ -173,11 +173,11 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   segmentColorMode,
   segmentRangeDraft,
   highlightedNodeUids,
+  outlinedNodeUids: outlinedNodeUidsProp,
   statusChipsByNodeUid: hostStatusChipsByNodeUid,
   ankiEditMode = false,
   mutedNodeUids: mutedNodeUidsProp,
 }: FlipCardMindMapPanelProps, forwardedRef) {
-  const navigate = useNavigate()
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
   const frameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
@@ -215,7 +215,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     exitNativeFullscreen: () => frameRef.current?.exitNativeFullscreen() ?? Promise.resolve(),
   }), [])
 
-  const frameEditorState = isEditMode && editableEditorState ? editableEditorState : visibleEditorState
+  const [textModeActive, setTextModeActive] = useState(false)
+  const frameEditorState = isEditMode && editableEditorState
+    ? editableEditorState
+    : visibleEditorState
   // Prefer a host-stable key so review/edit/learn toggles do not remount the canvas provider.
   // modeSyncVersion only bumps soft content identity — never force a ReactFlow recovery remount.
   const frameForceSyncKey = hostForceSyncKey ?? undefined
@@ -228,6 +231,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const frameForceSyncIntent = forceSyncIntent ?? 'soft'
   const frameSceneTransitionKey = `${sceneChrome}:${isEditMode ? 'edit' : 'review'}:${sessionKind}`
   const guidedModel = useMemo(() => buildGuidedMindMapModel(frameEditorState), [frameEditorState])
+  const unitScopeModel = useMemo(
+    () => buildGuidedMindMapModel(unitScopeEditorState ?? frameEditorState),
+    [frameEditorState, unitScopeEditorState],
+  )
   const guidedCurrentUid =
     activeGuidedUid && guidedModel.byUid.has(activeGuidedUid)
       ? activeGuidedUid
@@ -263,26 +270,45 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     return new Set(activeUnitNodeUids.filter(Boolean))
   }, [activeUnitNodeUids])
 
-  const unitScopeMutedUids = useMemo(() => {
-    if (isEditMode || !activeUnitUidSet) return [] as string[]
-    const keepFullOpacity = new Set<string>(activeUnitUidSet)
+  const unitScopeContextUids = useMemo(() => {
+    if (isEditMode || !activeUnitUidSet) return new Set<string>()
+    const keepFullOpacity = new Set<string>()
     for (const uid of activeUnitUidSet) {
-      let current = guidedModel.byUid.get(uid)
+      let current = unitScopeModel.byUid.get(uid)
+      if (!current) continue
+      keepFullOpacity.add(current.uid)
       while (current?.parentUid) {
         keepFullOpacity.add(current.parentUid)
-        current = guidedModel.byUid.get(current.parentUid)
+        current = unitScopeModel.byUid.get(current.parentUid)
       }
     }
-    return guidedModel.nodes
-      .map((node) => node.uid)
-      .filter((uid) => uid !== guidedModel.rootUid && !keepFullOpacity.has(uid))
+    return keepFullOpacity
   }, [
-    guidedModel.byUid,
-    guidedModel.nodes,
-    guidedModel.rootUid,
     activeUnitUidSet,
     isEditMode,
+    unitScopeModel.byUid,
   ])
+
+  const unitScopeMutedUids = useMemo(() => {
+    if (isEditMode || unitScopeContextUids.size === 0) return [] as string[]
+    return guidedModel.nodes
+      .map((node) => node.uid)
+      .filter((uid) => uid !== guidedModel.rootUid && !unitScopeContextUids.has(uid))
+  }, [
+    guidedModel.nodes,
+    guidedModel.rootUid,
+    unitScopeContextUids,
+    isEditMode,
+  ])
+
+  const resolvedOutlinedNodeUids = useMemo(() => {
+    const hostOutlinedUids = outlinedNodeUidsProp ?? []
+    if (unitScopeContextUids.size === 0) return hostOutlinedUids
+    const unitPathUids = guidedModel.nodes
+      .map((node) => node.uid)
+      .filter((uid) => unitScopeContextUids.has(uid))
+    return [...new Set([...hostOutlinedUids, ...unitPathUids])]
+  }, [guidedModel.nodes, outlinedNodeUidsProp, unitScopeContextUids])
 
   const resolvedMutedNodeUids = useMemo(() => {
     if (!mutedNodeUidsProp?.length) return unitScopeMutedUids
@@ -312,9 +338,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   }, [guidedNextNode, selectGuidedNode])
 
   const handlePanelNodeClick = useCallback((nodes: MindMapSelection[]) => {
-    if (englishModeActive) return
+    if (englishModeActive || textModeActive) return
     onNodeClick(nodes)
-  }, [englishModeActive, onNodeClick])
+  }, [englishModeActive, onNodeClick, textModeActive])
 
   const handleNodeActive = useCallback(
     (nodes: MindMapSelection[]) => {
@@ -325,14 +351,16 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     [onNodeActive],
   )
 
-  const handleOpenQuizPage = useCallback(() => {
-    if (onQuizBreakOpen) {
-      onQuizBreakOpen()
-      return
-    }
-    if (!currentPalaceId) return
-    navigate(`/palaces/${currentPalaceId}/quiz`)
-  }, [currentPalaceId, navigate, onQuizBreakOpen])
+  const handleToggleTextMode = useCallback(() => {
+    const next = !textModeActive
+    setTextModeActive(next)
+    if (next && englishModeActive) handleToggleEnglishMode()
+  }, [englishModeActive, handleToggleEnglishMode, textModeActive])
+
+  const handleToggleEnglishModeFromToolbar = useCallback(() => {
+    setTextModeActive(false)
+    handleToggleEnglishMode()
+  }, [handleToggleEnglishMode])
 
   const handleSurfaceFullscreenChange = useCallback((active: boolean) => {
     setNativeFullscreenActive(active)
@@ -358,10 +386,11 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     <div
       className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}
       data-english-mode={englishModeActive ? 'true' : 'false'}
+      data-text-mode={!isEditMode && textModeActive ? 'true' : 'false'}
     >
       {/* compact freestyle: no second guided rail — tap nodes to reveal; map toolbar is enough.
           default density keeps the mobile guided path + 上级/下一个/揭示/全局 rail. */}
-      {!isEditMode && !compactChrome ? (
+      {!isEditMode && !textModeActive && !compactChrome ? (
         <div
           className={cn(
             // text-foreground: avoid inheriting light shell text onto light chrome (PWA freestyle).
@@ -448,6 +477,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         practiceModeActive={!isEditMode}
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
+        textSelectionModeActive={!isEditMode && textModeActive}
         sceneChrome={sceneChrome}
         sceneTransitionKey={frameSceneTransitionKey}
         viewMemoryScope={viewMemoryScope}
@@ -456,17 +486,17 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           toolbarExtensions,
           isEditMode,
           englishModeActive,
+          textModeActive,
           fullscreen,
           uiCleared,
           nativeFullscreenActive,
           hidePresentationOverflowActions,
           resolvedPresentationStrategy,
-          currentPalaceId,
           modeToggleLabels,
           frameRef,
           onToggleMode,
-          onToggleEnglishMode: handleToggleEnglishMode,
-          onOpenQuizPage: handleOpenQuizPage,
+          onToggleEnglishMode: handleToggleEnglishModeFromToolbar,
+          onToggleTextMode: handleToggleTextMode,
           onToggleFullscreen,
         })}
         toolbarCenterContent={toolbarCenterContent}
@@ -488,6 +518,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         segmentColorMode={segmentColorMode}
         segmentRangeDraft={segmentRangeDraft}
         highlightedNodeUids={highlightedNodeUids}
+        outlinedNodeUids={resolvedOutlinedNodeUids}
         ankiEditMode={ankiEditMode}
         mutedNodeUids={resolvedMutedNodeUids}
         masteryByNodeUid={masteryByNodeUid}

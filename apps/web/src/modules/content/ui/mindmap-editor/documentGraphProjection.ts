@@ -60,6 +60,8 @@ export interface EditorDocGraphOptions {
   ankiEditMode?: boolean
   readonly?: boolean
   highlightedNodeUids?: string[]
+  /** Explicit host-owned outline emphasis (e.g. the active review path). */
+  outlinedNodeUids?: string[]
   /** Soft-dim these nodes (e.g. out-of-scope cards in formal rating mode). */
   mutedNodeUids?: string[]
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
@@ -120,6 +122,7 @@ export function editorDocToGraph(
   const segmentByNodeUid = buildSegmentByNodeUid(options.segments ?? [])
   const rangeSelected = new Set(options.segmentRangeDraft?.selectedNodeUids ?? [])
   const highlightedSet = new Set(options.highlightedNodeUids ?? [])
+  const outlinedSet = new Set(options.outlinedNodeUids ?? [])
   const mutedSet = new Set(options.mutedNodeUids ?? [])
   const ankiTree = options.ankiEditMode ? buildAnkiRoleTree(doc.root as MindMapDocNode) : null
   const ankiMemo = new Map<string, 'front' | 'back' | 'none'>()
@@ -183,7 +186,9 @@ export function editorDocToGraph(
           revealState,
           borderColor: rangeSelected.has(uid)
             ? '#0ea5e9'
-            : ankiBorder || (segmentVisible ? segment?.color : null),
+            : ankiBorder || (outlinedSet.has(uid)
+              ? '#16a34a'
+              : (segmentVisible ? segment?.color : null)),
           fillColor: markFill,
           muted: segmentMuted || mutedSet.has(uid),
           secondaryMarked: false,

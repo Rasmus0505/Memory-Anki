@@ -342,7 +342,7 @@ describe('useMindMapDocumentSession', () => {
     vi.useFakeTimers()
     act(() => {
       result.current.setEditorState(buildResponse(7, '第一次'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
 
     await act(async () => {
@@ -353,7 +353,7 @@ describe('useMindMapDocumentSession', () => {
 
     act(() => {
       result.current.setEditorState(buildResponse(7, '第二次'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
 
     await act(async () => {
@@ -403,7 +403,7 @@ describe('useMindMapDocumentSession', () => {
     vi.useFakeTimers()
     act(() => {
       result.current.setEditorState(buildResponse(1, 'A 的未完成保存'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
     await act(async () => {
       await flushAsyncWork()
@@ -470,7 +470,7 @@ describe('useMindMapDocumentSession', () => {
     vi.useFakeTimers()
     act(() => {
       result.current.setEditorState(buildResponse(7, '离线编辑'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
     await act(async () => {
       await flushAsyncWork()
@@ -540,7 +540,7 @@ describe('useMindMapDocumentSession', () => {
     vi.useFakeTimers()
     act(() => {
       result.current.setEditorState(buildResponse(9, '修改一'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
     await act(async () => {
       await flushAsyncWork()
@@ -616,7 +616,7 @@ describe('useMindMapDocumentSession', () => {
     vi.useFakeTimers()
     act(() => {
       result.current.setEditorState(buildResponse(15, '本地正在编辑'))
-      vi.advanceTimersByTime(450)
+      vi.advanceTimersByTime(800)
     })
     await act(async () => {
       await flushAsyncWork()
@@ -742,4 +742,3 @@ describe('useMindMapDocumentSession', () => {
     })
   })
 })
-
