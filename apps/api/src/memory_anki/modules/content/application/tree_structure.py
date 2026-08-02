@@ -216,11 +216,12 @@ def list_active_palace_ids_by_subject_scope(session: Session, subject_scope: str
     }
     if subject_scope == "english":
         return sorted(english_ids)
+    query = active
+    if english_ids:
+        query = query.filter(~Palace.id.in_(english_ids))
     return [
         int(row[0])
-        for row in active.filter(~Palace.id.in_(english_ids) if english_ids else True)
-        .order_by(Palace.group_sort_order.asc(), Palace.id.asc())
-        .all()
+        for row in query.order_by(Palace.group_sort_order.asc(), Palace.id.asc()).all()
     ]
 
 
