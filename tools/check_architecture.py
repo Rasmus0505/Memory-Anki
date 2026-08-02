@@ -1616,6 +1616,22 @@ def check_settings_module_boundaries(errors: list[str]) -> None:
 
 
 def check_mindmap_architecture(errors: list[str]) -> None:
+    autosave_hook = WEB_SRC / "shared" / "hooks" / "useMindMapDocumentSession.ts"
+    if autosave_hook.exists():
+        source = autosave_hook.read_text(encoding="utf-8", errors="ignore")
+        if "const AUTO_SAVE_DEBOUNCE_MS = 800" not in source:
+            errors.append(
+                f"{autosave_hook.relative_to(REPO_ROOT)}: mind-map autosave debounce must remain 800ms."
+            )
+
+    editor_router = API_SRC / "modules" / "content" / "presentation" / "editor_router.py"
+    if editor_router.exists():
+        source = editor_router.read_text(encoding="utf-8", errors="ignore")
+        if "background_tasks.add_task(_run_rolling_backup_after_response)" not in source:
+            errors.append(
+                f"{editor_router.relative_to(REPO_ROOT)}: editor rolling backups must run after the save response."
+            )
+
     removed_paths = (
         WEB_SRC / "shared" / "components" / "mindmap",
         WEB_SRC / "shared" / "components" / "mindmap-host",
@@ -2055,6 +2071,44 @@ def check_retired_palace_knowledge_binding(errors: list[str]) -> None:
 
 
 def check_unit_review_boundary(errors: list[str]) -> None:
+    retired_standalone_pages = (
+        "app/router/review/ReviewOverview.tsx",
+        "app/router/review/ReviewSession.tsx",
+        "app/router/review/ReviewCompletion.tsx",
+        "app/router/ReviewFeedbackPreviewRoute.tsx",
+    )
+    for relative in retired_standalone_pages:
+        path = WEB_SRC / relative
+        if path.exists():
+            errors.append(
+                f"standalone review page must stay deleted: {path.relative_to(REPO_ROOT)}"
+            )
+
+    routes_path = WEB_SRC / "app" / "router" / "appRoutes.tsx"
+    if routes_path.exists():
+        routes_source = routes_path.read_text(encoding="utf-8", errors="ignore")
+        if 'path="/review"' in routes_source or 'path="/review/' in routes_source:
+            errors.append(
+                f"{routes_path.relative_to(REPO_ROOT)}: standalone review routes must not be registered; use /freestyle."
+            )
+
+    shelf_actions_path = (
+        WEB_SRC
+        / "modules"
+        / "content"
+        / "ui"
+        / "palace-catalog"
+        / "components"
+        / "palace-list"
+        / "usePalaceListCardActions.tsx"
+    )
+    if shelf_actions_path.exists():
+        shelf_source = shelf_actions_path.read_text(encoding="utf-8", errors="ignore")
+        if "startUnitReviewSessionApi" in shelf_source or "buildReviewSessionPath" in shelf_source:
+            errors.append(
+                f"{shelf_actions_path.relative_to(REPO_ROOT)}: shelf review must enter /freestyle directly."
+            )
+
     guarded = {
         "app/router/review/ReviewOverview.tsx": ("FSRS", "wave", "node_count", "startReviewWaveSessionApi"),
         "app/router/review/ReviewSession.tsx": ("rateNode", "bulk", "stability", "memory_health"),

@@ -68,7 +68,8 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 - **正式数据只有一份**：服务端对同一 `editor_doc` 就地覆盖；`PalaceVersion` 仍按约 5 分钟节流（最多 50 条），不为每次编辑增殖版本。
 - **编辑即写本地草稿**：`scheduleSave` 将最新快照写入 IndexedDB 草稿槽（key = `loadCacheKey:entityId`，同 key 覆盖）。浏览器关页/杀进程后重开时，若草稿内容与服务端不一致则恢复草稿并立即回写。
-- **HTTP 防抖约 450ms**，单飞保存；在飞期间的后续编辑更新 `pendingSnapshot`；当前保存成功后若仍有更新的 pending，**必须**再发一次（不依赖组件仍 mounted）。
+- **HTTP 防抖约 800ms**，单飞保存；在飞期间的后续编辑更新 `pendingSnapshot`；当前保存成功后若仍有更新的 pending，**必须**再发一次（不依赖组件仍 mounted）。宫殿编辑器的自动保存使用轻量 ack，只返回服务端元数据和 revision，当前本地文档不因保存响应而重建。
+- **编辑滚动备份在响应后后台执行**，保存事务先提交并返回；备份失败只记录日志，不影响已成功的编辑保存。启动、周期和关机备份仍保留。
 - **关页**时 `visibilitychange` / `pagehide` 刷新草稿；若无在飞请求则立刻 flush。失败请求仍走既有 `mutationQueue`。
 
 ## 新增能力流程

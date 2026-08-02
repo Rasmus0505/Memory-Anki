@@ -1398,6 +1398,33 @@ def test_unit_review_boundary_rejects_waves_and_node_rating_routes(
     assert any("retired review runtime route" in error for error in errors)
 
 
+def test_unit_review_boundary_rejects_standalone_review_pages_and_shelf_session_start(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    write_file(api_src / "modules/memory/presentation/router.py", "")
+    write_file(web_src / "app/router/review/ReviewSession.tsx", "export default function ReviewSession() {}\n")
+    write_file(
+        web_src / "app/router/appRoutes.tsx",
+        '<Route path="/review/session/:id" element={<ReviewSession />} />\n',
+    )
+    write_file(
+        web_src / "modules/content/ui/palace-catalog/components/palace-list/usePalaceListCardActions.tsx",
+        "startUnitReviewSessionApi(palace.id)\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_unit_review_boundary(errors)
+
+    assert any("standalone review page must stay deleted" in error for error in errors)
+    assert any("standalone review routes must not be registered" in error for error in errors)
+    assert any("shelf review must enter /freestyle directly" in error for error in errors)
+
+
 def test_unit_review_boundary_rejects_temporary_mark_ui(
     tmp_path: Path, monkeypatch
 ) -> None:

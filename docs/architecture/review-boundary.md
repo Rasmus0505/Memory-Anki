@@ -12,6 +12,12 @@ content          -> saves palace documents; may save editor_doc without schedule
 practice         -> consumes reviews.api unit projections and the shared rating command
 ```
 
+The review scheduling and encounter API remains owned by `memory` and is consumed by
+freestyle cards. The frontend has one review workspace only: `apps/web/src/modules/practice/ui/freestyle`.
+The palace shelf enters it with `/freestyle?palaceId=<id>`, which scopes the current round to that
+palace while preserving the user's content and mix settings. The retired standalone `/review` page,
+session page, completion page, and feedback-preview route must not return.
+
 Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.
 
 ## Topology Invariants

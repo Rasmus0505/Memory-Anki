@@ -17,9 +17,27 @@
 
 PWA 必须保持本地运行，使用本机服务和本机数据目录。手机 PWA 与 Electron 桌面端共用 `127.0.0.1:8012` 的同一个后端、前端构建产物和数据库，不再启动两套服务。
 
-当前数据库与运行时数据目录在 U 盘上：在 `local-config/memory-anki.local.json` 把 `local_app_home` 设为 `vol:MemoryAnki/memory anki data`（按卷标解析；U 盘卷标需为 `MemoryAnki`，目录名为 `memory anki data`）。启动前请插入 U 盘；盘符可随电脑变化，不必写死 `E:`。模板见 `local-config/memory-anki.local.example.json`。
+当前数据库与运行时数据目录在 Syncthing 文件夹中：在 `local-config/memory-anki.local.json` 把 `local_app_home` 设为本机实际同步目录（例如 `F:\memory anki data`；盘符按本机实际情况填写）。两台电脑的 Syncthing 文件夹应对应同一套逻辑数据目录；启动前确认 Syncthing 已完成同步，且不要让两台电脑同时运行并写入 SQLite。模板见 `local-config/memory-anki.local.example.json`。
 
-PWA 默认会跳过百度云盘启动同步；桌面端启动时会短暂停止共享服务，完成拉取和迁移后重启，正常跨设备同步仍由 `start-desktop.bat` / `tools\stop.bat` 负责。
+PWA 默认不执行应用内文件同步；Syncthing 在应用外负责跨设备同步。桌面端启动时会短暂停止共享服务，确认文件已同步后执行迁移并重启。
+
+### Syncthing 文件夹配置
+
+Syncthing 的“忽略模式”文本框可以留空：如果要同步完整的 `memory anki data`，不要忽略数据库、附件或上传目录。更重要的是，两台电脑不要同时运行并写入同一套 SQLite 数据；在另一台电脑启动前，先停止当前实例并等待 Syncthing 显示已完成同步。不要用 `(?d)` 删除标记，避免把一台电脑的文件删除操作同步到另一台。
+
+每台电脑只保留一个 Syncthing 实例。不要同时运行独立版 Syncthing、SyncTrayzor 内置 Syncthing 或多个同配置实例；它们可能同时写入同一个数据库目录并产生 `memory_palace.sync-conflict-*.db`。
+
+### 双机切换顺序
+
+按下面顺序切换设备，网页刷新不能替代其中任何一步：
+
+1. 在当前设备完成学习后，关闭浏览器/PWA 页面，并运行 `tools\stop.bat` 停止 Memory Anki 后端。
+2. 确认当前设备的 `memory_palace.db-wal` 和 `memory_palace.db-shm` 不再变化，再让唯一的 Syncthing 实例继续同步。
+3. 等当前设备和目标设备都显示 `Up to Date`，并确认没有出现新的 `sync-conflict` 文件。
+4. 在目标设备只启动一个 Syncthing 实例，然后运行 Memory Anki；启动后重新加载 `/freestyle` 并重建随心队列。
+5. 目标设备学习结束后重复第 1 至第 3 步，再切回另一台设备。
+
+如果发现新的 `memory_palace.sync-conflict-*.db`、数据库 WAL 仍在变化，或两个 Syncthing 进程同时存在，先停止应用和重复的 Syncthing 实例。不要直接用冲突文件覆盖 `memory_palace.db`；先保留文件并做数据库完整性检查。
 
 PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露，不要开启 Funnel。
 
@@ -48,7 +66,7 @@ PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露�
 - 启动前自动执行指纹驱动的增量更新，按需完成同步、前端构建和数据库迁移；
 - 如果 `127.0.0.1:8012` 已有健康的 Memory Anki 服务，会直接复用；否则启动 FastAPI；
 - 让后端同时服务 API 和已构建前端；
-- 当前 `sync_enabled=false`，启动不再访问百度网盘/MemoryAnki-Sync；数据只读 U 盘 `local_app_home`。
+- 当前 `sync_enabled=false`、`sync_on_start=false`、`sync_on_stop=false`；启动不访问百度网盘/MemoryAnki-Sync，数据从本机 Syncthing `local_app_home` 读取。
 
 停止 PWA 后端：
 
@@ -95,7 +113,7 @@ tailscale serve --https=443 off
 tools\install-pwa-autostart.bat
 ```
 
-它会在当前 Windows 用户的启动文件夹写入 `Memory Anki PWA.lnk`。这是每台电脑自己的本地启动项，不会通过 git 或百度同步互相覆盖。
+它会在当前 Windows 用户的启动文件夹写入 `Memory Anki PWA.lnk`。这是每台电脑自己的本地启动项，不会通过 git 或 Syncthing 互相覆盖。
 
 取消自启：
 
@@ -107,7 +125,7 @@ tools\uninstall-pwa-autostart.bat
 
 - `start-desktop.bat`：先执行智能增量更新，再同步并重启共享 `8012` 服务，让 Electron 与手机 PWA 共用该服务。
 - `start-pwa.bat`：先执行智能增量更新，再启动或复用共享 `8012` 服务，并保留可见后端窗口。
-- `tools\stop.bat`：停止 Electron、共享服务和开发前端，然后推送百度同步。
+- `tools\stop.bat`：停止 Electron、共享服务和开发前端；Syncthing 会在应用外继续处理文件同步。
 - `tools\stop-pwa.bat`：停止占用 `8012` 的 PWA 后端。
 - `tools\configure-tailscale-pwa.bat`：配置当前设备的 Tailscale Serve，将 HTTPS 转发到 `127.0.0.1:8012`。
 - `tools\install-pwa-autostart.bat`：安装 Windows 登录自启快捷方式。

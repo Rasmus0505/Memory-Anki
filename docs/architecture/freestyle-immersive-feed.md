@@ -4,6 +4,14 @@ Freestyle is a consumer of public learning projections. It does not own palace r
 `FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
 older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
+## Review Entry
+
+The palace shelf and all review-oriented frontend actions enter the same immersive workspace.
+`/freestyle?palaceId=<id>` applies a transient single-palace scope for that round, keeps the stored
+content/mix/queue settings, and does not create a separate formal page session before the queue loads.
+Refreshing that URL keeps the same palace scope. There is no standalone `/review` frontend route or
+completion screen; unknown retired `/review...` paths fall back to `/freestyle`.
+
 ## Round Plan State
 
 Each local freestyle round has a stable `roundId` and a persisted round plan owned by the

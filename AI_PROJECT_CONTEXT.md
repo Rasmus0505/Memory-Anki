@@ -10,7 +10,7 @@
 
 Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + 间隔重复 + AI 辅助知识生产”。PWA 使用完整桌面端前端，默认入口是 `/freestyle`，不再维护单独移动端应用或 `/m` 功能面。
 
-它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）唯一放在共享 U 盘（卷标 `MemoryAnki`，路径 `vol:MemoryAnki/memory anki data`）；**不要**再使用 `MemoryAnki-Sync` / 百度同步目录作为 `local_app_home` 或 `sync_root`，设备间靠同一块 U 盘交换数据，文件同步默认关闭。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
+它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）放在每台电脑各自的 Syncthing 同步文件夹中；**不要**使用固定盘符、`MemoryAnki-Sync` 或百度同步目录作为运行时约束。设备间由 Syncthing 在应用外同步文件，应用内文件同步默认关闭。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
 
 当前产品能力大致包括：
 
@@ -65,10 +65,11 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 - 开发模式：显式运行 Vite 时使用 `127.0.0.1:5173`，并将 `/api` 代理到 `127.0.0.1:8012`
 - 生产/日常本地启动：Electron 桌面端和手机 PWA 共用 `127.0.0.1:8012`，后端同时服务 API 和已构建前端
 - PWA 私有访问：Tailscale Serve 将当前设备的 HTTPS 地址转发到 `http://127.0.0.1:8012`，手机访问脚本输出的 HTTPS 地址并追加 `/freestyle`
-- 运行时数据默认：`%LOCALAPPDATA%\MemoryAnki`（仅作未配置时的回退；日常唯一数据在 U 盘）
+- 运行时数据默认：`%LOCALAPPDATA%\MemoryAnki`（仅作未配置时的回退；日常数据应放在本机 Syncthing 文件夹）
 - 可用 `MEMORY_ANKI_HOME` 覆盖运行时数据目录；启动脚本优先读 `local-config/memory-anki.local.json` 的 `local_app_home`
-- U 盘共享数据目录（当前正式方案）：`vol:MemoryAnki/memory anki data`（按卷标解析，避免两台电脑盘符不一致）
-- 跨设备同步：`sync_enabled=false`；不使用 `D:\BaiduSyncdisk\MemoryAnki-Sync` 或任何百度同步路径
+- Syncthing 数据目录：每台电脑在 `local_app_home` 填本机实际同步文件夹（例如 `F:\memory anki data`），不要写死盘符
+- 跨设备同步：由 Syncthing 在应用外完成；应用内 `sync_enabled=false`、`sync_on_start=false`、`sync_on_stop=false`，`sync_root=null`
+- SQLite 使用约束：同一时间只允许一台设备写入同步目录；切换设备前先停止应用并等待 Syncthing 完成同步。不要在 Syncthing 忽略模式中排除数据库、附件或上传目录
 - 本地设备身份配置：`local-config/memory-anki.local.json`（gitignore，模板见 `local-config/memory-anki.local.example.json`）
 
 运行时数据、真实密钥、数据库、日志、上传文件、生成文件等不要提交到 git。
@@ -378,7 +379,7 @@ npm run dev
 .\start-desktop.bat
 ```
 
-桌面启动会短暂停止现有 PWA 服务，执行百度同步与数据库迁移，再重启共享的 `127.0.0.1:8012`。Electron 和手机 PWA 随后共用该服务；关闭 Electron 不会停止 PWA。`5173` 只用于显式前端开发。
+桌面启动会短暂停止现有 PWA 服务，确认 Syncthing 文件已完成同步并执行数据库迁移，再重启共享的 `127.0.0.1:8012`。Electron 和手机 PWA 随后共用该服务；关闭 Electron 不会停止 PWA。`5173` 只用于显式前端开发。两台电脑不要同时写同一份 SQLite 数据目录。
 
 停止：
 
@@ -497,7 +498,7 @@ AI 相关功能分布较广：
 
 这些路径通常由 `memory_anki.core.config` 派生，根目录来自 `MEMORY_ANKI_HOME` 或默认 `%LOCALAPPDATA%\MemoryAnki`。涉及新增路径时要考虑：
 
-- 两台设备插入同一 U 盘（卷标 MemoryAnki）时是否可用
+- 两台设备的 Syncthing 文件夹是否指向同一套逻辑数据目录
 - `.gitignore` 是否正确
 - 是否需要迁移旧位置
 - 是否需要备份/恢复支持

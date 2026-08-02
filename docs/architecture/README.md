@@ -127,7 +127,7 @@ Frontend AI scenario/model selection and per-run overrides are owned by `modules
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed).
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed). It is the sole frontend review workspace: shelf review enters `/freestyle?palaceId=<id>`, and the retired standalone `/review` pages are not registered.
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
