@@ -53,7 +53,7 @@ export function GlobalCommandPalette() {
 
   const actions = useMemo(
     () => [
-      { label: '开始今日复习', shortcut: '', icon: Brain, run: () => navigate('/review') },
+      { label: '开始随心复习', shortcut: '', icon: Brain, run: () => navigate('/freestyle') },
       { label: '打开今日工作台', shortcut: '', icon: CalendarCheck, run: () => navigate('/today') },
       { label: '新建宫殿', shortcut: 'Ctrl+N', icon: Plus, run: () => navigate('/palaces/new') },
       { label: '搜索宫殿', shortcut: '/', icon: Search, run: () => navigate('/palaces/list?focusSearch=true') },

@@ -83,9 +83,6 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/english/listening/courses/3', 'english', 'english', 'english:course:3'],
     ['/english/courses/3', 'english', 'english', 'english:course:3'],
     ['/english/reading/materials/5', 'english', 'english', 'english:material:5'],
-    ['/review', 'review', 'review', 'review:overview'],
-    ['/review/session/9', 'review', 'review', 'review:session:9'],
-    ['/review/completed/4', 'review', 'review', 'route:/review/completed/4'],
     ['/profile', null, 'profile', 'profile:overview'],
     ['/profile/timer', null, 'profile', 'profile:timer'],
     ['/profile/unknown', null, 'profile', 'profile:unknown'],
@@ -102,5 +99,12 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     const unregistered = DYNAMIC_ROUTES.filter((entry) => entry.registered === false)
     expect(unregistered.length).toBeGreaterThan(0)
     expect(resolveRouteFallbackTarget('/profile/unknown')).toBe('/profile')
+  })
+
+  it('does not register the retired standalone review pages', () => {
+    expect(resolveRouteFallbackTarget('/review')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/review/session/9')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/review/completed/4')).toBe('/freestyle')
+    expect(resolveNavSection('/review')).toBeNull()
   })
 })

@@ -21,7 +21,6 @@ import {
   preloadPalaceShelfPage,
   preloadPracticeRoutes,
   preloadProfilePage,
-  preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
@@ -64,7 +63,6 @@ function normalizeRememberedSectionTarget(section: NavSectionDefinition, target:
   try {
     const pathname = new URL(target, window.location.origin).pathname
     if (!section.matches(pathname)) return section.to
-    if (section.key === 'review' && pathname.startsWith('/review/session/')) return section.to
     return target
   } catch {
     return section.to
@@ -230,7 +228,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   useEffect(() => {
     return scheduleIdleWarmup(() => {
       preloadPracticeRoutes()
-      preloadReviewRoutes()
       prefetchPalaceSubjectShelfApi()
       prefetchPalacesGroupedSummaryApi()
       void preloadFreestylePage()

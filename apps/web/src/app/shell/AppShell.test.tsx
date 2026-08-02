@@ -14,7 +14,6 @@ const prefetchPalaceSubjectShelfApi = vi.fn()
 const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
 const preloadPracticeRoutes = vi.fn()
-const preloadReviewRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
 const preloadEnglishReadingPage = vi.fn()
 const preloadFreestylePage = vi.fn()
@@ -44,7 +43,6 @@ vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
 
 vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: () => preloadPracticeRoutes(),
-  preloadReviewRoutes: () => preloadReviewRoutes(),
   preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
   preloadEnglishReadingPage: () => preloadEnglishReadingPage(),
   preloadFreestylePage: () => preloadFreestylePage(),
@@ -76,7 +74,6 @@ describe('AppShell', () => {
     prefetchPalacesGroupedSummaryApi.mockClear()
     prefetchDashboardApi.mockClear()
     preloadPracticeRoutes.mockClear()
-    preloadReviewRoutes.mockClear()
     preloadEnglishWorkspacePage.mockClear()
     preloadEnglishReadingPage.mockClear()
     preloadFreestylePage.mockClear()
@@ -380,7 +377,6 @@ describe('AppShell', () => {
       expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
       expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
       expect(preloadPracticeRoutes).toHaveBeenCalledTimes(1)
-      expect(preloadReviewRoutes).toHaveBeenCalledTimes(1)
       expect(preloadFreestylePage).toHaveBeenCalledTimes(1)
     })
   })
@@ -460,63 +456,6 @@ describe('AppShell', () => {
     fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/palaces/new')).toBeTruthy()
-    })
-  })
-
-  it('remembers review overview routes but not active review sessions', async () => {
-    getRuntimeInfoApi.mockResolvedValue({
-      channel: 'stable',
-      commit: 'abcdef1234567890',
-      short_commit: 'abcdef12',
-      min_supported_generation: 1,
-      max_supported_generation: 1,
-      last_started_at: '2026-06-01T12:00:00+08:00',
-    })
-
-    const { unmount } = render(
-      <MemoryRouter initialEntries={['/review']}>
-        <AppShell>
-          <LocationEcho />
-        </AppShell>
-      </MemoryRouter>,
-    )
-
-    await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
-    await waitFor(() => {
-      expect(screen.getByText('/freestyle')).toBeTruthy()
-    })
-
-    const reviewLinks = screen.getAllByRole('link', { name: '洞察' })
-    expect(reviewLinks.some((link) => link.getAttribute('href') === '/review')).toBe(true)
-    fireEvent.click(reviewLinks.find((link) => link.getAttribute('href') === '/review')!)
-    await waitFor(() => {
-      expect(screen.getByText('/review')).toBeTruthy()
-    })
-    unmount()
-    resetNavSectionHistoryForTest()
-
-    render(
-      <MemoryRouter initialEntries={['/review/session/9']}>
-        <AppShell>
-          <LocationEcho />
-        </AppShell>
-      </MemoryRouter>,
-    )
-
-    await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
-    await waitFor(() => {
-      expect(screen.getByText('/freestyle')).toBeTruthy()
-    })
-
-    const sessionReviewLinks = screen.getAllByRole('link', { name: '洞察' })
-    expect(sessionReviewLinks.map((link) => link.getAttribute('href'))).toContain('/dashboard')
-    fireEvent.click(
-      sessionReviewLinks.find((link) => link.getAttribute('href') === '/dashboard')!,
-    )
-    await waitFor(() => {
-      expect(screen.getByText('/dashboard')).toBeTruthy()
     })
   })
 

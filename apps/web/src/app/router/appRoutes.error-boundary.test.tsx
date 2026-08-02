@@ -14,7 +14,6 @@ vi.mock('@/app/router/PalacePracticePage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/PalaceFocusPracticePage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/SegmentPracticePage', () => ({ default: () => <div /> }))
 vi.mock('@/app/router/MiniPalacePracticePage', () => ({ default: () => <div /> }))
-vi.mock('@/app/router/review/ReviewOverview', () => ({ default: () => <div /> }))
 
 function AppRoutesHarness() {
   const location = useLocation()

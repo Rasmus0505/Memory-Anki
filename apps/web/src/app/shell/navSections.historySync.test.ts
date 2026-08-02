@@ -25,8 +25,7 @@ const SAMPLE_PATHS = [
   '/batch-generation',
   '/',
   '/dashboard',
-  '/review',
-  '/review/session/9',
+  '/freestyle?palaceId=9',
   '/profile',
   '/profile/backups',
 ]

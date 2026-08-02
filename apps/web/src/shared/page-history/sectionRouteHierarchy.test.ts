@@ -33,15 +33,14 @@ describe('sectionRouteHierarchy', () => {
     ])
   })
 
-  it('walks create and review levels', () => {
+  it('walks create and insight levels', () => {
     expect(resolveSectionHierarchicalParent('/palaces/12/edit')).toBe('/palaces/new')
     expect(resolveSectionHierarchicalParent('/palaces/12/quiz')).toBe('/palaces/12/edit')
-    expect(resolveSectionHierarchicalParent('/review/session/5')).toBe('/review')
-    expect(resolveSectionHierarchicalParent('/review')).toBe('/dashboard')
-    expect(getSectionHierarchyChain('/review/session/5')).toEqual([
+    expect(resolveSectionHierarchicalParent('/today')).toBe('/dashboard')
+    expect(resolveSectionHierarchicalParent('/review')).toBeNull()
+    expect(getSectionHierarchyChain('/today')).toEqual([
       '/dashboard',
-      '/review',
-      '/review/session/5',
+      '/today',
     ])
   })
 

@@ -68,8 +68,6 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/english/patterns', nav: 'english', history: 'english', historyKey: 'english:patterns', commandLabel: '英语句型' },
   { path: '/english/vocab', nav: 'english', history: 'english', historyKey: 'english:vocab', commandLabel: '英语词汇' },
   { path: '/english-reading', nav: 'english', history: 'english', historyKey: 'english:reading' },
-  { path: '/review', nav: 'review', history: 'review', historyKey: 'review:overview', commandLabel: '复习队列' },
-  { path: '/review/feedback-preview', nav: 'review', history: 'review' },
   { path: '/profile', nav: null, history: 'profile', historyKey: 'profile:overview', commandLabel: '设置' },
   { path: '/profile/timer', nav: null, history: 'profile', historyKey: 'profile:timer' },
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
@@ -127,13 +125,6 @@ export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [
     history: 'english',
     historyKey: (match) => `english:material:${match[1]}`,
   },
-  {
-    pattern: /^\/review\/session\/(\d+)$/,
-    nav: 'review',
-    history: 'review',
-    historyKey: (match) => `review:session:${match[1]}`,
-  },
-  { pattern: /^\/review\/completed\/(\d+)$/, nav: 'review', history: 'review' },
   // 仅历史键归类：未知 /profile/* 落到 profile:<sub>，与既有行为一致。
   {
     pattern: /^\/profile\/(.+)$/,
@@ -159,7 +150,6 @@ export const DYNAMIC_PREFIX_FALLBACKS: Array<{
     match: /^\/english\/reading\/materials\/(\d+)(?:\/.*)?$/,
     build: (id) => `/english/reading/materials/${id}`,
   },
-  { match: /^\/review\/session\/(\d+)(?:\/.*)?$/, build: (id) => `/review/session/${id}` },
   { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id) => `/segments/${id}/practice` },
 ]
 
@@ -168,7 +158,6 @@ export const PREFIX_RULES: PrefixRule[] = [
   { prefix: '/knowledge/', nav: 'palaces', history: 'knowledge', fallbackTarget: '/knowledge' },
   { prefix: '/freestyle/', nav: null, history: 'other', fallbackTarget: '/freestyle' },
   { prefix: '/profile/', nav: null, history: 'profile', fallbackTarget: '/profile' },
-  { prefix: '/review/', nav: 'review', history: 'review', fallbackTarget: '/review' },
   {
     prefix: '/english-reading/',
     nav: 'english',

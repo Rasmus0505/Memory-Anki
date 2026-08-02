@@ -24,7 +24,6 @@ import {
   preloadPalaceShelfPage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
-  preloadReviewRoutes,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 // 路径归属规则统一由 routeManifest 派生（新增路由请在 manifest 登记）。
@@ -56,7 +55,6 @@ export const navSections: NavSectionDefinition[] = [
       void preloadFreestylePage()
       void preloadTodayLearningPage()
       preloadPracticeRoutes()
-      preloadReviewRoutes()
     },
   },
   {
@@ -116,7 +114,6 @@ export const navSections: NavSectionDefinition[] = [
     warmup: () => {
       prefetchDashboardApi()
       void preloadDashboardPage()
-      preloadReviewRoutes()
     },
   },
 ]

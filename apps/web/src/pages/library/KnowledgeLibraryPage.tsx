@@ -553,8 +553,8 @@ export default function Knowledge() {
                           </Button>
                         ) : null}
                         {selectedChapterId ? (
-                          <Link to={`/review?chapterId=${selectedChapterId}`}>
-                            <Button size="sm" variant="outline">开始章节复习</Button>
+                          <Link to="/freestyle">
+                            <Button size="sm" variant="outline">开始随心复习</Button>
                           </Link>
                         ) : null}
                       </div>

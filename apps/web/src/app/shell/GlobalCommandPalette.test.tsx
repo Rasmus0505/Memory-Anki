@@ -19,7 +19,6 @@ vi.mock('@/modules/search/public', () => ({
 
 vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: vi.fn(),
-  preloadReviewRoutes: vi.fn(),
   preloadEnglishWorkspacePage: vi.fn(),
   preloadEnglishReadingPage: vi.fn(),
   preloadFreestylePage: vi.fn(),
@@ -50,7 +49,7 @@ function renderPalette(initialPath = '/dashboard') {
     <MemoryRouter initialEntries={[initialPath]}>
       <GlobalCommandPalette />
       <LocationEcho />
-      <NavigationButton to="/review" />
+      <NavigationButton to="/freestyle" />
       <input aria-label="editable" />
     </MemoryRouter>,
   )
@@ -86,7 +85,7 @@ describe('GlobalCommandPalette', () => {
 
     expect(await screen.findByText('操作')).toBeTruthy()
     expect(screen.getByText('页面')).toBeTruthy()
-    expect(screen.getByText('开始今日复习')).toBeTruthy()
+    expect(screen.getByText('开始随心复习')).toBeTruthy()
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
@@ -104,16 +103,16 @@ describe('GlobalCommandPalette', () => {
   it('shows recent visits and filters out the current route', async () => {
     renderPalette('/palaces')
 
-    fireEvent.click(screen.getByRole('button', { name: 'go /review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'go /freestyle' }))
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/review')
+      expect(screen.getByTestId('location').textContent).toBe('/freestyle')
     })
 
     openPalette()
 
     expect(await screen.findByText('最近访问')).toBeTruthy()
     expect(screen.getByText('知识 · /palaces')).toBeTruthy()
-    expect(screen.queryByText('洞察 · /review')).toBeNull()
+    expect(screen.queryByText('随心 · /freestyle')).toBeNull()
   })
 
   it('does not trigger global shortcuts from editable fields', async () => {

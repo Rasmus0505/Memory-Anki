@@ -10,7 +10,6 @@ export const preloadPalaceViewPage = () => import('@/app/router/PalaceViewPage')
 export const preloadDashboardPage = () => import('@/pages/insights/InsightsPage')
 export const preloadPalaceListPage = () => import('@/pages/library/PalaceListPage')
 export const preloadPalaceShelfPage = () => import('@/pages/library/PalaceLibraryPage')
-export const preloadReviewOverviewPage = () => import('@/app/router/review/ReviewOverview')
 /** Immersive freestyle card feed — default /freestyle entry. */
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
 /** Today learning workspace (overview) — route /today. */
@@ -26,14 +25,7 @@ export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPa
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
 export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
-export const preloadReviewSessionPage = () => import('@/app/router/review/ReviewSession')
-export const preloadReviewCompletionPage = () => import('@/app/router/review/ReviewCompletion')
 export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
-
-export function preloadReviewRoutes() {
-  void preloadReviewOverviewPage()
-  void preloadReviewSessionPage()
-}
 
 export function preloadPracticeRoutes() {
   void preloadPalaceEditPage()
@@ -46,7 +38,6 @@ const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
 const DashboardPage = lazyWithRetry(preloadDashboardPage)
 const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
 const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
-const ReviewOverviewPage = lazyWithRetry(preloadReviewOverviewPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const TodayLearningPage = lazyWithRetry(preloadTodayLearningPage)
 const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
@@ -91,12 +82,7 @@ const ProfileAiPage = lazyWithRetry(() => import('@/pages/settings/AiSettingsPag
 const ProfileBackupsPage = lazyWithRetry(
   () => import('@/pages/settings/BackupSettingsPage'),
 )
-const ReviewSessionPage = lazyWithRetry(preloadReviewSessionPage)
-const ReviewCompletionPage = lazyWithRetry(preloadReviewCompletionPage)
 const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
-const ReviewFeedbackPreviewRoute = lazyWithRetry(
-  () => import('@/app/router/ReviewFeedbackPreviewRoute'),
-)
 const DevTokensPage = lazyWithRetry(() => import('@/app/dev/DevTokensPage'))
 
 function RouteFallback() {
@@ -150,10 +136,6 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
-          <Route path="/review" element={<ReviewOverviewPage />} />
-          <Route path="/review/feedback-preview" element={<ReviewFeedbackPreviewRoute />} />
-          <Route path="/review/session/:id" element={<ReviewSessionPage />} />
-          <Route path="/review/completed/:reviewLogId" element={<ReviewCompletionPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/timer" element={<ProfileTimerPage />} />
           <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />

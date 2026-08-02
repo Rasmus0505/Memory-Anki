@@ -61,7 +61,7 @@ describe('bootstrapClientPreferences', () => {
       allowCustomMinutes: false,
       autoFinishOnStudyReturn: false,
       resumeInterruptedStudyOnReturn: false,
-      targetPath: '/review',
+      targetPath: '/freestyle',
       alertStrength: 'gentle',
       snoozeMinutes: [9, 1],
       recordBreakLogs: false,

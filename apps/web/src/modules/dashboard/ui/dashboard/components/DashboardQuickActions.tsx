@@ -15,9 +15,9 @@ export function DashboardQuickActions({ todayTodoTotal }: DashboardQuickActionsP
     icon: LucideIcon
   }> = [
     {
-      label: '开始复习',
-      description: todayTodoTotal > 0 ? `${todayTodoTotal} 项待处理` : '查看复习队列',
-      to: '/review',
+      label: '开始随心复习',
+      description: todayTodoTotal > 0 ? `${todayTodoTotal} 项待处理` : '进入随心模式',
+      to: '/freestyle',
       icon: BookOpen,
     },
     {

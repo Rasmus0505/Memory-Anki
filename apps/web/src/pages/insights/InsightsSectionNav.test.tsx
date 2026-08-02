@@ -7,16 +7,16 @@ import {
 } from '@/pages/insights/InsightsSectionNav'
 
 describe('InsightsSectionNav', () => {
-  it('resolves dashboard vs review hubs', () => {
+  it('resolves the dashboard and today workspace tabs', () => {
     expect(resolveInsightsSectionTab('/dashboard')).toBe('dashboard')
     expect(resolveInsightsSectionTab('/')).toBe('dashboard')
-    expect(resolveInsightsSectionTab('/review')).toBe('review')
-    expect(resolveInsightsSectionTab('/review/session/3')).toBe('review')
+    expect(resolveInsightsSectionTab('/freestyle')).toBe('dashboard')
+    expect(resolveInsightsSectionTab('/today')).toBe('today')
   })
 
   it('renders switcher links with current page marked', () => {
     render(
-      <MemoryRouter initialEntries={['/review']}>
+      <MemoryRouter initialEntries={['/dashboard']}>
         <InsightsSectionNav />
       </MemoryRouter>,
     )
@@ -25,10 +25,8 @@ describe('InsightsSectionNav', () => {
     expect(nav).toBeTruthy()
 
     const dashboard = screen.getByRole('link', { name: '仪表盘' })
-    const review = screen.getByRole('link', { name: '今日复习' })
     expect(dashboard.getAttribute('href')).toBe('/dashboard')
-    expect(review.getAttribute('href')).toBe('/review')
-    expect(review.getAttribute('aria-current')).toBe('page')
-    expect(dashboard.getAttribute('aria-current')).toBeNull()
+    expect(dashboard.getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: '今日工作台' }).getAttribute('href')).toBe('/today')
   })
 })

@@ -52,8 +52,8 @@ export function DashboardStatCards({
       label: '今日待处理',
       icon: BookOpen,
       color: '',
-      link: '/review',
-      linkText: '开始复习',
+      link: '/freestyle',
+      linkText: '开始随心复习',
       valueNode: (
         <div className="space-y-3" aria-label="今日待处理优先级">
           <div className="flex min-h-3 overflow-hidden rounded-full border border-border/60 bg-secondary/80">

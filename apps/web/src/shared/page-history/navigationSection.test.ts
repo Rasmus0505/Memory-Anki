@@ -29,8 +29,8 @@ describe('resolveNavigationSection', () => {
     expect(resolveNavigationSection('/english/reading')).toBe('english')
     expect(resolveNavigationSection('/english-reading/1')).toBe('english')
     expect(resolveNavigationSection('/dashboard')).toBe('review')
-    expect(resolveNavigationSection('/review')).toBe('review')
-    expect(resolveNavigationSection('/review/session/9')).toBe('review')
+    expect(resolveNavigationSection('/freestyle')).toBe('freestyle')
+    expect(resolveNavigationSection('/review')).toBeNull()
   })
 
   it('returns null outside primary nav sections', () => {

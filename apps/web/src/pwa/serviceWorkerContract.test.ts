@@ -192,7 +192,7 @@ describe('PWA service worker contract', () => {
     await appCache.put('/freestyle', new Response('<main>cached freestyle shell</main>'))
 
     const response = await harness.dispatchFetch({
-      url: 'https://memory.test/review/session/42',
+      url: 'https://memory.test/freestyle?palaceId=42',
       method: 'GET',
       mode: 'navigate',
       destination: '',

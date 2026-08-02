@@ -34,9 +34,7 @@
  *
  *  洞察 review
  *    /dashboard
- *      └─ /review
- *           ├─ /review/session/:id
- *           └─ /review/completed/:id
+ *      └─ /today
  */
 import {
   getNavigationSectionRoot,
@@ -156,9 +154,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
 
   // ── 洞察 ──────────────────────────────────────────────
   if (section === 'review') {
-    if (/^\/review\/session\/\d+$/.test(pathname)) return '/review'
-    if (/^\/review\/completed\/\d+$/.test(pathname)) return '/review'
-    if (pathname === '/review' || pathname.startsWith('/review/')) return root
     if (pathname === '/' || pathname === '/dashboard') return null
     return root
   }
@@ -226,9 +221,6 @@ export function describeNavigationPath(fullPath: string): string {
   }
   if (/^\/palaces\/\d+$/.test(pathname)) return '宫殿详情'
   if (pathname === '/dashboard' || pathname === '/') return '洞察首页'
-  if (pathname === '/review') return '复习队列'
-  if (/^\/review\/session\/\d+$/.test(pathname)) return '复习会话'
-  if (/^\/review\/completed\/\d+$/.test(pathname)) return '复习完成'
   if (pathname === '/batch-generation') return '批量生成'
   return pathname
 }
