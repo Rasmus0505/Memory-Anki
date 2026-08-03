@@ -277,6 +277,30 @@ export function findNextHiddenChild(
   )
 }
 
+/**
+ * Find the first pending descendant in level order, preserving child order.
+ * A pending card blocks its own deeper descendants until its placeholder and
+ * content have both been revealed.
+ */
+function findNextPendingDescendant(
+  node: ReviewMindMapNode,
+  revealMap: Record<string, RevealState>,
+) {
+  let frontier = [...node.children]
+
+  while (frontier.length > 0) {
+    const nextFrontier: ReviewMindMapNode[] = []
+    for (const child of frontier) {
+      const state = revealMap[child.id] ?? 'hidden'
+      if (state === 'hidden' || state === 'placeholder') return child
+      nextFrontier.push(...child.children)
+    }
+    frontier = nextFrontier
+  }
+
+  return null
+}
+
 /** Bulk flip target set: full descendant tree or only direct children. */
 export type BulkRevealScope = 'subtree' | 'direct-children'
 
@@ -401,7 +425,9 @@ export function advanceRevealStateForNodeClick(
   const state = revealMap[nodeId] ?? 'hidden'
   const focusIds = resolveFocusNodeIds(root, options)
 
-  // Flip only this card. Do not auto-open its whole subtree of free/due children.
+  // Flip only this card when it is a placeholder. A revealed parent advances
+  // through its descendants in level order so the parent itself can drive the
+  // whole branch without requiring the learner to select each child.
   if (state === 'placeholder') {
     return applyQuestionCardAutoReveal(nodeMap, {
       ...revealMap,
@@ -410,12 +436,26 @@ export function advanceRevealStateForNodeClick(
   }
   if (state !== 'revealed') return revealMap
 
-  const nextChild = findNextHiddenChild(node, revealMap)
+  // Segment checkpoints deliberately keep their existing direct-child
+  // behavior: the learner must click the checkpoint card itself.
+  const nextChild = options.mode === 'segment-checkpoint'
+    ? findNextHiddenChild(node, revealMap)
+    : findNextPendingDescendant(node, revealMap)
   if (!nextChild) return revealMap
-  // One step per click: next hidden child appears. Free (non-due) cards open fully;
+  // One step per click: hidden cards appear, placeholder cards open fully.
+  // Free (non-due) cards still skip the placeholder in formal due-scope, while
   // due cards land on placeholder so the user still flips them one by one.
   const childState = firstAppearStateForChild(nextChild, focusIds)
-  return applyQuestionCardAutoReveal(nodeMap, { ...revealMap, [nextChild.id]: childState })
+  if ((revealMap[nextChild.id] ?? 'hidden') === 'placeholder') {
+    return applyQuestionCardAutoReveal(nodeMap, {
+      ...revealMap,
+      [nextChild.id]: 'revealed',
+    })
+  }
+  return applyQuestionCardAutoReveal(nodeMap, {
+    ...revealMap,
+    [nextChild.id]: childState,
+  })
 }
 
 export function hideRevealStateBranch(

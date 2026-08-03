@@ -267,11 +267,93 @@ describe('review-flow-tree visible editor state', () => {
       b: 'placeholder',
     })
 
-    const afterRootClick = advanceRevealStateForNodeClick('root', nodeMap, initial)
+    const checkpointOptions = { mode: 'segment-checkpoint' as const, checkpointIds: ['a1', 'b'] }
+    const afterRootClick = advanceRevealStateForNodeClick(
+      'root',
+      nodeMap,
+      initial,
+      checkpointOptions,
+      root,
+    )
     expect(afterRootClick).toEqual(initial)
 
-    const afterCheckpointReveal = advanceRevealStateForNodeClick('a1', nodeMap, initial)
+    const afterCheckpointReveal = advanceRevealStateForNodeClick(
+      'a1',
+      nodeMap,
+      initial,
+      checkpointOptions,
+      root,
+    )
     expect(afterCheckpointReveal.a1).toBe('revealed')
+  })
+
+  it('lets a revealed parent finish descendants in level order', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: '阶段评价考点', uid: 'group' },
+            children: [
+              {
+                data: { text: '实施阶段', uid: 'implementation' },
+                children: [
+                  {
+                    data: { text: '婴儿期', uid: 'implementation-child' },
+                    children: [
+                      { data: { text: '婴儿期内容', uid: 'implementation-deep' }, children: [] },
+                    ],
+                  },
+                ],
+              },
+              {
+                data: { text: '评价', uid: 'evaluation' },
+                children: [
+                  { data: { text: '评价内容', uid: 'evaluation-child' }, children: [] },
+                ],
+              },
+              { data: { text: '考点延伸', uid: 'extension' }, children: [] },
+            ],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    let revealMap = buildInitialRevealState(root)
+    const clickRoot = () => {
+      revealMap = advanceRevealStateForNodeClick('root', nodeMap, revealMap)
+      return revealMap
+    }
+
+    expect(clickRoot().group).toBe('placeholder')
+    expect(clickRoot().group).toBe('revealed')
+
+    // Finish the three same-level cards before entering their children.
+    expect(clickRoot().implementation).toBe('placeholder')
+    expect(clickRoot().implementation).toBe('revealed')
+    expect(clickRoot().evaluation).toBe('placeholder')
+    expect(clickRoot().evaluation).toBe('revealed')
+    expect(clickRoot().extension).toBe('placeholder')
+    expect(clickRoot().extension).toBe('revealed')
+
+    // The next level is also top-to-bottom across branches.
+    expect(clickRoot()['implementation-child']).toBe('placeholder')
+    expect(clickRoot()['implementation-child']).toBe('revealed')
+    expect(clickRoot()['evaluation-child']).toBe('placeholder')
+    expect(clickRoot()['evaluation-child']).toBe('revealed')
+
+    // A deeper implementation card waits until the whole preceding level ends.
+    expect(clickRoot()['implementation-deep']).toBe('placeholder')
+    const afterLeafClick = advanceRevealStateForNodeClick(
+      'implementation-deep',
+      nodeMap,
+      revealMap,
+    )
+    expect(afterLeafClick['implementation-deep']).toBe('revealed')
+    expect(
+      advanceRevealStateForNodeClick('root', nodeMap, afterLeafClick),
+    ).toEqual(afterLeafClick)
   })
 
   it('auto-reveals non-due cards for formal due-scope focusNodeIds (node review)', () => {

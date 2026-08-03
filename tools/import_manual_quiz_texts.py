@@ -239,6 +239,22 @@ def import_source(
     )
 
 
+def _validate_text_source_path(value: str | None, label: str) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    forbidden = ("qwen", "deepseek", "ocr", "paddle", "tesseract")
+    lowered = str(path).lower()
+    if any(token in lowered for token in forbidden):
+        raise SystemExit(
+            f"{label} 路径疑似包含受禁用的 OCR/AI 目录：{path}；"
+            "本脚本只接受已经存在的人工或视觉识别文本记录"
+        )
+    if not path.exists():
+        raise SystemExit(f"{label} 路径不存在：{path}")
+    return path
+
+
 def _write_report(
     *,
     results: dict[str, ImportReport],
@@ -279,38 +295,38 @@ def _write_report(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Import OCR textbook quiz text into Memory Anki.")
-    parser.add_argument(
-        "--waijiao",
-        default=r"C:\Users\Administrator\Desktop\Qwen vl ocr\waijiao",
-    )
-    parser.add_argument(
-        "--zhongjiao",
-        default=r"C:\Users\Administrator\Desktop\Qwen vl ocr\zhongjiao",
-    )
+    parser.add_argument("--waijiao", help="已有的外教文本记录目录，不执行 OCR")
+    parser.add_argument("--zhongjiao", help="已有的中教文本记录目录，不执行 OCR")
     parser.add_argument("--dry-run", action="store_true", help="Parse and report without writing questions.")
     args = parser.parse_args()
+
+    waijiao_root = _validate_text_source_path(args.waijiao, "外教文本")
+    zhongjiao_root = _validate_text_source_path(args.zhongjiao, "中教文本")
+    if waijiao_root is None and zhongjiao_root is None:
+        parser.error("至少提供 --waijiao 或 --zhongjiao；本脚本不会自动寻找 OCR/AI 目录")
 
     backup_path = None if args.dry_run else _backup_database()
     with get_session() as session:
         chapter_map, ambiguous_keys = _load_existing_chapter_map(session)
         chapter_snapshot = _load_existing_chapter_snapshot(session)
 
-    results = {
-        "waijiao": import_source(
-            Path(args.waijiao),
+    results = {}
+    if waijiao_root is not None:
+        results["waijiao"] = import_source(
+            waijiao_root,
             "waijiao",
             chapter_map,
             ambiguous_keys,
             dry_run=args.dry_run,
-        ),
-        "zhongjiao": import_source(
-            Path(args.zhongjiao),
+        )
+    if zhongjiao_root is not None:
+        results["zhongjiao"] = import_source(
+            zhongjiao_root,
             "zhongjiao",
             chapter_map,
             ambiguous_keys,
             dry_run=args.dry_run,
-        ),
-    }
+        )
     report_path = _write_report(
         results=results,
         backup_path=backup_path,

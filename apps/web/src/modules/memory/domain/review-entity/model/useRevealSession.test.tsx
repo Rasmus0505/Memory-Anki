@@ -76,9 +76,62 @@ describe('useRevealSession', () => {
 
     flushRevealFrame()
 
-    expect(result.current.revealMap.a).toBe('placeholder')
-    expect(result.current.revealMap.b).toBe('placeholder')
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('hidden')
     expect(result.current.visibleEditorSyncKey).not.toBe(initialSyncKey)
+  })
+
+  it('lets the root continue through nested cards without selecting each child', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '阶段评价考点', uid: 'group' },
+              children: [
+                { data: { text: '实施阶段', uid: 'implementation' }, children: [] },
+                { data: { text: '评价', uid: 'evaluation' }, children: [] },
+                { data: { text: '考点延伸', uid: 'extension' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    const clickRoot = () => {
+      act(() => {
+        result.current.handleNodeClick([selection('root', '宫殿')])
+      })
+      flushRevealFrame()
+    }
+
+    clickRoot()
+    expect(result.current.revealMap.group).toBe('placeholder')
+    clickRoot()
+    expect(result.current.revealMap.group).toBe('revealed')
+    clickRoot()
+    expect(result.current.revealMap.implementation).toBe('placeholder')
+    clickRoot()
+    expect(result.current.revealMap.implementation).toBe('revealed')
+    clickRoot()
+    expect(result.current.revealMap.evaluation).toBe('placeholder')
+    clickRoot()
+    expect(result.current.revealMap.evaluation).toBe('revealed')
+    clickRoot()
+    expect(result.current.revealMap.extension).toBe('placeholder')
+    clickRoot()
+    expect(result.current.revealMap.extension).toBe('revealed')
+
+    clickRoot()
+    expect(result.current.revealMap.implementation).toBe('revealed')
+    expect(result.current.revealMap.evaluation).toBe('revealed')
+    expect(result.current.revealMap.extension).toBe('revealed')
   })
 
   it('batches reveal and hide actions without revealing hidden cards during recovery-style input', () => {

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -17,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def resolve_app_home() -> Path:
+    configured = os.environ.get("MEMORY_ANKI_HOME", "").strip()
+    if configured:
+        return Path(configured)
     data = json.loads((ROOT / "local-config/memory-anki.local.json").read_text(encoding="utf-8"))
     home = data.get("local_app_home") or ""
     if not home.startswith("vol:"):
@@ -41,6 +45,8 @@ DB = resolve_app_home() / "data" / "memory_palace.db"
 def connect() -> sqlite3.Connection:
     con = sqlite3.connect(str(DB))
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA foreign_keys=ON")
+    con.execute("PRAGMA busy_timeout=10000")
     return con
 
 

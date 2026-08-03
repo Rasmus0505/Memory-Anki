@@ -3,6 +3,9 @@
 
 Input JSON:
     {"palace_id": 15,
+     "question_ids": [401, 402],
+     "run_id": "manual-bind-2026-08-03",
+     "source": "manual",
      "bindings": [
        {"question_id": 401, "node_uids": ["uid-a"], "reason": "考查X"},
        {"question_id": 402, "node_uids": ["uid-b"], "reason": "知识点在第三节",
@@ -10,9 +13,10 @@ Input JSON:
      ],
      "unbound": [403]}
 
-Replaces every binding belonging to this palace's questions -- including edges
-that point at another palace's mindmap -- and leaves other palaces' questions
-alone even when they bind into this palace.
+By default, question_ids is required and only those questions are replaced.
+To intentionally replace every active question in a palace, omit question_ids
+and set replace_scope to palace. This explicit opt-in prevents a chapter plan
+from deleting bindings belonging to other chapters in the same palace.
 
 `target_palace_id` defaults to `palace_id`; set it to bind a question onto a
 node that lives in a different palace's mindmap.
@@ -34,13 +38,20 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from dump_palace_for_binding import connect, walk_nodes  # noqa: E402
 
-RUN_ID = "hand-bind-2026-07-26"
+DEFAULT_RUN_ID = "hand-bind-manual"
+ALLOWED_SOURCES = {"manual", "vision", "import"}
 MAX_NODES_PER_QUESTION = 8
 
 
 def main() -> None:
     plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     palace_id = int(plan["palace_id"])
+    run_id = str(plan.get("run_id") or DEFAULT_RUN_ID).strip()
+    source = str(plan.get("source") or "manual").strip()
+    if not run_id:
+        raise SystemExit("run_id 不能为空")
+    if source not in ALLOWED_SOURCES:
+        raise SystemExit(f"source 必须是 {sorted(ALLOWED_SOURCES)} 之一")
     con = connect()
 
     palace = con.execute(
@@ -63,13 +74,34 @@ def main() -> None:
                 uid_cache[target_id] = {uid for uid, _t, _n, _d in walk_nodes(row["editor_doc"])}
         return uid_cache[target_id]
 
-    active_qids = {
+    palace_active_qids = {
         int(r["id"])
         for r in con.execute(
             "select id from palace_quiz_questions where palace_id=? and deleted_at is null",
             (palace_id,),
         )
     }
+    declared_question_ids = plan.get("question_ids")
+    if declared_question_ids is None:
+        if plan.get("replace_scope") != "palace":
+            raise SystemExit(
+                "为防止误删其他章节绑定，必须提供 question_ids；"
+                "若确实要覆盖整座宫殿，请显式设置 replace_scope='palace'"
+            )
+        active_qids = palace_active_qids
+    else:
+        try:
+            active_qids = {int(qid) for qid in declared_question_ids}
+        except (TypeError, ValueError) as exc:
+            raise SystemExit("question_ids 必须是整数数组") from exc
+        invalid_qids = active_qids - palace_active_qids
+        if invalid_qids:
+            raise SystemExit(
+                f"question_ids 中存在不属于宫殿 {palace_id} 或已删除的题目："
+                f"{sorted(invalid_qids)}"
+            )
+        if not active_qids:
+            raise SystemExit("question_ids 不能为空")
 
     errors: list[str] = []
     rows: list[tuple] = []
@@ -102,7 +134,19 @@ def main() -> None:
                 continue
             seen.add((qid, target_id, uid))
             bound_qids.add(qid)
-            rows.append((target_id, qid, uid, item.get("confidence"), reason, "ai", RUN_ID, now, now))
+            rows.append(
+                (
+                    target_id,
+                    qid,
+                    uid,
+                    item.get("confidence"),
+                    reason,
+                    source,
+                    run_id,
+                    now,
+                    now,
+                )
+            )
 
     for qid in sorted(bound_qids):
         count = sum(1 for q, _p, _u in seen if q == qid)
@@ -123,21 +167,24 @@ def main() -> None:
             print("  -", line)
         raise SystemExit(1)
 
-    # Scope the wipe to THIS palace's questions, wherever their edges point.
-    removed = con.execute(
-        """delete from palace_quiz_question_node_bindings
-           where question_id in (
-             select id from palace_quiz_questions where palace_id=? and deleted_at is null
-           )""",
-        (palace_id,),
-    ).rowcount
-    con.executemany(
-        """insert into palace_quiz_question_node_bindings
-           (palace_id, question_id, node_uid, confidence, reason, source, run_id, created_at, updated_at)
-           values (?,?,?,?,?,?,?,?,?)""",
-        rows,
-    )
-    con.commit()
+    # Scope the wipe to the explicit question set, wherever their edges point.
+    placeholders = ",".join("?" for _ in active_qids)
+    try:
+        removed = con.execute(
+            f"delete from palace_quiz_question_node_bindings "
+            f"where question_id in ({placeholders})",
+            tuple(sorted(active_qids)),
+        ).rowcount
+        con.executemany(
+            """insert into palace_quiz_question_node_bindings
+               (palace_id, question_id, node_uid, confidence, reason, source, run_id, created_at, updated_at)
+               values (?,?,?,?,?,?,?,?,?)""",
+            rows,
+        )
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
     cross = sum(1 for r in rows if r[0] != palace_id)
     print(
         f"宫殿 {palace_id}《{palace['manual_title'] or palace['title']}》："
