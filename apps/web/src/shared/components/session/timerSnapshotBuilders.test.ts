@@ -70,10 +70,10 @@ describe('buildStudyTimerSnapshot', () => {
     expect(snapshot.availableActions).toEqual(['continueRound', 'startGoalBreak'])
   })
 
-  it('opens the idle warning at the timeout and counts down the grace window', () => {
+  it('opens the idle warning before the total timeout and counts down to pause', () => {
     const snapshot = buildStudyTimerSnapshot({
-      // Idle just hit the 120s timeout, so the whole 30s grace window is left.
-      activeEntry: createEntry({ effectiveSeconds: 120, idleSeconds: 120 }),
+      // The 30s warning starts at 90s and ends at the 120s total idle deadline.
+      activeEntry: createEntry({ effectiveSeconds: 90, idleSeconds: 90 }),
       focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
       automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
       breakConfig: DEFAULT_BREAK_GUARD_CONFIG,

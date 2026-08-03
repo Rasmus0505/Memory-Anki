@@ -19,15 +19,15 @@ describe('timedSessionAutoPause', () => {
     })).toBe(0)
   })
 
-  it('rolls back only the idle tail allowed by config', () => {
+  it('rolls back the full idle window allowed by config', () => {
     expect(calculateAutoPauseTransition({
       effectiveSeconds: 20,
       pauseCount: 1,
       idleSecondsAtPause: 8,
-      maxRollbackSeconds: 5,
+      maxRollbackSeconds: 8,
     })).toEqual({
-      rollbackSeconds: 5,
-      effectiveSeconds: 15,
+      rollbackSeconds: 8,
+      effectiveSeconds: 12,
       idleSeconds: 0,
       pauseCount: 2,
     })
@@ -42,6 +42,20 @@ describe('timedSessionAutoPause', () => {
     })).toMatchObject({
       rollbackSeconds: 5,
       effectiveSeconds: 0,
+    })
+  })
+
+  it('removes a full three-minute idle window from the recorded duration', () => {
+    expect(calculateAutoPauseTransition({
+      effectiveSeconds: 180,
+      pauseCount: 0,
+      idleSecondsAtPause: 180,
+      maxRollbackSeconds: 180,
+    })).toMatchObject({
+      rollbackSeconds: 180,
+      effectiveSeconds: 0,
+      idleSeconds: 0,
+      pauseCount: 1,
     })
   })
 })

@@ -34,7 +34,7 @@ describe('timer automation config', () => {
       schemaVersion: 5,
       autoStartOnPageEnter: true,
       keepScreenAwake: true,
-      idleTimeoutSeconds: 300,
+      idleTimeoutSeconds: 180,
       idleGraceSeconds: 30,
       backgroundGraceSeconds: 20,
     })
@@ -53,7 +53,7 @@ describe('timer automation config', () => {
       },
     })
 
-    expect(config.idleTimeoutSeconds).toBe(300)
+    expect(config.idleTimeoutSeconds).toBe(180)
     expect(config.idleGraceSeconds).toBe(30)
     expect(config.backgroundGraceSeconds).toBe(20)
   })

@@ -52,19 +52,18 @@ describe('advanceTickState', () => {
 })
 
 describe('resolveTimedSessionAutomation', () => {
-  it('adds the warning grace window to configured inactivity timing', () => {
+  it('keeps the warning grace inside the configured idle window', () => {
     expect(resolveTimedSessionAutomation({
       idleTimeoutSeconds: 120,
       idleGraceSeconds: 30,
       backgroundGraceSeconds: 15,
     }, {})).toEqual({
-      inactivityWarningMs: 120_000,
+      inactivityWarningMs: 90_000,
       inactivityGraceMs: 30_000,
-      autoPauseMs: 150_000,
+      autoPauseMs: 120_000,
       hiddenPauseMs: 15_000,
       resumeWindowMs: 120_000,
-      // Only the warned-about grace window is rolled back, never the timeout.
-      autoPauseRollbackSeconds: 30,
+      autoPauseRollbackSeconds: 120,
     })
   })
 

@@ -65,13 +65,33 @@ describe('useTimedSession automation config', () => {
     expect(result.current).toBe(initialController)
   })
 
-  it('arms the default inactivity pause after the 120s timeout plus its 30s grace', () => {
+  it('arms the default inactivity pause at the 120s total idle window', () => {
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
 
     render(<TimedSessionTestHarness kind="palace_edit" />)
 
     expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 150_000)).toBe(true)
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 120_000)).toBe(true)
+  })
+
+  it('pauses at three minutes and removes the full idle window from effective time', () => {
+    window.localStorage.setItem(
+      TIMER_AUTOMATION_STORAGE_KEY,
+      JSON.stringify({
+        idleTimeoutSeconds: 180,
+        idleGraceSeconds: 30,
+      }),
+    )
+
+    render(<TimedSessionTestHarness kind="palace_edit" />)
+
+    act(() => {
+      vi.advanceTimersByTime(180_000)
+    })
+
+    expect(screen.getByTestId('status').textContent).toBe('paused')
+    expect(screen.getByTestId('seconds').textContent).toBe('0')
+    expect(screen.getByTestId('idle-seconds').textContent).toBe('0')
   })
 
   it('treats explicit autoPauseMs overrides as milliseconds', () => {
@@ -1124,4 +1144,3 @@ describe('useTimedSession automation config', () => {
     })
   })
 })
-

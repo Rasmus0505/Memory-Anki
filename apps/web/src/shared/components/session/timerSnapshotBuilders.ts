@@ -52,13 +52,13 @@ export function buildStudyTimerSnapshot({
   const status = activeEntry?.timer.status ?? 'idle'
   const goalReached = Boolean(activeEntry && roundElapsedSeconds >= primarySeconds)
   const idleSeconds = activeEntry?.timer.idleSeconds ?? 0
-  const warningThreshold = Math.max(0, automationConfig.idleTimeoutSeconds)
-  const graceSeconds = Math.max(0, automationConfig.idleGraceSeconds)
-  // The warning owns the grace window: it opens when the idle timeout is hit
-  // and counts down the seconds left before the auto-pause fires.
+  const idleWindowSeconds = Math.max(0, automationConfig.idleTimeoutSeconds)
+  const graceSeconds = Math.min(idleWindowSeconds, Math.max(0, automationConfig.idleGraceSeconds))
+  const warningThreshold = Math.max(0, idleWindowSeconds - graceSeconds)
+  // The warning is inside the idle window and counts down to the final pause.
   const idleWarningRemainingSeconds =
-    activeEntry && status === 'running' && warningThreshold > 0 && idleSeconds >= warningThreshold
-      ? Math.max(0, warningThreshold + graceSeconds - idleSeconds)
+    activeEntry && status === 'running' && idleWindowSeconds > 0 && idleSeconds >= warningThreshold
+      ? Math.max(0, idleWindowSeconds - idleSeconds)
       : null
   const studyPhase: UnifiedTimerStudyPhase = !activeEntry
     ? 'idle'
@@ -81,7 +81,7 @@ export function buildStudyTimerSnapshot({
           : studyPhase === 'completed'
             ? '本次学习已经完成'
             : activeEntry && scene
-              ? `专注中 · 闲置 ${idleSeconds}/${warningThreshold} 秒`
+              ? `专注中 · 闲置 ${idleSeconds}/${idleWindowSeconds} 秒`
               : '当前无学习会话'
   const secondaryText = activeEntry
     ? `本轮 ${formatClock(Math.min(roundElapsedSeconds, primarySeconds))}/${formatClock(primarySeconds)} · 第 ${roundIndex} 轮`
@@ -99,7 +99,7 @@ export function buildStudyTimerSnapshot({
           ? 'running'
           : 'idle'
   const focusProgress = primarySeconds > 0 ? Math.min(1, roundElapsedSeconds / primarySeconds) : 0
-  const idleProgress = warningThreshold > 0 ? Math.max(0, 1 - idleSeconds / warningThreshold) : 0
+  const idleProgress = idleWindowSeconds > 0 ? Math.max(0, 1 - idleSeconds / idleWindowSeconds) : 0
   return {
     mode: 'study',
     status,

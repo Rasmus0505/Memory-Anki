@@ -26,13 +26,12 @@ export interface TimerAutomationConfig {
    * suspends the timer, so this is a timing rule, not a way of responding.
    */
   keepScreenAwake: boolean
-  /** How long without a click still counts as studying (silent recitation). */
+  /** Total idle window before pausing; the warning grace is included in it. */
   idleTimeoutSeconds: number
   /**
-   * "Still studying?" window shown after {@link idleTimeoutSeconds}. Any
-   * activity within it keeps the timer running; otherwise the timer pauses and
-   * rolls back exactly this many seconds — the stretch that was warned about
-   * and ignored. Rollback is deliberately not a separate knob.
+   * "Still studying?" warning shown near the end of {@link idleTimeoutSeconds}.
+   * The warning duration is included in the total idle window and does not
+   * extend the pause deadline.
    */
   idleGraceSeconds: number
   /** Debounce before backgrounding the app leaves the scene. 0 = pause at once. */
@@ -60,6 +59,7 @@ const ACTIVITY_ENABLED: Readonly<Record<TimerAutomationActivityKind, boolean>> =
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
 export const TIMER_AUTOMATION_CONFIG_VERSION = 5
+export const MAX_TIMER_IDLE_SECONDS = 3 * 60
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
@@ -79,6 +79,13 @@ function sanitizeSeconds(value: unknown, fallback: number) {
 function sanitizeBoolean(value: unknown, fallback: boolean) {
   if (typeof value === 'boolean') return value
   return fallback
+}
+
+function sanitizeIdleTimeoutSeconds(value: unknown) {
+  return Math.min(
+    MAX_TIMER_IDLE_SECONDS,
+    sanitizeSeconds(value, DEFAULT_TIMER_AUTOMATION_CONFIG.idleTimeoutSeconds),
+  )
 }
 
 export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationConfig {
@@ -101,10 +108,7 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
         raw.keepScreenAwake,
         DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
       ),
-      idleTimeoutSeconds: sanitizeSeconds(
-        legacyShared.inactiveAutoPauseSeconds,
-        DEFAULT_TIMER_AUTOMATION_CONFIG.idleTimeoutSeconds,
-      ),
+      idleTimeoutSeconds: sanitizeIdleTimeoutSeconds(legacyShared.inactiveAutoPauseSeconds),
       // Deliberately ignore the stored grace/hidden values: v3 sanitize forced
       // both to 0, which is exactly the behaviour this schema bump fixes.
       idleGraceSeconds: DEFAULT_TIMER_AUTOMATION_CONFIG.idleGraceSeconds,
@@ -122,10 +126,7 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
       raw.keepScreenAwake,
       DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
     ),
-    idleTimeoutSeconds: sanitizeSeconds(
-      raw.idleTimeoutSeconds,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.idleTimeoutSeconds,
-    ),
+    idleTimeoutSeconds: sanitizeIdleTimeoutSeconds(raw.idleTimeoutSeconds),
     idleGraceSeconds: sanitizeSeconds(
       raw.idleGraceSeconds,
       DEFAULT_TIMER_AUTOMATION_CONFIG.idleGraceSeconds,

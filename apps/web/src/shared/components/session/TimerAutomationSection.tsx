@@ -1,4 +1,5 @@
 import type { AutomationDraft, FieldKey } from '@/shared/components/session/timerAutomationDialogModel'
+import { MAX_TIMER_IDLE_SECONDS } from '@/shared/components/session/timer-automation-config'
 import { Input } from '@/shared/components/ui/input'
 
 export function TimerAutomationSection({
@@ -15,7 +16,10 @@ export function TimerAutomationSection({
   /** `compact` is the in-session dialog: only the knobs worth changing mid-study. */
   variant?: 'full' | 'compact'
 }) {
-  const idleMinutes = Math.max(1, Math.round((Number(draft.idleTimeoutSeconds) || 120) / 60))
+  const idleMinutes = Math.min(
+    MAX_TIMER_IDLE_SECONDS / 60,
+    Math.max(1, Math.round((Number(draft.idleTimeoutSeconds) || 120) / 60)),
+  )
   const graceSeconds = Math.max(0, Math.round(Number(draft.idleGraceSeconds) || 0))
   const backgroundSeconds = Math.max(0, Math.round(Number(draft.backgroundGraceSeconds) || 0))
 
@@ -24,7 +28,7 @@ export function TimerAutomationSection({
       <div>
         <div className="text-sm font-semibold text-foreground">自动计时</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          所有学习页面共用同一套规则。只有主应用内容区内的鼠标点击会续活；无点击达到闲置阈值后会先提示「仍在学习吗」，宽限期内任意操作都会继续计时。
+          所有学习页面共用同一套规则。只有主应用内容区内的鼠标点击会续活；闲置总时长达到上限后自动暂停，预警宽限包含在这段总时长内。
         </p>
       </div>
 
@@ -32,17 +36,20 @@ export function TimerAutomationSection({
         <label className="rounded-lg border border-border/60 bg-background/60 px-3 py-3 text-sm">
           <span className="block font-medium text-foreground">无点击自动暂停</span>
           <span className="mt-1 block text-xs text-muted-foreground">
-            持续多少分钟没有点击主应用内容后进入预警。这段时间视为默读背诵，仍计入时长。
+            最多允许 3 分钟。达到设定的总时长后自动暂停，这段闲置时间不会计入学习记录。
           </span>
           <div className="mt-3 flex items-center gap-2">
             <Input
               aria-label="无点击自动暂停分钟"
               type="number"
               min={1}
-              max={180}
+              max={MAX_TIMER_IDLE_SECONDS / 60}
               value={idleMinutes}
               onChange={(event) => {
-                const minutes = Math.max(1, Math.round(Number(event.target.value) || 1))
+                const minutes = Math.min(
+                  MAX_TIMER_IDLE_SECONDS / 60,
+                  Math.max(1, Math.round(Number(event.target.value) || 1)),
+                )
                 onFieldChange('idleTimeoutSeconds', String(minutes * 60))
               }}
             />
@@ -54,7 +61,7 @@ export function TimerAutomationSection({
         <label className="rounded-lg border border-border/60 bg-background/60 px-3 py-3 text-sm">
           <span className="block font-medium text-foreground">预警宽限</span>
           <span className="mt-1 block text-xs text-muted-foreground">
-            「仍在学习吗」提示持续多久。无人理会则暂停，并回退这段时长。
+            「仍在学习吗」提示持续多久。它包含在闲置总时长内，不会额外延长暂停时间。
           </span>
           <div className="mt-3 flex items-center gap-2">
             <Input

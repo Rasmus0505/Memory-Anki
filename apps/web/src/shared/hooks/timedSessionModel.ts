@@ -324,15 +324,16 @@ export function resolveTimedSessionAutomation(
     hiddenPauseMs?: number
   },
 ): ResolvedTimedSessionAutomation {
-  const inactivityGraceMs = Math.max(0, Math.round(rule.idleGraceSeconds * 1000))
-  const configuredWarningMs = Math.max(0, Math.round(rule.idleTimeoutSeconds * 1000))
+  const configuredIdleWindowMs = Math.max(0, Math.round(rule.idleTimeoutSeconds * 1000))
+  const inactivityGraceMs = Math.min(
+    configuredIdleWindowMs,
+    Math.max(0, Math.round(rule.idleGraceSeconds * 1000)),
+  )
   const explicitAutoPauseMs = overrides.autoPauseMs == null
     ? null
     : Math.max(0, Math.round(overrides.autoPauseMs))
-  const resolvedInactiveMs = explicitAutoPauseMs ?? configuredWarningMs + inactivityGraceMs
-  const inactivityWarningMs = explicitAutoPauseMs == null
-    ? configuredWarningMs
-    : Math.max(0, explicitAutoPauseMs - inactivityGraceMs)
+  const resolvedInactiveMs = explicitAutoPauseMs ?? configuredIdleWindowMs
+  const inactivityWarningMs = Math.max(0, resolvedInactiveMs - inactivityGraceMs)
   return {
     inactivityWarningMs,
     inactivityGraceMs,
@@ -341,10 +342,9 @@ export function resolveTimedSessionAutomation(
       0,
       Math.round(overrides.hiddenPauseMs ?? rule.backgroundGraceSeconds * 1000),
     ),
-    resumeWindowMs: explicitAutoPauseMs ?? configuredWarningMs,
-    // Roll back exactly the warned-about stretch. The idle timeout itself stays
-    // credited: silent recitation with no clicks is normal in a memory app.
-    autoPauseRollbackSeconds: Math.max(0, Math.round(rule.idleGraceSeconds)),
+    resumeWindowMs: explicitAutoPauseMs ?? configuredIdleWindowMs,
+    // The full idle window is excluded from study time when it ends without activity.
+    autoPauseRollbackSeconds: Math.max(0, Math.round(resolvedInactiveMs / 1000)),
   }
 }
 

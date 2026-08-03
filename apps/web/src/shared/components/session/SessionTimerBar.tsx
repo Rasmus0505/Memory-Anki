@@ -183,10 +183,16 @@ export function SessionTimerBar({
     />
   )
 
-  const isIdleWarning = isRunning && safeIdleSeconds >= automationConfig.idleTimeoutSeconds
+  const idleWindowSeconds = Math.max(0, automationConfig.idleTimeoutSeconds)
+  const warningThresholdSeconds = Math.max(
+    0,
+    idleWindowSeconds - Math.max(0, automationConfig.idleGraceSeconds),
+  )
+  const isIdleWarning =
+    isRunning && idleWindowSeconds > 0 && safeIdleSeconds >= warningThresholdSeconds
   const idleWarningRemaining = Math.max(
     0,
-    automationConfig.idleTimeoutSeconds + automationConfig.idleGraceSeconds - safeIdleSeconds,
+    idleWindowSeconds - safeIdleSeconds,
   )
   const idleStatusClassName = isIdleWarning
     ? 'font-medium text-orange-600'
@@ -195,7 +201,7 @@ export function SessionTimerBar({
       : 'text-foreground'
   const idleStatusText = isIdleWarning
     ? `仍在学习吗？${idleWarningRemaining} 秒后暂停`
-    : `闲置 ${safeIdleSeconds}/${automationConfig.idleTimeoutSeconds} 秒`
+    : `闲置 ${safeIdleSeconds}/${idleWindowSeconds} 秒`
 
   if (layout === 'compact') {
     return (

@@ -47,7 +47,7 @@ describe('SessionTimerBar', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     const saved = readTimerAutomationConfig()
-    expect(saved.idleTimeoutSeconds).toBe(300)
+    expect(saved.idleTimeoutSeconds).toBe(180)
     // Fields the compact dialog never showed must survive the save untouched,
     // not fall back to defaults or zero.
     expect(saved.backgroundGraceSeconds).toBe(20)
@@ -167,7 +167,7 @@ describe('SessionTimerBar', () => {
       />,
     )
 
-    expect(screen.getByText('闲置 3/300 秒')).toBeTruthy()
+    expect(screen.getByText('闲置 3/180 秒')).toBeTruthy()
   })
 
   it('keeps the idle row visible and only highlights it after idle starts', () => {
