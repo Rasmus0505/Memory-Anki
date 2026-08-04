@@ -4,9 +4,6 @@ import { resolvePageHistoryKey, resolvePageHistorySection } from './pageHistoryR
 describe('pageHistoryRoute', () => {
   it('builds stable object keys for dynamic learning pages', () => {
     expect(resolvePageHistoryKey('/palaces/42')).toBe('palace:view:42')
-    expect(resolvePageHistoryKey('/palaces/42/practice')).toBe('palace:practice:42')
-    expect(resolvePageHistoryKey('/segments/8/practice')).toBe('segment:practice:8')
-    expect(resolvePageHistoryKey('/english/courses/7')).toBe('english:course:7')
     expect(resolvePageHistoryKey('/english/listening/courses/7')).toBe('english:course:7')
     expect(resolvePageHistoryKey('/english/reading/materials/3')).toBe('english:material:3')
     expect(resolvePageHistoryKey('/freestyle')).toBe('freestyle')

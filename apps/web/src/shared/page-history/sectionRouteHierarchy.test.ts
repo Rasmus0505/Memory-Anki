@@ -44,8 +44,4 @@ describe('sectionRouteHierarchy', () => {
     ])
   })
 
-  it('walks freestyle practice back to freestyle home', () => {
-    expect(resolveSectionHierarchicalParent('/palaces/3/practice')).toBe('/freestyle')
-    expect(resolveSectionHierarchicalParent('/segments/8/practice')).toBe('/freestyle')
-  })
 })

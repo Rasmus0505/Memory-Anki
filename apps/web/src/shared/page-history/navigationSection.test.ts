@@ -2,11 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { resolveNavigationSection } from './navigationSection'
 
 describe('resolveNavigationSection', () => {
-  it('maps freestyle and practice routes to freestyle', () => {
+  it('maps the immersive feed to freestyle', () => {
     expect(resolveNavigationSection('/freestyle')).toBe('freestyle')
-    expect(resolveNavigationSection('/freestyle/session')).toBe('freestyle')
-    expect(resolveNavigationSection('/palaces/12/practice')).toBe('freestyle')
-    expect(resolveNavigationSection('/segments/3/practice')).toBe('freestyle')
   })
 
   it('maps library and knowledge-tree routes to palaces (知识)', () => {
@@ -27,7 +24,6 @@ describe('resolveNavigationSection', () => {
   it('maps english and review/insight hubs', () => {
     expect(resolveNavigationSection('/english')).toBe('english')
     expect(resolveNavigationSection('/english/reading')).toBe('english')
-    expect(resolveNavigationSection('/english-reading/1')).toBe('english')
     expect(resolveNavigationSection('/dashboard')).toBe('review')
     expect(resolveNavigationSection('/freestyle')).toBe('freestyle')
     expect(resolveNavigationSection('/review')).toBeNull()

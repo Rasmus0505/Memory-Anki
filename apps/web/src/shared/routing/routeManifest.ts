@@ -56,7 +56,6 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
   { path: '/today', nav: 'review', history: 'dashboard', historyKey: 'today:workspace', commandLabel: '今日工作台' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
-  { path: '/freestyle/session', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
   { path: '/palaces', nav: 'palaces', history: 'palaces', historyKey: 'palace:shelf' },
   { path: '/palaces/list', nav: 'palaces', history: 'palaces', historyKey: 'palace:list', commandLabel: '宫殿列表' },
   { path: '/palaces/new', nav: 'knowledge', history: 'palaces', historyKey: 'palace:new' },
@@ -67,7 +66,6 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/english/reading', nav: 'english', history: 'english', historyKey: 'english:reading', commandLabel: '英语阅读' },
   { path: '/english/patterns', nav: 'english', history: 'english', historyKey: 'english:patterns', commandLabel: '英语句型' },
   { path: '/english/vocab', nav: 'english', history: 'english', historyKey: 'english:vocab', commandLabel: '英语词汇' },
-  { path: '/english-reading', nav: 'english', history: 'english', historyKey: 'english:reading' },
   { path: '/profile', nav: null, history: 'profile', historyKey: 'profile:overview', commandLabel: '设置' },
   { path: '/profile/timer', nav: null, history: 'profile', historyKey: 'profile:timer' },
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
@@ -96,25 +94,7 @@ export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [
     historyKey: (match) => `palace:quiz:${match[1]}`,
   },
   {
-    pattern: /^\/palaces\/(\d+)\/practice$/,
-    nav: 'freestyle',
-    history: 'palaces',
-    historyKey: (match) => `palace:practice:${match[1]}`,
-  },
-  {
-    pattern: /^\/segments\/(\d+)\/practice$/,
-    nav: 'freestyle',
-    history: 'palaces',
-    historyKey: (match) => `segment:practice:${match[1]}`,
-  },
-  {
     pattern: /^\/english\/listening\/courses\/(\d+)$/,
-    nav: 'english',
-    history: 'english',
-    historyKey: (match) => `english:course:${match[1]}`,
-  },
-  {
-    pattern: /^\/english\/courses\/(\d+)$/,
     nav: 'english',
     history: 'english',
     historyKey: (match) => `english:course:${match[1]}`,
@@ -145,28 +125,19 @@ export const DYNAMIC_PREFIX_FALLBACKS: Array<{
     match: /^\/english\/listening\/courses\/(\d+)(?:\/.*)?$/,
     build: (id) => `/english/listening/courses/${id}`,
   },
-  { match: /^\/english\/courses\/(\d+)(?:\/.*)?$/, build: (id) => `/english/courses/${id}` },
   {
     match: /^\/english\/reading\/materials\/(\d+)(?:\/.*)?$/,
     build: (id) => `/english/reading/materials/${id}`,
   },
-  { match: /^\/segments\/(\d+)\/practice(?:\/.*)?$/, build: (id) => `/segments/${id}/practice` },
 ]
 
-/** 顶层前缀规则（顺序即匹配优先级；'/english-reading/' 必须在 '/english/' 之前）。 */
+/** 顶层前缀规则（顺序即匹配优先级）。 */
 export const PREFIX_RULES: PrefixRule[] = [
   { prefix: '/knowledge/', nav: 'palaces', history: 'knowledge', fallbackTarget: '/knowledge' },
   { prefix: '/freestyle/', nav: null, history: 'other', fallbackTarget: '/freestyle' },
   { prefix: '/profile/', nav: null, history: 'profile', fallbackTarget: '/profile' },
-  {
-    prefix: '/english-reading/',
-    nav: 'english',
-    history: 'english',
-    fallbackTarget: '/english/reading',
-  },
   { prefix: '/english/', nav: 'english', history: 'english', fallbackTarget: '/english' },
   { prefix: '/palaces/', nav: null, history: 'palaces', fallbackTarget: '/palaces' },
-  { prefix: '/segments/', nav: null, history: 'palaces' },
   { prefix: '/timer-overlay/', nav: null, history: 'other', fallbackTarget: '/timer-overlay' },
 ]
 

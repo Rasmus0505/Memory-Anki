@@ -9,7 +9,7 @@
  *
  *  随心 freestyle
  *    /freestyle
- *      └─ practice routes (/palaces/:id/practice, /segments/:id/practice)
+ *      └─ immersive feed (/freestyle)
  *
  *  知识 palaces
  *    /palaces                          ← 学科书架（封面）
@@ -20,7 +20,7 @@
  *  英语 english
  *    /english
  *      ├─ /english/listening
- *      │    └─ /english/listening/courses/:id  (legacy /english/courses/:id)
+ *      │    └─ /english/listening/courses/:id
  *      ├─ /english/reading
  *      │    └─ /english/reading/materials/:id
  *      ├─ /english/patterns
@@ -98,9 +98,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
 
   // ── 随心 ──────────────────────────────────────────────
   if (section === 'freestyle') {
-    if (pathname === '/freestyle/session') return root
-    if (/^\/palaces\/\d+\/practice$/.test(pathname)) return root
-    if (/^\/segments\/\d+\/practice$/.test(pathname)) return root
     return root
   }
 
@@ -124,7 +121,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
   // ── 英语 ──────────────────────────────────────────────
   if (section === 'english') {
     if (/^\/english\/listening\/courses\/\d+$/.test(pathname)) return '/english/listening'
-    if (/^\/english\/courses\/\d+$/.test(pathname)) return '/english/listening'
     if (/^\/english\/reading\/materials\/\d+$/.test(pathname)) return '/english/reading'
     if (
       pathname === '/english/listening' ||
@@ -133,9 +129,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
       pathname === '/english/vocab'
     ) {
       return root
-    }
-    if (pathname === '/english-reading' || pathname.startsWith('/english-reading/')) {
-      return '/english/reading'
     }
     return root
   }
@@ -205,7 +198,7 @@ export function describeNavigationPath(fullPath: string): string {
   if (pathname === '/knowledge' || pathname.startsWith('/knowledge/')) return '知识树编辑'
   if (pathname === '/english') return '英语总览'
   if (pathname === '/english/listening') return '听力库'
-  if (/^\/english\/listening\/courses\/\d+$/.test(pathname) || /^\/english\/courses\/\d+$/.test(pathname)) {
+  if (/^\/english\/listening\/courses\/\d+$/.test(pathname)) {
     return '听力课程'
   }
   if (pathname === '/english/reading') return '阅读库'
@@ -216,9 +209,6 @@ export function describeNavigationPath(fullPath: string): string {
   if (pathname === '/palaces/new') return '创建入口'
   if (/^\/palaces\/\d+\/edit$/.test(pathname)) return '宫殿编辑'
   if (/^\/palaces\/\d+\/quiz$/.test(pathname)) return '宫殿测验'
-  if (/^\/palaces\/\d+\/practice$/.test(pathname) || /^\/segments\/\d+\/practice$/.test(pathname)) {
-    return '练习'
-  }
   if (/^\/palaces\/\d+$/.test(pathname)) return '宫殿详情'
   if (pathname === '/dashboard' || pathname === '/') return '洞察首页'
   if (pathname === '/batch-generation') return '批量生成'
