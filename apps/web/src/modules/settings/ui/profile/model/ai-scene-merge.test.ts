@@ -18,9 +18,4 @@ describe('mergeAiScenes', () => {
     })
   })
 
-  it('filters compatibility aliases', () => {
-    expect(
-      mergeAiScenes([], [{ ...promptScene, scene_key: 'compat', is_compatibility: true }]),
-    ).toEqual([])
-  })
 })

@@ -12,13 +12,10 @@ export const AI_TABS: ReadonlyArray<{ key: AiTab; label: string }> = [
 
 export function resolveAiTab(params: URLSearchParams): AiTab {
   const tab = params.get('tab')
-  const legacyWorkspaceTab = params.get('aiTab')
   if (tab === 'access' || tab === 'models' || tab === 'scenes' || tab === 'blocks' || tab === 'observability') {
     return tab
   }
-  if (tab === 'prompts') return 'scenes'
-  if (tab === 'config') return workspaceTabToAiTab(legacyWorkspaceTab)
-  return workspaceTabToAiTab(legacyWorkspaceTab)
+  return 'access'
 }
 
 export function workspaceTabToAiTab(value: string | null): AiTab {

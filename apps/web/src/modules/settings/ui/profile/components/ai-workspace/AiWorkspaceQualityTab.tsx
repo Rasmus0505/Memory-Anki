@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw, ShieldCheck } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { getAiQualitySummaryApi } from '@/modules/settings/domain/preferences-entity/api'
 import type { AiQualitySummary } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
@@ -37,7 +37,7 @@ export function AiWorkspaceQualityTab() {
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <div className="font-medium">AI 质量与稳定性</div>
-            <div className="text-sm text-muted-foreground">成功率、结构输出、延迟、用量与提示词评测。</div>
+            <div className="text-sm text-muted-foreground">成功率、结构输出、延迟、用量与错误统计。</div>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -90,20 +90,6 @@ export function AiWorkspaceQualityTab() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4" />最近评测</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {summary?.recent_evals.length ? summary.recent_evals.map((run) => (
-              <div key={run.id} className="rounded-lg border p-3 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{run.prompt_key}</span>
-                  <Badge variant={run.gate_passed ? 'secondary' : 'destructive'}>{run.gate_passed ? '通过' : '未通过'}</Badge>
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">{run.case_count} 个案例 · 断言 {percent(run.assertion_success_rate)}</div>
-              </div>
-            )) : <div className="text-sm text-muted-foreground">尚未运行提示词评测。</div>}
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

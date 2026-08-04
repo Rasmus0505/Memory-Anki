@@ -4,16 +4,11 @@ import unittest
 from unittest.mock import patch
 
 from memory_anki.infrastructure.db._tables.misc import Config, ExternalAiCallLog
-from memory_anki.modules.english.infrastructure import dashscope_gateway
-from memory_anki.modules.english_reading.application import service as reading_service
-from memory_anki.modules.english_reading.application.ai_dependencies import (
-    EnglishReadingAiDependencies,
-)
 from memory_anki.modules.produce.application.mindmap_ai_split.config_loader import (
     resolve_config as resolve_ai_split_config,
 )
 from memory_anki.modules.produce.application.mindmap_ai_split.contracts import MindMapAiSplitError
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
+from memory_anki.modules.settings.api import SettingsAiRuntimeProvider
 from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
 from memory_anki.modules.settings.application.ai_model_registry_catalog import (
     PROVIDER_API_KEY_CONFIG_KEYS,
@@ -58,71 +53,6 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(payload["mindmap_ai_split_include_note"], "false")
         self.assertEqual(payload["mindmap_ai_split_custom_instruction"], "优先按考试框架拆分。")
 
-    def test_ai_prompt_settings_can_list_save_and_reset_templates(self):
-        list_response = self.client.get("/api/v1/settings/ai-prompts")
-        self.assertEqual(list_response.status_code, 200)
-        items = list_response.json()["items"]
-        target = next(item for item in items if item["key"] == "ai_prompt_import_ocr_mindmap_format")
-        self.assertIn("{{ocr_text}}", target["template"])
-        self.assertIn("{{target_title}}", target["template"])
-
-        custom_template = "自定义整理提示词\n目标：{{target_title}}\n原文：{{ocr_text}}\n请严格输出 JSON。"
-        save_response = self.client.put(
-            "/api/v1/settings/ai-prompts",
-            json={"templates": {"ai_prompt_import_ocr_mindmap_format": custom_template}},
-        )
-        self.assertEqual(save_response.status_code, 200)
-        saved_target = next(
-            item
-            for item in save_response.json()["items"]
-            if item["key"] == "ai_prompt_import_ocr_mindmap_format"
-        )
-        self.assertNotEqual(saved_target["template"], custom_template)
-        self.assertFalse(saved_target["is_customized"])
-        self.assertTrue(save_response.json()["requires_evaluation"])
-        candidate = save_response.json()["candidates"][0]
-        self.assertEqual(candidate["template"], custom_template)
-        self.assertEqual(candidate["status"], "candidate")
-
-        versions_response = self.client.get(
-            "/api/v1/settings/ai-prompts/ai_prompt_import_ocr_mindmap_format/versions"
-        )
-        self.assertEqual(versions_response.status_code, 200)
-        self.assertGreaterEqual(len(versions_response.json()["items"]), 2)
-
-        reset_response = self.client.post(
-            "/api/v1/settings/ai-prompts/reset",
-            json={"keys": ["ai_prompt_import_ocr_mindmap_format"]},
-        )
-        self.assertEqual(reset_response.status_code, 200)
-        self.assertTrue(reset_response.json()["requires_evaluation"])
-        self.assertEqual(reset_response.json()["candidates"][0]["source"], "builtin")
-
-    def test_ai_prompt_candidate_requires_passing_eval_before_activation(self):
-        custom_template = "候选提示词\n{{target_title}}\n{{ocr_text}}"
-        save_response = self.client.put(
-            "/api/v1/settings/ai-prompts",
-            json={"templates": {"ai_prompt_import_ocr_mindmap_format": custom_template}},
-        )
-        candidate = save_response.json()["candidates"][0]
-
-        eval_response = self.client.post(
-            "/api/v1/settings/ai-evals/runs",
-            json={
-                "prompt_key": "ai_prompt_import_ocr_mindmap_format",
-                "candidate_version_id": candidate["id"],
-            },
-        )
-        self.assertEqual(eval_response.status_code, 200)
-        self.assertFalse(eval_response.json()["gate_passed"])
-        self.assertEqual(eval_response.json()["case_count"], 0)
-
-        activate_response = self.client.post(
-            f"/api/v1/settings/ai-prompts/ai_prompt_import_ocr_mindmap_format/versions/{candidate['id']}/activate"
-        )
-        self.assertEqual(activate_response.status_code, 400)
-        self.assertIn("尚未通过", activate_response.json()["detail"])
-
     def test_ai_quality_summary_returns_lightweight_metrics(self):
         with self.SessionLocal() as session:
             session.add(
@@ -153,18 +83,6 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(metrics["input_tokens"], 120)
         self.assertTrue(metrics["has_estimated_cost"])
 
-    def test_ai_prompt_settings_reject_unknown_placeholder(self):
-        response = self.client.put(
-            "/api/v1/settings/ai-prompts",
-            json={
-                "templates": {
-                    "ai_prompt_import_ocr_mindmap_format": "坏模板 {{target_title}} {{ocr_text}} {{unknown_var}}"
-                }
-            },
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("未知占位符", response.json()["detail"])
-
     def test_prompt_blocks_compile_in_fixed_layers_and_allow_missing_recommended_blocks(self):
         blocks_response = self.client.get("/api/v1/settings/ai-prompt-blocks")
         self.assertEqual(blocks_response.status_code, 200)
@@ -184,9 +102,8 @@ class SettingsAiRouteTests(RouterTestCase):
         format_scene = next(item for item in scenes if item["scene_key"] == "mindmap_ocr_formatter")
         self.assertGreaterEqual(len(format_scene["block_keys"]), 4)
         self.assertTrue(set(format_scene["recommended_block_keys"]).issubset(set(format_scene["block_keys"])))
-        self.assertFalse(format_scene.get("is_compatibility"))
-        compat = next(item for item in scenes if item["scene_key"] == "ai_split_parallel")
-        self.assertTrue(compat.get("is_compatibility"))
+        self.assertNotIn("is_compatibility", format_scene)
+        self.assertFalse(any(item["scene_key"] in {"ai_split_parallel", "ai_split_hierarchy"} for item in scenes))
 
         preview = self.client.post(
             "/api/v1/settings/ai-prompt-compose/preview",
@@ -569,42 +486,6 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(payload["response_text"], "{\"ok\":true}")
         self.assertEqual(payload["job_id"], "job-1")
 
-
-    def test_legacy_english_gateway_does_not_fall_back_to_environment_key(self):
-        with patch.object(dashscope_gateway, "DASHSCOPE_API_KEY", "environment-secret"):
-            runtime = dashscope_gateway._resolve_legacy_dashscope_runtime(
-                legacy_default_model="qwen3-asr-flash"
-            )
-        self.assertEqual(runtime.api_key, "")
-        self.assertEqual(runtime.base_url, "")
-
-    def test_english_reading_runtime_keeps_database_tombstone_over_environment_key(self):
-        with self.SessionLocal() as session:
-            runtime_provider = SettingsAiRuntimeProvider(session)
-            initial_runtime = runtime_provider.resolve("translation")
-            session.add(
-                Config(
-                    key=PROVIDER_API_KEY_CONFIG_KEYS[initial_runtime.provider],
-                    value="",
-                )
-            )
-            session.commit()
-            dependencies = EnglishReadingAiDependencies(
-                runtime=runtime_provider,
-                prompts=SettingsPromptCatalog(session),
-            )
-            with patch(
-                "memory_anki.modules.english_reading.application.service.DASHSCOPE_API_KEY",
-                "environment-secret",
-            ):
-                resolved = reading_service._resolve_legacy_dashscope_runtime(
-                    session,
-                    ai_dependencies=dependencies,
-                    scenario_key="translation",
-                    ai_options=None,
-                    legacy_default_model="qwen-mt-plus",
-                )
-        self.assertEqual(resolved.api_key, "")
 
     def test_ai_split_legacy_empty_key_blocks_provider_and_environment_fallbacks(self):
         with self.SessionLocal() as session:

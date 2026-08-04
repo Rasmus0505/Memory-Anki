@@ -117,11 +117,11 @@ def build_model_input(
     existing_children: list[dict[str, Any]],
     include_note: bool,
     max_children: int,
-    split_mode: str = "legacy_children",
+    split_mode: str = "add_children",
     target_card_count: int | None = None,
 ) -> dict[str, Any]:
     existing_count = len(existing_children)
-    is_add_mode = split_mode in {"add_children", "legacy_children"}
+    is_add_mode = split_mode == "add_children"
     payload: dict[str, Any] = {
         "task": "add_mindmap_group_nodes" if is_add_mode else "split_mindmap_node",
         "max_children": max_children,

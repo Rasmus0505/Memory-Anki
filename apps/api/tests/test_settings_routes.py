@@ -166,14 +166,6 @@ class TestAiModels:
         assert response.json()["detail"]["code"] == "provider_invalid"
 
 
-class TestAiPrompts:
-    def test_list_templates(self, client):
-        response = client.get("/api/v1/settings/ai-prompts")
-
-        assert response.status_code == 200
-        assert response.json()["items"]
-
-
 class TestAiCallLogs:
     def test_list_empty(self, client):
         response = client.get("/api/v1/ai-call-logs")

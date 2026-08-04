@@ -1,29 +1,22 @@
 import { request } from '@/shared/api/http'
 import type {
-  AiEvalRun,
   AiPromptBlock,
   AiPromptBlockVersion,
   AiPromptRunSelection,
   AiPromptSceneDefault,
   AiPromptSceneVersion,
-  AiPromptTemplateListResponse,
-  AiPromptVersionSummary,
   AiQualitySummary,
   CompiledPromptSnapshot,
 } from '@/shared/api/contracts'
 
 /**
- * Prompt, eval and quality endpoints.
+ * Prompt composition and quality endpoints.
  *
  * These used to exist twice: once here in the entity layer and once in the
  * settings UI's own profileApi. The two copies of
  * `saveAiPromptSceneDefaultApi` even behaved differently offline, so the
  * settings page and the in-run dialog queued differently for the same write.
  */
-export function getAiPromptTemplatesApi() {
-  return request<AiPromptTemplateListResponse>('/settings/ai-prompts')
-}
-
 export function getAiPromptBlocksApi() {
   return request<{ items: AiPromptBlock[] }>('/settings/ai-prompt-blocks')
 }
@@ -92,51 +85,6 @@ export function getAiPromptSceneVersionsApi(sceneKey: string) {
 export function activateAiPromptSceneVersionApi(sceneKey: string, versionId: string) {
   return request<AiPromptSceneDefault>(
     `/settings/ai-prompt-scenes/${encodeURIComponent(sceneKey)}/versions/${encodeURIComponent(versionId)}/activate`,
-    { method: 'POST' },
-  )
-}
-
-export function updateAiPromptTemplatesApi(templates: Record<string, string>) {
-  return request<AiPromptTemplateListResponse>('/settings/ai-prompts', {
-    method: 'PUT',
-    body: JSON.stringify({ templates }),
-    persistence: {
-      resourceKey: 'settings:ai-prompts',
-      coalesceKey: 'settings:ai-prompts',
-      description: '保存 AI Prompt 模板',
-      replayMode: 'auto',
-    },
-  })
-}
-
-export function resetAiPromptTemplatesApi(keys?: string[]) {
-  return request<AiPromptTemplateListResponse>('/settings/ai-prompts/reset', {
-    method: 'POST',
-    body: JSON.stringify(keys && keys.length > 0 ? { keys } : {}),
-    persistence: {
-      resourceKey: 'settings:ai-prompts:reset',
-      description: '重置 AI Prompt 模板',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function getAiPromptVersionsApi(promptKey: string) {
-  return request<{ items: AiPromptVersionSummary[] }>(
-    `/settings/ai-prompts/${encodeURIComponent(promptKey)}/versions`,
-  )
-}
-
-export function runAiPromptEvalApi(promptKey: string, candidateVersionId: string) {
-  return request<AiEvalRun>('/settings/ai-evals/runs', {
-    method: 'POST',
-    body: JSON.stringify({ prompt_key: promptKey, candidate_version_id: candidateVersionId }),
-  })
-}
-
-export function activateAiPromptVersionApi(promptKey: string, versionId: string) {
-  return request<AiPromptVersionSummary>(
-    `/settings/ai-prompts/${encodeURIComponent(promptKey)}/versions/${encodeURIComponent(versionId)}/activate`,
     { method: 'POST' },
   )
 }

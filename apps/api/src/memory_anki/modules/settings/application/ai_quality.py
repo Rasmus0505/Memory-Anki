@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import AiEvalRun, AiPromptVersion, ExternalAiCallLog
+from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 
 
 def _percentile(values: list[int], percentile: float) -> int | None:
@@ -45,16 +45,6 @@ def build_ai_quality_summary(
     for row in rows:
         if row.error_kind:
             error_counts[row.error_kind] = error_counts.get(row.error_kind, 0) + 1
-    recent_evals = (
-        session.query(AiEvalRun).order_by(AiEvalRun.created_at.desc()).limit(10).all()
-    )
-    candidates = (
-        session.query(AiPromptVersion)
-        .filter(AiPromptVersion.status.in_(("candidate", "passed", "failed")))
-        .order_by(AiPromptVersion.created_at.desc())
-        .limit(20)
-        .all()
-    )
     return {
         "range_days": days,
         "filters": {"scene": scene, "provider": provider, "model": model},
@@ -74,25 +64,4 @@ def build_ai_quality_summary(
             "has_estimated_cost": any(row.estimated_cost is not None for row in rows),
         },
         "errors": [{"kind": key, "count": value} for key, value in sorted(error_counts.items())],
-        "recent_evals": [
-            {
-                "id": row.id,
-                "prompt_key": row.prompt_key,
-                "status": row.status,
-                "case_count": row.case_count,
-                "assertion_success_rate": row.assertion_success_rate,
-                "gate_passed": row.gate_passed,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            }
-            for row in recent_evals
-        ],
-        "prompt_candidates": [
-            {
-                "id": row.id,
-                "prompt_key": row.prompt_key,
-                "status": row.status,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            }
-            for row in candidates
-        ],
     }

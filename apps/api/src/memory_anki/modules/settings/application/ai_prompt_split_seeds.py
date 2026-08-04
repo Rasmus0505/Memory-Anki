@@ -21,7 +21,6 @@ class PromptSceneSeedData(TypedDict):
     label: NotRequired[str]
     description: NotRequired[str]
     category: NotRequired[str]
-    is_compatibility: NotRequired[bool]
 
 
 AI_SPLIT_BLOCK_SEEDS: tuple[PromptBlockSeedData, ...] = (
@@ -147,40 +146,5 @@ AI_SPLIT_SCENE_SEEDS: tuple[PromptSceneSeedData, ...] = (
         "label": "AI 分卡",
         "description": "脑图编辑页右键：把无子节点的长内容卡片原位拆成并列或层级小卡片，保留原句。",
         "category": "脑图分卡",
-    },
-    # Compatibility aliases for older UI entrypoints / localStorage keys.
-    {
-        "scene_key": "ai_split_parallel",
-        "prompt_key": "ai_prompt_mindmap_ai_split_system",
-        "block_keys": _AI_SPLIT_DEFAULT_BLOCKS,
-        "scene_instruction": _AI_SPLIT_SCENE_INSTRUCTION,
-        "recommended_block_keys": (
-            "role.strict_json",
-            "content.split_source_fidelity",
-            "task.split_structure_judgment",
-            "boundary.split_in_place",
-            "output.mindmap_split_json",
-        ),
-        "label": "AI 分卡（兼容·并列入口）",
-        "description": "旧「并列分卡」入口兼容场景，默认与统一 AI 分卡相同。",
-        "category": "脑图分卡",
-        "is_compatibility": True,
-    },
-    {
-        "scene_key": "ai_split_hierarchy",
-        "prompt_key": "ai_prompt_mindmap_ai_split_system",
-        "block_keys": _AI_SPLIT_DEFAULT_BLOCKS,
-        "scene_instruction": _AI_SPLIT_SCENE_INSTRUCTION,
-        "recommended_block_keys": (
-            "role.strict_json",
-            "content.split_source_fidelity",
-            "task.split_structure_judgment",
-            "boundary.split_in_place",
-            "output.mindmap_split_json",
-        ),
-        "label": "AI 分卡（兼容·层级入口）",
-        "description": "旧「层级分卡」入口兼容场景，默认与统一 AI 分卡相同。",
-        "category": "脑图分卡",
-        "is_compatibility": True,
     },
 )

@@ -286,7 +286,7 @@ export function usePalaceEditPage() {
     try {
       const result = await getEnglishContinueCourseApi()
       if (result.course?.id) {
-        navigate(`/english/courses/${result.course.id}`)
+        navigate(`/english/listening/courses/${result.course.id}`)
         return
       }
       navigate('/english')

@@ -1,36 +1,10 @@
 import type {
   AiModelScenario,
   AiPromptSceneDefault,
-  AiPromptTemplate,
   AiRuntimeOptions,
 } from '@/shared/api/contracts'
 
 const RECENT_AI_CONFIG_PREFIX = 'memory-anki.ai-runtime-recent.'
-
-const SCENARIO_PROMPT_TEMPLATE_KEYS = {
-  vision_image_mindmap: 'ai_prompt_import_image_mindmap',
-  vision_image_text: 'ai_prompt_import_image_text',
-  vision_batch_mindmap: 'ai_prompt_import_document_mindmap',
-  mindmap_ocr_formatter: 'ai_prompt_import_ocr_mindmap_format',
-  quiz_image_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_text_generation: 'ai_prompt_palace_quiz_generate',
-  quiz_review_mindmap_generation: 'ai_prompt_palace_quiz_review_mindmap',
-  quiz_mini_palace_grouping: 'ai_prompt_palace_quiz_group_by_mini_palace',
-  quiz_node_binding: 'ai_prompt_palace_quiz_node_binding',
-} as const satisfies Record<string, AiPromptTemplate['key']>
-
-type ScenarioPromptTemplateKey = keyof typeof SCENARIO_PROMPT_TEMPLATE_KEYS
-
-export interface PromptTemplateSnapshot {
-  template: string
-  defaultTemplate: string
-}
-
-export function getScenarioPromptTemplateKey(scenarioKey: string) {
-  return Object.prototype.hasOwnProperty.call(SCENARIO_PROMPT_TEMPLATE_KEYS, scenarioKey)
-    ? SCENARIO_PROMPT_TEMPLATE_KEYS[scenarioKey as ScenarioPromptTemplateKey]
-    : undefined
-}
 
 function recentConfigKey(entrypointKey: string, scenarioKey: string) {
   return `${RECENT_AI_CONFIG_PREFIX}${entrypointKey}.${scenarioKey}`
@@ -110,7 +84,6 @@ export function writeRecentAiConfig(
 
 export function buildDefaultAiConfig(
   scenario: AiModelScenario,
-  promptTemplate?: PromptTemplateSnapshot | null,
   promptScene?: AiPromptSceneDefault | null,
 ): AiRuntimeOptions {
   const defaultBlockKeys = promptScene
@@ -132,7 +105,7 @@ export function buildDefaultAiConfig(
           emphasis_mark_description: '',
         }
       : {
-          scene_instruction: promptTemplate?.template || promptTemplate?.defaultTemplate || '',
+          scene_instruction: '',
           run_instruction: '',
           emphasis_mark_description: '',
         },
@@ -142,10 +115,9 @@ export function buildDefaultAiConfig(
 export function normalizeScenarioAiConfig(
   scenario: AiModelScenario,
   value: AiRuntimeOptions | null | undefined,
-  promptTemplate?: PromptTemplateSnapshot | null,
   promptScene?: AiPromptSceneDefault | null,
 ): AiRuntimeOptions {
-  const fallback = buildDefaultAiConfig(scenario, promptTemplate, promptScene)
+  const fallback = buildDefaultAiConfig(scenario, promptScene)
   const model = value?.model?.trim()
   const matchedModel = scenario.available_models.find((item) => item.key === model)
   const resolvedModel = matchedModel?.key ?? fallback.model

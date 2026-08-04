@@ -44,8 +44,6 @@ def _dashscope_runtime(
     if isinstance(source_meta, dict):
         runtime_key = "formatter_ai_runtime" if runtime_role == "formatter" else "vision_ai_runtime"
         runtime_meta = source_meta.get(runtime_key)
-        if not isinstance(runtime_meta, dict) or not runtime_meta.get("model"):
-            runtime_meta = source_meta.get("ai_runtime") if runtime_role == "vision" else None
     if isinstance(runtime_meta, dict) and runtime_meta.get("model"):
         runtime = ai_runtime.restore(_runtime_snapshot(runtime_meta))
     else:

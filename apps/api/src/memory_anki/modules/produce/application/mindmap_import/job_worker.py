@@ -184,8 +184,7 @@ def run_image_single_job(
         result.update(
             {
                 "pipeline_strategy": "extract_then_format",
-                "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime")
-                or _resolved_ai(source_meta, "ai_runtime"),
+                "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime"),
                 "formatter_resolved_ai": _resolved_ai(source_meta, "formatter_ai_runtime"),
                 "ocr_pages": ocr_pages,
                 "stage_usage": {
@@ -249,7 +248,7 @@ def _run_page_ocr(
     selected_pages = [int(value) for value in source_meta.get("page_selection") or []]
     pdf_document_id = str(source_meta.get("pdf_document_id") or "").strip()
     ocr_model = None
-    vision_runtime = source_meta.get("vision_ai_runtime") or source_meta.get("ai_runtime") or {}
+    vision_runtime = source_meta.get("vision_ai_runtime") or {}
     if isinstance(vision_runtime, dict):
         ocr_model = str(vision_runtime.get("model") or "").strip() or None
     page_results: list[dict[str, Any]] = []
@@ -501,8 +500,7 @@ def run_image_batch_job(
         result.update(
             {
                 "pipeline_strategy": "extract_then_format",
-                "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime")
-                or _resolved_ai(source_meta, "ai_runtime"),
+                "vision_resolved_ai": _resolved_ai(source_meta, "vision_ai_runtime"),
                 "formatter_resolved_ai": _resolved_ai(source_meta, "formatter_ai_runtime"),
                 "fallback_reason": None,
                 "ocr_pages": ocr_pages,

@@ -35,26 +35,6 @@ export interface ReviewSettings {
   mindmap_ai_split_custom_instruction: string
   [key: string]: string
 }
-export interface AiPromptPlaceholder {
-  name: string
-  description: string
-}
-export interface AiPromptTemplate {
-  key: string
-  label: string
-  description: string
-  template: string
-  default_template: string
-  is_customized: boolean
-  source_location: string
-  required_placeholders: string[]
-  available_placeholders: AiPromptPlaceholder[]
-  active_version_id?: string | null
-  candidate_version?: AiPromptVersionSummary | null
-  scene_key?: string | null
-  composition?: CompiledPromptSnapshot | null
-}
-
 export type AiPromptLayer = 'role' | 'task' | 'content' | 'boundary' | 'output' | 'quality'
 
 export interface AiPromptBlock {
@@ -110,8 +90,6 @@ export interface AiPromptSceneDefault {
   label: string
   description: string
   category?: string
-  /** Compatibility aliases kept for old entrypoints; hide from default settings lists. */
-  is_compatibility?: boolean
   block_keys: string[]
   blocks: AiPromptBlock[]
   scene_instruction: string
@@ -132,28 +110,6 @@ export interface AiPromptSceneVersion {
   source: string
   created_at?: string | null
   activated_at?: string | null
-}
-export interface AiPromptVersionSummary {
-  id: string
-  prompt_key?: string
-  status: 'candidate' | 'passed' | 'failed' | 'active' | 'archived'
-  template?: string
-  source?: string
-  eval_summary?: {
-    run_id?: string
-    case_count?: number
-    schema_success_rate?: number
-    assertion_success_rate?: number
-    critical_passed?: boolean
-    gate_passed?: boolean
-  }
-  created_at?: string | null
-  activated_at?: string | null
-}
-export interface AiPromptTemplateListResponse {
-  items: AiPromptTemplate[]
-  candidates?: AiPromptVersionSummary[]
-  requires_evaluation?: boolean
 }
 export interface AiRuntimeOptions {
   model?: string
@@ -294,18 +250,6 @@ export interface AiConnectionTestResponse {
     requires_confirmation: boolean
   }
 }
-export interface AiEvalRun {
-  id: string
-  prompt_key: string
-  candidate_version_id: string
-  status: string
-  case_count: number
-  schema_success_rate: number
-  assertion_success_rate: number
-  critical_passed: boolean
-  gate_passed: boolean
-  results: Array<Record<string, unknown>>
-}
 export interface AiQualitySummary {
   range_days: number
   metrics: {
@@ -322,21 +266,6 @@ export interface AiQualitySummary {
     has_estimated_cost: boolean
   }
   errors: Array<{ kind: string; count: number }>
-  recent_evals: Array<{
-    id: string
-    prompt_key: string
-    status: string
-    case_count: number
-    assertion_success_rate: number
-    gate_passed: boolean
-    created_at: string | null
-  }>
-  prompt_candidates: Array<{
-    id: string
-    prompt_key: string
-    status: string
-    created_at: string | null
-  }>
 }
 export interface AiModelSettingsSummary {
   provider_count: number

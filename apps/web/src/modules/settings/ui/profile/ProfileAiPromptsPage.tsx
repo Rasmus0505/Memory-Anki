@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Layers3, Play, RotateCcw, Save, ShieldCheck, WandSparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Layers3, Save } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
@@ -8,22 +8,16 @@ import type {
   AiPromptBlockVersion,
   AiPromptSceneDefault,
   AiPromptSceneVersion,
-  AiPromptTemplate,
 } from '@/shared/api/contracts'
 import {
   activateAiPromptBlockVersionApi,
   activateAiPromptSceneVersionApi,
-  activateAiPromptVersionApi,
   getAiPromptBlocksApi,
   getAiPromptBlockVersionsApi,
   getAiPromptScenesApi,
   getAiPromptSceneVersionsApi,
-  getAiPromptTemplatesApi,
-  resetAiPromptTemplatesApi,
-  runAiPromptEvalApi,
   saveAiPromptBlockApi,
   saveAiPromptSceneDefaultApi,
-  updateAiPromptTemplatesApi,
 } from '@/modules/settings/domain/preferences-entity/api'
 import {
   filterBlocksForScene,
@@ -45,10 +39,6 @@ const SCENE_CATEGORY_ORDER = [
   '其他',
 ]
 
-function buildDraftMap(items: AiPromptTemplate[]) {
-  return Object.fromEntries(items.map((item) => [item.key, item.template]))
-}
-
 export function ProfileAiPromptsPage({
   standalone = false,
   view,
@@ -56,126 +46,30 @@ export function ProfileAiPromptsPage({
   standalone?: boolean
   view?: 'scenes' | 'blocks'
 }) {
-  const [activeTab, setActiveTab] = useState<'scenes' | 'blocks' | 'legacy'>(view ?? 'scenes')
+  const [activeTab, setActiveTab] = useState<'scenes' | 'blocks'>(view ?? 'scenes')
   const visibleTab = view === 'scenes' ? 'scenes' : activeTab
-  const [items, setItems] = useState<AiPromptTemplate[]>([])
   const [blocks, setBlocks] = useState<AiPromptBlock[]>([])
   const [scenes, setScenes] = useState<AiPromptSceneDefault[]>([])
   const [blockDrafts, setBlockDrafts] = useState<Record<string, AiPromptBlock>>({})
   const [sceneDrafts, setSceneDrafts] = useState<Record<string, AiPromptSceneDefault>>({})
   const [blockVersions, setBlockVersions] = useState<Record<string, AiPromptBlockVersion[]>>({})
   const [sceneVersions, setSceneVersions] = useState<Record<string, AiPromptSceneVersion[]>>({})
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({})
-  const [resettingKeys, setResettingKeys] = useState<Record<string, boolean>>({})
-  const [resettingAll, setResettingAll] = useState(false)
-  const [evaluatingKeys, setEvaluatingKeys] = useState<Record<string, boolean>>({})
-  const [publishingKeys, setPublishingKeys] = useState<Record<string, boolean>>({})
-  const [showCompatibilityScenes, setShowCompatibilityScenes] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
-      const [response, blockResponse, sceneResponse] = await Promise.all([
-        getAiPromptTemplatesApi(),
+      const [blockResponse, sceneResponse] = await Promise.all([
         getAiPromptBlocksApi(),
         getAiPromptScenesApi(),
       ])
-      setItems(response.items)
-      setDrafts(buildDraftMap(response.items))
       setBlocks(blockResponse.items)
       setBlockDrafts(Object.fromEntries(blockResponse.items.map((item) => [item.key, item])))
       setScenes(sceneResponse.items)
       setSceneDrafts(Object.fromEntries(sceneResponse.items.map((item) => [item.scene_key, item])))
+      setLoaded(true)
     }
     void load()
   }, [])
-
-  const hasItems = items.length > 0
-  const dirtyKeys = useMemo(
-    () =>
-      new Set(
-        items
-          .filter((item) => (drafts[item.key] ?? '') !== item.template)
-          .map((item) => item.key),
-      ),
-    [drafts, items],
-  )
-
-  const syncItems = (nextItems: AiPromptTemplate[]) => {
-    setItems(nextItems)
-    setDrafts(buildDraftMap(nextItems))
-  }
-
-  const handleSaveOne = async (item: AiPromptTemplate) => {
-    setSavingKeys((current) => ({ ...current, [item.key]: true }))
-    try {
-      const response = await updateAiPromptTemplatesApi({ [item.key]: drafts[item.key] ?? '' })
-      syncItems(response.items)
-      toast.success(`${item.label} 已保存为候选版本，请运行评测`)
-    } finally {
-      setSavingKeys((current) => ({ ...current, [item.key]: false }))
-    }
-  }
-
-  const handleResetOne = async (item: AiPromptTemplate) => {
-    setResettingKeys((current) => ({ ...current, [item.key]: true }))
-    try {
-      const response = await resetAiPromptTemplatesApi([item.key])
-      syncItems(response.items)
-      toast.success(`${item.label} 的默认模板已保存为候选版本`)
-    } finally {
-      setResettingKeys((current) => ({ ...current, [item.key]: false }))
-    }
-  }
-
-  const handleResetAll = async () => {
-    if (
-      !(await appConfirm('将为全部完整模板创建默认候选版本，现有候选会被替换。', {
-        title: '全部恢复默认',
-        confirmText: '确认恢复',
-        tone: 'danger',
-      }))
-    ) return
-    setResettingAll(true)
-    try {
-      const response = await resetAiPromptTemplatesApi()
-      syncItems(response.items)
-      toast.success('全部默认模板已保存为候选版本')
-    } finally {
-      setResettingAll(false)
-    }
-  }
-
-  const reload = async () => {
-    const response = await getAiPromptTemplatesApi()
-    syncItems(response.items)
-  }
-
-  const handleEvaluate = async (item: AiPromptTemplate) => {
-    const candidate = item.candidate_version
-    if (!candidate) return
-    setEvaluatingKeys((current) => ({ ...current, [item.key]: true }))
-    try {
-      const run = await runAiPromptEvalApi(item.key, candidate.id)
-      toast.success(run.gate_passed ? `${item.label} 评测通过` : `${item.label} 评测未通过`)
-      await reload()
-    } finally {
-      setEvaluatingKeys((current) => ({ ...current, [item.key]: false }))
-    }
-  }
-
-  const handlePublish = async (item: AiPromptTemplate) => {
-    const candidate = item.candidate_version
-    if (!candidate || candidate.status !== 'passed') return
-    setPublishingKeys((current) => ({ ...current, [item.key]: true }))
-    try {
-      await activateAiPromptVersionApi(item.key, candidate.id)
-      toast.success(`${item.label} 已发布`)
-      await reload()
-    } finally {
-      setPublishingKeys((current) => ({ ...current, [item.key]: false }))
-    }
-  }
 
   const handleSaveBlock = async (blockKey: string) => {
     const draft = blockDrafts[blockKey]
@@ -233,7 +127,7 @@ export function ProfileAiPromptsPage({
     toast.success(`${saved.label} 已回滚`)
   }
 
-  if (!hasItems) {
+  if (!loaded) {
     return (
       <div className="flex items-center justify-center py-32 text-sm text-muted-foreground">
         Loading...
@@ -253,9 +147,6 @@ export function ProfileAiPromptsPage({
           <Button type="button" variant={visibleTab === 'blocks' ? 'default' : 'outline'} onClick={() => setActiveTab('blocks')}>
             提示词块库
           </Button>
-          <Button type="button" variant={visibleTab === 'legacy' ? 'default' : 'outline'} onClick={() => setActiveTab('legacy')}>
-            完整模板兼容
-          </Button>
         </div>
       ) : null}
 
@@ -265,22 +156,12 @@ export function ProfileAiPromptsPage({
             <p className="text-sm text-muted-foreground">
               按场景分类展示；每个场景只列出相关提示词块，避免把分卡/OCR/做题块混在一起。
             </p>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                className="size-4"
-                checked={showCompatibilityScenes}
-                onChange={(event) => setShowCompatibilityScenes(event.target.checked)}
-              />
-              显示兼容入口场景
-            </label>
           </div>
           {SCENE_CATEGORY_ORDER
             .map((category) => {
               const categoryScenes = scenes.filter((scene) => {
                 const sceneCategory = scene.category || '其他'
                 if (sceneCategory !== category) return false
-                if (!showCompatibilityScenes && scene.is_compatibility) return false
                 return true
               })
               return { category, categoryScenes }
@@ -312,7 +193,6 @@ export function ProfileAiPromptsPage({
                     <Badge variant="outline">{scene.scene_key}</Badge>
                     <Badge variant="secondary">{draft.block_keys.length} 个提示词块</Badge>
                     <Badge variant="outline">约 {scene.estimated_tokens} Token</Badge>
-                    {scene.is_compatibility ? <Badge variant="outline">兼容入口</Badge> : null}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -473,110 +353,6 @@ export function ProfileAiPromptsPage({
         </div>
       ) : null}
 
-      {visibleTab === 'legacy' ? (
-        <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline">共 {items.length} 组提示词</Badge>
-        <Badge variant="secondary">已改动 {dirtyKeys.size}</Badge>
-        <Button type="button" variant="outline" size="sm" onClick={handleResetAll} disabled={resettingAll}>
-          <RotateCcw className="mr-2 size-4" />
-          {resettingAll ? '重置中...' : '全部恢复默认'}
-        </Button>
-      </div>
-
-      <div className="space-y-4">
-        {items.map((item) => {
-          const draftValue = drafts[item.key] ?? item.template
-          const isDirty = dirtyKeys.has(item.key)
-          const isSaving = Boolean(savingKeys[item.key])
-          const isResetting = Boolean(resettingKeys[item.key])
-          const isEvaluating = Boolean(evaluatingKeys[item.key])
-          const isPublishing = Boolean(publishingKeys[item.key])
-          const candidate = item.candidate_version
-          return (
-            <Card key={item.key}>
-              <CardHeader className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <WandSparkles className="size-4" />
-                      {item.label}
-                    </CardTitle>
-                    <p className="max-w-3xl text-sm text-muted-foreground">{item.description}</p>
-                    {item.source_location ? (
-                      <p className="text-xs text-muted-foreground/70 font-mono">
-                        文件：{item.source_location}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {candidate ? (
-                      <Badge variant={candidate.status === 'passed' ? 'secondary' : candidate.status === 'failed' ? 'destructive' : 'outline'}>
-                        候选：{candidate.status}
-                      </Badge>
-                    ) : null}
-                    <Badge variant={item.is_customized ? 'secondary' : 'outline'}>
-                      {item.is_customized ? '已自定义' : '默认模板'}
-                    </Badge>
-                    {isDirty ? <Badge variant="secondary">未保存</Badge> : null}
-                  </div>
-                </div>
-                {item.available_placeholders.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {item.available_placeholders.map((placeholder) => (
-                      <Badge key={placeholder.name} variant="outline" title={placeholder.description}>
-                        {`{{${placeholder.name}}}`}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  value={draftValue}
-                  onChange={(event) =>
-                    setDrafts((current) => ({ ...current, [item.key]: event.target.value }))
-                  }
-                  rows={Math.max(10, Math.min(22, draftValue.split('\n').length + 2))}
-                  className="font-mono text-xs leading-6"
-                />
-
-                <details className="rounded-xl border border-border/70 bg-background/70 p-4">
-                  <summary className="cursor-pointer text-sm font-medium">查看默认模板</summary>
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
-                    {item.default_template}
-                  </pre>
-                </details>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => void handleSaveOne(item)} disabled={isSaving || !isDirty}>
-                    <Save className="mr-2 size-4" />
-                    {isSaving ? '保存中...' : '保存候选'}
-                  </Button>
-                  {candidate ? (
-                    <Button type="button" variant="outline" size="sm" onClick={() => void handleEvaluate(item)} disabled={isEvaluating}>
-                      <Play className="mr-2 size-4" />
-                      {isEvaluating ? '评测中...' : '运行评测'}
-                    </Button>
-                  ) : null}
-                  {candidate?.status === 'passed' ? (
-                    <Button type="button" size="sm" onClick={() => void handlePublish(item)} disabled={isPublishing}>
-                      <ShieldCheck className="mr-2 size-4" />
-                      {isPublishing ? '发布中...' : '发布'}
-                    </Button>
-                  ) : null}
-                  <Button type="button" variant="outline" size="sm" onClick={() => void handleResetOne(item)} disabled={isResetting}>
-                    <RotateCcw className="mr-2 size-4" />
-                    {isResetting ? '重置中...' : '恢复默认'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-        </>
-      ) : null}
     </div>
   )
 

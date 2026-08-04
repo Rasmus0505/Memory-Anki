@@ -5,7 +5,6 @@ import type {
   AiPromptSceneDefault,
   AiRuntimeOptions,
 } from '@/shared/api/contracts'
-import type { PromptTemplateSnapshot } from './aiRunConfigPersistence'
 import {
   compileLocalPromptPreview,
   filterBlocksForScene,
@@ -27,7 +26,6 @@ export interface AiRunConfigDialogEntryView {
   entry: MultiScenarioEntry
   scenario: AiModelScenario | null
   recentConfig: AiRuntimeOptions | null
-  promptTemplate: PromptTemplateSnapshot | null
   promptScene: AiPromptSceneDefault | null
 }
 
@@ -108,7 +106,7 @@ export function AiRunConfigDialogView({
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-          {currentEntries.map(({ entry, scenario, recentConfig, promptTemplate, promptScene }) => {
+          {currentEntries.map(({ entry, scenario, recentConfig, promptScene }) => {
             const selectedConfig = selectedConfigs[entry.scenarioKey]
             const selectedModel = selectedConfig?.model?.trim() || ''
             const selectedModelMeta =
@@ -139,7 +137,7 @@ export function AiRunConfigDialogView({
               .filter((item) => enabledContextIds.includes(item.id))
               .reduce((total, item) => total + item.content.length, 0)
             const estimatedTokens = Math.ceil(
-              ((selectedConfig?.prompt_override || localPreview.text).length + contextCharacters) / 1.5,
+              (localPreview.text.length + contextCharacters) / 1.5,
             )
             const exceedsBudget = estimatedTokens > 24000
             const useCollapsible = Boolean(entry.collapsedByDefault) && currentEntries.length > 1
@@ -399,31 +397,12 @@ export function AiRunConfigDialogView({
                   <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
                     <div className="font-medium">最终编译预览</div>
                     <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs leading-5">
-                      {selectedConfig?.prompt_override?.trim() || localPreview.text || '当前组合为空。'}
+                      {localPreview.text || '当前组合为空。'}
                     </pre>
                     {localPreview.warnings.map((warning) => (
                       <div key={warning} className="text-xs text-amber-600">{warning}</div>
                     ))}
                   </div>
-
-                  <details className="rounded-lg border border-dashed border-border/60 bg-background/60 p-3">
-                    <summary className="cursor-pointer text-sm font-medium">完整覆盖（高级兼容）</summary>
-                    <textarea
-                      aria-label="完整覆盖提示词"
-                      value={selectedConfig?.prompt_override ?? ''}
-                      onChange={(event) => {
-                        onUpdateScenarioConfig(entry.scenarioKey, (current) => ({
-                          ...current,
-                          prompt_override: event.target.value,
-                        }))
-                      }}
-                      placeholder={promptTemplate?.defaultTemplate || '填写后将绕过提示词块组合。'}
-                      className="mt-3 min-h-[140px] w-full resize-y rounded-lg border border-input bg-background px-4 py-3 font-mono text-xs leading-5"
-                    />
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      仅用于兼容旧流程；浏览器不会再把完整覆盖内容保存为以后默认。
-                    </div>
-                  </details>
 
                   {(entry.contextOptions ?? []).length > 0 ? (
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
@@ -509,9 +488,8 @@ export function AiRunConfigDialogView({
               const contextCharacters = (entry.contextOptions ?? [])
                 .filter((item) => selectedIds.includes(item.id))
                 .reduce((total, item) => total + item.content.length, 0)
-              const exceedsBudget = Math.ceil(
-                ((selectedConfigs[entry.scenarioKey]?.prompt_override ?? '').length + contextCharacters) / 1.5,
-              ) > 24000
+              const promptCharacters = JSON.stringify(selectedConfigs[entry.scenarioKey]?.prompt_options ?? '').length
+              const exceedsBudget = Math.ceil((promptCharacters + contextCharacters) / 1.5) > 24000
               return exceedsBudget || !scenario?.available_models.some((item) => item.key === selectedModel)
             })}
           >

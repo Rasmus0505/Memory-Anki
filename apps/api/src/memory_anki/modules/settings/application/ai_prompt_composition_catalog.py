@@ -46,7 +46,6 @@ class PromptSceneSeed:
     label: str | None = None
     description: str | None = None
     category: str = "其他"
-    is_compatibility: bool = False
 
 
 def _scene_seed_from_mapping(seed: Mapping[str, Any]) -> PromptSceneSeed:
@@ -59,7 +58,6 @@ def _scene_seed_from_mapping(seed: Mapping[str, Any]) -> PromptSceneSeed:
         label=str(seed["label"]) if seed.get("label") else None,
         description=str(seed["description"]) if seed.get("description") else None,
         category=str(seed.get("category") or "其他"),
-        is_compatibility=bool(seed.get("is_compatibility", False)),
     )
 
 
@@ -231,11 +229,9 @@ PROMPT_SCENE_BINDINGS = {
     "ai_prompt_english_translation_single": "translation_reading_sentence",
 }
 
-# Legacy prompt keys still map to composition scenes that may share a prompt_key.
+# Prompt definitions map to the scene that composes their runtime instructions.
 SCENE_CATEGORY_BY_KEY: dict[str, str] = {
     "ai_split": "脑图分卡",
-    "ai_split_parallel": "脑图分卡",
-    "ai_split_hierarchy": "脑图分卡",
     "vision_image_mindmap": "脑图导入",
     "vision_batch_mindmap": "脑图导入",
     "mindmap_ocr_formatter": "OCR 与整理",
@@ -411,7 +407,6 @@ for _prompt_key, _scene_key in PROMPT_SCENE_BINDINGS.items():
         label=_definition.label,
         description=_definition.description,
         category=_category,
-        is_compatibility=False,
     )
 
 
@@ -423,5 +418,3 @@ def block_applicable_scene_keys(block_key: str) -> list[str]:
         if block_key in seed.block_keys or block_key in seed.recommended_block_keys
     ]
     return sorted(set(scenes))
-
-

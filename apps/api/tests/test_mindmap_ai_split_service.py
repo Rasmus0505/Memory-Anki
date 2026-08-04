@@ -170,38 +170,6 @@ def test_existing_children_only_move_without_rewriting_descendants(db_session: S
     assert result.owner_id == f"palace:{palace.id}"
 
 
-def test_legacy_children_alias_maps_to_add_children(db_session: Session):
-    editor_doc = _build_editor_doc()
-    with patch.object(
-        service,
-        "_call_mindmap_ai_split_model",
-        return_value={
-            "new_children": [
-                {"id": "category_1", "text": "目的"},
-                {"id": "category_2", "text": "内容"},
-            ],
-            "child_assignments": [
-                {"source_ref": "uid:child-1", "target_new_child_id": "category_1"},
-                {"source_ref": "uid:child-2", "target_new_child_id": "category_1"},
-                {"source_ref": "uid:child-3", "target_new_child_id": "category_2"},
-            ],
-        },
-    ):
-        result = service.split_palace_editor_doc_with_ai(
-            db_session,
-            _get_palace(db_session),
-            editor_doc,
-            "target-1",
-            split_mode="legacy_children",
-            **_add_kwargs(db_session),
-        )
-    assert result.split_mode == "add_children"
-    assert [child["data"]["text"] for child in result.editor_doc["root"]["children"][0]["children"]] == [
-        "目的",
-        "内容",
-    ]
-
-
 def test_duplicate_and_unknown_assignments_fall_back_to_uncategorized_bucket(db_session: Session):
     editor_doc = _build_editor_doc()
 
@@ -731,8 +699,6 @@ def test_auto_rejects_only_safety_top_level_cap(db_session: Session):
 def test_ai_split_prompt_scenes_compile_with_required_blocks(db_session: Session):
     catalog = _prompt_catalog(db_session)
     unified = catalog.compose("ai_split")
-    parallel_alias = catalog.compose("ai_split_parallel")
-    hierarchy_alias = catalog.compose("ai_split_hierarchy")
 
     required = {
         "role.strict_json",
@@ -743,8 +709,6 @@ def test_ai_split_prompt_scenes_compile_with_required_blocks(db_session: Session
         "output.mindmap_split_json",
     }
     assert required.issubset(set(unified.block_keys))
-    assert required.issubset(set(parallel_alias.block_keys))
-    assert required.issubset(set(hierarchy_alias.block_keys))
     assert "replacement_nodes" in unified.text
     assert "保留原句" in unified.text
     assert "实科中学" in unified.text

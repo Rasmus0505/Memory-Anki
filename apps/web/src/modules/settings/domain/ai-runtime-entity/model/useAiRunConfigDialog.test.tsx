@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAiRunConfigDialog } from './useAiRunConfigDialog'
 
 const getAiModelScenariosApiMock = vi.fn()
-const getAiPromptTemplatesApiMock = vi.fn()
 const getAiPromptBlocksApiMock = vi.fn()
 const getAiPromptScenesApiMock = vi.fn()
 const previewAiPromptCompositionApiMock = vi.fn()
@@ -12,7 +11,6 @@ const saveAiPromptSceneDefaultApiMock = vi.fn()
 
 vi.mock('@/modules/settings/domain/preferences-entity/api', () => ({
   getAiModelScenariosApi: () => getAiModelScenariosApiMock(),
-  getAiPromptTemplatesApi: () => getAiPromptTemplatesApiMock(),
   getAiPromptBlocksApi: () => getAiPromptBlocksApiMock(),
   getAiPromptScenesApi: () => getAiPromptScenesApiMock(),
   previewAiPromptCompositionApi: (...args: unknown[]) => previewAiPromptCompositionApiMock(...args),
@@ -59,7 +57,6 @@ describe('useAiRunConfigDialog', () => {
   beforeEach(() => {
     window.localStorage.clear()
     getAiModelScenariosApiMock.mockReset()
-    getAiPromptTemplatesApiMock.mockReset()
     getAiPromptBlocksApiMock.mockReset()
     getAiPromptScenesApiMock.mockReset()
     previewAiPromptCompositionApiMock.mockReset()
@@ -107,20 +104,6 @@ describe('useAiRunConfigDialog', () => {
               supports_thinking: false,
             },
           ],
-        },
-      ],
-    })
-    getAiPromptTemplatesApiMock.mockResolvedValue({
-      items: [
-        {
-          key: 'ai_prompt_import_image_text',
-          template: '默认 OCR 提示词',
-          default_template: '系统 OCR 提示词',
-        },
-        {
-          key: 'ai_prompt_import_document_mindmap',
-          template: '新版正文提示词：不假设结构图，根据全部正文层级生成。',
-          default_template: '系统正文提示词',
         },
       ],
     })
@@ -219,7 +202,7 @@ describe('useAiRunConfigDialog', () => {
     }))
   })
 
-  it('uses the server scene default and never restores a cached full prompt', async () => {
+  it('uses the server scene default and ignores a cached full prompt', async () => {
     window.localStorage.setItem(
       'memory-anki.ai-runtime-recent.import-image-text.vision_image_text',
       JSON.stringify({ model: 'qwen3-vl-flash', prompt_override: '陈旧完整提示词' }),
@@ -228,7 +211,6 @@ describe('useAiRunConfigDialog', () => {
 
     fireEvent.click(screen.getByText('open'))
     expect((await screen.findByLabelText('场景特殊提示词') as HTMLTextAreaElement).value).toBe('服务器 OCR 默认要求')
-    expect((screen.getByLabelText('完整覆盖提示词') as HTMLTextAreaElement).value).toBe('')
     expect((screen.getByLabelText('本次模型') as HTMLSelectElement).value).toBe('qwen3-vl-flash')
     const ocrCheckbox = screen.getByRole('checkbox', { name: /逐字识别/ }) as HTMLInputElement
     expect(ocrCheckbox.checked).toBe(true)
@@ -269,31 +251,6 @@ describe('useAiRunConfigDialog', () => {
     fireEvent.click(screen.getByText('open'))
     const reopenedCheckbox = await screen.findByRole('checkbox', { name: /当前思维导图/ })
     expect((reopenedCheckbox as HTMLInputElement).checked).toBe(false)
-  })
-
-  it('discards a cached structure-image prompt for ordinary PDF while preserving the model', async () => {
-    window.localStorage.setItem(
-      'memory-anki.ai-runtime-recent.import-pdf-mindmap.vision_batch_mindmap',
-      JSON.stringify({
-        model: 'qwen3.5-ocr',
-        thinking_enabled: false,
-        prompt_override:
-          '任务：第一张图片是结构图，其余图片提供教材正文，基于原始导图结构补全内容。',
-      }),
-    )
-    render(
-      <TestHarness
-        scenarioKey={'vision_batch_mindmap'}
-        entrypointKey={'import-pdf-mindmap'}
-      />,
-    )
-
-    fireEvent.click(screen.getByText('open'))
-    expect((await screen.findByLabelText('场景特殊提示词') as HTMLTextAreaElement).value).toBe(
-      '根据全部正文层级生成，不假设结构图。',
-    )
-    expect((screen.getByLabelText('完整覆盖提示词') as HTMLTextAreaElement).value).toBe('')
-    expect((screen.getByLabelText('本次模型') as HTMLSelectElement).value).toBe('qwen3.5-ocr')
   })
 
   it('saves block selection and scene instruction as the future default only', async () => {

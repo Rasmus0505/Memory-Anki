@@ -19,7 +19,6 @@ def create_image_job(
     image_bytes: bytes,
     filename: str | None,
     fallback_title: str,
-    ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     max_image_bytes: int,
     import_error_cls: type[Exception],
@@ -37,7 +36,6 @@ def create_image_job(
         "fallback_title": str(fallback_title or "未命名宫殿"),
         "filename": filename or "image.png",
         "image_sha256": job_creation_support.hash_bytes(image_bytes),
-        "ai_runtime": dict(ai_runtime or {}),
     }
     source_meta.update(source_meta_extra or {})
     job, created = _create_draft_job_record(
@@ -69,7 +67,6 @@ def create_batch_job(
     normalized_items: list[tuple[bytes, str | None]],
     fallback_title: str,
     mode: str,
-    ai_runtime: dict[str, object] | None,
     import_jobs_dir: Path,
     import_error_cls: type[Exception],
     source_kind: str = job_state.SOURCE_KIND_IMAGE_BATCH,
@@ -79,7 +76,6 @@ def create_batch_job(
     job_creation_support.validate_mode(mode, import_error_cls=import_error_cls)
     source_meta: dict[str, object] = {
         "fallback_title": str(fallback_title or "未命名宫殿"),
-        "ai_runtime": dict(ai_runtime or {}),
         "images": [
             {
                 "filename": filename or f"image-{index + 1}.png",

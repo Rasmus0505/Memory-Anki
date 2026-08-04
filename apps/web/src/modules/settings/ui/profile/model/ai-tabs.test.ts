@@ -3,11 +3,15 @@ import { normalizeAiSearchParams, resolveAiTab } from './ai-tabs'
 
 describe('ai-tabs', () => {
   it.each([
-    ['tab=prompts', 'scenes'],
-    ['tab=config&aiTab=models', 'models'],
-    ['tab=config&aiTab=quality', 'observability'],
-    ['aiTab=scenes', 'scenes'],
-  ])('normalizes legacy params %s', (query, expected) => {
+    ['tab=access', 'access'],
+    ['tab=models', 'models'],
+    ['tab=scenes', 'scenes'],
+    ['tab=blocks', 'blocks'],
+    ['tab=observability', 'observability'],
+    ['tab=prompts', 'access'],
+    ['tab=config&aiTab=models', 'access'],
+    ['aiTab=scenes', 'access'],
+  ])('resolves canonical params %s', (query, expected) => {
     expect(resolveAiTab(new URLSearchParams(query))).toBe(expected)
   })
 

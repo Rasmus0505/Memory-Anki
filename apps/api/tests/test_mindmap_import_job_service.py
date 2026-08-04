@@ -104,7 +104,7 @@ def test_same_fingerprint_completed_job_is_reused_without_creating_a_new_job():
     assert payload["operation_id"] == job.id
     assert payload["source_meta"]["owner_id"] == "palace_1"
     assert payload["source_meta"]["operation_id"] == job.id
-    assert "api_key" not in payload["source_meta"]["ai_runtime"]
+    assert "api_key" not in payload["source_meta"]["vision_ai_runtime"]
 
 
 
@@ -125,7 +125,7 @@ def test_persisted_runtime_restores_credentials_through_platform_provider():
 
     runtime = job_service._dashscope_runtime(
         {
-            "ai_runtime": {
+            "vision_ai_runtime": {
                 "scenario_key": "vision_batch_mindmap",
                 "model": "snapshot-model",
                 "provider": "dashscope",

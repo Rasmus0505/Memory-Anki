@@ -84,7 +84,6 @@ class AiRequest:
     provider: str = "openai-compatible"
     structured_output: StructuredOutputSpec | None = None
     structured_output_mode: StructuredOutputMode = "json_object"
-    prompt_version_id: str | None = None
     extra_payload: dict[str, Any] | None = None
     legacy_response_format: dict[str, Any] | None = None
     allow_structure_repair: bool = True

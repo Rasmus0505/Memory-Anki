@@ -9,27 +9,12 @@ import {
   writeEnglishPracticeSettings,
 } from '@/modules/settings/domain/preferences-entity/model/englishPracticeSettings'
 
-const LEGACY_V1_STORAGE_KEY = 'memory-anki-english-practice-settings-v1'
-
 describe('englishPracticeSettings', () => {
   beforeEach(() => {
     window.localStorage.clear()
   })
 
   it('returns defaults when storage is empty', () => {
-    expect(readEnglishPracticeSettings()).toEqual(DEFAULT_ENGLISH_PRACTICE_SETTINGS)
-  })
-
-  it('uses the v2 storage key and ignores legacy v1 local settings', () => {
-    window.localStorage.setItem(
-      LEGACY_V1_STORAGE_KEY,
-      JSON.stringify({
-        ...DEFAULT_ENGLISH_PRACTICE_SETTINGS,
-        sound: { enabled: false, masterVolume: 0 },
-      }),
-    )
-
-    expect(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY).toBe('memory-anki-english-practice-settings-v2')
     expect(readEnglishPracticeSettings()).toEqual(DEFAULT_ENGLISH_PRACTICE_SETTINGS)
   })
 
@@ -118,7 +103,7 @@ describe('englishPracticeSettings', () => {
     expect(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)).toBeNull()
   })
 
-  it('fills in default masterVolume for legacy settings that lack it', () => {
+  it('fills in default masterVolume when it is omitted', () => {
     const sanitized = sanitizeEnglishPracticeSettings({
       shortcuts: DEFAULT_ENGLISH_PRACTICE_SETTINGS.shortcuts,
       sound: { enabled: false },

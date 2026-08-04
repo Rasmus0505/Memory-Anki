@@ -34,12 +34,6 @@ MindMapAiSplitError = split_contracts.MindMapAiSplitError
 MindMapAiSplitResult = split_contracts.MindMapAiSplitResult
 
 
-def _normalize_split_mode(split_mode: str) -> str:
-    if split_mode in split_contracts.AI_SPLIT_ADD_CHILDREN_ALIASES:
-        return split_contracts.AI_SPLIT_ADD_CHILDREN_MODE
-    return split_mode
-
-
 def split_palace_editor_doc_with_ai(
     session: Session,
     palace: Palace,
@@ -49,18 +43,18 @@ def split_palace_editor_doc_with_ai(
     ai_runtime: AiRuntimeProvider,
     prompt_catalog: PromptCatalog,
     ai_options: AiRuntimeOptions | None = None,
-    split_mode: str = "legacy_children",
+    split_mode: str = "add_children",
     owner_id: str | None = None,
     operation_id: str | None = None,
     target_card_count: int | None = None,
 ) -> MindMapAiSplitResult:
-    requested_mode = str(split_mode or "legacy_children").strip() or "legacy_children"
+    requested_mode = str(split_mode or "add_children").strip() or "add_children"
     if requested_mode not in {
-        *split_contracts.AI_SPLIT_ADD_CHILDREN_ALIASES,
+        split_contracts.AI_SPLIT_ADD_CHILDREN_MODE,
         *split_contracts.AI_SPLIT_REPLACEMENT_MODES,
     }:
         raise MindMapAiSplitError("不支持的 AI 分卡模式。")
-    effective_mode = _normalize_split_mode(requested_mode)
+    effective_mode = requested_mode
     preferred_card_count = tree_ops.normalize_target_card_count(
         target_card_count,
         hard_cap=split_contracts.AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP,

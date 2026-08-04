@@ -147,7 +147,6 @@ class LoggedChatCompletionRequest:
     image_items: list[tuple[bytes, str | None]] | None = None
     scene: str | None = None
     provider: str = "openai_compatible"
-    prompt_version_id: str | None = None
     structured_output_mode: str | None = None
     input_price_per_million: float | None = None
     output_price_per_million: float | None = None
@@ -205,7 +204,6 @@ def call_logged_chat_completion(
         request_payload=request.request_payload,
         image_items=request.image_items,
         scene=str(resolved_ai.get("scene_key") or request.scene or request.feature),
-        prompt_version_id=request.prompt_version_id,
         structured_output_mode=str(
             resolved_ai.get("structured_output_mode")
             or request.structured_output_mode
@@ -220,7 +218,6 @@ def call_logged_chat_completion(
                 config=request.config,
                 messages=request.messages,
                 provider=str(resolved_ai.get("provider") or request.provider),
-                prompt_version_id=request.prompt_version_id,
                 extra_payload=request.extra_payload,
                 legacy_response_format=request.response_format,
             )

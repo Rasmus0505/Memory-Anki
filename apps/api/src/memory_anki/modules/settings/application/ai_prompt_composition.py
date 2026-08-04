@@ -12,7 +12,6 @@ from memory_anki.infrastructure.db._tables.misc import (
     AiPromptBlockVersion,
     AiPromptSceneDefault,
     AiPromptSceneVersion,
-    Config,
 )
 
 from .ai_prompt_compiler import lint_compiled_prompt, render_prompt_text
@@ -29,7 +28,6 @@ from .ai_prompt_composition_catalog import (
 )
 from .ai_prompts import (
     PLACEHOLDER_PATTERN,
-    PROMPT_DEFINITIONS,
     AiPromptValidationError,
     get_prompt_template,
 )
@@ -167,46 +165,9 @@ def ensure_prompt_composition_seed(session: Session) -> None:
                 scene_row.active_version_id = version_id
                 changed = True
             continue
-        override = session.query(Config).filter_by(key=scene_seed.prompt_key).first()
         block_keys = list(scene_seed.block_keys)
         scene_instruction = scene_seed.scene_instruction
         source = "builtin"
-        # Only migrate legacy full-template overrides onto the primary scene for a prompt_key.
-        # Alias scenes (e.g. ai_split_parallel) always use modular defaults.
-        primary_scene = PROMPT_SCENE_BINDINGS.get(scene_seed.prompt_key)
-        allow_legacy_migration = primary_scene is None or primary_scene == scene_seed.scene_key
-        if allow_legacy_migration and override is not None and override.value.strip():
-            legacy_key = f"legacy.{scene_seed.prompt_key}"
-            legacy = session.get(AiPromptBlock, legacy_key)
-            if legacy is None:
-                legacy_version_id = uuid.uuid4().hex
-                session.add(
-                    AiPromptBlock(
-                        key=legacy_key,
-                        label=f"历史完整提示词：{PROMPT_DEFINITIONS[scene_seed.prompt_key].label}",
-                        description="从旧版完整自定义提示词迁移，仅供当前场景兼容。",
-                        layer="task",
-                        sort_order=10,
-                        applicable_scenes_json=json.dumps([scene_seed.scene_key], ensure_ascii=False),
-                        placeholders_json=json.dumps(sorted(set(PLACEHOLDER_PATTERN.findall(override.value)))),
-                        active_version_id=legacy_version_id,
-                        is_builtin=False,
-                        is_active=True,
-                    )
-                )
-                session.add(
-                    AiPromptBlockVersion(
-                        id=legacy_version_id,
-                        block_key=legacy_key,
-                        template=override.value.strip(),
-                        status="active",
-                        source="migrated",
-                        activated_at=now,
-                    )
-                )
-            block_keys = [legacy_key]
-            scene_instruction = ""
-            source = "migrated"
         version_id = uuid.uuid4().hex
         session.add(
             AiPromptSceneDefault(
@@ -478,7 +439,6 @@ def list_scene_defaults(session: Session) -> list[dict[str, Any]]:
                 "label": _scene_display_label(seed),
                 "description": _scene_display_description(seed),
                 "category": seed.category,
-                "is_compatibility": bool(seed.is_compatibility),
                 "block_keys": block_keys,
                 "blocks": [blocks[key] for key in block_keys if key in blocks],
                 "scene_instruction": version.scene_instruction,

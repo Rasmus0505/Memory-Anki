@@ -63,7 +63,6 @@ def create_image_import_job(
         image_bytes=image_bytes,
         filename=filename,
         fallback_title=fallback_title,
-        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         max_image_bytes=MAX_IMAGE_BYTES,
         import_error_cls=MindMapImportError,
@@ -108,7 +107,6 @@ def create_batch_import_job(
         normalized_items=normalized_items,
         fallback_title=fallback_title,
         mode=mode,
-        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
         source_meta_extra={
@@ -204,7 +202,6 @@ def create_pdf_import_job(
         normalized_items=normalized_items,
         fallback_title=fallback_title or document.original_name,
         mode=mode,
-        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
         source_kind=job_state.SOURCE_KIND_PDF_DOCUMENT,

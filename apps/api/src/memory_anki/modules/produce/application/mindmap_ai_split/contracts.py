@@ -26,9 +26,7 @@ AI_SPLIT_TARGET_CARD_COUNT_HARD_CAP = 99
 # parallel/hierarchy remain accepted aliases for older clients.
 AI_SPLIT_REPLACEMENT_MODES = ("auto", "parallel", "hierarchy")
 # add_children: insert intermediate group cards under a parent and re-home first-level children.
-# legacy_children is the historical alias for the same path.
 AI_SPLIT_ADD_CHILDREN_MODE = "add_children"
-AI_SPLIT_ADD_CHILDREN_ALIASES = (AI_SPLIT_ADD_CHILDREN_MODE, "legacy_children")
 AI_SPLIT_DEFAULT_MAX_DEPTH = 4
 AI_SPLIT_MAX_TOTAL_NODES = 40
 

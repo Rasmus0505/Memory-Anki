@@ -160,7 +160,6 @@ def create_batch_import_job(*args, **kwargs):
         normalized_items=normalized_items,
         fallback_title=kwargs["fallback_title"],
         mode=mode,
-        ai_runtime=_serialize_runtime_payload(runtime),
         import_jobs_dir=IMPORT_JOBS_DIR,
         import_error_cls=MindMapImportError,
         source_kind=source_kind,

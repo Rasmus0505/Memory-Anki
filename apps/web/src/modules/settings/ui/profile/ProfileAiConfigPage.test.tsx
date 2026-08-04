@@ -242,7 +242,7 @@ const baseResponse = {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/profile?aiTab=scenes']}>
+    <MemoryRouter initialEntries={['/profile?tab=scenes']}>
       <Routes>
         <Route path="/profile" element={<ProfileAiConfigPage />} />
       </Routes>
@@ -337,7 +337,7 @@ describe('ProfileAiConfigPage', () => {
     } as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=models']}>
+      <MemoryRouter initialEntries={['/profile?tab=models']}>
         <Routes>
           <Route path="/profile" element={<ProfileAiConfigPage />} />
         </Routes>
@@ -398,7 +398,7 @@ describe('ProfileAiConfigPage', () => {
     } as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=observability']}>
+      <MemoryRouter initialEntries={['/profile?tab=observability']}>
         <Routes>
           <Route path="/profile" element={<ProfileAiConfigPage />} />
         </Routes>
@@ -423,7 +423,7 @@ describe('ProfileAiConfigPage', () => {
     vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+      <MemoryRouter initialEntries={['/profile?tab=access']}>
         <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
       </MemoryRouter>,
     )
@@ -442,7 +442,7 @@ describe('ProfileAiConfigPage', () => {
     const updateSpy = vi.spyOn(profileApi, 'updateAiModelScenariosApi').mockResolvedValue(baseResponse as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+      <MemoryRouter initialEntries={['/profile?tab=access']}>
         <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
       </MemoryRouter>,
     )
@@ -468,7 +468,7 @@ describe('ProfileAiConfigPage', () => {
     const updateSpy = vi.spyOn(profileApi, 'updateAiModelScenariosApi').mockResolvedValue(baseResponse as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=providers']}>
+      <MemoryRouter initialEntries={['/profile?tab=access']}>
         <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
       </MemoryRouter>,
     )
@@ -490,7 +490,7 @@ describe('ProfileAiConfigPage', () => {
     vi.spyOn(aiLogsApi, 'listAiCallLogsApi').mockResolvedValue({ items: [] } as never)
 
     render(
-      <MemoryRouter initialEntries={['/profile?aiTab=models']}>
+      <MemoryRouter initialEntries={['/profile?tab=models']}>
         <Routes><Route path="/profile" element={<ProfileAiConfigPage />} /></Routes>
       </MemoryRouter>,
     )

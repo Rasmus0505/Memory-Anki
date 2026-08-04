@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
     AI_LEARNING_WORKBENCH_PROMPT,
@@ -32,40 +30,6 @@ from memory_anki.modules.settings.application.ai_prompt_templates import (
     build_palace_quiz_review_mindmap_prompt,
     build_palace_quiz_text_formatting_prompt,
 )
-
-PROMPT_CONFIG_KEYS = (
-    "ai_prompt_import_image_mindmap",
-    "ai_prompt_import_image_text",
-    "ai_prompt_import_document_mindmap",
-    "ai_prompt_import_ocr_mindmap_format",
-    "ai_prompt_mindmap_ai_split_system",
-    "ai_prompt_peg_association",
-    "ai_prompt_ai_learning_workbench",
-    "ai_prompt_batch_palace_generation",
-    "ai_prompt_batch_quiz_generation",
-    "ai_prompt_palace_quiz_generate",
-    "ai_prompt_palace_quiz_classify_existing_to_mini_palace",
-    "ai_prompt_palace_quiz_group_by_mini_palace",
-    "ai_prompt_palace_quiz_node_binding",
-    "ai_prompt_palace_quiz_short_answer_feedback",
-    "ai_prompt_palace_quiz_source_pair_transcription",
-    "ai_prompt_palace_quiz_generation_user_text",
-    "ai_prompt_palace_quiz_source_pair_user_text",
-    "ai_prompt_palace_quiz_text_formatting",
-    "ai_prompt_palace_quiz_review_mindmap",
-    "ai_prompt_english_reading_generate",
-    "ai_prompt_english_reading_word_explain",
-    "ai_prompt_english_reading_sentence_explain",
-    "ai_prompt_english_reading_target_article",
-    "ai_prompt_english_translation_batch",
-    "ai_prompt_english_translation_single",
-)
-
-PROMPT_KEY_ALIASES = {
-    "import_text_ocr": "ai_prompt_import_image_text",
-    "ai_prompt_english_reading_adapt_sentence": "ai_prompt_english_reading_generate",
-    "ai_prompt_english_reading_classify_words": "ai_prompt_english_reading_generate",
-}
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
@@ -105,8 +69,8 @@ _DEFAULT_PALACE_QUIZ_NODE_BINDING_TEMPLATE = PALACE_QUIZ_NODE_BINDING_PROMPT
 PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     "ai_prompt_import_image_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_image_mindmap",
-        label="图片转脑图（兼容）",
-        description="兼容旧配置键；运行时为「识别全文 → 整理 JSON」。",
+        label="图片转脑图",
+        description="运行时为「识别全文 → 整理 JSON」。",
         default_template=IMPORT_IMAGE_MINDMAP_PROMPT,
         source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/prompts.py",
     ),
@@ -119,8 +83,8 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
     ),
     "ai_prompt_import_document_mindmap": PromptTemplateDefinition(
         key="ai_prompt_import_document_mindmap",
-        label="教材转脑图（兼容）",
-        description="兼容旧配置键；主路径已改为先识别全文再整理 JSON。",
+        label="教材转脑图",
+        description="主路径先识别全文，再整理为脑图 JSON。",
         default_template=IMPORT_DOCUMENT_MINDMAP_PROMPT,
         source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/runtime.py",
     ),
@@ -351,12 +315,11 @@ def _normalize_template(value: str) -> str:
 
 
 def _get_template_override_map(session: Session) -> dict[str, str]:
-    rows = session.query(Config).filter(Config.key.in_(PROMPT_CONFIG_KEYS)).all()
-    return {row.key: row.value for row in rows}
+    rows = session.query(Config).all()
+    return {row.key: row.value for row in rows if row.key in PROMPT_DEFINITIONS}
 
 
 def _definition_for(key: str) -> PromptTemplateDefinition:
-    key = PROMPT_KEY_ALIASES.get(key, key)
     definition = PROMPT_DEFINITIONS.get(key)
     if definition is None:
         raise AiPromptValidationError(f"未知的提示词键：{key}")
@@ -367,117 +330,12 @@ def _extract_placeholders(template: str) -> set[str]:
     return {match.group(1) for match in PLACEHOLDER_PATTERN.finditer(template)}
 
 
-def validate_prompt_template(key: str, template: str) -> str:
-    key = PROMPT_KEY_ALIASES.get(key, key)
-    definition = _definition_for(key)
-    normalized_template = _normalize_template(template)
-    placeholders = _extract_placeholders(normalized_template)
-    allowed = {item.name for item in definition.available_placeholders}
-    unknown = sorted(name for name in placeholders if name not in allowed)
-    if unknown:
-        raise AiPromptValidationError(f"{definition.label} 含有未知占位符：{', '.join(unknown)}")
-    missing = sorted(name for name in definition.required_placeholders if name not in placeholders)
-    if missing:
-        raise AiPromptValidationError(f"{definition.label} 缺少必填占位符：{', '.join(missing)}")
-    return normalized_template
-
-
 def get_prompt_template(session: Session | None, key: str) -> str:
-    key = PROMPT_KEY_ALIASES.get(key, key)
     definition = _definition_for(key)
     if session is None:
         return definition.default_template
     overrides = _get_template_override_map(session)
     return _normalize_template(overrides.get(key) or definition.default_template)
-
-
-def list_prompt_templates(session: Session) -> list[dict[str, Any]]:
-    from memory_anki.infrastructure.db._tables.misc import AiPromptVersion
-
-    from .ai_prompt_versions import ensure_prompt_versions
-
-    ensure_prompt_versions(session)
-    from .ai_prompt_composition import PROMPT_SCENE_BINDINGS, compile_prompt_for_key
-
-    overrides = _get_template_override_map(session)
-    items: list[dict[str, Any]] = []
-    for key in PROMPT_CONFIG_KEYS:
-        definition = _definition_for(key)
-        compiled = compile_prompt_for_key(key, session=session)
-        current_template = _normalize_template(compiled["text"])
-        default_compiled = compile_prompt_for_key(key, session=None)
-        active_version = (
-            session.query(AiPromptVersion)
-            .filter_by(prompt_key=key, status="active")
-            .order_by(AiPromptVersion.activated_at.desc())
-            .first()
-        )
-        latest_candidate = (
-            session.query(AiPromptVersion)
-            .filter(
-                AiPromptVersion.prompt_key == key,
-                AiPromptVersion.status.in_(("candidate", "passed", "failed")),
-            )
-            .order_by(AiPromptVersion.created_at.desc())
-            .first()
-        )
-        items.append(
-            {
-                "key": definition.key,
-                "label": definition.label,
-                "description": definition.description,
-                "template": current_template,
-                "default_template": default_compiled["text"],
-                "is_customized": key in overrides
-                and _normalize_template(overrides[key])
-                != _normalize_template(definition.default_template),
-                "source_location": definition.source_location,
-                "required_placeholders": list(definition.required_placeholders),
-                "active_version_id": active_version.id if active_version else None,
-                "candidate_version": (
-                    {
-                        "id": latest_candidate.id,
-                        "status": latest_candidate.status,
-                        "eval_summary": json.loads(latest_candidate.eval_summary_json or "{}"),
-                    }
-                    if latest_candidate
-                    else None
-                ),
-                "available_placeholders": [
-                    {"name": item.name, "description": item.description}
-                    for item in definition.available_placeholders
-                ],
-                "scene_key": PROMPT_SCENE_BINDINGS.get(key),
-                "composition": compiled,
-            }
-        )
-    return items
-
-
-def save_prompt_templates(session: Session, templates: dict[str, str]) -> list[dict[str, Any]]:
-    for key, value in templates.items():
-        normalized_value = validate_prompt_template(key, value)
-        row = session.query(Config).filter_by(key=key).first()
-        if row:
-            row.value = normalized_value
-            row.updated_at = utc_now_naive()
-        else:
-            session.add(Config(key=key, value=normalized_value))
-    session.commit()
-    return list_prompt_templates(session)
-
-
-def reset_prompt_templates(
-    session: Session,
-    *,
-    keys: list[str] | None = None,
-) -> list[dict[str, Any]]:
-    target_keys = keys or list(PROMPT_CONFIG_KEYS)
-    for key in target_keys:
-        _definition_for(key)
-    (session.query(Config).filter(Config.key.in_(target_keys)).delete(synchronize_session=False))
-    session.commit()
-    return list_prompt_templates(session)
 
 
 def render_prompt(
@@ -497,5 +355,3 @@ def render_prompt(
         return "" if value is None else str(value)
 
     return PLACEHOLDER_PATTERN.sub(_replace, template).strip()
-
-

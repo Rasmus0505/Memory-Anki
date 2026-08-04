@@ -15,9 +15,8 @@ export function mergeAiScenes(
   modelScenes: AiSceneBinding[],
   promptScenes: AiPromptSceneDefault[],
 ): MergedAiScene[] {
-  const visiblePromptScenes = promptScenes.filter((scene) => !scene.is_compatibility)
   const modelByKey = new Map(modelScenes.map((scene) => [scene.key, scene]))
-  const promptByKey = new Map(visiblePromptScenes.map((scene) => [scene.scene_key, scene]))
+  const promptByKey = new Map(promptScenes.map((scene) => [scene.scene_key, scene]))
   const keys = new Set([...modelByKey.keys(), ...promptByKey.keys()])
 
   return [...keys]

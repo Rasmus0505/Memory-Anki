@@ -151,7 +151,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
       setPromptScene(nextScene)
       if (nextScenario) {
         const recent = readRecentAiConfig(ENTRYPOINT, SCENARIO_KEY)
-        setAiConfig(normalizeScenarioAiConfig(nextScenario, recent, null, nextScene))
+        setAiConfig(normalizeScenarioAiConfig(nextScenario, recent, nextScene))
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '无法加载 AI 分卡配置')
@@ -221,7 +221,7 @@ export function useAiSplitWorkbench(options: UseAiSplitWorkbenchOptions) {
 
   const resetConfigToDefault = useCallback(() => {
     if (!scenario) return
-    setAiConfig(buildDefaultAiConfig(scenario, null, promptScene))
+    setAiConfig(buildDefaultAiConfig(scenario, promptScene))
   }, [promptScene, scenario])
 
   const resolveAiOptionsForRequest = useCallback(async (): Promise<AiRuntimeOptions> => {

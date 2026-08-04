@@ -6,7 +6,6 @@ export {
   readRecentAiConfig,
   writeRecentAiConfig,
 } from './model/aiRunConfigPersistence'
-export type { PromptTemplateSnapshot } from './model/aiRunConfigPersistence'
 export {
   filterBlocksForScene,
   groupBlocksByLayer,

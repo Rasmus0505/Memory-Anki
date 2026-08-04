@@ -141,7 +141,6 @@ class ExternalAiCallLog(Base):
     model: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     request_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     scene: Mapped[str] = mapped_column(String(120), nullable=False, default="")
-    prompt_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     structured_output_mode: Mapped[str] = mapped_column(String(24), nullable=False, default="")
     finish_reason: Mapped[str] = mapped_column(String(40), nullable=False, default="")
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -162,23 +161,6 @@ class ExternalAiCallLog(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
-
-
-class AiPromptVersion(Base):
-    __tablename__ = "ai_prompt_versions"
-    __table_args__ = (
-        Index("ix_ai_prompt_versions_key_created", "prompt_key", "created_at"),
-        Index("ix_ai_prompt_versions_key_status", "prompt_key", "status"),
-    )
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    prompt_key: Mapped[str] = mapped_column(String(120), nullable=False)
-    template: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default="candidate")
-    source: Mapped[str] = mapped_column(String(24), nullable=False, default="custom")
-    eval_summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AiPromptBlock(Base):
@@ -247,26 +229,6 @@ class AiPromptSceneVersion(Base):
     source: Mapped[str] = mapped_column(String(24), nullable=False, default="builtin")
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class AiEvalRun(Base):
-    __tablename__ = "ai_eval_runs"
-    __table_args__ = (Index("ix_ai_eval_runs_prompt_created", "prompt_key", "created_at"),)
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    prompt_key: Mapped[str] = mapped_column(String(120), nullable=False)
-    candidate_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    baseline_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default="completed")
-    case_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    schema_success_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    assertion_success_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    baseline_assertion_success_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
-    critical_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    gate_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    results_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Config(Base):

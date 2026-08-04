@@ -17,7 +17,7 @@ export default function ProfileAiPage() {
   const tab = resolveAiTab(searchParams)
 
   useEffect(() => {
-    if (!searchParams.has('tab') && !searchParams.has('aiTab')) {
+    if (!searchParams.has('tab')) {
       void getAiModelScenariosApi()
         .then((response) => {
           const nextTab = response.providers.some((provider) => provider.has_api_key)

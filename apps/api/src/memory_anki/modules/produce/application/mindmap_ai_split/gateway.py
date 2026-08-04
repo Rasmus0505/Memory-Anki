@@ -66,12 +66,6 @@ _STRUCTURE_SYSTEM_HINTS: dict[str, str] = {
         "用 child_assignments 把每个已有一级子节点整体归到某个 new_children；"
         "不要改写、复制、拆分已有子节点；new_children 数量必须严格少于一级子节点数。"
     ),
-    "legacy_children": (
-        "本次任务：AI 添卡（插入中间分类）。"
-        "在目标节点与其一级子节点之间新建更少数量的中间分类标题；"
-        "用 child_assignments 把每个已有一级子节点整体归到某个 new_children；"
-        "不要改写、复制、拆分已有子节点；new_children 数量必须严格少于一级子节点数。"
-    ),
 }
 
 
@@ -89,9 +83,9 @@ def call_model(
 ) -> dict[str, Any]:
     request_url = build_chat_completions_url(config.base_url)
     compiled_prompt = None
-    is_add_mode = split_mode in {"add_children", "legacy_children"}
+    is_add_mode = split_mode == "add_children"
     if split_mode in {"auto", "parallel", "hierarchy"}:
-        # Unified composition scene; legacy parallel/hierarchy entrypoints share the same defaults.
+        # Unified composition scene for replacement-style splitting.
         compiled_prompt = prompt_catalog.compose(
             "ai_split",
             selection=_prompt_selection(prompt_options),

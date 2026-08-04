@@ -12,7 +12,6 @@ from memory_anki.core.runtime import build_runtime_health, build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.infrastructure.llm import AiGatewayError
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     get_external_ai_call_log,
     list_external_ai_call_logs,
@@ -42,18 +41,7 @@ from memory_anki.modules.settings.application.ai_prompt_composition import (
     save_prompt_block,
     save_scene_default,
 )
-from memory_anki.modules.settings.application.ai_prompt_versions import (
-    activate_prompt_version,
-    create_prompt_candidates,
-    create_reset_candidates,
-    get_eval_run,
-    list_prompt_versions,
-    run_prompt_eval,
-)
-from memory_anki.modules.settings.application.ai_prompts import (
-    AiPromptValidationError,
-    list_prompt_templates,
-)
+from memory_anki.modules.settings.application.ai_prompts import AiPromptValidationError
 from memory_anki.modules.settings.application.ai_quality import build_ai_quality_summary
 from memory_anki.modules.settings.application.metrics_service import build_metrics
 from memory_anki.modules.settings.presentation.response_models import (
@@ -231,11 +219,6 @@ def api_update_client_preferences(data: dict, s: Session = Depends(session_dep))
     return {"items": write_client_preferences(data if isinstance(data, dict) else {}, s)}
 
 
-@router.get("/settings/ai-prompts")
-def api_ai_prompt_settings(s: Session = Depends(session_dep)):
-    return {"items": list_prompt_templates(s)}
-
-
 @router.get("/settings/ai-prompt-blocks")
 def api_ai_prompt_blocks(s: Session = Depends(session_dep)):
     return {"items": list_prompt_blocks(s)}
@@ -315,89 +298,6 @@ def api_ai_prompt_compose_preview(data: dict, s: Session = Depends(session_dep))
         return compile_prompt(scene_key, variables, session=s, selection=selection)
     except AiPromptValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.put("/settings/ai-prompts")
-def api_ai_prompt_settings_update(data: dict, s: Session = Depends(session_dep)):
-    try:
-        templates = data.get("templates") if isinstance(data.get("templates"), dict) else data
-        normalized_templates = {
-            str(key): str(value)
-            for key, value in dict(templates or {}).items()
-        }
-        candidates = create_prompt_candidates(s, normalized_templates)
-        return {
-            "items": list_prompt_templates(s),
-            "candidates": candidates,
-            "requires_evaluation": True,
-        }
-    except AiPromptValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/settings/ai-prompts/reset")
-def api_ai_prompt_settings_reset(data: dict, s: Session = Depends(session_dep)):
-    try:
-        keys = data.get("keys")
-        if keys is not None and not isinstance(keys, list):
-            raise AiPromptValidationError("keys 必须是字符串数组。")
-        candidates = create_reset_candidates(
-            s,
-            keys=[str(key) for key in keys] if keys else None,
-        )
-        return {
-            "items": list_prompt_templates(s),
-            "candidates": candidates,
-            "requires_evaluation": True,
-        }
-    except AiPromptValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.get("/settings/ai-prompts/{prompt_key}/versions")
-def api_ai_prompt_versions(prompt_key: str, s: Session = Depends(session_dep)):
-    try:
-        return {"items": list_prompt_versions(s, prompt_key)}
-    except AiPromptValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/settings/ai-prompts/{prompt_key}/versions/{version_id}/activate")
-def api_ai_prompt_version_activate(
-    prompt_key: str,
-    version_id: str,
-    s: Session = Depends(session_dep),
-):
-    try:
-        return activate_prompt_version(s, prompt_key, version_id)
-    except AiPromptValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/settings/ai-evals/runs")
-def api_ai_eval_run(data: dict, s: Session = Depends(session_dep)):
-    try:
-        return run_prompt_eval(
-            s,
-            str(data.get("prompt_key") or ""),
-            str(data.get("candidate_version_id") or ""),
-        )
-    except (AiPromptValidationError, AiGatewayError, KeyError) as exc:
-        detail: dict[str, object] = {
-            "message": str(exc),
-            "code": "ai_eval_failed",
-        }
-        if isinstance(exc, AiGatewayError):
-            detail.update({"kind": exc.kind.value, "retryable": exc.retryable})
-        raise HTTPException(status_code=400, detail=detail) from exc
-
-
-@router.get("/settings/ai-evals/runs/{run_id}")
-def api_ai_eval_run_detail(run_id: str, s: Session = Depends(session_dep)):
-    payload = get_eval_run(s, run_id)
-    if not payload:
-        raise HTTPException(status_code=404, detail="评测运行不存在。")
-    return payload
 
 
 @router.get("/settings/ai-quality/summary")

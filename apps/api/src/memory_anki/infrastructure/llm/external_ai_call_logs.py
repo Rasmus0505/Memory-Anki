@@ -172,7 +172,6 @@ def begin_external_ai_call_log(
     artifact_refs: list[dict[str, Any]] | None = None,
     image_items: list[tuple[bytes, str | None]] | None = None,
     scene: str | None = None,
-    prompt_version_id: str | None = None,
     structured_output_mode: str | None = None,
     repaired_from_log_id: str | None = None,
 ) -> str:
@@ -206,7 +205,6 @@ def begin_external_ai_call_log(
                     model=model,
                     request_id=request_id,
                     scene=str(scene or feature or ""),
-                    prompt_version_id=prompt_version_id,
                     structured_output_mode=str(structured_output_mode or ""),
                     repaired_from_log_id=repaired_from_log_id,
                     request_json=_json_for_db(request_payload_with_artifacts),
@@ -347,7 +345,6 @@ def serialize_external_ai_call_log(
         "model": row.model,
         "request_id": row.request_id,
         "scene": row.scene,
-        "prompt_version_id": row.prompt_version_id,
         "structured_output_mode": row.structured_output_mode,
         "finish_reason": row.finish_reason,
         "input_tokens": row.input_tokens,

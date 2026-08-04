@@ -10,16 +10,13 @@ import type {
 } from '@/shared/api/contracts'
 import {
   buildDefaultAiConfig,
-  getScenarioPromptTemplateKey,
   normalizeScenarioAiConfig,
   readRecentAiConfig,
-  type PromptTemplateSnapshot,
   writeRecentAiConfig,
 } from './aiRunConfigPersistence'
 import {
   getAiPromptBlocksApi,
   getAiPromptScenesApi,
-  getAiPromptTemplatesApi,
   getAiModelScenariosApi,
   previewAiPromptCompositionApi,
   saveAiPromptSceneDefaultApi,
@@ -45,7 +42,6 @@ interface PendingRequest extends MultiAiRunConfigRequest {
 
 interface AiRunConfigCatalog {
   scenarios: AiModelScenario[]
-  promptTemplates: Record<string, PromptTemplateSnapshot>
   promptBlocks: AiPromptBlock[]
   promptScenes: Record<string, AiPromptSceneDefault>
 }
@@ -56,7 +52,6 @@ export function useAiRunConfigDialog() {
   const [confirming, setConfirming] = React.useState(false)
   const [pending, setPending] = React.useState<PendingRequest | null>(null)
   const [selectedConfigs, setSelectedConfigs] = React.useState<Record<string, AiRuntimeOptions>>({})
-  const [promptTemplates, setPromptTemplates] = React.useState<Record<string, PromptTemplateSnapshot>>({})
   const [promptBlocks, setPromptBlocks] = React.useState<AiPromptBlock[]>([])
   const [promptScenes, setPromptScenes] = React.useState<Record<string, AiPromptSceneDefault>>({})
   const [savingDefaults, setSavingDefaults] = React.useState<Record<string, boolean>>({})
@@ -69,33 +64,21 @@ export function useAiRunConfigDialog() {
         entry,
         scenario: scenarios.find((item) => item.key === entry.scenarioKey) ?? null,
         recentConfig: readRecentAiConfig(entry.entrypointKey, entry.scenarioKey),
-        promptTemplate: promptTemplates[getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''] ?? null,
         promptScene: promptScenes[entry.promptSceneKey ?? entry.scenarioKey] ?? null,
       })),
-    [pendingEntries, promptScenes, promptTemplates, scenarios],
+    [pendingEntries, promptScenes, scenarios],
   )
 
   const loadScenarios = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [response, promptResponse, blockResponse, sceneResponse] = await Promise.all([
+      const [response, blockResponse, sceneResponse] = await Promise.all([
         getAiModelScenariosApi(),
-        getAiPromptTemplatesApi().catch(() => ({ items: [] })),
         getAiPromptBlocksApi().catch(() => ({ items: [] })),
         getAiPromptScenesApi().catch(() => ({ items: [] })),
       ])
       const nextScenes = response.scenes ?? response.scenarios ?? []
-      const nextPromptTemplates = Object.fromEntries(
-        (promptResponse.items ?? []).map((item) => [
-          item.key,
-          {
-            template: item.template,
-            defaultTemplate: item.default_template,
-          },
-        ]),
-      )
       setScenarios(nextScenes)
-      setPromptTemplates(nextPromptTemplates)
       setPromptBlocks(blockResponse.items ?? [])
       const nextPromptScenes = Object.fromEntries(
         (sceneResponse.items ?? []).map((item) => [item.scene_key, item]),
@@ -103,7 +86,6 @@ export function useAiRunConfigDialog() {
       setPromptScenes(nextPromptScenes)
       return {
         scenarios: nextScenes,
-        promptTemplates: nextPromptTemplates,
         promptBlocks: blockResponse.items ?? [],
         promptScenes: nextPromptScenes,
       } satisfies AiRunConfigCatalog
@@ -119,7 +101,6 @@ export function useAiRunConfigDialog() {
   const promptForScenarioAiOptions = React.useCallback(
     async (request: MultiAiRunConfigRequest) => {
       let nextScenarios = scenarios
-      let nextPromptTemplates = promptTemplates
       let nextPromptScenes = promptScenes
       // Reload when scenarios are missing, or when scene defaults never loaded
       // (otherwise modular block checkboxes open with an empty combination).
@@ -127,7 +108,6 @@ export function useAiRunConfigDialog() {
         try {
           const catalog = await loadScenarios()
           nextScenarios = catalog.scenarios
-          nextPromptTemplates = catalog.promptTemplates
           nextPromptScenes = catalog.promptScenes
         } catch {
           return undefined
@@ -141,13 +121,10 @@ export function useAiRunConfigDialog() {
           toast.error('当前入口没有找到对应的 AI 场景配置。')
           return undefined
         }
-        const promptTemplateKey = getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''
-        const promptTemplate = nextPromptTemplates[promptTemplateKey] ?? null
         const recentConfig = readRecentAiConfig(entry.entrypointKey, entry.scenarioKey)
         nextSelectedConfigs[entry.scenarioKey] = normalizeScenarioAiConfig(
           scenario,
           recentConfig,
-          promptTemplate,
           nextPromptScenes[entry.promptSceneKey ?? entry.scenarioKey] ?? null,
         )
         nextSelectedContexts[entry.scenarioKey] = []
@@ -162,7 +139,7 @@ export function useAiRunConfigDialog() {
         setPending({ ...request, resolve })
       })
     },
-    [loadScenarios, promptScenes, promptTemplates, scenarios],
+    [loadScenarios, promptScenes, scenarios],
   )
 
   const promptForAiOptions = React.useCallback(
@@ -282,13 +259,11 @@ export function useAiRunConfigDialog() {
     const scenario = scenarios.find((item) => item.key === scenarioKey)
     if (!scenario) return
     const promptKey = resolvePromptSceneKey(scenarioKey, promptSceneKey)
-    const promptTemplateKey = getScenarioPromptTemplateKey(scenarioKey) ?? ''
-    const promptTemplate = promptTemplates[promptTemplateKey] ?? null
     setSelectedConfigs((current) => ({
       ...current,
-      [scenarioKey]: buildDefaultAiConfig(scenario, promptTemplate, promptScenes[promptKey] ?? null),
+      [scenarioKey]: buildDefaultAiConfig(scenario, promptScenes[promptKey] ?? null),
     }))
-  }, [promptScenes, promptTemplates, scenarios])
+  }, [promptScenes, scenarios])
 
   const applyScenarioRecentChoice = React.useCallback(
     (scenarioKey: string, entrypointKey: string, promptSceneKey?: string) => {
@@ -297,19 +272,16 @@ export function useAiRunConfigDialog() {
       const recentConfig = readRecentAiConfig(entrypointKey, scenarioKey)
       if (!recentConfig) return
       const promptKey = resolvePromptSceneKey(scenarioKey, promptSceneKey)
-      const promptTemplateKey = getScenarioPromptTemplateKey(scenarioKey) ?? ''
-      const promptTemplate = promptTemplates[promptTemplateKey] ?? null
       setSelectedConfigs((current) => ({
         ...current,
         [scenarioKey]: normalizeScenarioAiConfig(
           scenario,
           recentConfig,
-          promptTemplate,
           promptScenes[promptKey] ?? null,
         ),
       }))
     },
-    [promptScenes, promptTemplates, scenarios],
+    [promptScenes, scenarios],
   )
 
   const resetAllToDefaults = React.useCallback(() => {
@@ -319,15 +291,13 @@ export function useAiRunConfigDialog() {
       const scenario = scenarios.find((item) => item.key === entry.scenarioKey)
       if (!scenario) continue
       const promptKey = resolvePromptSceneKey(entry.scenarioKey, entry.promptSceneKey)
-      const promptTemplateKey = getScenarioPromptTemplateKey(entry.scenarioKey) ?? ''
       nextSelectedConfigs[entry.scenarioKey] = buildDefaultAiConfig(
         scenario,
-        promptTemplates[promptTemplateKey] ?? null,
         promptScenes[promptKey] ?? null,
       )
     }
     setSelectedConfigs(nextSelectedConfigs)
-  }, [pending, promptScenes, promptTemplates, scenarios])
+  }, [pending, promptScenes, scenarios])
 
   const saveCurrentAsDefault = React.useCallback(async (scenarioKey: string, promptSceneKey?: string) => {
     const selection = selectedConfigs[scenarioKey]?.prompt_options
