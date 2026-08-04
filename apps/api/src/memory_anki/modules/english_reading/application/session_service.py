@@ -375,13 +375,7 @@ def generate_sentence_renders_with_ai(
     generation_job_id: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    runtime = _svc._resolve_legacy_dashscope_runtime(
-        session,
-        ai_dependencies=ai_dependencies,
-        scenario_key="english_reading",
-        ai_options=ai_options,
-        legacy_default_model=_svc.DASHSCOPE_TEXT_MODEL,
-    )
+    runtime = ai_dependencies.runtime.resolve("english_reading", options=ai_options)
     if not runtime.api_key or not sentence_tasks:
         return ({}, [])
     config = OpenAICompatibleChatConfig(
@@ -409,7 +403,7 @@ def generate_sentence_renders_with_ai(
                 for task in batch
             ],
         }
-        base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_adapt_sentence")
+        base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_generate")
         prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
         try:
             payload, log_id = _svc.call_json_completion_with_log(

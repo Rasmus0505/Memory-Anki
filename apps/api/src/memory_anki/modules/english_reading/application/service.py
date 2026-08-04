@@ -4,9 +4,6 @@ import json
 import math  # noqa: F401
 import re
 import shutil
-import urllib.error
-import urllib.parse
-import urllib.request
 import uuid  # noqa: F401
 from collections import Counter  # noqa: F401
 from dataclasses import dataclass, replace  # noqa: F401
@@ -18,12 +15,8 @@ import fitz  # noqa: F401
 from sqlalchemy.orm import Session  # noqa: F401
 
 from memory_anki.core.config import (
-    DASHSCOPE_API_KEY,  # noqa: F401
-    DASHSCOPE_BASE_URL,  # noqa: F401
-    DASHSCOPE_TEXT_MODEL,  # noqa: F401
     ENGLISH_READING_CEFR_PATH,
     ENGLISH_READING_DEFAULT_CEFR_SOURCE,
-    ENGLISH_TRANSLATION_MODEL,  # noqa: F401
 )
 from memory_anki.core.time import utc_now_naive  # noqa: F401
 from memory_anki.infrastructure.db._tables.english_reading import (
@@ -110,8 +103,6 @@ READING_DIFFICULTY_BASE_DELTA = {
 }
 READING_ALLOWED_DIFFICULTY_DELTAS = (0.5, 1.0, 1.5, 2.0)
 READING_ALLOWED_DIFFICULTY_DIRECTIONS = {"easier", "same", "harder"}
-XXAPI_DICTIONARY_API_URL = "https://v2.xxapi.cn/api/englishwords"
-XXAPI_DICTIONARY_TIMEOUT_SECONDS = 4
 SENTENCE_TRANSLATION_MAX_CHARS = 400
 
 
@@ -189,42 +180,6 @@ def ensure_english_reading_storage() -> dict[str, Any]:
         "exists": target_path.exists(),
         "copied": copied,
     }
-
-
-def fetch_xxapi_dictionary_payload(word: str) -> dict[str, Any]:
-    query = urllib.parse.urlencode({"word": word})
-    request = urllib.request.Request(
-        f"{XXAPI_DICTIONARY_API_URL}?{query}",
-        method="GET",
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "MemoryAnki/1.0",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=XXAPI_DICTIONARY_TIMEOUT_SECONDS) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            raise EnglishReadingError(f"未找到单词“{word}”的词典结果。") from exc
-        raise EnglishReadingError("词典服务暂时不可用，请稍后重试。") from exc
-    except urllib.error.URLError as exc:
-        raise EnglishReadingError("词典服务暂时不可用，请稍后重试。") from exc
-    except json.JSONDecodeError as exc:
-        raise EnglishReadingError("词典服务返回了无法解析的数据。") from exc
-
-    if not isinstance(payload, dict):
-        raise EnglishReadingError("词典服务返回结构无效。")
-    code = int(payload.get("code") or 0)
-    if code != 200:
-        message = str(payload.get("msg") or "").strip()
-        if "未找到" in message:
-            raise EnglishReadingError(f"未找到单词“{word}”的词典结果。")
-        raise EnglishReadingError(message or "词典服务暂时不可用，请稍后重试。")
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        raise EnglishReadingError("词典服务返回结构无效。")
-    return data
 
 
 def load_lexicon_state() -> LexiconState:
@@ -370,11 +325,7 @@ from .lexicon_service import (  # noqa: E402,F401,I001
 from .dictionary_service import (  # noqa: E402,F401,I001
     get_english_reading_runtime,
     prepare_english_reading_runtime,
-    get_dictionary_entry,
-    _resolve_legacy_dashscope_runtime,
     translate_sentence_text,
-    build_xxapi_dictionary_entry_payload,
-    normalize_dictionary_phonetic,
     normalize_resolution_source,
     call_json_completion,
     call_json_completion_with_log,

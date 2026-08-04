@@ -50,7 +50,6 @@ from .course_service import (
 )
 from .task_runtime import (
     TASK_RUNTIME_FILE,
-    load_task_asr_ai_options,
     load_task_runtime_identity,
     load_task_runtime_public_metadata,
     restore_task_runtime,
@@ -158,7 +157,6 @@ def retry_current_task(session: Session) -> dict[str, Any]:
     for artifact_name in (
         "asr_result.json",
         "audio.wav",
-        "runtime_options.json",
         "ai_runtime.json",
     ):
         artifact = old_dir / artifact_name
@@ -305,20 +303,6 @@ def create_task_row(
     task_path.mkdir(parents=True, exist_ok=True)
     source_path = task_path / f"source{suffix}"
     source_path.write_bytes(file_bytes)
-    (task_path / "runtime_options.json").write_text(
-        json.dumps(
-            {
-                "asr": {
-                    "model": asr_ai_options.model if asr_ai_options else None,
-                    "thinking_enabled": (
-                        asr_ai_options.thinking_enabled if asr_ai_options else None
-                    ),
-                }
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
     write_task_runtime_snapshot(
         task_path,
         owner_id=task_id,
@@ -450,7 +434,6 @@ def run_generation_task(task_id: str) -> None:
             )
             asr_kwargs: dict[str, Any] = {
                 "task_id": task_id,
-                "ai_options": load_task_asr_ai_options(source_path.parent),
                 "progress_callback": asr_progress,
             }
             if asr_runtime is not None:

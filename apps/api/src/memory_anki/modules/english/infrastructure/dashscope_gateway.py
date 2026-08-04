@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -14,11 +13,6 @@ import requests  # type: ignore[import-untyped]
 from dashscope.audio.qwen_asr import QwenTranscription
 from dashscope.files import Files
 
-from memory_anki.core.config import (
-    DASHSCOPE_API_KEY,  # noqa: F401 - compatibility export only
-    DASHSCOPE_BASE_URL,  # noqa: F401 - compatibility export only
-    ENGLISH_TRANSLATION_MODEL,
-)
 from memory_anki.infrastructure.llm.external_ai_call_logs import (
     begin_external_ai_call_log,
     complete_external_ai_call_log,
@@ -33,7 +27,7 @@ from memory_anki.modules.english.domain.errors import (
     EnglishCourseError,
     EnglishTranslationBatchMismatchError,
 )
-from memory_anki.platform.application import AiRuntimeOptions, PromptCatalog, ResolvedAiRuntime
+from memory_anki.platform.application import PromptCatalog, ResolvedAiRuntime
 
 from .generation_log_store import append_generation_log_event
 
@@ -44,46 +38,18 @@ TRANSLATION_BATCH_SIZE = 40
 TRANSLATION_LINE_RE = re.compile(r"^\[S(?P<index>\d+)\]\s*(?P<text>.*)$")
 
 
-@dataclass(frozen=True, slots=True)
-class LegacyDashscopeRuntime:
-    model: str
-    api_key: str
-    base_url: str
-    provider: str = "dashscope"
-    supports_temperature: bool = True
-    extra_payload: dict[str, Any] | None = None
-
-
-def _resolve_legacy_dashscope_runtime(
-    *,
-    ai_options: AiRuntimeOptions | None = None,
-    legacy_default_model: str | None = None,
-    resolved_runtime: ResolvedAiRuntime | None = None,
-) -> ResolvedAiRuntime | LegacyDashscopeRuntime:
-    if resolved_runtime is not None:
-        return resolved_runtime
-    model = str(
-        (ai_options.model if ai_options and ai_options.model else None)
-        or legacy_default_model
-        or "qwen3-asr-flash"
-    ).strip()
-    return LegacyDashscopeRuntime(model=model, api_key="", base_url="")
-
-
 class DashscopeEnglishAsrGateway:
     def transcribe(
         self,
         audio_path: Path,
         *,
         task_id: str,
-        ai_options: AiRuntimeOptions | None = None,
         resolved_runtime: ResolvedAiRuntime | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        runtime = _resolve_legacy_dashscope_runtime(
-            ai_options=ai_options,
-            resolved_runtime=resolved_runtime,
-        )
+        if resolved_runtime is None:
+            raise EnglishCourseError("英语任务缺少运行时快照，请重新创建任务。")
+        runtime = resolved_runtime
         api_key = str(runtime.api_key or "").strip()
         if not api_key:
             raise EnglishCourseError("未配置 ASR 模型对应的 Provider API Key，无法生成英语课程。")
@@ -229,10 +195,9 @@ class DashscopeEnglishTranslator:
         prompt_catalog: PromptCatalog,
         resolved_runtime: ResolvedAiRuntime | None = None,
     ) -> list[dict[str, Any]]:
-        runtime = _resolve_legacy_dashscope_runtime(
-            legacy_default_model=ENGLISH_TRANSLATION_MODEL,
-            resolved_runtime=resolved_runtime,
-        )
+        if resolved_runtime is None:
+            raise EnglishCourseError("英语任务缺少运行时快照，请重新创建任务。")
+        runtime = resolved_runtime
         if not str(runtime.api_key or "").strip():
             raise EnglishCourseError("未配置翻译模型对应的 Provider API Key，无法生成中文译文。")
         config = OpenAICompatibleChatConfig(

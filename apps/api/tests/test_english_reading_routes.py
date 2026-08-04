@@ -53,8 +53,6 @@ class EnglishReadingRouteTests(RouterTestCase):
     def setUp(self):
         self.original_runtime = reading_service.get_english_reading_runtime()
         self.original_call_chat_completion_text = reading_service.call_chat_completion_text
-        self.original_api_key = reading_service.DASHSCOPE_API_KEY
-        self.original_text_model = reading_service.DASHSCOPE_TEXT_MODEL
         self.original_cefr_path = reading_service.ENGLISH_READING_CEFR_PATH
         self.original_lexicon_state = reading_service._lexicon_state
         self.generation_calls = 0
@@ -85,8 +83,6 @@ class EnglishReadingRouteTests(RouterTestCase):
             reading_service.EnglishReadingRuntime(cefr_source_path=self.source_cefr_path)
         )
         reading_service._lexicon_state = None
-        reading_service.DASHSCOPE_API_KEY = "test-key"
-        reading_service.DASHSCOPE_TEXT_MODEL = "qwen3.6-flash"
 
         super().setUp()
 
@@ -103,8 +99,6 @@ class EnglishReadingRouteTests(RouterTestCase):
     def tearDown(self):
         reading_service.configure_english_reading_runtime(self.original_runtime)
         reading_service.call_chat_completion_text = self.original_call_chat_completion_text
-        reading_service.DASHSCOPE_API_KEY = self.original_api_key
-        reading_service.DASHSCOPE_TEXT_MODEL = self.original_text_model
         reading_service.ENGLISH_READING_CEFR_PATH = self.original_cefr_path
         reading_service._lexicon_state = self.original_lexicon_state
         super().tearDown()
@@ -436,7 +430,6 @@ class EnglishReadingRouteTests(RouterTestCase):
         self.assertIn("难度变化幅度", invalid_delta.json()["detail"])
 
     def test_local_fallback_keeps_only_natural_green_words_colored(self):
-        reading_service.DASHSCOPE_API_KEY = ""
         with self.SessionLocal() as session:
             row = session.query(Config).filter_by(key="dashscope_api_key").first()
             self.assertIsNotNone(row)
@@ -694,21 +687,6 @@ class EnglishReadingRouteTests(RouterTestCase):
         self.assertEqual(reviewed_payload["incorrectCount"], 0)
         self.assertGreaterEqual(int(reviewed_payload["intervalDays"] or 0), 0)
         self.assertFalse(reviewed_payload["isDue"])
-
-    def test_legacy_dictionary_route_returns_gone_migration(self):
-        response = self.client.get(
-            "/api/v1/english-reading/dictionary",
-            params={"word": "cancel"},
-        )
-        self.assertEqual(response.status_code, 410)
-        self.assertIn("english-lookup/search", response.json()["detail"])
-
-        blank = self.client.get(
-            "/api/v1/english-reading/dictionary",
-            params={"word": "   "},
-        )
-        self.assertEqual(blank.status_code, 400)
-        self.assertIn("英文单词", blank.json()["detail"])
 
     def test_sentence_translation_uses_translation_options_and_normalizes_text(self):
         captured: dict[str, object] = {}

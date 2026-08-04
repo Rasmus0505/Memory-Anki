@@ -97,8 +97,6 @@ class EnglishRouteTests(RouterTestCase):
         self.original_task_get_session = task_service.get_session
         self.original_runtime = task_service.get_english_runtime()
         self.original_call_chat_completion_text = dashscope_gateway.call_chat_completion_text
-        self.original_api_key = dashscope_gateway.DASHSCOPE_API_KEY
-        self.original_translation_model = dashscope_gateway.ENGLISH_TRANSLATION_MODEL
         self.original_course_media_dir = course_service.ENGLISH_MEDIA_DIR
         self.original_paths_media_dir = paths.ENGLISH_MEDIA_DIR
         self.original_paths_tasks_dir = paths.ENGLISH_TASKS_DIR
@@ -113,8 +111,6 @@ class EnglishRouteTests(RouterTestCase):
         course_service.ENGLISH_MEDIA_DIR = self.media_dir
         paths.ENGLISH_MEDIA_DIR = self.media_dir
         paths.ENGLISH_TASKS_DIR = self.tasks_dir
-        dashscope_gateway.DASHSCOPE_API_KEY = "test-key"
-        dashscope_gateway.ENGLISH_TRANSLATION_MODEL = "qwen-mt-flash"
 
         super().setUp()
 
@@ -127,8 +123,6 @@ class EnglishRouteTests(RouterTestCase):
         task_service.get_session = self.original_task_get_session
         task_service.configure_english_runtime(self.original_runtime)
         dashscope_gateway.call_chat_completion_text = self.original_call_chat_completion_text
-        dashscope_gateway.DASHSCOPE_API_KEY = self.original_api_key
-        dashscope_gateway.ENGLISH_TRANSLATION_MODEL = self.original_translation_model
         course_service.ENGLISH_MEDIA_DIR = self.original_course_media_dir
         paths.ENGLISH_MEDIA_DIR = self.original_paths_media_dir
         paths.ENGLISH_TASKS_DIR = self.original_paths_tasks_dir
@@ -512,12 +506,6 @@ class EnglishRouteTests(RouterTestCase):
 
         original_dir = paths.task_dir(original["id"])
         (original_dir / "audio.wav").write_bytes(b"cached-audio")
-        (original_dir / "runtime_options.json").write_text(
-            json.dumps(
-                {"asr": {"model": "cached-model", "thinking_enabled": True}}, ensure_ascii=False
-            ),
-            encoding="utf-8",
-        )
         (original_dir / "asr_result.json").write_text(
             json.dumps(
                 {

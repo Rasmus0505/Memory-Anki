@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import replace
 from typing import (
     Any,
 )
@@ -47,35 +46,6 @@ def prepare_english_reading_runtime(session: Session) -> dict[str, Any]:
     }
 
 
-def get_dictionary_entry(session: Session, *, word: str) -> dict[str, Any]:
-    """Deprecated live xxapi path. Popup lookup uses english-lookup instead."""
-    del session  # no longer touches cache or upstream dictionary
-    safe_word = _svc.normalize_dictionary_query_word(word)
-    if not safe_word:
-        raise EnglishReadingError("请提供要查询的英文单词。")
-    raise EnglishReadingError("已迁移到 /api/v1/english-lookup/search")
-
-
-def _resolve_legacy_dashscope_runtime(
-    session: Session,
-    *,
-    ai_dependencies: EnglishReadingAiDependencies,
-    scenario_key: str,
-    ai_options: AiRuntimeOptions | None,
-    legacy_default_model: str,
-):
-    del session
-    runtime = ai_dependencies.runtime.resolve(scenario_key, options=ai_options)
-    return replace(
-        runtime,
-        model=(
-            runtime.model
-            if ai_options and ai_options.model
-            else str(legacy_default_model or runtime.model or "").strip()
-        ),
-    )
-
-
 def translate_sentence_text(
     session: Session,
     *,
@@ -92,13 +62,7 @@ def translate_sentence_text(
         )
     if _svc.ASCII_LETTER_RE.search(normalized_text) is None:
         raise EnglishReadingError("请选择包含英文内容的句子。")
-    runtime = _svc._resolve_legacy_dashscope_runtime(
-        session,
-        ai_dependencies=ai_dependencies,
-        scenario_key="translation",
-        ai_options=ai_options,
-        legacy_default_model=_svc.ENGLISH_TRANSLATION_MODEL,
-    )
+    runtime = ai_dependencies.runtime.resolve("translation", options=ai_options)
     if not runtime.api_key:
         raise EnglishReadingError("未配置翻译模型对应的 Provider API Key，无法翻译句子。")
 
@@ -131,68 +95,6 @@ def translate_sentence_text(
         "originalText": normalized_text,
         "translatedText": normalized_translation,
     }
-
-
-def build_xxapi_dictionary_entry_payload(
-    payload: dict[str, Any],
-    *,
-    query_word: str,
-    requested_word: str,
-) -> dict[str, Any] | None:
-    word = _svc.normalize_dictionary_query_word(str(payload.get("word") or requested_word or query_word))
-    lemma = word or query_word
-    translations = payload.get("translations")
-    translation_items = translations if isinstance(translations, list) else []
-
-    parts_of_speech: list[str] = []
-    summary_zh: list[str] = []
-    seen_summary_zh: set[str] = set()
-    senses: list[dict[str, Any]] = []
-
-    for item in translation_items:
-        if not isinstance(item, dict):
-            continue
-        part_of_speech = str(item.get("pos") or "").strip() or "unknown"
-        if part_of_speech not in parts_of_speech:
-            parts_of_speech.append(part_of_speech)
-        definition_zh = str(item.get("tran_cn") or "").strip()
-        if definition_zh and definition_zh not in seen_summary_zh and len(summary_zh) < 3:
-            seen_summary_zh.add(definition_zh)
-            summary_zh.append(definition_zh)
-        if not definition_zh:
-            continue
-        senses.append(
-            {
-                "partOfSpeech": part_of_speech,
-                "definitionZh": definition_zh,
-                "definition": "",
-                "exampleZh": None,
-                "example": None,
-            }
-        )
-
-    if not lemma and not senses:
-        return None
-
-    return {
-        "word": query_word,
-        "lemma": lemma or query_word,
-        "phoneticUs": _svc.normalize_dictionary_phonetic(str(payload.get("usphone") or "").strip()),
-        "audioUsUrl": str(payload.get("usspeech") or "").strip() or None,
-        "summaryZh": summary_zh,
-        "partsOfSpeech": parts_of_speech,
-        "senses": senses,
-        "source": "xxapi",
-    }
-
-
-def normalize_dictionary_phonetic(value: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    if text.startswith("/") and text.endswith("/"):
-        return text
-    return f"/{text.strip('/')}/"
 
 
 def normalize_resolution_source(value: str) -> str:
@@ -316,7 +218,7 @@ def upsert_dictionary_cache(
         row.summary_zh_json = json.dumps(payload.get("summaryZh") or [], ensure_ascii=False)
         row.parts_of_speech_json = json.dumps(payload.get("partsOfSpeech") or [], ensure_ascii=False)
         row.senses_json = json.dumps(payload.get("senses") or [], ensure_ascii=False)
-        row.source = str(payload.get("source") or "xxapi")
+        row.source = str(payload.get("source") or "dictionary")
         row.updated_at = utc_now_naive()
     session.commit()
 
@@ -418,6 +320,6 @@ def serialize_dictionary_cache_row(row: EnglishReadingDictionaryCache) -> dict[s
         "summaryZh": summary_zh if isinstance(summary_zh, list) else [],
         "partsOfSpeech": parts_of_speech if isinstance(parts_of_speech, list) else [],
         "senses": senses if isinstance(senses, list) else [],
-        "source": row.source or "xxapi",
+        "source": row.source or "dictionary",
         "cachedAt": row.updated_at.isoformat() if row.updated_at else None,
     }

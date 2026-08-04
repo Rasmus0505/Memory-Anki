@@ -14,28 +14,6 @@ from memory_anki.platform.application import (
 
 from .ai_dependencies import EnglishAiDependencies
 
-
-def load_task_asr_ai_options(task_path: Path) -> AiRuntimeOptions:
-    options_path = task_path / "runtime_options.json"
-    if not options_path.exists():
-        return AiRuntimeOptions()
-    try:
-        payload = json.loads(options_path.read_text(encoding="utf-8"))
-    except Exception:
-        return AiRuntimeOptions()
-    asr_payload = payload.get("asr") if isinstance(payload, dict) else None
-    if not isinstance(asr_payload, dict):
-        return AiRuntimeOptions()
-    return AiRuntimeOptions(
-        model=str(asr_payload.get("model") or "").strip() or None,
-        thinking_enabled=(
-            None
-            if asr_payload.get("thinking_enabled") is None
-            else bool(asr_payload.get("thinking_enabled"))
-        ),
-    )
-
-
 TASK_RUNTIME_FILE = "ai_runtime.json"
 
 

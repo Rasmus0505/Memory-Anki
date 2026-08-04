@@ -7,7 +7,7 @@
   ],
   "forbids": [
     "private cross-module imports",
-    "xxapi dictionary contracts",
+    "dictionary lookup contracts",
     "sentence LLM translation UI"
   ],
   "publicEntry": "src/modules/english-lookup/public.ts",

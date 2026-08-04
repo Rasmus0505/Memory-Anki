@@ -38,13 +38,7 @@ def generate_surface_resolutions_with_ai(
     generation_job_id: str,
     ai_options: AiRuntimeOptions | None = None,
 ) -> tuple[dict[str, _svc.SurfaceResolution], list[str]]:
-    runtime = _svc._resolve_legacy_dashscope_runtime(
-        session,
-        ai_dependencies=ai_dependencies,
-        scenario_key="english_reading",
-        ai_options=ai_options,
-        legacy_default_model=_svc.DASHSCOPE_TEXT_MODEL,
-    )
+    runtime = ai_dependencies.runtime.resolve("english_reading", options=ai_options)
     if not runtime.api_key:
         return ({}, [])
     requested_surfaces = sorted(surface for surface in unresolved_surfaces if surface)
@@ -65,7 +59,7 @@ def generate_surface_resolutions_with_ai(
         "unknown_surfaces": requested_surfaces,
         "sentence_tasks": [],
     }
-    base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_classify_words")
+    base_prompt = ai_dependencies.prompts.render("ai_prompt_english_reading_generate")
     prompt = f"{base_prompt}\n\n输入数据：{json.dumps(prompt_payload, ensure_ascii=False)}"
     try:
         payload, log_id = _svc.call_json_completion_with_log(

@@ -1,7 +1,6 @@
 export {
   EnglishZoneLayout,
   EnglishZoneNav,
-  type EnglishHubTab,
   type EnglishHubZone,
 } from './EnglishZoneLayout'
 export { EnglishContinueHero } from './EnglishContinueHero'

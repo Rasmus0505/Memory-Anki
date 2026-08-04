@@ -38,7 +38,7 @@ import {
 import type { EnglishPracticeSettings } from '@/modules/settings/public'
 import { shouldKeepEnglishPracticeControlFocus } from '@/modules/english/ui/english/englishTypingHelpers'
 import { EnglishFocusChrome, EnglishZoneNav } from '@/modules/english/ui/english-shell'
-import { EnglishLookupText } from '@/modules/english/ui/english-text-interactions'
+import { ReadingLookupText } from '@/modules/english-reading/public'
 import {
   EnglishLookupPanel,
   useEnglishLookup,
@@ -439,7 +439,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                       data-testid="english-course-source-text"
                       className="mt-1.5 shrink-0 rounded-2xl border border-info/20 bg-info/5 px-3 py-2 text-sm leading-5 text-foreground"
                     >
-                      <EnglishLookupText
+                      <ReadingLookupText
                         text={activeSentence.textEn}
                         onLookupWord={lookup.handleTokenClick}
                       />

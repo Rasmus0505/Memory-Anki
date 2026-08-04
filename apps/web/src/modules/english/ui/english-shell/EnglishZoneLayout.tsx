@@ -25,9 +25,6 @@ const ZONE_LINKS: Array<{
   { id: 'vocab', label: '生词', to: '/english/vocab', icon: NotebookPen },
 ]
 
-/** @deprecated Use EnglishHubZone; kept for transitional imports */
-export type EnglishHubTab = 'listening' | 'reading' | 'vocab' | 'patterns'
-
 /** Sticky zone switcher shared by listening / reading / patterns / vocab (and course chrome). */
 export function EnglishZoneNav({
   zone = 'hub',

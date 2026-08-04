@@ -247,7 +247,7 @@ class EnglishReadingDictionaryCache(Base):
     summary_zh_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     parts_of_speech_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     senses_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    source: Mapped[str] = mapped_column(String(32), nullable=False, default="xxapi")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="dictionary")
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
