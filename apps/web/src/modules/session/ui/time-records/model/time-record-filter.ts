@@ -24,18 +24,7 @@ export interface TimeRecordFilterState {
   pageSize: number
 }
 
-interface LegacyDashboardDurationFilterState {
-  mode: 'month' | 'range' | 'all'
-  month: string
-  startDate: string
-  endDate: string
-  trendRangeDays?: 7 | 30 | 90 | 'all'
-  breakdownRangeDays?: 7 | 30 | 90 | 'all'
-}
-
-export type TimeRecordFilterPersistenceState =
-  | TimeRecordFilterState
-  | LegacyDashboardDurationFilterState
+export type TimeRecordFilterPersistenceState = TimeRecordFilterState
 
 const RANGE_MODES: TimeRecordRangeMode[] = [
   'month',
@@ -87,15 +76,8 @@ export function isTimeRecordFilterPersistenceState(
   value: unknown,
 ): value is TimeRecordFilterPersistenceState {
   if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<
-    TimeRecordFilterState & LegacyDashboardDurationFilterState
-  >
-  return (
-    candidate.version === 2 ||
-    candidate.mode === 'month' ||
-    candidate.mode === 'range' ||
-    candidate.mode === 'all'
-  )
+  const candidate = value as Partial<TimeRecordFilterState>
+  return candidate.version === 2
 }
 
 export function normalizeTimeRecordFilter(
@@ -104,21 +86,6 @@ export function normalizeTimeRecordFilter(
 ): TimeRecordFilterState {
   const defaults = createDefaultTimeRecordFilter(reference)
   if (!value) return defaults
-
-  if ('mode' in value) {
-    return {
-      ...defaults,
-      rangeMode:
-        value.mode === 'range'
-          ? 'custom'
-          : value.mode === 'all'
-            ? 'all'
-            : 'month',
-      month: isMonthValue(value.month) ? value.month : defaults.month,
-      startDate: isDateValue(value.startDate) ? value.startDate : '',
-      endDate: isDateValue(value.endDate) ? value.endDate : '',
-    }
-  }
 
   return {
     version: 2,

@@ -604,18 +604,8 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
         return []
 
     # Only palaces that appear in the due candidate set — not every palace in the DB.
-    reconciled_any = False
-    for pid in candidate_palace_ids:
-        if _reconcile_if_unit_hashes_lag(session, pid):
-            reconciled_any = True
-
-    if reconciled_any:
-        # Demotion can move due_date; membership change can alter the active set.
-        rows = _query_due_unit_rows(session, palace_id)
-        candidate_palace_ids = sorted({row.palace_id for row in rows})
-        if not candidate_palace_ids:
-            return []
-
+    # Load the candidate topology and active states in batches so the normal queue
+    # path stays flat; only genuinely stale palaces need per-palace reconciliation.
     palaces = (
         session.query(Palace)
         .filter(
@@ -625,13 +615,57 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
         )
         .all()
     )
+    if not palaces:
+        return []
+    palace_by_id = {palace.id: palace for palace in palaces}
+    active_states = (
+        session.query(ReviewUnitState)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.palace_id.in_(list(palace_by_id)),
+        )
+        .all()
+    )
+    states_by_palace: dict[int, list[ReviewUnitState]] = {}
+    for state in active_states:
+        states_by_palace.setdefault(state.palace_id, []).append(state)
+
+    stale_palace_ids: list[int] = []
+    for palace in palaces:
+        _tree, definitions = _definitions_for_palace(palace)
+        if _unit_hashes_lag(states_by_palace.get(palace.id, []), definitions):
+            stale_palace_ids.append(palace.id)
+
+    reconciled_any = False
+    for pid in stale_palace_ids:
+        reconcile_palace_units(session, pid)
+        reconciled_any = True
+
+    if reconciled_any:
+        # Demotion can move due_date; membership change can alter the active set.
+        rows = _query_due_unit_rows(session, palace_id)
+        candidate_palace_ids = sorted({row.palace_id for row in rows})
+        if not candidate_palace_ids:
+            return []
+        palaces = (
+            session.query(Palace)
+            .filter(
+                Palace.id.in_(candidate_palace_ids),
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
+            )
+            .all()
+        )
+        if not palaces:
+            return []
+        palace_by_id = {palace.id: palace for palace in palaces}
+
     definitions_by_palace = {
         palace.id: {
             item.anchor_uid: item for item in _definitions_for_palace(palace)[1]
         }
         for palace in palaces
     }
-    palace_by_id = {palace.id: palace for palace in palaces}
     result: list[dict[str, Any]] = []
     for row in rows:
         definition = definitions_by_palace.get(row.palace_id, {}).get(row.anchor_uid)
@@ -644,8 +678,8 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
             # Should be rare after lag reconcile; skip rather than project stale topology.
             continue
         payload = unit_payload(row, definition)
-        palace = palace_by_id.get(row.palace_id)
-        payload["palace_title"] = palace.title if palace is not None else ""
+        palace_row = palace_by_id.get(row.palace_id)
+        payload["palace_title"] = palace_row.title if palace_row is not None else ""
         result.append(payload)
     return result
 

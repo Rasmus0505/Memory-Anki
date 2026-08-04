@@ -134,27 +134,6 @@ describe('useTimeRecordsDashboard', () => {
     expect(result.current.sourceSummary.totalEffectiveSeconds).toBe(3600)
   })
 
-  it('migrates the legacy persisted custom range into the unified request', async () => {
-    window.localStorage.setItem(
-      'memory_anki_dashboard_total_duration_filter',
-      JSON.stringify({
-        mode: 'range',
-        month: '2026-06',
-        startDate: '2026-06-01',
-        endDate: '2026-06-15',
-      }),
-    )
-
-    renderHook(() => useTimeRecordsDashboard())
-    await waitFor(() => {
-      expect(mocks.readUnified.mock.calls.at(-1)?.[0]).toMatchObject({
-        rangeMode: 'custom',
-        startDate: '2026-06-01',
-        endDate: '2026-06-15',
-      })
-    })
-  })
-
   it('ignores a stale response after a newer filter request completes', async () => {
     const { result } = renderHook(() => useTimeRecordsDashboard())
     await waitFor(() => expect(mocks.readUnified).toHaveBeenCalledTimes(1))

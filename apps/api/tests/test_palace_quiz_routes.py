@@ -3910,15 +3910,7 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("不是成功记录", response.json()["detail"])
 
-    def test_settings_list_new_prompt_keys_and_quiz_scene_bindings(self):
-        prompt_response = self.client.get("/api/v1/settings/ai-prompts")
-        self.assertEqual(prompt_response.status_code, 200)
-        prompt_keys = {item["key"] for item in prompt_response.json()["items"]}
-        self.assertIn("ai_prompt_palace_quiz_generate", prompt_keys)
-        self.assertIn("ai_prompt_palace_quiz_classify_existing_to_mini_palace", prompt_keys)
-        self.assertIn("ai_prompt_palace_quiz_group_by_mini_palace", prompt_keys)
-        self.assertIn("ai_prompt_palace_quiz_short_answer_feedback", prompt_keys)
-
+    def test_settings_list_quiz_scene_bindings(self):
         model_response = self.client.get("/api/v1/settings/ai-models")
         self.assertEqual(model_response.status_code, 200)
         scenarios = {item["key"]: item for item in model_response.json()["scenes"]}

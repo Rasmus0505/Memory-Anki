@@ -238,7 +238,6 @@ describe('AppShell', () => {
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/english"]')).toBeTruthy()
-    expect(mobileNav.querySelector('a[href="/english-reading"]')).toBeFalsy()
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
   })
 
@@ -456,42 +455,6 @@ describe('AppShell', () => {
     fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/palaces/new')).toBeTruthy()
-    })
-  })
-
-  it('restores freestyle practice when switching back from another section', async () => {
-    getRuntimeInfoApi.mockResolvedValue({
-      channel: 'stable',
-      commit: 'abcdef1234567890',
-      short_commit: 'abcdef12',
-      min_supported_generation: 1,
-      max_supported_generation: 1,
-      last_started_at: '2026-06-01T12:00:00+08:00',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/palaces/12/practice']}>
-        <AppShell>
-          <LocationEcho />
-        </AppShell>
-      </MemoryRouter>,
-    )
-
-    await screen.findAllByText(/Stable abcdef12/)
-    fireEvent.click(screen.getAllByRole('link', { name: '知识' })[0]!)
-    await waitFor(() => {
-      expect(screen.getByText('/palaces')).toBeTruthy()
-    })
-
-    const freestyleLinks = screen.getAllByRole('link', { name: '随心' })
-    expect(
-      freestyleLinks.some((link) => link.getAttribute('href') === '/palaces/12/practice'),
-    ).toBe(true)
-    fireEvent.click(
-      freestyleLinks.find((link) => link.getAttribute('href') === '/palaces/12/practice')!,
-    )
-    await waitFor(() => {
-      expect(screen.getByText('/palaces/12/practice')).toBeTruthy()
     })
   })
 

@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Navigate, Route, Routes, useParams, useSearchParams, type Location } from 'react-router-dom'
+import { Navigate, Route, Routes, type Location } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
@@ -25,13 +25,11 @@ export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPa
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
 export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
-export const preloadPalacePracticePage = () => import('@/app/router/PalacePracticePage')
 
 export function preloadPracticeRoutes() {
   void preloadPalaceEditPage()
   void preloadPalaceViewPage()
   void preloadPalaceQuizPage()
-  void preloadPalacePracticePage()
 }
 
 const KnowledgePage = lazyWithRetry(preloadKnowledgePage)
@@ -47,30 +45,6 @@ const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
 const EnglishPatternsPage = lazyWithRetry(preloadEnglishPatternsPage)
 const EnglishVocabPage = lazyWithRetry(preloadEnglishVocabPage)
 
-function EnglishLegacyTabRedirect() {
-  const [searchParams] = useSearchParams()
-  const tab = searchParams.get('tab')
-  if (tab === 'reading') return <Navigate to="/english/reading" replace />
-  if (tab === 'patterns') return <Navigate to="/english/patterns" replace />
-  if (tab === 'vocab') return <Navigate to="/english/vocab" replace />
-  if (tab === 'listening') return <Navigate to="/english/listening" replace />
-  return <EnglishHubPage />
-}
-
-function EnglishReadingLegacyRedirect() {
-  const [searchParams] = useSearchParams()
-  const material = searchParams.get('material')
-  if (material && /^\d+$/.test(material)) {
-    return <Navigate to={`/english/reading/materials/${material}`} replace />
-  }
-  return <Navigate to="/english/reading" replace />
-}
-
-function EnglishCourseLegacyRedirect() {
-  const { id } = useParams()
-  if (!id) return <Navigate to="/english/listening" replace />
-  return <Navigate to={`/english/listening/courses/${id}`} replace />
-}
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
@@ -82,7 +56,6 @@ const ProfileAiPage = lazyWithRetry(() => import('@/pages/settings/AiSettingsPag
 const ProfileBackupsPage = lazyWithRetry(
   () => import('@/pages/settings/BackupSettingsPage'),
 )
-const PalacePracticePage = lazyWithRetry(preloadPalacePracticePage)
 const DevTokensPage = lazyWithRetry(() => import('@/app/dev/DevTokensPage'))
 
 function RouteFallback() {
@@ -111,21 +84,15 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
-          <Route path="/freestyle/session" element={<Navigate to="/freestyle" replace />} />
           <Route path="/today" element={<TodayLearningPage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
-          <Route path="/english" element={<EnglishLegacyTabRedirect />} />
+          <Route path="/english" element={<EnglishHubPage />} />
           <Route path="/english/listening" element={<EnglishWorkspacePage />} />
           <Route path="/english/listening/courses/:id" element={<EnglishCoursePage />} />
           <Route path="/english/reading" element={<EnglishReadingPage />} />
           <Route path="/english/reading/materials/:materialId" element={<EnglishReadingPage />} />
           <Route path="/english/patterns" element={<EnglishPatternsPage />} />
           <Route path="/english/vocab" element={<EnglishVocabPage />} />
-          <Route path="/english-reading" element={<EnglishReadingLegacyRedirect />} />
-          <Route
-            path="/english/courses/:id"
-            element={<EnglishCourseLegacyRedirect />}
-          />
           <Route path="/palaces/list" element={<PalaceListPage />} />
           <Route path="/palaces/new" element={<PalaceEditPage />} />
           <Route path="/batch-generation" element={<BatchGenerationPage />} />
@@ -133,7 +100,6 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
           <Route path="/palaces/:id" element={<PalaceViewPage />} />
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
-          <Route path="/palaces/:id/practice" element={<PalacePracticePage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/profile" element={<ProfilePage />} />

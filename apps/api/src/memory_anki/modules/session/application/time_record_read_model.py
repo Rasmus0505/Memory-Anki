@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Query, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
@@ -188,6 +189,7 @@ def _apply_time_record_kind_filter(query: Query, kind: str | None) -> Query:
             )
         )
 
+    scene_matches: ColumnElement[bool]
     if normalized == "review":
         scene_matches = StudySession.scene.in_(TIME_RECORD_REVIEW_SCENES)
     elif normalized == "practice":

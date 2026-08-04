@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cleanupLegacyPracticeProgressStorage,
   formatClientSource,
   formatTimeRecordTagLabel,
 } from '@/modules/session/domain/session-entity/model'
@@ -40,17 +39,5 @@ describe('session-record formatters', () => {
       activityTagLabel: '整理笔记',
       sceneSegments: [],
     })).toBe('英语阅读-整理笔记')
-  })
-})
-
-describe('cleanupLegacyPracticeProgressStorage', () => {
-  it('removes the retired practice progress localStorage key', () => {
-    const legacyKey = ['memory-anki', ['practice', 'progress'].join('-'), 'v1'].join('.')
-
-    window.localStorage.setItem(legacyKey, '{"1":{"completed":false}}')
-
-    cleanupLegacyPracticeProgressStorage()
-
-    expect(window.localStorage.getItem(legacyKey)).toBeNull()
   })
 })

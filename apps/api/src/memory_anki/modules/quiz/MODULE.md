@@ -1,7 +1,7 @@
 # Module: quiz
 
 ## Status
-scaffolding — public surface path for concentrated refactor (branch 7.22-refactor-optimize).
+active — owns the current question and quiz-learning contracts.
 
 ## Owns
 Questions, bindings, generation workspace, wrong-question sets
@@ -14,9 +14,7 @@ No formal review session lifecycle
 
 ## Public surface
 - `public/commands.py` — write intents
-- `public/queries.py` — read intents
-- `public/events.py` — domain events this module emits
-- `public/projections.py` — stable read DTOs for other modules
+- `public/queries.py` — read contracts
 
 ## Cross-module rule
 Import only `memory_anki.modules.quiz.public`. Never import another module's application/infrastructure/presentation.

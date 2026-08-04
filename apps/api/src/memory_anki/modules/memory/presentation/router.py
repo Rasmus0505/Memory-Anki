@@ -37,6 +37,8 @@ def _optional_nonnegative_seconds(value: object) -> int | None:
         return None
     if isinstance(value, bool):
         raise ValueError("effective_seconds must be a non-negative integer")
+    if not isinstance(value, str | int | float):
+        raise ValueError("effective_seconds must be a non-negative integer")
     try:
         seconds = int(value)
     except (TypeError, ValueError) as exc:

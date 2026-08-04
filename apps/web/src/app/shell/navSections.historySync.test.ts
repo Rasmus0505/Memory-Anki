@@ -8,9 +8,6 @@ import { navSections } from './navSections'
 /** Guard against drift between shell matchers and section-scoped history. */
 const SAMPLE_PATHS = [
   '/freestyle',
-  '/freestyle/session',
-  '/palaces/12/practice',
-  '/segments/3/practice',
   '/palaces',
   '/palaces/list',
   '/palaces/42',
@@ -18,7 +15,6 @@ const SAMPLE_PATHS = [
   '/knowledge/tree/1',
   '/english',
   '/english/reading',
-  '/english-reading/1',
   '/palaces/new',
   '/palaces/42/edit',
   '/palaces/42/quiz',

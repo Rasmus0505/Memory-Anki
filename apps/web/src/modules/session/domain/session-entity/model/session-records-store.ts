@@ -401,16 +401,3 @@ export function formatCompletionMethod(method: SessionCompletionMethod) {
   if (method === 'all_units_passed') return '单元复习完成'
   return '离开页面'
 }
-
-/**
- * 一次性清理：练习进度已服务端化（见 app/router/practiceRouteSupport.tsx），
- * 移除两台设备浏览器中残留的旧 localStorage 键。清理逻辑保留至 2026-10 后可整体删除。
- */
-export function cleanupLegacyPracticeProgressStorage() {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.removeItem('memory-anki.practice-progress.v1')
-  } catch {
-    // localStorage 不可用时静默跳过
-  }
-}

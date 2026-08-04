@@ -198,7 +198,10 @@ def _summary_seconds_for_palace(row: StudySession, palace_id: int | None) -> int
             raw_palace = segment.get("palaceId", segment.get("palace_id"))
             raw_seconds = segment.get("effectiveSeconds", segment.get("effective_seconds"))
             try:
-                if int(raw_palace) != palace_id:
+                raw_palace_value = (
+                    raw_palace if isinstance(raw_palace, str | int | float) else None
+                )
+                if raw_palace_value is None or int(raw_palace_value) != palace_id:
                     continue
                 seconds = max(0, int(raw_seconds or 0))
             except (TypeError, ValueError):

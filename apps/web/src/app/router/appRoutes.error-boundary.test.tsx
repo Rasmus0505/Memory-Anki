@@ -10,11 +10,6 @@ vi.mock('@/pages/insights/InsightsPage', () => ({
 }))
 vi.mock('@/modules/content/ui/palace-catalog/PalaceListPage', () => ({ default: () => <div /> }))
 vi.mock('@/modules/content/ui/palace-catalog/PalaceShelfPage', () => ({ default: () => <div /> }))
-vi.mock('@/app/router/PalacePracticePage', () => ({ default: () => <div /> }))
-vi.mock('@/app/router/PalaceFocusPracticePage', () => ({ default: () => <div /> }))
-vi.mock('@/app/router/SegmentPracticePage', () => ({ default: () => <div /> }))
-vi.mock('@/app/router/MiniPalacePracticePage', () => ({ default: () => <div /> }))
-
 function AppRoutesHarness() {
   const location = useLocation()
   return (

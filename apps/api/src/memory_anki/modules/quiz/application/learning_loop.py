@@ -168,7 +168,7 @@ def build_mastery_profile(
             .limit(20)
             .all()
         )
-        events_by_qid = {}
+        events_by_qid: dict[int, list[Any]] = {}
         for e in events_query:
             events_by_qid.setdefault(e.question_id, []).append(e)
         for question in questions:
