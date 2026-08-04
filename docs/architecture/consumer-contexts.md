@@ -35,8 +35,8 @@ Practice does not split palace documents. It maps each Reviews projection to one
 Frontend ownership:
 
 - Domain/config/skip/refresh: `apps/web/src/modules/practice` via `public.ts`
-- Immersive page/widgets: `features/freestyle` + thin `pages/today/ImmersiveFreestylePage`
-- Primary nav first item is **随心** (`/freestyle`); legacy `/freestyle/session` redirects there
+- Immersive page/widgets: `modules/practice/ui/freestyle` and its public facade
+- Primary nav first item is **随心** (`/freestyle`)
 - Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to palace unit scheduling
 
 ## Study Sessions

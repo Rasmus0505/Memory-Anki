@@ -82,7 +82,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 - Fast iteration: `python tools/quality_gate.py`
 - Full handoff: `python tools/quality_gate.py --full` (backend tests, frontend tests/build, and Playwright smoke)
-- Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-pwa.bat` and `start-desktop.bat`, verifies API/Electron readiness, then restores the shared PWA service)
+- Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-all.bat --smoke-test` and `start-all.bat --desktop`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
@@ -127,7 +127,7 @@ Frontend AI scenario/model selection and per-run overrides are owned by `modules
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only `palaces.api` / `reviews.api` / `palace_quiz.api` (plus legacy english facades for the older feed). It is the sole frontend review workspace: shelf review enters `/freestyle?palaceId=<id>`, and the retired standalone `/review` pages are not registered.
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only the public `content`, `memory`, `quiz`, `english`, and `english_reading` capabilities. It is the sole frontend review workspace: shelf review enters `/freestyle?palaceId=<id>`, and the retired standalone `/review` pages are not registered.
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.

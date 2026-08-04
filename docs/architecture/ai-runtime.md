@@ -20,8 +20,8 @@ Business modules must not import `settings.application` or `settings.infrastruct
 - English course generation persists non-secret ASR and translation runtime snapshots beside each task, restores current credentials inside workers, and carries stable `ownerId`/`operationId` across retries.
 - English presentation composes `SettingsAiRuntimeProvider` through `memory_anki.modules.settings.api`; English application and infrastructure no longer import settings application internals.
 - Prompt catalog dependencies are tracked separately from runtime resolution.
-- The settings UI exposes five top-level workspaces (`access`, `models`, `scenes`, `blocks`, `observability`); prompt/evaluation/quality calls stay in the prompt settings API, while Provider/model/scenario calls stay in the model settings API.
-- English course, English Reading, and mind-map AI split resolve credentials through the injected `AiRuntimeProvider`; compatibility helpers may expose old constants for tests, but must not consume environment secrets directly.
+- The settings UI exposes five top-level workspaces (`access`, `models`, `scenes`, `blocks`, `observability`); prompt composition and quality calls stay in the prompt settings API, while Provider/model/scenario calls stay in the model settings API.
+- English course, English Reading, and mind-map AI split resolve credentials through the injected `AiRuntimeProvider`.
 
 ## Invariants
 
@@ -32,6 +32,6 @@ Business modules must not import `settings.application` or `settings.infrastruct
 5. Persisted worker snapshots never contain API keys; workers restore the current credential at execution time.
 6. Entity-scoped background work persists stable owner and operation identities before launch.
 7. `AiRuntimeOptions.prompt_options` carries the modular prompt selection independently from model resolution.
-8. Persisted runtime snapshots retain `prompt_options` and the compiled `prompt_override` for reproducibility, while remaining compatible with historical snapshots that only contain `prompt_override`.
+8. Persisted runtime snapshots retain `prompt_options` and the compiled prompt for reproducibility.
 9. A Provider API-key row is authoritative even when its value is empty. The empty value is a durable tombstone that blocks environment fallback until the user saves a new key; Base URL keeps its existing empty-value fallback behavior.
 10. `PUT /settings/ai-models` with `clear_all_api_keys: true` writes tombstones for every configurable Provider and `mindmap_ai_split_api_key`, so legacy and current call paths stop together.

@@ -200,6 +200,20 @@ def test_migration_guard_accepts_review_history_retirement(tmp_path: Path, monke
     assert errors == []
 
 
+def test_migration_guard_accepts_retired_ai_prompt_storage(tmp_path: Path, monkeypatch) -> None:
+    versions = tmp_path / "versions"
+    monkeypatch.setattr(check_architecture, "ALEMBIC_VERSIONS", versions)
+    write_file(
+        versions / "0056_remove_legacy_ai_prompt_storage.py",
+        "def upgrade():\n    op.drop_table('ai_prompt_versions')\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_forward_compatible_migrations(errors)
+
+    assert errors == []
+
+
 def test_mindmap_architecture_blocks_process_identity(
     tmp_path: Path, monkeypatch
 ) -> None:

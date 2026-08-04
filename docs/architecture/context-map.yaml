@@ -37,8 +37,7 @@
         "publicEntry": "memory_anki.modules.english.api"
       },
       "english_lookup": {
-        "status": "migrated",
-        "publicEntry": "memory_anki.modules.english_lookup.api"
+        "status": "migrated"
       },
       "english_reading": {
         "status": "migrated",
@@ -153,7 +152,6 @@
       "english_lookup": [],
       "english_reading": [
         "english",
-        "english_lookup",
         "memory",
         "session",
         "settings"

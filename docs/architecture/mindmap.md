@@ -8,13 +8,13 @@
 
 | 需求 | 修改位置 |
 |---|---|
-| 节点增删改、移动、子树遍历、搜索、审计 | `apps/web/src/entities/mindmap-document` |
+| 节点增删改、移动、子树遍历、搜索、审计 | `apps/web/src/modules/content/domain/mindmap-document-entity` |
 | React Flow 布局、拖拽、视口、通用节点外观 | `apps/web/src/shared/ui/mindmap-canvas` |
-| 编辑历史、快捷键、全屏、编辑器运行时 | `apps/web/src/features/mindmap-editor` |
+| 编辑历史、快捷键、全屏、编辑器运行时 | `apps/web/src/modules/content/ui/mindmap-editor` |
 | 实体级加载、自动保存、陈旧请求隔离 | `apps/web/src/shared/hooks/useMindMapDocumentSession.ts` 与 `shared/lib/mindmapDocumentSessionModel.ts` |
 | 编辑写前本地草稿（每文档单槽覆盖，关页可恢复） | `apps/web/src/shared/persistence/mindmapEditorDraftStore.ts` |
-| 学习组、焦点、AI 拆分 | `features/palace-edit` 提供业务状态，`pages/create/PalaceEditorPage` 组合编辑器与跨 feature UI |
-| 图片/PDF 导入、任务历史、预览应用 | `features/mindmap-import`，服务端任务通过 `entities/knowledge-import/api` 访问 |
+| 学习组、焦点、AI 拆分 | `modules/content/ui/palace-edit` 提供业务状态，`pages/create/PalaceEditorPage` 组合编辑器与跨模块 UI |
+| 图片/PDF 导入、任务历史、预览应用 | `modules/produce/ui/mindmap-import`，服务端任务通过 produce public API 访问 |
 | 复习揭示、评分、掌握度 | `widgets/mindmap-review-flow` 宿主和 capability 输入 |
 | 知识体系导图 | `pages/library/KnowledgeLibraryPage` 宿主 |
 
@@ -41,7 +41,7 @@
 - `PalaceEditorPage` 负责进入选点状态；普通节点点击切换整棵子树，`MindMapEditorSurface` 只接收通用 `segmentRangeDraft` 装饰和工具栏内容，不感知宫殿业务。
 - 学习组训练统一使用 `/segments/{id}/practice` 与 `segment-checkpoint` 揭示模式。节点掌握度全局共享，揭示状态、完成状态和续练进度按 `palace_segment_id` 独立保存。
 - 题目通过 `segment_ids: number[]` 与学习组多对多关联；题目正文和答题统计只有一份，不为学习组复制题目。
-- 迷你宫殿功能、路由、API 和前端类型已经退役，不得重新创建 `features/mini-palace`、`entities/mini-palace` 或 mini practice 路由。
+- 迷你宫殿功能、路由、API 和前端类型已经退役，不得重新创建对应模块或 mini practice 路由。
 
 ## 后端修改入口
 
@@ -90,7 +90,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 ## Import preview port
 
-`features/mindmap-import` owns import state and result presentation but receives mind-map preview rendering through `renderMindMapPreview`. Knowledge and Palace hosts provide `MindMapEditorSurface`; the import feature does not import editor feature internals.
+`modules/produce/ui/mindmap-import` owns import state and result presentation but receives mind-map preview rendering through `renderMindMapPreview`. Knowledge and Palace hosts provide `MindMapEditorSurface`; the import module does not import editor internals.
 
 ## 浮层启动协调
 
@@ -121,13 +121,13 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - **阶段 B（范围整理）**：用 `mindmap_ocr_formatter` 文本模型，按用户已选页范围与目标标题删除噪声/范围外内容，输出脑图 JSON。
 - OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可在同一任务内恢复复用；跨任务时按 `pdf_document_id + page` 写入 `%MEMORY_ANKI_HOME%/pdf_ocr_cache`，后续任务命中后复制进工件并跳过模型调用。覆盖查询：`GET /pdf-library/{id}/ocr-coverage`。
 - 同时保存 `ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
-- 任务保存 `vision_ai_runtime` 与 `formatter_ai_runtime`，读取时兼容旧 `ai_runtime`；同一 `owner_id/operation_id` 贯穿识别、整理和预览阶段。
+- 任务保存并读取 `vision_ai_runtime` 与 `formatter_ai_runtime`；同一 `owner_id/operation_id` 贯穿识别、整理和预览阶段。
 - 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；重整创建新的 operation，不覆盖历史任务。
 ## AI 分卡 / AI 添卡边界
 
 - 脑图编辑页通过 capability 提供统一的“AI 分卡”入口；工作台配置里选择任务类型：
   - **分卡**（`split_mode=auto|parallel|hierarchy`）：原位替换无子节点的长内容卡。
-  - **添卡**（`split_mode=add_children`，兼容别名 `legacy_children`）：在父卡与一级子卡之间插入更少数量的中间分类，并把已有一级子节点整棵子树重挂（uid 不变）。
+  - **添卡**（`split_mode=add_children`）：在父卡与一级子卡之间插入更少数量的中间分类，并把已有一级子节点整棵子树重挂（uid 不变）。
 - 根节点、只读模式和练习模式不开放右键入口；替换式分卡只处理无子节点的长内容卡片；添卡要求至少 2 个一级子节点，中间分类数必须严格少于子节点数。
 - 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
 - 分卡：服务端在父级 `children` 的原索引执行一次切片替换；新 UID 由 operation 和树路径确定生成。统一场景 `ai_split` 输出 `replacement_nodes`。

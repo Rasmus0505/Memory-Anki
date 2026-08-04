@@ -260,6 +260,9 @@ HISTORICAL_DESTRUCTIVE_UPGRADE_EXCEPTIONS = {
     "0051_remove_node_review_history.py": (
         "User-approved removal of retired node recall tables after an in-migration SQLite backup."
     ),
+    "0056_remove_legacy_ai_prompt_storage.py": (
+        "Removes complete-prompt versioning and evaluation tables replaced by modular prompt blocks and scene versions."
+    ),
 }
 REQUIRED_STORAGE_KEYS = {
     "database",
@@ -272,7 +275,6 @@ REQUIRED_STORAGE_KEYS = {
     "backups_rescue",
     "runtime_active_instances",
     "migration_state",
-    "sync_state",
 }
 PERSONAL_ABSOLUTE_PATH_PATTERNS = (
     re.compile(r"[A-Za-z]:\\Users\\"),
@@ -1800,7 +1802,6 @@ def check_mindmap_architecture(errors: list[str]) -> None:
         API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "contracts.py": (
             "AI_SPLIT_ADD_CHILDREN_MODE",
             "add_children",
-            "legacy_children",
         ),
         API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
             "new_children",
@@ -2233,7 +2234,6 @@ def check_english_reading_gap_loop(errors: list[str]) -> None:
         "ReadingVersion",
         "completeEnglishReadingMaterialApi",
         "createEnglishReadingVocabularyNoteApi",
-        "EnglishReadingReadingPanels",
         "ReadingDifficultyDelta",
     )
     for marker in retired_markers:

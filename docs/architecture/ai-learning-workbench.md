@@ -5,7 +5,7 @@ The AI learning context owns persisted study conversations, immutable context sn
 ## Dependency Direction
 
 ```text
-review presentation -> entities/ai-learning -> /ai-learning API
+review presentation -> widgets/mindmap-review-flow -> /ai-learning API
 ai_learning application -> platform.application.AiRuntimeProvider
 ai_learning presentation -> settings.api.SettingsAiRuntimeProvider
 business result actions -> owning public facade (palaces or palace_quiz)
@@ -23,14 +23,14 @@ business result actions -> owning public facade (palaces or palace_quiz)
 
 ## Frontend Ownership
 
-- `entities/ai-runtime` owns reusable model, thinking, and per-run prompt configuration.
-- `entities/ai-learning` owns context/run contracts, API access, and pure context selection.
+- `modules/settings/domain/ai-runtime-entity` owns reusable model, thinking, and per-run prompt configuration.
+- `widgets/mindmap-review-flow` owns the review workbench composition and AI learning run presentation.
 - `widgets/mindmap-review-flow` composes the review-specific workbench and task actions.
 - New AI entrypoints must reuse these public entities rather than recreate model selectors or request preview logic.
 
 ## Generation Configuration Workbench
 
-`entities/ai-runtime` also exposes the shared pre-run configuration dialog used by mind-map import and quiz generation. Business modules may provide scenario keys, prompt templates, optional context choices, and the command that consumes the result; they must not import `entities/ai-runtime/model` directly.
+`modules/settings/domain/ai-runtime-entity` also exposes the shared pre-run configuration dialog used by mind-map import and quiz generation through the settings public facade. Business modules may provide scenario keys, prompt templates, optional context choices, and the command that consumes the result; they must not import the runtime entity's private model files directly.
 
 1. The dialog shows the full effective per-run prompt, supports direct editing, restores the scenario default, and switches among models allowed by the selected scenario without changing global defaults.
 1a. Modular prompt blocks are scoped per scene (`applicable_scene_keys`). The run dialog only lists blocks for the current scene, groups them by layer (角色/任务/内容/边界/输出/质量), and pre-checks the scene default combination (`block_keys`, falling back to `recommended_block_keys`). Empty modular defaults are repaired from the catalog on seed.
@@ -40,7 +40,7 @@ business result actions -> owning public facade (palaces or palace_quiz)
 5. Re-run restores a previous source/configuration snapshot into a new operation. Old operation IDs and results remain unchanged, preventing stale asynchronous responses from updating the new run.
 
 ```text
-business feature/page -> entities/ai-runtime public facade -> scenario/prompt APIs
+business module/page -> modules/settings/public -> scenario/prompt APIs
 business context serializer -> AiGenerationContextOption -> immutable prompt snapshot
 AI result preview -> owning domain confirmation command
 ```
