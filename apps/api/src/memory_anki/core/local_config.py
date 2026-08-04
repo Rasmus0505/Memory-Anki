@@ -15,8 +15,6 @@ REPO_ROOT = Path(__file__).resolve().parents[5]
 LOCAL_CONFIG_DIR = REPO_ROOT / "local-config"
 LOCAL_CONFIG_PATH = LOCAL_CONFIG_DIR / "memory-anki.local.json"
 PLACEHOLDER_DEVICE_ID = "auto-generated-on-first-run"
-SUPPORTED_CONFLICT_POLICY = "block"
-
 _WINDOWS_ENV_PATTERN = re.compile(r"%([^%]+)%")
 # vol:Label/relative/path — resolve removable/USB roots by volume label so drive
 # letters can differ across Laptop/Desktop without hard-coding one machine.
@@ -31,11 +29,6 @@ class LocalRuntimeConfig:
     device_id: str
     device_name: str
     local_app_home: Path
-    sync_root: Path | None
-    sync_enabled: bool
-    conflict_policy: str
-    sync_on_start: bool
-    sync_on_stop: bool
     config_path: Path
     config_exists: bool
 
@@ -120,36 +113,9 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _resolve_sync_root(sync_root: Path | None) -> Path | None:
-    """Prefer an existing protocol layout under sync-meta when present.
-
-    Historical Baidu layouts keep state.json + snapshots under ``sync-meta/``.
-    If the configured path points at the parent folder (no state.json) but
-    ``sync-meta/state.json`` exists, use that directory so both devices keep
-    working without hand-editing paths.
-    """
-    if sync_root is None:
-        return None
-    if (sync_root / "state.json").exists():
-        return sync_root
-    nested = sync_root / "sync-meta"
-    if (nested / "state.json").exists():
-        return nested
-    return sync_root
-
-
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _normalize_bool(payload: dict[str, Any], key: str, default: bool) -> bool:
-    value = payload.get(key, default)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
 
 
 def load_local_runtime_config(
@@ -185,21 +151,10 @@ def load_local_runtime_config(
     )
     if local_app_home is None:
         local_app_home = default_app_home()
-    sync_root = _resolve_sync_root(_resolve_path(payload.get("sync_root"), repo_root=resolved_repo))
-
-    conflict_policy = str(payload.get("conflict_policy") or SUPPORTED_CONFLICT_POLICY).strip().lower()
-    if conflict_policy != SUPPORTED_CONFLICT_POLICY:
-        conflict_policy = SUPPORTED_CONFLICT_POLICY
-
     return LocalRuntimeConfig(
         device_id=device_id,
         device_name=device_name,
         local_app_home=local_app_home,
-        sync_root=sync_root,
-        sync_enabled=_normalize_bool(payload, "sync_enabled", False),
-        conflict_policy=conflict_policy,
-        sync_on_start=_normalize_bool(payload, "sync_on_start", True),
-        sync_on_stop=_normalize_bool(payload, "sync_on_stop", True),
         config_path=resolved_path,
         config_exists=config_exists,
     )

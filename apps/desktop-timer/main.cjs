@@ -30,7 +30,7 @@ function writeDesktopReady() {
 
 if (!hasSingleInstanceLock) {
   // Another desktop is already running (and will focus via 'second-instance').
-  // Still write the ready file so a second start-desktop.bat can detach cleanly
+  // Still write the ready file so a second launcher can detach cleanly
   // instead of treating this intentional exit as "Desktop startup failed".
   if (READY_FILE) {
     try {

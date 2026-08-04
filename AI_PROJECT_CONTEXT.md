@@ -10,7 +10,7 @@
 
 Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + 间隔重复 + AI 辅助知识生产”。PWA 使用完整桌面端前端，默认入口是 `/freestyle`，不再维护单独移动端应用或 `/m` 功能面。
 
-它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）放在每台电脑各自的 Syncthing 同步文件夹中；**不要**使用固定盘符、`MemoryAnki-Sync` 或百度同步目录作为运行时约束。设备间由 Syncthing 在应用外同步文件，应用内文件同步默认关闭。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
+它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）放在每台电脑各自的 Syncthing 同步文件夹中；**不要**使用固定盘符、`MemoryAnki-Sync` 或百度同步目录作为运行时约束。设备间由 Syncthing 在应用外同步文件，应用本身不实现文件同步。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
 
 当前产品能力大致包括：
 
@@ -68,7 +68,7 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 - 运行时数据默认：`%LOCALAPPDATA%\MemoryAnki`（仅作未配置时的回退；日常数据应放在本机 Syncthing 文件夹）
 - 可用 `MEMORY_ANKI_HOME` 覆盖运行时数据目录；启动脚本优先读 `local-config/memory-anki.local.json` 的 `local_app_home`
 - Syncthing 数据目录：每台电脑在 `local_app_home` 填本机实际同步文件夹（例如 `F:\memory anki data`），不要写死盘符
-- 跨设备同步：由 Syncthing 在应用外完成；应用内 `sync_enabled=false`、`sync_on_start=false`、`sync_on_stop=false`，`sync_root=null`
+- 跨设备同步：完全由 Syncthing 在应用外完成；应用不读取或写入同步配置，也不提供应用内同步流程
 - SQLite 使用约束：同一时间只允许一台设备写入同步目录；切换设备前先停止应用并等待 Syncthing 完成同步。不要在 Syncthing 忽略模式中排除数据库、附件或上传目录
 - 本地设备身份配置：`local-config/memory-anki.local.json`（gitignore，模板见 `local-config/memory-anki.local.example.json`）
 
@@ -81,11 +81,9 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 ```text
 Memory Anki/
 ├── AGENTS.md                   AI 工具自动发现的硬性项目规则
-├── AGENT.md                    旧工具兼容入口
 ├── AI_PROJECT_CONTEXT.md       当前这份 AI 主上下文文档
 ├── .env.example                环境变量示例，真实 .env 不提交
-├── start-desktop.bat           本地桌面启动脚本
-├── start-pwa.bat               本地 PWA 启动脚本
+├── start-all.bat               本地统一启动脚本（PWA 与桌面端）
 ├── apps/
 │   ├── api/                    FastAPI 后端
 │   ├── web/                    React + Vite 前端
@@ -114,7 +112,7 @@ Memory Anki/
 ```text
 apps/api/src/memory_anki/
 ├── app/                  FastAPI app 装配、启动流程、运行时准备
-├── core/                 配置、路径、日志、时间、运行时、文件同步
+├── core/                 配置、路径、日志、时间、运行时
 ├── infrastructure/       数据库、ORM 表、迁移、LLM 网关等基础设施
 ├── modules/              业务模块
 └── __init__.py
@@ -137,7 +135,6 @@ apps/api/src/memory_anki/
 
 - `config.py`：环境变量、运行目录、默认配置、AI provider 配置
 - `runtime.py` / `runtime_paths.py`：运行时信息与路径解析
-- `file_sync.py`：文件同步相关能力
 - `logging.py` / `request_logging.py`：日志与请求日志
 - `time.py`：时间处理
 - `migration.py`：迁移相关支持
@@ -207,8 +204,7 @@ modules/<feature>/
 ```text
 apps/web/src/
 ├── app/                 应用壳、Provider、路由装配
-├── features/            用户可感知功能
-├── entities/            领域实体 API/model
+├── modules/             按业务能力组织的前端模块
 ├── shared/              可复用基础能力
 ├── test/                测试 setup
 ├── main.tsx             前端入口
@@ -223,44 +219,13 @@ apps/web/src/
 
 规则：`app/router` 尽量只做路由装配，不承载复杂业务逻辑。
 
-### 5.2 `features/`
+### 5.2 `modules/`
 
-这里是前端主要业务页面和交互：
+前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-- `dashboard`
-- `freestyle`
-- `knowledge`
-- `mindmap-import`
-- `palace-catalog`
-- `palace-edit`
-- `palace-quiz`
-- `profile`
-- `review`
-- `english`
-- `english-reading`
-- `timer-overlay`
+`backup`、`content`、`dashboard`、`english`、`english-reading`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
-修改功能时优先在对应 feature 内解决。只有真正复用或跨模块需要时才下沉到 `entities` 或 `shared`。
-
-### 5.3 `entities/`
-
-常见内容：
-
-- API client
-- contract 类型转换
-- entity model
-- 与后端领域对象对应的薄封装
-
-例如：
-
-- `entities/knowledge`
-- `entities/palace`
-- `entities/palace-segment`
-- `entities/preferences`
-- `entities/quiz`
-- `entities/runtime`
-- `entities/session`
-- `entities/study-session`
+模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
 
 ### 5.4 `shared/`
 
@@ -276,7 +241,7 @@ apps/web/src/
 - logs
 - hooks
 
-硬规则：`shared` 不依赖 `app`、`features`、`entities`。
+硬规则：`shared` 不依赖 `app` 或业务模块；业务模块通过公开入口使用 shared 能力。
 
 ---
 
@@ -286,10 +251,10 @@ apps/web/src/
 
 思维导图已拆为明确边界，详细说明见 `docs/architecture/mindmap.md`：
 
-- `entities/mindmap-document`：纯文档类型、命令、选择器和持久化 reducer。
+- `modules/content/domain/mindmap-document-entity`：纯文档类型、命令、选择器和持久化 reducer。
 - `shared/ui/mindmap-canvas`：无业务语义的 React Flow 画布。
-- `features/mindmap-editor`：编辑器运行时、capability 组合和持久化 Adapter。
-- 宫殿、知识、复习 feature：各自组合能力，不向通用画布增加业务条件。
+- `modules/content/ui/mindmap-editor`：编辑器运行时、capability 组合和持久化 Adapter。
+- 宫殿、知识、复习模块：各自组合能力，不向通用画布增加业务条件。
 
 后端对应 `mindmap_document`、宫殿/知识各自的 `editor_*` 用例，以及独立的 `mindmap_learning`。不要重新使用旧 `modules/mindmap/application/editor_state_*` 路径。
 
@@ -320,14 +285,14 @@ apps/web/src/
 
 前端规则：
 
-- `shared` 不依赖 `app/features/entities`。
+- `shared` 不依赖 `app` 或业务模块。
 - `app/router` 只做路由装配。
 - 页面逻辑优先放在 feature 内部 hook/model。
 - API contract 变化要同步 `shared/api/contracts`、生成类型和调用方测试。
 
 架构规则来源：
 
-- `AGENTS.md`（`AGENT.md` 仅作旧工具兼容）
+- `AGENTS.md`
 - `apps/api/pyproject.toml` 的 import-linter 配置
 - `tools/check_architecture.py`
 - 如果当前 checkout 中存在 `docs/architecture/`，架构性修改前必须阅读
@@ -376,10 +341,10 @@ npm run dev
 根目录：
 
 ```powershell
-.\start-desktop.bat
+.\start-all.bat
 ```
 
-桌面启动会短暂停止现有 PWA 服务，确认 Syncthing 文件已完成同步并执行数据库迁移，再重启共享的 `127.0.0.1:8012`。Electron 和手机 PWA 随后共用该服务；关闭 Electron 不会停止 PWA。`5173` 只用于显式前端开发。两台电脑不要同时写同一份 SQLite 数据目录。
+统一启动会准备数据库迁移并启动共享的 `127.0.0.1:8012`。Electron 和手机 PWA 共用该服务；关闭 Electron 不会停止 PWA。`5173` 只用于显式前端开发。两台电脑不要同时写同一份 SQLite 数据目录。
 
 停止：
 
@@ -392,10 +357,10 @@ npm run dev
 PWA 使用完整桌面端前端，不单独部署公网服务。当前统一端口和访问方式见 `PWA.md`：
 
 ```powershell
-.\start-pwa.bat
+.\start-all.bat
 ```
 
-- 前端改动后直接运行 `.\start-pwa.bat`，启动入口会自动执行智能增量更新
+- 前端改动后直接运行 `.\start-all.bat`，统一启动入口会自动执行智能增量更新
 - 本机检查：`http://127.0.0.1:8012/freestyle`
 - 手机安装/访问：运行 `tools\configure-tailscale-pwa.bat` 后，使用脚本输出的 HTTPS Tailscale 地址并追加 `/freestyle`
 - 停止服务：`.\tools\stop-pwa.bat`
@@ -470,7 +435,7 @@ AI 相关功能分布较广：
 - 思维导图导入：`modules/produce/application/mindmap_import`
 - 题目生成：`modules/quiz/application/quiz_generation_*`
 - AI 模型注册表：`modules/settings/application/ai_model_registry_*`
-- 前端模型配置：`features/profile`、`features/ai-config`
+- 前端模型配置：`modules/settings/domain/ai-runtime-entity` 与 `modules/settings/ui/profile`
 - AI 调用日志：`infrastructure/llm/external_ai_call_logs.py`
 
 修改 AI 调用时要注意：
@@ -513,4 +478,4 @@ AI 相关功能分布较广：
 - 2026-07-05：新增 `AI_PROJECT_CONTEXT.md` 作为中文主项目上下文，替代旧的 `PROJECT_DOCUMENTATION.md`。
 - 2026-07-06：PWA 恢复为完整桌面端入口，默认进入 `/freestyle`；不再维护单独移动端 `/m` 应用，PWA 端口统一为 `127.0.0.1:8012`。
 - 2026-07-10：Electron 日常入口改为复用 PWA 的 `127.0.0.1:8012` 共享服务；桌面与 PWA 启动通过跨进程锁协调，`5173` 仅保留给显式前端开发。
-- 2026-07-10：本机指纹驱动的智能增量更新已合并到 `start-desktop.bat` 与 `start-pwa.bat`，不再保留独立 `update.bat`；Desktop/PWA 共用单实例后台托盘。
+- 2026-07-10：本机指纹驱动的智能增量更新已合并到 `start-all.bat`，不再保留独立 `update.bat` 或分开的桌面/PWA 启动入口；Desktop/PWA 共用单实例后台托盘。

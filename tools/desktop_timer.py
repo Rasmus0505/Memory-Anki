@@ -64,7 +64,7 @@ def main() -> int:
     # the long-running service detached from the launcher's output pipe.
     os.environ["MEMORY_ANKI_VISIBLE_BACKEND"] = "1"
     if pwa_server.restart_for_desktop() != 0:
-        log("Shared service restart failed")
+        log("Shared service startup failed")
         return 1
     log(f"Shared service ready after {time.perf_counter() - started_at:.2f}s")
     ensure_shared_tray()

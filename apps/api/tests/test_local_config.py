@@ -7,14 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from memory_anki.core.local_config import (
-    PLACEHOLDER_DEVICE_ID,
-    load_local_runtime_config,
-)
+from memory_anki.core.local_config import PLACEHOLDER_DEVICE_ID, load_local_runtime_config
 
 
 class LocalConfigTests(unittest.TestCase):
-    def test_missing_config_keeps_sync_disabled_and_uses_default_home(self):
+    def test_missing_config_uses_default_home(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "local-config" / "memory-anki.local.json"
             default_home = Path(temp_dir) / "AppData" / "MemoryAnki"
@@ -26,9 +23,8 @@ class LocalConfigTests(unittest.TestCase):
                 )
 
         self.assertFalse(config.config_exists)
-        self.assertFalse(config.sync_enabled)
         self.assertEqual(config.local_app_home, default_home)
-        self.assertIsNone(config.sync_root)
+        self.assertFalse(hasattr(config, "sync_enabled"))
 
     def test_config_expands_paths_and_generates_device_id(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -41,11 +37,6 @@ class LocalConfigTests(unittest.TestCase):
                         "device_id": PLACEHOLDER_DEVICE_ID,
                         "device_name": "Laptop",
                         "local_app_home": "%LOCALAPPDATA%/MemoryAnki",
-                        "sync_root": "sync-folder",
-                        "sync_enabled": True,
-                        "conflict_policy": "block",
-                        "sync_on_start": True,
-                        "sync_on_stop": True,
                     }
                 ),
                 encoding="utf-8",
@@ -59,39 +50,6 @@ class LocalConfigTests(unittest.TestCase):
         self.assertNotEqual(config.device_id, PLACEHOLDER_DEVICE_ID)
         self.assertEqual(reloaded["device_id"], config.device_id)
         self.assertEqual(config.local_app_home, root / "LocalAppData" / "MemoryAnki")
-        self.assertEqual(config.sync_root, root / "sync-folder")
-        self.assertTrue(config.sync_enabled)
-
-    def test_sync_root_resolves_nested_sync_meta_layout(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            parent = root / "MemoryAnki-Sync"
-            meta = parent / "sync-meta"
-            meta.mkdir(parents=True)
-            (meta / "state.json").write_text(
-                json.dumps({"version": 1, "revision": 1}),
-                encoding="utf-8",
-            )
-            config_path = root / "memory-anki.local.json"
-            config_path.write_text(
-                json.dumps(
-                    {
-                        "device_id": "abc123",
-                        "device_name": "Laptop",
-                        "local_app_home": str(root / "app-home"),
-                        "sync_root": str(parent),
-                        "sync_enabled": True,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            config = load_local_runtime_config(
-                config_path=config_path,
-                repo_root=root,
-                write_device_id=False,
-            )
-
-        self.assertEqual(config.sync_root, meta)
 
     def test_config_accepts_utf8_bom(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -101,11 +59,8 @@ class LocalConfigTests(unittest.TestCase):
                 "device_id": "abc123",
                 "device_name": "Laptop",
                 "local_app_home": str(root / "app-home"),
-                "sync_enabled": False,
             }
-            config_path.write_bytes(
-                b"\xef\xbb\xbf" + json.dumps(payload).encode("utf-8")
-            )
+            config_path.write_bytes(b"\xef\xbb\xbf" + json.dumps(payload).encode("utf-8"))
             config = load_local_runtime_config(
                 config_path=config_path,
                 repo_root=root,
@@ -113,7 +68,6 @@ class LocalConfigTests(unittest.TestCase):
             )
 
         self.assertEqual(config.device_id, "abc123")
-        self.assertFalse(config.sync_enabled)
 
     def test_dev_server_backend_env_uses_configured_app_home(self):
         repo_root = Path(__file__).resolve().parents[3]
@@ -152,7 +106,6 @@ class LocalConfigTests(unittest.TestCase):
                         "device_id": "abc123",
                         "device_name": "Laptop",
                         "local_app_home": "vol:MemoryAnki/memory anki data",
-                        "sync_enabled": False,
                     }
                 ),
                 encoding="utf-8",
@@ -179,7 +132,6 @@ class LocalConfigTests(unittest.TestCase):
                         "device_id": "abc123",
                         "device_name": "Laptop",
                         "local_app_home": "vol:MissingStick/data",
-                        "sync_enabled": False,
                     }
                 ),
                 encoding="utf-8",

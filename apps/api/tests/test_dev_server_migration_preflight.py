@@ -28,7 +28,7 @@ class DevServerMigrationPreflightTests(unittest.TestCase):
             calls.append("backend")
             return SimpleNamespace(pid=123)
 
-        with patch.object(dev_server, "sync_before_start", return_value=True), patch.object(
+        with patch.object(
             dev_server,
             "ensure_backend_runtime_prepared",
             side_effect=prepare_runtime,
@@ -56,7 +56,7 @@ class DevServerMigrationPreflightTests(unittest.TestCase):
         self.assertEqual(calls, ["prepare", "migrate", "backend"])
 
     def test_main_stops_before_backend_when_migration_preflight_fails(self):
-        with patch.object(dev_server, "sync_before_start", return_value=True), patch.object(
+        with patch.object(
             dev_server,
             "ensure_backend_runtime_prepared",
         ), patch.object(

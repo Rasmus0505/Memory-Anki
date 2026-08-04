@@ -84,13 +84,6 @@
       "kind": "file",
       "required": false,
       "backup": true
-    },
-    {
-      "key": "sync_state",
-      "relative_path": "sync-state.json",
-      "kind": "file",
-      "required": false,
-      "backup": false
     }
   ]
 }

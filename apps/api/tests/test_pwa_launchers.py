@@ -109,13 +109,12 @@ def test_stale_pid_file_does_not_trust_unrelated_windows_process(tmp_path):
         assert pwa_server._is_memory_anki_service_process(99) is False
 
 
-def test_desktop_restart_syncs_and_leaves_shared_service_running():
+def test_desktop_restart_starts_shared_service():
     process = SimpleNamespace(pid=1234)
     with (
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
         patch.object(pwa_server, "_shared_service_healthy", return_value=False),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
-        patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
         patch.object(pwa_server, "_prepare_runtime", return_value=True) as prepare_runtime,
         patch.object(pwa_server, "_start_backend", return_value=process) as start_backend,
@@ -125,56 +124,23 @@ def test_desktop_restart_syncs_and_leaves_shared_service_running():
         assert pwa_server.restart_for_desktop() == 0
 
     stop_service.assert_called_once_with()
-    sync.assert_called_once_with()
     prepare_runtime.assert_called_once_with()
     start_backend.assert_called_once_with()
     kill_process.assert_not_called()
 
 
-def test_desktop_reuses_healthy_service_when_baidu_sync_up_to_date():
+def test_desktop_reuses_healthy_service():
     with (
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
         patch.object(pwa_server, "_shared_service_healthy", return_value=True),
-        patch.object(
-            pwa_server.dev_server,
-            "peek_sync_before_start",
-            return_value=SimpleNamespace(ok=True, status="up-to-date", message="ok"),
-        ) as peek,
         patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
         patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
-        patch.object(pwa_server.dev_server, "sync_before_start") as sync,
         patch.object(pwa_server, "_start_backend") as start_backend,
     ):
         assert pwa_server.restart_for_desktop() == 0
 
-    peek.assert_called_once_with()
     stop_service.assert_not_called()
-    sync.assert_not_called()
     start_backend.assert_not_called()
-
-
-def test_desktop_restarts_when_baidu_sync_needs_pull():
-    process = SimpleNamespace(pid=1234)
-    with (
-        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
-        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
-        patch.object(
-            pwa_server.dev_server,
-            "peek_sync_before_start",
-            return_value=SimpleNamespace(ok=True, status="needs-pull", message="remote newer"),
-        ),
-        patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
-        patch.object(pwa_server.dev_server, "sync_before_start", return_value=True) as sync,
-        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
-        patch.object(pwa_server, "_prepare_runtime", return_value=True),
-        patch.object(pwa_server, "_start_backend", return_value=process) as start_backend,
-        patch.object(pwa_server, "_wait_for_pwa", return_value=True),
-    ):
-        assert pwa_server.restart_for_desktop() == 0
-
-    stop_service.assert_called_once_with()
-    sync.assert_called_once_with()
-    start_backend.assert_called_once_with()
 
 
 def test_fingerprint_uses_metadata_not_file_contents(tmp_path):
@@ -200,18 +166,6 @@ def test_supervise_exits_zero_when_service_taken_over(tmp_path):
     ):
         assert pwa_server._supervise(process) == 0
     assert not reason_file.exists()
-
-
-def test_desktop_stop_holds_service_lock_through_sync_push():
-    with (
-        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
-        patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
-        patch.object(pwa_server.dev_server, "sync_after_stop", return_value=True) as sync,
-    ):
-        assert pwa_server.stop_for_desktop_sync() == 0
-
-    stop_service.assert_called_once_with()
-    sync.assert_called_once_with()
 
 
 def test_desktop_electron_defaults_to_shared_service():
@@ -240,13 +194,11 @@ def test_prepare_skips_all_work_when_fingerprints_are_current():
         patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
         patch.object(pwa_server, "_stop_service_unlocked") as stop_service,
         patch.object(pwa_server, "_run_frontend_build") as build,
-        patch.object(pwa_server.dev_server, "sync_after_stop") as sync,
     ):
         assert pwa_server.prepare() == 0
 
     stop_service.assert_not_called()
     build.assert_not_called()
-    sync.assert_not_called()
 
 
 
@@ -310,7 +262,6 @@ def test_prepare_repairs_missing_desktop_runtime():
         patch.object(pwa_server.dev_server, "kill_memory_anki_desktop_processes"),
         patch.object(pwa_server.dev_server, "free_port"),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True),
-        patch.object(pwa_server.dev_server, "sync_after_stop", return_value=True),
         patch.object(pwa_server, "_ensure_desktop_runtime", return_value=True) as repair,
         patch.object(pwa_server, "_ensure_runtime_initialized", return_value=True),
         patch.object(pwa_server, "_write_update_state") as write_state,
@@ -333,7 +284,6 @@ def test_prepare_only_builds_changed_frontend_and_records_success():
         patch.object(pwa_server.dev_server, "kill_memory_anki_desktop_processes"),
         patch.object(pwa_server.dev_server, "free_port"),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True),
-        patch.object(pwa_server.dev_server, "sync_after_stop", return_value=True),
         patch.object(pwa_server, "_run_frontend_build", return_value=True) as build,
         patch.object(pwa_server, "_ensure_runtime_initialized", return_value=True),
         patch.object(pwa_server.dev_server, "ensure_backend_migrations_applied") as migrate,
@@ -358,7 +308,6 @@ def test_prepare_does_not_record_state_after_build_failure():
         patch.object(pwa_server.dev_server, "kill_memory_anki_desktop_processes"),
         patch.object(pwa_server.dev_server, "free_port"),
         patch.object(pwa_server, "_stop_service_unlocked", return_value=True),
-        patch.object(pwa_server.dev_server, "sync_after_stop", return_value=True),
         patch.object(pwa_server, "_run_frontend_build", return_value=False),
         patch.object(pwa_server, "_write_update_state") as write_state,
     ):
@@ -427,8 +376,6 @@ def test_start_entrypoints_prepare_before_launching():
     assert launcher.index('pwa_launcher.ps1" Update') < launcher.index('desktop_launcher.ps1" -ChildSta Start')
     assert launcher.index('pwa_launcher.ps1" Start') < launcher.index('desktop_launcher.ps1" -ChildSta Start')
     assert not (ROOT / "update.bat").exists()
-    assert not (ROOT / "start-pwa.bat").exists()
-    assert not (ROOT / "start-desktop.bat").exists()
 
 def test_diagnostic_runner_writes_fixed_ai_debug_artifacts():
     runner = (TOOLS_DIR / "run_with_diagnostics.ps1").read_text(encoding="utf-8")

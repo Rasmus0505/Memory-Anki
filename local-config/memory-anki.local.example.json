@@ -1,10 +1,5 @@
 {
   "device_id": "auto-generated-on-first-run",
   "device_name": "Laptop",
-  "local_app_home": "F:\\memory anki data",
-  "sync_root": null,
-  "sync_enabled": false,
-  "conflict_policy": "block",
-  "sync_on_start": false,
-  "sync_on_stop": false
+  "local_app_home": "F:\\memory anki data"
 }

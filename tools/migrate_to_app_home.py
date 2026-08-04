@@ -33,7 +33,6 @@ from memory_anki.core.storage_layout import (  # noqa: E402
 
 SKIPPED_MIGRATION_STORAGE_KEYS = {
     "runtime_active_instances",
-    "sync_state",
 }
 
 

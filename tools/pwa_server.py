@@ -661,7 +661,6 @@ def start(
     *,
     build: bool = False,
     configure_serve: bool = False,
-    sync: bool = False,
     supervise: bool = True,
 ) -> int:
     started_at = time.perf_counter()
@@ -685,7 +684,6 @@ def start(
             bool(pids)
             and _pwa_is_ready()
             and not build
-            and not sync
             and _database_at_alembic_head()
         )
         if can_reuse_service:
@@ -697,11 +695,6 @@ def start(
                 stage("Building frontend assets")
                 if not _run_frontend_build():
                     return 1
-
-            if sync and not dev_server.sync_before_start():
-                return 1
-            if not sync:
-                stage("Skipping startup sync (desktop start/stop handles synchronization)")
 
             # Always migrate after the shared service is stopped. Synced databases can arrive
             # behind the current ORM even when frontend/backend fingerprints are unchanged.
@@ -733,28 +726,16 @@ def stop() -> int:
 
 def restart_for_desktop() -> int:
     """Ensure shared service is ready for desktop.
-
-    Baidu-disk data sync (not GitHub): when the service is already healthy and
-    remote revision is up-to-date, keep the process running and only launch Electron.
-    When remote has a newer revision, stop → pull → migrate → start as before.
     """
     with service_lock():
         can_reuse = _shared_service_healthy()
         if can_reuse:
-            peek = dev_server.peek_sync_before_start()
-            if not peek.ok:
+            if not _pwa_dist_ready() and not _run_frontend_build():
                 return 1
-            if peek.status in {"disabled", "no-remote", "up-to-date"}:
-                if not _pwa_dist_ready() and not _run_frontend_build():
-                    return 1
-                print("[ok] Reusing running Memory Anki service for desktop (sync up-to-date)")
-                return 0
-            # needs-pull or any other ok status that still requires restore under a stopped service
-            print(f"[i] Desktop will restart shared service for sync: {peek.status}")
+            print("[ok] Reusing running Memory Anki service for desktop")
+            return 0
 
         if not _stop_service_unlocked():
-            return 1
-        if not dev_server.sync_before_start():
             return 1
         if not _pwa_dist_ready() and not _run_frontend_build():
             return 1
@@ -767,14 +748,6 @@ def restart_for_desktop() -> int:
             return 1
         print("[ok] Shared Memory Anki service is ready")
         return 0
-
-
-def stop_for_desktop_sync() -> int:
-    """Stop the shared service and push local data without another start racing in."""
-    with service_lock():
-        if not _stop_service_unlocked():
-            return 1
-        return 0 if dev_server.sync_after_stop() else 1
 
 
 def prepare(*, build: bool = True) -> int:
@@ -812,14 +785,6 @@ def prepare(*, build: bool = True) -> int:
         dev_server.free_port(dev_server.FRONTEND_PORT, "frontend")
         if not _stop_service_unlocked():
             return 1
-        # Prepare only refreshes code/runtime fingerprints. Data push stays with
-        # desktop start/stop. Blocking prepare on Baidu push breaks PWA when
-        # APP_HOME is on a USB stick and the cloud revision lags behind local.
-        print(
-            "[i] Skipping Baidu stop-sync during PWA prepare "
-            "(desktop start/stop handles data sync; APP_HOME may be on USB)"
-        )
-
         if desktop_runtime_missing and not _ensure_desktop_runtime():
             return 1
         if frontend_changed:
@@ -848,7 +813,6 @@ def main() -> int:
     return start(
         build="--build" in args,
         configure_serve="--configure-serve" in args,
-        sync="--sync" in args,
         supervise="--no-supervise" not in args,
     )
 
