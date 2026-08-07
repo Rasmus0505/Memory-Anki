@@ -38,6 +38,7 @@ interface BuildNodeActionsInput {
   onDelete: (nodeId: string) => void
   onDeleteNodes?: (nodeIds: string[]) => void
   onDeleteNodeOnly?: (nodeId: string) => void
+  onDeleteNodesOnly?: (nodeIds: string[]) => void
   onHighlightNodes?: (nodeIds: string[]) => void
   /**
    * Apply last-used mark color (or open palette if none).
@@ -82,6 +83,7 @@ export function buildNodeActions({
   onDelete,
   onDeleteNodes,
   onDeleteNodeOnly,
+  onDeleteNodesOnly,
   onHighlightNodes,
   onApplyLastMarkColor,
   onOpenMarkColorPalette,
@@ -246,6 +248,20 @@ export function buildNodeActions({
           label: 'NODE_ONLY',
         })
         onDeleteNodeOnly(nodeId)
+      },
+      variant: 'danger' as const,
+      separatorBefore: true,
+    } satisfies ContextMenuAction] : []),
+    ...(multiTarget && deletableTargets.length > 0 && onDeleteNodesOnly ? [{
+      label: `单独删除选中（${deletableTargets.length} 张，保留子级）`,
+      icon: Trash2,
+      onClick: () => {
+        dispatchGlobalFeedback('node_delete', {
+          point: { x: ctxMenu.x, y: ctxMenu.y },
+          origin: 'node',
+          label: 'NODES_ONLY',
+        })
+        onDeleteNodesOnly(deletableTargets)
       },
       variant: 'danger' as const,
       separatorBefore: true,

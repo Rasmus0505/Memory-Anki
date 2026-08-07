@@ -1,5 +1,13 @@
 # PDF 题目识别、记录与记忆宫殿绑定提示词
 
+> 兼容入口（2026-08-05）：本文件保留历史规则。新的可复用流程已拆分为个人 skill：
+> pdf-process-initializer-auditor、pdf-question-explanation-recognizer、
+> pdf-question-audit 和 memory-anki-binding-auditor。
+>
+> 新任务应先运行过程初始化与审计，再运行题目/解析识别和 PDF 题目审计；
+> 只有经过审计且用户明确要求时，才运行 Memory Anki 绑定 skill。
+> JSON 是机器流程主记录，Markdown 是自动生成的阅读版；原始 PDF 始终只读。
+
 你是 Memory Anki 本地学习资料整理代理。请使用中文完成任务，直接执行可安全执行的步骤，不要只给方案。
 
 ## 一、本次任务参数

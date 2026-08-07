@@ -14,6 +14,7 @@ import type { MindMapSelection } from '@/modules/content/domain/mindmap-document
 import type { MindMapEditorState, SessionProgressSnapshot } from '@/shared/api/contracts'
 import type { EditorMode } from '@/modules/content/ui/palace-edit/model/mindmap-editor'
 import { useReviewFeedback } from '@/modules/memory/public'
+import { useFlipCardRevealSettings } from '@/modules/settings/public'
 
 interface PalacePracticeModeOptions {
   palaceId: number | null
@@ -31,10 +32,12 @@ export function usePalacePracticeMode({
   timer,
 }: PalacePracticeModeOptions) {
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
+  const flipCardRevealSettings = useFlipCardRevealSettings()
   const reveal = useRevealSession({
     title,
     editorState,
     initialSnapshot: null,
+    revealConfig: flipCardRevealSettings.settings,
   })
   const {
     docFingerprint,
@@ -198,5 +201,6 @@ export function usePalacePracticeMode({
     restartInlinePractice,
     setEditorMode,
     toggleInlinePractice,
+    flipCardRevealSettings,
   }
 }

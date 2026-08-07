@@ -58,6 +58,8 @@ export interface MindMapCanvasProps {
   /** Multi-select context-menu delete (Delete key already uses the same handler). */
   onDeleteNodes?: (nodeIds: string[]) => void
   onDeleteNodeOnly?: (nodeId: string) => void
+  /** Multi-select context-menu delete while promoting each selected node's children. */
+  onDeleteNodesOnly?: (nodeIds: string[]) => void
   /** Mark full card text with yellow emphasis (`data-emphasis="highlight"`). */
   onHighlightNodes?: (nodeIds: string[]) => void
   /**

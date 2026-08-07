@@ -98,6 +98,7 @@ describe('mind map node context actions', () => {
   it('applies multi-select highlight and delete to all target node ids', () => {
     const onHighlightNodes = vi.fn()
     const onDeleteNodes = vi.fn()
+    const onDeleteNodesOnly = vi.fn()
     const onDelete = vi.fn()
     const actions = buildActions({
       ctxMenu: {
@@ -108,12 +109,14 @@ describe('mind map node context actions', () => {
       },
       onHighlightNodes,
       onDeleteNodes,
+      onDeleteNodesOnly,
       onDelete,
       isRootNode: (id) => id === 'root',
     })
 
     expect(actions.map((action) => action.label)).toEqual([
       '标记重点（3 张）',
+      '单独删除选中（3 张，保留子级）',
       '删除选中（3 处）',
     ])
 
@@ -122,6 +125,8 @@ describe('mind map node context actions', () => {
 
     actions.find((action) => action.label === '删除选中（3 处）')?.onClick()
     expect(onDeleteNodes).toHaveBeenCalledWith(['child-a', 'child-b', 'child-c'])
+    actions.find((action) => action.label === '单独删除选中（3 张，保留子级）')?.onClick()
+    expect(onDeleteNodesOnly).toHaveBeenCalledWith(['child-a', 'child-b', 'child-c'])
     expect(onDelete).not.toHaveBeenCalled()
   })
 

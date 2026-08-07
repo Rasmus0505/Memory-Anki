@@ -60,6 +60,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
+  immersiveModeActive = false,
   englishInteractionActive = false,
   onEnglishWordClick,
   textSelectionModeActive = false,
@@ -105,6 +106,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onSegmentRangeDraftChange,
   onAiSplitRequest,
   onFullscreenChange,
+  onFullscreenToggle,
+  delegateFullscreenToHost = false,
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
@@ -471,7 +474,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const toggleNativeFullscreen = fullscreen.toggleNative
   const toggleViewportFullscreen = fullscreen.toggleViewport
   const toggleCanvasFullscreen = fullscreen.toggle
-  const showSystemFullscreenControl = presentationStrategy !== 'viewport-only'
+  const showSystemFullscreenControl = !delegateFullscreenToHost && presentationStrategy !== 'viewport-only'
 
   // Each focusRequestNonce must run at most once. Including requestFocusNode in deps is
   // unsafe: hosts pass unstable onNodeActive, which used to recreate requestFocusNode and
@@ -560,6 +563,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,
+    handleDeleteNodesOnly,
     handleHighlightNodes,
     handleMarkColorNodes,
     handleToggleQuestionCards,
@@ -631,21 +635,34 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const handleSystemFullscreenToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
     if (handled) return
+    if (delegateFullscreenToHost) {
+      onFullscreenToggle?.()
+      return
+    }
     // Desktop: Fullscreen API (system fullscreen). Host immersive layout stays separate.
     toggleNativeFullscreen()
-  }, [capabilities, toggleNativeFullscreen])
-
+  }, [capabilities, delegateFullscreenToHost, onFullscreenToggle, toggleNativeFullscreen])
   const handleWebpageFullscreenToggle = useCallback(() => {
     const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
     if (handled) return
+    if (delegateFullscreenToHost) {
+      onFullscreenToggle?.()
+      return
+    }
     // Viewport CSS lock inside the browser window so the OS window can still be dragged.
     if (presentationStrategy === 'viewport-only') {
       toggleCanvasFullscreen()
       return
     }
     toggleViewportFullscreen()
-  }, [capabilities, presentationStrategy, toggleCanvasFullscreen, toggleViewportFullscreen])
-
+  }, [
+    capabilities,
+    delegateFullscreenToHost,
+    onFullscreenToggle,
+    presentationStrategy,
+    toggleCanvasFullscreen,
+    toggleViewportFullscreen,
+  ])
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
       <MindMapCanvas
@@ -661,7 +678,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onEnglishWordClick={onEnglishWordClick}
         textSelectionModeActive={textSelectionModeActive}
         focusMode={nativeFullscreenActive}
-        presentationMode={fullscreen.mode}
+        presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
         showToolbar={!uiCleared}
         toolbarContent={toolbarContent}
@@ -688,6 +705,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onDelete={handleDeleteNode}
         onDeleteNodes={handleDeleteNodes}
         onDeleteNodeOnly={handleDeleteNodeOnly}
+        onDeleteNodesOnly={handleDeleteNodesOnly}
         onHighlightNodes={handleHighlightNodes}
         onMarkColorNodes={handleMarkColorNodes}
         onToggleQuestionCards={handleToggleQuestionCards}
@@ -728,6 +746,5 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     </div>
   )
 })
-
 MindMapEditorSurface.displayName = 'MindMapEditorSurface'
 export type { MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps } from './MindMapEditorSurface.types'

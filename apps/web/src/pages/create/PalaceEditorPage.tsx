@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, FileStack, History, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
+import { AlertCircle, CheckCircle2, FileStack, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import {
   MindMapEditorSurface,
@@ -333,6 +333,11 @@ export default function PalaceEdit() {
       : null,
     moreActions: [
       {
+        label: '恢复点',
+        onClick: () => { void page.handleOpenVersions() },
+        opensOverlay: true,
+      },
+      {
         label: permanentMarkMode
           ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
           : permanentMarkHighlights.length
@@ -453,14 +458,6 @@ export default function PalaceEdit() {
               </Button>
               {page.palace ? (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void page.handleOpenVersions()}
-                  >
-                    <History className="mr-2 size-4" />
-                    恢复点
-                  </Button>
                   {showTemplateCreateAction ? (
                     <Button
                       variant="outline"
@@ -576,6 +573,7 @@ export default function PalaceEdit() {
                           modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
                           viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
                           toolbarExtensions={mindMapToolbarExtensions}
+                          revealSettings={page.flipCardRevealSettings}
                           hidePresentationOverflowActions
                           visibleEditorState={activeFrameEditorState}
                           editableEditorState={page.editorState}

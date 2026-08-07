@@ -42,3 +42,22 @@ export function collectMindMapSubtreeUids(
   walk(normalizeMindMapDocument(document).root, [], false)
   return collected
 }
+
+/** Remove selected non-root nodes and promote their children in place. */
+export function deleteMindMapNodesOnly(
+  document: MindMapDocumentInput,
+  nodeUids: readonly string[],
+) {
+  const nextDocument = normalizeMindMapDocument(document)
+  const selected = new Set(nodeUids.filter(Boolean))
+  selected.delete(getMindMapNodeUid(nextDocument.root, 'root'))
+
+  const promote = (nodes: MindMapNode[]): MindMapNode[] => nodes.flatMap((node) => {
+    const children = promote(Array.isArray(node.children) ? node.children : [])
+    node.children = children
+    return selected.has(getMindMapNodeUid(node, '')) ? children : [node]
+  })
+
+  nextDocument.root.children = promote(nextDocument.root.children ?? [])
+  return nextDocument
+}

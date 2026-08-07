@@ -20,6 +20,7 @@ import {
   setMindMapQuestionCards,
   type MindMapDocumentV1,
 } from './document'
+import { deleteMindMapNodesOnly } from './subtree'
 
 const document: MindMapDocumentV1 = {
   schemaVersion: 1,
@@ -188,5 +189,15 @@ describe('mind-map document entity', () => {
   it('deletes multiple non-root nodes deepest-first', () => {
     const next = deleteMindMapNodes(document, ['mito', 'cell', 'dup2'])
     expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['empty', 'dup1'])
+  })
+
+  it('deletes multiple nodes while promoting their children', () => {
+    const next = deleteMindMapNodesOnly(document, ['mito', 'cell', 'dup2'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['empty', 'dup1'])
+  })
+
+  it('handles selected parent and child nodes without retaining either card', () => {
+    const next = deleteMindMapNodesOnly(document, ['cell', 'mito'])
+    expect(next.root.children!.map((node) => node.data?.uid)).toEqual(['empty', 'dup1', 'dup2'])
   })
 })

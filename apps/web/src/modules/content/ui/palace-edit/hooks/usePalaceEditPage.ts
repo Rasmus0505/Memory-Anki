@@ -413,6 +413,7 @@ export function usePalaceEditPage() {
     enterInlinePractice,
     exitInlinePractice,
     toggleInlinePractice,
+    flipCardRevealSettings: practice.flipCardRevealSettings,
     handleInlinePracticeNodeClick,
     handleInlinePracticeNodeContextMenu,
     handleAiSplitRequest,

@@ -166,6 +166,7 @@ describe('MindMapCanvas multi-select context menu', () => {
     const onHighlightNodes = vi.fn()
     const onMarkColorNodes = vi.fn()
     const onDeleteNodes = vi.fn()
+    const onDeleteNodesOnly = vi.fn()
 
     render(
       <MindMapCanvas
@@ -177,6 +178,7 @@ describe('MindMapCanvas multi-select context menu', () => {
         onAddSibling={vi.fn()}
         onDelete={vi.fn()}
         onDeleteNodes={onDeleteNodes}
+        onDeleteNodesOnly={onDeleteNodesOnly}
         onHighlightNodes={onHighlightNodes}
         onMarkColorNodes={onMarkColorNodes}
       />,
@@ -193,8 +195,16 @@ describe('MindMapCanvas multi-select context menu', () => {
     expect(screen.getByRole('button', { name: '标记颜色（2 张）' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '打开调色板' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '删除选中（2 处）' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '单独删除选中（2 张，保留子级）' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑文字 (Enter / F2)' })).toBeNull()
 
+    fireEvent.click(screen.getByRole('button', { name: '单独删除选中（2 张，保留子级）' }))
+    expect(onDeleteNodesOnly).toHaveBeenCalledWith(['child-a', 'child-b'])
+
+    fireEvent.contextMenu(screen.getByTestId('node-child-a'), {
+      clientX: 120,
+      clientY: 160,
+    })
     fireEvent.click(screen.getByRole('button', { name: '标记重点（2 张）' }))
     expect(onHighlightNodes).toHaveBeenCalledWith(['child-a', 'child-b'])
   })

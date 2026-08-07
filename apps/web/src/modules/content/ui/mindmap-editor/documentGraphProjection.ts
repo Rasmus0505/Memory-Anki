@@ -15,6 +15,7 @@ import {
   countMindMapSubtree,
   deleteMindMapNode,
   deleteMindMapNodeOnly,
+  deleteMindMapNodesOnly,
   editMindMapNode,
   extractMindMapSelectionWithResult,
   getMindMapNodeStoredText,
@@ -236,6 +237,7 @@ export const addEditorDocChild = addMindMapChild
 export const addEditorDocSibling = addMindMapSibling
 export const deleteEditorDocNode = deleteMindMapNode
 export const deleteEditorDocNodeOnly = deleteMindMapNodeOnly
+export const deleteEditorDocNodesOnly = deleteMindMapNodesOnly
 export const countEditorDocSubtree = countMindMapSubtree
 export const collectEditorDocSubtreeUids = collectMindMapSubtreeUids
 export const reparentEditorDocNode = reparentMindMapNode

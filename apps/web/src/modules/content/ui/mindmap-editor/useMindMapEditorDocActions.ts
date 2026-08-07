@@ -12,6 +12,7 @@ import {
   deleteEditorDocNode,
   deleteEditorDocNodeOnly,
   deleteEditorDocNodes,
+  deleteEditorDocNodesOnly,
   editEditorDocNode,
   extractEditorDocSelectionWithResult,
   highlightEditorDocNodes,
@@ -256,6 +257,26 @@ export function useMindMapEditorDocActions(deps: {
     [commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
+  const handleDeleteNodesOnly = useCallback(
+    async (nodeIds: readonly string[]) => {
+      const unique = [...new Set(nodeIds.filter(Boolean))]
+      if (unique.length === 0) return
+      if (unique.length === 1) {
+        await handleDeleteNodeOnly(unique[0]!)
+        return
+      }
+      if (confirmDeleteNodes && !(await confirmDeleteNodes(unique))) return
+      const nextEditorDoc = deleteEditorDocNodesOnly(getCurrentEditorDoc(), unique)
+      if (!commitEditorDoc(nextEditorDoc)) return
+      replaceInteraction({ mode: 'idle' })
+      onNodeActive?.([])
+      toast.success(`已单独删除 ${unique.length} 张卡片，子级已提升`, {
+        action: { label: '撤销', onClick: undoEditorDoc },
+      })
+    },
+    [commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNodeOnly, onNodeActive, replaceInteraction, undoEditorDoc],
+  )
+
   const handleEditNode = useCallback(
     (nodeId: string, text: string, currentInteraction: MindMapInteractionState) => {
       const trimmed = text.trim()
@@ -358,6 +379,7 @@ export function useMindMapEditorDocActions(deps: {
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,
+    handleDeleteNodesOnly,
     handleHighlightNodes,
     handleMarkColorNodes,
     handleToggleQuestionCards,

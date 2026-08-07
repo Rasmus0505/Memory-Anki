@@ -332,6 +332,34 @@ describe('MindMapEditorSurface native host', () => {
     expect(screen.getByTitle('退出全屏')).toBeTruthy()
   })
 
+  it('delegates both canvas fullscreen controls to an immersive host', async () => {
+    const onFullscreenToggle = vi.fn()
+    const requestFullscreen = vi.fn(async () => {})
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    render(
+      <MindMapEditorSurface
+        editorState={editorState}
+        presentationStrategy="native-preferred"
+        delegateFullscreenToHost
+        onEditorStateChange={vi.fn()}
+        onFullscreenToggle={onFullscreenToggle}
+      />,
+    )
+
+    await screen.findByTitle('进入全屏')
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('进入全屏'))
+    })
+
+    expect(onFullscreenToggle).toHaveBeenCalledTimes(1)
+    expect(requestFullscreen).not.toHaveBeenCalled()
+    expect(screen.queryByTitle('进入系统全屏')).toBeNull()
+    expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('embedded')
+  })
+
   it('locks page scrolling while fullscreen is active', async () => {
     const ref = createRef<MindMapEditorSurfaceHandle>()
     document.body.style.overflow = 'auto'

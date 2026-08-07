@@ -129,6 +129,8 @@ export interface MindMapEditorSurfaceProps {
   onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
+  /** When true, both canvas fullscreen toolbar actions are owned by the host. */
+  delegateFullscreenToHost?: boolean
   onUiClearedChange?: (active: boolean) => void
   onReady?: () => void
   onReadyTimeout?: () => void
