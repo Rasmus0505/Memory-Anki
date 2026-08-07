@@ -72,13 +72,12 @@ describe('useTimeRecordsDashboard', () => {
     mocks.readUnified.mockReset().mockResolvedValue(response())
   })
 
-  it('defaults to the current month and hydrates every region from one response', async () => {
+  it('defaults to today and hydrates every region from one response', async () => {
     const { result } = renderHook(() => useTimeRecordsDashboard())
 
     await waitFor(() => expect(mocks.readUnified).toHaveBeenCalledTimes(1))
     expect(mocks.readUnified.mock.calls[0]?.[0]).toMatchObject({
-      rangeMode: 'month',
-      month: expect.stringMatching(/^\d{4}-\d{2}$/),
+      rangeMode: 'today',
       offset: 0,
     })
     await waitFor(() =>

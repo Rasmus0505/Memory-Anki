@@ -5,7 +5,11 @@ import type {
   DashboardResponse,
   WeeklyReport,
 } from "@/shared/api/contracts"
-import { consumePrefetchedPromise, prefetchPromise } from "@/shared/api/promiseWarmupCache"
+import {
+  clearPrefetchedPromisesByPrefix,
+  consumePrefetchedPromise,
+  prefetchPromise,
+} from "@/shared/api/promiseWarmupCache"
 
 function buildDashboardPath(query?: DashboardQuery) {
   const params = new URLSearchParams()
@@ -25,6 +29,10 @@ export function getDashboardApi(query?: DashboardQuery) {
 export function prefetchDashboardApi(query?: DashboardQuery) {
   const path = buildDashboardPath(query)
   prefetchPromise(`dashboard:${path}`, () => request<DashboardResponse>(path))
+}
+
+export function invalidateDashboardApi() {
+  clearPrefetchedPromisesByPrefix('dashboard:')
 }
 
 export function getDashboardHeatmapApi(days = 182) {

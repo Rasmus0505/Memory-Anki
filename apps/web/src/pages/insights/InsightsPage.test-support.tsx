@@ -34,6 +34,7 @@ vi.mock("react-router-dom", () => ({
 }));
 
 export const getDashboardApi = vi.fn();
+export const invalidateDashboardApi = vi.fn();
 export const getDashboardHeatmapApi = vi.fn();
 export const getRecentReviewNotesApi = vi.fn();
 export const getStudyGoalsApi = vi.fn();
@@ -133,6 +134,7 @@ export const timeRecordsDashboardMock = {
 vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   getDashboardApi: async (...args: unknown[]) =>
     buildDashboardResponse(await getDashboardApi(...args)),
+  invalidateDashboardApi: (...args: unknown[]) => invalidateDashboardApi(...args),
   getDashboardHeatmapApi: async (...args: unknown[]) =>
     getDashboardHeatmapApi(...args),
   getRecentReviewNotesApi: async (...args: unknown[]) =>
@@ -196,6 +198,7 @@ vi.mock("@/modules/session/ui/time-records/components/TimeRecordQuickAddDialog",
 
 export function setupDashboardPageTest() {
   getDashboardApi.mockReset();
+  invalidateDashboardApi.mockReset();
   getDashboardHeatmapApi.mockReset();
   getRecentReviewNotesApi.mockReset();
   getStudyGoalsApi.mockReset();

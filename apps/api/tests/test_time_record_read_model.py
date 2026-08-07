@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.modules.session.application.time_bounds import today_bounds
 from memory_anki.modules.session.application.time_record_read_model import (
     build_time_record_read_model,
 )
@@ -195,6 +196,35 @@ def test_ranges_attribute_records_by_completion_time(db_session):
     assert all_history["summary"]["total_effective_seconds"] == 1_500
 
 
+def test_today_range_uses_local_calendar_day_and_shared_summary(db_session):
+    today = date(2026, 7, 30)
+    db_session.add_all(
+        [
+            _record("today-one", scene="practice", seconds=100, ended_day=today),
+            _record("today-two", scene="quiz", seconds=200, ended_day=today),
+            _record("yesterday", scene="practice", seconds=400, ended_day=today - timedelta(days=1)),
+            _record("tomorrow", scene="practice", seconds=800, ended_day=today + timedelta(days=1)),
+        ]
+    )
+    db_session.commit()
+
+    payload = build_time_record_read_model(
+        db_session,
+        range_mode="today",
+        reference_date=today,
+    )
+
+    assert payload["range"] == {
+        "mode": "today",
+        "month": None,
+        "rolling_days": None,
+        "start_date": "2026-07-30",
+        "end_date": "2026-07-30",
+    }
+    assert payload["summary"]["total_effective_seconds"] == 300
+    assert {item["id"] for item in payload["items"]} == {"today-one", "today-two"}
+
+
 def test_time_records_endpoint_returns_paginated_items_and_unpaged_reconciliation(
     session_factory,
     make_client,
@@ -223,3 +253,32 @@ def test_time_records_endpoint_returns_paginated_items_and_unpaged_reconciliatio
     assert payload["summary"]["total_effective_seconds"] == 9_100
     assert sum(item["seconds"] for item in payload["kind_breakdown"]) == 9_100
     assert sum(item["seconds"] for item in payload["trend"]) == 9_100
+
+
+def test_time_records_endpoint_accepts_today_range(session_factory, make_client):
+    today_start, _ = today_bounds()
+    with session_factory() as session:
+        session.add(
+            StudySession(
+                id="today-endpoint-record",
+                status="completed",
+                scene="practice",
+                target_type="none",
+                title="today endpoint record",
+                started_at=today_start + timedelta(hours=8),
+                ended_at=today_start + timedelta(hours=9),
+                effective_seconds=3_600,
+            )
+        )
+        session.commit()
+
+    client = make_client(sessions_router)
+    response = client.get(
+        "/api/v1/study-sessions/time-records",
+        params={"range_mode": "today"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["range"]["mode"] == "today"
+    assert payload["summary"]["total_effective_seconds"] == 3_600

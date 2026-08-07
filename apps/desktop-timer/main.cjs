@@ -124,6 +124,11 @@ function scheduleExternalMainBlurPrompt() {
   }, 100)
 }
 
+function publishMainWindowFullscreen(active) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('memory-anki-main-window-fullscreen-change', Boolean(active))
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -174,6 +179,8 @@ function createMainWindow() {
     }
     mainWindow?.webContents.send('memory-anki-timer-command', { type: 'returnToStudy' })
   })
+  mainWindow.on('enter-full-screen', () => publishMainWindowFullscreen(true))
+  mainWindow.on('leave-full-screen', () => publishMainWindowFullscreen(false))
   mainWindow.on('closed', () => {
     clearMainBlurPromptTimer()
     allowMainWindowClose = false
@@ -300,6 +307,16 @@ ipcMain.on('memory-anki-desktop-flush-complete', (_event, result) => {
 
 ipcMain.on('memory-anki-request-main-pause', () => {
   mainWindow?.webContents.send('memory-anki-desktop-pause-active-timer')
+})
+
+ipcMain.on('memory-anki-main-window-fullscreen', (event, active) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return
+  const next = Boolean(active)
+  if (mainWindow.isFullScreen() === next) {
+    publishMainWindowFullscreen(next)
+    return
+  }
+  mainWindow.setFullScreen(next)
 })
 
 ipcMain.on('memory-anki-open-main-target', (_event, targetPath) => {

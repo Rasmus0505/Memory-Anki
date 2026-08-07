@@ -6,6 +6,7 @@ import {
   getRecentReviewNotesApi,
   getStudyGoalsApi,
   getWeeklyReportApi,
+  invalidateDashboardApi,
   prefetchDashboardApi,
   saveStudyGoalsApi,
 } from "@/modules/dashboard/ui/dashboard/api"
@@ -47,6 +48,14 @@ describe("dashboard api", () => {
 
     prefetchDashboardApi()
     await getDashboardApi()
+    await getDashboardApi()
+
+    expect(requestMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("invalidates all warmed dashboard requests", async () => {
+    prefetchDashboardApi()
+    invalidateDashboardApi()
     await getDashboardApi()
 
     expect(requestMock).toHaveBeenCalledTimes(2)

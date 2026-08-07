@@ -10,6 +10,7 @@ from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.dashboard.application.service import build_weekly_report_payload
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.memory.api import reconcile_palace_units
+from memory_anki.modules.session.application.time_bounds import today_bounds
 
 EDITOR_DOC = json.dumps(
     {
@@ -85,6 +86,42 @@ def test_dashboard_duration_is_not_a_separate_filterable_read_model(client, sess
     response = client.get("/api/v1/dashboard")
     assert response.status_code == 200
     assert "selected_total_review_duration_seconds" not in response.json()
+
+
+def test_dashboard_today_total_matches_unified_today_records(client, session_factory):
+    today_start, _ = today_bounds()
+    now = today_start + timedelta(hours=12)
+    with session_factory() as session:
+        session.add_all(
+            [
+                StudySession(
+                    id="today-completed",
+                    status="completed",
+                    scene="practice",
+                    target_type="none",
+                    title="today completed",
+                    started_at=now - timedelta(minutes=5),
+                    ended_at=now,
+                    effective_seconds=120,
+                ),
+                StudySession(
+                    id="today-active",
+                    status="active",
+                    scene="practice",
+                    target_type="none",
+                    title="today active checkpoint",
+                    started_at=now - timedelta(minutes=10),
+                    ended_at=None,
+                    effective_seconds=9_000,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["today_total_review_duration_seconds"] == 120
 
 
 def test_weekly_report_payload(session_factory):

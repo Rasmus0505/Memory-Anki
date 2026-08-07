@@ -13,6 +13,7 @@ from memory_anki.modules.memory.public.queries import (
     get_unit_review_weekly_stats,
 )
 from memory_anki.modules.session.public.queries import (
+    build_time_record_read_model,
     count_time_records,
     current_month_bounds,
     current_week_bounds,
@@ -72,6 +73,17 @@ def build_dashboard_payload(session: Session) -> dict:
 
     current_month_start, current_month_end = current_month_bounds()
     current_week_start, current_week_end = current_week_bounds()
+    today_time_records = build_time_record_read_model(
+        session,
+        range_mode="today",
+        limit=1,
+    )
+    today_review_records = build_time_record_read_model(
+        session,
+        range_mode="today",
+        kind="review",
+        limit=1,
+    )
     monthly_total_review_duration_seconds = get_time_record_duration_seconds(
         session,
         start=current_month_start,
@@ -105,18 +117,13 @@ def build_dashboard_payload(session: Session) -> dict:
         "due_later_today_count": 0,
         "reviews": reviews,
         "stats": get_unit_review_weekly_stats(session),
-        "today_review_duration_seconds": get_time_record_duration_seconds(
-            session,
-            start=today_start,
-            end=today_end,
-            kind="review",
-        ),
+        "today_review_duration_seconds": today_review_records["summary"][
+            "total_effective_seconds"
+        ],
         "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
-        "today_total_review_duration_seconds": get_time_record_duration_seconds(
-            session,
-            start=today_start,
-            end=today_end,
-        ),
+        "today_total_review_duration_seconds": today_time_records["summary"][
+            "total_effective_seconds"
+        ],
         "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
         "weekly_total_review_duration_seconds": get_time_record_duration_seconds(
             session,

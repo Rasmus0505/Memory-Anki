@@ -13,9 +13,9 @@ from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 
 from .serialization import study_session_json
-from .time_bounds import date_range_bounds, month_bounds
+from .time_bounds import date_range_bounds, month_bounds, today_bounds
 
-TimeRecordRangeMode = Literal["month", "rolling", "custom", "all"]
+TimeRecordRangeMode = Literal["today", "month", "rolling", "custom", "all"]
 TimeRecordKind = Literal[
     "review",
     "practice",
@@ -89,6 +89,9 @@ def resolve_time_record_range(
     mode = str(range_mode or "month").strip().lower()
     if mode == "all":
         return ResolvedTimeRecordRange("all", None, None, None, None)
+    if mode == "today":
+        start, end = today_bounds() if reference_date is None else date_range_bounds(today, today)
+        return ResolvedTimeRecordRange("today", start, end, today, today)
     if mode == "rolling":
         days = int(rolling_days or 7)
         if days not in {7, 30, 90}:
@@ -111,7 +114,7 @@ def resolve_time_record_range(
         start, end = date_range_bounds(first_day, last_day)
         return ResolvedTimeRecordRange("custom", start, end, first_day, last_day)
     if mode != "month":
-        raise TimeRecordQueryError("range_mode must be month, rolling, custom, or all")
+        raise TimeRecordQueryError("range_mode must be today, month, rolling, custom, or all")
     month_value = str(month or f"{today.year:04d}-{today.month:02d}")
     try:
         year_value, month_number = month_value.split("-", 1)

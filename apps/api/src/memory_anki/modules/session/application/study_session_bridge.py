@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitEncounter
 
 from .serialization import _int_or_none, _parse_datetime
 
@@ -355,6 +356,7 @@ def restore_nested_freestyle_review_time_durations(session: Session) -> int:
 # Align with migration 0031 trustworthy cap: multi-hour hang-ups from PWA
 # background freezes are not credible continuous study without duration_edited.
 MAX_TRUSTWORTHY_STUDY_SECONDS = 4 * 60 * 60
+LONG_FREESTYLE_ENCOUNTER_AUDIT_SECONDS = 60 * 60
 STALE_ACTIVE_AGE = timedelta(hours=24)
 
 
@@ -396,6 +398,15 @@ def _wall_seconds(row: StudySession) -> int | None:
         return None
     try:
         return max(0, int((row.ended_at - row.started_at).total_seconds()))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _encounter_wall_seconds(encounter: ReviewUnitEncounter) -> int | None:
+    if encounter.created_at is None or encounter.closed_at is None:
+        return None
+    try:
+        return max(0, int((encounter.closed_at - encounter.created_at).total_seconds()))
     except (TypeError, ValueError, OverflowError):
         return None
 
@@ -466,6 +477,38 @@ def audit_inflated_study_sessions(
         )
         .count()
     )
+    long_freestyle_query = (
+        session.query(ReviewUnitEncounter, StudySession)
+        .join(StudySession, StudySession.id == ReviewUnitEncounter.study_session_id)
+        .filter(
+            StudySession.scene == "freestyle_unit_review",
+            StudySession.deleted_at.is_(None),
+            ReviewUnitEncounter.status == "closed",
+            ReviewUnitEncounter.effective_seconds > LONG_FREESTYLE_ENCOUNTER_AUDIT_SECONDS,
+        )
+        .order_by(ReviewUnitEncounter.effective_seconds.desc())
+    )
+    long_freestyle_count = long_freestyle_query.count()
+    long_freestyle_encounters = []
+    for encounter, row in long_freestyle_query.limit(limit).all():
+        summary = _load_summary(row)
+        long_freestyle_encounters.append(
+            {
+                "encounter_id": encounter.id,
+                "study_session_id": row.id,
+                "unit_id": encounter.unit_id,
+                "title": row.title,
+                "effective_seconds": int(encounter.effective_seconds or 0),
+                "wall_seconds": _encounter_wall_seconds(encounter),
+                "created_at": encounter.created_at.isoformat(sep=" ")
+                if encounter.created_at
+                else None,
+                "closed_at": encounter.closed_at.isoformat(sep=" ")
+                if encounter.closed_at
+                else None,
+                "client_source": summary.get("client_source"),
+            }
+        )
     return {
         "max_trustworthy_seconds": max_trust,
         "inflated_completed_count": len(inflated_samples)
@@ -481,6 +524,9 @@ def audit_inflated_study_sessions(
         "autosave_completed_count": int(autosave_completed),
         "ghost_review_count": int(ghost_review),
         "stale_active_count": int(stale_active),
+        "long_freestyle_encounter_threshold_seconds": LONG_FREESTYLE_ENCOUNTER_AUDIT_SECONDS,
+        "long_freestyle_encounter_count": int(long_freestyle_count),
+        "long_freestyle_encounters": long_freestyle_encounters,
     }
 
 

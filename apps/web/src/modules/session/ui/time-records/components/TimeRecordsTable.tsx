@@ -144,6 +144,9 @@ export function TimeRecordsTable({
         <div className="space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 text-xs text-muted-foreground">统一时间范围</span>
+            <RangeButton active={filter.rangeMode === 'today'} onClick={() => onRangeModeChange('today')}>
+              今天
+            </RangeButton>
             <RangeButton active={filter.rangeMode === 'month'} onClick={() => onRangeModeChange('month')}>
               月份
             </RangeButton>

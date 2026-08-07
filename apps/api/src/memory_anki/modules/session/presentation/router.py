@@ -104,7 +104,7 @@ def api_time_record_analytics(
 
 @router.get("/study-sessions/time-records")
 def api_time_records(
-    range_mode: Literal["month", "rolling", "custom", "all"] = "month",
+    range_mode: Literal["today", "month", "rolling", "custom", "all"] = "month",
     month: str | None = Query(default=None, max_length=7),
     rolling_days: Literal[7, 30, 90] | None = None,
     start_date: str | None = Query(default=None, max_length=10),

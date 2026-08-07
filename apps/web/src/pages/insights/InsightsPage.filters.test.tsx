@@ -1,7 +1,8 @@
-import { screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { act, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getDashboardApi,
+  invalidateDashboardApi,
   renderDashboardPage,
   setupDashboardPageTest,
 } from '@/pages/insights/InsightsPage.test-support'
@@ -47,5 +48,57 @@ describe('DashboardPage unified time-record filters', () => {
 
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
     expect(getDashboardApi).toHaveBeenCalledWith()
+  })
+
+  it('invalidates the dashboard cache before loading and refreshes after window focus', async () => {
+    renderDashboardPage()
+
+    await waitFor(() => expect(invalidateDashboardApi).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
+
+    act(() => window.dispatchEvent(new Event('focus')))
+
+    await waitFor(() => expect(invalidateDashboardApi).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
+  })
+
+  it('refreshes after returning from the background', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    visibility.mockReturnValue('hidden')
+    renderDashboardPage()
+
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(getDashboardApi).toHaveBeenCalledTimes(1)
+
+    visibility.mockReturnValue('visible')
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
+    visibility.mockRestore()
+  })
+
+  it('does not let a stale dashboard response overwrite a newer refresh', async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined
+    const firstResponse = new Promise((resolve) => {
+      resolveFirst = resolve
+    })
+    getDashboardApi
+      .mockImplementationOnce(() => firstResponse)
+      .mockResolvedValueOnce({ today_total_review_duration_seconds: 120 })
+
+    renderDashboardPage()
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
+
+    act(() => window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('2分 0秒')).toBeTruthy()
+
+    await act(async () => {
+      resolveFirst?.({ today_total_review_duration_seconds: 3600 })
+      await firstResponse
+    })
+    expect(screen.getByText('2分 0秒')).toBeTruthy()
+    expect(screen.queryByText('1小时 0分')).toBeNull()
   })
 })

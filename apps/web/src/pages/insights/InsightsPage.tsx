@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DashboardResponse } from '@/shared/api/contracts'
 import {
   TimeRecordDialog,
@@ -17,6 +17,7 @@ import {
   StudyHeatmap,
   TimeRecordChartCard,
   getDashboardApi,
+  invalidateDashboardApi,
 } from '@/modules/dashboard/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
@@ -25,13 +26,18 @@ import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const dashboardRequestIdRef = useRef(0)
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (): Promise<void> => {
+    const requestId = ++dashboardRequestIdRef.current
     setLoadError(null)
     try {
+      invalidateDashboardApi()
       const dashboard = await getDashboardApi()
+      if (requestId !== dashboardRequestIdRef.current) return
       setData(dashboard)
     } catch (error) {
+      if (requestId !== dashboardRequestIdRef.current) return
       setLoadError(error instanceof Error ? error.message : '加载仪表盘失败。')
       throw error
     }
@@ -43,6 +49,19 @@ export default function Dashboard() {
 
   useEffect(() => {
     void loadDashboard().catch(() => undefined)
+  }, [loadDashboard])
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadDashboard().catch(() => undefined)
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
   }, [loadDashboard])
 
   if (!data && loadError) {

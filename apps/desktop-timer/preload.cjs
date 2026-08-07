@@ -19,6 +19,14 @@ ipcRenderer.on('memory-anki-desktop-flush-request', async (_event, request) => {
 
 contextBridge.exposeInMainWorld('memoryAnkiDesktopTimer', {
   isDesktop: true,
+  setMainWindowFullscreen(active) {
+    ipcRenderer.send('memory-anki-main-window-fullscreen', Boolean(active))
+  },
+  onMainWindowFullscreenChange(handler) {
+    const listener = (_event, active) => handler(Boolean(active))
+    ipcRenderer.on('memory-anki-main-window-fullscreen-change', listener)
+    return () => ipcRenderer.removeListener('memory-anki-main-window-fullscreen-change', listener)
+  },
   onDesktopFlushRequest(handler) {
     desktopFlushHandlers.add(handler)
     return () => desktopFlushHandlers.delete(handler)
