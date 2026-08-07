@@ -76,7 +76,9 @@ CLIENT_PREFERENCE_GROUPS = {
     "palace_shelf_view_settings",
     "time_record_tags",
     "freestyle_feed_config",
+    "freestyle_display_settings",
     "mark_color_labels",
+    "flip_card_reveal_config",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

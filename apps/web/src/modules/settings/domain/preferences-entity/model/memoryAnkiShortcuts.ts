@@ -8,7 +8,10 @@ import {
   normalizeShortcutBindingValue,
   type ShortcutBinding,
 } from '@/shared/keyboard/shortcutBindings'
-import { isEditableKeyboardTarget } from '@/shared/keyboard/keyboardTargets'
+import {
+  isEditableKeyboardTarget,
+  isKeyboardShortcutSuspended,
+} from '@/shared/keyboard/keyboardTargets'
 import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -204,7 +207,11 @@ export function useMemoryAnkiShortcuts(
   useEffect(() => {
     if (!enabled) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditableKeyboardTarget(event.target)) return
+      if (
+        event.defaultPrevented ||
+        isEditableKeyboardTarget(event.target) ||
+        isKeyboardShortcutSuspended()
+      ) return
       // Bare letter shortcuts must not fire while IME is composing.
       if (event.isComposing || event.key === 'Process') return
       const matchedAction = sceneActions.find((action) =>

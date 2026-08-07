@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BookOpen, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   getPalaceQuizQuestionsApi,
@@ -26,6 +26,7 @@ import {
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
+import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 
 export function NodeBoundQuizDialog({
   open,
@@ -59,6 +60,9 @@ export function NodeBoundQuizDialog({
   )
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
+  const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
+  const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
+  const questionInteractionRef = useRef<HTMLDivElement | null>(null)
 
   const questionIdsKey = questionIds.join(',')
 
@@ -130,6 +134,10 @@ export function NodeBoundQuizDialog({
 
   const current = questions[index] ?? null
 
+  useEffect(() => {
+    setKeyboardOptionIndex(0)
+  }, [current?.id])
+
   const markCompleted = useCallback(
     (questionId: number) => {
       onQuestionCompleted(questionId)
@@ -186,6 +194,97 @@ export function NodeBoundQuizDialog({
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
 
+  const handleChoiceResolve = useCallback(
+    (optionId: string, isCorrect: boolean) => {
+      if (!current) return
+      orchestration.handleChoiceSelect(current, optionId, isCorrect)
+      markCompleted(current.id)
+    },
+    [current, markCompleted, orchestration],
+  )
+
+  useEffect(() => {
+    if (!open || !current) return
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLElement
+        && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      ) {
+        return
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (questions.length <= 1) return
+        event.preventDefault()
+        setIndex((value) =>
+          event.key === 'ArrowLeft'
+            ? Math.max(0, value - 1)
+            : Math.min(questions.length - 1, value + 1),
+        )
+        return
+      }
+
+      if (current.question_type !== 'multiple_choice' || currentState.resolved) return
+      const optionCount = current.options.length
+      if (optionCount === 0) return
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        const delta = event.key === 'ArrowDown' ? 1 : -1
+        const nextIndex = (keyboardOptionIndex + delta + optionCount) % optionCount
+        setKeyboardOptionIndex(nextIndex)
+        questionInteractionRef.current
+          ?.querySelector<HTMLButtonElement>(`[data-quiz-option-index="${nextIndex}"]`)
+          ?.focus()
+        return
+      }
+
+      const normalizedKey = event.key.toLowerCase()
+      const directIndex = /^[1-4]$/.test(normalizedKey)
+        ? Number(normalizedKey) - 1
+        : 'abcd'.indexOf(normalizedKey)
+      const focusedOption =
+        target instanceof HTMLElement
+          ? target.closest<HTMLElement>('[data-quiz-option-index]')
+          : null
+      if (
+        event.key === 'Enter' &&
+        target instanceof HTMLElement &&
+        !focusedOption &&
+        target.closest('button, [role="button"], a')
+      ) {
+        return
+      }
+      const focusedIndex = focusedOption?.dataset.quizOptionIndex
+      const optionIndex = event.key === 'Enter'
+        ? (focusedIndex == null ? keyboardOptionIndex : Number(focusedIndex))
+        : directIndex
+      if (optionIndex < 0 || optionIndex >= optionCount) return
+      const option = current.options[optionIndex]
+      if (!option) return
+      event.preventDefault()
+      const correct = option.id === (current.answer_payload.correct_option_id || '')
+      updateLocalState(current.id, (state) => ({
+        ...state,
+        selectedOptionId: option.id,
+        resolved: true,
+        correct,
+      }))
+      handleChoiceResolve(option.id, correct)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [
+    current,
+    currentState.resolved,
+    handleChoiceResolve,
+    keyboardOptionIndex,
+    open,
+    questions.length,
+    updateLocalState,
+  ])
+
   const headerDetail = loading
     ? '加载中…'
     : questions.length > 0
@@ -197,9 +296,27 @@ export function NodeBoundQuizDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] max-w-xl overflow-hidden p-0 sm:max-w-xl">
+        <DialogContent
+          className="max-h-[90vh] max-w-xl overflow-hidden p-0 sm:max-w-xl"
+          data-keyboard-shortcuts-suspended="true"
+        >
           <DialogHeader>
-            <DialogTitle className="text-base">关联题目</DialogTitle>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-base">关联题目</DialogTitle>
+              {palaceId != null ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label="查看宫殿"
+                  title="查看宫殿和思维导图"
+                  onClick={() => setPalaceLookupOpen(true)}
+                >
+                  <BookOpen className="size-4" />
+                  查看宫殿
+                </Button>
+              ) : null}
+            </div>
             <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
               {headerDetail}
             </DialogDescription>
@@ -250,6 +367,7 @@ export function NodeBoundQuizDialog({
                         type="button"
                         size="sm"
                         variant="outline"
+                        aria-label="上一题"
                         disabled={index <= 0}
                         onClick={() => setIndex((value) => Math.max(0, value - 1))}
                       >
@@ -259,6 +377,7 @@ export function NodeBoundQuizDialog({
                         type="button"
                         size="sm"
                         variant="outline"
+                        aria-label="下一题"
                         disabled={index >= questions.length - 1}
                         onClick={() =>
                           setIndex((value) => Math.min(questions.length - 1, value + 1))
@@ -282,27 +401,32 @@ export function NodeBoundQuizDialog({
                     {current.stem || '（题干为空）'}
                   </div>
                 </div>
-                <QuizQuestionInteraction
-                  question={current}
-                  state={currentState}
-                  onStateChange={(updater) => updateLocalState(current.id, updater)}
-                  onChoiceResolve={(optionId, isCorrect) => {
-                    orchestration.handleChoiceSelect(current, optionId, isCorrect)
-                    markCompleted(current.id)
-                  }}
-                  onShortAnswerSubmit={() => {
-                    orchestration.handleShortAnswerSubmit(current.id)
-                    markCompleted(current.id)
-                  }}
-                  onRequestShortAnswerFeedback={() =>
-                    void orchestration.handleShortAnswerFeedback(current)
-                  }
-                />
+                <div ref={questionInteractionRef}>
+                  <QuizQuestionInteraction
+                    question={current}
+                    state={currentState}
+                    onStateChange={(updater) => updateLocalState(current.id, updater)}
+                    onChoiceResolve={handleChoiceResolve}
+                    onShortAnswerSubmit={() => {
+                      orchestration.handleShortAnswerSubmit(current.id)
+                      markCompleted(current.id)
+                    }}
+                    onRequestShortAnswerFeedback={() =>
+                      void orchestration.handleShortAnswerFeedback(current)
+                    }
+                  />
+                </div>
               </>
             )}
           </div>
         </DialogContent>
       </Dialog>
+      <PalaceMemoryLookupDialog
+        open={palaceLookupOpen}
+        onOpenChange={setPalaceLookupOpen}
+        currentPalaceId={palaceId}
+        followCurrentPalace
+      />
       {aiRunConfigDialog}
     </>
   )

@@ -5,14 +5,21 @@ import type {
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import type { RevealState } from '@/modules/session/public'
+import {
+  DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+  type FlipCardRevealConfig,
+  type RevealGranularity,
+  type RevealStage,
+} from '@/shared/preferences/flipCardRevealConfig'
+
+export type { FlipCardRevealConfig, RevealGranularity, RevealStage }
+export { DEFAULT_FLIP_CARD_REVEAL_CONFIG }
 
 export interface ReviewMindMapNode {
   id: string
   text: string
   note: string
   parentId: string | null
-  /** Parent reveal auto-shows this node's body (skip placeholder). */
-  isQuestionCard: boolean
   children: ReviewMindMapNode[]
 }
 
@@ -27,6 +34,10 @@ export type RevealFlowMode = 'standard' | 'segment-checkpoint'
 export interface RevealFlowOptions {
   mode?: RevealFlowMode
   checkpointIds?: Iterable<string>
+  revealGranularity?: RevealGranularity
+  revealStage?: RevealStage
+  /** Optional freestyle-only reveal scope. The root is always retained. */
+  allowedNodeIds?: Iterable<string>
   /**
    * Formal-review due scope: auto-reveal every non-focus node; only focus
    * (frozen due) nodes stay as flip targets. Ignored in segment-checkpoint mode.
@@ -77,7 +88,6 @@ function normalizeNode(
     text: plainText(data.text),
     note: plainText(data.note),
     parentId,
-    isQuestionCard: data.memoryAnkiQuestionCard === true,
     children: children.map((child, index) =>
       normalizeNode(child, `${fallbackId}-${index}`, id),
     ),
@@ -94,7 +104,6 @@ export function buildReviewTree(
       text: fallbackTitle || '未命名导图',
       note: '',
       parentId: null,
-      isQuestionCard: false,
       children: [],
     }
   }
@@ -160,34 +169,6 @@ function buildCheckpointRevealState(
   return next
 }
 
-/**
- * When a parent is revealed, any direct child marked as a question card
- * becomes revealed immediately (skipping "待回忆"). Cascades while stable.
- */
-export function applyQuestionCardAutoReveal(
-  nodeMap: Map<string, ReviewMindMapNode>,
-  revealMap: Record<string, RevealState>,
-): Record<string, RevealState> {
-  let next = revealMap
-  let changed = true
-  while (changed) {
-    changed = false
-    let working = next
-    for (const node of nodeMap.values()) {
-      if ((working[node.id] ?? 'hidden') !== 'revealed') continue
-      for (const child of node.children) {
-        if (!child.isQuestionCard) continue
-        if ((working[child.id] ?? 'hidden') === 'revealed') continue
-        if (working === next) working = { ...next }
-        working[child.id] = 'revealed'
-        changed = true
-      }
-    }
-    next = working
-  }
-  return next
-}
-
 export function buildInitialRevealState(
   root: ReviewMindMapNode,
   previous: Record<string, RevealState> | null = null,
@@ -199,13 +180,27 @@ export function buildInitialRevealState(
       options.checkpointIds ?? [],
       previous,
     )
-    return applyQuestionCardAutoReveal(flattenNodes(root), checkpointState)
+    return checkpointState
+  }
+  const allowedNodeIds = resolveAllowedNodeIds(root, options)
+  if (allowedNodeIds) {
+    const next: Record<string, RevealState> = {}
+    const walk = (node: ReviewMindMapNode) => {
+      next[node.id] = node.id === root.id
+        ? 'revealed'
+        : allowedNodeIds.has(node.id)
+          ? previous?.[node.id] ?? 'hidden'
+          : 'hidden'
+      node.children.forEach(walk)
+    }
+    walk(root)
+    return next
   }
   // Formal due-scope: skip flipping nodes that are not in the frozen due set.
   const focusIds = sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
   if (focusIds.length > 0) {
     const focusState = buildCheckpointRevealState(root, focusIds, previous)
-    return applyQuestionCardAutoReveal(flattenNodes(root), focusState)
+    return focusState
   }
   const next: Record<string, RevealState> = {}
   const walk = (node: ReviewMindMapNode) => {
@@ -215,7 +210,7 @@ export function buildInitialRevealState(
   }
   walk(root)
   next[root.id] = 'revealed'
-  return applyQuestionCardAutoReveal(flattenNodes(root), next)
+  return next
 }
 
 export function buildAllRevealedState(root: ReviewMindMapNode) {
@@ -236,6 +231,28 @@ export function collectNodeIds(root: ReviewMindMapNode) {
   }
   walk(root)
   return ids
+}
+
+/** Normalize a host-provided reveal scope without excluding the root node. */
+export function sanitizeAllowedNodeIds(
+  root: ReviewMindMapNode,
+  allowedNodeIds: Iterable<string>,
+) {
+  const validIds = new Set(collectNodeIds(root))
+  const result = new Set<string>([root.id])
+  for (const value of allowedNodeIds) {
+    const id = String(value || '').trim()
+    if (id && validIds.has(id)) result.add(id)
+  }
+  return result
+}
+
+function resolveAllowedNodeIds(
+  root: ReviewMindMapNode | null,
+  options: RevealFlowOptions = {},
+) {
+  if (!root || options.allowedNodeIds == null) return null
+  return sanitizeAllowedNodeIds(root, options.allowedNodeIds)
 }
 
 export function hideNodeAndDescendants(
@@ -278,27 +295,41 @@ export function findNextHiddenChild(
 }
 
 /**
- * Find the first pending descendant in level order, preserving child order.
- * A pending card blocks its own deeper descendants until its placeholder and
- * content have both been revealed.
+ * Find the first incomplete level below a revealed anchor.
+ *
+ * Revealed nodes may open the next level, but hidden/placeholder nodes block
+ * their own descendants. Returning the whole level lets a click reveal sibling
+ * placeholders together before a later click reveals their content together.
  */
-function findNextPendingDescendant(
+function findNextPendingLevel(
   node: ReviewMindMapNode,
   revealMap: Record<string, RevealState>,
-) {
-  let frontier = [...node.children]
+  allowedNodeIds: Set<string> | null = null,
+): ReviewMindMapNode[] {
+  let frontier = allowedNodeIds
+    ? node.children.filter((child) => allowedNodeIds.has(child.id))
+    : [...node.children]
 
   while (frontier.length > 0) {
-    const nextFrontier: ReviewMindMapNode[] = []
-    for (const child of frontier) {
+    const pending = frontier.filter((child) => {
+      if (allowedNodeIds && !allowedNodeIds.has(child.id)) return false
       const state = revealMap[child.id] ?? 'hidden'
-      if (state === 'hidden' || state === 'placeholder') return child
-      nextFrontier.push(...child.children)
-    }
-    frontier = nextFrontier
+      return state === 'hidden' || state === 'placeholder'
+    })
+    if (pending.length > 0) return pending
+    frontier = frontier
+      .flatMap((child) => child.children)
+      .filter((child) => !allowedNodeIds || allowedNodeIds.has(child.id))
   }
 
-  return null
+  return []
+}
+
+function selectRevealTargets(
+  pendingLevel: ReviewMindMapNode[],
+  options: RevealFlowOptions,
+): ReviewMindMapNode[] {
+  return options.revealGranularity === 'single' ? pendingLevel.slice(0, 1) : pendingLevel
 }
 
 /** Bulk flip target set: full descendant tree or only direct children. */
@@ -338,16 +369,11 @@ function resolveFocusNodeIds(
   return sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
 }
 
-/**
- * First appearance state for a card that is being stepped out of `hidden`.
- * Formal due-scope: non-due cards skip placeholder and open fully; due cards
- * still require an explicit flip (placeholder → revealed).
- */
+/** First appearance state for a card that is being stepped out of `hidden`. */
 function firstAppearStateForChild(
   child: ReviewMindMapNode,
   focusIds: string[],
 ): RevealState {
-  if (child.isQuestionCard) return 'revealed'
   if (focusIds.length > 0 && !focusIds.includes(child.id)) return 'revealed'
   return 'placeholder'
 }
@@ -358,8 +384,14 @@ export function hasPendingBulkReveal(
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
   scope: BulkRevealScope,
+  options: RevealFlowOptions = {},
+  root: ReviewMindMapNode | null = null,
 ): boolean {
-  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
+  const allowedNodeIds = resolveAllowedNodeIds(root, options)
+  if (allowedNodeIds && !allowedNodeIds.has(nodeId)) return false
+  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope).filter(
+    (target) => !allowedNodeIds || allowedNodeIds.has(target.id),
+  )
   return targets.some((target) => {
     const state = revealMap[target.id] ?? 'hidden'
     return state === 'hidden' || state === 'placeholder'
@@ -369,7 +401,7 @@ export function hasPendingBulkReveal(
 /**
  * Two-phase bulk flip under a hover/selection anchor:
  * 1) If any target is still hidden → turn those into placeholders
- *    (question cards / non-due free cards skip placeholder and open as revealed).
+ *    (formal non-due cards still skip placeholder and open as revealed).
  * 2) Else if any target is still placeholder → turn those into revealed content.
  * Already-revealed cards are never forced back to placeholder.
  *
@@ -384,7 +416,11 @@ export function advanceBulkRevealState(
   options: RevealFlowOptions = {},
   root: ReviewMindMapNode | null = null,
 ): Record<string, RevealState> {
-  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope)
+  const allowedNodeIds = resolveAllowedNodeIds(root, options)
+  if (allowedNodeIds && !allowedNodeIds.has(nodeId)) return revealMap
+  const targets = collectBulkRevealTargets(nodeId, nodeMap, scope).filter(
+    (target) => !allowedNodeIds || allowedNodeIds.has(target.id),
+  )
   if (targets.length === 0) return revealMap
   const focusIds = resolveFocusNodeIds(root, options)
 
@@ -395,7 +431,7 @@ export function advanceBulkRevealState(
       if ((next[target.id] ?? 'hidden') !== 'hidden') continue
       next[target.id] = firstAppearStateForChild(target, focusIds)
     }
-    return applyQuestionCardAutoReveal(nodeMap, next)
+    return next
   }
 
   const hasPlaceholder = targets.some(
@@ -407,7 +443,7 @@ export function advanceBulkRevealState(
       if ((next[target.id] ?? 'hidden') !== 'placeholder') continue
       next[target.id] = 'revealed'
     }
-    return applyQuestionCardAutoReveal(nodeMap, next)
+    return next
   }
 
   return revealMap
@@ -422,6 +458,8 @@ export function advanceRevealStateForNodeClick(
 ): Record<string, RevealState> {
   const node = nodeMap.get(nodeId)
   if (!node) return revealMap
+  const allowedNodeIds = resolveAllowedNodeIds(root, options)
+  if (allowedNodeIds && !allowedNodeIds.has(nodeId)) return revealMap
   const state = revealMap[nodeId] ?? 'hidden'
   const focusIds = resolveFocusNodeIds(root, options)
 
@@ -429,33 +467,41 @@ export function advanceRevealStateForNodeClick(
   // through its descendants in level order so the parent itself can drive the
   // whole branch without requiring the learner to select each child.
   if (state === 'placeholder') {
-    return applyQuestionCardAutoReveal(nodeMap, {
+    return {
       ...revealMap,
       [nodeId]: 'revealed',
-    })
+    }
   }
   if (state !== 'revealed') return revealMap
 
-  // Segment checkpoints deliberately keep their existing direct-child
-  // behavior: the learner must click the checkpoint card itself.
-  const nextChild = options.mode === 'segment-checkpoint'
-    ? findNextHiddenChild(node, revealMap)
-    : findNextPendingDescendant(node, revealMap)
-  if (!nextChild) return revealMap
-  // One step per click: hidden cards appear, placeholder cards open fully.
-  // Free (non-due) cards still skip the placeholder in formal due-scope, while
-  // due cards land on placeholder so the user still flips them one by one.
-  const childState = firstAppearStateForChild(nextChild, focusIds)
-  if ((revealMap[nextChild.id] ?? 'hidden') === 'placeholder') {
-    return applyQuestionCardAutoReveal(nodeMap, {
-      ...revealMap,
-      [nextChild.id]: 'revealed',
-    })
+  const pendingLevel = findNextPendingLevel(node, revealMap, allowedNodeIds)
+  if (pendingLevel.length === 0) return revealMap
+
+  const targets = selectRevealTargets(pendingLevel, options)
+
+  // First phase: make the selected hidden cards appear. Existing placeholders
+  // stay in place, so mixed restored states are completed by later clicks.
+  const hasHidden = targets.some(
+    (child) => (revealMap[child.id] ?? 'hidden') === 'hidden',
+  )
+  const next = { ...revealMap }
+  if (hasHidden) {
+    for (const child of targets) {
+      if ((next[child.id] ?? 'hidden') !== 'hidden') continue
+      next[child.id] =
+        options.revealStage === 'direct'
+          ? 'revealed'
+          : firstAppearStateForChild(child, focusIds)
+    }
+  } else {
+    // Second phase: reveal the selected placeholders together.
+    for (const child of targets) {
+      if ((next[child.id] ?? 'hidden') === 'placeholder') {
+        next[child.id] = 'revealed'
+      }
+    }
   }
-  return applyQuestionCardAutoReveal(nodeMap, {
-    ...revealMap,
-    [nextChild.id]: childState,
-  })
+  return next
 }
 
 export function hideRevealStateBranch(
@@ -525,7 +571,7 @@ export function pourCheckpointRevealState(
     frontier = nextFrontier
   }
 
-  return applyQuestionCardAutoReveal(nodeMap, next)
+  return next
 }
 
 export function buildSelectionNodeId(node: MindMapSelection | null): string | null {
@@ -873,5 +919,6 @@ export function buildFocusRevealState(
   previous: Record<string, RevealState> | null = null,
 ) {
   const focusState = buildCheckpointRevealState(root, focusNodeIds, previous)
-  return applyQuestionCardAutoReveal(nodeMap, focusState)
+  void nodeMap
+  return focusState
 }

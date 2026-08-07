@@ -127,6 +127,7 @@ export function MindMapReviewFlow({
           },
         ],
       }}
+      revealSettings={review.flow.flipCardRevealSettings}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
       onCountBadgeClick={handleOpenNodeQuiz}
     />
@@ -464,5 +465,4 @@ export function MindMapReviewFlow({
     </div>
   );
 }
-
 

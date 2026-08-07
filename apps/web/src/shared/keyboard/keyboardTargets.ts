@@ -9,3 +9,10 @@ export function isEditableKeyboardTarget(target: EventTarget | null) {
     Boolean(element.closest('[contenteditable="true"]'))
   )
 }
+
+/** Modal quiz interactions must own keys before page-level learning shortcuts. */
+export function isKeyboardShortcutSuspended() {
+  return typeof document !== 'undefined'
+    ? Boolean(document.querySelector('[data-keyboard-shortcuts-suspended="true"]'))
+    : false
+}

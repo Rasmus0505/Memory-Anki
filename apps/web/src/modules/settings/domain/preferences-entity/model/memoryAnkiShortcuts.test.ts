@@ -153,4 +153,34 @@ describe('memoryAnkiShortcuts', () => {
     expect(handler).toHaveBeenCalledTimes(1)
     expect(event.defaultPrevented).toBe(true)
   })
+
+  it('does not run page shortcuts while a modal owns keyboard input', () => {
+    const scope = document.createElement('div')
+    scope.dataset.keyboardShortcutsSuspended = 'true'
+    const button = document.createElement('button')
+    scope.appendChild(button)
+    document.body.appendChild(scope)
+
+    try {
+      const handler = vi.fn()
+      renderHook(() =>
+        useMemoryAnkiShortcuts('practice', { flip_subtree_cards_practice: handler }, true),
+      )
+
+      act(() => {
+        button.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'a',
+            code: 'KeyA',
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+
+      expect(handler).not.toHaveBeenCalled()
+    } finally {
+      scope.remove()
+    }
+  })
 })

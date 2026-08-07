@@ -7,6 +7,17 @@ export * from './domain/ai-log-entity/api'
 export * from './domain/ai-runtime-entity'
 export * from './domain/preferences-entity/api'
 export * from './domain/preferences-entity/model/palaceViewSettings'
+export {
+  DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+  FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY,
+  FLIP_CARD_REVEAL_SETTINGS_UPDATED_EVENT,
+  readFlipCardRevealSettings,
+  resetFlipCardRevealSettings,
+  sanitizeFlipCardRevealConfig,
+  useFlipCardRevealSettings,
+  writeFlipCardRevealSettings,
+  type FlipCardRevealConfig,
+} from './domain/preferences-entity/model/flipCardRevealSettings'
 export * from './domain/runtime-entity/api'
 // Prefer englishPracticeSettings for shared shortcut capture helper (also used by memory shortcuts).
 export {
@@ -48,10 +59,6 @@ export {
   type MemoryAnkiShortcutMap,
   type ShortcutScene,
 } from './domain/preferences-entity/model/memoryAnkiShortcuts'
-export { default as ProfileAiPage } from './ui/profile/ProfileAiPage'
-export { default as ProfileBackupsPage } from './ui/profile/ProfileBackupsPage'
-export { default as ProfileFeedbackPage } from './ui/profile/ProfileFeedbackPage'
-export { default as ProfileSettingsPage } from './ui/profile/ProfileSettingsPage'
-export { default as ProfileTimerPage } from './ui/profile/ProfileTimerPage'
 export * from './ui/shortcuts/FlipCardShortcutsDialog'
 export * from './ui/shortcuts/MemoryAnkiShortcutsSettings'
+export * from './ui/flip-card/FlipCardRevealSettingsDialog'

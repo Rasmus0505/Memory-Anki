@@ -17,7 +17,9 @@ import {
   hideRevealStateBranch,
   parseEditorDoc,
   pourCheckpointRevealState,
+  DEFAULT_FLIP_CARD_REVEAL_CONFIG,
   type BulkRevealScope,
+  type FlipCardRevealConfig,
   type RevealFlowMode,
   type RevealFlowOptions,
   sanitizeRedNodeIds,
@@ -37,6 +39,9 @@ interface UseRevealSessionOptions {
    * no longer passes this (classic flip for all cards).
    */
   focusNodeIds?: Iterable<string>
+  /** Optional freestyle-only scope for cards that may be revealed. */
+  allowedNodeIds?: Iterable<string>
+  revealConfig?: FlipCardRevealConfig
 }
 
 const EMPTY_CHECKPOINT_IDS: string[] = []
@@ -55,6 +60,8 @@ export function useRevealSession({
   mode = 'standard',
   checkpointIds = EMPTY_CHECKPOINT_IDS,
   focusNodeIds = EMPTY_FOCUS_NODE_IDS,
+  allowedNodeIds,
+  revealConfig = DEFAULT_FLIP_CARD_REVEAL_CONFIG,
 }: UseRevealSessionOptions) {
   const parsedDoc = React.useMemo(
     () => parseEditorDoc(editorState?.editor_doc ?? null),
@@ -79,13 +86,37 @@ export function useRevealSession({
     () => JSON.parse(focusNodeIdsKey) as string[],
     [focusNodeIdsKey],
   )
+  const allowedNodeIdsKey = React.useMemo(
+    () => allowedNodeIds == null
+      ? null
+      : JSON.stringify(Array.from(allowedNodeIds, (value) => String(value || '').trim())),
+    [allowedNodeIds],
+  )
+  const normalizedAllowedNodeIds = React.useMemo(
+    () => allowedNodeIdsKey == null
+      ? undefined
+      : JSON.parse(allowedNodeIdsKey) as string[],
+    [allowedNodeIdsKey],
+  )
+  const revealGranularity = revealConfig.granularity
+  const revealStage = revealConfig.stage
   const revealOptions = React.useMemo<RevealFlowOptions>(
     () => ({
       mode,
       checkpointIds: normalizedCheckpointIds,
       focusNodeIds: normalizedFocusNodeIds,
+      allowedNodeIds: normalizedAllowedNodeIds,
+      revealGranularity,
+      revealStage,
     }),
-    [mode, normalizedCheckpointIds, normalizedFocusNodeIds],
+    [
+      mode,
+      normalizedAllowedNodeIds,
+      normalizedCheckpointIds,
+      normalizedFocusNodeIds,
+      revealGranularity,
+      revealStage,
+    ],
   )
   const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(
     () => buildInitialRevealState(root, initialSnapshot?.revealMap ?? null, revealOptions),
@@ -201,7 +232,14 @@ export function useRevealSession({
           )
           if (
             lockedBulkTargetNodeIdRef.current === action.nodeId &&
-            !hasPendingBulkReveal(action.nodeId, nodeMap, nextBulkMap, action.scope)
+            !hasPendingBulkReveal(
+              action.nodeId,
+              nodeMap,
+              nextBulkMap,
+              action.scope,
+              revealOptions,
+              root,
+            )
           ) {
             lockedBulkTargetNodeIdRef.current = null
           }
@@ -284,7 +322,14 @@ export function useRevealSession({
       const lockedId = lockedBulkTargetNodeIdRef.current
       const revealSnapshot = revealMapRef.current
       const targetId =
-        lockedId && hasPendingBulkReveal(lockedId, nodeMap, revealSnapshot, scope)
+        lockedId && hasPendingBulkReveal(
+          lockedId,
+          nodeMap,
+          revealSnapshot,
+          scope,
+          revealOptions,
+          root,
+        )
           ? lockedId
           : (() => {
               if (lockedId) clearLockedBulkTarget()
@@ -296,7 +341,7 @@ export function useRevealSession({
             })()
 
       if (!targetId) return false
-      if (!hasPendingBulkReveal(targetId, nodeMap, revealSnapshot, scope)) {
+      if (!hasPendingBulkReveal(targetId, nodeMap, revealSnapshot, scope, revealOptions, root)) {
         clearLockedBulkTarget()
         return false
       }
@@ -306,7 +351,7 @@ export function useRevealSession({
       enqueueRevealAction({ type: 'bulk', nodeId: targetId, scope })
       return true
     },
-    [clearLockedBulkTarget, enqueueRevealAction, nodeMap],
+    [clearLockedBulkTarget, enqueueRevealAction, nodeMap, revealOptions, root],
   )
 
   const handleBulkRevealSubtree = React.useCallback(

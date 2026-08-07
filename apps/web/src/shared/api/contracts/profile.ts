@@ -331,8 +331,12 @@ export interface ClientPreferences {
   time_record_tags: Array<Record<string, unknown>> | null
   /** Immersive freestyle queue settings; shared across PWA and desktop via backend. */
   freestyle_feed_config: Record<string, unknown> | null
+  /** Immersive freestyle display preferences; shared across PWA and desktop via backend. */
+  freestyle_display_settings?: Record<string, unknown> | null
   /** Saved mind-map card mark-color labels + last used color. */
   mark_color_labels?: Record<string, unknown> | null
+  /** Global flip-card reveal granularity and placeholder behavior. */
+  flip_card_reveal_config?: Record<string, unknown> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

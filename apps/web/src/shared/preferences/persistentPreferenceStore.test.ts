@@ -55,7 +55,7 @@ describe('createPersistentPreferenceStore', () => {
   beforeEach(() => {
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   it('prefers loaded backend cache over stale localStorage', async () => {

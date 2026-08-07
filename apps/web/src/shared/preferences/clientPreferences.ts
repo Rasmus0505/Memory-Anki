@@ -13,6 +13,7 @@ type PreferenceNormalizer<T> = PreferenceValidator<T> | ((value: unknown) => T)
 
 const cache: Partial<ClientPreferences> = {}
 const latestSaveVersion: Partial<Record<PreferenceKey, number>> = {}
+const locallyWrittenBeforeInitialization = new Set<PreferenceKey>()
 let initialized = false
 let initializationSucceeded = false
 let initializePromise: Promise<boolean> | null = null
@@ -61,14 +62,22 @@ export async function initializeClientPreferences() {
   initializePromise = (async () => {
     try {
       const response = await getClientPreferencesApi()
-      Object.assign(cache, response.items || {})
+      // A user can save a preference while the initial GET is still pending.
+      // Do not let that older GET response roll the optimistic value back.
+      Object.entries(response.items || {}).forEach(([rawKey, value]) => {
+        const key = rawKey as PreferenceKey
+        if (locallyWrittenBeforeInitialization.has(key)) return
+        cache[key] = value
+      })
       initialized = true
       initializationSucceeded = true
       emitUpdate()
+      locallyWrittenBeforeInitialization.clear()
       return true
     } catch {
       initialized = true
       initializationSucceeded = false
+      locallyWrittenBeforeInitialization.clear()
       return false
     } finally {
       initializePromise = null
@@ -84,6 +93,7 @@ export async function saveClientPreference<T>(key: PreferenceKey, value: T) {
       persisted: true,
     }
   }
+  if (!initialized) locallyWrittenBeforeInitialization.add(key)
   const requestVersion = (latestSaveVersion[key] ?? 0) + 1
   latestSaveVersion[key] = requestVersion
   // Indexed assignment through keyof needs a cast: TS wants intersection of all value types.
@@ -125,6 +135,7 @@ export function resetClientPreferenceCacheForTest() {
   for (const key of Object.keys(latestSaveVersion) as PreferenceKey[]) {
     delete latestSaveVersion[key]
   }
+  locallyWrittenBeforeInitialization.clear()
   initialized = false
   initializationSucceeded = false
   initializePromise = null

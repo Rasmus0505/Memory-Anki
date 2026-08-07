@@ -109,7 +109,7 @@ describe("MindMapReviewFlow feedback", () => {
           milestone: {
             ...createReviewFeedbackSettingsFixture().scenes.milestone,
             cooldownMs: 0,
-            steps: [2, 4, 6, 10, 15],
+            steps: [3, 4, 6, 10, 15],
           },
         },
       }),
@@ -177,7 +177,7 @@ describe("MindMapReviewFlow feedback", () => {
     });
     await flushRevealFrame();
 
-    expect(screen.getByRole("status", { name: "推进链 2" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "推进链 3" })).toBeTruthy();
     expect(screen.getAllByText("起势成功，继续爆裂揭示。").length).toBeGreaterThan(0);
 
     await act(async () => {

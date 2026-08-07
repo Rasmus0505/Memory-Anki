@@ -28,6 +28,7 @@ export function buildFlipCardToolbar(options: {
   fullscreen: boolean
   uiCleared: boolean
   nativeFullscreenActive: boolean
+  hostFullscreenControl?: boolean
   hidePresentationOverflowActions: boolean
   resolvedPresentationStrategy: 'native-preferred' | 'viewport-only' | string
   modeToggleLabels?: { enterEdit?: string; leaveEdit?: string }
@@ -45,6 +46,7 @@ export function buildFlipCardToolbar(options: {
     fullscreen,
     uiCleared,
     nativeFullscreenActive,
+    hostFullscreenControl = false,
     hidePresentationOverflowActions,
     resolvedPresentationStrategy,
     modeToggleLabels,
@@ -96,16 +98,22 @@ export function buildFlipCardToolbar(options: {
         hidePresentationOverflowActions
           ? null
           : {
+              // A freestyle host owns both presentation buttons; the canvas
+              // native state must not decide the host button label.
               label:
                 resolvedPresentationStrategy === 'viewport-only'
-                  ? nativeFullscreenActive
+                  ? (hostFullscreenControl ? fullscreen : nativeFullscreenActive)
                     ? '退出全屏'
                     : '全屏'
-                  : nativeFullscreenActive
+                  : (hostFullscreenControl ? fullscreen : nativeFullscreenActive)
                     ? '退出系统全屏'
                     : '系统全屏',
-              active: nativeFullscreenActive,
+              active: hostFullscreenControl ? fullscreen : nativeFullscreenActive,
               onClick: () => {
+                if (hostFullscreenControl) {
+                  onToggleFullscreen()
+                  return
+                }
                 void (nativeFullscreenActive
                   ? frameRef.current?.exitFullscreen()
                   : frameRef.current?.enterFullscreen())

@@ -8,7 +8,9 @@ import {
   type MindMapSelection,
 } from '@/modules/content/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { FlipCardRevealConfig } from '@/shared/preferences/flipCardRevealConfig'
 import type { MindMapReviewFxPayload } from '@/modules/content/public'
+import { FlipCardRevealSettingsDialog } from '@/modules/settings/public'
 import { cn } from '@/shared/lib/utils'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -75,6 +77,17 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   className?: string
   surfaceClassName?: string
   toolbarExtensions?: FlipCardToolbarExtensions
+  revealSettings?: {
+    settings: FlipCardRevealConfig
+    updateSettings: (next: FlipCardRevealConfig) => void
+  }
+  /** Freestyle-only mode selector; formal palace review leaves this unset. */
+  freestyleFlipMode?: {
+    value: 'free' | 'focused'
+    onChange: (value: 'free' | 'focused') => void
+  }
+  /** Delegate canvas fullscreen buttons to the enclosing freestyle page. */
+  hostFullscreenControl?: boolean
   /** Host chrome after canvas tools (e.g. palace ladder progress). */
   toolbarCenterContent?: ReactNode
   /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
@@ -127,6 +140,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   className,
   surfaceClassName,
   toolbarExtensions,
+  revealSettings: revealSettingsControl,
+  freestyleFlipMode,
+  hostFullscreenControl = false,
   toolbarCenterContent,
   hidePresentationOverflowActions = false,
   chromeDensity = 'default',
@@ -190,6 +206,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
   const [activeGuidedUid, setActiveGuidedUid] = useState<string | null>(null)
   const isEditMode = displayMode === 'edit'
+  const [revealSettingsOpen, setRevealSettingsOpen] = useState(false)
   const {
     englishModeActive,
     handleToggleEnglishMode,
@@ -203,6 +220,22 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     mode: isEditMode ? 'edit' : sessionKind === 'review' ? 'review' : 'practice',
     ratingMode: false,
   })
+
+  const resolvedToolbarExtensions = useMemo(() => {
+    if ((!revealSettingsControl && !freestyleFlipMode) || isEditMode) return toolbarExtensions
+    return {
+      ...toolbarExtensions,
+      moreActions: [
+        ...(toolbarExtensions?.moreActions ?? []),
+        {
+          label: '翻卡设置',
+          onClick: () => setRevealSettingsOpen(true),
+          separatorBefore: true,
+          opensOverlay: true,
+        },
+      ],
+    }
+  }, [freestyleFlipMode, isEditMode, revealSettingsControl, toolbarExtensions])
 
   useImperativeHandle(forwardedRef, () => ({
     setUiCleared: (nextValue) => frameRef.current?.setUiCleared(nextValue),
@@ -483,13 +516,14 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         viewMemoryScope={viewMemoryScope}
         immersiveModeActive={fullscreen}
         toolbarContent={buildFlipCardToolbar({
-          toolbarExtensions,
+          toolbarExtensions: resolvedToolbarExtensions,
           isEditMode,
           englishModeActive,
           textModeActive,
           fullscreen,
           uiCleared,
           nativeFullscreenActive,
+          hostFullscreenControl: Boolean(hostFullscreenControl && !isEditMode),
           hidePresentationOverflowActions,
           resolvedPresentationStrategy,
           modeToggleLabels,
@@ -545,6 +579,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onSegmentRangeConfirm={onSegmentRangeConfirm}
         onAiSplitRequest={onAiSplitRequest}
         onFullscreenToggle={onToggleFullscreen}
+        delegateFullscreenToHost={Boolean(hostFullscreenControl && !isEditMode)}
         onFullscreenChange={handleSurfaceFullscreenChange}
         onUiClearedChange={handleSurfaceUiClearedChange}
         onReady={handleSurfaceReady}
@@ -558,6 +593,18 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       </div>
       {englishChrome}
       {aiRunConfigDialog}
+      {revealSettingsControl || freestyleFlipMode ? (
+        <FlipCardRevealSettingsDialog
+          open={revealSettingsOpen}
+          onOpenChange={setRevealSettingsOpen}
+          value={revealSettingsControl?.settings ?? {
+            granularity: 'level',
+            stage: 'two-step',
+          }}
+          onChange={revealSettingsControl?.updateSettings ?? (() => undefined)}
+          freestyleFlipMode={freestyleFlipMode}
+        />
+      ) : null}
     </div>
   )
 })

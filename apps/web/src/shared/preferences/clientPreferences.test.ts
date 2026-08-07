@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_PREFERENCES_UPDATED_EVENT,
   getCachedClientPreference,
+  initializeClientPreferences,
   migrateLocalPreferenceToBackend,
   resetClientPreferenceCacheForTest,
   saveClientPreference,
@@ -161,5 +162,37 @@ describe('clientPreferences', () => {
         (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
       ),
     ).toEqual({ enabled: false })
+  })
+
+  it('does not let initial loading overwrite a preference saved before it finishes', async () => {
+    let resolveInitial: ((value: { items: ReturnType<typeof emptyPreferences> }) => void) | null = null
+    mockGetClientPreferencesApi.mockImplementation(
+      () => new Promise((resolve) => { resolveInitial = resolve }),
+    )
+    const nextConfig = { specific_palace_ids: [40], subject_scope: 'english' }
+    mockUpdateClientPreferencesApi.mockResolvedValue({
+      items: {
+        ...emptyPreferences(),
+        freestyle_feed_config: nextConfig,
+      },
+    })
+
+    const initialLoad = initializeClientPreferences()
+    await saveClientPreference('freestyle_feed_config', nextConfig)
+    resolveInitial?.({
+      items: {
+        ...emptyPreferences(),
+        freestyle_feed_config: { specific_palace_ids: [41], subject_scope: 'all' },
+      },
+    })
+    await initialLoad
+
+    expect(
+      getCachedClientPreference(
+        'freestyle_feed_config',
+        null,
+        (value): value is typeof nextConfig => Boolean(value && typeof value === 'object'),
+      ),
+    ).toEqual(nextConfig)
   })
 })

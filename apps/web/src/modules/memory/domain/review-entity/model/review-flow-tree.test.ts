@@ -3,7 +3,6 @@ import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
 import {
   advanceBulkRevealState,
   advanceRevealStateForNodeClick,
-  applyQuestionCardAutoReveal,
   buildInitialRevealState,
   buildReviewTree,
   buildVisibleEditorState,
@@ -240,7 +239,7 @@ describe('review-flow-tree visible editor state', () => {
     expect(subtreeRevealed[1]).toMatchObject({ lineColor: '#059669', lineWidth: 6 })
   })
 
-  it('keeps standard click semantics when segment-checkpoint mode is enabled', () => {
+  it('reveals checkpoint siblings in two phases from a parent click', () => {
     const sourceDoc: MindMapDoc = {
       root: {
         data: { text: 'Root', uid: 'root' },
@@ -258,29 +257,43 @@ describe('review-flow-tree visible editor state', () => {
 
     const initial = buildInitialRevealState(root, null, {
       mode: 'segment-checkpoint',
-      checkpointIds: ['a1', 'b'],
+      checkpointIds: ['a', 'b'],
     })
     expect(initial).toEqual({
       root: 'revealed',
-      a: 'revealed',
-      a1: 'placeholder',
+      a: 'placeholder',
+      a1: 'hidden',
       b: 'placeholder',
     })
 
-    const checkpointOptions = { mode: 'segment-checkpoint' as const, checkpointIds: ['a1', 'b'] }
-    const afterRootClick = advanceRevealStateForNodeClick(
+    const checkpointOptions = { mode: 'segment-checkpoint' as const, checkpointIds: ['a', 'b'] }
+    const afterFirstRootClick = advanceRevealStateForNodeClick(
       'root',
       nodeMap,
       initial,
       checkpointOptions,
       root,
     )
-    expect(afterRootClick).toEqual(initial)
+    expect(afterFirstRootClick).toEqual({
+      root: 'revealed',
+      a: 'revealed',
+      a1: 'hidden',
+      b: 'revealed',
+    })
+
+    const afterSecondRootClick = advanceRevealStateForNodeClick(
+      'root',
+      nodeMap,
+      afterFirstRootClick,
+      checkpointOptions,
+      root,
+    )
+    expect(afterSecondRootClick.a1).toBe('placeholder')
 
     const afterCheckpointReveal = advanceRevealStateForNodeClick(
       'a1',
       nodeMap,
-      initial,
+      afterSecondRootClick,
       checkpointOptions,
       root,
     )
@@ -329,19 +342,20 @@ describe('review-flow-tree visible editor state', () => {
     expect(clickRoot().group).toBe('placeholder')
     expect(clickRoot().group).toBe('revealed')
 
-    // Finish the three same-level cards before entering their children.
+    // Show all three same-level cards as placeholders, then reveal them.
     expect(clickRoot().implementation).toBe('placeholder')
+    expect(revealMap.evaluation).toBe('placeholder')
+    expect(revealMap.extension).toBe('placeholder')
     expect(clickRoot().implementation).toBe('revealed')
-    expect(clickRoot().evaluation).toBe('placeholder')
-    expect(clickRoot().evaluation).toBe('revealed')
-    expect(clickRoot().extension).toBe('placeholder')
-    expect(clickRoot().extension).toBe('revealed')
+    expect(revealMap.evaluation).toBe('revealed')
+    expect(revealMap.extension).toBe('revealed')
 
-    // The next level is also top-to-bottom across branches.
+    // The next level is also grouped top-to-bottom across branches.
     expect(clickRoot()['implementation-child']).toBe('placeholder')
-    expect(clickRoot()['implementation-child']).toBe('revealed')
-    expect(clickRoot()['evaluation-child']).toBe('placeholder')
-    expect(clickRoot()['evaluation-child']).toBe('revealed')
+    expect(revealMap['evaluation-child']).toBe('placeholder')
+    clickRoot()
+    expect(revealMap['implementation-child']).toBe('revealed')
+    expect(revealMap['evaluation-child']).toBe('revealed')
 
     // A deeper implementation card waits until the whole preceding level ends.
     expect(clickRoot()['implementation-deep']).toBe('placeholder')
@@ -408,7 +422,7 @@ describe('review-flow-tree visible editor state', () => {
       'nested-due': 'hidden',
     })
 
-    // Next expand: free child opens fully (skip placeholder); due sibling still hidden.
+    // First phase: free child opens fully and due sibling becomes a placeholder.
     const afterExpandFresh = advanceRevealStateForNodeClick(
       'due-parent',
       nodeMap,
@@ -422,10 +436,10 @@ describe('review-flow-tree visible editor state', () => {
       fresh: 'revealed',
       'due-parent': 'revealed',
       'nested-fresh': 'revealed',
-      'nested-due': 'hidden',
+      'nested-due': 'placeholder',
     })
 
-    // Next expand: due child appears as placeholder and still needs its own flip.
+    // Second phase: the due child opens with the same parent click.
     const afterExpandNestedDue = advanceRevealStateForNodeClick(
       'due-parent',
       nodeMap,
@@ -433,22 +447,14 @@ describe('review-flow-tree visible editor state', () => {
       options,
       root,
     )
-    expect(afterExpandNestedDue['nested-due']).toBe('placeholder')
-    const afterFlipNestedDue = advanceRevealStateForNodeClick(
-      'nested-due',
-      nodeMap,
-      afterExpandNestedDue,
-      options,
-      root,
-    )
-    expect(afterFlipNestedDue['nested-due']).toBe('revealed')
-    expect(afterFlipNestedDue['nested-fresh']).toBe('revealed')
+    expect(afterExpandNestedDue['nested-due']).toBe('revealed')
+    expect(afterExpandNestedDue['nested-fresh']).toBe('revealed')
 
     // Hide from a due card must stick (not re-heal free/due children open).
     const afterHide = hideRevealStateBranch(
       'due-parent',
       nodeMap,
-      afterFlipNestedDue,
+      afterExpandNestedDue,
       options,
       root,
     )
@@ -474,7 +480,7 @@ describe('review-flow-tree visible editor state', () => {
     expect(healed.branch).toBe('revealed')
   })
 
-  it('auto-reveals question-card children when a parent becomes revealed', () => {
+  it('keeps question-card children on the normal manual reveal path', () => {
     const sourceDoc: MindMapDoc = {
       root: {
         data: { text: 'Root', uid: 'root' },
@@ -491,71 +497,37 @@ describe('review-flow-tree visible editor state', () => {
     const root = buildReviewTree(sourceDoc, 'Root')
     const nodeMap = flattenNodes(root)
 
-    expect(nodeMap.get('b')?.isQuestionCard).toBe(true)
-    expect(nodeMap.get('c')?.isQuestionCard).toBe(true)
-
     const initial = buildInitialRevealState(root)
     expect(initial).toEqual({
       root: 'revealed',
       a: 'hidden',
-      b: 'revealed',
+      b: 'hidden',
       b1: 'hidden',
-      c: 'revealed',
+      c: 'hidden',
     })
 
     const afterRootClick = advanceRevealStateForNodeClick('root', nodeMap, initial)
     expect(afterRootClick.a).toBe('placeholder')
-    expect(afterRootClick.b).toBe('revealed')
-    expect(afterRootClick.c).toBe('revealed')
+    expect(afterRootClick.b).toBe('placeholder')
+    expect(afterRootClick.c).toBe('placeholder')
     expect(afterRootClick.b1).toBe('hidden')
 
     const afterBClick = advanceRevealStateForNodeClick('b', nodeMap, afterRootClick)
-    expect(afterBClick.b1).toBe('placeholder')
+    expect(afterBClick.b1).toBe('hidden')
+    const afterBExpand = advanceRevealStateForNodeClick('b', nodeMap, afterBClick)
+    expect(afterBExpand.b1).toBe('placeholder')
 
-    const afterHide = hideRevealStateBranch('root', nodeMap, afterBClick)
+    const afterHide = hideRevealStateBranch('root', nodeMap, afterBExpand)
     expect(afterHide.b).toBe('hidden')
     expect(afterHide.c).toBe('hidden')
     expect(afterHide.a).toBe('hidden')
     expect(afterHide.root).toBe('revealed')
 
-    // Parent still revealed: next advance re-runs cascade so question cards return.
+    // Parent still revealed: the learner must explicitly reveal the children again.
     const afterRecover = advanceRevealStateForNodeClick('root', nodeMap, afterHide)
     expect(afterRecover.a).toBe('placeholder')
-    expect(afterRecover.b).toBe('revealed')
-    expect(afterRecover.c).toBe('revealed')
-  })
-
-  it('cascades nested question cards through applyQuestionCardAutoReveal', () => {
-    const sourceDoc: MindMapDoc = {
-      root: {
-        data: { text: 'Root', uid: 'root' },
-        children: [
-          {
-            data: { text: 'Q1', uid: 'q1', memoryAnkiQuestionCard: true },
-            children: [
-              {
-                data: { text: 'Q2', uid: 'q2', memoryAnkiQuestionCard: true },
-                children: [{ data: { text: 'Leaf', uid: 'leaf' }, children: [] }],
-              },
-            ],
-          },
-        ],
-      },
-    }
-    const root = buildReviewTree(sourceDoc, 'Root')
-    const nodeMap = flattenNodes(root)
-    const next = applyQuestionCardAutoReveal(nodeMap, {
-      root: 'revealed',
-      q1: 'hidden',
-      q2: 'hidden',
-      leaf: 'hidden',
-    })
-    expect(next).toEqual({
-      root: 'revealed',
-      q1: 'revealed',
-      q2: 'revealed',
-      leaf: 'hidden',
-    })
+    expect(afterRecover.b).toBe('placeholder')
+    expect(afterRecover.c).toBe('placeholder')
   })
 
   it('bulk flips all descendants in two phases without resetting revealed cards', () => {

@@ -105,6 +105,20 @@ class TestClientPreferences:
             "review_feedback_settings"
         ] == {"a": 1}
 
+    def test_freestyle_display_settings_roundtrip(self, client):
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={"freestyle_display_settings": {"rating_mode": False}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["items"]["freestyle_display_settings"] == {
+            "rating_mode": False,
+        }
+        assert client.get("/api/v1/profile/client-preferences").json()["items"][
+            "freestyle_display_settings"
+        ] == {"rating_mode": False}
+
     def test_study_goals_roundtrip(self, client):
         response = client.put(
             "/api/v1/profile/client-preferences",

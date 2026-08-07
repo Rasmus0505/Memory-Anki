@@ -77,8 +77,62 @@ describe('useRevealSession', () => {
     flushRevealFrame()
 
     expect(result.current.revealMap.a).toBe('revealed')
-    expect(result.current.revealMap.b).toBe('hidden')
+    expect(result.current.revealMap.b).toBe('revealed')
     expect(result.current.visibleEditorSyncKey).not.toBe(initialSyncKey)
+  })
+
+  it('keeps rapid clicks sequential in single-card mode', () => {
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState,
+        revealConfig: { granularity: 'single', stage: 'two-step' },
+      }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('hidden')
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
+
+  it('keeps reveal progress when the reveal configuration changes', () => {
+    const { result, rerender } = renderHook(
+      ({ config }: { config: { granularity: 'single' | 'level'; stage: 'two-step' | 'direct' } }) =>
+        useRevealSession({ title: '宫殿', editorState, revealConfig: config }),
+      { initialProps: { config: { granularity: 'level', stage: 'two-step' } } },
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('placeholder')
+    expect(result.current.revealMap.b).toBe('placeholder')
+
+    rerender({ config: { granularity: 'single', stage: 'direct' } })
+    expect(result.current.revealMap.a).toBe('placeholder')
+    expect(result.current.revealMap.b).toBe('placeholder')
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('placeholder')
   })
 
   it('lets the root continue through nested cards without selecting each child', () => {
@@ -117,15 +171,11 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.group).toBe('revealed')
     clickRoot()
     expect(result.current.revealMap.implementation).toBe('placeholder')
-    clickRoot()
-    expect(result.current.revealMap.implementation).toBe('revealed')
-    clickRoot()
     expect(result.current.revealMap.evaluation).toBe('placeholder')
-    clickRoot()
-    expect(result.current.revealMap.evaluation).toBe('revealed')
-    clickRoot()
     expect(result.current.revealMap.extension).toBe('placeholder')
     clickRoot()
+    expect(result.current.revealMap.implementation).toBe('revealed')
+    expect(result.current.revealMap.evaluation).toBe('revealed')
     expect(result.current.revealMap.extension).toBe('revealed')
 
     clickRoot()
@@ -149,7 +199,7 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('hidden')
   })
 
-  it('auto-reveals question-card children when the session starts with a revealed root', () => {
+  it('keeps question-card children hidden until the learner reveals them', () => {
     const withQuestionCards: MindMapEditorState = {
       ...editorState,
       editor_doc: {
@@ -170,7 +220,7 @@ describe('useRevealSession', () => {
     )
 
     expect(result.current.revealMap.a).toBe('hidden')
-    expect(result.current.revealMap.b).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('hidden')
   })
 
   it('auto-reveals non-due cards when focusNodeIds are provided for formal review', () => {
@@ -230,20 +280,15 @@ describe('useRevealSession', () => {
       result.current.handleNodeClick([selection('root', '宫殿')])
     })
     flushRevealFrame()
-    // One step: free sibling auto-opens fully; due still waits for the next expand.
+    // First phase: free sibling opens fully and the due sibling becomes a placeholder.
     expect(result.current.revealMap.fresh).toBe('revealed')
-    expect(result.current.revealMap.due).toBe('hidden')
-
-    act(() => {
-      result.current.handleNodeClick([selection('root', '宫殿')])
-    })
-    flushRevealFrame()
     expect(result.current.revealMap.due).toBe('placeholder')
 
     act(() => {
       result.current.handleNodeClick([selection('due', 'Due')])
     })
     flushRevealFrame()
+    expect(result.current.revealMap.due).toBe('revealed')
     // Flip due content only — do not dump all children.
     expect(result.current.revealMap.due).toBe('revealed')
     expect(result.current.revealMap['nested-fresh']).toBe('hidden')
@@ -253,15 +298,15 @@ describe('useRevealSession', () => {
       result.current.handleNodeClick([selection('due', 'Due')])
     })
     flushRevealFrame()
-    // Free child skips placeholder; due sibling stays hidden until next expand.
+    // Free child skips placeholder; due sibling becomes a placeholder in the same phase.
     expect(result.current.revealMap['nested-fresh']).toBe('revealed')
-    expect(result.current.revealMap['nested-due']).toBe('hidden')
+    expect(result.current.revealMap['nested-due']).toBe('placeholder')
 
     act(() => {
       result.current.handleNodeClick([selection('due', 'Due')])
     })
     flushRevealFrame()
-    expect(result.current.revealMap['nested-due']).toBe('placeholder')
+    expect(result.current.revealMap['nested-due']).toBe('revealed')
 
     act(() => {
       result.current.handleNodeContextMenu([selection('due', 'Due')])

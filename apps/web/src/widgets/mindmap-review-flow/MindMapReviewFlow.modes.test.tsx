@@ -66,6 +66,26 @@ describe("MindMapReviewFlow modes", () => {
     expect(latestCall?.nodeClickViewportPolicy).toBe("preserve");
   });
 
+  it("opens the flip-card settings from the toolbar overflow actions", async () => {
+    renderInRouter(
+      <MindMapReviewFlow
+        title="Root"
+        palaceId={1}
+        sessionKind="practice"
+        reviewEditorState={editorState}
+        onComplete={vi.fn()}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "翻卡设置" }));
+    });
+
+    expect(screen.getByTestId("flip-card-reveal-settings-dialog")).toBeTruthy();
+    expect(screen.getByText("同层批量")).toBeTruthy();
+    expect(screen.getByText("直接显示内容")).toBeTruthy();
+  });
+
   it("shows a mobile guided review rail without moving the viewport during card navigation", async () => {
     renderInRouter(
       <MindMapReviewFlow
@@ -482,7 +502,7 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: "child", text: "Child" }]);
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: "root", text: "Root" }]);
     });
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: "Root",
