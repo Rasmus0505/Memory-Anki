@@ -47,6 +47,47 @@ export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 
 export type FreestyleSubjectScope = 'all' | 'english' | 'non_english'
 
+/** The first decision in the freestyle configuration flow. */
+export type FreestyleTrainingMode = 'memory_palace' | 'quiz' | 'english' | 'mixed'
+
+/** Content streams available inside the mixed training direction. */
+export type FreestyleTrainingStream = Exclude<FreestyleTrainingMode, 'mixed'>
+
+/** Ordering inside one palace after the palace itself has been selected. */
+export type FreestyleUnitOrder = 'structured' | 'random'
+
+/** How active streams are composed for a mixed round. */
+export type FreestyleMixStrategy = 'ratio' | 'random' | 'sequential'
+
+export interface FreestyleStreamScope {
+  specific_palace_ids: number[]
+  subject_scope: FreestyleSubjectScope
+}
+
+export interface FreestylePalaceStreamConfig extends FreestyleStreamScope {
+  due_policy: FreestyleDuePolicy
+  palace_order: FreestylePalaceOrder
+  unit_order: FreestyleUnitOrder
+}
+
+export interface FreestyleQuizStreamConfig extends FreestyleStreamScope {
+  question_type: FreestyleQuestionTypeFilter
+  mastery_buckets: FreestyleQuizMasteryBucket[]
+  quiz_scope: FreestyleQuizScope
+  weak_priority: boolean
+}
+
+export interface FreestyleTrainingStreams {
+  memory_palace: FreestylePalaceStreamConfig
+  quiz: FreestyleQuizStreamConfig
+  english: FreestylePalaceStreamConfig
+}
+
+export interface FreestyleTrainingMix {
+  strategy: FreestyleMixStrategy
+  ratios: Record<FreestyleTrainingStream, number>
+}
+
 export interface FreestyleMixRatio {
   /** Palace-side cards per cycle (mindmap + anki stream). */
   mindmap: number
@@ -55,9 +96,26 @@ export interface FreestyleMixRatio {
 }
 
 export interface FreestyleFeedConfig {
+  /** New information architecture. Old fields below are compatibility-only. */
+  training_mode: FreestyleTrainingMode
+  /** Non-empty only when training_mode is mixed; sanitized to at least two streams. */
+  mixed_modes: FreestyleTrainingStream[]
+  /** Each training stream owns its source range and its own relevant options. */
+  streams: FreestyleTrainingStreams
+  /** Used only for mixed rounds. */
+  mix: FreestyleTrainingMix
+  /** One total for every direction. Candidate shortfall never creates duplicates. */
+  queue_length: number
+  /** Deterministic ordering seed. Kept under advanced settings in the UI. */
+  seed: number
+
+  /**
+   * Compatibility projection for v1 local preferences and callers during the
+   * configuration migration. New UI and queue code must read the fields above.
+   */
   content: {
     mindmap_branch: boolean
-    /** Anki-style front/back cards from marked palace nodes. */
+    /** Retired from new freestyle rounds; always false after sanitization. */
     anki_card: boolean
     quiz_question: boolean
   }
@@ -95,13 +153,11 @@ export interface FreestyleFeedConfig {
   quiz_mastery_buckets: FreestyleQuizMasteryBucket[]
   /** Cross-palace vs single-palace quiz draw order. */
   quiz_scope: FreestyleQuizScope
-  queue_length: number
   specific_palace_ids: number[]
   subject_scope: FreestyleSubjectScope
   question_type: FreestyleQuestionTypeFilter
   /** Pool-internal sort only; does not decide membership (see quiz_mastery_buckets). */
   weak_quiz_priority: boolean
-  seed: number
 }
 
 export interface FreestyleContextPathItem {

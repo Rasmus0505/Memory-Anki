@@ -35,6 +35,7 @@ from .quiz_stream import (
     stable_mix as _stable_mix,
 )
 from .review_units import ReviewUnitCandidate
+from .stream_mixer import merge_content_streams
 
 
 @dataclass(frozen=True)
@@ -394,6 +395,7 @@ def assemble_queue(
     seed = int(config.get("seed") or 17)
     due_policy = str(config.get("due_policy") or DUE_POLICY_DUE_FIRST)
     palace_order = str(config.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
+    unit_order = str(config.get("unit_order") or "structured")
     queue_length = int(config.get("queue_length") or 20)
     mindmap_enabled = bool((config.get("content") or {}).get("mindmap_branch", True))
     anki_enabled = bool((config.get("content") or {}).get("anki_card", True))
@@ -459,6 +461,15 @@ def assemble_queue(
             mastery_by_palace,
             recent_practice_rank,
         )
+        if unit_order == "random":
+            due_units_by_palace[palace_id] = sorted(
+                due_units_by_palace[palace_id],
+                key=lambda unit: (_stable_mix(seed, "unit", unit.unit_id, unit.revision), unit.unit_id),
+            )
+            later_units_by_palace[palace_id] = sorted(
+                later_units_by_palace[palace_id],
+                key=lambda unit: (_stable_mix(seed + 11, "unit-fill", unit.unit_id, unit.revision), unit.unit_id),
+            )
 
     # Quiz membership is driven by quiz_mastery_buckets (not due_policy).
     # All in-scope quizzes ride phase1 with due units so mix_ratio can fire even
@@ -736,6 +747,7 @@ __all__ = [
     "filter_completed",
     "filter_quizzes_by_mastery_buckets",
     "interleave_by_weights",
+    "merge_content_streams",
     "merge_streams_by_mix_mode",
     "mindmap_card_payload",
     "order_quiz_stream_by_scope",

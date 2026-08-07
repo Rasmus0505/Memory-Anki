@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from datetime import date, timedelta
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive, utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
+    ReviewUnitEncounter,
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_ladder_progress import (
@@ -78,6 +79,11 @@ def _pass_once(
         operation_id=operation_id,
         rating=rating,
     )
+    if elapsed_seconds:
+        encounter = session.get(ReviewUnitEncounter, encounter_id)
+        assert encounter is not None
+        encounter.created_at = utc_now_naive() - timedelta(seconds=elapsed_seconds)
+        session.flush()
     close_unit_review_encounter(
         session,
         study_session_id=review["id"],

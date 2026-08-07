@@ -14,34 +14,8 @@ import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
-import type { ReviewFlowSnapshot } from '@/modules/memory/public'
 
 export { FlipCardMindMapPanel, NodeBoundQuizDialog }
-
-/**
- * Freestyle swipe remounts cards outside the mount window. Cache flip/reveal
- * so going back to a previous unit restores the full revealed map instead of
- * root-only initial state.
- */
-export const branchRevealSnapshotCache = new Map<string, ReviewFlowSnapshot>()
-
-export function readBranchRevealSnapshot(cardId: string): ReviewFlowSnapshot | null {
-  const snapshot = branchRevealSnapshotCache.get(cardId)
-  if (!snapshot) return null
-  return {
-    revealMap: { ...snapshot.revealMap },
-    redNodeIds: [...snapshot.redNodeIds],
-    completed: snapshot.completed,
-  }
-}
-
-export function writeBranchRevealSnapshot(cardId: string, snapshot: ReviewFlowSnapshot) {
-  branchRevealSnapshotCache.set(cardId, {
-    revealMap: { ...snapshot.revealMap },
-    redNodeIds: [...snapshot.redNodeIds],
-    completed: snapshot.completed,
-  })
-}
 
 export function plainContextLabel(
   contextPath: FreestyleMindMapBranchCard['context_path'] | undefined,

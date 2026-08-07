@@ -16,6 +16,7 @@ describe('useForegroundEncounterClock', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(performance, 'now').mockImplementation(() => now)
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
     window.localStorage.clear()
     setVisibility('visible')
   })
@@ -71,6 +72,36 @@ describe('useForegroundEncounterClock', () => {
 
     act(() => setVisibility('visible'))
     act(() => {
+      now += 1000
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(2)
+  })
+
+  it('stops while the desktop window is blurred even when the document stays visible', () => {
+    const { result } = renderHook(() => useForegroundEncounterClock({
+      encounterId: 'encounter-blurred',
+      active: true,
+      open: true,
+    }))
+
+    act(() => {
+      now += 1000
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(1)
+
+    act(() => {
+      vi.mocked(document.hasFocus).mockReturnValue(false)
+      window.dispatchEvent(new Event('blur'))
+      now += 10 * 60 * 1000
+      vi.advanceTimersByTime(10 * 60 * 1000)
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(1)
+
+    act(() => {
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      window.dispatchEvent(new Event('focus'))
       now += 1000
       vi.advanceTimersByTime(1000)
     })

@@ -14,6 +14,7 @@ import {
   rateReviewUnitApi,
   startFreestyleUnitReviewSessionApi,
   undoReviewUnitRatingApi,
+  type FreestyleFlipMode,
   type FreestyleUnitEncounterState,
   type ReviewUnitDto,
   type UnitRating,
@@ -243,13 +244,16 @@ export function FreestyleUnitReviewCardView({
   roundId,
   encounter,
   retryAfterCards,
-  ratingVisible = true,
   onEnsureEncounter,
   onEncounterChange,
   onBranchComplete,
   onStaleDrop,
   onSaveFailed,
   onUnitsReconciled,
+  fullscreen = false,
+  onToggleFullscreen = () => undefined,
+  freestyleFlipMode = 'free',
+  onFreestyleFlipModeChange,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -257,8 +261,6 @@ export function FreestyleUnitReviewCardView({
   roundId: string
   encounter?: FreestyleUnitEncounterState
   retryAfterCards: number
-  /** When false, hide the rating overlay (HUD star toggle). */
-  ratingVisible?: boolean
   onEnsureEncounter: (
     cardId: string,
     unitRevision: number,
@@ -273,15 +275,20 @@ export function FreestyleUnitReviewCardView({
   onSaveFailed: (message: string) => void
   /** Silent freestyle queue rebuild after mark/leave unit reconcile changes. */
   onUnitsReconciled?: () => void
+  /** Fullscreen is owned by ImmersiveFreestylePage so rating/navigation stay visible. */
+  fullscreen?: boolean
+  onToggleFullscreen?: (active?: boolean) => void
+  freestyleFlipMode?: FreestyleFlipMode
+  onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
   const [busy, setBusy] = useState(false)
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
-  const [fullscreen, setFullscreen] = useState(false)
   const [inlineEditing, setInlineEditing] = useState(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [staleRecovery, setStaleRecovery] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const activeRef = useRef(active)
@@ -318,6 +325,7 @@ export function FreestyleUnitReviewCardView({
   // A freshly mounted unit card must not inherit a previous card's saved-doc override.
   useEffect(() => {
     setSavedEditorState(null)
+    setStaleRecovery(false)
   }, [cardUnitKey])
 
   const retryLoad = useCallback(() => {
@@ -325,6 +333,7 @@ export function FreestyleUnitReviewCardView({
     loadOperationRef.current = null
     setSession(null)
     setLoadError(null)
+    setStaleRecovery(false)
     setActionError(null)
     setLoadAttempt((value) => value + 1)
   }, [])
@@ -488,6 +497,7 @@ export function FreestyleUnitReviewCardView({
       openedForKeyRef.current = cardUnitKey
       setSession(value)
       setLoadError(null)
+      setStaleRecovery(false)
       setLastOperationId(nextUnit.encounter.effective_operation_id)
       onEncounterChange(
         card.id,
@@ -496,6 +506,7 @@ export function FreestyleUnitReviewCardView({
     }).catch((error) => {
       if (!mounted || loadOperationRef.current !== requestIdentity) return
       if (isStaleUnitError(error)) {
+        setStaleRecovery(true)
         onStaleDrop(card.id)
         return
       }
@@ -601,7 +612,7 @@ export function FreestyleUnitReviewCardView({
     } catch (error) {
       if (isStaleUnitError(error)) {
         const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '评分后卡片已过期' })
-        setActionError(`${diagnostic}\n请点击“重建队列”后继续。`)
+        setActionError(`${diagnostic}\n已检测到内容版本变化，正在自动更新复习安排。`)
         onSaveFailed(diagnostic)
         onStaleDrop(card.id)
       } else {
@@ -657,38 +668,15 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  if (!editorState || !session || !unit || !unit.encounter) {
-    if (loadError) {
-      return (
-        <div className="flex h-full flex-col items-center justify-center gap-3 rounded-3xl border border-rose-400/25 bg-rose-950/20 px-5 text-center text-sm text-rose-100">
-          <p>单元加载失败：{loadError}</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={retryLoad}>
-              重试加载
-            </button>
-            <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={() => onStaleDrop(card.id)}>
-              重建队列
-            </button>
-          </div>
-        </div>
-      )
-    }
-    return (
-      <div className="flex h-full items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03] text-sm text-zinc-400">
-        <LoaderCircle className="mr-2 size-4 animate-spin" />
-        正在加载单元...
-      </div>
-    )
-  }
-
-  const currentEncounter = unit.encounter
-  const selectedRating = currentEncounter.selected_rating
-  const selectedEffect = currentEncounter.rating_effects.find(
+  const reviewReady = Boolean(editorState && session && unit && unit.encounter)
+  const currentEncounter = unit?.encounter ?? null
+  const selectedRating = currentEncounter?.selected_rating ?? null
+  const selectedEffect = currentEncounter?.rating_effects.find(
     (effect) => effect.rating === selectedRating,
   )
-  const locked = readOnly || currentEncounter.status === 'closed'
+  const locked = readOnly || !reviewReady || currentEncounter?.status === 'closed'
   const titleText = stripMindMapHtml(
-    unit.title || card.palace_title || `宫殿 ${card.palace_id}`,
+    unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )
   const flipTone = activeFlipProgress
     ? flipProgressTone(activeFlipProgress.revealed, activeFlipProgress.total)
@@ -741,28 +729,60 @@ export function FreestyleUnitReviewCardView({
       </header>
 
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.4rem] border border-white/10 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
-        <FreestyleUnitReviewFlipPanel
-          key={`${card.id}:${unit.encounter.id}`}
-          card={card}
-          session={session}
-          unit={unit}
-          editorState={savedEditorState ?? editorState}
-          active={active}
-          fullscreen={fullscreen}
-          onToggleFullscreen={(next) => setFullscreen(next ?? !fullscreen)}
-          onEditingChange={setInlineEditing}
-          onSaveFailed={onSaveFailed}
-          onEditorStateSaved={setSavedEditorState}
-          onUnitsReconciled={onUnitsReconciled}
-          onRevealProgressChange={handleRevealProgressChange}
-        />
+        {editorState && session && unit && unit.encounter ? (
+          <FreestyleUnitReviewFlipPanel
+            key={`${card.id}:${unit.encounter.id}`}
+            card={card}
+            session={session}
+            unit={unit}
+            editorState={savedEditorState ?? editorState}
+            active={active}
+            fullscreen={fullscreen}
+            onToggleFullscreen={onToggleFullscreen}
+            freestyleFlipMode={freestyleFlipMode}
+            onFreestyleFlipModeChange={onFreestyleFlipModeChange}
+            onEditingChange={setInlineEditing}
+            onSaveFailed={onSaveFailed}
+            onEditorStateSaved={setSavedEditorState}
+            onUnitsReconciled={onUnitsReconciled}
+            onRevealProgressChange={handleRevealProgressChange}
+          />
+        ) : (
+          <div className={cn(
+            'flex h-full items-center justify-center px-5 text-center text-sm',
+            loadError
+              ? 'bg-rose-950/20 text-rose-100'
+              : staleRecovery
+                ? 'bg-amber-200/[0.04] text-amber-100'
+                : 'bg-white/[0.03] text-zinc-400',
+          )}>
+            {loadError ? (
+              <div className="flex flex-col items-center gap-3">
+                <p>单元加载失败：{loadError}</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={retryLoad}>
+                    重试加载
+                  </button>
+                  <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={() => onStaleDrop(card.id)}>
+                    重建队列
+                  </button>
+                </div>
+              </div>
+            ) : staleRecovery ? (
+              <span className="inline-flex items-center"><LoaderCircle className="mr-2 size-4 animate-spin" />正在更新复习安排...</span>
+            ) : (
+              <span className="inline-flex items-center">{active ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}{active ? '正在加载单元...' : '等待进入当前单元'}</span>
+            )}
+          </div>
+        )}
 
-        {ratingVisible && !inlineEditing ? (
+        {active && !inlineEditing ? (
           <footer
+            data-testid="freestyle-rating-bar"
             className={cn(
               // Phone: float over map bottom so the map keeps full height.
               // Desktop: still overlay but roomier hit targets.
-              'pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 sm:p-2.5',
+              'pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:p-2.5 sm:pb-2.5',
             )}
           >
             <div className="pointer-events-auto rounded-[1.2rem] border border-white/12 bg-zinc-950/88 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-md sm:rounded-2xl sm:p-2">
@@ -787,18 +807,19 @@ export function FreestyleUnitReviewCardView({
               ) : null}
               <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
                 {ratings.map((item) => {
-                  const effect = currentEncounter.rating_effects.find(
+                  const effect = currentEncounter?.rating_effects.find(
                     (value) => value.rating === item.value,
                   )
                   const hint = effect
                     ? ratingEffectLabel(effect, retryAfterCards)
-                    : '计划不可用'
+                    : reviewReady ? '计划不可用' : '加载中'
                   const selected = selectedRating === item.value
                   return (
                     <button
+                      data-testid={`freestyle-rating-button-${item.value}`}
                       key={item.value}
                       type="button"
-                      disabled={busy || locked || selected}
+                      disabled={busy || locked || selected || !currentEncounter}
                       aria-pressed={selected}
                       aria-label={`${item.label}：${hint}`}
                       title={actionError || hint}

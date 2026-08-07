@@ -6,6 +6,7 @@ from memory_anki.modules.practice.domain.feed_config import sanitize_feed_config
 from memory_anki.modules.practice.domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
+    merge_content_streams,
 )
 from memory_anki.modules.practice.domain.review_units import ReviewUnitCandidate
 
@@ -101,7 +102,7 @@ def test_queue_reports_candidate_and_scheduled_counts_when_limit_truncates():
     assert "ratable_node_uids" not in result.cards[0]
 
 
-def test_anki_card_supplements_unit_without_rating_identity():
+def test_anki_cards_are_not_emitted_by_the_new_freestyle_queue():
     unit = _unit("front", ("front", "back"), unit_id="review-1", revision=4)
     result = _assemble(
         units=[unit],
@@ -131,15 +132,73 @@ def test_anki_card_supplements_unit_without_rating_identity():
         },
     )
 
-    assert [card["type"] for card in result.cards] == [
-        "mindmap_branch",
-        "anki_card",
-    ]
-    unit_card, anki_card = result.cards
-    assert unit_card["id"] == "review_unit:review-1:r4"
-    assert unit_card["unit_id"] == "review-1"
-    assert "unit_id" not in anki_card
-    assert "unit_revision" not in anki_card
+    assert [card["type"] for card in result.cards] == ["mindmap_branch"]
+    assert result.cards[0]["id"] == "review_unit:review-1:r4"
+    assert result.cards[0]["unit_id"] == "review-1"
+
+
+def test_three_stream_ratio_merge_is_stable_and_deduplicates_card_ids():
+    streams = {
+        "memory_palace": [{"id": "m1"}, {"id": "shared"}],
+        "quiz": [{"id": "q1"}, {"id": "shared"}],
+        "english": [{"id": "e1"}],
+    }
+    kwargs = {
+        "active_streams": ["memory_palace", "quiz", "english"],
+        "strategy": "ratio",
+        "ratios": {"memory_palace": 2, "quiz": 1, "english": 1},
+        "seed": 17,
+    }
+    first = merge_content_streams(streams, **kwargs)
+    second = merge_content_streams(streams, **kwargs)
+
+    assert [card["id"] for card in first] == ["m1", "shared", "q1", "e1"]
+    assert [card["id"] for card in second] == [card["id"] for card in first]
+    assert len({card["id"] for card in first}) == len(first)
+
+
+def test_three_stream_random_and_sequential_strategies_are_supported():
+    streams = {
+        "memory_palace": [{"id": "m1"}, {"id": "m2"}],
+        "quiz": [{"id": "q1"}],
+        "english": [{"id": "e1"}],
+    }
+    random_kwargs = {
+        "active_streams": ["memory_palace", "quiz", "english"],
+        "strategy": "random",
+        "ratios": {},
+        "seed": 23,
+    }
+    random_first = merge_content_streams(streams, **random_kwargs)
+    random_second = merge_content_streams(streams, **random_kwargs)
+    sequential = merge_content_streams(
+        streams,
+        active_streams=["memory_palace", "quiz", "english"],
+        strategy="sequential",
+        ratios={},
+        seed=23,
+    )
+
+    assert [card["id"] for card in random_first] == [card["id"] for card in random_second]
+    assert set(card["id"] for card in random_first) == {"m1", "m2", "q1", "e1"}
+    assert [card["id"] for card in sequential] == ["m1", "m2", "q1", "e1"]
+
+
+def test_sanitize_migrates_legacy_directions_and_removes_anki():
+    assert sanitize_feed_config({"mix_mode": "quiz_only"})["training_mode"] == "quiz"
+    assert sanitize_feed_config({
+        "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+    })["training_mode"] == "memory_palace"
+    assert sanitize_feed_config({
+        "subject_scope": "english",
+        "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+    })["training_mode"] == "english"
+    migrated = sanitize_feed_config({
+        "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": True},
+    })
+    assert migrated["training_mode"] == "mixed"
+    assert migrated["mixed_modes"] == ["memory_palace", "quiz"]
+    assert migrated["content"]["anki_card"] is False
 
 
 def test_bound_quiz_follows_owning_review_unit():

@@ -9,10 +9,29 @@ import type {
   FreestyleQuizMasteryBucket,
   FreestyleQuizScope,
   FreestyleSubjectScope,
+  FreestyleTrainingMode,
+  FreestyleTrainingMix,
+  FreestyleTrainingStream,
+  FreestyleTrainingStreams,
+  FreestyleUnitOrder,
 } from '@/shared/api/contracts'
 import type { FreestylePalaceContext } from '@/shared/api/contracts'
 
-export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
+export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v2'
+export const LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
+
+export const FREESTYLE_TRAINING_MODES: FreestyleTrainingMode[] = [
+  'memory_palace',
+  'quiz',
+  'english',
+  'mixed',
+]
+
+export const FREESTYLE_TRAINING_STREAMS: FreestyleTrainingStream[] = [
+  'memory_palace',
+  'quiz',
+  'english',
+]
 
 export const FREESTYLE_MIX_MODES: FreestyleMixMode[] = [
   'mindmap_only',
@@ -63,14 +82,46 @@ export const FREESTYLE_QUICK_PRESETS: FreestyleQuickPreset[] = [
 ]
 
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
+  training_mode: 'mixed',
+  mixed_modes: ['memory_palace', 'quiz'],
+  streams: {
+    memory_palace: {
+      specific_palace_ids: [],
+      subject_scope: 'non_english',
+      due_policy: 'due_first_then_expand',
+      palace_order: 'finish_palace_then_next',
+      unit_order: 'structured',
+    },
+    quiz: {
+      specific_palace_ids: [],
+      subject_scope: 'all',
+      question_type: 'all',
+      mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
+      quiz_scope: 'cross_palace_random',
+      weak_priority: true,
+    },
+    english: {
+      specific_palace_ids: [],
+      subject_scope: 'english',
+      due_policy: 'due_first_then_expand',
+      palace_order: 'finish_palace_then_next',
+      unit_order: 'structured',
+    },
+  },
+  mix: {
+    strategy: 'ratio',
+    ratios: { memory_palace: 2, quiz: 1, english: 1 },
+  },
+  queue_length: 20,
+  seed: 17,
   content: {
     mindmap_branch: true,
-    anki_card: true,
+    anki_card: false,
     quiz_question: true,
   },
   weights: {
     mindmap_branch: 2,
-    anki_card: 2,
+    anki_card: 0,
     quiz_question: 1,
   },
   mix_mode: 'ratio',
@@ -78,19 +129,17 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     mindmap: 2,
     quiz: 1,
   },
-  // Bound quizzes participate in N:M so mix_ratio is not an empty free stream.
+  // Legacy projection only. New queue code reads `mix` and stream config.
   bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
-  // Mind-map cards are formal-due only; quiz membership uses quiz_mastery_buckets.
-  due_policy: 'due_only',
+  // Legacy projection only; new palace streams default to due-first expansion.
+  due_policy: 'due_first_then_expand',
   quiz_mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
   quiz_scope: 'cross_palace_random',
-  queue_length: 20,
   specific_palace_ids: [],
   subject_scope: 'all',
   question_type: 'all',
   weak_quiz_priority: true,
-  seed: 17,
 }
 
 function asBoolean(value: unknown, fallback: boolean) {
@@ -120,9 +169,9 @@ function asPalaceOrder(value: unknown): FreestylePalaceOrder {
   return value === 'interleave_palaces' ? 'interleave_palaces' : 'finish_palace_then_next'
 }
 
-function asDuePolicy(value: unknown): FreestyleDuePolicy {
-  if (value === 'due_first_then_expand' || value === 'all_content_due_weighted') return value
-  return 'due_only'
+function asDuePolicy(value: unknown, fallback: FreestyleDuePolicy = 'due_first_then_expand'): FreestyleDuePolicy {
+  if (value === 'due_first_then_expand' || value === 'due_only' || value === 'all_content_due_weighted') return value
+  return fallback
 }
 
 function asQuestionType(value: unknown): FreestyleQuestionTypeFilter {
@@ -163,6 +212,60 @@ function asQuizScope(value: unknown): FreestyleQuizScope {
 
 function asSubjectScope(value: unknown): FreestyleSubjectScope {
   return value === 'english' || value === 'non_english' ? value : 'all'
+}
+
+function asTrainingMode(value: unknown): FreestyleTrainingMode | null {
+  return FREESTYLE_TRAINING_MODES.includes(value as FreestyleTrainingMode)
+    ? value as FreestyleTrainingMode
+    : null
+}
+
+function asUnitOrder(value: unknown): FreestyleUnitOrder {
+  return value === 'random' ? 'random' : 'structured'
+}
+
+function asMixStrategy(value: unknown): FreestyleTrainingMix['strategy'] {
+  return value === 'random' || value === 'sequential' ? value : 'ratio'
+}
+
+function streamScope(
+  value: unknown,
+  fallback: { specific_palace_ids: number[]; subject_scope: FreestyleSubjectScope },
+): { specific_palace_ids: number[]; subject_scope: FreestyleSubjectScope } {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    specific_palace_ids: asIdList(raw.specific_palace_ids ?? fallback.specific_palace_ids),
+    subject_scope: asSubjectScope(raw.subject_scope ?? fallback.subject_scope),
+  }
+}
+
+function inferTrainingMode(
+  rawMode: unknown,
+  rawMixMode: unknown,
+  content: { mindmap_branch: boolean; quiz_question: boolean },
+  subjectScope: FreestyleSubjectScope,
+): FreestyleTrainingMode {
+  const explicit = asTrainingMode(rawMode)
+  if (explicit) return explicit
+  const legacyMixMode = asMixMode(rawMixMode)
+  if (legacyMixMode === 'quiz_only') return 'quiz'
+  if (legacyMixMode === 'mindmap_only') {
+    return subjectScope === 'english' ? 'english' : 'memory_palace'
+  }
+  if (content.mindmap_branch && !content.quiz_question) {
+    return subjectScope === 'english' ? 'english' : 'memory_palace'
+  }
+  if (!content.mindmap_branch && content.quiz_question) return 'quiz'
+  return 'mixed'
+}
+
+function sanitizeMixedModes(value: unknown, fallback: FreestyleTrainingStream[]): FreestyleTrainingStream[] {
+  const raw = Array.isArray(value) ? value : []
+  const next = [...new Set(raw.filter((item): item is FreestyleTrainingStream =>
+    FREESTYLE_TRAINING_STREAMS.includes(item as FreestyleTrainingStream),
+  ))]
+  if (next.length > 0) return next
+  return [...fallback]
 }
 
 /**
@@ -240,73 +343,200 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const contentRaw = raw.content && typeof raw.content === 'object' ? (raw.content as Record<string, unknown>) : {}
   const weightsRaw = raw.weights && typeof raw.weights === 'object' ? (raw.weights as Record<string, unknown>) : {}
-  let mindmap = asBoolean(contentRaw.mindmap_branch, true)
-  let anki = asBoolean(contentRaw.anki_card, true)
-  let quiz = asBoolean(contentRaw.quiz_question, true)
-  if (!mindmap && !anki && !quiz) {
-    mindmap = true
-    anki = true
-    quiz = true
-  }
-  const content = {
-    mindmap_branch: mindmap,
-    anki_card: anki,
-    quiz_question: quiz,
-  }
+  const legacySubjectScope = asSubjectScope(raw.subject_scope)
+  const legacyMindmap = asBoolean(contentRaw.mindmap_branch, true)
+  const legacyQuiz = asBoolean(contentRaw.quiz_question, true)
+  const legacyMode = inferTrainingMode(raw.training_mode, raw.mix_mode, {
+    mindmap_branch: legacyMindmap,
+    quiz_question: legacyQuiz,
+  }, legacySubjectScope)
   const weights = {
     mindmap_branch: asInt(weightsRaw.mindmap_branch, 2, 0, 20),
-    anki_card: asInt(weightsRaw.anki_card, 2, 0, 20),
+    anki_card: 0,
     quiz_question: asInt(weightsRaw.quiz_question, 1, 0, 20),
   }
-  const mix_mode = inferMixMode(raw.mix_mode, content)
-  if (mix_mode === 'quiz_only') {
-    mindmap = false
-    anki = false
-    quiz = true
-  } else if (mix_mode === 'mindmap_only') {
-    mindmap = true
-    quiz = false
+  const legacyMixMode = inferMixMode(raw.mix_mode, {
+    mindmap_branch: legacyMindmap,
+    anki_card: false,
+    quiz_question: legacyQuiz,
+  })
+  const legacyMixRatio = asMixRatio(raw.mix_ratio, weights, {
+    hasExplicitWeights: Object.prototype.hasOwnProperty.call(raw, 'weights'),
+  })
+  const legacyIds = asIdList(raw.specific_palace_ids)
+  const legacyDuePolicy = asDuePolicy(raw.due_policy, 'due_first_then_expand')
+  const legacyPalaceOrder = asPalaceOrder(raw.palace_order)
+  const rawStreams = raw.streams && typeof raw.streams === 'object'
+    ? raw.streams as Record<string, unknown>
+    : {}
+  const hasExplicitNewConfig = Object.prototype.hasOwnProperty.call(raw, 'training_mode')
+    || Object.prototype.hasOwnProperty.call(raw, 'streams')
+    || Object.keys(raw).length === 0
+  const rawMemory = rawStreams.memory_palace && typeof rawStreams.memory_palace === 'object'
+    ? rawStreams.memory_palace as Record<string, unknown>
+    : {}
+  const rawQuiz = rawStreams.quiz && typeof rawStreams.quiz === 'object'
+    ? rawStreams.quiz as Record<string, unknown>
+    : {}
+  const rawEnglish = rawStreams.english && typeof rawStreams.english === 'object'
+    ? rawStreams.english as Record<string, unknown>
+    : {}
+
+  const memoryScope = streamScope(rawMemory, {
+    specific_palace_ids: legacySubjectScope === 'english' ? [] : legacyIds,
+    subject_scope: legacySubjectScope === 'english' ? 'non_english' : 'non_english',
+  })
+  const quizScope = streamScope(rawQuiz, {
+    specific_palace_ids: legacyIds,
+    subject_scope: legacySubjectScope,
+  })
+  const englishScope = streamScope(rawEnglish, {
+    specific_palace_ids: legacySubjectScope === 'english' ? legacyIds : [],
+    subject_scope: 'english',
+  })
+  englishScope.subject_scope = 'english'
+
+  const memoryStream = {
+    ...memoryScope,
+    due_policy: asDuePolicy(rawMemory.due_policy, legacyDuePolicy),
+    palace_order: asPalaceOrder(rawMemory.palace_order ?? legacyPalaceOrder),
+    unit_order: asUnitOrder(rawMemory.unit_order),
   }
-  const normalizedContent = {
-    mindmap_branch: mindmap,
-    anki_card: anki,
-    quiz_question: quiz,
+  const englishStream = {
+    ...englishScope,
+    due_policy: asDuePolicy(rawEnglish.due_policy, legacyDuePolicy),
+    palace_order: asPalaceOrder(rawEnglish.palace_order ?? legacyPalaceOrder),
+    unit_order: asUnitOrder(rawEnglish.unit_order),
   }
-  const mix_ratio = asMixRatio(raw.mix_ratio, weights, { hasExplicitWeights: Boolean(raw.weights) })
-  // Legacy weights stay independent; mix_ratio is the interleave source of truth.
-  // Zero out disabled content streams so older weight readers stay coherent.
-  const syncedWeights = {
-    mindmap_branch: mindmap ? weights.mindmap_branch : 0,
-    anki_card: anki ? weights.anki_card : 0,
-    quiz_question: quiz ? weights.quiz_question : 0,
+  const quizStream = {
+    ...quizScope,
+    question_type: asQuestionType(rawQuiz.question_type ?? raw.question_type),
+    mastery_buckets: asQuizMasteryBuckets(
+      rawQuiz.mastery_buckets ?? raw.quiz_mastery_buckets,
+      memoryStream.due_policy,
+      hasExplicitNewConfig
+        || !Object.prototype.hasOwnProperty.call(raw, 'due_policy')
+        || Object.prototype.hasOwnProperty.call(rawQuiz, 'mastery_buckets')
+        || Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets'),
+    ),
+    quiz_scope: asQuizScope(rawQuiz.quiz_scope ?? raw.quiz_scope),
+    weak_priority: asBoolean(rawQuiz.weak_priority ?? raw.weak_quiz_priority, true),
   }
-  const due_policy = asDuePolicy(raw.due_policy)
-  const hasExplicitBuckets = Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets')
+
+  const hasExplicitNewMode = Object.prototype.hasOwnProperty.call(raw, 'training_mode')
+  let trainingMode = hasExplicitNewMode ? (asTrainingMode(raw.training_mode) ?? legacyMode) : legacyMode
+  const modeFallback: FreestyleTrainingStream[] = legacyMode === 'mixed'
+    ? [legacyMindmap ? 'memory_palace' : 'quiz', ...(legacyMindmap && legacyQuiz ? ['quiz' as const] : [])]
+    : [legacyMode === 'english' ? 'english' : legacyMode === 'quiz' ? 'quiz' : 'memory_palace']
+  let mixedModes = sanitizeMixedModes(raw.mixed_modes, modeFallback.length >= 2 ? modeFallback : ['memory_palace', 'quiz'])
+  if (trainingMode !== 'mixed') mixedModes = [trainingMode]
+  if (trainingMode === 'mixed' && mixedModes.length < 2) {
+    trainingMode = mixedModes[0] ?? 'memory_palace'
+    mixedModes = [trainingMode]
+  }
+
+  const rawMix = raw.mix && typeof raw.mix === 'object' ? raw.mix as Record<string, unknown> : {}
+  const rawRatios = rawMix.ratios && typeof rawMix.ratios === 'object' ? rawMix.ratios as Record<string, unknown> : {}
+  const legacyStrategy = legacyMixMode === 'random'
+    ? 'random'
+    : legacyMixMode === 'sequential_map_quiz' || legacyMixMode === 'sequential_quiz_map'
+      ? 'sequential'
+      : 'ratio'
+  const mix: FreestyleTrainingMix = {
+    strategy: asMixStrategy(rawMix.strategy ?? legacyStrategy),
+    ratios: {
+      memory_palace: asInt(rawRatios.memory_palace, legacyMixRatio.mindmap, 1, 10),
+      quiz: asInt(rawRatios.quiz, legacyMixRatio.quiz, 1, 10),
+      english: asInt(rawRatios.english, 1, 1, 10),
+    },
+  }
+
+  const mapStreams = mixedModes.filter((item) => item === 'memory_palace' || item === 'english')
+  const hasMemory = trainingMode === 'memory_palace' || (trainingMode === 'mixed' && mixedModes.includes('memory_palace'))
+  const hasEnglish = trainingMode === 'english' || (trainingMode === 'mixed' && mixedModes.includes('english'))
+  const hasQuiz = trainingMode === 'quiz' || (trainingMode === 'mixed' && mixedModes.includes('quiz'))
+  const mapRatio = mapStreams.reduce((sum, item) => sum + mix.ratios[item], 0)
+  const quizRatio = hasQuiz ? mix.ratios.quiz : 0
+  const firstMap = mixedModes.find((item) => item === 'memory_palace' || item === 'english')
+  const mixMode: FreestyleMixMode = trainingMode === 'quiz'
+    ? 'quiz_only'
+    : trainingMode === 'memory_palace' || trainingMode === 'english' || !hasQuiz
+      ? 'mindmap_only'
+      : mix.strategy === 'random'
+        ? 'random'
+        : mix.strategy === 'sequential'
+          ? (firstMap ? 'sequential_map_quiz' : 'sequential_quiz_map')
+          : 'ratio'
+  const legacySpecificIds = [...new Set([
+    ...(hasMemory ? memoryStream.specific_palace_ids : []),
+    ...(hasEnglish ? englishStream.specific_palace_ids : []),
+    ...(hasQuiz ? quizStream.specific_palace_ids : []),
+  ])]
+  const legacyScope = trainingMode === 'english'
+    ? 'english'
+    : trainingMode === 'memory_palace'
+      ? memoryStream.subject_scope
+      : trainingMode === 'quiz'
+        ? quizStream.subject_scope
+        : 'all'
+  const legacyDue = hasMemory ? memoryStream.due_policy : englishStream.due_policy
+  const legacyPalace = hasMemory ? memoryStream.palace_order : englishStream.palace_order
+  const legacyQuestionType = quizStream.question_type
+  const mixRatio: FreestyleMixRatio = {
+    mindmap: Math.max(1, mapRatio || 2),
+    quiz: Math.max(1, quizRatio || 1),
+  }
 
   return {
-    content: normalizedContent,
-    weights: syncedWeights,
-    mix_mode,
-    mix_ratio,
-    bound_quiz_placement: asBoundPlacement(raw.bound_quiz_placement),
-    palace_order: asPalaceOrder(raw.palace_order),
-    due_policy,
-    quiz_mastery_buckets: asQuizMasteryBuckets(raw.quiz_mastery_buckets, due_policy, hasExplicitBuckets),
-    quiz_scope: asQuizScope(raw.quiz_scope),
+    training_mode: trainingMode,
+    mixed_modes: mixedModes,
+    streams: {
+      memory_palace: memoryStream,
+      quiz: quizStream,
+      english: englishStream,
+    } as FreestyleTrainingStreams,
+    mix,
     queue_length: asInt(raw.queue_length, 20, 5, 100),
-    specific_palace_ids: asIdList(raw.specific_palace_ids),
-    subject_scope: asSubjectScope(raw.subject_scope),
-    question_type: asQuestionType(raw.question_type),
-    weak_quiz_priority: asBoolean(raw.weak_quiz_priority, true),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
+    content: {
+      mindmap_branch: hasMemory || hasEnglish,
+      anki_card: false,
+      quiz_question: hasQuiz,
+    },
+    weights: {
+      mindmap_branch: hasMemory || hasEnglish ? Math.max(1, mapRatio || 2) : 0,
+      anki_card: 0,
+      quiz_question: hasQuiz ? Math.max(1, quizRatio || 1) : 0,
+    },
+    mix_mode: mixMode,
+    mix_ratio: mixRatio,
+    bound_quiz_placement: asBoundPlacement(raw.bound_quiz_placement),
+    palace_order: legacyPalace,
+    due_policy: legacyDue,
+    quiz_mastery_buckets: quizStream.mastery_buckets,
+    quiz_scope: quizStream.quiz_scope,
+    specific_palace_ids: legacySpecificIds,
+    subject_scope: legacyScope,
+    question_type: legacyQuestionType,
+    weak_quiz_priority: quizStream.weak_priority,
   }
 }
 
 /** A palace-scope change starts a new local freestyle round. */
 export function freestylePalaceScopeSignature(config: FreestyleFeedConfig): string {
   return JSON.stringify({
-    specific_palace_ids: [...config.specific_palace_ids].sort((left, right) => left - right),
-    subject_scope: config.subject_scope,
+    memory_palace: {
+      specific_palace_ids: [...config.streams.memory_palace.specific_palace_ids].sort((left, right) => left - right),
+      subject_scope: config.streams.memory_palace.subject_scope,
+    },
+    quiz: {
+      specific_palace_ids: [...config.streams.quiz.specific_palace_ids].sort((left, right) => left - right),
+      subject_scope: config.streams.quiz.subject_scope,
+    },
+    english: {
+      specific_palace_ids: [...config.streams.english.specific_palace_ids].sort((left, right) => left - right),
+      subject_scope: config.streams.english.subject_scope,
+    },
   })
 }
 
@@ -325,29 +555,47 @@ export function applyFreestyleQuickPreset(
   if (presetId === 'quiz') {
     return sanitizeFreestyleFeedConfig({
       ...config,
-      content: { ...config.content, mindmap_branch: false, anki_card: false, quiz_question: true },
-      mix_mode: 'quiz_only',
-      specific_palace_ids: [],
-      subject_scope: 'all',
+      training_mode: 'quiz',
+      mixed_modes: ['quiz'],
+      streams: {
+        ...config.streams,
+        quiz: {
+          ...config.streams.quiz,
+          specific_palace_ids: [],
+          subject_scope: 'all',
+        },
+      },
     })
   }
 
   if (presetId === 'english') {
     return sanitizeFreestyleFeedConfig({
       ...config,
-      content: { mindmap_branch: true, anki_card: true, quiz_question: false },
-      mix_mode: 'mindmap_only',
-      specific_palace_ids: englishPalaceIds,
-      subject_scope: 'english',
+      training_mode: 'english',
+      mixed_modes: ['english'],
+      streams: {
+        ...config.streams,
+        english: {
+          ...config.streams.english,
+          specific_palace_ids: englishPalaceIds,
+          subject_scope: 'english',
+        },
+      },
     })
   }
 
   return sanitizeFreestyleFeedConfig({
     ...config,
-    content: { mindmap_branch: true, anki_card: true, quiz_question: false },
-    mix_mode: 'mindmap_only',
-    specific_palace_ids: nonEnglishPalaceIds,
-    subject_scope: 'non_english',
+    training_mode: 'memory_palace',
+    mixed_modes: ['memory_palace'],
+    streams: {
+      ...config.streams,
+      memory_palace: {
+        ...config.streams.memory_palace,
+        specific_palace_ids: nonEnglishPalaceIds,
+        subject_scope: 'non_english',
+      },
+    },
   })
 }
 

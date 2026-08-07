@@ -1,0 +1,58 @@
+import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
+
+export const FREESTYLE_DISPLAY_SETTINGS_STORAGE_KEY = 'memory-anki.freestyle.display-settings.v1'
+export const FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT = 'memory-anki-freestyle-display-settings-change'
+
+export type FreestyleFlipMode = 'free' | 'focused'
+
+export interface FreestyleDisplaySettings {
+  rating_mode: boolean
+  flip_mode: FreestyleFlipMode
+}
+
+export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
+  rating_mode: true,
+  flip_mode: 'free',
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isFreestyleDisplaySettings(value: unknown): value is FreestyleDisplaySettings {
+  return isRecord(value) && typeof value.rating_mode === 'boolean'
+}
+
+export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDisplaySettings {
+  const raw = isRecord(value) ? value : {}
+  return {
+    // Keep the legacy field readable, but migrate both true and false to the
+    // new always-visible rating behavior.
+    rating_mode: true,
+    flip_mode: raw.flip_mode === 'focused' || raw.flip_mode === 'free'
+      ? raw.flip_mode
+      : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.flip_mode,
+  }
+}
+
+const displaySettingsStore = createPersistentPreferenceStore<FreestyleDisplaySettings>({
+  cacheKey: 'freestyle_display_settings',
+  defaultValue: DEFAULT_FREESTYLE_DISPLAY_SETTINGS,
+  localStorageKey: FREESTYLE_DISPLAY_SETTINGS_STORAGE_KEY,
+  sanitize: sanitizeFreestyleDisplaySettings,
+  updatedEvent: FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT,
+  isValidCache: isFreestyleDisplaySettings,
+})
+
+export function readFreestyleDisplaySettings() {
+  return displaySettingsStore.read()
+}
+
+export function saveFreestyleDisplaySettings(
+  settings: Partial<FreestyleDisplaySettings>,
+) {
+  return displaySettingsStore.write({
+    ...readFreestyleDisplaySettings(),
+    ...settings,
+  })
+}

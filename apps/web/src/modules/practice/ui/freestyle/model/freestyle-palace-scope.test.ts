@@ -5,8 +5,10 @@ import {
   buildFreestylePalaceScopeSections,
   buildFreestylePalaceScopeSubjects,
   allFreestylePalaceIdsFromSubjects,
+  getFreestylePalaceScopeSummary,
   getFreestyleChapterSelection,
   getFreestylePalaceGroupSelection,
+  normalizeFreestylePalaceSelection,
   toggleFreestylePalaceGroup,
 } from './freestyle-palace-scope'
 
@@ -30,6 +32,10 @@ const palace = (id: number, title: string) => ({
   binding_status: 'ok',
   primary_chapter_id: 10,
   primary_chapter: { id: 10, name: '小节', subject_id: 1, parent_id: 9 },
+  chapters: [
+    { id: 9, name: '第一章', subject_id: 1, parent_id: null, is_explicit: false },
+    { id: 10, name: '小节', subject_id: 1, parent_id: 9, is_explicit: true },
+  ],
   resolved_subject: { id: 1, name: '教育学', color: '#6366f1' },
   resolved_parent_chapter: { id: 9, name: '第一章', subject_id: 1, parent_id: null },
   group_id: null,
@@ -81,7 +87,9 @@ describe('freestyle palace scope model', () => {
     }])
     const root = subjects[0].chapters[0]
     expect(root.palaceIds).toEqual([40, 41])
+    expect(root.palaces).toEqual([])
     expect(root.children[0].palaceIds).toEqual([40, 41])
+    expect(root.children[0].palaces.map((item) => item.id)).toEqual([40, 41])
     expect(subjects[0].ungrouped?.palaceIds).toEqual([42])
     expect(getFreestyleChapterSelection(root.palaceIds, [40])).toBe('indeterminate')
   })
@@ -91,5 +99,36 @@ describe('freestyle palace scope model', () => {
     expect(allFreestylePalaceIdsFromSubjects(subjects)).toEqual([40, 41, 42])
     expect(toggleFreestylePalaceGroup([], [40, 41, 42], true)).toEqual([40, 41, 42])
     expect(toggleFreestylePalaceGroup([40, 41, 42], [40, 41, 42], false)).toEqual([])
+  })
+
+  it('treats a subject preset as a broad scope plus explicit extra palaces', () => {
+    const subjects = [
+      {
+        key: 'subject:english',
+        id: 1,
+        title: '英语',
+        chapters: [],
+        ungrouped: { key: 'english', title: '未归类宫殿', palaces: [palace(1, 'English')], palaceIds: [1] },
+      },
+      {
+        key: 'subject:education',
+        id: 2,
+        title: '教育学',
+        chapters: [],
+        ungrouped: { key: 'education', title: '未归类宫殿', palaces: [palace(2, '卢梭')], palaceIds: [2] },
+      },
+    ]
+    const config = { subject_scope: 'english' as const, specific_palace_ids: [1, 2] }
+    const summary = getFreestylePalaceScopeSummary(config, subjects)
+    expect(summary.extraIds).toEqual([2])
+    expect(summary.effectiveIds).toEqual([1, 2])
+    expect(normalizeFreestylePalaceSelection(config, [1, 2], subjects)).toEqual({
+      subject_scope: 'english',
+      specific_palace_ids: [2],
+    })
+    expect(normalizeFreestylePalaceSelection(config, [2], subjects)).toEqual({
+      subject_scope: 'all',
+      specific_palace_ids: [2],
+    })
   })
 })

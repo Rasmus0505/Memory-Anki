@@ -9,10 +9,6 @@ import type {
 } from '@/modules/practice/public'
 import type { FreestyleReviewUnitCard } from '@/shared/api/contracts'
 import {
-  branchRevealSnapshotCache,
-  readBranchRevealSnapshot,
-} from './freestyleBranchCardSupport'
-import {
   FreestyleUnitReviewCardView,
   ratingEffectLabel,
   retryPositionLabel,
@@ -275,7 +271,6 @@ function renderCard(
     active?: boolean
     readOnly?: boolean
     encounter?: FreestyleUnitEncounterState
-    ratingVisible?: boolean
     roundId?: string
   } = {},
 ) {
@@ -294,7 +289,6 @@ function renderCard(
     roundId: options.roundId ?? 'round-1',
     encounter: options.encounter ?? queueEncounter(),
     retryAfterCards: 3,
-    ratingVisible: options.ratingVisible ?? true,
     ...callbacks,
   }
   const renderResult = render(<FreestyleUnitReviewCardView {...props} />)
@@ -321,7 +315,6 @@ describe('FreestyleUnitReviewCardView', () => {
   beforeEach(() => {
     capturedPanelProps = null
     capturedSavedState = null
-    branchRevealSnapshotCache.clear()
     revealFrameCallbacks = []
     originalRequestAnimationFrame = window.requestAnimationFrame
     originalCancelAnimationFrame = window.cancelAnimationFrame
@@ -388,6 +381,20 @@ describe('FreestyleUnitReviewCardView', () => {
         editor_doc: { root: { data: { uid: string } } }
       }).editor_doc.root.data.uid,
     ).toBe('root')
+  })
+
+  it('keeps four disabled rating buttons visible while the session is loading', async () => {
+    const card = buildCard('unit-loading-ratings')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
+    renderCard(card)
+
+    const bar = await screen.findByTestId('freestyle-rating-bar')
+    expect(bar).toBeTruthy()
+    for (const value of [1, 2, 3, 4]) {
+      const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
+      expect(button.disabled).toBe(true)
+      expect(button.getAttribute('aria-label')).toContain('加载中')
+    }
   })
 
   it('shows flip progress badge next to the unit title (empty tone at start)', async () => {
@@ -724,7 +731,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const onNodeClick = capturedPanelProps?.onNodeClick as (nodes: MindMapSelection[]) => void
     act(() => onNodeClick([selection('root', '完整宫殿')]))
     flushRevealFrame()
-    await waitFor(() => expect(readBranchRevealSnapshot(`${card.id}:encounter-1`)?.revealMap['unit-node']).toBe('placeholder'))
+    expect(capturedPanelProps?.visibleEditorState).toBeTruthy()
   })
 
   it('starts a retry encounter from the root instead of the prior reveal state', async () => {
@@ -745,16 +752,11 @@ describe('FreestyleUnitReviewCardView', () => {
     const onNodeClick = capturedPanelProps?.onNodeClick as (nodes: MindMapSelection[]) => void
     act(() => onNodeClick([selection('root', '完整宫殿')]))
     flushRevealFrame()
-    await waitFor(() => expect(
-      readBranchRevealSnapshot(`${card.id}:encounter-1`)?.revealMap['unit-node'],
-    ).toBe('placeholder'))
-
     view.rerenderCard({
       encounter: retryEncounter,
       onEnsureEncounter: vi.fn(() => retryEncounter),
     })
     await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(2))
-    expect(readBranchRevealSnapshot(`${card.id}:encounter-2`)).toBeNull()
     expect(
       (capturedPanelProps?.visibleEditorState as {
         editor_doc: { root: { children: unknown[] } }
@@ -913,9 +915,10 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
-    // Still shows loading placeholder until parent unmounts after onStaleDrop;
-    // permanent load-failure toast path must not run.
-    expect(screen.getByText('正在加载单元...')).toBeTruthy()
+    // The parent rebuild removes the stale card; until then, distinguish recovery
+    // from a normal session load so the UI does not look stuck.
+    expect(screen.getByText('正在更新复习安排...')).toBeTruthy()
+    expect(onStaleDrop).toHaveBeenCalledTimes(1)
   })
 
   it('drops silently when active unit review session is required', async () => {

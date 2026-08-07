@@ -35,7 +35,7 @@ import {
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 describe('freestyle feed config', () => {
-  it('sanitizes bounds and re-enables empty content', () => {
+  it('sanitizes bounds and removes Anki from legacy content', () => {
     const config = sanitizeFreestyleFeedConfig({
       node_limit: 99,
       progress_scopes: ['reinforcement'],
@@ -48,7 +48,7 @@ describe('freestyle feed config', () => {
     expect(config.queue_length).toBe(5)
     expect(config.seed).toBe(1)
     expect(config.content.mindmap_branch).toBe(true)
-    expect(config.content.anki_card).toBe(true)
+    expect(config.content.anki_card).toBe(false)
     expect(config.content.quiz_question).toBe(true)
     expect(config).not.toHaveProperty('node_limit')
     expect(config).not.toHaveProperty('progress_scopes')
@@ -65,7 +65,7 @@ describe('freestyle feed config', () => {
       weights: { mindmap_branch: 3, anki_card: 1, quiz_question: 2 },
     })
     expect(config.mix_mode).toBe('ratio')
-    expect(config.mix_ratio).toEqual({ mindmap: 4, quiz: 2 })
+    expect(config.mix_ratio).toEqual({ mindmap: 3, quiz: 2 })
     expect(config.bound_quiz_placement).toBe('into_mix')
     expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce'])
     expect(config.quiz_scope).toBe('cross_palace_random')
@@ -112,6 +112,28 @@ describe('freestyle feed config', () => {
     expect(config.mix_ratio.mindmap).toBe(10)
     expect(config.mix_ratio.quiz).toBe(1)
     expect(config.bound_quiz_placement).toBe('into_mix')
+  })
+
+  it('migrates legacy directions into three streams and normalizes mixed selection', () => {
+    expect(sanitizeFreestyleFeedConfig({ mix_mode: 'quiz_only' })).toMatchObject({
+      training_mode: 'quiz',
+      mixed_modes: ['quiz'],
+    })
+    expect(sanitizeFreestyleFeedConfig({
+      subject_scope: 'english',
+      content: { mindmap_branch: true, anki_card: false, quiz_question: false },
+    })).toMatchObject({
+      training_mode: 'english',
+      mixed_modes: ['english'],
+      streams: { english: { subject_scope: 'english' } },
+    })
+    expect(sanitizeFreestyleFeedConfig({
+      training_mode: 'mixed',
+      mixed_modes: ['english'],
+    })).toMatchObject({
+      training_mode: 'english',
+      mixed_modes: ['english'],
+    })
   })
 })
 
@@ -184,7 +206,7 @@ describe('freestyle queue skip rules', () => {
 
   it('keeps a mid-queue settled unit in place so scroll does not land on the next card', () => {
     // User is on branch B (index 1). Completing B must not prepend it to the front:
-    // that used to leave scrollTop on index 1 while B moved to 0 �?visual auto-advance.
+    // that used to leave scrollTop on index 1 while B moved to 0 �?visual auto-advance.
     const previous = [
       { id: 'branch:a', type: 'mindmap_branch' },
       { id: 'branch:b', type: 'mindmap_branch' },
@@ -321,7 +343,7 @@ describe('freestyle queue skip rules', () => {
       { id: 'later' },
     ]
 
-    // Still on the finished card �?prefer stays under the viewport.
+    // Still on the finished card �?prefer stays under the viewport.
     expect(
       resolveRebuildIndex({
         nextCards,
@@ -331,7 +353,7 @@ describe('freestyle queue skip rules', () => {
       }),
     ).toBe(0)
 
-    // Already swiped to the next card before silent rebuild resolves �?do not yank back.
+    // Already swiped to the next card before silent rebuild resolves �?do not yank back.
     expect(
       resolveRebuildIndex({
         nextCards,
@@ -351,7 +373,7 @@ describe('freestyle queue skip rules', () => {
       }),
     ).toBe(0)
 
-    // No user card known �?fall back to prefer, then clamp.
+    // No user card known �?fall back to prefer, then clamp.
     expect(
       resolveRebuildIndex({
         nextCards,
@@ -442,7 +464,7 @@ describe('freestyle queue skip rules', () => {
 
   it('groups same palace even when palace_id arrives as a numeric string (JSON edge)', () => {
     // If string "1" !== number 1,「下个宫殿」would only move the current card
-    // and look identical to「跳过当�?/ 下一题�?
+    // and look identical to「跳过当�?/ 下一题�?
     const cards = [
       { id: 'a1', type: 'mindmap_branch', palace_id: 1 },
       { id: 'a2', type: 'mindmap_branch', palace_id: '1' as unknown as number },
@@ -561,7 +583,7 @@ describe('freestyle queue skip rules', () => {
       '1',
       '5',
     ])
-    // Only one card remains after the weak unit �?place right after it.
+    // Only one card remains after the weak unit �?place right after it.
     expect(
       placeRestudyCardWithMaxGap(
         [
@@ -593,7 +615,7 @@ describe('freestyle queue skip rules', () => {
 
     const previous = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
     const nextMulti = [{ id: 'a' }, { id: 'c' }, { id: 'b' }]
-    // Prefer the weak unit itself �?never jump ahead to the next incomplete card.
+    // Prefer the weak unit itself �?never jump ahead to the next incomplete card.
     expect(
       resolveRestudyPreferCardId({
         previousCards: previous,

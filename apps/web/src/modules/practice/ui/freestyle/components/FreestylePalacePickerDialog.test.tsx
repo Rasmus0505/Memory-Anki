@@ -19,6 +19,17 @@ const subjects = [{
 }]
 
 describe('FreestylePalacePickerDialog', () => {
+  it('can collapse an entire subject', () => {
+    render(<FreestylePalacePickerDialog open subjects={subjects} value={[]} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '收起教育学' }))
+    expect(screen.queryByText('Palace A')).toBeNull()
+    expect(screen.getByRole('button', { name: '展开教育学' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '展开教育学' }))
+    expect(screen.getByText('Palace A')).toBeTruthy()
+  })
+
   it('opens as a large picker and confirms selected ids', () => {
     const onConfirm = vi.fn()
     render(<FreestylePalacePickerDialog open subjects={subjects} value={[]} onOpenChange={vi.fn()} onConfirm={onConfirm} />)

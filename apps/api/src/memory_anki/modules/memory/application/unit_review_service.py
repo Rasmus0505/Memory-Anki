@@ -531,6 +531,14 @@ def start_freestyle_unit_review_session(
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
         raise ValueError("review unit not found")
+
+    # Queue projection may reconcile a stale editor document inside its request
+    # and return the new revision before that request is committed. Re-project
+    # here so the queue card and the session start observe the same unit state.
+    get_palace_unit_projection(session, state.palace_id)
+    session.refresh(state)
+    if not state.active:
+        raise ValueError("review unit not found")
     if int(unit_revision) != int(state.revision):
         raise ValueError("review unit changed; rebuild the queue")
 
@@ -854,13 +862,20 @@ def close_unit_review_encounter(
         }
     if encounter.effective_operation_id is None or encounter.selected_rating is None:
         raise ValueError("rate the review unit before leaving it")
-    encounter.status = ENCOUNTER_CLOSED
-    encounter.close_operation_id = close_operation_id
     normalized_seconds = 0 if effective_seconds is None else int(effective_seconds)
     if normalized_seconds < 0:
         raise ValueError("effective_seconds must be non-negative")
+    closed_at = utc_now_naive()
+    if encounter.created_at is not None:
+        wall_seconds = max(0, int((closed_at - encounter.created_at).total_seconds()))
+        if normalized_seconds > wall_seconds:
+            raise ValueError(
+                "effective_seconds cannot exceed the encounter wall-clock span"
+            )
+    encounter.status = ENCOUNTER_CLOSED
+    encounter.close_operation_id = close_operation_id
     encounter.effective_seconds = normalized_seconds
-    encounter.closed_at = utc_now_naive()
+    encounter.closed_at = closed_at
     completion = None
     if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:
         completion = _complete_unit_review_session(session, study)

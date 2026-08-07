@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
@@ -6,6 +7,10 @@ import {
   QUESTION_TYPE_ACCENT,
   QUESTION_TYPE_DISPLAY,
 } from '@/modules/practice/ui/freestyle/model/freestyle-labels'
+import {
+  getFreestyleChoiceIndex,
+  isFreestyleShortcutBlocked,
+} from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
@@ -19,6 +24,7 @@ export function FreestyleQuizCardView({
   onShortAnswerSubmit,
   onRequestShortAnswerFeedback,
   onRequestNext,
+  active = false,
 }: {
   card: FreestyleQuizCard
   state: QuizRuntimeState | undefined
@@ -29,7 +35,11 @@ export function FreestyleQuizCardView({
   onRequestShortAnswerFeedback: () => void
   /** Immersive feed: explicit next after reading analysis. */
   onRequestNext?: () => void
+  /** Only the card currently under the feed viewport owns choice shortcuts. */
+  active?: boolean
 }) {
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const palaceTitle = card.palace_context.resolved_title || card.palace_context.title
   const segmentNames = card.segment_contexts?.map((segment) => segment.name).filter(Boolean).join('、')
   const chapterName = card.chapter_context?.name
@@ -37,8 +47,71 @@ export function FreestyleQuizCardView({
   const isCorrect = state?.correct === true
   const isIncorrect = state?.correct === false
   const isResolved = state?.resolved === true
+
+  useEffect(() => {
+    setKeyboardOptionIndex(0)
+  }, [card.question.id])
+
+  useEffect(() => {
+    if (!active || card.question.question_type !== 'multiple_choice') return
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
+      if (state?.resolved) return
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        const optionCount = card.question.options.length
+        if (optionCount === 0) return
+        event.preventDefault()
+        const delta = event.key === 'ArrowDown' ? 1 : -1
+        const nextIndex = (keyboardOptionIndex + delta + optionCount) % optionCount
+        setKeyboardOptionIndex(nextIndex)
+        cardRef.current
+          ?.querySelector<HTMLButtonElement>(`[data-quiz-option-index="${nextIndex}"]`)
+          ?.focus()
+        return
+      }
+
+      if (event.key === 'Enter') {
+        const option = card.question.options[keyboardOptionIndex]
+        if (!option) return
+        event.preventDefault()
+        const correct = option.id === (card.question.answer_payload.correct_option_id || '')
+        onStateChange((current) => ({
+          ...current,
+          selectedOptionId: option.id,
+          resolved: true,
+          correct,
+        }))
+        onChoiceResolve(option.id, correct)
+        return
+      }
+
+      const optionIndex = getFreestyleChoiceIndex(event.key)
+      const option = optionIndex == null ? undefined : card.question.options[optionIndex]
+      if (!option) return
+      event.preventDefault()
+      const correct = option.id === (card.question.answer_payload.correct_option_id || '')
+      onStateChange((current) => ({
+        ...current,
+        selectedOptionId: option.id,
+        resolved: true,
+        correct,
+      }))
+      onChoiceResolve(option.id, correct)
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [
+    active,
+    card.question,
+    keyboardOptionIndex,
+    onChoiceResolve,
+    onStateChange,
+    state?.resolved,
+  ])
+
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col justify-center py-2 sm:py-4">
+    <div ref={cardRef} className="mx-auto flex h-full w-full max-w-4xl flex-col justify-center py-2 sm:py-4">
       <div
         className={cn(
           'rounded-2xl border bg-zinc-900/88 p-4 text-zinc-50 shadow-[0_12px_40px_rgba(0,0,0,0.4)] backdrop-blur-md sm:p-6',

@@ -493,6 +493,69 @@ export function mutePalace(state: FreestyleSkipState, palaceId: number): Freesty
   }
 }
 
+/**
+ * An explicit palace selection is an instruction to include that palace.
+ * Clear stale local mute state so an old mute cannot empty a newly selected
+ * scope after the backend has returned its cards.
+ */
+export function clearMutedPalaces(
+  state: FreestyleSkipState,
+  palaceIds: Iterable<number>,
+): FreestyleSkipState {
+  const selected = new Set(
+    Array.from(palaceIds, (id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0),
+  )
+  if (!selected.size || !state.mutedPalaceIds.some((id) => selected.has(id))) return state
+  return {
+    ...state,
+    mutedPalaceIds: state.mutedPalaceIds.filter((id) => !selected.has(id)),
+  }
+}
+
+/**
+ * A selected scope is a positive inclusion instruction. If local stale/mute
+ * filtering removed cards from that scope, restore those backend candidates
+ * without restoring cards from an unrelated scope.
+ */
+export function restoreExplicitlySelectedCards(
+  responseCards: FreestyleCard[],
+  filteredCards: FreestyleCard[],
+  options: {
+    specificPalaceIds?: Iterable<number>
+    subjectScope?: string
+    excludeCardIds?: Iterable<string>
+  } = {},
+): FreestyleCard[] {
+  const selectedPalaces = new Set(
+    Array.from(options.specificPalaceIds ?? [], (id) => Number(id)).filter(
+      (id) => Number.isInteger(id) && id > 0,
+    ),
+  )
+  const broadSubjectScope = options.subjectScope != null && options.subjectScope !== 'all'
+  const excluded = new Set(
+    Array.from(options.excludeCardIds ?? [], (id) => String(id).trim()).filter(Boolean),
+  )
+  const retainedCards = excluded.size
+    ? filteredCards.filter((card) => !excluded.has(card.id))
+    : filteredCards
+  if (!selectedPalaces.size && !broadSubjectScope) return retainedCards
+
+  const keptIds = new Set(retainedCards.map((card) => card.id))
+  const eligibleResponseCards = excluded.size
+    ? responseCards.filter((card) => !excluded.has(card.id))
+    : responseCards
+  const selectedIds = new Set(
+    eligibleResponseCards
+      .filter((card) => broadSubjectScope || selectedPalaces.has(cardPalaceId(card)))
+      .map((card) => card.id),
+  )
+  if (!selectedIds.size || eligibleResponseCards.every((card) => keptIds.has(card.id))) {
+    return retainedCards
+  }
+
+  return eligibleResponseCards.filter((card) => keptIds.has(card.id) || selectedIds.has(card.id))
+}
+
 export function moveCardToTail(cards: FreestyleCard[], cardId: string): FreestyleCard[] {
   const index = cards.findIndex((card) => card.id === cardId)
   if (index < 0) return cards

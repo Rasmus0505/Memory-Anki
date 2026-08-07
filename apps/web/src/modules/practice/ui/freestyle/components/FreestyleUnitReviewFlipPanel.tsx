@@ -6,6 +6,7 @@ import {
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession } from '@/modules/memory/public'
+import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
   FreestyleReviewUnitCard,
@@ -14,7 +15,11 @@ import type {
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import { copyMindMapToClipboard, exportMindMapToFile } from '@/modules/content/public'
-import type { ReviewUnitDto, UnitReviewSessionDto } from '@/modules/practice/public'
+import type {
+  FreestyleFlipMode,
+  ReviewUnitDto,
+  UnitReviewSessionDto,
+} from '@/modules/practice/public'
 import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { toast } from '@/shared/feedback/toast'
 import {
@@ -31,8 +36,6 @@ import {
   persistPalaceEditor,
   type PersistPalaceEditorOptions,
   type PersistPalaceEditorResult,
-  readBranchRevealSnapshot,
-  writeBranchRevealSnapshot,
 } from './freestyleBranchCardSupport'
 
 export function FreestyleUnitReviewFlipPanel({
@@ -43,6 +46,8 @@ export function FreestyleUnitReviewFlipPanel({
   active = true,
   fullscreen,
   onToggleFullscreen,
+  freestyleFlipMode = 'free',
+  onFreestyleFlipModeChange,
   onEditingChange,
   onSaveFailed,
   onEditorStateSaved,
@@ -57,6 +62,8 @@ export function FreestyleUnitReviewFlipPanel({
   active?: boolean
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
+  freestyleFlipMode?: FreestyleFlipMode
+  onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
   /** Parent hides rating overlay while inline editing. */
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
@@ -67,27 +74,28 @@ export function FreestyleUnitReviewFlipPanel({
   /** Adopt the saved doc so review shows the edited content after returning. */
   onEditorStateSaved?: (state: MindMapEditorState) => void
 }) {
-  // A weak rating creates a new encounter when this unit returns to the queue.
-  // Its reveal state must start at the root; only a remount of the same encounter
-  // is allowed to restore the learner's in-progress flips.
-  const revealSnapshotKey = `${card.id}:${unit.encounter.id}`
-  const initialRevealSnapshot = useMemo(
-    () => readBranchRevealSnapshot(revealSnapshotKey),
-    [revealSnapshotKey],
-  )
+  const flipCardRevealSettings = useFlipCardRevealSettings()
+  const allowedRevealNodeIds = useMemo(() => {
+    if (freestyleFlipMode !== 'focused') return undefined
+    const parentByUid = buildEditorParentMap(editorState.editor_doc as EditorDoc)
+    const allowed = new Set<string>()
+    const seeds = new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))
+    for (const seed of seeds) {
+      let current: string | null = String(seed)
+      while (current) {
+        if (allowed.has(current)) break
+        allowed.add(current)
+        current = parentByUid.get(current) ?? null
+      }
+    }
+    return [...allowed]
+  }, [editorState.editor_doc, freestyleFlipMode, unit.anchor_uid, unit.node_uids])
   const reveal = useRevealSession({
     title: card.palace_title || session.title || `宫殿 ${card.palace_id}`,
     editorState,
-    initialSnapshot: initialRevealSnapshot,
+    revealConfig: flipCardRevealSettings.settings,
+    allowedNodeIds: allowedRevealNodeIds,
   })
-
-  useEffect(() => {
-    writeBranchRevealSnapshot(revealSnapshotKey, {
-      revealMap: reveal.revealMap,
-      redNodeIds: [...reveal.redNodeIds],
-      completed: reveal.completed,
-    })
-  }, [reveal.completed, reveal.redNodeIds, reveal.revealMap, revealSnapshotKey])
 
   // Header chip: this unit's membership only (not whole-palace node count).
   useEffect(() => {
@@ -484,6 +492,7 @@ export function FreestyleUnitReviewFlipPanel({
         sessionKind="review"
         chromeDensity="compact"
         hidePresentationOverflowActions
+        hostFullscreenControl
         modeSyncVersion={modeSyncVersion}
         onToggleFullscreen={onToggleFullscreen}
         visibleEditorState={
@@ -523,6 +532,10 @@ export function FreestyleUnitReviewFlipPanel({
             : undefined
         }
         toolbarExtensions={{ moreActions }}
+        revealSettings={flipCardRevealSettings}
+        freestyleFlipMode={onFreestyleFlipModeChange
+          ? { value: freestyleFlipMode, onChange: onFreestyleFlipModeChange }
+          : undefined}
         toolbarCenterContent={
           <PalaceLadderProgress
             palaceId={session.palace_id}

@@ -4,6 +4,10 @@ const STORAGE_KEY_PREFIX = 'memory_anki_review_foreground_seconds:'
 const TICK_INTERVAL_MS = 1000
 const MAX_CONTIGUOUS_TICK_SECONDS = 5
 
+function isWindowFocused() {
+  return typeof document.hasFocus !== 'function' || document.hasFocus()
+}
+
 export function useForegroundEncounterClock({
   encounterId,
   active,
@@ -27,7 +31,7 @@ export function useForegroundEncounterClock({
   }, [storageKey])
 
   const tick = useCallback(() => {
-    if (!active || !open || document.visibilityState !== 'visible') {
+    if (!active || !open || document.visibilityState !== 'visible' || !isWindowFocused()) {
       tickAtRef.current = null
       return
     }
@@ -63,13 +67,18 @@ export function useForegroundEncounterClock({
     if (!active || !open) return
     const interval = window.setInterval(tick, TICK_INTERVAL_MS)
     const onVisibilityChange = () => tick()
+    const onWindowFocusChange = () => tick()
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pagehide', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocusChange)
+    window.addEventListener('blur', onWindowFocusChange)
     return () => {
       tick()
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocusChange)
+      window.removeEventListener('blur', onWindowFocusChange)
     }
   }, [active, open, tick])
 

@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { DEFAULT_QUEUE_STATE } from '@/modules/practice/domain/queueState'
 import { createRoundPlan } from '@/modules/practice/domain/roundPlan'
 import { FreestyleRoundPlanDialog } from './FreestyleRoundPlanDialog'
+import { getPalacesGroupedApi } from '@/modules/content/public'
 
 vi.mock('@/modules/content/public', () => ({
-  getPalacesGroupedApi: vi.fn().mockResolvedValue({ subjects: [] }),
+  getPalacesGroupedApi: vi.fn(),
+  getSubjectTreeApi: vi.fn().mockResolvedValue({ chapters: [] }),
 }))
 
 const config = {
@@ -41,6 +43,10 @@ const card = (id: string): FreestyleCard => ({
 })
 
 describe('FreestyleRoundPlanDialog', () => {
+  beforeEach(() => {
+    vi.mocked(getPalacesGroupedApi).mockReset().mockResolvedValue({ subjects: [] } as never)
+  })
+
   it('groups the round, supports batch exclusion, and saves config', async () => {
     const cards = [card('one'), card('two')]
     const plan = createRoundPlan('round-1', cards, config, {
@@ -154,10 +160,87 @@ describe('FreestyleRoundPlanDialog', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '打开筛选器' }))
+    fireEvent.click((await screen.findAllByRole('button', { name: '选择宫殿' }))[0])
 
     expect(screen.getByRole('dialog', { name: /宫殿章节筛选/ })).toBeTruthy()
     // 内层 modal 打开时外层会被 aria-hidden（Radix 嵌套 dialog 行为），但不应卸载。
     expect(document.querySelector('[data-dialog-title="true"]')?.textContent).toMatch(/本轮安排/)
+  })
+
+  it('saves the palace scope when the picker confirms', async () => {
+    vi.mocked(getPalacesGroupedApi).mockResolvedValue({
+      subjects: [{
+        subject: { id: 1, name: '教育学', color: null },
+        chapter_groups: [],
+        ungrouped_palaces: [{
+          id: 11,
+          title: 'Palace A',
+          resolved_title: 'Palace A',
+          resolved_subject: null,
+          primary_chapter: null,
+          chapters: [],
+        }],
+      }],
+    } as never)
+    const onSaveConfig = vi.fn()
+    const cards = [card('one')]
+    const plan = createRoundPlan('round-1', cards, config)
+    render(
+      <FreestyleRoundPlanDialog
+        open
+        config={config}
+        cards={cards}
+        currentIndex={0}
+        queueState={{ ...DEFAULT_QUEUE_STATE, roundId: 'round-1', currentCardId: 'one' }}
+        roundPlan={plan}
+        onOpenChange={vi.fn()}
+        onJump={vi.fn()}
+        onExclude={vi.fn()}
+        onRestore={vi.fn()}
+        onReorder={vi.fn()}
+        onSaveConfig={onSaveConfig}
+        onResetRound={vi.fn()}
+      />,
+    )
+
+    fireEvent.click((await screen.findAllByRole('button', { name: '选择宫殿' }))[0])
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择宫殿Palace A' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
+
+    expect(onSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      streams: expect.objectContaining({
+        memory_palace: expect.objectContaining({ specific_palace_ids: [11] }),
+      }),
+    }))
+  })
+
+  it('shows automatic round rebuild progress and blocks duplicate clicks', async () => {
+    const onResetRound = vi.fn()
+    const cards = [card('one')]
+    const plan = createRoundPlan('round-1', cards, config)
+    render(
+      <FreestyleRoundPlanDialog
+        open
+        config={config}
+        cards={cards}
+        currentIndex={0}
+        queueState={{ ...DEFAULT_QUEUE_STATE, roundId: 'round-1', currentCardId: 'one' }}
+        roundPlan={plan}
+        onOpenChange={vi.fn()}
+        onJump={vi.fn()}
+        onExclude={vi.fn()}
+        onRestore={vi.fn()}
+        onReorder={vi.fn()}
+        onSaveConfig={vi.fn()}
+        onResetRound={onResetRound}
+        loading
+      />,
+    )
+
+    await screen.findByText('宫殿 A')
+    const button = screen.getByRole('button', { name: '正在安排...' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    act(() => fireEvent.click(button))
+    expect(onResetRound).not.toHaveBeenCalled()
   })
 })

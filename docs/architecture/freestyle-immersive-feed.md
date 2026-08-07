@@ -33,6 +33,36 @@ palace and supports jump, drag, batch exclude/restore, and reset-round. The righ
 complete `FreestyleFeedConfig`; saving preserves finished/excluded records and only reorders
 unstarted work. Configuration and round state remain client-local per device/day.
 
+## Training Directions and Three Streams
+
+The user-facing configuration starts with one training direction: `memory_palace`, `quiz`,
+`english`, or `mixed`. The first three directions activate exactly one queue stream. Mixed mode
+selects at least two of the three streams and keeps each stream's configuration while the user
+switches modes; a selection that falls to one stream is normalized back to that single direction.
+
+`streams.memory_palace` builds marked palace review-unit cards. Its scope can be all or non-English
+palaces, with an optional explicit palace list, `due_first_then_expand`, `due_only`, or
+`all_content_due_weighted` selection, palace completion/interleaving order, and structured/random
+unit order. `streams.english` has the same review-unit semantics but is constrained to English
+subject palaces. English mode does not currently mean vocabulary or reading content; it is the
+English-palace review stream.
+
+`streams.quiz` builds question cards independently from palace review scheduling. It filters by
+subject, explicit palace scope, question type, mastery buckets, cross-palace/single-palace order,
+and weak-question priority. The mixed combiner then merges the available stream results with a
+stable seed using `ratio`, global `random`, or `sequential` strategy. Ratio mode uses the three
+stream weights in `mix.ratios`; sequential mode completes one selected stream before moving to
+the next. The combiner de-duplicates by stable card ID after all streams are built, so overlapping
+explicit scopes cannot show the same card twice. Candidate shortage is reported as the actual
+scheduled count: the queue never repeats cards or silently broadens a filter.
+
+The v1 local configuration remains readable only for migration. `quiz_only` becomes `quiz`, a
+palace-only configuration becomes `memory_palace`, an English-palace preset becomes `english`,
+and palace-plus-question content becomes `mixed`. Legacy Anki front/back fields remain in source
+data and compatibility projections but are excluded from the new freestyle streams and queue.
+When a configuration is saved, the round plan preserves completed, excluded, and retry entries;
+only unstarted entries are rebuilt against the new streams.
+
 ## Palace Review Cards
 
 - Palace cards are built only from active due review units returned by Reviews.
@@ -56,7 +86,9 @@ Temporary marks do not exist. Practice must not persist, merge, clear, or schedu
 
 ## Other Cards
 
-Quiz, English, English Reading, and standalone Anki cards retain their own evidence. Their completion must not change a palace review unit. An Anki card may supplement a due unit card, but it never replaces that card and never carries `unit_id` or `unit_revision`.
+Quiz, English Reading, and other standalone learning surfaces retain their own evidence. Their
+completion must not change a palace review unit. Anki front/back data remains in its palace as
+source content, but is no longer emitted by the freestyle streams or mixed queue.
 
 Practice receives topology only through `memory.public.get_palace_unit_projection`. It must not import the mind-map split function, apply node-count limits, or derive due state from member nodes.
 

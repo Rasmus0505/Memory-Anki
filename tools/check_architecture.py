@@ -1279,6 +1279,9 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         "memory_anki.modules.memory.",
         "memory_anki.modules.quiz.",
         "build_freestyle_queue",
+        "merge_content_streams",
+        "training_mode",
+        "streams",
     ):
         if required not in source:
             errors.append(
@@ -1320,6 +1323,29 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must not import "
                 f"private `{forbidden}` modules."
             )
+    stream_mixer = API_SRC / "modules" / "practice" / "domain" / "stream_mixer.py"
+    if not stream_mixer.exists():
+        errors.append(
+            f"{stream_mixer.relative_to(REPO_ROOT).as_posix()}: three-stream queue mixer is required."
+        )
+    else:
+        stream_mixer_source = stream_mixer.read_text(encoding="utf-8", errors="ignore")
+        if "def merge_content_streams" not in stream_mixer_source:
+            errors.append(
+                f"{stream_mixer.relative_to(REPO_ROOT).as_posix()}: must keep the three-stream merger."
+            )
+    freestyle_contract = WEB_SRC / "shared" / "api" / "contracts" / "freestyle.ts"
+    if not freestyle_contract.exists():
+        errors.append(
+            f"{freestyle_contract.relative_to(REPO_ROOT).as_posix()}: freestyle training contract is required."
+        )
+    else:
+        contract_source = freestyle_contract.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("FreestyleTrainingMode", "FreestyleTrainingStreams", "FreestyleTrainingMix"):
+            if marker not in contract_source:
+                errors.append(
+                    f"{freestyle_contract.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
+                )
     public_ts = WEB_SRC / "modules" / "practice" / "public.ts"
     if public_ts.exists():
         public_source = public_ts.read_text(encoding="utf-8", errors="ignore")

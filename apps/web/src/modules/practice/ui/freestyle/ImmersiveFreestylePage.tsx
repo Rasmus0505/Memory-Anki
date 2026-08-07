@@ -16,10 +16,9 @@ import {
   ListChecks,
   MoreHorizontal,
   RefreshCw,
-  Star,
   Waypoints,
 } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundPlanDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundPlanDialog'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
@@ -39,6 +38,10 @@ import {
   isMindMapBranchCard,
   isQuizCard,
 } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import {
+  getFreestyleQuestionDirection,
+  isFreestyleShortcutBlocked,
+} from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   canPopViewHistory,
@@ -50,9 +53,15 @@ import {
   popViewHistory,
   pushViewHistory,
   visibleMountIndices,
+  FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT,
+  type FreestyleFlipMode,
+  readFreestyleDisplaySettings,
+  sanitizeFreestyleDisplaySettings,
+  saveFreestyleDisplaySettings,
 } from '@/modules/practice/public'
-import type { FreestyleCard, FreestyleMindMapBranchCard, FreestyleQuizCard } from '@/shared/api/contracts'
+import type { FreestyleCard, FreestyleFeedConfig, FreestyleMindMapBranchCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
+import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import {
   DropdownMenu,
@@ -64,6 +73,7 @@ import {
 } from '@/shared/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/shared/components/ui/tooltip'
 import { toast } from '@/shared/feedback/toast'
+import { onAppEvent } from '@/shared/events/appEvents'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { cn } from '@/shared/lib/utils'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
@@ -127,6 +137,7 @@ function FreestyleRetryCornerBadge({
 }
 
 export default function ImmersiveFreestylePage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const entryPalaceId = parseFreestyleEntryPalaceId(searchParams.toString())
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
@@ -150,7 +161,10 @@ export default function ImmersiveFreestylePage() {
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const [planOpen, setPlanOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [ratingMode, setRatingMode] = useState(true)
+  const [flipMode, setFlipMode] = useState<FreestyleFlipMode>(
+    () => readFreestyleDisplaySettings().flip_mode,
+  )
+  const [freestyleFullscreen, setFreestyleFullscreen] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [readOnlyHistoryCardId, setReadOnlyHistoryCardId] = useState<string | null>(null)
   const { promptForAiOptions } = useAiRunConfigDialog()
@@ -180,6 +194,81 @@ export default function ImmersiveFreestylePage() {
     skipToNextPalace,
     buildQueue,
   } = useImmersiveQueue(entryPalaceId)
+
+  useEffect(() => {
+    return onAppEvent(FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT, (detail) => {
+      const settings = sanitizeFreestyleDisplaySettings(detail)
+      setFlipMode(settings.flip_mode)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!freestyleFullscreen) return
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setFreestyleFullscreen(false)
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [freestyleFullscreen])
+
+  useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    const unsubscribe = bridge?.onMainWindowFullscreenChange?.((active) => {
+      setFreestyleFullscreen(active)
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (bridge?.setMainWindowFullscreen) {
+      bridge.setMainWindowFullscreen(freestyleFullscreen)
+      return
+    }
+
+    // Installed PWA/browser fallback. The desktop shell uses native window
+    // fullscreen so the Electron title bar and Windows taskbar disappear too.
+    if (freestyleFullscreen) {
+      if (document.fullscreenElement) return
+      if (typeof document.documentElement.requestFullscreen === 'function') {
+        void document.documentElement.requestFullscreen().catch(() => undefined)
+      }
+      return
+    }
+    if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+      void document.exitFullscreen().catch(() => undefined)
+    }
+  }, [freestyleFullscreen])
+
+  useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (bridge?.onMainWindowFullscreenChange) return
+    const handleDocumentFullscreenChange = () => {
+      setFreestyleFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', handleDocumentFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleDocumentFullscreenChange)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      getDesktopTimerBridge()?.setMainWindowFullscreen?.(false)
+    }
+  }, [])
+
+  const updateFlipMode = useCallback((next: FreestyleFlipMode) => {
+    setFlipMode(next)
+    saveFreestyleDisplaySettings({ flip_mode: next })
+  }, [])
+
+  const saveFreestyleConfig = useCallback((nextConfig: FreestyleFeedConfig) => {
+    setConfigAndPersist(nextConfig)
+    // A shelf link is a launch hint. Remove it after saving so refresh cannot
+    // reapply the old single-palace scope over the saved selection.
+    if (entryPalaceId != null) navigate('/freestyle', { replace: true })
+  }, [entryPalaceId, navigate, setConfigAndPersist])
 
   queueRef.current = cards
   const currentCard = cards[currentIndex] ?? null
@@ -400,6 +489,22 @@ export default function ImmersiveFreestylePage() {
     scrollToIndex(currentIndex)
   }, [currentIndex, scrollToIndex])
 
+  useEffect(() => {
+    const handleQuestionNavigation = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
+      const direction = getFreestyleQuestionDirection(event.key)
+      if (!direction) return
+      event.preventDefault()
+      if (direction === 'previous') {
+        navigatePrevious()
+        return
+      }
+      navigateToIndex(currentIndex + 1)
+    }
+    window.addEventListener('keydown', handleQuestionNavigation, true)
+    return () => window.removeEventListener('keydown', handleQuestionNavigation, true)
+  }, [currentIndex, navigatePrevious, navigateToIndex])
+
   /**
    * After finger/wheel inertia ends: apply deferred restudy placement, then pin
    * the card still under the viewport by id. Never advances past that card.
@@ -503,6 +608,11 @@ export default function ImmersiveFreestylePage() {
     },
     [dropStaleCard],
   )
+
+  const handleCardSaveFailed = useCallback((message: string) => {
+    setSaveError(message)
+    toast.error(message)
+  }, [])
 
   const onChoiceResolve = useCallback(
     (card: FreestyleQuizCard, optionId: string, isCorrect: boolean) => {
@@ -671,6 +781,7 @@ export default function ImmersiveFreestylePage() {
           'bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(52,211,153,0.08),transparent_45%),linear-gradient(180deg,#0c0d10_0%,#09090b_100%)]',
           // Immersive freestyle hides mobile bottom nav; use almost full viewport height on phone.
           'h-[calc(100dvh-env(safe-area-inset-bottom,0px))] min-h-0 rounded-xl border border-white/5 shadow-2xl max-lg:rounded-none max-lg:border-0 lg:h-[calc(100vh-88px)]',
+          freestyleFullscreen && 'fixed inset-0 z-[80] h-[100dvh] max-w-none rounded-none border-0 shadow-none',
         )}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
@@ -692,8 +803,9 @@ export default function ImmersiveFreestylePage() {
           onExclude={excludePlanCards}
           onRestore={restorePlanCards}
           onReorder={reorderPlan}
-          onSaveConfig={setConfigAndPersist}
+          onSaveConfig={saveFreestyleConfig}
           onResetRound={reshuffleQueue}
+          loading={loading}
         />
         <FreestyleHistoryDialog
           open={historyOpen}
@@ -709,7 +821,7 @@ export default function ImmersiveFreestylePage() {
           onOpenChange={setHistoryOpen}
         />
 
-        {/* Compact top HUD — progress + timer + rating toggle + overflow menu */}
+        {/* Compact top HUD — progress + timer + overflow menu */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-2 pt-[max(0.35rem,env(safe-area-inset-top,0px))] sm:px-3 sm:pt-2.5">
           <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-2xl border border-white/10 bg-zinc-950/88 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md sm:gap-1.5 sm:rounded-full sm:px-2 sm:py-1">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2">
@@ -767,21 +879,6 @@ export default function ImmersiveFreestylePage() {
               </button>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 border-l border-white/10 pl-1 sm:gap-1 sm:pl-1.5">
-              <button
-                type="button"
-                className={cn(
-                  hudActionClass,
-                  ratingMode
-                    ? 'bg-amber-300/20 text-amber-50'
-                    : 'text-zinc-400 hover:text-zinc-200',
-                )}
-                title={ratingMode ? '评分开：点击关闭' : '评分关：点击开启'}
-                aria-label={ratingMode ? '评分开' : '评分关'}
-                aria-pressed={ratingMode}
-                onClick={() => setRatingMode((value) => !value)}
-              >
-                <Star className={cn('size-4', ratingMode && 'fill-current')} />
-              </button>
               <button
                 type="button"
                 className={cn(hudActionClass, 'text-zinc-300 hover:text-white')}
@@ -901,15 +998,17 @@ export default function ImmersiveFreestylePage() {
                           roundId={queueState.roundId}
                           encounter={queueState.unitEncountersByCardId[card.id]}
                           retryAfterCards={Math.min(3, Math.max(0, cards.length - index - 1))}
-                          ratingVisible={ratingMode}
+                          fullscreen={freestyleFullscreen && index === currentIndex}
+                          onToggleFullscreen={(next) => {
+                            setFreestyleFullscreen(next ?? !freestyleFullscreen)
+                          }}
+                          freestyleFlipMode={flipMode}
+                          onFreestyleFlipModeChange={updateFlipMode}
                           onEnsureEncounter={ensureUnitEncounter}
                           onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
                           onStaleDrop={handleStaleDrop}
-                          onSaveFailed={(message) => {
-                            setSaveError(message)
-                            toast.error(message)
-                          }}
+                          onSaveFailed={handleCardSaveFailed}
                           onUnitsReconciled={() => {
                             void buildQueue(config, {
                               preserveCompleted: true,
@@ -935,6 +1034,7 @@ export default function ImmersiveFreestylePage() {
                   ) : isQuizCard(card) ? (
                     <FreestyleQuizCardView
                       card={card}
+                      active={isActive && index === currentIndex}
                       state={progress.questionStates[card.question.id]}
                       answeredBefore={answeredQuestionIds.has(card.question.id)}
                       onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
@@ -971,7 +1071,7 @@ export default function ImmersiveFreestylePage() {
           className={cn(
             'pointer-events-none absolute z-20',
             'right-3 top-1/2 -translate-y-1/2',
-            unitReviewActive && ratingMode
+            unitReviewActive
               ? 'max-lg:bottom-[calc(6.75rem+env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0'
               : 'max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-lg:right-2 max-lg:top-auto max-lg:translate-y-0',
           )}

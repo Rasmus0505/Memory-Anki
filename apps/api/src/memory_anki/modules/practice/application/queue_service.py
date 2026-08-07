@@ -21,6 +21,7 @@ from ..domain.feed_config import sanitize_feed_config
 from ..domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
+    merge_content_streams,
 )
 from ..domain.review_units import candidate_from_projection
 
@@ -39,18 +40,35 @@ def build_freestyle_queue(
     if not op_id:
         raise ValueError("operation_id is required")
 
-    specific_ids = list(config.get("specific_palace_ids") or [])
-    subject_scope = str(config.get("subject_scope") or "all")
-    subject_ids = list_active_palace_ids_by_subject_scope(session, subject_scope)
-    if subject_scope != "all":
-        specific_ids = [
-            palace_id for palace_id in subject_ids
-            if not specific_ids or palace_id in specific_ids
-        ]
-    palace_filter = specific_ids if specific_ids or subject_scope != "all" else None
+    training_mode = str(config.get("training_mode") or "mixed")
+    active_streams = list(config.get("mixed_modes") or [training_mode])
+    if training_mode != "mixed":
+        active_streams = [training_mode]
+    active_streams = [item for item in active_streams if item in {"memory_palace", "quiz", "english"}]
+    if not active_streams:
+        active_streams = ["memory_palace"]
+    stream_configs = config.get("streams") or {}
+
+    def resolve_stream_ids(stream_name: str) -> tuple[list[int], str]:
+        raw = stream_configs.get(stream_name) if isinstance(stream_configs, dict) else {}
+        raw = raw if isinstance(raw, dict) else {}
+        subject_scope = str(raw.get("subject_scope") or "all")
+        subject_ids = list_active_palace_ids_by_subject_scope(session, subject_scope)
+        specific_ids = [int(value) for value in raw.get("specific_palace_ids") or []]
+        if subject_scope != "all":
+            # Subject presets are broad inclusion scopes; explicit IDs are additive.
+            specific_ids = list(dict.fromkeys([*subject_ids, *specific_ids]))
+        return specific_ids, subject_scope
+
+    stream_ids: dict[str, list[int]] = {}
+    stream_subjects: dict[str, str] = {}
+    for stream_name in active_streams:
+        stream_ids[stream_name], stream_subjects[stream_name] = resolve_stream_ids(stream_name)
+
+    all_selected_ids = sorted({item for values in stream_ids.values() for item in values})
     trees = list_active_palace_tree_structures(
         session,
-        palace_ids=palace_filter,
+        palace_ids=all_selected_ids or None,
     )
     # Drop trees with no root / no stable nodes.
     trees = [tree for tree in trees if tree.get("root_uid") and tree.get("nodes")]
@@ -92,22 +110,26 @@ def build_freestyle_queue(
                 / max(1, len(projected_units) * 8)
             )
 
-    # Quiz projections only when enabled.
+    # Quiz projections only when the quiz stream is active. Its scope is
+    # independent from both palace streams in a mixed round.
     quizzes: list[QuizCandidate] = []
-    if config["content"].get("quiz_question"):
+    if "quiz" in active_streams:
+        quiz_filter = stream_ids.get("quiz") or None
+        quiz_scope_config = stream_configs.get("quiz") if isinstance(stream_configs, dict) else {}
+        quiz_scope_config = quiz_scope_config if isinstance(quiz_scope_config, dict) else {}
         questions = list_published_questions_for_palaces(
             session,
-            palace_ids=palace_filter,
-            question_type=str(config.get("question_type") or "all"),
+            palace_ids=quiz_filter,
+            question_type=str(quiz_scope_config.get("question_type") or config.get("question_type") or "all"),
         )
-        bindings = list_node_bindings_for_palaces(session, palace_ids=palace_filter)
+        bindings = list_node_bindings_for_palaces(session, palace_ids=quiz_filter)
         bound_map: dict[int, list[str]] = {}
         for row in bindings:
             qid = int(row["question_id"])
             bound_map.setdefault(qid, []).append(str(row["node_uid"]))
         mastery_rows = list_mastery_profiles_for_palaces(
             session,
-            palace_ids=palace_filter,
+            palace_ids=quiz_filter,
         )
         mastery_by_question = {
             int(row["question_id"]): row
@@ -145,37 +167,115 @@ def build_freestyle_queue(
         for tree in trees
     }
 
-    result = assemble_queue(
-        config=config,
-        palace_meta=palace_meta,
-        units_by_palace=units_by_palace,
-        due_by_palace=due_by_palace,
-        mastery_by_palace=mastery_by_palace,
-        recent_practice_rank=recent_practice_rank,
-        quizzes=quizzes,
-        completed_ids=completed_ids or [],
-        hidden_ids=hidden_ids or [],
-        operation_id=op_id,
-        nodes_by_palace=nodes_by_palace,
+    def subset(mapping: dict[int, Any], ids: list[int]) -> dict[int, Any]:
+        allowed = set(ids) if ids else set(mapping)
+        return {key: value for key, value in mapping.items() if key in allowed}
+
+    def stream_config(stream_name: str) -> dict[str, Any]:
+        raw = stream_configs.get(stream_name) if isinstance(stream_configs, dict) else {}
+        raw = raw if isinstance(raw, dict) else {}
+        ids = stream_ids.get(stream_name, [])
+        if stream_name in {"memory_palace", "english"}:
+            return {
+                **config,
+                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "mix_mode": "mindmap_only",
+                "specific_palace_ids": ids,
+                "subject_scope": stream_subjects.get(stream_name, "all"),
+                "palace_order": raw.get("palace_order") or "finish_palace_then_next",
+                "due_policy": raw.get("due_policy") or "due_first_then_expand",
+                "unit_order": raw.get("unit_order") or "structured",
+                "queue_length": 100,
+            }
+        return {
+            **config,
+            "content": {"mindmap_branch": False, "anki_card": False, "quiz_question": True},
+            "mix_mode": "quiz_only",
+            "specific_palace_ids": ids,
+            "subject_scope": stream_subjects.get(stream_name, "all"),
+            "question_type": raw.get("question_type") or "all",
+            "quiz_mastery_buckets": raw.get("mastery_buckets") or config.get("quiz_mastery_buckets"),
+            "quiz_scope": raw.get("quiz_scope") or "cross_palace_random",
+            "weak_quiz_priority": raw.get("weak_priority", True),
+            "queue_length": 100,
+        }
+
+    stream_results: dict[str, Any] = {}
+    stream_cards: dict[str, list[dict[str, Any]]] = {}
+    for stream_name in active_streams:
+        scoped_ids = stream_ids.get(stream_name) or palace_ids
+        result = assemble_queue(
+            config=stream_config(stream_name),
+            palace_meta=subset(palace_meta, scoped_ids),
+            units_by_palace=subset(units_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
+            due_by_palace=subset(due_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
+            mastery_by_palace=subset(mastery_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
+            recent_practice_rank=subset(recent_practice_rank, scoped_ids),
+            quizzes=quizzes if stream_name == "quiz" else [],
+            completed_ids=completed_ids or [],
+            hidden_ids=hidden_ids or [],
+            operation_id=f"{op_id}:{stream_name}",
+            nodes_by_palace=subset(nodes_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
+        )
+        stream_results[stream_name] = result
+        stream_cards[stream_name] = result.cards
+
+    raw_mix = config.get("mix")
+    mix: dict[str, Any] = raw_mix if isinstance(raw_mix, dict) else {}
+    raw_ratios = mix.get("ratios")
+    ratios: dict[str, Any] = raw_ratios if isinstance(raw_ratios, dict) else {}
+    combined = merge_content_streams(
+        stream_cards,
+        active_streams=active_streams,
+        strategy=str(mix.get("strategy") or "ratio") if isinstance(mix, dict) else "ratio",
+        ratios={str(key): int(value) for key, value in ratios.items()},
+        seed=int(config.get("seed") or 17),
     )
+    completed = {str(item) for item in completed_ids or [] if item}
+    hidden = {str(item) for item in hidden_ids or [] if item}
+    remaining = [
+        card for card in combined
+        if str(card.get("id") or "") not in completed
+        and str(card.get("id") or "") not in hidden
+    ]
+    queue_length = int(config.get("queue_length") or 20)
+    limited = remaining[:queue_length]
+    phase_stats = {
+        "candidate_count": len(remaining),
+        "scheduled_count": len(limited),
+        "queue_limit": queue_length,
+        "limit_reached": len(remaining) > len(limited),
+        # Preserve the former top-level diagnostic while each palace stream
+        # now owns its own due-policy evaluation.
+        "due_unit_count": sum(
+            int(stream_results[name].phase_stats.get("due_unit_count") or 0)
+            for name in ("memory_palace", "english")
+            if name in stream_results
+        ),
+        "training_mode": training_mode,
+        "active_streams": ",".join(active_streams),
+    }
+    for stream_name, result in stream_results.items():
+        phase_stats[f"{stream_name}_candidate_count"] = int(result.phase_stats.get("candidate_count") or 0)
+        phase_stats[f"{stream_name}_scheduled_count"] = len(result.cards)
 
     return {
-        "operation_id": result.operation_id,
+        "operation_id": op_id,
         "round_id": str(round_id or ""),
         "config": config,
-        "cards": result.cards,
-        "phase_stats": result.phase_stats,
+        "cards": limited,
+        "phase_stats": phase_stats,
         "round_meta": {
-            "candidate_count": int(result.phase_stats.get("candidate_count") or 0),
-            "scheduled_count": int(result.phase_stats.get("scheduled_count") or 0),
-            "queue_limit": int(result.phase_stats.get("queue_limit") or config["queue_length"]),
-            "limit_reached": bool(result.phase_stats.get("limit_reached")),
+            "candidate_count": len(remaining),
+            "scheduled_count": len(limited),
+            "queue_limit": queue_length,
+            "limit_reached": len(remaining) > len(limited),
         },
         "counts": {
-            "mindmap_branch": sum(1 for card in result.cards if card.get("type") == "mindmap_branch"),
-            "anki_card": sum(1 for card in result.cards if card.get("type") == "anki_card"),
-            "quiz_question": sum(1 for card in result.cards if card.get("type") == "quiz_question"),
-            "total": len(result.cards),
+            "mindmap_branch": sum(1 for card in limited if card.get("type") == "mindmap_branch"),
+            "anki_card": 0,
+            "quiz_question": sum(1 for card in limited if card.get("type") == "quiz_question"),
+            "total": len(limited),
         },
     }
 

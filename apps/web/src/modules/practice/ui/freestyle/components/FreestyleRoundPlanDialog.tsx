@@ -13,7 +13,6 @@ import {
 import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
 import {
   applyFreestyleQuickPreset,
-  DEFAULT_QUIZ_MASTERY_BUCKETS,
   FREESTYLE_QUICK_PRESETS,
   sanitizeFreestyleFeedConfig,
   type FreestyleQuickPresetId,
@@ -30,7 +29,13 @@ import {
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
-import type { FreestyleCard, FreestyleFeedConfig, FreestylePalaceContext } from '@/shared/api/contracts'
+import { FreestyleTrainingConfigForm } from './FreestyleTrainingConfigForm'
+import type {
+  FreestyleCard,
+  FreestyleFeedConfig,
+  FreestylePalaceContext,
+  FreestyleTrainingStream,
+} from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -41,12 +46,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { Input } from '@/shared/components/ui/input'
-import { Switch } from '@/shared/components/ui/switch'
 import type { FreestyleSkipState } from '@/modules/practice/domain/queueState'
 import { cn } from '@/shared/lib/utils'
-
-const FIELD_CLASS = 'h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm'
 
 const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
   pending: '待复习',
@@ -76,92 +77,6 @@ function rowLabel(entry: FreestyleRoundPlanCard) {
     : entry.label || entry.cardId
 }
 
-function configWith(next: FreestyleFeedConfig, patch: Partial<FreestyleFeedConfig>) {
-  return sanitizeFreestyleFeedConfig({ ...next, ...patch })
-}
-
-function ConfigPanel({
-  config,
-  onOpenPalacePicker,
-  onChange,
-}: {
-  config: FreestyleFeedConfig
-  onOpenPalacePicker: () => void
-  onChange: (next: FreestyleFeedConfig) => void
-}) {
-  const set = (patch: Partial<FreestyleFeedConfig>) => onChange(configWith(config, patch))
-  const setContent = (key: keyof FreestyleFeedConfig['content'], value: boolean) =>
-    set({ content: { ...config.content, [key]: value } })
-  const setRatio = (key: 'mindmap' | 'quiz', value: number) =>
-    set({ mix_ratio: { ...config.mix_ratio, [key]: value } })
-  const selected = new Set(config.specific_palace_ids)
-
-  return (
-    <div className="space-y-3 pb-2">
-      <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <div className="text-sm font-semibold">本轮刷什么</div>
-        {([
-          ['mindmap_branch', '记忆宫殿（翻节点回忆）'],
-          ['anki_card', '正反面卡片（Anki 样式）'],
-          ['quiz_question', '练习题'],
-        ] as const).map(([key, label]) => (
-          <label key={key} className="flex min-h-10 items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-sm">
-            <span>{label}</span>
-            <Switch checked={config.content[key]} onCheckedChange={(value) => setContent(key, Boolean(value))} aria-label={label} />
-          </label>
-        ))}
-      </section>
-
-      <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <div className="text-sm font-semibold">宫殿与题目</div>
-        <label className="grid gap-1 text-sm">
-          <span>混合模式</span>
-          <select className={FIELD_CLASS} value={config.mix_mode} onChange={(event) => set({ mix_mode: event.target.value as FreestyleFeedConfig['mix_mode'] })}>
-            <option value="ratio">按比例穿插</option>
-            <option value="random">随机混刷</option>
-            <option value="sequential_map_quiz">先宫殿后题</option>
-            <option value="sequential_quiz_map">先题后宫殿</option>
-            <option value="mindmap_only">只刷宫殿</option>
-            <option value="quiz_only">只刷练习题</option>
-          </select>
-        </label>
-        {config.mix_mode === 'ratio' ? (
-          <div className="grid grid-cols-2 gap-2">
-            <label className="grid gap-1 text-sm"><span>宫殿类卡</span><Input type="number" min={1} max={10} value={config.mix_ratio.mindmap} onChange={(event) => setRatio('mindmap', Number(event.target.value))} /></label>
-            <label className="grid gap-1 text-sm"><span>练习题</span><Input type="number" min={1} max={10} value={config.mix_ratio.quiz} onChange={(event) => setRatio('quiz', Number(event.target.value))} /></label>
-          </div>
-        ) : null}
-        <label className="grid gap-1 text-sm"><span>绑定题目位置</span><select className={FIELD_CLASS} value={config.bound_quiz_placement} onChange={(event) => set({ bound_quiz_placement: event.target.value as FreestyleFeedConfig['bound_quiz_placement'] })}><option value="into_mix">计入混合比例</option><option value="follow_unit">跟随所属单元</option><option value="quiz_stream">进入题目流</option></select></label>
-        <label className="flex min-h-10 items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-sm"><span>薄弱题目优先</span><Switch checked={config.weak_quiz_priority} onCheckedChange={(value) => set({ weak_quiz_priority: Boolean(value) })} aria-label="薄弱题目优先" /></label>
-        <label className="grid gap-1 text-sm"><span>多个宫殿时</span><select className={FIELD_CLASS} value={config.palace_order} onChange={(event) => set({ palace_order: event.target.value as FreestyleFeedConfig['palace_order'] })}><option value="finish_palace_then_next">完成一个宫殿再换下一个</option><option value="interleave_palaces">多个宫殿轮流穿插</option></select></label>
-        <label className="grid gap-1 text-sm"><span>复习单元范围</span><select className={FIELD_CLASS} value={config.due_policy} onChange={(event) => set({ due_policy: event.target.value as FreestyleFeedConfig['due_policy'] })}><option value="due_only">只出到期单元</option><option value="due_first_then_expand">到期优先，不足时补未到期</option><option value="all_content_due_weighted">到期和补充单元一起进池</option></select></label>
-        <label className="grid gap-1 text-sm"><span>题目范围</span><select className={FIELD_CLASS} value={config.quiz_scope} onChange={(event) => set({ quiz_scope: event.target.value as FreestyleFeedConfig['quiz_scope'] })}><option value="cross_palace_random">跨宫殿随机</option><option value="single_palace_random">单宫殿随机</option></select></label>
-      </section>
-
-      <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <div className="text-sm font-semibold">题目筛选</div>
-        <label className="grid gap-1 text-sm"><span>题型</span><select className={FIELD_CLASS} value={config.question_type} onChange={(event) => set({ question_type: event.target.value as FreestyleFeedConfig['question_type'] })}><option value="all">全部题型</option><option value="multiple_choice">选择题</option><option value="true_false">判断题</option><option value="fill_blank">填空题</option><option value="matching">匹配题</option><option value="ordering">排序题</option><option value="categorization">分类题</option><option value="short_answer">简答题</option></select></label>
-        <div className="space-y-1.5 text-sm">
-          <div>题目掌握度</div>
-          {(['unseen', 'weak', 'reinforce', 'stable'] as const).map((bucket) => {
-            const checked = config.quiz_mastery_buckets.includes(bucket)
-            return <label key={bucket} className="flex items-center gap-2"><input type="checkbox" checked={checked} onChange={(event) => { const next = event.target.checked ? [...config.quiz_mastery_buckets, bucket] : config.quiz_mastery_buckets.filter((item) => item !== bucket); set({ quiz_mastery_buckets: next.length ? next : [...DEFAULT_QUIZ_MASTERY_BUCKETS] }) }} /><span>{bucket === 'unseen' ? '没做过' : bucket === 'weak' ? '错的 / 薄弱' : bucket === 'reinforce' ? '需巩固' : '已掌握'}</span></label>
-          })}
-        </div>
-      </section>
-
-      <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <div className="flex items-center justify-between gap-2"><div><div className="text-sm font-semibold">宫殿筛选</div><span className="text-xs text-muted-foreground">{selected.size ? `已选 ${selected.size} 个` : '全部宫殿'}</span></div><Button type="button" size="sm" variant="outline" onClick={onOpenPalacePicker}>打开筛选器</Button></div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-card/40 p-3">
-        <label className="grid gap-1 text-sm"><span>本轮上限</span><Input type="number" min={5} max={100} value={config.queue_length} onChange={(event) => set({ queue_length: Number(event.target.value) })} /></label>
-        <label className="grid gap-1 text-sm"><span>随机种子</span><Input type="number" min={1} value={config.seed} onChange={(event) => set({ seed: Number(event.target.value) })} /></label>
-      </section>
-    </div>
-  )
-}
-
 export function FreestyleRoundPlanDialog({
   open,
   config,
@@ -176,6 +91,7 @@ export function FreestyleRoundPlanDialog({
   onReorder,
   onSaveConfig,
   onResetRound,
+  loading = false,
 }: {
   open: boolean
   config: FreestyleFeedConfig
@@ -190,11 +106,12 @@ export function FreestyleRoundPlanDialog({
   onReorder: (orderIds: string[]) => void
   onSaveConfig: (config: FreestyleFeedConfig) => void
   onResetRound: () => void
+  loading?: boolean
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
   const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
-  const [palacePickerOpen, setPalacePickerOpen] = useState(false)
+  const [pickerStream, setPickerStream] = useState<FreestyleTrainingStream | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -202,7 +119,7 @@ export function FreestyleRoundPlanDialog({
   const planDialogOpen = open
 
   useEffect(() => {
-    if (!open) setPalacePickerOpen(false)
+    if (!open) setPickerStream(null)
   }, [open])
 
   useEffect(() => {
@@ -301,7 +218,10 @@ export function FreestyleRoundPlanDialog({
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" disabled={!selectedIds.length} onClick={() => onExclude(selectedIds)}><X className="size-3.5" />排除选中</Button>
                 <Button type="button" size="sm" variant="outline" disabled={!selectedIds.length} onClick={() => onRestore(selectedIds)}><Undo2 className="size-3.5" />恢复选中</Button>
-                <Button type="button" size="sm" variant="ghost" onClick={onResetRound}><RotateCcw className="size-3.5" />再来一轮</Button>
+                <Button type="button" size="sm" variant="ghost" disabled={loading} aria-busy={loading} onClick={onResetRound}>
+                  <RotateCcw className={cn('size-3.5', loading && 'animate-spin')} />
+                  {loading ? '正在安排...' : '再来一轮'}
+                </Button>
               </div>
             </div>
             {roundPlan?.limitReached ? <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">候选内容超过本轮上限，只安排了前 {roundPlan.queueLimit} 张。</div> : null}
@@ -399,7 +319,12 @@ export function FreestyleRoundPlanDialog({
                 ))}
               </div>
             </section>
-            <ConfigPanel config={draft} onOpenPalacePicker={() => setPalacePickerOpen(true)} onChange={setDraft} />
+            <FreestyleTrainingConfigForm
+              config={draft}
+              scopeSubjects={scopeSubjects}
+              onOpenPalacePicker={setPickerStream}
+              onChange={setDraft}
+            />
           </section>
         </div>
 
@@ -410,11 +335,26 @@ export function FreestyleRoundPlanDialog({
       </DialogContent>
     </Dialog>
     <FreestylePalacePickerDialog
-      open={palacePickerOpen}
+      open={pickerStream != null}
       subjects={scopeSubjects}
-      value={draft.specific_palace_ids}
-      onOpenChange={setPalacePickerOpen}
-      onConfirm={(ids) => setDraft((current) => configWith(current, { specific_palace_ids: ids }))}
+      value={pickerStream ? draft.streams[pickerStream].specific_palace_ids : []}
+      onOpenChange={(next) => { if (!next) setPickerStream(null) }}
+      onConfirm={(ids) => {
+        if (!pickerStream) return
+        const next = sanitizeFreestyleFeedConfig({
+          ...draft,
+          streams: {
+            ...draft.streams,
+            [pickerStream]: {
+              ...draft.streams[pickerStream],
+              specific_palace_ids: ids,
+            },
+          },
+        })
+        setDraft(next)
+        setPickerStream(null)
+        onSaveConfig(next)
+      }}
     />
   </>
   )

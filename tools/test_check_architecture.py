@@ -35,8 +35,19 @@ def test_freestyle_facade_requires_round_plan_public_surface(
                 "from memory_anki.modules.memory.public import y",
                 "from memory_anki.modules.quiz.public import z",
                 "def build_freestyle_queue(): pass",
+                "merge_content_streams",
+                "training_mode",
+                "streams",
             ]
         ),
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "stream_mixer.py",
+        "def merge_content_streams(): pass\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix\n",
     )
     write_file(
         web_src / "modules" / "practice" / "public.ts",

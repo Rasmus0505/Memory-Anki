@@ -20,6 +20,14 @@ export {
   saveQueueState,
 } from './application/feedPersistence'
 export {
+  FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT,
+  readFreestyleDisplaySettings,
+  saveFreestyleDisplaySettings,
+  sanitizeFreestyleDisplaySettings,
+  type FreestyleFlipMode,
+  type FreestyleDisplaySettings,
+} from './application/freestyleDisplaySettings'
+export {
   DEFAULT_QUEUE_STATE,
   FREESTYLE_QUEUE_STATE_STORAGE_KEY,
   UNDO_SKIP_WINDOW_MS,
@@ -61,6 +69,8 @@ export {
   pushViewHistory,
   popViewHistory,
   canPopViewHistory,
+  clearMutedPalaces,
+  restoreExplicitlySelectedCards,
   type FreestyleSkipState,
   type FreestyleUnitEncounterState,
 } from './domain/queueState'

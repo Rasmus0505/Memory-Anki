@@ -118,9 +118,18 @@ describe('round plan reducer', () => {
     const retry = updateRoundPlanCard(first, 'a', { status: 'retry', retryAfterCards: 3 })
     const stale = updateRoundPlanCard(retry, 'b', { status: 'stale' })
     const rebuilt = createRoundPlan('round-1', [], config, undefined, stale)
-    expect(rebuilt.orderIds).toEqual(['a', 'b'])
+    expect(rebuilt.orderIds).toEqual(['a'])
     expect(rebuilt.cardsById.a.status).toBe('retry')
-    expect(rebuilt.cardsById.b.status).toBe('stale')
+    expect(rebuilt.cardsById.b).toBeUndefined()
+  })
+
+  it('lets a freshly rebuilt card replace an old stale entry with the same id', () => {
+    const first = createRoundPlan('round-1', [card('a', 1)], config)
+    const stale = updateRoundPlanCard(first, 'a', { status: 'stale' })
+    const rebuilt = createRoundPlan('round-1', [card('a', 1)], config, undefined, stale)
+
+    expect(rebuilt.orderIds).toEqual(['a'])
+    expect(rebuilt.cardsById.a.status).toBe('pending')
   })
 
   it('does not allow moving to another palace before all current units pass', () => {
@@ -146,7 +155,21 @@ describe('round plan reducer', () => {
     const completed = updateRoundPlanCard(first, 'a', { status: 'completed' })
     const reordered = reorderRoundPlan(completed, ['c', 'missing', 'b'])
     expect(reordered.orderIds).toEqual(['a', 'c', 'b'])
-    expect(sanitizeRoundPlan({ roundId: 'round-1', orderIds: ['a'], cardsById: {} })?.orderIds).toEqual(['a'])
+    expect(sanitizeRoundPlan({ roundId: 'round-1', orderIds: ['a'], cardsById: {} })?.orderIds).toEqual([])
+  })
+
+  it('removes persisted stale entries before the next queue build', () => {
+    const plan = sanitizeRoundPlan({
+      roundId: 'round-1',
+      orderIds: ['a', 'b'],
+      cardsById: {
+        a: { cardId: 'a', status: 'stale', kind: 'mindmap_branch' },
+        b: { cardId: 'b', status: 'pending', kind: 'mindmap_branch' },
+      },
+    })
+
+    expect(plan?.orderIds).toEqual(['b'])
+    expect(plan?.cardsById.a).toBeUndefined()
   })
 
   it('reports active, retry and excluded status from the round state', () => {

@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -18,6 +19,9 @@ from memory_anki.modules.memory.application.unit_review_service import (
     reconcile_palace_units,
     start_freestyle_unit_review_session,
     undo_unit_rating,
+)
+from memory_anki.modules.session.application.study_session_bridge import (
+    audit_inflated_study_sessions,
 )
 
 
@@ -252,6 +256,30 @@ def test_close_uses_client_observed_foreground_seconds(db_session):
     assert closed["completion"]["duration_seconds"] == 7
 
 
+def test_close_rejects_seconds_beyond_server_wall_span(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-wall-guard")
+    _rate(db_session, review_session, state, "encounter-wall-guard", "rating-wall-guard", 3)
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-wall-guard").one()
+    encounter.created_at = utc_now_naive() - timedelta(seconds=5)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="cannot exceed the encounter wall-clock span"):
+        close_unit_review_encounter(
+            db_session,
+            study_session_id=review_session["id"],
+            unit_id=state.id,
+            encounter_id="encounter-wall-guard",
+            operation_id="close-wall-guard",
+            effective_seconds=6,
+        )
+
+    db_session.rollback()
+    db_session.refresh(encounter)
+    assert encounter.status == "open"
+    assert encounter.effective_seconds is None
+
+
 def test_close_without_observed_seconds_does_not_bill_wall_clock(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-no-clock")
@@ -271,6 +299,43 @@ def test_close_without_observed_seconds_does_not_bill_wall_clock(db_session):
     study = db_session.get(StudySession, review_session["id"])
     assert study.effective_seconds == 0
     assert closed["completion"]["duration_seconds"] == 0
+
+
+def test_audit_reports_long_freestyle_encounters_without_repairing_them(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-audit")
+    _rate(db_session, review_session, state, "encounter-audit", "rating-audit", 3)
+    study = db_session.get(StudySession, review_session["id"])
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-audit").one()
+    created_at = utc_now_naive() - timedelta(hours=2)
+    closed_at = created_at + timedelta(seconds=3601)
+    encounter.created_at = created_at
+    encounter.closed_at = closed_at
+    encounter.status = "closed"
+    encounter.effective_seconds = 3601
+    study.status = "completed"
+    study.ended_at = closed_at
+    study.effective_seconds = 3601
+    db_session.commit()
+
+    report = audit_inflated_study_sessions(db_session)
+
+    assert report["long_freestyle_encounter_threshold_seconds"] == 3600
+    assert report["long_freestyle_encounter_count"] == 1
+    assert report["long_freestyle_encounters"] == [
+        {
+            "encounter_id": "encounter-audit",
+            "study_session_id": review_session["id"],
+            "unit_id": state.id,
+            "title": study.title,
+            "effective_seconds": 3601,
+            "wall_seconds": 3601,
+            "created_at": created_at.isoformat(sep=" "),
+            "closed_at": closed_at.isoformat(sep=" "),
+            "client_source": "desktop",
+        }
+    ]
+    assert encounter.effective_seconds == 3601
 
 
 def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_session):
@@ -345,6 +410,12 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     assert rated.json()["item"]["unit"]["stage_index"] == 1
     assert len(rated.json()["item"]["encounter"]["rating_effects"]) == 4
 
+    with session_factory() as session:
+        encounter = session.get(ReviewUnitEncounter, "http-encounter")
+        assert encounter is not None
+        encounter.created_at = utc_now_naive() - timedelta(seconds=10)
+        session.commit()
+
     wrong_round_close = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
@@ -352,6 +423,16 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     )
     assert wrong_round_close.status_code == 400
     assert "round_id does not match the active encounter" in wrong_round_close.json()["detail"]
+
+    impossible_duration_close = client.post(
+        f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
+        "/encounters/http-encounter/close",
+        json={"operation_id": "http-close-impossible-duration", "effective_seconds": 11},
+    )
+    assert impossible_duration_close.status_code == 400
+    assert "cannot exceed the encounter wall-clock span" in impossible_duration_close.json()[
+        "detail"
+    ]
 
     closed = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"

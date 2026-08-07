@@ -9,6 +9,7 @@ import type { RevealFlowMode } from '@/modules/memory/public'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import type { CompleteFlowPayload } from '@/modules/practice/ui/review/model/mind-map-review-flow'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
+import { useFlipCardRevealSettings } from '@/modules/settings/public'
 
 interface UseReviewFlowSessionOptions {
   title: string
@@ -68,6 +69,7 @@ export function useReviewFlowSession({
     becameActiveAt,
     routePath: fullPath,
   })
+  const flipCardRevealSettings = useFlipCardRevealSettings()
   const reveal = useRevealSession({
     title,
     editorState,
@@ -76,6 +78,7 @@ export function useReviewFlowSession({
     mode: revealMode,
     checkpointIds: checkpointNodeUids,
     focusNodeIds: sessionKind === 'review' ? focusNodeUids : EMPTY_FOCUS_NODE_UIDS,
+    revealConfig: flipCardRevealSettings.settings,
   })
   const feedback = useReviewFeedback({
     root: reveal.root,
@@ -371,5 +374,6 @@ export function useReviewFlowSession({
     finishFlowWithPayload,
     finishFlow,
     screenGlowClass,
+    flipCardRevealSettings,
   }
 }

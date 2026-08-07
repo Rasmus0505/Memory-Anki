@@ -100,6 +100,12 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
   const raw = value as Record<string, unknown>
   const roundId = asString(raw.roundId)
   if (!roundId) return null
+  const cardsById = asCards(raw.cardsById)
+  // Stale is a transient recovery marker, not a review outcome. Old persisted
+  // markers must not make the next fresh queue look empty or require manual work.
+  Object.keys(cardsById).forEach((id) => {
+    if (cardsById[id].status === 'stale') delete cardsById[id]
+  })
   return {
     roundId,
     configSignature: asString(raw.configSignature),
@@ -108,8 +114,8 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     scheduledCount: Math.max(0, Math.round(Number(raw.scheduledCount) || 0)),
     queueLimit: Math.max(1, Math.round(Number(raw.queueLimit) || 20)),
     limitReached: Boolean(raw.limitReached),
-    orderIds: asStringList(raw.orderIds),
-    cardsById: asCards(raw.cardsById),
+    orderIds: asStringList(raw.orderIds).filter((id) => Boolean(cardsById[id])),
+    cardsById,
   }
 }
 
@@ -152,10 +158,11 @@ export function createRoundPlan(
   })
 
   // Keep terminal and retry cards from the same round visible in the plan even
-  // when the API omits them after a rebuild. This makes stale/blocked work
-  // inspectable instead of silently disappearing from the round dialog.
+  // when the API omits them after a rebuild. Stale cards are intentionally not
+  // retained: they are rebuildable projections, and retaining them can let an
+  // old stale entry overwrite a fresh card with the same stable id.
   Object.entries(previous?.cardsById ?? {}).forEach(([id, item]) => {
-    if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry' || item.status === 'stale') {
+    if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry') {
       nextById[id] = item
     }
   })

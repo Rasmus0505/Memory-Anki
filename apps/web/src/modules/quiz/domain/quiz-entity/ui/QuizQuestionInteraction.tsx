@@ -144,7 +144,7 @@ export function QuizQuestionInteraction({
     const correctOptionId = question.answer_payload.correct_option_id || ''
     return (
       <div className={cn('grid', compact ? 'gap-2' : 'gap-3')}>
-        {(question.options || []).map((option) => {
+        {(question.options || []).map((option, index) => {
           const selected = currentState.selectedOptionId === option.id
           const resolved = Boolean(currentState.resolved)
           const correct = option.id === correctOptionId
@@ -152,6 +152,7 @@ export function QuizQuestionInteraction({
             <button
               key={option.id}
               type="button"
+              data-quiz-option-index={index}
               disabled={resolved}
               onClick={() => {
                 if (resolved) return
