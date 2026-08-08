@@ -380,12 +380,19 @@ def _restore_snapshot(
     )
 
 
-def _rating_effects(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+def _rating_effects(
+    snapshot: dict[str, Any],
+    *,
+    fuzz_key: str | None = None,
+) -> list[dict[str, Any]]:
     state_data = snapshot["state"]
     item_data = snapshot["item"]
     stage_index = int(state_data["stage_index"])
     has_passed = bool(state_data["has_passed"])
     had_prior_failure = int(item_data["retry_count"]) > 0
+    # Pin "today" once so every button in one preview shares a reference day and
+    # the reported gap cannot drift across a midnight boundary mid-render.
+    today = date.today()
     effects: list[dict[str, Any]] = []
     for rating, label in RATING_LABELS.items():
         result = rate_unit(
@@ -393,12 +400,19 @@ def _rating_effects(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             has_passed=has_passed,
             rating=rating,
             had_failure_in_encounter=had_prior_failure,
+            today=today,
+            fuzz_key=fuzz_key,
         )
+        # Nominal ladder interval names the landing stage ("14天级"); the actual
+        # gap carries day-level fuzz and is what a passing rating really books.
         target_interval = INTERVAL_DAYS[result.stage_index]
-        if rating == 1:
-            stage_action = "reset"
-        elif result.stage_index < stage_index:
-            stage_action = "lower"
+        actual_interval = max(0, (result.due_date - today).days)
+        if result.stage_index < stage_index:
+            # "reset" only when a unit truly falls back to first-learning; a
+            # partial lapse from stage 9 to 4 is a drop, not a reset.
+            stage_action = (
+                "reset" if result.stage_index == 0 and not result.passed else "lower"
+            )
         elif result.stage_index == stage_index:
             stage_action = "keep"
         else:
@@ -410,6 +424,7 @@ def _rating_effects(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
                 "passed": result.passed,
                 "target_stage_index": result.stage_index,
                 "target_interval_days": target_interval,
+                "target_actual_interval_days": actual_interval,
                 "target_due_date": result.due_date.isoformat(),
                 "retry_after_cards": result.retry_after_cards,
                 "stage_action": stage_action,
@@ -431,7 +446,9 @@ def _encounter_payload(encounter: ReviewUnitEncounter) -> dict[str, Any]:
         "effective_operation_id": encounter.effective_operation_id,
         "effective_seconds": encounter.effective_seconds,
         "closed_at": to_api_datetime(encounter.closed_at),
-        "rating_effects": _rating_effects(snapshot),
+        # Same fuzz key as the commit path (unit id), so the previewed due date is
+        # the one actually booked instead of an unfuzzed approximation.
+        "rating_effects": _rating_effects(snapshot, fuzz_key=encounter.unit_id),
     }
 
 
@@ -665,6 +682,9 @@ def _apply_rating_from_snapshot(
         has_passed=state.has_passed,
         rating=rating,
         had_failure_in_encounter=item.retry_count > 0,
+        # Same key the preview used, so the committed due date is the one the
+        # button promised. Keyed on the unit so a same-day cohort still scatters.
+        fuzz_key=state.id,
     )
     now = utc_now_naive()
     state.stage_index = result.stage_index

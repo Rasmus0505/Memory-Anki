@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/shared/components/ui/radio-group'
 import { Button } from '@/shared/components/ui/button'
+import { Switch } from '@/shared/components/ui/switch'
 import type { FlipCardRevealConfig } from '@/shared/preferences/flipCardRevealConfig'
 import type { FreestyleFlipMode } from '@/modules/practice/public'
 
@@ -13,6 +14,11 @@ export interface FlipCardRevealSettingsDialogProps {
     value: FreestyleFlipMode
     onChange: (value: FreestyleFlipMode) => void
   }
+  /** Freestyle-only: advance after a passing rate. Formal review leaves this unset. */
+  freestyleAutoAdvance?: {
+    value: boolean
+    onChange: (value: boolean) => void
+  }
 }
 
 export function FlipCardRevealSettingsDialog({
@@ -21,6 +27,7 @@ export function FlipCardRevealSettingsDialog({
   value,
   onChange,
   freestyleFlipMode,
+  freestyleAutoAdvance,
 }: FlipCardRevealSettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,6 +109,25 @@ export function FlipCardRevealSettingsDialog({
                   </span>
                 </label>
               </RadioGroup>
+            </fieldset>
+          ) : null}
+
+          {freestyleAutoAdvance ? (
+            <fieldset className="space-y-2 border-t pt-4">
+              <legend className="text-sm font-medium">评分后自动进下一张</legend>
+              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border px-3 py-2.5 hover:bg-accent">
+                <span className="grid gap-0.5 text-sm">
+                  <span>记得 / 轻松后自动前进</span>
+                  <span className="text-xs text-muted-foreground">
+                    留出撤销时间后翻页；忘记 / 困难始终停在原卡
+                  </span>
+                </span>
+                <Switch
+                  checked={freestyleAutoAdvance.value}
+                  onCheckedChange={freestyleAutoAdvance.onChange}
+                  aria-label="评分后自动进下一张"
+                />
+              </label>
             </fieldset>
           ) : null}
         </div>

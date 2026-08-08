@@ -127,6 +127,7 @@ const effects: UnitRatingEffectDto[] = [
     passed: false,
     target_stage_index: 0,
     target_interval_days: 0,
+    target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
     stage_action: 'reset',
@@ -137,6 +138,7 @@ const effects: UnitRatingEffectDto[] = [
     passed: false,
     target_stage_index: 0,
     target_interval_days: 0,
+    target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
     stage_action: 'keep',
@@ -147,6 +149,7 @@ const effects: UnitRatingEffectDto[] = [
     passed: true,
     target_stage_index: 1,
     target_interval_days: 1,
+    target_actual_interval_days: 1,
     target_due_date: '2026-07-28',
     retry_after_cards: 0,
     stage_action: 'advance',
@@ -157,6 +160,7 @@ const effects: UnitRatingEffectDto[] = [
     passed: true,
     target_stage_index: 2,
     target_interval_days: 3,
+    target_actual_interval_days: 3,
     target_due_date: '2026-07-30',
     retry_after_cards: 0,
     stage_action: 'advance',
@@ -771,6 +775,56 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(retryPositionLabel(3)).toBe('3张后重练')
     expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 重置到首学阶段')
     expect(ratingEffectLabel(effects[2], 3)).toBe('1天后复习 · 7月28日')
+  })
+
+  it('reports the real booked gap when a due date carries per-unit spread', () => {
+    // Server books 362d for a 365d stage after spread; the label must not claim 365.
+    const spread: UnitRatingEffectDto = {
+      rating: 3,
+      label: '记得',
+      passed: true,
+      target_stage_index: 9,
+      target_interval_days: 365,
+      target_actual_interval_days: 362,
+      target_due_date: '2027-07-25',
+      retry_after_cards: 0,
+      stage_action: 'keep',
+    }
+    expect(ratingEffectLabel(spread, 0)).toBe('362天后复习 · 7月25日')
+  })
+
+  it('falls back to the nominal interval when a cached client lacks the spread field', () => {
+    const legacy: UnitRatingEffectDto = {
+      rating: 3,
+      label: '记得',
+      passed: true,
+      target_stage_index: 1,
+      target_interval_days: 1,
+      target_due_date: '2026-07-28',
+      retry_after_cards: 0,
+      stage_action: 'advance',
+    }
+    expect(ratingEffectLabel(legacy, 0)).toBe('1天后复习 · 7月28日')
+  })
+
+  it('says a lapsed mature unit drops to a stage instead of resetting', () => {
+    // 忘记 on a unit that already passed keeps part of its ladder position, so the
+    // verb comes from stage_action; only a true stage-0 landing reads as 重置.
+    const lapsed: UnitRatingEffectDto = {
+      rating: 1,
+      label: '忘记',
+      passed: false,
+      target_stage_index: 4,
+      target_interval_days: 14,
+      target_actual_interval_days: 0,
+      target_due_date: '2026-07-27',
+      retry_after_cards: 3,
+      stage_action: 'lower',
+    }
+    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 降至14天级')
+
+    const heldAtLearning: UnitRatingEffectDto = { ...lapsed, target_stage_index: 0, target_interval_days: 0, stage_action: 'keep' }
+    expect(ratingEffectLabel(heldAtLearning, 3)).toBe('3张后重练 · 保持首学阶段')
   })
 
   it('stays on the card, ignores the same rating, and atomically amends another rating', async () => {

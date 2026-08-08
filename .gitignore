@@ -99,3 +99,4 @@ _DEBUG_FALLBACK.json
 .superpowers/
 *.jpg
 *.png
+/.quality-gate-tmp

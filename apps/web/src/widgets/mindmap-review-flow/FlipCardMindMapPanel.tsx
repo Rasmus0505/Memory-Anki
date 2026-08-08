@@ -86,6 +86,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
     value: 'free' | 'focused'
     onChange: (value: 'free' | 'focused') => void
   }
+  /** Freestyle-only auto-advance toggle; formal palace review leaves this unset. */
+  freestyleAutoAdvance?: {
+    value: boolean
+    onChange: (value: boolean) => void
+  }
   /** Delegate canvas fullscreen buttons to the enclosing freestyle page. */
   hostFullscreenControl?: boolean
   /** Host chrome after canvas tools (e.g. palace ladder progress). */
@@ -142,6 +147,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   toolbarExtensions,
   revealSettings: revealSettingsControl,
   freestyleFlipMode,
+  freestyleAutoAdvance,
   hostFullscreenControl = false,
   toolbarCenterContent,
   hidePresentationOverflowActions = false,
@@ -603,6 +609,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           }}
           onChange={revealSettingsControl?.updateSettings ?? (() => undefined)}
           freestyleFlipMode={freestyleFlipMode}
+          freestyleAutoAdvance={freestyleAutoAdvance}
         />
       ) : null}
     </div>

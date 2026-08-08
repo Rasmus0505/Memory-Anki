@@ -18,7 +18,6 @@ import {
   type FreestyleUnitEncounterState,
   type ReviewUnitDto,
   type UnitRating,
-  type UnitRatingEffectDto,
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
 import type {
@@ -29,41 +28,13 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
 import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
+import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
 const SESSION_LOAD_TIMEOUT_MS = 15_000
-const ratings: Array<{
-  value: UnitRating
-  label: string
-  className: string
-  selectedClassName: string
-}> = [
-  {
-    value: 1,
-    label: '忘记',
-    className: 'border-rose-400/30 bg-rose-400/10 text-rose-100 hover:bg-rose-400/18',
-    selectedClassName: 'border-rose-300 bg-rose-400/25 ring-2 ring-rose-300/45',
-  },
-  {
-    value: 2,
-    label: '困难',
-    className: 'border-amber-300/30 bg-amber-300/10 text-amber-50 hover:bg-amber-300/18',
-    selectedClassName: 'border-amber-200 bg-amber-300/25 ring-2 ring-amber-200/45',
-  },
-  {
-    value: 3,
-    label: '记得',
-    className: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-50 hover:bg-emerald-300/18',
-    selectedClassName: 'border-emerald-200 bg-emerald-300/25 ring-2 ring-emerald-200/45',
-  },
-  {
-    value: 4,
-    label: '轻松',
-    className: 'border-sky-300/30 bg-sky-300/10 text-sky-50 hover:bg-sky-300/18',
-    selectedClassName: 'border-sky-200 bg-sky-300/25 ring-2 ring-sky-200/45',
-  },
-]
+/** Undo stays reachable just after a rate, then collapses so the map keeps the room. */
+const UNDO_VISIBLE_MS = 5_000
 
 function operationId() {
   return crypto.randomUUID?.() ?? `freestyle-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -183,29 +154,10 @@ function formatUnitDiagnostic(input: {
   return lines.join('\n')
 }
 
-function localDateLabel(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return value
-  return `${month}月${day}日`
-}
-
-export function retryPositionLabel(cardCount: number) {
-  const count = Math.max(0, Math.min(3, Math.round(cardCount)))
-  return count === 0 ? '立即重练' : `${count}张后重练`
-}
-
-export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
-  if (effect.passed) {
-    return `${effect.target_interval_days}天后复习 · ${localDateLabel(effect.target_due_date)}`
-  }
-  const targetStage = effect.target_interval_days === 0 ? '首学阶段' : `${effect.target_interval_days}天级`
-  const stage = effect.rating === 1
-    ? `重置到${targetStage}`
-    : effect.stage_action === 'lower'
-      ? `降至${targetStage}`
-      : `保持${targetStage}`
-  return `${retryPositionLabel(retryAfterCards)} · ${stage}`
-}
+export {
+  ratingEffectLabel,
+  retryPositionLabel,
+} from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 
 function encounterState(
   sessionId: string,
@@ -254,6 +206,10 @@ export function FreestyleUnitReviewCardView({
   onToggleFullscreen = () => undefined,
   freestyleFlipMode = 'free',
   onFreestyleFlipModeChange,
+  autoAdvance = false,
+  onAutoAdvanceChange,
+  blockedHint = null,
+  onRatingSettled,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -261,6 +217,10 @@ export function FreestyleUnitReviewCardView({
   roundId: string
   encounter?: FreestyleUnitEncounterState
   retryAfterCards: number
+  /** Why 「下一组」 is blocked, shown inline instead of a toast. */
+  blockedHint?: string | null
+  /** Fired after a successful rate so the page can auto-advance when enabled. */
+  onRatingSettled?: (cardId: string, passed: boolean) => void
   onEnsureEncounter: (
     cardId: string,
     unitRevision: number,
@@ -280,6 +240,8 @@ export function FreestyleUnitReviewCardView({
   onToggleFullscreen?: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
+  autoAdvance?: boolean
+  onAutoAdvanceChange?: (value: boolean) => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
@@ -291,6 +253,9 @@ export function FreestyleUnitReviewCardView({
   const [staleRecovery, setStaleRecovery] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  /** Undo surfaces only right after a rate, then collapses to give the map the room. */
+  const [undoVisible, setUndoVisible] = useState(false)
+  const undoTimerRef = useRef<number | null>(null)
   const activeRef = useRef(active)
   const busyRef = useRef(false)
   const sessionRef = useRef<UnitReviewSessionDto | null>(null)
@@ -327,6 +292,31 @@ export function FreestyleUnitReviewCardView({
     setSavedEditorState(null)
     setStaleRecovery(false)
   }, [cardUnitKey])
+
+  const revealUndo = useCallback(() => {
+    if (undoTimerRef.current != null) window.clearTimeout(undoTimerRef.current)
+    setUndoVisible(true)
+    undoTimerRef.current = window.setTimeout(() => {
+      undoTimerRef.current = null
+      setUndoVisible(false)
+    }, UNDO_VISIBLE_MS)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current != null) window.clearTimeout(undoTimerRef.current)
+    }
+  }, [])
+
+  // Leaving the card ends the undo window; the next card must not inherit it.
+  useEffect(() => {
+    if (active) return
+    if (undoTimerRef.current != null) {
+      window.clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+    setUndoVisible(false)
+  }, [active])
 
   const retryLoad = useCallback(() => {
     openedForKeyRef.current = null
@@ -609,6 +599,8 @@ export function FreestyleUnitReviewCardView({
       onBranchComplete(card.id, {
         restudy: !result.passed,
       })
+      revealUndo()
+      onRatingSettled?.(card.id, result.passed)
     } catch (error) {
       if (isStaleUnitError(error)) {
         const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '评分后卡片已过期' })
@@ -671,9 +663,6 @@ export function FreestyleUnitReviewCardView({
   const reviewReady = Boolean(editorState && session && unit && unit.encounter)
   const currentEncounter = unit?.encounter ?? null
   const selectedRating = currentEncounter?.selected_rating ?? null
-  const selectedEffect = currentEncounter?.rating_effects.find(
-    (effect) => effect.rating === selectedRating,
-  )
   const locked = readOnly || !reviewReady || currentEncounter?.status === 'closed'
   const titleText = stripMindMapHtml(
     unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
@@ -689,46 +678,49 @@ export function FreestyleUnitReviewCardView({
     : null
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-1.5 sm:gap-3" aria-label="永久标记复习单元">
-      <header className="flex min-w-0 shrink-0 items-center gap-2 px-1">
-        <span
-          className="size-2 shrink-0 rounded-full bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)]"
-          title="永久标记"
-          aria-label="永久标记"
-        />
-        <h1 className="min-w-0 truncate text-sm font-semibold text-zinc-100 sm:text-base">
-          {titleText}
-        </h1>
-        {flipTone && flipLabel && flipTitle ? (
-          <span
-            role="status"
-            aria-label={flipTitle}
-            title={flipTitle}
-            data-testid="flip-progress-badge"
-            data-tone={flipTone}
-            className={cn(
-              'inline-flex h-6 shrink-0 items-center rounded-full border px-2 font-mono text-[11px] font-semibold tabular-nums tracking-tight sm:h-7 sm:px-2.5 sm:text-xs',
-              flipProgressToneClass(flipTone),
-            )}
-          >
-            {flipLabel}
-          </span>
-        ) : null}
-        <div className="min-w-0 flex-1" />
-        {lastOperationId && !locked ? (
-          <button
-            type="button"
-            disabled={busy}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs text-zinc-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
-            onClick={() => void undo()}
-          >
-            <RotateCcw className="size-3.5" />
-            撤销
-          </button>
-        ) : null}
-      </header>
-
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.4rem] border border-white/10 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+    <section className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
+      {/* Warm off-white: pure #fff against the near-black shell was a flashbang at night. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#f7f5f2] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+        {/* Title + flip progress float over the map instead of owning a chrome row. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex min-w-0 items-center gap-1.5 p-2 sm:p-2.5">
+          <div className="pointer-events-auto flex min-w-0 max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-full border border-black/8 bg-white/88 px-2.5 py-1 shadow-sm backdrop-blur-sm">
+            <span
+              className="size-2 shrink-0 rounded-full bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.2)]"
+              title="永久标记"
+              aria-label="永久标记"
+            />
+            <h1 className="min-w-0 truncate text-xs font-semibold text-zinc-800 sm:text-sm">
+              {titleText}
+            </h1>
+            {flipTone && flipLabel && flipTitle ? (
+              <span
+                role="status"
+                aria-label={flipTitle}
+                title={flipTitle}
+                data-testid="flip-progress-badge"
+                data-tone={flipTone}
+                className={cn(
+                  'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 font-mono text-[10px] font-semibold tabular-nums tracking-tight sm:h-6 sm:px-2 sm:text-[11px]',
+                  flipProgressToneClass(flipTone),
+                )}
+              >
+                {flipLabel}
+              </span>
+            ) : null}
+          </div>
+          {undoVisible && lastOperationId && !locked ? (
+            <button
+              type="button"
+              disabled={busy}
+              data-testid="freestyle-transient-undo"
+              className="pointer-events-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-black/8 bg-white/92 px-2.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:opacity-40"
+              onClick={() => void undo()}
+            >
+              <RotateCcw className="size-3.5" />
+              撤销
+            </button>
+          ) : null}
+        </div>
         {editorState && session && unit && unit.encounter ? (
           <FreestyleUnitReviewFlipPanel
             key={`${card.id}:${unit.encounter.id}`}
@@ -741,6 +733,8 @@ export function FreestyleUnitReviewCardView({
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
             onFreestyleFlipModeChange={onFreestyleFlipModeChange}
+            autoAdvance={autoAdvance}
+            onAutoAdvanceChange={onAutoAdvanceChange}
             onEditingChange={setInlineEditing}
             onSaveFailed={onSaveFailed}
             onEditorStateSaved={setSavedEditorState}
@@ -777,66 +771,20 @@ export function FreestyleUnitReviewCardView({
         )}
 
         {active && !inlineEditing ? (
-          <footer
-            data-testid="freestyle-rating-bar"
-            className={cn(
-              // Phone: float over map bottom so the map keeps full height.
-              // Desktop: still overlay but roomier hit targets.
-              'pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:p-2.5 sm:pb-2.5',
-            )}
-          >
-            <div className="pointer-events-auto rounded-[1.2rem] border border-white/12 bg-zinc-950/88 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-md sm:rounded-2xl sm:p-2">
-              {/* After rate, one status line shows the real schedule; buttons stay label-only. */}
-              {actionError ? (
-                <div className="mb-1.5 whitespace-pre-wrap rounded-lg border border-rose-300/25 bg-rose-400/10 px-2.5 py-1.5 text-[11px] text-rose-100" role="alert">
-                  <div>{actionError}</div>
-                  <button
-                    type="button"
-                    className="mt-1 underline underline-offset-2"
-                    onClick={() => void navigator.clipboard?.writeText(actionError)}
-                  >
-                    复制诊断
-                  </button>
-                </div>
-              ) : null}
-              {selectedEffect ? (
-                <div className="mb-1.5 truncate rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 sm:text-xs">
-                  已选{selectedEffect.label} · {ratingEffectLabel(selectedEffect, retryAfterCards)}
-                  {locked ? <span className="ml-2 text-zinc-500">已锁定</span> : null}
-                </div>
-              ) : null}
-              <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
-                {ratings.map((item) => {
-                  const effect = currentEncounter?.rating_effects.find(
-                    (value) => value.rating === item.value,
-                  )
-                  const hint = effect
-                    ? ratingEffectLabel(effect, retryAfterCards)
-                    : reviewReady ? '计划不可用' : '加载中'
-                  const selected = selectedRating === item.value
-                  return (
-                    <button
-                      data-testid={`freestyle-rating-button-${item.value}`}
-                      key={item.value}
-                      type="button"
-                      disabled={busy || locked || selected || !currentEncounter}
-                      aria-pressed={selected}
-                      aria-label={`${item.label}：${hint}`}
-                      title={actionError || hint}
-                      className={cn(
-                        'flex min-h-11 items-center justify-center rounded-xl border px-1 py-1.5 text-center transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-2',
-                        item.className,
-                        selected && item.selectedClassName,
-                      )}
-                      onClick={() => void rate(item.value)}
-                    >
-                      <span className="text-xs font-semibold sm:text-sm">{item.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </footer>
+          <FreestyleRatingBar
+            ratingEffects={currentEncounter?.rating_effects ?? []}
+            selectedRating={selectedRating}
+            retryAfterCards={retryAfterCards}
+            busy={busy}
+            locked={locked}
+            reviewReady={reviewReady}
+            hasEncounter={Boolean(currentEncounter)}
+            actionError={actionError}
+            blockedHint={blockedHint}
+            shortcutsActive={active && !inlineEditing}
+            onRate={(rating) => void rate(rating)}
+            onDismissError={() => setActionError(null)}
+          />
         ) : null}
       </div>
     </section>

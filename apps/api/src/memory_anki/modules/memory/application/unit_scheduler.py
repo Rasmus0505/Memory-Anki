@@ -37,6 +37,11 @@ class UnitScheduleResult:
     due_date: date
     passed: bool
     retry_after_cards: int
+    # False when the rating was recorded but the ladder position and due date were
+    # deliberately left alone (see ``schedule_locked``). The UI must say so out
+    # loud, because a silently ignored rating is exactly the kind of invisible
+    # rule this scheduler is meant to avoid.
+    schedule_changed: bool = True
 
 
 def normalize_rating(value: int | str) -> int:
@@ -100,19 +105,36 @@ def rate_unit(
     had_failure_in_encounter: bool,
     today: date | None = None,
     fuzz_key: str | None = None,
+    schedule_locked: bool = False,
 ) -> UnitScheduleResult:
     current_day = today or date.today()
     current_stage = clamp_stage(stage_index)
     normalized = normalize_rating(rating)
 
     # 忘记 is the only failing grade: relearn today, landing proportional to the
-    # strength already earned.
+    # strength already earned. A lapse is honest evidence whether or not the unit
+    # was due, so it is applied even while the schedule is locked -- only the
+    # promoting direction needs protection.
     if normalized == 1:
         return UnitScheduleResult(
             lapse_stage(current_stage, has_passed),
             current_day,
             False,
             RETRY_AFTER_CARDS,
+        )
+
+    # Reviewing a unit ahead of its due date proves nothing about retention over
+    # the interval it was given, so a pass records the review without moving the
+    # ladder. Without this, filler cards (served whenever the due set is short)
+    # let intervals climb on zero forgetting evidence -- the more diligently the
+    # queue is cleared, the more filler appears and the faster it drifts.
+    if schedule_locked:
+        return UnitScheduleResult(
+            current_stage,
+            due_date_when_locked,
+            True,
+            0,
+            schedule_changed=False,
         )
 
     if not has_passed:

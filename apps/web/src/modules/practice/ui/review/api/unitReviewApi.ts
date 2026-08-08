@@ -9,7 +9,11 @@ export interface UnitRatingEffectDto {
   label: string
   passed: boolean
   target_stage_index: number
+  /** Nominal ladder interval that names the landing stage ("14天级"). */
   target_interval_days: number
+  /** Real gap to target_due_date, including per-unit spread. Optional so a
+   * cached PWA client predating this field degrades instead of showing NaN. */
+  target_actual_interval_days?: number
   target_due_date: string
   retry_after_cards: number
   stage_action: 'reset' | 'lower' | 'keep' | 'advance'

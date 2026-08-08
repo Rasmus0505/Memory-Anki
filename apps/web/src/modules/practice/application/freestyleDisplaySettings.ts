@@ -8,11 +8,18 @@ export type FreestyleFlipMode = 'free' | 'focused'
 export interface FreestyleDisplaySettings {
   rating_mode: boolean
   flip_mode: FreestyleFlipMode
+  /**
+   * Opt-in: advance to the next card after a passing rate. Off by default so the
+   * learner keeps control of pace; a weak rate never auto-advances because the
+   * card is what they still need to look at.
+   */
+  auto_advance: boolean
 }
 
 export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
   rating_mode: true,
   flip_mode: 'free',
+  auto_advance: false,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +39,9 @@ export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDispl
     flip_mode: raw.flip_mode === 'focused' || raw.flip_mode === 'free'
       ? raw.flip_mode
       : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.flip_mode,
+    auto_advance: typeof raw.auto_advance === 'boolean'
+      ? raw.auto_advance
+      : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.auto_advance,
   }
 }
 

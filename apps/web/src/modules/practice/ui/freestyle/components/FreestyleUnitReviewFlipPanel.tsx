@@ -48,6 +48,8 @@ export function FreestyleUnitReviewFlipPanel({
   onToggleFullscreen,
   freestyleFlipMode = 'free',
   onFreestyleFlipModeChange,
+  autoAdvance = false,
+  onAutoAdvanceChange,
   onEditingChange,
   onSaveFailed,
   onEditorStateSaved,
@@ -64,6 +66,9 @@ export function FreestyleUnitReviewFlipPanel({
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
+  /** Advance after a passing rate; surfaced in 翻卡设置. */
+  autoAdvance?: boolean
+  onAutoAdvanceChange?: (value: boolean) => void
   /** Parent hides rating overlay while inline editing. */
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
@@ -115,6 +120,12 @@ export function FreestyleUnitReviewFlipPanel({
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
   const [returnSaveState, setReturnSaveState] = useState<'idle' | 'saving' | 'failed'>('idle')
+  /**
+   * Quiet status replaces the old toast stack. Save / mark / reconcile notices
+   * belong on the card that changed, not flying into a screen corner mid-recall.
+   */
+  const [quietStatus, setQuietStatus] = useState<string | null>(null)
+  const quietStatusTimerRef = useRef<number | null>(null)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
   const [lastUndoToken, setLastUndoToken] = useState<string | null>(null)
   const [recentUnitChanges, setRecentUnitChanges] = useState<PalaceReviewUnitChangeHighlight[]>([])
@@ -139,6 +150,25 @@ export function FreestyleUnitReviewFlipPanel({
   useEffect(() => {
     onEditingChange?.(isEditMode)
   }, [isEditMode, onEditingChange])
+
+  const showQuietStatus = useCallback((message: string) => {
+    if (quietStatusTimerRef.current != null) {
+      window.clearTimeout(quietStatusTimerRef.current)
+    }
+    setQuietStatus(message)
+    quietStatusTimerRef.current = window.setTimeout(() => {
+      quietStatusTimerRef.current = null
+      setQuietStatus(null)
+    }, 2_400)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (quietStatusTimerRef.current != null) {
+        window.clearTimeout(quietStatusTimerRef.current)
+      }
+    }
+  }, [])
 
   const notifyUnitReconcile = useCallback((
     unitReconcile: PalaceUnitReconcileResult | null | undefined,
@@ -166,20 +196,20 @@ export function FreestyleUnitReviewFlipPanel({
         // Stay in inline edit after a finished mark pass: keep card mounted and
         // rebuild freestyle only when returning to review / leaving the card.
         pendingQueueRebuildRef.current = true
-        toast.message('复习进度已更新（返回学习后同步队列）')
+        showQuietStatus('复习进度已更新，返回学习后同步')
         return
       }
       pendingQueueRebuildRef.current = false
-      toast.message('复习进度已更新')
+      showQuietStatus('复习进度已更新')
       onUnitsReconciled?.()
       return
     }
     if (rebuildQueue && pendingQueueRebuildRef.current) {
       pendingQueueRebuildRef.current = false
-      toast.message('复习进度已更新')
+      showQuietStatus('复习进度已更新')
       onUnitsReconciled?.()
     }
-  }, [onUnitsReconciled])
+  }, [onUnitsReconciled, showQuietStatus])
 
   const persistEdit = useCallback(async (
     state: MindMapEditorState,
@@ -199,7 +229,7 @@ export function FreestyleUnitReviewFlipPanel({
         editBaselineRef.current = result.state
         editEditorStateRef.current = result.state
         if (!quiet) {
-          toast.success('已保存宫殿编辑')
+          showQuietStatus('已保存宫殿编辑')
         }
         // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
         if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
@@ -225,7 +255,7 @@ export function FreestyleUnitReviewFlipPanel({
       if (saveQueueRef.current === queued) setSavingEdit(false)
     })
     return queued
-  }, [notifyUnitReconcile, onSaveFailed, session.palace_id])
+  }, [notifyUnitReconcile, onSaveFailed, session.palace_id, showQuietStatus])
 
   const clearPersistTimer = useCallback(() => {
     if (saveTimerRef.current != null) {
@@ -342,8 +372,10 @@ export function FreestyleUnitReviewFlipPanel({
     editBaselineRef.current = nextState
     editEditorStateRef.current = nextState
     schedulePersist(nextState)
-    toast.success(result.marked ? '已添加永久标记（层级自动）' : '已取消永久标记')
-  }, [schedulePersist])
+    // Per-node feedback: the chip on the node already shows the mark; a toast per
+    // toggle turned a marking pass into a stream of interruptions.
+    showQuietStatus(result.marked ? '已标记' : '已取消标记')
+  }, [schedulePersist, showQuietStatus])
 
   const handleTogglePermanentMarkMode = useCallback(() => {
     setPermanentMarkMode((current) => {
@@ -351,17 +383,13 @@ export function FreestyleUnitReviewFlipPanel({
       if (current && !next) {
         // Finished this mark pass: one reconcile for the whole batch.
         void flushPersistWithReconcile('mark_change', editEditorStateRef.current, true)
-        toast.success('已退出永久标记；复习进度整理中')
+        showQuietStatus('已退出永久标记，正在整理复习进度')
       } else {
-        toast.success(
-          next
-            ? '永久标记：点击卡片标记/取消；改完后再退出，才会整理复习进度'
-            : '已退出永久标记',
-        )
+        showQuietStatus(next ? '永久标记：点击节点标记 / 取消' : '已退出永久标记')
       }
       return next
     })
-  }, [flushPersistWithReconcile])
+  }, [flushPersistWithReconcile, showQuietStatus])
 
   const permanentMarkChips = useMemo(() => {
     const doc = editEditorState.editor_doc as EditorDoc
@@ -484,6 +512,16 @@ export function FreestyleUnitReviewFlipPanel({
             正在保存宫殿…
           </span>
         </div>
+      ) : quietStatus ? (
+        <div
+          data-testid="freestyle-quiet-status"
+          role="status"
+          className="pointer-events-none absolute inset-x-0 bottom-20 z-30 flex justify-center sm:bottom-16"
+        >
+          <span className="max-w-[min(20rem,90%)] truncate rounded-full border border-black/8 bg-white/92 px-3 py-1 text-[11px] font-medium text-zinc-700 shadow-sm backdrop-blur-sm">
+            {quietStatus}
+          </span>
+        </div>
       ) : null}
 
       <FlipCardMindMapPanel
@@ -535,6 +573,9 @@ export function FreestyleUnitReviewFlipPanel({
         revealSettings={flipCardRevealSettings}
         freestyleFlipMode={onFreestyleFlipModeChange
           ? { value: freestyleFlipMode, onChange: onFreestyleFlipModeChange }
+          : undefined}
+        freestyleAutoAdvance={onAutoAdvanceChange
+          ? { value: autoAdvance, onChange: onAutoAdvanceChange }
           : undefined}
         toolbarCenterContent={
           <PalaceLadderProgress
