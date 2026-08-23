@@ -1,6 +1,7 @@
 ﻿import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as pwaReset from '@/pwa/resetPwa'
+import * as runtimeDiagnostics from './runtimeDiagnostics'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 
 let shouldThrow = false
@@ -37,6 +38,7 @@ describe('RouteErrorBoundary', () => {
 
     expect(screen.getByText('shell navigation')).toBeTruthy()
     expect(screen.getByText('这个页面出了点问题')).toBeTruthy()
+    expect(screen.getByText(/Memory Anki route error diagnosis/)).toBeTruthy()
 
     shouldThrow = false
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
@@ -56,6 +58,21 @@ describe('RouteErrorBoundary', () => {
     expect(screen.getByRole('button', { name: '修复并刷新' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '直接刷新' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  })
+
+  it('copies complete route diagnostics and reports the result', async () => {
+    const copy = vi.spyOn(runtimeDiagnostics, 'copyRuntimeDiagnostics').mockResolvedValue(true)
+
+    render(
+      <RouteErrorBoundary resetKey="/knowledge">
+        <BrokenChunkRoute />
+      </RouteErrorBoundary>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '复制诊断' }))
+
+    await vi.waitFor(() => expect(copy).toHaveBeenCalledWith(expect.stringContaining('route chunk error')))
+    expect(await screen.findByRole('button', { name: '已复制诊断' })).toBeTruthy()
   })
 
   it('repairs PWA runtime caches before reloading for chunk failures', async () => {

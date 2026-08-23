@@ -41,4 +41,18 @@ describe('lazyWithRetry helpers', () => {
     await assertion
     expect(importer).toHaveBeenCalledTimes(2)
   })
+
+  it('turns a hung dynamic import into a recoverable chunk error', async () => {
+    vi.useFakeTimers()
+    const importer = vi.fn<() => Promise<{ default: () => null }>>(
+      () => new Promise(() => undefined),
+    )
+
+    const promise = loadLazyModuleWithRetry(importer)
+    const assertion = expect(promise).rejects.toBeInstanceOf(ChunkLoadError)
+    await vi.advanceTimersByTimeAsync(24_500)
+
+    await assertion
+    expect(importer).toHaveBeenCalledTimes(2)
+  })
 })

@@ -13,6 +13,19 @@ describe('index.css desktop PWA contract', () => {
     expect(html).toContain('viewport-fit=cover')
   })
 
+  it('keeps boot failures fully diagnosable and copyable before React mounts', () => {
+    const html = readFileSync(indexHtmlPath, 'utf8')
+
+    expect(html).toContain('meta[name="memory-anki-release"]')
+    expect(html).toContain('serviceWorkerController')
+    expect(html).toContain('display_mode=')
+    expect(html).toContain('error_name=')
+    expect(html).toContain('error_message=')
+    expect(html).toContain('error_stack=')
+    expect(html).toContain('document.execCommand(\'copy\')')
+    expect(html).toContain('boot_elapsed_ms=')
+  })
+
   it('does not keep a separate mobile PWA stylesheet surface', () => {
     const css = readFileSync(indexCssPath, 'utf8')
 

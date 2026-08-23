@@ -203,4 +203,69 @@ describe('shared api http token headers', () => {
     await expect(request('/palaces/subjects')).resolves.toEqual({ ok: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('gives up on a GET that never responds instead of hanging the page forever', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('navigator', { onLine: true, userAgent: 'Electron/39.8.10' })
+      // 半开连接：fetch 既不 resolve 也不 reject，只有 signal 能把它取消。
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const pending = request('/dashboard').catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(25_000)
+      const error = await pending
+
+      expect(String(error)).toMatch(/请求超过 20 秒未响应/)
+      // 超时不重试：20s 不该变成 60s。
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('times out when a GET receives headers but its JSON body never finishes', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('navigator', { onLine: true, userAgent: 'Electron/39.8.10' })
+      let bodyReadStarted = false
+      let requestAborted = false
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+        init?.signal?.addEventListener('abort', () => {
+          requestAborted = true
+        })
+        const response = jsonResponse({})
+        Object.defineProperty(response, 'json', {
+          value: () => {
+            bodyReadStarted = true
+            return new Promise(() => {})
+          },
+        })
+        return Promise.resolve(response)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const pending = request('/dashboard').catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(20_000)
+      const error = await pending
+
+      expect(bodyReadStarted).toBe(true)
+      expect(requestAborted).toBe(true)
+      expect(String(error)).toMatch(/请求超过 20 秒未响应/)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves writes unbounded so the mutation queue stays the only authority', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await request('/palaces/subjects', { method: 'POST', body: '{}' })
+
+    expect(readFirstFetchInit(fetchMock).signal).toBeUndefined()
+  })
 })

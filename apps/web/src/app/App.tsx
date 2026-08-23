@@ -1,8 +1,12 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 import { AppProviders } from '@/app/providers/AppProviders'
+import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 
-const DesktopApp = lazy(() => import('@/app/DesktopApp'))
-const TimerOverlayApp = lazy(() =>
+// These are the first dynamic imports after the entry bundle. They need the
+// same bounded recovery as route chunks so a stalled PWA asset request cannot
+// leave the application-level Suspense fallback on screen indefinitely.
+const DesktopApp = lazyWithRetry(() => import('@/app/DesktopApp'))
+const TimerOverlayApp = lazyWithRetry(() =>
   import('@/modules/session/ui/timer-overlay/TimerOverlayApp').then((module) => ({
     default: module.TimerOverlayApp,
   })),

@@ -1,7 +1,8 @@
 import { lazy, type ComponentType } from 'react'
 
 const CHUNK_ERROR_PATTERN =
-  /failed to fetch dynamically imported module|loading chunk|importing a module script failed|load failed|failed to fetch/i
+  /failed to fetch dynamically imported module|loading chunk|importing a module script failed|load failed|failed to fetch|timed out/i
+const CHUNK_LOAD_TIMEOUT_MS = 12_000
 
 export function isChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '')
@@ -20,15 +21,41 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
+function loadModuleWithin<T>(importer: () => Promise<T>) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Loading chunk timed out after ${CHUNK_LOAD_TIMEOUT_MS}ms`))
+    }, CHUNK_LOAD_TIMEOUT_MS)
+    let loading: Promise<T>
+    try {
+      loading = importer()
+    } catch (error) {
+      clearTimeout(timer)
+      reject(error)
+      return
+    }
+    loading.then(
+      (module) => {
+        clearTimeout(timer)
+        resolve(module)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 export async function loadLazyModuleWithRetry<T extends ComponentType<unknown>>(
   importer: () => Promise<{ default: T }>,
 ) {
   try {
-    return await importer()
+    return await loadModuleWithin(importer)
   } catch (firstError) {
     await delay(500)
     try {
-      return await importer()
+      return await loadModuleWithin(importer)
     } catch (secondError) {
       if (isChunkLoadError(secondError) || isChunkLoadError(firstError)) {
         throw new ChunkLoadError(secondError)
