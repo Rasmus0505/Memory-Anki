@@ -664,6 +664,7 @@ export default function Knowledge() {
                   editorState={editorState}
                   sceneChrome={mindMapExperience.task === 'learn' ? 'default' : 'edit'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
+                  mobileViewPolicy="map"
                   readonly={mindMapExperience.task === 'learn'}
                   highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                   immersiveModeActive={mindMapFullscreen}

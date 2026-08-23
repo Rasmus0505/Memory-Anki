@@ -383,6 +383,7 @@ function MindMapCanvasInner({
               onViewportChange={state.handleViewportChange}
               readonly={Boolean(props.readonly)}
               mobileGuided={state.mobileGuidedActive}
+              yieldOneFingerPan={state.yieldOneFingerPan}
               preserveViewport={state.preserveViewport}
             />
             {canvasIssue ? (

@@ -59,6 +59,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'focusRequestNonce'
   | 'feedbackFxSignal'
   | 'presentationStrategy'
+  | 'mobileViewPolicy'
   | 'aiSplitBusy'
   | 'onAiSplitRequest'
   | 'onSegmentSelect'
@@ -182,6 +183,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   focusRequestNonce,
   feedbackFxSignal,
   presentationStrategy,
+  mobileViewPolicy,
   aiSplitBusy = false,
   onAiSplitRequest,
   onSegmentSelect,
@@ -548,7 +550,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         forceSyncKey={frameForceSyncKey}
         forceSyncIntent={frameForceSyncIntent}
         initialViewPolicy={frameInitialViewPolicy}
-        mobileViewPolicy={isEditMode ? 'map' : 'auto'}
+        mobileViewPolicy={isEditMode ? 'map' : (mobileViewPolicy ?? 'auto')}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
         reviewFxSignal={reviewFxSignal}
         feedbackFxSignal={feedbackFxSignal}

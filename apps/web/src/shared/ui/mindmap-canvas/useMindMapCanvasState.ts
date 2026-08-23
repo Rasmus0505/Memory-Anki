@@ -106,6 +106,7 @@ export interface UseMindMapCanvasStateResult {
   displayEdges: Edge[]
   isDraggingNode: boolean
   mobileGuidedActive: boolean
+  yieldOneFingerPan: boolean
   nodeActions: ContextMenuAction[]
   edgeActions: ContextMenuAction[]
   markColorFlyout: MarkColorFlyoutState | null
@@ -765,6 +766,7 @@ export function useMindMapCanvasState(
     displayEdges,
     isDraggingNode,
     mobileGuidedActive: viewport.mobileGuidedActive,
+    yieldOneFingerPan: viewport.yieldOneFingerPan,
     nodeActions,
     edgeActions,
     markColorFlyout,

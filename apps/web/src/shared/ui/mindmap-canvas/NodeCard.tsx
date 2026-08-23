@@ -786,6 +786,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             onContextMenu={longPress.handleContextMenu}
             englishInteractionActive={englishInteractionActive}
             onEnglishWordClick={nodeData.onEnglishWordClick}
+            readonly={readonly}
           />
         </div>
       )}

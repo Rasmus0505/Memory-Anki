@@ -50,6 +50,19 @@ describe('FlipCardMindMapPanel', () => {
     expect(screen.queryByRole('button', { name: '宫殿进度校准' })).toBeNull()
   })
 
+  it('forwards an explicit guided policy when a host opts into one-finger yield', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        mobileViewPolicy="guided"
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()).toMatchObject({
+      mobileViewPolicy: 'guided',
+    })
+  })
+
   it('hides the mobile guided rail in compact freestyle (tap nodes to reveal)', () => {
     renderInRouter(
       <FlipCardMindMapPanel

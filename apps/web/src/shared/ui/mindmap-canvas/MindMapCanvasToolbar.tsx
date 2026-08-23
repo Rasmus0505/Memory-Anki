@@ -51,12 +51,26 @@ interface MindMapCanvasToolbarProps {
   onRedo?: () => void
 }
 
+/**
+ * Phone width (393px) fits ~4 icon buttons next to the host's leading controls.
+ * The row keeps `overflow-x-auto` as a safety valve, but a scrolled-off tool is an
+ * invisible tool, so small screens get a denser box instead of a wider one.
+ */
+const TOOLBAR_BUTTON_BASE =
+  'flex size-8 shrink-0 items-center justify-center rounded-xl border transition-colors sm:size-9'
+const TOOLBAR_BUTTON_IDLE =
+  'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
+
 function toolbarButtonClass(active: boolean) {
-  return `flex size-9 items-center justify-center rounded-xl border transition-colors ${
+  return `${TOOLBAR_BUTTON_BASE} ${
     active
       ? 'border-info/30 bg-info/5 text-info hover:border-info/50 hover:bg-info/10'
-      : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-primary'
+      : TOOLBAR_BUTTON_IDLE
   }`
+}
+
+function plainToolbarButtonClass(extra = '') {
+  return `${TOOLBAR_BUTTON_BASE} ${TOOLBAR_BUTTON_IDLE}${extra ? ` ${extra}` : ''}`
 }
 
 export function MindMapCanvasToolbar({
@@ -86,13 +100,13 @@ export function MindMapCanvasToolbar({
   const handleWebpageToggle = onToggleWebpageFullscreen ?? onToggleFocusMode
 
   return (
-    <div className="flex h-[62px] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-background px-3 py-2">
+    <div className="flex h-12 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-background px-2 py-1.5 sm:h-[62px] sm:gap-2 sm:px-3 sm:py-2">
       {leadingContent}
       {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
       <button
         type="button"
         onClick={onRefreshHost}
-        className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+        className={plainToolbarButtonClass()}
         title="刷新脑图"
       >
         <RefreshCw className="size-4" />
@@ -101,7 +115,7 @@ export function MindMapCanvasToolbar({
         <button
           type="button"
           onClick={onFitWholeTree}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          className={plainToolbarButtonClass()}
           title="适应整树"
         >
           <Scan className="size-4" />
@@ -111,7 +125,9 @@ export function MindMapCanvasToolbar({
         <button
           type="button"
           onClick={onFitSelectionBranch}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          /* Branch-scoped fit needs a selected node first; on phone that costs a tap
+             the row cannot afford, so it yields to 适应整树 under sm. */
+          className={plainToolbarButtonClass('max-sm:hidden')}
           title="适应当前分支"
         >
           <Focus className="size-4" />
@@ -121,7 +137,7 @@ export function MindMapCanvasToolbar({
         <button
           type="button"
           onClick={onExpandSelectionSubtree}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          className={plainToolbarButtonClass('max-sm:hidden')}
           title="展开本支整树"
         >
           <GitBranchPlus className="size-4" />
@@ -131,7 +147,7 @@ export function MindMapCanvasToolbar({
         <button
           type="button"
           onClick={onExpandAllBranches}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          className={plainToolbarButtonClass()}
           title="展开全部"
         >
           <ChevronsUpDown className="size-4" />
@@ -141,7 +157,7 @@ export function MindMapCanvasToolbar({
         <button
           type="button"
           onClick={onCollapseDeepBranches}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary"
+          className={plainToolbarButtonClass()}
           title="折叠深层"
         >
           <ChevronsDownUp className="size-4" />
@@ -173,13 +189,13 @@ export function MindMapCanvasToolbar({
       >
         {webpageActive ? <Shrink className="size-4" /> : <Expand className="size-4" />}
       </button>
-      {showHistoryControls ? <div className="mx-1 h-5 w-px bg-border" /> : null}
+      {showHistoryControls ? <div className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}
       {onUndo ? (
         <button
           type="button"
           onClick={onUndo}
           disabled={!canUndo}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
+          className={plainToolbarButtonClass('disabled:opacity-30')}
           title="撤销"
         >
           <Undo2 className="size-4" />
@@ -190,17 +206,21 @@ export function MindMapCanvasToolbar({
           type="button"
           onClick={onRedo}
           disabled={!canRedo}
-          className="flex size-9 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-primary disabled:opacity-30"
+          className={plainToolbarButtonClass('disabled:opacity-30')}
           title="重做"
         >
           <Redo2 className="size-4" />
         </button>
       ) : null}
       {centerContent ? (
-        <>
+        /* Hosts inject a wide progress widget here (freestyle: palace ladder). Its
+           intrinsic min-width is ~230px, which on phone pushed the whole row 286px
+           past the viewport and left the widget itself measuring 0 off-screen.
+           Divider and slot hide together under sm so no orphan rule remains. */
+        <div className="hidden min-w-0 flex-1 items-center gap-2 sm:flex">
           <div className="mx-1 h-5 w-px shrink-0 bg-border" />
           <div className="flex min-w-0 flex-1 items-center">{centerContent}</div>
-        </>
+        </div>
       ) : null}
     </div>
   )

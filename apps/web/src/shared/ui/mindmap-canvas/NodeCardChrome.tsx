@@ -107,6 +107,7 @@ export function NodeCardTextFace({
   onContextMenu,
   englishInteractionActive = false,
   onEnglishWordClick,
+  readonly = false,
 }: {
   textCls: string
   displayHtml: string
@@ -118,10 +119,13 @@ export function NodeCardTextFace({
   onContextMenu: (event: MouseEvent<HTMLElement>) => void
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
+  readonly?: boolean
 }) {
   const showEnglishInteraction =
     englishInteractionActive && !concealed && typeof onEnglishWordClick === 'function'
   const plainLabel = label || (isRoot ? '未命名主题' : '未命名知识点')
+  // Readonly cards (except english / text-select) let pane pan start on the label.
+  const blockPanePan = !readonly || englishInteractionActive
 
   return (
     // Use role=button div (not <button>) so highlight markup can legally contain
@@ -139,7 +143,8 @@ export function NodeCardTextFace({
         if (event.key === 'Enter' || event.key === ' ') event.preventDefault()
       }}
       className={[
-        'mindmap-node-text nopan nodrag',
+        'mindmap-node-text nodrag',
+        blockPanePan ? 'nopan' : '',
         textCls,
         displayHtml && !showEnglishInteraction
           ? '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]'

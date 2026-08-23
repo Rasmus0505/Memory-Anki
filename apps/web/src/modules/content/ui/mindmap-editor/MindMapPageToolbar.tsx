@@ -1,9 +1,12 @@
 ﻿import {
   Brain,
   Eye,
-  FolderTree,  MoreHorizontal,
+  FolderTree,
+  Languages,
+  MoreHorizontal,
   PenLine,  Search,
   Target,
+  TextSelect,
   Wand2,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
@@ -66,6 +69,9 @@ export interface MindMapPageToolbarProps {
   nativeFullscreenAction?: MindMapToolbarToggleAction | null
   clearUiAction?: MindMapToolbarToggleAction | null
 }
+
+/** Square icon-button footprint under sm, normal labelled button from sm up. */
+const COMPACT_TOGGLE_CLASS = 'max-sm:size-8 max-sm:gap-0 max-sm:px-0'
 
 function resolveSegmentTargetLabel(control: MindMapToolbarSegmentControl) {
   if (!control.active) return '学习组'
@@ -139,15 +145,22 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         ) : null}
         {/* modeToggle is optional primary chrome; freestyle puts 进入编辑 inside moreActions ⋯ instead. */}
         {modeToggle ? <Button type="button" variant="outline" onClick={modeToggle.onClick}><Wand2 className="size-4" />{modeToggle.label}</Button> : null}
+        {/* 英语 / 文字模式 are the two toggles review hosts keep inline. Their labels cost
+            ~120px of a 377px phone row, so under sm they collapse to icons and the label
+            moves to aria-label/title — the accessible name is unchanged either way. */}
         {englishAction ? (
           <Button
             type="button"
             variant={englishAction.active ? 'default' : 'outline'}
             disabled={englishAction.disabled}
             aria-pressed={Boolean(englishAction.active)}
+            aria-label={englishAction.label}
+            title={englishAction.label}
             onClick={englishAction.onClick}
+            className={COMPACT_TOGGLE_CLASS}
           >
-            {englishAction.label}
+            <Languages className="sm:hidden" aria-hidden />
+            <span className="max-sm:hidden">{englishAction.label}</span>
           </Button>
         ) : null}
         {textAction ? (
@@ -156,9 +169,13 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             variant={textAction.active ? 'default' : 'outline'}
             disabled={textAction.disabled}
             aria-pressed={Boolean(textAction.active)}
+            aria-label={textAction.label}
+            title={textAction.label}
             onClick={textAction.onClick}
+            className={COMPACT_TOGGLE_CLASS}
           >
-            {textAction.label}
+            <TextSelect className="sm:hidden" aria-hidden />
+            <span className="max-sm:hidden">{textAction.label}</span>
           </Button>
         ) : null}
         {quizAction ? (
@@ -172,7 +189,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {!modern && clearUiAction ? <Button type="button" variant="outline" onClick={clearUiAction.onClick}>{clearUiAction.label}</Button> : null}
         {overflowActions.length ? (
           <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
-            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作" className="max-sm:size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
               {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={(event) => { if (action.opensOverlay) event.preventDefault(); overflowMenu.runAction(action.onClick, action.opensOverlay) }}>{action.label}</DropdownMenuItem></div>)}
             </DropdownMenuContent>

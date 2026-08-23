@@ -43,6 +43,8 @@ interface MindMapCanvasViewportProps {
   onViewportChange: (viewport: Viewport) => void
   readonly?: boolean
   mobileGuided?: boolean
+  /** Explicit `guided` policy only: one-finger drag belongs to a parent scroller (freestyle feed). */
+  yieldOneFingerPan?: boolean
   preserveViewport?: boolean
 }
 
@@ -72,6 +74,7 @@ export function MindMapCanvasViewport({
   onViewportChange,
   readonly = false,
   mobileGuided = false,
+  yieldOneFingerPan = false,
 }: MindMapCanvasViewportProps) {
   // Large-graph mode: skip dots earlier once collapse still leaves a wide map.
   const largeGraph = nodes.length >= 120
@@ -116,18 +119,25 @@ export function MindMapCanvasViewport({
         maxZoom={MINDMAP_MANUAL_MAX_ZOOM}
         onlyRenderVisibleElements={onlyRenderVisible}
         proOptions={{ hideAttribution: true }}
-        panOnScroll={!mobileGuided}
-        panOnDrag
+        panOnScroll={!yieldOneFingerPan}
+        // Only explicit `guided` yields one-finger drag to a parent scroller.
+        // `auto` still uses the phone camera, but standalone maps stay pannable.
+        // Two-finger pinch still pans/zooms via zoomOnPinch.
+        panOnDrag={!yieldOneFingerPan}
+        preventScrolling={!yieldOneFingerPan}
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         zoomOnPinch
         zoomOnDoubleClick={readonly && !mobileGuided}
         zoomActivationKeyCode="Control"
       >
+        {/* Zoom/interactive are off, so this panel is a single fitView button — the same
+            action as 适应整树 in the toolbar. On phone it reads as a stray white square
+            floating over the map, so it yields to the toolbar copy. */}
         <Controls
           showZoom={false}
           showInteractive={false}
-          className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg"
+          className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg max-sm:!hidden"
         />
         {!simplifiedDecorations ? (
           <Background

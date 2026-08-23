@@ -130,6 +130,7 @@ export function QuizKnowledgeDigressionDialog({
               editorState={editorState}
               readonly
               presentationStrategy="viewport-only"
+              mobileViewPolicy="map"
               focusRequestNodeUid={nodeUid}
               focusRequestNonce={focusNonce}
               highlightedNodeUids={highlight}

@@ -53,7 +53,8 @@
     background-color 180ms ease;
 }
 
-/* Scene badge sits clear of the in-canvas toolbar (top bar). */
+/* Scene badge sits clear of the in-canvas toolbar (top bar) from sm up; below
+   that the row is too tight to share, so the badge hides (see bottom of file). */
 .memory-anki-mindmap-scene > .memory-anki-mindmap-scene-label {
   top: 0.45rem;
   right: 0.5rem;
@@ -245,5 +246,19 @@
 @media (prefers-reduced-motion: reduce) {
   .memory-anki-mindmap-scene-rating {
     animation: none;
+  }
+}
+
+/*
+ * Phone: the badge is absolutely positioned at the frame's top-right, which at
+ * 393px lands inside the toolbar row and covers its right-most button (重做).
+ * The scene is already unmistakable from the surrounding chrome there, so the
+ * label yields rather than sitting on a control.
+ * Must stay after the base `.memory-anki-mindmap-scene-label` block — equal
+ * specificity, so source order is what makes this win.
+ */
+@media (max-width: 639px) {
+  .memory-anki-mindmap-scene-label {
+    display: none;
   }
 }

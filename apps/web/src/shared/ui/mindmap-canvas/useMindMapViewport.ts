@@ -110,6 +110,9 @@ export function useMindMapViewport({
       readonly &&
       canvasSize.width > 0 &&
       canvasSize.width < 768)
+  // `auto` keeps the phone camera; only explicit `guided` yields one-finger drag.
+  // Freestyle uses `auto` so the map stays pannable; the feed pager changes cards.
+  const yieldOneFingerPan = mobileViewPolicy === 'guided'
   const preserveViewport = contentChangeViewportPolicy === 'preserve'
   const graphContentSignature = useMemo(() => JSON.stringify(graphNodes), [graphNodes])
 
@@ -757,6 +760,7 @@ export function useMindMapViewport({
     canvasSize,
     isCanvasReady,
     mobileGuidedActive,
+    yieldOneFingerPan,
     preserveViewport,
     controlledViewport,
     handleMoveStart,

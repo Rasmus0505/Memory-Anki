@@ -198,6 +198,7 @@ export default function PalaceView() {
                   editorState={editorState}
                   readonly
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
+                  mobileViewPolicy="map"
                   immersiveModeActive={mindMapFullscreen}
                   onEditorStateChange={() => {}}
                   onFullscreenToggle={setMindMapFullscreen}

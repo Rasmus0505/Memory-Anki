@@ -72,6 +72,30 @@ describe('NodeCard', () => {
     expect(screen.getByRole('button', { name: '可编辑内容' }).className).toContain('cursor-text')
   })
 
+  it('lets readonly review cards start a pane pan from the label', () => {
+    renderNodeCard({
+      label: '只读知识点',
+      readonly: true,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+
+    const face = screen.getByRole('button', { name: '只读知识点' })
+    expect(face.className).toContain('nodrag')
+    expect(face.className).not.toContain('nopan')
+  })
+
+  it('keeps english interaction cards from stealing the pane pan', () => {
+    renderNodeCard({
+      label: 'memory palace',
+      readonly: true,
+      englishInteractionActive: true,
+      onEnglishWordClick: vi.fn(),
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+
+    expect(screen.getByRole('button', { name: 'memory palace' }).className).toContain('nopan')
+  })
+
   it('widens the edit shell so thicker edit borders do not wrap earlier than display', () => {
     const label = '一二三四五六'
     const displaySize = getNodeSize('branch', label)

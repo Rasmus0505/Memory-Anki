@@ -10,13 +10,15 @@ vi.mock('@xyflow/react', () => ({
     Dots: 'dots',
   },
   Controls: () => <div data-testid="controls" />,
-  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport, minZoom, onlyRenderVisibleElements }: {
+  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, panOnDrag, preventScrolling, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport, minZoom, onlyRenderVisibleElements }: {
     children: React.ReactNode
     nodesDraggable: boolean
     nodesFocusable: boolean
     edgesFocusable: boolean
     deleteKeyCode: unknown
     panOnScroll: boolean
+    panOnDrag: boolean
+    preventScrolling: boolean
     zoomOnDoubleClick: boolean
     autoPanOnNodeDrag: boolean
     autoPanOnConnect: boolean
@@ -31,6 +33,8 @@ vi.mock('@xyflow/react', () => ({
       data-edges-focusable={String(edgesFocusable)}
       data-delete-key-code={String(deleteKeyCode)}
       data-pan-on-scroll={String(panOnScroll)}
+      data-pan-on-drag={String(panOnDrag)}
+      data-prevent-scrolling={String(preventScrolling)}
       data-zoom-on-double-click={String(zoomOnDoubleClick)}
       data-auto-pan-on-node-drag={String(autoPanOnNodeDrag)}
       data-auto-pan-on-connect={String(autoPanOnConnect)}
@@ -109,12 +113,26 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('react-flow').dataset.nodesDraggable).toBe('false')
   })
 
-  it('uses guided mobile interaction props', () => {
+  it('uses guided mobile camera without yielding one-finger pan', () => {
+    // Freestyle review uses this path (`auto` + phone camera): map drag stays on.
     renderViewport({ mobileGuided: true })
 
-    expect(screen.getByTestId('react-flow').dataset.panOnScroll).toBe('false')
-    expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('false')
+    const flow = screen.getByTestId('react-flow')
+    expect(flow.dataset.panOnScroll).toBe('true')
+    expect(flow.dataset.panOnDrag).toBe('true')
+    expect(flow.dataset.preventScrolling).toBe('true')
+    expect(flow.dataset.zoomOnDoubleClick).toBe('false')
     expect(screen.queryByTestId('background')).toBeNull()
+  })
+
+  it('yields one-finger pan only when the host opts into a parent scroller', () => {
+    renderViewport({ mobileGuided: true, yieldOneFingerPan: true })
+
+    const flow = screen.getByTestId('react-flow')
+    expect(flow.dataset.panOnScroll).toBe('false')
+    expect(flow.dataset.panOnDrag).toBe('false')
+    expect(flow.dataset.preventScrolling).toBe('false')
+    expect(flow.dataset.zoomOnDoubleClick).toBe('false')
   })
 
   it('lowers min zoom and virtualizes medium/large maps', () => {

@@ -512,6 +512,7 @@ export function PalaceMemoryLookupDialog({
             readonly
             practiceModeActive
             presentationStrategy={'viewport-only'}
+            mobileViewPolicy="map"
             onFullscreenChange={handleMindMapFullscreenChange}
             syncOnPropChange
             syncIntent="replace"
@@ -532,6 +533,7 @@ export function PalaceMemoryLookupDialog({
             editorState={previewState}
             readonly
             presentationStrategy={'viewport-only'}
+            mobileViewPolicy="map"
             onFullscreenChange={handleMindMapFullscreenChange}
             focusRequestNodeUid={rootNodeUid}
             focusRequestNonce={rootFocusNonce}
