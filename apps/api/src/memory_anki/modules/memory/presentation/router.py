@@ -17,6 +17,7 @@ from memory_anki.modules.memory.api import (
     get_unit_review_session,
     list_due_units,
     open_unit_review_encounter,
+    rate_palace_due_units,
     rate_review_unit,
     reconcile_palace_units,
     start_freestyle_unit_review_session,
@@ -212,6 +213,42 @@ def session_detail(study_session_id: str, session: Session = Depends(session_dep
         return {"item": get_unit_review_session(session, study_session_id)}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/review/palaces/{palace_id}/due-units/ratings")
+def rate_palace_due(
+    palace_id: int,
+    data: dict,
+    session: Session = Depends(session_dep),
+):
+    try:
+        rating = data.get("rating")
+        if not isinstance(rating, int | str):
+            raise ValueError("rating is required")
+        current = data.get("current")
+        if current is not None and not isinstance(current, dict):
+            raise ValueError("current must be an object")
+        exclude_raw = data.get("exclude_unit_ids") or []
+        if not isinstance(exclude_raw, list):
+            raise ValueError("exclude_unit_ids must be a list")
+        include_raw = data.get("include_unit_ids") or []
+        if not isinstance(include_raw, list):
+            raise ValueError("include_unit_ids must be a list")
+        return {
+            "item": rate_palace_due_units(
+                session,
+                palace_id=palace_id,
+                operation_id=str(data.get("operation_id") or ""),
+                rating=rating,
+                round_id=str(data.get("round_id") or ""),
+                current=current,
+                exclude_unit_ids=[str(item) for item in exclude_raw],
+                include_unit_ids=[str(item) for item in include_raw],
+            )
+        }
+    except (TypeError, ValueError) as exc:
+        session.rollback()
+        raise _bad_request(ValueError(str(exc))) from exc
 
 
 @router.post("/review/session/{study_session_id}/units/{unit_id}/ratings")

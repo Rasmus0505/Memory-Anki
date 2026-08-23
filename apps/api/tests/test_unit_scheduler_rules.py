@@ -145,6 +145,40 @@ def test_top_stage_stays_capped():
         assert (result.due_date - TODAY).days == INTERVAL_DAYS[TOP_STAGE]
 
 
+def test_locked_pass_records_review_without_moving_the_ladder():
+    booked = date(2026, 9, 1)
+    result = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=4,
+        had_failure_in_encounter=False,
+        today=TODAY,
+        schedule_locked=True,
+        locked_due_date=booked,
+    )
+    assert result.passed is True
+    assert result.schedule_changed is False
+    assert result.stage_index == 5
+    assert result.due_date == booked
+    assert result.retry_after_cards == 0
+
+
+def test_forget_still_lapses_when_the_schedule_is_locked():
+    result = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=1,
+        had_failure_in_encounter=False,
+        today=TODAY,
+        schedule_locked=True,
+        locked_due_date=date(2026, 9, 1),
+    )
+    assert result.passed is False
+    assert result.schedule_changed is True
+    assert result.due_date == TODAY
+    assert result.stage_index == 2
+
+
 def test_without_a_fuzz_key_intervals_are_exactly_nominal():
     """Keeps existing pinned dates and test determinism intact."""
     for stage in range(len(INTERVAL_DAYS)):

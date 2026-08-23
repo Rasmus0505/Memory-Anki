@@ -42,11 +42,13 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 ## Scheduling Invariants
 
 - The only interval ladder is `0 (initial learning), 1, 3, 7, 14, 30, 60, 120, 240, 365` local calendar days. A unit that has never passed occupies the initial-learning stage; its first `记得` always schedules the one-day stage for tomorrow.
-- `记得` advances one level and `轻松` advances two. `困难` moves back one and `忘记` resets to the initial-learning stage.
-- Only `记得` and `轻松` pass the current encounter. `困难` and `忘记` remain immediately due and return after at most three other units.
+- `记得` advances one level and `轻松` advances two. `困难` on a unit that has already passed is itself a pass with a shorter interval; `困难` on a never-passed unit stays in first-learning and retries the same day. `忘记` lapses: never-passed units return to first-learning, previously passed units keep about half their ladder position.
+- Only failing grades (`忘记`, and first-learning `困难`) remain immediately due and return after at most three other units. There is no per-round retry cap.
+- A unit reviewed ahead of its booked due date (freestyle fill cards) records a passing grade without moving the ladder or due date. `忘记` still lapses. Preview and commit share this `schedule_locked` rule.
 - One encounter has one effective rating. Before leaving, another rating atomically replaces it from the frozen pre-encounter baseline; the replaced choice has no scheduling effect.
 - Closing a `困难` or `忘记` encounter preserves its penalty in the next encounter. A later `记得` settles at that penalized level; a later `轻松` recovers only one level.
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
+- Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
 - Due dates are local natural-day dates; presentation converts them to local midnight only at API boundaries.
 - A content change, once reconciled, makes only the affected unit immediately due and lowers it one fixed-ladder level (batched per edit session as above).
 
@@ -55,7 +57,7 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - A formal session freezes all due units for one palace, including member UIDs and revisions.
 - Rating never auto-opens nodes, scrolls the map, or switches the current unit.
 - Leaving a card closes its encounter and locks the effective rating. Re-rendering or restoring the page resumes the same open encounter instead of opening another session.
-- Encounter duration is client-observed foreground activity: only the current open card while the document is visible accrues seconds. Browser background, suspension, lock-screen, and wall-clock gaps are never inferred from `closed_at - created_at`; close persists the stable encounter's observed `effective_seconds` and session completion sums those values.
+- Encounter duration is client-observed foreground activity: only the current open card while the document is visible accrues seconds. Browser background, suspension, lock-screen, and wall-clock gaps are never inferred from `closed_at - created_at`; close persists the stable encounter's observed `effective_seconds` and session completion sums those values. If the client reports more seconds than the encounter wall span, close clamps to that span — it does not 400. The rating is already committed; failing leave would trap the learner on the card.
 - A session completes only after every frozen unit passes.
 - Quiz cards and standalone Anki cards never mutate palace unit scheduling.
 

@@ -121,6 +121,11 @@ class ReviewUnitRatingOperation(Base):
             "created_at",
         ),
         Index("ix_review_unit_rating_operations_unit", "unit_id", "created_at"),
+        Index(
+            "ix_review_unit_rating_operations_batch",
+            "batch_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -147,6 +152,9 @@ class ReviewUnitRatingOperation(Base):
     replaces_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     replaced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     undone_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Shared by every unit scored in one palace-due rating. Null for a single
+    # section rating. The current card's operation id equals this batch id.
+    batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_now_naive
     )

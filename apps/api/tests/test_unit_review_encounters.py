@@ -256,28 +256,30 @@ def test_close_uses_client_observed_foreground_seconds(db_session):
     assert closed["completion"]["duration_seconds"] == 7
 
 
-def test_close_rejects_seconds_beyond_server_wall_span(db_session):
+def test_close_clamps_seconds_beyond_server_wall_span(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-wall-guard")
     _rate(db_session, review_session, state, "encounter-wall-guard", "rating-wall-guard", 3)
     encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-wall-guard").one()
-    encounter.created_at = utc_now_naive() - timedelta(seconds=5)
+    created_at = utc_now_naive() - timedelta(seconds=5)
+    encounter.created_at = created_at
     db_session.commit()
 
-    with pytest.raises(ValueError, match="cannot exceed the encounter wall-clock span"):
-        close_unit_review_encounter(
-            db_session,
-            study_session_id=review_session["id"],
-            unit_id=state.id,
-            encounter_id="encounter-wall-guard",
-            operation_id="close-wall-guard",
-            effective_seconds=6,
-        )
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-wall-guard",
+        operation_id="close-wall-guard",
+        effective_seconds=60,
+    )
 
-    db_session.rollback()
-    db_session.refresh(encounter)
-    assert encounter.status == "open"
-    assert encounter.effective_seconds is None
+    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-wall-guard").one()
+    wall_seconds = max(0, round((encounter.closed_at - created_at).total_seconds()))
+    assert encounter.status == "closed"
+    assert encounter.effective_seconds == wall_seconds
+    assert encounter.effective_seconds < 60
+    assert closed["encounter"]["effective_seconds"] == wall_seconds
 
 
 def test_close_without_observed_seconds_does_not_bill_wall_clock(db_session):
@@ -424,22 +426,22 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     assert wrong_round_close.status_code == 400
     assert "round_id does not match the active encounter" in wrong_round_close.json()["detail"]
 
-    impossible_duration_close = client.post(
+    clamped_close = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
         json={"operation_id": "http-close-impossible-duration", "effective_seconds": 11},
     )
-    assert impossible_duration_close.status_code == 400
-    assert "cannot exceed the encounter wall-clock span" in impossible_duration_close.json()[
-        "detail"
-    ]
+    assert clamped_close.status_code == 200
+    clamped_seconds = clamped_close.json()["item"]["encounter"]["effective_seconds"]
+    assert clamped_seconds is not None
+    assert 9 <= clamped_seconds <= 11
+    assert clamped_close.json()["item"]["encounter"]["status"] == "closed"
+    assert clamped_close.json()["item"]["completion"]["duration_seconds"] == clamped_seconds
 
-    closed = client.post(
+    replayed_close = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
         json={"operation_id": "http-close", "effective_seconds": 9},
     )
-    assert closed.status_code == 200
-    assert closed.json()["item"]["encounter"]["status"] == "closed"
-    assert closed.json()["item"]["encounter"]["effective_seconds"] == 9
-    assert closed.json()["item"]["completion"]["duration_seconds"] == 9
+    assert replayed_close.status_code == 200
+    assert replayed_close.json()["item"]["encounter"]["effective_seconds"] == clamped_seconds

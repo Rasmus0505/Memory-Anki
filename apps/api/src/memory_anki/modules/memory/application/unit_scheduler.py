@@ -106,6 +106,7 @@ def rate_unit(
     today: date | None = None,
     fuzz_key: str | None = None,
     schedule_locked: bool = False,
+    locked_due_date: date | None = None,
 ) -> UnitScheduleResult:
     current_day = today or date.today()
     current_stage = clamp_stage(stage_index)
@@ -131,7 +132,7 @@ def rate_unit(
     if schedule_locked:
         return UnitScheduleResult(
             current_stage,
-            due_date_when_locked,
+            locked_due_date or current_day,
             True,
             0,
             schedule_changed=False,

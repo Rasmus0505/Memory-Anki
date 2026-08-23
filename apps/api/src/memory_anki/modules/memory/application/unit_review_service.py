@@ -380,6 +380,11 @@ def _restore_snapshot(
     )
 
 
+def _schedule_lock_from_due(due_date: date, today: date) -> tuple[bool, date]:
+    """A unit reviewed ahead of its booked day must not climb the ladder."""
+    return due_date > today, due_date
+
+
 def _rating_effects(
     snapshot: dict[str, Any],
     *,
@@ -393,6 +398,11 @@ def _rating_effects(
     # Pin "today" once so every button in one preview shares a reference day and
     # the reported gap cannot drift across a midnight boundary mid-render.
     today = date.today()
+    try:
+        baseline_due = date.fromisoformat(str(state_data["due_date"]))
+    except (TypeError, ValueError):
+        baseline_due = today
+    schedule_locked, locked_due_date = _schedule_lock_from_due(baseline_due, today)
     effects: list[dict[str, Any]] = []
     for rating, label in RATING_LABELS.items():
         result = rate_unit(
@@ -402,6 +412,8 @@ def _rating_effects(
             had_failure_in_encounter=had_prior_failure,
             today=today,
             fuzz_key=fuzz_key,
+            schedule_locked=schedule_locked,
+            locked_due_date=locked_due_date,
         )
         # Nominal ladder interval names the landing stage ("14天级"); the actual
         # gap carries day-level fuzz and is what a passing rating really books.
@@ -428,6 +440,7 @@ def _rating_effects(
                 "target_due_date": result.due_date.isoformat(),
                 "retry_after_cards": result.retry_after_cards,
                 "stage_action": stage_action,
+                "schedule_changed": result.schedule_changed,
             }
         )
     return effects
@@ -677,6 +690,8 @@ def _apply_rating_from_snapshot(
     rating: int,
 ) -> Any:
     _restore_snapshot(state, item, snapshot)
+    today = date.today()
+    schedule_locked, locked_due_date = _schedule_lock_from_due(state.due_date, today)
     result = rate_unit(
         stage_index=state.stage_index,
         has_passed=state.has_passed,
@@ -685,6 +700,9 @@ def _apply_rating_from_snapshot(
         # Same key the preview used, so the committed due date is the one the
         # button promised. Keyed on the unit so a same-day cohort still scatters.
         fuzz_key=state.id,
+        today=today,
+        schedule_locked=schedule_locked,
+        locked_due_date=locked_due_date,
     )
     now = utc_now_naive()
     state.stage_index = result.stage_index
@@ -705,6 +723,211 @@ def _apply_rating_from_snapshot(
         else:
             item.hard_count += 1
     return result
+
+
+def _rate_open_encounter(
+    session: Session,
+    *,
+    study: StudySession,
+    state: ReviewUnitState,
+    item: ReviewSessionUnit,
+    encounter: ReviewUnitEncounter,
+    operation_id: str,
+    rating: int,
+    batch_id: str | None = None,
+) -> dict[str, Any]:
+    """Apply a rating to an open encounter without committing."""
+    previous = (
+        session.get(ReviewUnitRatingOperation, encounter.effective_operation_id)
+        if encounter.effective_operation_id
+        else None
+    )
+    if previous is not None and previous.rating == rating and not batch_id:
+        return json.loads(previous.after_state_json)
+    before = json.loads(encounter.baseline_state_json)
+    result = _apply_rating_from_snapshot(state, item, before, rating)
+    now = utc_now_naive()
+    if previous is not None:
+        previous.replaced_at = now
+    encounter.effective_operation_id = operation_id
+    encounter.selected_rating = rating
+    encounter.passed = result.passed
+    encounter.retry_after_cards = result.retry_after_cards
+    after = {
+        "operation_id": operation_id,
+        "study_session_id": study.id,
+        "encounter_id": encounter.id,
+        "amended": previous is not None,
+        "unit": unit_payload(state),
+        "passed": result.passed,
+        "retry_after_cards": result.retry_after_cards,
+        "rating": rating,
+        "rating_label": RATING_LABELS[rating],
+        "session_status": item.status,
+        "schedule_changed": result.schedule_changed,
+        "encounter": _encounter_payload(encounter),
+    }
+    session.add(
+        ReviewUnitRatingOperation(
+            id=operation_id,
+            encounter_id=encounter.id,
+            study_session_id=study.id,
+            unit_id=state.id,
+            palace_id=state.palace_id,
+            unit_revision=state.revision,
+            rating=rating,
+            passed=result.passed,
+            retry_after_cards=result.retry_after_cards,
+            before_state_json=json.dumps(before, ensure_ascii=False),
+            after_state_json=json.dumps(after, ensure_ascii=False),
+            replaces_operation_id=previous.id if previous is not None else None,
+            batch_id=batch_id,
+        )
+    )
+    return after
+
+
+def _close_rated_encounter(
+    session: Session,
+    *,
+    study: StudySession,
+    encounter: ReviewUnitEncounter,
+    close_operation_id: str,
+    effective_seconds: int = 0,
+) -> None:
+    """Close a rated encounter without committing. Sibling palace rates use 0s."""
+    if encounter.status == ENCOUNTER_CLOSED:
+        return
+    if encounter.effective_operation_id is None or encounter.selected_rating is None:
+        raise ValueError("rate the review unit before leaving it")
+    closed_at = utc_now_naive()
+    encounter.status = ENCOUNTER_CLOSED
+    encounter.close_operation_id = close_operation_id
+    encounter.effective_seconds = max(0, int(effective_seconds))
+    encounter.closed_at = closed_at
+    if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:
+        _complete_unit_review_session(session, study)
+
+
+def _create_one_unit_freestyle_session(
+    session: Session,
+    state: ReviewUnitState,
+    *,
+    allow_not_due: bool,
+) -> tuple[StudySession, ReviewSessionUnit]:
+    """Open a sibling freestyle session without releasing the current card."""
+    if state.due_date > date.today() and not allow_not_due:
+        raise ValueError("review unit is not due")
+    palace = session.get(Palace, state.palace_id)
+    now = utc_now_naive()
+    study = StudySession(
+        id=uuid.uuid4().hex,
+        status=SESSION_ACTIVE,
+        scene=FREESTYLE_UNIT_REVIEW_SCENE,
+        target_type="palace",
+        target_id=state.palace_id,
+        palace_id=state.palace_id,
+        title=str(palace.title or "") if palace is not None else "",
+        started_at=now,
+        summary_json="{}",
+        progress_json="{}",
+        events_json="[]",
+    )
+    session.add(study)
+    item = ReviewSessionUnit(
+        study_session_id=study.id,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        node_uids_json=state.node_uids_json,
+        order_index=0,
+        status=ITEM_PENDING,
+    )
+    session.add(item)
+    session.flush()
+    return study, item
+
+
+def _create_open_encounter(
+    session: Session,
+    *,
+    study: StudySession,
+    state: ReviewUnitState,
+    item: ReviewSessionUnit,
+    encounter_id: str,
+    round_id: str,
+) -> ReviewUnitEncounter:
+    encounter = ReviewUnitEncounter(
+        id=encounter_id,
+        study_session_id=study.id,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        round_id=round_id,
+        sequence=0,
+        baseline_state_json=json.dumps(_state_snapshot(state, item), ensure_ascii=False),
+        status=ENCOUNTER_OPEN,
+    )
+    session.add(encounter)
+    session.flush()
+    return encounter
+
+
+def _due_states_for_palace(session: Session, palace_id: int) -> list[ReviewUnitState]:
+    return (
+        session.query(ReviewUnitState)
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.due_date <= date.today(),
+        )
+        .order_by(ReviewUnitState.due_date.asc(), ReviewUnitState.id.asc())
+        .all()
+    )
+
+
+def _round_rated_unit_ids(session: Session, palace_id: int, round_id: str) -> set[str]:
+    rows = (
+        session.query(ReviewUnitEncounter.unit_id)
+        .join(ReviewUnitState, ReviewUnitState.id == ReviewUnitEncounter.unit_id)
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitEncounter.round_id == round_id,
+            ReviewUnitEncounter.selected_rating.isnot(None),
+        )
+        .all()
+    )
+    return {str(unit_id) for (unit_id,) in rows}
+
+
+def _remaining_due_count(session: Session, palace_id: int) -> int:
+    return (
+        session.query(func.count(ReviewUnitState.id))
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.due_date <= date.today(),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _batch_result_from_operations(
+    session: Session,
+    operations: list[ReviewUnitRatingOperation],
+    *,
+    palace_id: int,
+    batch_id: str,
+) -> dict[str, Any]:
+    items = [json.loads(operation.after_state_json) for operation in operations]
+    return {
+        "batch_id": batch_id,
+        "palace_id": palace_id,
+        "rating": operations[0].rating if operations else None,
+        "items": items,
+        "rated_unit_ids": [operation.unit_id for operation in operations],
+        "remaining_due_count": _remaining_due_count(session, palace_id),
+        "current": next((item for item in items if item.get("operation_id") == batch_id), None),
+    }
 
 
 def rate_review_unit(
@@ -748,67 +971,188 @@ def rate_review_unit(
     if encounter.unit_revision != state.revision:
         raise ValueError("review unit changed; rebuild the queue")
 
-    normalized = normalize_rating(rating)
-    previous = (
-        session.get(ReviewUnitRatingOperation, encounter.effective_operation_id)
-        if encounter.effective_operation_id
-        else None
-    )
-    if previous is not None and previous.rating == normalized:
-        return json.loads(previous.after_state_json)
-    before = json.loads(encounter.baseline_state_json)
-    result = _apply_rating_from_snapshot(state, item, before, normalized)
-    now = utc_now_naive()
-    if previous is not None:
-        previous.replaced_at = now
-    encounter.effective_operation_id = op_id
-    encounter.selected_rating = normalized
-    encounter.passed = result.passed
-    encounter.retry_after_cards = result.retry_after_cards
-    after = {
-        "operation_id": op_id,
-        "study_session_id": study.id,
-        "encounter_id": encounter.id,
-        "amended": previous is not None,
-        "unit": unit_payload(state),
-        "passed": result.passed,
-        "retry_after_cards": result.retry_after_cards,
-        "rating": normalized,
-        "rating_label": RATING_LABELS[normalized],
-        "session_status": item.status,
-        "encounter": _encounter_payload(encounter),
-    }
-    session.add(
-        ReviewUnitRatingOperation(
-            id=op_id,
-            encounter_id=encounter.id,
-            study_session_id=study.id,
-            unit_id=state.id,
-            palace_id=state.palace_id,
-            unit_revision=state.revision,
-            rating=normalized,
-            passed=result.passed,
-            retry_after_cards=result.retry_after_cards,
-            before_state_json=json.dumps(before, ensure_ascii=False),
-            after_state_json=json.dumps(after, ensure_ascii=False),
-            replaces_operation_id=previous.id if previous is not None else None,
-        )
+    after = _rate_open_encounter(
+        session,
+        study=study,
+        state=state,
+        item=item,
+        encounter=encounter,
+        operation_id=op_id,
+        rating=normalize_rating(rating),
     )
     session.commit()
     return after
 
 
-def undo_unit_rating(session: Session, operation_id: str, round_id: str | None = None) -> dict[str, Any]:
-    operation = session.get(ReviewUnitRatingOperation, operation_id)
-    if operation is None or operation.undone_at is not None:
-        raise ValueError("active unit rating operation not found")
-    encounter = session.get(ReviewUnitEncounter, operation.encounter_id)
-    if encounter is None or encounter.status != ENCOUNTER_OPEN:
-        raise ValueError("only the current open encounter can be undone")
-    if encounter.effective_operation_id != operation.id:
-        raise ValueError("only the effective rating can be undone")
-    if round_id and encounter.round_id != str(round_id).strip():
+def rate_palace_due_units(
+    session: Session,
+    *,
+    palace_id: int,
+    operation_id: str,
+    rating: int | str,
+    round_id: str,
+    current: dict[str, Any] | None,
+    exclude_unit_ids: list[str] | None = None,
+    include_unit_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rate every still-due unit of a palace, plus the open current card.
+
+    Already-rated units in this round stay put unless they are the current
+    open encounter (which may amend). Sibling units get a 0-second encounter
+    so only the card under the viewport bills time.
+    """
+    batch_id = str(operation_id or "").strip()
+    requested_round_id = str(round_id or "").strip()
+    if not batch_id:
+        raise ValueError("operation_id is required")
+    if not requested_round_id:
+        raise ValueError("round_id is required")
+    existing = (
+        session.query(ReviewUnitRatingOperation)
+        .filter(ReviewUnitRatingOperation.batch_id == batch_id)
+        .order_by(ReviewUnitRatingOperation.created_at.asc())
+        .all()
+    )
+    if existing:
+        return _batch_result_from_operations(
+            session, existing, palace_id=int(palace_id), batch_id=batch_id
+        )
+    if session.get(ReviewUnitRatingOperation, batch_id) is not None:
+        raise ValueError("operation_id belongs to another encounter")
+
+    # Heal hash lag before we freeze the due set.
+    get_palace_unit_projection(session, int(palace_id))
+    normalized = normalize_rating(rating)
+    excluded = {str(unit_id).strip() for unit_id in (exclude_unit_ids or []) if str(unit_id).strip()}
+    included = {str(unit_id).strip() for unit_id in (include_unit_ids or []) if str(unit_id).strip()}
+    current_payload = current if isinstance(current, dict) else None
+    current_unit_id = str((current_payload or {}).get("unit_id") or "").strip()
+    current_encounter_id = str((current_payload or {}).get("encounter_id") or "").strip()
+    current_session_id = str((current_payload or {}).get("study_session_id") or "").strip()
+    if current_payload is None or not current_unit_id or not current_encounter_id or not current_session_id:
+        raise ValueError("current open encounter is required")
+
+    current_state = session.get(ReviewUnitState, current_unit_id)
+    if current_state is None or not current_state.active or current_state.palace_id != int(palace_id):
+        raise ValueError("review unit not found")
+    current_revision = int(current_payload.get("unit_revision") or 0)
+    if current_revision != int(current_state.revision):
+        raise ValueError("review unit changed; rebuild the queue")
+    current_study = session.get(StudySession, current_session_id)
+    current_encounter = session.get(ReviewUnitEncounter, current_encounter_id)
+    if (
+        current_study is None
+        or current_study.status != SESSION_ACTIVE
+        or current_study.palace_id != int(palace_id)
+        or current_encounter is None
+        or current_encounter.study_session_id != current_study.id
+        or current_encounter.unit_id != current_state.id
+        or current_encounter.status != ENCOUNTER_OPEN
+    ):
+        raise ValueError("open review encounter required")
+    if current_encounter.round_id != requested_round_id:
         raise ValueError("round_id does not match the active encounter")
+    if current_encounter.unit_revision != current_state.revision:
+        raise ValueError("review unit changed; rebuild the queue")
+
+    already_rated = _round_rated_unit_ids(session, int(palace_id), requested_round_id)
+    targets: dict[str, ReviewUnitState] = {}
+    for state in _due_states_for_palace(session, int(palace_id)):
+        if state.id == current_state.id:
+            targets[state.id] = state
+            continue
+        if state.id in excluded or state.id in already_rated:
+            continue
+        targets[state.id] = state
+    for unit_id in included:
+        if unit_id in excluded or unit_id in already_rated or unit_id in targets:
+            continue
+        extra = session.get(ReviewUnitState, unit_id)
+        if extra is None or not extra.active or extra.palace_id != int(palace_id):
+            continue
+        targets[extra.id] = extra
+    targets[current_state.id] = current_state
+
+    operations: list[ReviewUnitRatingOperation] = []
+    current_item = _session_item(session, current_study.id, current_state.id)
+    _rate_open_encounter(
+        session,
+        study=current_study,
+        state=current_state,
+        item=current_item,
+        encounter=current_encounter,
+        operation_id=batch_id,
+        rating=normalized,
+        batch_id=batch_id,
+    )
+    current_op = session.get(ReviewUnitRatingOperation, batch_id)
+    if current_op is not None:
+        operations.append(current_op)
+
+    for unit_id, state in targets.items():
+        if unit_id == current_state.id:
+            continue
+        sibling_op_id = f"{batch_id}:{state.id}"
+        sibling_encounter_id = f"{batch_id}:enc:{state.id}"
+        study, item = _create_one_unit_freestyle_session(
+            session,
+            state,
+            allow_not_due=state.due_date > date.today(),
+        )
+        encounter = _create_open_encounter(
+            session,
+            study=study,
+            state=state,
+            item=item,
+            encounter_id=sibling_encounter_id,
+            round_id=requested_round_id,
+        )
+        _rate_open_encounter(
+            session,
+            study=study,
+            state=state,
+            item=item,
+            encounter=encounter,
+            operation_id=sibling_op_id,
+            rating=normalized,
+            batch_id=batch_id,
+        )
+        _close_rated_encounter(
+            session,
+            study=study,
+            encounter=encounter,
+            close_operation_id=f"{sibling_op_id}:close",
+            effective_seconds=0,
+        )
+        if study.status == SESSION_ACTIVE:
+            # Failed siblings must not linger as a second live freestyle session.
+            study.status = SESSION_ABANDONED
+            study.ended_at = utc_now_naive()
+            study.completion_method = "palace_due_batch"
+            study.effective_seconds = _sum_billable_encounter_seconds(session, study.id)
+        sibling_op = session.get(ReviewUnitRatingOperation, sibling_op_id)
+        if sibling_op is not None:
+            operations.append(sibling_op)
+
+    session.commit()
+    return _batch_result_from_operations(
+        session, operations, palace_id=int(palace_id), batch_id=batch_id
+    )
+
+
+def _undo_one_rating_operation(
+    session: Session,
+    operation: ReviewUnitRatingOperation,
+    *,
+    allow_closed: bool,
+) -> dict[str, Any]:
+    encounter = session.get(ReviewUnitEncounter, operation.encounter_id)
+    if encounter is None:
+        raise ValueError("only the current open encounter can be undone")
+    if encounter.status != ENCOUNTER_OPEN and not allow_closed:
+        raise ValueError("only the current open encounter can be undone")
+    if encounter.status == ENCOUNTER_OPEN and encounter.effective_operation_id != operation.id:
+        raise ValueError("only the effective rating can be undone")
     state = session.get(ReviewUnitState, operation.unit_id)
     if state is None:
         raise ValueError("review unit not found")
@@ -820,7 +1164,7 @@ def undo_unit_rating(session: Session, operation_id: str, round_id: str | None =
         if operation.replaces_operation_id
         else None
     )
-    if previous is not None and previous.undone_at is None:
+    if encounter.status == ENCOUNTER_OPEN and previous is not None and previous.undone_at is None:
         result = _apply_rating_from_snapshot(state, item, snapshot, previous.rating)
         previous.replaced_at = None
         encounter.effective_operation_id = previous.id
@@ -829,17 +1173,83 @@ def undo_unit_rating(session: Session, operation_id: str, round_id: str | None =
         encounter.retry_after_cards = result.retry_after_cards
     else:
         _restore_snapshot(state, item, snapshot)
-        encounter.effective_operation_id = None
-        encounter.selected_rating = None
-        encounter.passed = None
-        encounter.retry_after_cards = 0
-    session.commit()
+        if encounter.status == ENCOUNTER_OPEN:
+            encounter.effective_operation_id = None
+            encounter.selected_rating = None
+            encounter.passed = None
+            encounter.retry_after_cards = 0
+        study = session.get(StudySession, operation.study_session_id)
+        if (
+            study is not None
+            and study.scene == FREESTYLE_UNIT_REVIEW_SCENE
+            and study.status == SESSION_COMPLETED
+            and allow_closed
+        ):
+            study.status = SESSION_ABANDONED
+            study.completion_method = "palace_rating_undone"
     return {
-        "operation_id": operation_id,
+        "operation_id": operation.id,
         "unit": unit_payload(state),
         "session_status": item.status,
         "encounter": _encounter_payload(encounter),
     }
+
+
+def _undo_rating_batch(
+    session: Session,
+    batch_id: str,
+    round_id: str | None = None,
+) -> dict[str, Any]:
+    operations = (
+        session.query(ReviewUnitRatingOperation)
+        .filter(
+            ReviewUnitRatingOperation.batch_id == batch_id,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+        )
+        .order_by(ReviewUnitRatingOperation.created_at.desc())
+        .all()
+    )
+    if not operations:
+        raise ValueError("active unit rating operation not found")
+    current = next((item for item in operations if item.id == batch_id), None)
+    if current is None:
+        raise ValueError("active unit rating operation not found")
+    current_encounter = session.get(ReviewUnitEncounter, current.encounter_id)
+    if current_encounter is None or current_encounter.status != ENCOUNTER_OPEN:
+        raise ValueError("only the current open encounter can be undone")
+    if round_id and current_encounter.round_id != str(round_id).strip():
+        raise ValueError("round_id does not match the active encounter")
+    current_result: dict[str, Any] | None = None
+    for operation in operations:
+        result = _undo_one_rating_operation(
+            session,
+            operation,
+            allow_closed=operation.id != batch_id,
+        )
+        if operation.id == batch_id:
+            current_result = result
+    session.commit()
+    if current_result is None:
+        raise ValueError("active unit rating operation not found")
+    current_result["batch_id"] = batch_id
+    current_result["undone_unit_ids"] = [operation.unit_id for operation in operations]
+    return current_result
+
+
+def undo_unit_rating(session: Session, operation_id: str, round_id: str | None = None) -> dict[str, Any]:
+    operation = session.get(ReviewUnitRatingOperation, operation_id)
+    if operation is None or operation.undone_at is not None:
+        raise ValueError("active unit rating operation not found")
+    if operation.batch_id:
+        return _undo_rating_batch(session, operation.batch_id, round_id)
+    encounter = session.get(ReviewUnitEncounter, operation.encounter_id)
+    if encounter is None or encounter.status != ENCOUNTER_OPEN:
+        raise ValueError("only the current open encounter can be undone")
+    if round_id and encounter.round_id != str(round_id).strip():
+        raise ValueError("round_id does not match the active encounter")
+    result = _undo_one_rating_operation(session, operation, allow_closed=False)
+    session.commit()
+    return result
 
 
 def close_unit_review_encounter(
@@ -887,11 +1297,12 @@ def close_unit_review_encounter(
         raise ValueError("effective_seconds must be non-negative")
     closed_at = utc_now_naive()
     if encounter.created_at is not None:
-        wall_seconds = max(0, int((closed_at - encounter.created_at).total_seconds()))
+        # Cap inflation only. Client clocks start after the start response lands
+        # (PWA/Tailscale lag) and round up; a 400 here left the rating saved and
+        # the learner stuck on the card.
+        wall_seconds = max(0, round((closed_at - encounter.created_at).total_seconds()))
         if normalized_seconds > wall_seconds:
-            raise ValueError(
-                "effective_seconds cannot exceed the encounter wall-clock span"
-            )
+            normalized_seconds = wall_seconds
     encounter.status = ENCOUNTER_CLOSED
     encounter.close_operation_id = close_operation_id
     encounter.effective_seconds = normalized_seconds
@@ -996,6 +1407,7 @@ __all__ = [
     "get_unit_review_session",
     "list_due_units",
     "open_unit_review_encounter",
+    "rate_palace_due_units",
     "rate_review_unit",
     "reconcile_palace_units",
     "resolve_unit_definitions",
