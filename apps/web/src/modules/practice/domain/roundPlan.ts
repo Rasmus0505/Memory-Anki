@@ -42,6 +42,7 @@ export interface FreestyleRoundMeta {
   scheduled_count: number
   queue_limit: number
   limit_reached: boolean
+  palace_leftover_due?: Record<string, number>
 }
 
 function asString(value: unknown) {
@@ -292,6 +293,9 @@ export function isSequentialPalaceBlocked(
 ) {
   if (palaceOrder !== 'finish_palace_then_next') return false
   if (currentIndex === targetIndex || !cards.length) return false
+  // Looking back at a previous palace is never a "leave before finishing" move.
+  // The old bidirectional gate bounced swipe-back after crossing a palace boundary.
+  if (targetIndex < currentIndex) return false
   const currentPalace = cardPalaceId(cards[Math.max(0, Math.min(currentIndex, cards.length - 1))])
   const targetPalace = cardPalaceId(cards[Math.max(0, Math.min(targetIndex, cards.length - 1))])
   if (currentPalace == null || targetPalace === currentPalace) return false

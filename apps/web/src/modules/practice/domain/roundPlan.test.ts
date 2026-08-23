@@ -138,6 +138,12 @@ describe('round plan reducer', () => {
     expect(isSequentialPalaceBlocked(cards, 0, 2, ['a', 'b'], config.palace_order)).toBe(false)
   })
 
+  it('never blocks looking back at a previous palace', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 2)]
+    expect(isSequentialPalaceBlocked(cards, 2, 1, [], config.palace_order)).toBe(false)
+    expect(isSequentialPalaceBlocked(cards, 2, 0, [], config.palace_order)).toBe(false)
+  })
+
   it('counts incomplete units per palace including retry occurrences', () => {
     const cards = [card('a', 1), card('b', 1), card('c', 2)]
     expect(countIncompletePalaceUnits(cards, 1, [])).toBe(2)

@@ -30,10 +30,16 @@ export function getFreestyleFeedApi(params: {
   return request<FreestyleFeedResponse>(`/freestyle/feed?${searchParams.toString()}`)
 }
 
-export function buildFreestyleQueueApi(payload: FreestyleQueueBuildRequest) {
+export function buildFreestyleQueueApi(
+  payload: FreestyleQueueBuildRequest,
+  options?: Pick<RequestInit, 'signal'>,
+) {
   return request<FreestyleQueueBuildResponse>('/freestyle/queue/build', {
+    ...options,
     method: 'POST',
     body: JSON.stringify(payload),
+    // Queue construction is a read operation even though its API uses POST.
+    persistence: false,
   })
 }
 
@@ -106,4 +112,3 @@ export function getFreestyleHistorySummaryApi() {
 export function getWrongQuestionsApi(limit = 200) {
   return request<WrongQuestionsResponse>(`/palace-quiz-questions/wrong?limit=${limit}`)
 }
-

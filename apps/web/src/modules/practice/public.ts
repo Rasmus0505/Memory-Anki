@@ -14,6 +14,7 @@ export {
 export {
   createOperationId,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+  isQueueStateFromPreviousDay,
   readFreestyleFeedConfig,
   readQueueState,
   saveFreestyleFeedConfig,
@@ -25,6 +26,7 @@ export {
   saveFreestyleDisplaySettings,
   sanitizeFreestyleDisplaySettings,
   type FreestyleFlipMode,
+  type FreestyleRatingScope,
   type FreestyleDisplaySettings,
 } from './application/freestyleDisplaySettings'
 export {

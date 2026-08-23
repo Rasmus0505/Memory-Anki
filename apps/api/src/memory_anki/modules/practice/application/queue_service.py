@@ -18,6 +18,7 @@ from memory_anki.modules.quiz.public.queries import (
 )
 
 from ..domain.feed_config import sanitize_feed_config
+from ..domain.leftover_due import leftover_due_by_palace, merge_leftover_due
 from ..domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
@@ -259,6 +260,15 @@ def build_freestyle_queue(
         phase_stats[f"{stream_name}_candidate_count"] = int(result.phase_stats.get("candidate_count") or 0)
         phase_stats[f"{stream_name}_scheduled_count"] = len(result.cards)
 
+    palace_leftover_due = merge_leftover_due(
+        *(
+            result.phase_stats.get("palace_leftover_due")
+            for result in stream_results.values()
+        ),
+        leftover_due_by_palace(remaining, limited),
+    )
+    phase_stats["palace_leftover_due"] = palace_leftover_due
+
     return {
         "operation_id": op_id,
         "round_id": str(round_id or ""),
@@ -270,6 +280,7 @@ def build_freestyle_queue(
             "scheduled_count": len(limited),
             "queue_limit": queue_length,
             "limit_reached": len(remaining) > len(limited),
+            "palace_leftover_due": palace_leftover_due,
         },
         "counts": {
             "mindmap_branch": sum(1 for card in limited if card.get("type") == "mindmap_branch"),

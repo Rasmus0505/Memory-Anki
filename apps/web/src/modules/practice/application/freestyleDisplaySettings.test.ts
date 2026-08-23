@@ -20,11 +20,13 @@ describe('freestyle display settings', () => {
       rating_mode: true,
       flip_mode: 'free',
       auto_advance: false,
+      rating_scope: 'unit',
     })
     expect(sanitizeFreestyleDisplaySettings({ rating_mode: true, flip_mode: 'focused' })).toEqual({
       rating_mode: true,
       flip_mode: 'focused',
       auto_advance: false,
+      rating_scope: 'unit',
     })
   })
 
@@ -45,6 +47,12 @@ describe('freestyle display settings', () => {
       rating_mode: true,
       flip_mode: 'free',
       auto_advance: true,
+      rating_scope: 'unit',
     })
+  })
+
+  it('keeps an explicit palace rating scope', () => {
+    expect(sanitizeFreestyleDisplaySettings({ rating_scope: 'palace' }).rating_scope).toBe('palace')
+    expect(sanitizeFreestyleDisplaySettings({ rating_scope: 'section' }).rating_scope).toBe('unit')
   })
 })

@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_QUEUE_STATE, FREESTYLE_QUEUE_STATE_STORAGE_KEY } from '../domain/queueState'
-import { saveQueueState } from './feedPersistence'
+import {
+  isQueueStateFromPreviousDay,
+  readQueueState,
+  saveQueueState,
+} from './feedPersistence'
 
 function quotaError() {
   const error = new Error('quota exceeded')
@@ -11,6 +15,10 @@ function quotaError() {
 describe('saveQueueState', () => {
   beforeEach(() => {
     window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('drops the rebuildable round plan when localStorage quota is exceeded', () => {
@@ -65,8 +73,32 @@ describe('saveQueueState', () => {
     })
 
     expect(saved.roundPlan).toBeNull()
-    expect(saved.completedIds).toEqual([])
+    expect(saved.completedIds).toEqual(['card-1'])
     expect(saved.mutedPalaceIds).toEqual([17])
     expect(setItem).toHaveBeenCalled()
+  })
+})
+
+describe('readQueueState', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('keeps an unfinished round that started yesterday', () => {
+    const yesterday = Date.now() - 36 * 60 * 60 * 1000
+    window.localStorage.setItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_QUEUE_STATE,
+      roundId: 'round-yesterday',
+      startedAt: yesterday,
+      currentCardId: 'still-here',
+      completedIds: ['done-1'],
+    }))
+
+    const state = readQueueState()
+    expect(state.roundId).toBe('round-yesterday')
+    expect(state.currentCardId).toBe('still-here')
+    expect(state.completedIds).toEqual(['done-1'])
+    expect(isQueueStateFromPreviousDay(state)).toBe(true)
   })
 })

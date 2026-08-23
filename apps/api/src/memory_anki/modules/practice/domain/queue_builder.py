@@ -26,6 +26,7 @@ from .feed_config import (
     QUIZ_SCOPE_CROSS,
     QUIZ_SCOPE_SINGLE,
 )
+from .leftover_due import leftover_due_by_palace
 from .quiz_stream import (
     deterministic_shuffle,
     filter_quizzes_by_mastery_buckets,
@@ -708,6 +709,7 @@ def assemble_queue(
     combined = phase1 + phase2
     remaining = filter_completed(combined, completed_ids=completed, hidden_ids=hidden)
     limited = remaining[:queue_length]
+    palace_leftover_due = leftover_due_by_palace(remaining, limited)
 
     return QueueBuildResult(
         cards=limited,
@@ -732,6 +734,7 @@ def assemble_queue(
             "scheduled_count": len(limited),
             "queue_limit": queue_length,
             "limit_reached": len(remaining) > len(limited),
+            "palace_leftover_due": palace_leftover_due,
         },
         operation_id=operation_id,
     )

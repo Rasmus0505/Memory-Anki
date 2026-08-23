@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from memory_anki.modules.practice.domain.feed_config import sanitize_feed_config
+from memory_anki.modules.practice.domain.leftover_due import (
+    leftover_due_by_palace,
+    merge_leftover_due,
+)
 from memory_anki.modules.practice.domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
@@ -99,7 +103,47 @@ def test_queue_reports_candidate_and_scheduled_counts_when_limit_truncates():
     assert result.phase_stats["scheduled_count"] == 5
     assert result.phase_stats["queue_limit"] == 5
     assert result.phase_stats["limit_reached"] is True
+    assert result.phase_stats["palace_leftover_due"] == {"1": 1}
     assert "ratable_node_uids" not in result.cards[0]
+
+
+def test_leftover_due_counts_only_unscheduled_due_review_units():
+    remaining = [
+        {"id": "a", "type": "mindmap_branch", "phase": "due", "unit_id": "u-a", "palace_id": 1},
+        {"id": "b", "type": "mindmap_branch", "phase": "due", "unit_id": "u-b", "palace_id": 1},
+        {"id": "c", "type": "mindmap_branch", "phase": "fill", "unit_id": "u-c", "palace_id": 1},
+        {"id": "d", "type": "quiz_question", "phase": "due", "palace_id": 1},
+        {"id": "e", "type": "mindmap_branch", "phase": "due", "unit_id": "u-e", "palace_id": 2},
+    ]
+    scheduled = [remaining[0]]
+    assert leftover_due_by_palace(remaining, scheduled) == {"1": 1, "2": 1}
+    assert merge_leftover_due({"1": 1}, {"1": 2, "3": 4}) == {"1": 3, "3": 4}
+
+
+def test_queue_reports_leftover_due_per_palace_when_limit_cuts_the_second():
+    result = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "mix_mode": "mindmap_only",
+                "due_policy": "due_only",
+                "palace_order": "finish_palace_then_next",
+                "queue_length": 5,
+            }
+        ),
+        palace_meta={1: {"title": "A"}, 2: {"title": "B"}},
+        units_by_palace={
+            1: [_unit("a", ("a",), palace_id=1, unit_id="u-a"), _unit("b", ("b",), palace_id=1, unit_id="u-b"), _unit("c", ("c",), palace_id=1, unit_id="u-c")],
+            2: [_unit("d", ("d",), palace_id=2, unit_id="u-d"), _unit("e", ("e",), palace_id=2, unit_id="u-e"), _unit("f", ("f",), palace_id=2, unit_id="u-f")],
+        },
+        due_by_palace={1: {"a", "b", "c"}, 2: {"d", "e", "f"}},
+        mastery_by_palace={1: 0.0, 2: 0.0},
+        recent_practice_rank={},
+        quizzes=[],
+        nodes_by_palace={1: {}, 2: {}},
+    )
+    assert len(result.cards) == 5
+    assert result.phase_stats["palace_leftover_due"] == {"2": 1}
 
 
 def test_anki_cards_are_not_emitted_by_the_new_freestyle_queue():

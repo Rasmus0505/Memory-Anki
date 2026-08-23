@@ -4,6 +4,7 @@ export const FREESTYLE_DISPLAY_SETTINGS_STORAGE_KEY = 'memory-anki.freestyle.dis
 export const FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT = 'memory-anki-freestyle-display-settings-change'
 
 export type FreestyleFlipMode = 'free' | 'focused'
+export type FreestyleRatingScope = 'unit' | 'palace'
 
 export interface FreestyleDisplaySettings {
   rating_mode: boolean
@@ -14,12 +15,15 @@ export interface FreestyleDisplaySettings {
    * card is what they still need to look at.
    */
   auto_advance: boolean
+  /** Section vs whole-palace due rating. Defaults to the current unit only. */
+  rating_scope: FreestyleRatingScope
 }
 
 export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
   rating_mode: true,
   flip_mode: 'free',
   auto_advance: false,
+  rating_scope: 'unit',
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,6 +46,7 @@ export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDispl
     auto_advance: typeof raw.auto_advance === 'boolean'
       ? raw.auto_advance
       : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.auto_advance,
+    rating_scope: raw.rating_scope === 'palace' ? 'palace' : 'unit',
   }
 }
 

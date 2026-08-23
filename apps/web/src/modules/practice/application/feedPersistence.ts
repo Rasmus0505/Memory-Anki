@@ -53,20 +53,29 @@ export function resetFreestyleFeedConfig() {
   return feedConfigStore.reset()
 }
 
+export function isSameLocalDay(left: number, right = Date.now()) {
+  const start = new Date(left)
+  const other = new Date(right)
+  return (
+    start.getFullYear() === other.getFullYear()
+    && start.getMonth() === other.getMonth()
+    && start.getDate() === other.getDate()
+  )
+}
+
+export function isQueueStateFromPreviousDay(state: FreestyleSkipState, now = Date.now()) {
+  if (!state.startedAt) return false
+  return !isSameLocalDay(state.startedAt, now)
+}
+
 export function readQueueState(): FreestyleSkipState {
   if (typeof window === 'undefined') return DEFAULT_QUEUE_STATE
   try {
     const raw = window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY)
     if (!raw) return createQueueRoundState()
-    const state = sanitizeQueueState(JSON.parse(raw))
-    const now = Date.now()
-    const started = new Date(state.startedAt)
-    const today = new Date(now)
-    const sameLocalDay =
-      started.getFullYear() === today.getFullYear() &&
-      started.getMonth() === today.getMonth() &&
-      started.getDate() === today.getDate()
-    return sameLocalDay ? state : createQueueRoundState(state.seed, now)
+    // Unfinished rounds survive midnight. The page tells the learner this is
+    // yesterday's work; 「再来一轮」 is the only path that starts a new day.
+    return sanitizeQueueState(JSON.parse(raw))
   } catch {
     return createQueueRoundState()
   }
@@ -107,6 +116,9 @@ export function saveQueueState(state: FreestyleSkipState) {
 
         const reset = createQueueRoundState(compacted.seed)
         reset.mutedPalaceIds = [...compacted.mutedPalaceIds]
+        reset.currentCardId = compacted.currentCardId
+        reset.completedIds = [...compacted.completedIds]
+        reset.unitEncountersByCardId = { ...compacted.unitEncountersByCardId }
         try {
           window.localStorage.removeItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY)
           window.localStorage.setItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY, JSON.stringify(reset))
