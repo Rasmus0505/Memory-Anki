@@ -1375,6 +1375,24 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 errors.append(
                     f"{round_plan_path.relative_to(REPO_ROOT).as_posix()}: round-plan domain must define `{symbol}`."
                 )
+        if "targetIndex < currentIndex" not in round_plan_source:
+            errors.append(
+                f"{round_plan_path.relative_to(REPO_ROOT).as_posix()}: "
+                "finish-palace gate must stay forward-only so swipe-back can leave a new palace."
+            )
+    clearance_path = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestylePalaceClearance.ts"
+    if not clearance_path.exists():
+        errors.append(
+            f"{clearance_path.relative_to(REPO_ROOT).as_posix()}: palace chapter-clearance copy is required."
+        )
+    leftover_due = API_SRC / "modules" / "practice" / "domain" / "leftover_due.py"
+    if not leftover_due.exists() or "def leftover_due_by_palace" not in leftover_due.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{leftover_due.relative_to(REPO_ROOT).as_posix()}: "
+            "must report leftover due units per palace for chapter copy."
+        )
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_source = nav_path.read_text(encoding="utf-8", errors="ignore")
     if "label: '随心'" not in nav_source:
@@ -1418,6 +1436,50 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
             f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must switch "
             "optimistically instead of waiting for the save."
         )
+
+
+def check_freestyle_canvas_pan(errors: list[str]) -> None:
+    """Review maps stay pannable; the feed pager changes cards, not one-finger yield."""
+    panel = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    if not panel.exists():
+        errors.append(
+            f"{panel.relative_to(WEB_SRC).as_posix()}: freestyle flip panel is required."
+        )
+        return
+    source = panel.read_text(encoding="utf-8", errors="ignore")
+    if 'mobileViewPolicy="guided"' in source:
+        errors.append(
+            f"{panel.relative_to(WEB_SRC).as_posix()}: review maps must keep the default "
+            "`auto` camera so pan is not yielded to the feed scroller."
+        )
+    page = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "ImmersiveFreestylePage.tsx"
+    )
+    if page.exists():
+        page_source = page.read_text(encoding="utf-8", errors="ignore")
+        if "touch-pan-y" in page_source:
+            errors.append(
+                f"{page.relative_to(WEB_SRC).as_posix()}: the snap scroller must not "
+                "use `touch-pan-y`; canvas pan owns one-finger drag over the map."
+            )
+        if "FreestyleFeedPager" not in page_source:
+            errors.append(
+                f"{page.relative_to(WEB_SRC).as_posix()}: card changes must stay on "
+                "FreestyleFeedPager after restoring canvas pan."
+            )
 
 
 def check_consumer_context_public_facades(errors: list[str]) -> None:
@@ -1617,6 +1679,61 @@ def check_palace_quiz_application_facades(errors: list[str]) -> None:
             errors.append(
                 f"{relative}: quiz application modules must import question leaf modules directly instead of the service facade."
             )
+
+
+def check_quiz_bank_display_order(errors: list[str]) -> None:
+    """Bank lists keep multiple choice before short answer in one shared rank."""
+    contracts = PALACE_QUIZ_APPLICATION / "question_contracts.py"
+    queries = PALACE_QUIZ_APPLICATION / "questions" / "queries.py"
+    boundary = REPO_ROOT / "docs" / "architecture" / "palace-quiz-boundary.md"
+    frontend = (
+        WEB_SRC / "modules" / "quiz" / "ui" / "palace-quiz" / "model" / "questionBankOrder.ts"
+    )
+    if not contracts.exists():
+        errors.append(
+            f"{contracts.relative_to(REPO_ROOT).as_posix()}: quiz type display rank is required."
+        )
+        return
+    contracts_source = contracts.read_text(encoding="utf-8", errors="ignore")
+    for required in (
+        "QUESTION_TYPE_DISPLAY_ORDER",
+        "QUESTION_TYPE_MULTIPLE_CHOICE",
+        "QUESTION_TYPE_SHORT_ANSWER",
+        "sort_questions_for_bank_display",
+    ):
+        if required not in contracts_source:
+            errors.append(
+                f"{contracts.relative_to(REPO_ROOT).as_posix()}: must define `{required}`."
+            )
+    order_block = contracts_source.split("QUESTION_TYPE_DISPLAY_ORDER", 1)[-1]
+    if order_block.find("QUESTION_TYPE_MULTIPLE_CHOICE") > order_block.find(
+        "QUESTION_TYPE_SHORT_ANSWER"
+    ):
+        errors.append(
+            f"{contracts.relative_to(REPO_ROOT).as_posix()}: display order must "
+            "list multiple_choice before short_answer."
+        )
+    if not queries.exists() or "sort_questions_for_bank_display" not in queries.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{queries.relative_to(REPO_ROOT).as_posix()}: aggregated bank lists must "
+            "apply sort_questions_for_bank_display."
+        )
+    if not frontend.exists() or "multiple_choice" not in frontend.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{frontend.as_posix() if frontend.exists() else frontend}: frontend bank "
+            "order helper is required."
+        )
+    if boundary.exists() and "multiple choice first" not in boundary.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document bank display "
+            "order as multiple choice first."
+        )
 
 
 def check_ai_gateway_boundary(errors: list[str]) -> None:
@@ -2218,6 +2335,7 @@ def check_unit_review_boundary(errors: list[str]) -> None:
         API_SRC / "modules/memory/application/unit_review_service.py": (
             "def open_unit_review_encounter",
             "def rate_review_unit",
+            "def rate_palace_due_units",
             "def close_unit_review_encounter",
             "def undo_unit_rating",
         ),
@@ -2247,6 +2365,15 @@ def check_unit_review_boundary(errors: list[str]) -> None:
     if "encounter.closed_at - encounter.created_at" in service_source:
         errors.append(
             "unit review duration must use client-observed foreground seconds, not encounter wall time"
+        )
+    if "cannot exceed the encounter wall-clock span" in service_source:
+        errors.append(
+            "close_unit_review_encounter must clamp effective_seconds to the wall span, not 400"
+        )
+    if service_source and "normalized_seconds = wall_seconds" not in service_source:
+        errors.append(
+            "close_unit_review_encounter must clamp observed seconds with "
+            "'normalized_seconds = wall_seconds'"
         )
 
 
@@ -2298,6 +2425,7 @@ def main() -> int:
     check_mypy_typed_boundary_modules(errors)
     check_forward_compatible_migrations(errors)
     check_palace_quiz_application_facades(errors)
+    check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
@@ -2314,6 +2442,7 @@ def main() -> int:
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
     check_freestyle_return_save_ux(errors)
+    check_freestyle_canvas_pan(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)

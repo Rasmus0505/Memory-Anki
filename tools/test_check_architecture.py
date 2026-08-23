@@ -56,7 +56,16 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
-        "createRoundPlan reorderRoundPlan planCardStatus\n",
+        "createRoundPlan reorderRoundPlan planCardStatus\n"
+        "if (targetIndex < currentIndex) return false\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestylePalaceClearance.ts",
+        "export function isPalaceRoundCleared() { return true }\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "leftover_due.py",
+        "def leftover_due_by_palace():\n    return {}\n",
     )
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -65,6 +74,60 @@ def test_freestyle_facade_requires_round_plan_public_surface(
 
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
+
+    assert errors == []
+
+
+def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        'mobileViewPolicy="guided"\n',
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        'className="h-full touch-pan-y"\n',
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_canvas_pan(errors)
+
+    assert any("auto" in error and "pan" in error for error in errors)
+    assert any("touch-pan-y" in error for error in errors)
+    assert any("FreestyleFeedPager" in error for error in errors)
+
+
+def test_freestyle_canvas_pan_allows_auto_camera_and_pager(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "export function FreestyleUnitReviewFlipPanel() { return null }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "function Page() { return <FreestyleFeedPager /> }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_canvas_pan(errors)
 
     assert errors == []
 
@@ -947,6 +1010,44 @@ def test_dashboard_must_use_context_public_facades(tmp_path: Path, monkeypatch) 
     ]
 
 
+def test_quiz_bank_display_order_requires_choice_before_short_answer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(
+        check_architecture,
+        "PALACE_QUIZ_APPLICATION",
+        api_src / "modules" / "quiz" / "application",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "question_contracts.py",
+        "QUESTION_TYPE_DISPLAY_ORDER = (QUESTION_TYPE_SHORT_ANSWER, QUESTION_TYPE_MULTIPLE_CHOICE)\n",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "questions" / "queries.py",
+        "def list_aggregated_questions():\n    return []\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "ui" / "palace-quiz" / "model" / "questionBankOrder.ts",
+        "export const QUESTION_TYPE_DISPLAY_ORDER = ['short_answer']\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "palace-quiz-boundary.md",
+        "# Palace Quiz Boundary\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_bank_display_order(errors)
+
+    assert any("multiple_choice before short_answer" in item for item in errors)
+    assert any("sort_questions_for_bank_display" in item for item in errors)
+    assert any("multiple choice first" in item for item in errors)
+
+
 def test_palace_quiz_must_use_palace_public_facade(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -1507,8 +1608,10 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
         api_src / "modules/memory/application/unit_review_service.py",
         "def open_unit_review_encounter(): pass\n"
         "def rate_review_unit(): pass\n"
+        "def rate_palace_due_units(): pass\n"
         "def close_unit_review_encounter(): pass\n"
-        "def undo_unit_rating(): pass\n",
+        "def undo_unit_rating(): pass\n"
+        "normalized_seconds = wall_seconds\n",
     )
     write_file(
         api_src / "modules/memory/application/unit_scheduler.py",
@@ -1530,6 +1633,48 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     check_architecture.check_unit_review_boundary(errors)
 
     assert errors == []
+
+
+def test_unit_review_boundary_rejects_close_wall_span_400(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps/api/src/memory_anki"
+    web_src = tmp_path / "apps/web/src"
+    write_file(api_src / "modules/memory/presentation/router.py", "")
+    write_file(
+        api_src / "modules/memory/application/unit_review_projection.py",
+        "def reconcile_palace_units(): pass\n",
+    )
+    write_file(
+        api_src / "modules/memory/application/unit_review_service.py",
+        "def open_unit_review_encounter(): pass\n"
+        "def rate_review_unit(): pass\n"
+        "def rate_palace_due_units(): pass\n"
+        "def close_unit_review_encounter(): pass\n"
+        "def undo_unit_rating(): pass\n"
+        "raise ValueError('effective_seconds cannot exceed the encounter wall-clock span')\n",
+    )
+    write_file(
+        api_src / "modules/memory/application/unit_scheduler.py",
+        "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)\n",
+    )
+    write_file(
+        api_src / "modules/mindmap_document/split_units.py",
+        "def split_scheduling_units(): pass\n",
+    )
+    write_file(
+        api_src / "modules/practice/domain/review_units.py",
+        "class ReviewUnitCandidate: pass\ndef candidate_from_projection(): pass\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_unit_review_boundary(errors)
+
+    assert any("clamp effective_seconds to the wall span, not 400" in error for error in errors)
+    assert any("normalized_seconds = wall_seconds" in error for error in errors)
 
 
 def test_english_reading_gap_loop_rejects_retired_colored_flow(
