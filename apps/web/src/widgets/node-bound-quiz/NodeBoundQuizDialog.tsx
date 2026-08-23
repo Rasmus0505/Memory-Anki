@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   getPalaceQuizQuestionsApi,
@@ -13,6 +13,8 @@ import {
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
+import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -34,7 +36,7 @@ export function NodeBoundQuizDialog({
   palaceId,
   nodeUid,
   questionIds,
-  initialIndex = 0,
+  initialIndex: _initialIndex = 0,
   initialQuestionStates,
   onQuestionStateChange,
   onQuestionCompleted,
@@ -88,9 +90,11 @@ export function NodeBoundQuizDialog({
         const byId = new Map<number, PalaceQuizQuestion>()
         for (const item of palaceQuestions.items || []) byId.set(item.id, item)
         for (const item of questionResponse.items || []) byId.set(item.id, item)
-        const ordered = questionIds
-          .map((id) => byId.get(id))
-          .filter((item): item is PalaceQuizQuestion => Boolean(item))
+        const ordered = sortPalaceQuizQuestions(
+          questionIds
+            .map((id) => byId.get(id))
+            .filter((item): item is PalaceQuizQuestion => Boolean(item)),
+        )
         setQuestions(ordered)
         if (ordered.length === 0) {
           setLoadError('绑定题目未能加载，可能已删除。')
@@ -106,8 +110,17 @@ export function NodeBoundQuizDialog({
           if (!map.has(qid)) map.set(qid, edge)
         }
         setBindingByQuestion(map)
-        const safeIndex = Math.max(0, Math.min(initialIndex, Math.max(ordered.length - 1, 0)))
-        setIndex(safeIndex)
+        const completedIds = new Set(
+          ordered
+            .filter((question) => initialQuestionStates?.[question.id]?.resolved)
+            .map((question) => question.id),
+        )
+        setIndex(
+          firstIncompleteQuestionIndex(
+            ordered.map((question) => question.id),
+            completedIds,
+          ),
+        )
         // Keep prior session answers so prev/next can review 答题情况.
         const restored: Record<number, QuizRuntimeState> = {}
         for (const question of ordered) {
@@ -130,7 +143,7 @@ export function NodeBoundQuizDialog({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable key for id list; seed states once per open
-  }, [open, palaceId, questionIdsKey, nodeUid, initialIndex])
+  }, [open, palaceId, questionIdsKey, nodeUid])
 
   const current = questions[index] ?? null
 
@@ -297,8 +310,21 @@ export function NodeBoundQuizDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="max-h-[90vh] max-w-xl overflow-hidden p-0 sm:max-w-xl"
+          // Own floating id: the fallback key is derived from className, so a style
+          // tweak used to throw away the learner's remembered window size.
+          floatingId="node-bound-quiz"
+          showCloseButton
+          // A collapsed capsule must not swallow the next badge click: without this,
+          // tapping a node's question count only re-showed the capsule.
+          expandOnOpen
+          // An answering window should not vanish on a stray tap into the map behind
+          // it. ✕ / 完成 / Escape stay as the ways out.
+          dismissOnInteractOutside={false}
+          // max-w-none: `max-w-xl` beat the floating window's own width, so dragging
+          // the right edge past 36rem did nothing. Phone/centered fallback keeps a cap.
+          className="max-h-[min(92vh,100dvh-1rem)] w-[min(46rem,calc(100vw-1rem))] max-w-none p-0"
           data-keyboard-shortcuts-suspended="true"
+          data-testid="node-bound-quiz-dialog"
         >
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
@@ -322,7 +348,9 @@ export function NodeBoundQuizDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 overflow-y-auto px-4 py-3" style={{ maxHeight: '70vh' }}>
+          {/* min-h-0 + flex-1: the old fixed 70vh left dead space inside a resized
+              floating window and double-clipped against the panel's own max-height. */}
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                 <LoaderCircle className="size-4 animate-spin" />
@@ -336,56 +364,38 @@ export function NodeBoundQuizDialog({
               <div className="py-12 text-center text-sm text-muted-foreground">暂无题目</div>
             ) : (
               <>
+                {/* Sticky: the pills are the only way back to an earlier question,
+                    and a long stem used to scroll them out of reach. */}
                 {questions.length > 1 ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                      {questions.map((item, itemIndex) => {
-                        const done = Boolean(questionStates[item.id]?.resolved)
-                        const active = itemIndex === index
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            title={`第 ${itemIndex + 1} 题${done ? '（已答）' : ''}`}
-                            className={cn(
-                              'flex size-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
-                              active
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : done
-                                  ? 'border-muted-foreground/40 bg-muted text-muted-foreground'
-                                  : 'border-border bg-background text-foreground hover:bg-muted',
-                            )}
-                            onClick={() => setIndex(itemIndex)}
-                          >
-                            {itemIndex + 1}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        aria-label="上一题"
-                        disabled={index <= 0}
-                        onClick={() => setIndex((value) => Math.max(0, value - 1))}
-                      >
-                        <ChevronLeft className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        aria-label="下一题"
-                        disabled={index >= questions.length - 1}
-                        onClick={() =>
-                          setIndex((value) => Math.min(questions.length - 1, value + 1))
-                        }
-                      >
-                        <ChevronRight className="size-4" />
-                      </Button>
-                    </div>
+                  <div className="sticky -top-3 z-10 -mx-4 -mt-3 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur">
+                    {questions.map((item, itemIndex) => {
+                      const itemState = questionStates[item.id]
+                      const done = Boolean(itemState?.resolved)
+                      const active = itemIndex === index
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-current={active ? 'true' : undefined}
+                          title={`第 ${itemIndex + 1} 题${
+                            done ? (itemState?.correct === false ? '（已答·错）' : '（已答）') : ''
+                          }`}
+                          className={cn(
+                            'flex size-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
+                            active
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : done
+                                ? itemState?.correct === false
+                                  ? 'border-destructive/45 bg-destructive/10 text-destructive'
+                                  : 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                : 'border-border bg-background text-foreground hover:bg-muted',
+                          )}
+                          onClick={() => setIndex(itemIndex)}
+                        >
+                          {itemIndex + 1}
+                        </button>
+                      )
+                    })}
                   </div>
                 ) : null}
                 <div className="space-y-2">
@@ -419,6 +429,64 @@ export function NodeBoundQuizDialog({
               </>
             )}
           </div>
+
+          {/*
+            Footer: navigation used to sit in the top-right, above the stem — the
+            furthest point from the thumb right after answering. Progress lives here
+            too so the header description stops being the only place that counts.
+          */}
+          {current ? (
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
+              <span className="min-w-0 truncate text-xs tabular-nums text-muted-foreground">
+                {questions.length > 1
+                  ? `已答 ${answeredCount} / ${questions.length}`
+                  : currentState.resolved
+                    ? '已作答'
+                    : '待作答'}
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {questions.length > 1 ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-label="上一题"
+                      disabled={index <= 0}
+                      onClick={() => setIndex((value) => Math.max(0, value - 1))}
+                    >
+                      <ChevronLeft className="size-4" />
+                      上一题
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={currentState.resolved ? 'default' : 'outline'}
+                      aria-label="下一题"
+                      disabled={index >= questions.length - 1}
+                      onClick={() =>
+                        setIndex((value) => Math.min(questions.length - 1, value + 1))
+                      }
+                    >
+                      下一题
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </>
+                ) : null}
+                {/* Last question answered: an explicit way out beats hunting for ✕. */}
+                {index >= questions.length - 1 && currentState.resolved ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <Check className="size-4" />
+                    完成
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
       <PalaceMemoryLookupDialog

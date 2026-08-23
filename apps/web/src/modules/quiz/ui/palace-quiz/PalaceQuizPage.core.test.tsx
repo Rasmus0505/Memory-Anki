@@ -72,6 +72,7 @@ describe('PalaceQuizPage core flows', () => {
       expect.objectContaining({
         focusRequestNodeUid: 'root-1',
         focusRequestNonce: expect.any(Number),
+        mobileViewPolicy: 'map',
       }),
     )
     expect(screen.getByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeTruthy()
@@ -247,6 +248,21 @@ describe('PalaceQuizPage core flows', () => {
     await waitFor(() => {
       expect(getPalaceQuizQuestionsApiMock).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('practices multiple-choice questions before short-answer questions', async () => {
+    getPalaceQuizQuestionsApiMock.mockResolvedValue({
+      items: [baseQuestions[1], baseQuestions[2], baseQuestions[0]],
+    })
+    renderPage()
+
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+    expect(screen.getByText('选择题')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    expect(await screen.findByText('细胞核的主要作用是什么？')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    expect(await screen.findByText('简述有丝分裂的意义。')).toBeTruthy()
+    expect(screen.getByText('简答题')).toBeTruthy()
   })
 
   it('reveals short-answer reference content after submit and enables AI feedback', async () => {

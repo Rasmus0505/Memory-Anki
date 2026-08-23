@@ -21,6 +21,12 @@ The four idempotent question mutations are composed by `palace_quiz.application.
 
 Low-level question and OCR write helpers may flush for command composition but must not commit when invoked by a mutation command. The command owns the single commit, so a failure while storing the mutation response rolls back every business write. Palace Quiz must not import the transitional `memory_anki.modules.persistence` context.
 
+## Question Bank Display Order
+
+Palace Quiz practice, manage, aggregated lists, generation previews, and node-bound overlays present a bank as exam paper order: multiple choice first, then other objective types, then short answer. Within a type, `sort_order` then `id` stay stable. Freestyle quiz shuffle is a separate training draw and does not use this bank order.
+
+The rank lives in `quiz.application.question_contracts` so listing, generation drafts, and frontend bank views share one rule.
+
 ## Quiz–Mindmap Node Binding（题库结合 / 双向关联）
 
 `quiz.application.node_binding` binds questions to mind-map node UIDs. A question keeps a **single owner palace**; each edge points at a **target** mind-map palace + `node_uid` (cross-palace allowed).

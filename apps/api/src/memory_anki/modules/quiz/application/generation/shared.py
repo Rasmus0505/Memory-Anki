@@ -27,6 +27,7 @@ from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import (
     QUESTION_TYPE_SHORT_ANSWER,
     PalaceQuizValidationError,
+    sort_questions_for_bank_display,
 )
 
 
@@ -136,7 +137,7 @@ def normalize_generated_question_drafts(
         if warnings:
             raise PalaceQuizAiError("AI 返回的题目全部无法使用：" + "；".join(warnings))
         raise PalaceQuizAiError("AI 没有返回可用题目。")
-    return drafts, warnings, stats
+    return sort_questions_for_bank_display(drafts), warnings, stats
 
 
 # === quiz_generation_editor_summary.py ===

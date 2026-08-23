@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Query, Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.modules.content.api import get_palace_explicit_chapter_ids
 
-from ..question_contracts import PalaceQuizNotFoundError
+from ..question_contracts import (
+    QUESTION_TYPE_DISPLAY_RANKS,
+    PalaceQuizNotFoundError,
+    sort_questions_for_bank_display,
+)
 from ..question_schema import (
     get_chapter_or_raise,
     serialize_question_rows,
@@ -93,8 +97,19 @@ def resolve_minimal_explicit_chapter_ids(session: Session, palace: Palace) -> li
     return sorted(set(minimal_ids))
 
 
+def _question_type_display_order_clause():
+    return case(
+        *(
+            (PalaceQuizQuestion.question_type == question_type, rank)
+            for question_type, rank in QUESTION_TYPE_DISPLAY_RANKS.items()
+        ),
+        else_=99,
+    )
+
+
 def apply_question_display_order(query: Query) -> Query:
     return query.order_by(
+        _question_type_display_order_clause().asc(),
         PalaceQuizQuestion.sort_order.asc(),
         PalaceQuizQuestion.id.asc(),
     )
@@ -263,7 +278,7 @@ def list_aggregated_questions(session: Session, palace_id: int) -> list[dict[str
             continue
         seen_ids.add(row_id)
         rows.append(row)
-    return serialize_question_rows(rows)
+    return serialize_question_rows(sort_questions_for_bank_display(rows))
 
 
 def list_root_questions(session: Session, palace_id: int):

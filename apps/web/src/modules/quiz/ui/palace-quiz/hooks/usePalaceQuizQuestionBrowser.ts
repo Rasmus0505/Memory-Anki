@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import type { PalaceQuizScopeKey, PalaceQuizViewMode } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { QUIZ_VIEW_MODE_STORAGE_KEY, readPersistedViewMode } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 
 export function usePalaceQuizQuestionBrowser({
   questions,
@@ -15,14 +16,17 @@ export function usePalaceQuizQuestionBrowser({
   const [questionScope, setQuestionScope] = useState<PalaceQuizScopeKey>('all')
 
   const filteredQuestions = useMemo(() => {
-    if (questionScope === 'palace') {
-      return questions.filter((question) => !(question.segment_ids?.length))
-    }
-    if (questionScope.startsWith('segment:')) {
-      const segmentId = Number(questionScope.slice(8))
-      return questions.filter((question) => question.segment_ids?.includes(segmentId))
-    }
-    return questions
+    const scoped = (() => {
+      if (questionScope === 'palace') {
+        return questions.filter((question) => !(question.segment_ids?.length))
+      }
+      if (questionScope.startsWith('segment:')) {
+        const segmentId = Number(questionScope.slice(8))
+        return questions.filter((question) => question.segment_ids?.includes(segmentId))
+      }
+      return questions
+    })()
+    return sortPalaceQuizQuestions(scoped)
   }, [questionScope, questions])
 
   const visibleQuestionIds = useMemo(

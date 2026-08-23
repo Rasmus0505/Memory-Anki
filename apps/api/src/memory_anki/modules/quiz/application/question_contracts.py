@@ -20,6 +20,43 @@ QUESTION_TYPES = {
     QUESTION_TYPE_CATEGORIZATION,
 }
 
+# Bank practice / manage / preview order: objective types first, short answer last.
+QUESTION_TYPE_DISPLAY_ORDER = (
+    QUESTION_TYPE_MULTIPLE_CHOICE,
+    QUESTION_TYPE_TRUE_FALSE,
+    QUESTION_TYPE_FILL_BLANK,
+    QUESTION_TYPE_MATCHING,
+    QUESTION_TYPE_ORDERING,
+    QUESTION_TYPE_CATEGORIZATION,
+    QUESTION_TYPE_SHORT_ANSWER,
+)
+QUESTION_TYPE_DISPLAY_RANKS = {
+    question_type: index for index, question_type in enumerate(QUESTION_TYPE_DISPLAY_ORDER)
+}
+
+
+def question_type_display_rank(question_type: str | None) -> int:
+    return QUESTION_TYPE_DISPLAY_RANKS.get(str(question_type or "").strip(), 99)
+
+
+def sort_questions_for_bank_display(items: list[Any]) -> list[Any]:
+    def sort_key(item: Any) -> tuple[int, int, int]:
+        if isinstance(item, dict):
+            question_type = item.get("question_type")
+            sort_order = item.get("sort_order") or 0
+            question_id = item.get("id") or 0
+        else:
+            question_type = getattr(item, "question_type", "")
+            sort_order = getattr(item, "sort_order", 0) or 0
+            question_id = getattr(item, "id", 0) or 0
+        return (
+            question_type_display_rank(str(question_type or "")),
+            int(sort_order),
+            int(question_id),
+        )
+
+    return sorted(items, key=sort_key)
+
 
 class PalaceQuizValidationError(ValueError):
     pass
@@ -55,6 +92,10 @@ __all__ = [
     "QUESTION_TYPE_SHORT_ANSWER",
     "QUESTION_TYPE_TRUE_FALSE",
     "QUESTION_TYPES",
+    "QUESTION_TYPE_DISPLAY_ORDER",
+    "QUESTION_TYPE_DISPLAY_RANKS",
     "json_dump",
     "json_load",
+    "question_type_display_rank",
+    "sort_questions_for_bank_display",
 ]
