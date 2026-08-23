@@ -26,15 +26,21 @@ export function flipProgressLabel(revealed: number, total: number): string {
   return `${progress.revealed}/${progress.total}`
 }
 
+/**
+ * Tones read on the light unit-identity chip (white/88 over the card's #f7f5f2).
+ * They used to be `text-*-100` from when the badge floated on the dark immersive
+ * backdrop; over white that rendered as an empty coloured pill with no legible
+ * digits. Text is now the dark end of each ramp with the fill kept light.
+ */
 export function flipProgressToneClass(tone: FlipProgressTone): string {
   switch (tone) {
     case 'complete':
-      return 'border-emerald-400/45 bg-emerald-400/18 text-emerald-100'
+      return 'border-emerald-500/35 bg-emerald-500/12 text-emerald-700'
     case 'partial':
-      return 'border-amber-300/45 bg-amber-300/18 text-amber-50'
+      return 'border-amber-500/40 bg-amber-400/18 text-amber-700'
     case 'empty':
     default:
-      return 'border-rose-400/45 bg-rose-400/18 text-rose-100'
+      return 'border-rose-500/35 bg-rose-500/12 text-rose-700'
   }
 }
 

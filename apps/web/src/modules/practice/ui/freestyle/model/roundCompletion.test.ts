@@ -50,6 +50,46 @@ describe('buildFreestyleRoundCompletion', () => {
     expect(completion.ratedCount).toBe(3)
     expect(completion.passedCount).toBe(2)
     expect(completion.retryCount).toBe(1)
+    expect(completion.retriedCount).toBe(1)
+  })
+
+  it('counts a failed source and its later passed retry as one restudied unit', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const completion = buildFreestyleRoundCompletion(
+      [card('one'), card('two'), retry],
+      {
+        one: encounter(),
+        two: encounter({ selectedRating: 1, passed: false }),
+        [retry.id]: encounter({ selectedRating: 3, passed: true }),
+      },
+      9,
+      { scheduledCount: 2 },
+    )
+
+    expect(completion.ratedCount).toBe(2)
+    expect(completion.passedCount).toBe(2)
+    expect(completion.retriedCount).toBe(1)
+    expect(completion.remainingCandidates).toBe(7)
+  })
+
+  it('treats acknowledged cards as handled without an encounter', () => {
+    const cards = [card('one'), card('quiz-1')]
+    expect(isFreestyleRoundComplete(cards, { one: encounter() })).toBe(false)
+    expect(isFreestyleRoundComplete(cards, { one: encounter() }, ['quiz-1'])).toBe(true)
+
+    const completion = buildFreestyleRoundCompletion(
+      cards,
+      { one: encounter() },
+      2,
+      { completedIds: ['quiz-1'], scheduledCount: 2 },
+    )
+    expect(completion.ratedCount).toBe(2)
+    expect(completion.passedCount).toBe(2)
   })
 
   it('ignores cards the learner never rated', () => {
@@ -74,7 +114,7 @@ describe('buildFreestyleRoundCompletion', () => {
   it('never reports negative remaining candidates', () => {
     const cards = [card('one'), card('two'), card('three')]
     // Restudy re-insertion can push the feed past the original candidate count.
-    const completion = buildFreestyleRoundCompletion(cards, {}, 2)
+    const completion = buildFreestyleRoundCompletion(cards, {}, 2, { scheduledCount: 2 })
 
     expect(completion.remainingCandidates).toBe(0)
   })

@@ -6,15 +6,19 @@ import { FreestyleProgressRail } from './FreestyleProgressRail'
 function summary(overrides: Partial<FreestyleProgressSummary> = {}): FreestyleProgressSummary {
   return {
     segments: [
-      { cardId: 'one', tone: 'done' },
-      { cardId: 'two', tone: 'retry' },
-      { cardId: 'three', tone: 'current' },
-      { cardId: 'four', tone: 'pending' },
+      { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false },
+      { cardId: 'two', tone: 'retry', palaceId: 1, palaceDone: false },
+      { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false },
+      { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false },
     ],
     position: 3,
     total: 4,
     doneCount: 1,
     retryCount: 1,
+    scheduledBase: 4,
+    positionBase: 3,
+    retryInserted: 0,
+    passedCount: 1,
     ...overrides,
   }
 }
@@ -48,7 +52,21 @@ describe('FreestyleProgressRail', () => {
     renderRail()
 
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
-      .toBe('本轮进度 3/4，已通过 1，待重练 1。点击查看本轮安排')
+      .toBe('本轮进度 3/4，已通过 1。点击查看本轮安排')
+    expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4 · 过 1')
+  })
+
+  it('keeps the planned denominator when restudy insertions lengthen the feed', () => {
+    renderRail({
+      summary: summary({
+        retryInserted: 1,
+        scheduledBase: 4,
+        positionBase: 3,
+        passedCount: 1,
+      }),
+    })
+
+    expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4 · 重练 +1 · 过 1')
   })
 
   it('opens the round plan from the rail', () => {
@@ -59,7 +77,19 @@ describe('FreestyleProgressRail', () => {
   })
 
   it('renders an empty rail without segments for an empty round', () => {
-    renderRail({ summary: summary({ segments: [], position: 0, total: 0, doneCount: 0, retryCount: 0 }) })
+    renderRail({
+      summary: summary({
+        segments: [],
+        position: 0,
+        total: 0,
+        doneCount: 0,
+        retryCount: 0,
+        scheduledBase: 0,
+        positionBase: 0,
+        retryInserted: 0,
+        passedCount: 0,
+      }),
+    })
 
     expect(screen.queryAllByTestId('freestyle-progress-segment')).toHaveLength(0)
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
@@ -82,19 +112,11 @@ describe('FreestyleProgressRail', () => {
       expect(screen.getByTestId('freestyle-timer-dot').getAttribute('aria-label')).toBe('查看计时')
     })
 
-    it('reveals the clock on the first tap without starting or pausing', () => {
+    it('toggles the timer on the first tap and reveals the clock', () => {
       const { onTimerToggle } = renderRail()
 
       fireEvent.click(screen.getByTestId('freestyle-timer-dot'))
       expect(screen.getByTestId('freestyle-timer-readout').textContent).toBe('12:34')
-      expect(onTimerToggle).not.toHaveBeenCalled()
-    })
-
-    it('toggles the timer only once the clock is already showing', () => {
-      const { onTimerToggle } = renderRail()
-
-      fireEvent.click(screen.getByTestId('freestyle-timer-dot'))
-      fireEvent.click(screen.getByTestId('freestyle-timer-dot'))
       expect(onTimerToggle).toHaveBeenCalledTimes(1)
     })
 
@@ -120,6 +142,17 @@ describe('FreestyleProgressRail', () => {
       renderRail({ timerStatus: 'paused' })
 
       expect(screen.getByTestId('freestyle-timer-dot').className).toContain('text-amber-200')
+    })
+
+    it('shows a completed timer as a frozen duration without toggling it', () => {
+      const { onTimerToggle } = renderRail({ timerStatus: 'completed' })
+
+      fireEvent.click(screen.getByTestId('freestyle-timer-dot'))
+      expect(screen.getByTestId('freestyle-timer-readout').textContent).toBe('12:34')
+      expect(screen.getByTestId('freestyle-timer-dot').getAttribute('aria-label')).toBe('本次计时已完成')
+
+      fireEvent.click(screen.getByTestId('freestyle-timer-dot'))
+      expect(onTimerToggle).not.toHaveBeenCalled()
     })
   })
 })

@@ -98,10 +98,15 @@ export function FreestyleEmptyState({
   hiddenCount?: number
 }) {
   const filteredRound = completedCount > 0 || mutedCount > 0 || hiddenCount > 0
-  const freeTitle = filteredRound ? '本轮随心已刷完或被过滤' : '这组暂时刷空了'
+  const freeTitle = filteredRound ? '本轮暂时没有可刷的卡' : '这组暂时刷空了'
+  const facts = [
+    completedCount > 0 ? `本轮已完成 ${completedCount}` : null,
+    hiddenCount > 0 ? `已隐藏 ${hiddenCount}` : null,
+    mutedCount > 0 ? `少看 ${mutedCount} 座宫殿` : null,
+  ].filter(Boolean)
   const freeDescription = filteredRound
-    ? `洞察「今日复习」是全库宫殿到期列表；随心会排除本轮已完成${completedCount ? `（${completedCount}）` : ''}、跳过隐藏${hiddenCount ? `（${hiddenCount}）` : ''}和「少看」宫殿${mutedCount ? `（${mutedCount}）` : ''}。点「再来一轮」可重新拉取仍到期的单位。`
-    : '当前筛选下没有可展示的到期导图/题目。可改设置范围，或到洞察打开宫殿正式复习。'
+    ? `${facts.join(' · ')}。再来一轮会按今天仍到期的重新抽。`
+    : '当前范围里没有到期导图或题目。'
   return (
     <section className="flex h-full snap-start items-center justify-center px-4">
       <EmptyState
@@ -137,7 +142,7 @@ export function FreestyleEmptyState({
               </Button>
             </div>
             <p className="mt-3 text-xs text-zinc-600">
-              提示：再来一轮会清空本轮已完成/隐藏（保留「少看」宫殿），与洞察到期列表重新对齐。
+              再来一轮会清空本轮完成/隐藏，按今天仍到期的重抽。
             </p>
           </div>
         }

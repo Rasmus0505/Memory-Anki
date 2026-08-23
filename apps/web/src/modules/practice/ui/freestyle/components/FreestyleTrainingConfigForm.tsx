@@ -26,7 +26,7 @@ const MODE_OPTIONS: Array<{
 }> = [
   { value: 'memory_palace', label: '记忆宫殿', description: '翻节点回忆结构和关系', icon: Brain },
   { value: 'quiz', label: '刷题', description: '只做题，不出现宫殿卡', icon: ListChecks },
-  { value: 'english', label: '英语宫殿', description: '只进入英语学科宫殿', icon: Languages },
+  { value: 'english', label: '英语宫殿', description: '英语学科宫殿的结构复习，不是单词或阅读', icon: Languages },
   { value: 'mixed', label: '混合模式', description: '自由组合前面三种内容', icon: Blend },
 ]
 
@@ -150,7 +150,7 @@ export function FreestyleTrainingConfigForm({
       <Section
         key={stream}
         title={STREAM_LABELS[stream]}
-        description={isEnglish ? '只从英语学科宫殿生成结构复习卡。' : '只生成结构复习单元，不生成 Anki 正反面卡。'}
+        description={isEnglish ? '只从英语学科宫殿生成结构复习卡，不会进入单词或阅读练习。' : '只生成结构复习单元，不生成 Anki 正反面卡。'}
       >
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
@@ -179,7 +179,16 @@ export function FreestyleTrainingConfigForm({
             </Field>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="复习单元范围">
+            <Field
+              label="复习单元范围"
+              hint={
+                value.due_policy === 'due_only'
+                  ? '只动今天到期的单元。'
+                  : value.due_policy === 'all_content_due_weighted'
+                    ? '到期和补充一起安排；补充卡评记得/轻松只记下，不改下次到期日。'
+                    : '先刷完到期，不够再补；补充卡评记得/轻松只记下，不改下次到期日。'
+              }
+            >
               <select className={FIELD_CLASS} value={value.due_policy} onChange={(event) => onChange(updateStream(config, stream, { due_policy: event.target.value }))}>
                 <option value="due_first_then_expand">到期刷完后补充</option>
                 <option value="due_only">只刷到期单元</option>

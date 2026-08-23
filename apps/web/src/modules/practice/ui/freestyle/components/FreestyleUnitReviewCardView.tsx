@@ -11,15 +11,18 @@ import {
   cancelUnratedUnitReviewEncounterApi,
   closeUnitReviewEncounterApi,
   getUnitReviewSessionApi,
+  ratePalaceDueUnitsApi,
   rateReviewUnitApi,
   startFreestyleUnitReviewSessionApi,
   undoReviewUnitRatingApi,
   type FreestyleFlipMode,
+  type FreestyleRatingScope,
   type FreestyleUnitEncounterState,
   type ReviewUnitDto,
   type UnitRating,
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
+import type { PalaceRatingTarget } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
@@ -28,6 +31,8 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { cn } from '@/shared/lib/utils'
 import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
+import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
+import { FLOW_BREATH_CLASS } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
@@ -210,6 +215,10 @@ export function FreestyleUnitReviewCardView({
   onAutoAdvanceChange,
   blockedHint = null,
   onRatingSettled,
+  ratingScope = 'unit',
+  onRatingScopeChange,
+  palaceTarget = null,
+  onBatchCardsSettled,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -219,8 +228,11 @@ export function FreestyleUnitReviewCardView({
   retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
   blockedHint?: string | null
-  /** Fired after a successful rate so the page can auto-advance when enabled. */
-  onRatingSettled?: (cardId: string, passed: boolean) => void
+  /**
+   * Fired after a successful rate so the page can auto-advance when enabled, and so
+   * the challenge–skill channel can read what the learner actually reported.
+   */
+  onRatingSettled?: (cardId: string, passed: boolean, rating: UnitRating) => void
   onEnsureEncounter: (
     cardId: string,
     unitRevision: number,
@@ -242,10 +254,18 @@ export function FreestyleUnitReviewCardView({
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
   autoAdvance?: boolean
   onAutoAdvanceChange?: (value: boolean) => void
+  ratingScope?: FreestyleRatingScope
+  onRatingScopeChange?: (scope: FreestyleRatingScope) => void
+  palaceTarget?: PalaceRatingTarget | null
+  onBatchCardsSettled?: (
+    entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
+  ) => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Which rating is in flight — the bar shows it as chosen before the POST returns. */
+  const [pendingRating, setPendingRating] = useState<UnitRating | null>(null)
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
   const [inlineEditing, setInlineEditing] = useState(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
@@ -256,6 +276,7 @@ export function FreestyleUnitReviewCardView({
   /** Undo surfaces only right after a rate, then collapses to give the map the room. */
   const [undoVisible, setUndoVisible] = useState(false)
   const undoTimerRef = useRef<number | null>(null)
+  const lastSettledCardIdsRef = useRef<string[]>([])
   const activeRef = useRef(active)
   const busyRef = useRef(false)
   const sessionRef = useRef<UnitReviewSessionDto | null>(null)
@@ -272,6 +293,7 @@ export function FreestyleUnitReviewCardView({
   sessionRef.current = session
   const unit = session?.units.find((item) => item.id === card.unit_id) ?? null
   unitRef.current = unit
+  const { breath, signalRating, clearBreath } = useFreestyleFlowFeedback()
   const { getEffectiveSeconds: getEncounterSeconds, clear: clearEncounterClock } =
     useForegroundEncounterClock({
       encounterId: unit?.encounter?.id ?? null,
@@ -316,7 +338,9 @@ export function FreestyleUnitReviewCardView({
       undoTimerRef.current = null
     }
     setUndoVisible(false)
-  }, [active])
+    // Same for the breath: a confirmation belongs to the card that earned it.
+    clearBreath()
+  }, [active, clearBreath])
 
   const retryLoad = useCallback(() => {
     openedForKeyRef.current = null
@@ -568,39 +592,111 @@ export function FreestyleUnitReviewCardView({
     }
     setActionError(null)
     setBusy(true)
+    setPendingRating(rating)
     busyRef.current = true
     const id = operationId()
     try {
-      const result = await rateReviewUnitApi(
-        session.id,
-        unit,
-        currentEncounter.id,
-        rating,
-        id,
-        currentEncounter.round_id,
-      )
+      const result = ratingScope === 'palace'
+        ? await ratePalaceDueUnitsApi(card.palace_id, {
+          operationId: id,
+          rating,
+          roundId: currentEncounter.round_id,
+          current: {
+            study_session_id: session.id,
+            unit_id: unit.id,
+            unit_revision: unit.revision,
+            encounter_id: currentEncounter.id,
+          },
+          excludeUnitIds: palaceTarget?.excludeUnitIds ?? [],
+          includeUnitIds: palaceTarget?.includeUnitIds ?? [],
+        })
+        : null
+      const unitResult = result?.current ?? (result == null
+        ? await rateReviewUnitApi(
+          session.id,
+          unit,
+          currentEncounter.id,
+          rating,
+          id,
+          currentEncounter.round_id,
+        )
+        : null)
+      if (!unitResult) {
+        throw new Error('宫殿评分没有返回当前单元结果。')
+      }
       const nextUnit: ReviewUnitDto = {
         ...unit,
-        ...result.unit,
-        title: result.unit.title || unit.title,
-        session_status: result.session_status,
-        final_rating: result.rating,
-        encounter: result.encounter,
+        ...unitResult.unit,
+        title: unitResult.unit.title || unit.title,
+        session_status: unitResult.session_status,
+        final_rating: unitResult.rating,
+        encounter: unitResult.encounter,
       }
       const nextSession = updateSessionUnit(session, nextUnit)
       sessionRef.current = nextSession
       unitRef.current = nextUnit
       setSession(nextSession)
-      setLastOperationId(result.operation_id)
+      setLastOperationId(result?.batch_id ?? unitResult.operation_id)
       onEncounterChange(
         card.id,
-        encounterState(session.id, nextUnit.revision, result.encounter),
+        encounterState(session.id, nextUnit.revision, unitResult.encounter),
       )
-      onBranchComplete(card.id, {
-        restudy: !result.passed,
-      })
+      if (result && onBatchCardsSettled && palaceTarget) {
+        const itemsByUnit = new Map(result.items.map((item) => [item.unit.id, item]))
+        const ratedUnits = new Set(result.rated_unit_ids)
+        const entries = palaceTarget.settleCards.flatMap((settle) => {
+          const item = itemsByUnit.get(settle.unitId)
+          if (!item && !ratedUnits.has(settle.unitId) && settle.cardId !== card.id) return []
+          if (item && settle.cardId !== card.id && item.passed) {
+            onEncounterChange(settle.cardId, {
+              encounterId: item.encounter.id,
+              unitRevision: item.unit.revision,
+              status: item.encounter.status,
+              sessionId: item.study_session_id,
+              selectedRating: item.rating,
+              passed: item.passed,
+              retryAfterCards: item.retry_after_cards,
+            })
+          }
+          if (settle.cardId === card.id) {
+            return [{
+              cardId: settle.cardId,
+              restudy: !(item?.passed ?? unitResult.passed),
+              rating: item?.rating ?? unitResult.rating,
+              retryAfterCards: item?.retry_after_cards ?? unitResult.retry_after_cards,
+            }]
+          }
+          if (item && !item.passed) return []
+          return [{
+            cardId: settle.cardId,
+            restudy: false,
+            rating: item?.rating ?? unitResult.rating,
+            retryAfterCards: 0,
+          }]
+        })
+        lastSettledCardIdsRef.current = entries.map((item) => item.cardId)
+        onBatchCardsSettled(entries)
+      } else {
+        lastSettledCardIdsRef.current = [card.id]
+        onBranchComplete(card.id, {
+          restudy: !unitResult.passed,
+        })
+      }
       revealUndo()
-      onRatingSettled?.(card.id, result.passed)
+      /**
+       * The rate had no confirmation of its own: the bar went quiet and the card
+       * stayed put. This answers it in the periphery — a tone plus one breath at the
+       * card's own edge.
+       *
+       * Deliberately not `dispatchGlobalFeedback('save_success')`: that draws its
+       * burst at screen center (GlobalFeedbackProvider's default point), which is
+       * where the learner is reading, and it is gated only by the global sound /
+       * animation switches — so it would still sound under the 专注 preset, whose
+       * whole point is that learning sounds are off. signalRating respects the
+       * review scene and the learning-sounds channel.
+       */
+      signalRating(rating, unitResult.passed)
+      onRatingSettled?.(card.id, unitResult.passed, rating)
     } catch (error) {
       if (isStaleUnitError(error)) {
         const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '评分后卡片已过期' })
@@ -615,6 +711,7 @@ export function FreestyleUnitReviewCardView({
     } finally {
       busyRef.current = false
       setBusy(false)
+      setPendingRating(null)
       // Close only after the rate finishes so cancel/close cannot delete the
       // encounter the POST still references.
       if (!activeRef.current) void closeCurrentEncounter()
@@ -646,8 +743,13 @@ export function FreestyleUnitReviewCardView({
         card.id,
         encounterState(session.id, nextUnit.revision, result.encounter),
       )
+      const settledIds = lastSettledCardIdsRef.current.length ? lastSettledCardIdsRef.current : [card.id]
       if (result.encounter.selected_rating == null) {
-        onBranchComplete(card.id, { cleared: true })
+        if (onBatchCardsSettled && settledIds.length > 1) {
+          onBatchCardsSettled(settledIds.map((cardId) => ({ cardId, cleared: true })))
+        } else {
+          onBranchComplete(card.id, { cleared: true })
+        }
       } else {
         onBranchComplete(card.id, { restudy: !result.encounter.passed })
       }
@@ -680,18 +782,43 @@ export function FreestyleUnitReviewCardView({
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
       {/* Warm off-white: pure #fff against the near-black shell was a flashbang at night. */}
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#f7f5f2] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
-        {/* Title + flip progress float over the map instead of owning a chrome row. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex min-w-0 items-center gap-1.5 p-2 sm:p-2.5">
-          <div className="pointer-events-auto flex min-w-0 max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-full border border-black/8 bg-white/88 px-2.5 py-1 shadow-sm backdrop-blur-sm">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#f7f5f2] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+        {/* Rate confirmation, at the edge of the card being read rather than at screen
+            center. Keyed by nonce so two rates inside one breath window restart it. */}
+        {breath ? (
+          <span
+            key={breath.nonce}
+            data-testid="freestyle-flow-breath"
+            data-breath={breath.kind}
+            aria-hidden
+            className={cn(
+              'memory-anki-freestyle-breath',
+              FLOW_BREATH_CLASS[breath.kind],
+            )}
+          />
+        ) : null}
+        {/* Identity row sits in flow above the map chrome. It used to be absolutely
+            positioned over the canvas toolbar, which on phone hid 英语/文字模式 entirely.
+            Right padding reserves the page-level HUD pill's band (timer + plan + ⋯). */}
+        <div className="relative z-10 flex min-w-0 shrink-0 items-center gap-1.5 p-2 pr-[7rem] sm:p-2.5 sm:pr-2.5">
+          <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-black/8 bg-white/88 px-2.5 py-1 shadow-sm backdrop-blur-sm">
             <span
               className="size-2 shrink-0 rounded-full bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.2)]"
               title="永久标记"
               aria-label="永久标记"
             />
-            <h1 className="min-w-0 truncate text-xs font-semibold text-zinc-800 sm:text-sm">
+            <h1 className="min-w-0 truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-800 sm:text-sm">
               {titleText}
             </h1>
+            {card.phase === 'fill' ? (
+              <span
+                data-testid="freestyle-fill-badge"
+                title="补充练习：记得/轻松只记下，不改下次到期日"
+                className="inline-flex h-5 shrink-0 items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] font-semibold text-sky-800 sm:h-6 sm:px-2 sm:text-[11px]"
+              >
+                补充
+              </span>
+            ) : null}
             {flipTone && flipLabel && flipTitle ? (
               <span
                 role="status"
@@ -713,7 +840,7 @@ export function FreestyleUnitReviewCardView({
               type="button"
               disabled={busy}
               data-testid="freestyle-transient-undo"
-              className="pointer-events-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-black/8 bg-white/92 px-2.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:opacity-40"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-black/8 bg-white/92 px-2.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:opacity-40"
               onClick={() => void undo()}
             >
               <RotateCcw className="size-3.5" />
@@ -722,6 +849,7 @@ export function FreestyleUnitReviewCardView({
           ) : null}
         </div>
         {editorState && session && unit && unit.encounter ? (
+          <div className="flex min-h-0 flex-1 flex-col pb-[6.75rem] sm:pb-[7.25rem]">
           <FreestyleUnitReviewFlipPanel
             key={`${card.id}:${unit.encounter.id}`}
             card={card}
@@ -741,6 +869,7 @@ export function FreestyleUnitReviewCardView({
             onUnitsReconciled={onUnitsReconciled}
             onRevealProgressChange={handleRevealProgressChange}
           />
+          </div>
         ) : (
           <div className={cn(
             'flex h-full items-center justify-center px-5 text-center text-sm',
@@ -774,6 +903,7 @@ export function FreestyleUnitReviewCardView({
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
+            pendingRating={pendingRating}
             retryAfterCards={retryAfterCards}
             busy={busy}
             locked={locked}
@@ -782,6 +912,9 @@ export function FreestyleUnitReviewCardView({
             actionError={actionError}
             blockedHint={blockedHint}
             shortcutsActive={active && !inlineEditing}
+            ratingScope={ratingScope}
+            palaceDueCount={palaceTarget?.dueCount ?? 1}
+            onRatingScopeChange={onRatingScopeChange}
             onRate={(rating) => void rate(rating)}
             onDismissError={() => setActionError(null)}
           />

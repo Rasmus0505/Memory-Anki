@@ -9,14 +9,10 @@ import {
   type UIEvent,
 } from 'react'
 import {
-  ChevronDown,
-  ChevronUp,
-  ChevronsUp,
   History,
   ListChecks,
   MoreHorizontal,
   RefreshCw,
-  Waypoints,
 } from 'lucide-react'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
 import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
@@ -42,14 +38,37 @@ import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/u
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
 import { parseFreestyleEntryPalaceId } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
-  formatTimer,
   isMindMapBranchCard,
   isQuizCard,
 } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
   getFreestyleQuestionDirection,
+  isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
 } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
+import { FreestyleChannelHint } from '@/modules/practice/ui/freestyle/components/FreestyleChannelHint'
+import { FreestyleFeedPager } from '@/modules/practice/ui/freestyle/components/FreestyleFeedPager'
+import { FreestylePalaceClearedBanner } from '@/modules/practice/ui/freestyle/components/FreestylePalaceClearedBanner'
+import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
+import {
+  buildPalaceClearance,
+  isPalaceRoundCleared,
+  leftoverDueForPalace,
+  type PalaceClearance,
+} from '@/modules/practice/ui/freestyle/model/freestylePalaceClearance'
+import { buildPalaceRatingTarget } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
+import { useFreestyleChromeTheme } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChromeTheme'
+import { useFreestyleWakeLock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWakeLock'
+import {
+  CHANNEL_HINT_COOLDOWN_MS,
+  EMPTY_CHANNEL_LOG,
+  channelAdjustment,
+  channelLogSamples,
+  readChallengeChannel,
+  recordChannelRating,
+  shouldSurfaceChannelHint,
+  type ChannelLog,
+} from '@/modules/practice/ui/freestyle/model/freestyleChallengeChannel'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   canPopViewHistory,
@@ -62,7 +81,10 @@ import {
   pushViewHistory,
   visibleMountIndices,
   FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT,
+  isQueueStateFromPreviousDay,
   type FreestyleFlipMode,
+  type FreestyleRatingScope,
+  type UnitRating,
   readFreestyleDisplaySettings,
   sanitizeFreestyleDisplaySettings,
   saveFreestyleDisplaySettings,
@@ -155,6 +177,8 @@ export default function ImmersiveFreestylePage() {
   const [searchParams] = useSearchParams()
   const entryPalaceId = parseFreestyleEntryPalaceId(searchParams.toString())
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  useFreestyleWakeLock(isActive)
+  useFreestyleChromeTheme(isActive)
   const reducedMotion = usePrefersReducedMotion()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const queueRef = useRef<FreestyleCard[]>([])
@@ -172,6 +196,11 @@ export default function ImmersiveFreestylePage() {
   /** True while the user is actively dragging/wheeling the feed. */
   const userScrollingRef = useRef(false)
   const scrollIdleTimerRef = useRef<number | null>(null)
+  const pageHeightRef = useRef(0)
+  const [visualIndex, setVisualIndex] = useState(0)
+  const visualIndexRef = useRef(0)
+  const [palaceClearance, setPalaceClearance] = useState<PalaceClearance | null>(null)
+  const announcedPalaceClearanceRef = useRef<string | null>(null)
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const autoAdvanceTimerRef = useRef<number | null>(null)
   /** Read at auto-advance fire time so a settle-time reorder cannot turn the wrong page. */
@@ -185,10 +214,25 @@ export default function ImmersiveFreestylePage() {
   const [autoAdvance, setAutoAdvance] = useState(
     () => readFreestyleDisplaySettings().auto_advance,
   )
+  const [ratingScope, setRatingScope] = useState<FreestyleRatingScope>(
+    () => readFreestyleDisplaySettings().rating_scope,
+  )
   const [freestyleFullscreen, setFreestyleFullscreen] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [readOnlyHistoryCardId, setReadOnlyHistoryCardId] = useState<string | null>(null)
   const { promptForAiOptions } = useAiRunConfigDialog()
+  /** Challenge–skill channel rating log for this session. See ChannelLog for the keying. */
+  const [channelLog, setChannelLog] = useState<ChannelLog>(EMPTY_CHANNEL_LOG)
+  /**
+   * Suppression is a timer-cleared flag rather than a stored timestamp compared during
+   * render: a render-time `Date.now()` never re-evaluates on its own, so the hint would
+   * stay hidden past its cooldown until some unrelated re-render happened to occur.
+   */
+  const [channelHintSuppressed, setChannelHintSuppressed] = useState(false)
+  const channelHintCooldownRef = useRef<number | null>(null)
+  const [channelAdjusting, setChannelAdjusting] = useState(false)
+  const [channelAppliedHint, setChannelAppliedHint] = useState('')
+  const [yesterdayHintDismissed, setYesterdayHintDismissed] = useState(false)
 
   const {
     config,
@@ -205,6 +249,7 @@ export default function ImmersiveFreestylePage() {
     refreshQueue,
     reshuffleQueue,
     completeCard,
+    completeCardBatch,
     acknowledgeCard,
     ensureUnitEncounter,
     updateUnitEncounter,
@@ -214,13 +259,17 @@ export default function ImmersiveFreestylePage() {
     restorePlanCards,
     skipToNextPalace,
     buildQueue,
+    pendingRestudyCardIds,
   } = useImmersiveQueue(entryPalaceId)
+  const queueStateRef = useRef(queueState)
+  const { signalPalaceCleared } = useFreestyleFlowFeedback()
 
   useEffect(() => {
     return onAppEvent(FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT, (detail) => {
       const settings = sanitizeFreestyleDisplaySettings(detail)
       setFlipMode(settings.flip_mode)
       setAutoAdvance(settings.auto_advance)
+      setRatingScope(settings.rating_scope)
     })
   }, [])
 
@@ -285,6 +334,11 @@ export default function ImmersiveFreestylePage() {
     saveFreestyleDisplaySettings({ flip_mode: next })
   }, [])
 
+  const updateRatingScope = useCallback((next: FreestyleRatingScope) => {
+    setRatingScope(next)
+    saveFreestyleDisplaySettings({ rating_scope: next })
+  }, [])
+
   const updateAutoAdvance = useCallback((next: boolean) => {
     setAutoAdvance(next)
     saveFreestyleDisplaySettings({ auto_advance: next })
@@ -299,7 +353,19 @@ export default function ImmersiveFreestylePage() {
 
   queueRef.current = cards
   currentIndexRef.current = currentIndex
+  queueStateRef.current = queueState
+  visualIndexRef.current = visualIndex
   const currentCard = cards[currentIndex] ?? null
+  const palaceRatingTarget = useMemo(() => {
+    if (!currentCard || currentCard.type !== 'mindmap_branch' || !currentCard.unit_id) return null
+    return buildPalaceRatingTarget({
+      current: currentCard,
+      cards,
+      leftoverDue: leftoverDueForPalace(roundMeta.palace_leftover_due, currentCard.palace_id),
+      completedIds: queueState.completedIds,
+      encountersByCardId: queueState.unitEncountersByCardId,
+    })
+  }, [cards, currentCard, queueState.completedIds, queueState.unitEncountersByCardId, roundMeta.palace_leftover_due])
   const ratedCardIds = useMemo(
     () => getFreestyleRatedCardIds(cards, queueState.completedIds, queueState.unitEncountersByCardId),
     [cards, queueState.completedIds, queueState.unitEncountersByCardId],
@@ -335,6 +401,17 @@ export default function ImmersiveFreestylePage() {
   useEffect(() => {
     refreshCanGoPrevious()
   }, [refreshCanGoPrevious, cards, currentIndex])
+
+  useEffect(() => {
+    if (userScrollingRef.current) return
+    setVisualIndex(currentIndex)
+    visualIndexRef.current = currentIndex
+  }, [currentIndex])
+
+  useEffect(() => {
+    announcedPalaceClearanceRef.current = null
+    setPalaceClearance(null)
+  }, [queueState.roundId])
 
   const timer = useTimedSession({
     kind: 'quiz',
@@ -486,7 +563,9 @@ export default function ImmersiveFreestylePage() {
       }
       refreshCanGoPrevious(typeof applied === 'number' ? applied : next)
     },
-    [cards, config.palace_order, currentIndex, goToIndex, getIncompleteUnitSummary, ratedCardIds, refreshCanGoPrevious, scrollToIndex],
+    // getIncompleteUnitSummary is intentionally absent: the hint moved onto the card
+    // (see sequentialBlockedHint), so this callback no longer reads it.
+    [cards, config.palace_order, currentIndex, goToIndex, ratedCardIds, refreshCanGoPrevious, scrollToIndex],
   )
 
   /**
@@ -495,6 +574,13 @@ export default function ImmersiveFreestylePage() {
    * unit slid into index 0 and index-based back would stay disabled).
    */
   const navigatePrevious = useCallback(() => {
+    if (ratingScope === 'palace') {
+      const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
+      if (previousPalaceIndex != null) {
+        navigateToIndex(previousPalaceIndex, { skipHistory: true, historical: true })
+      }
+      return
+    }
     const list = cards
     const currentId = list[currentIndex]?.id ?? null
     const popped = popViewHistory(viewHistoryRef.current, list, currentId)
@@ -509,7 +595,28 @@ export default function ImmersiveFreestylePage() {
     if (currentIndex > 0) {
       navigateToIndex(currentIndex - 1, { skipHistory: true, historical: true })
     }
-  }, [cards, currentIndex, navigateToIndex])
+  }, [cards, currentIndex, navigateToIndex, ratingScope])
+
+  const navigateNext = useCallback(() => {
+    if (ratingScope === 'palace') {
+      const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
+      if (nextPalaceIndex == null) return
+      if (
+        isSequentialPalaceBlocked(
+          cards,
+          currentIndex,
+          nextPalaceIndex,
+          ratedCardIds,
+          config.palace_order,
+        )
+      ) {
+        return
+      }
+      navigateToIndex(nextPalaceIndex)
+      return
+    }
+    navigateToIndex(currentIndex + 1)
+  }, [cards, config.palace_order, currentIndex, navigateToIndex, ratedCardIds, ratingScope])
 
   useEffect(() => {
     if (requestedScrollIndexRef.current !== currentIndex) return
@@ -527,11 +634,11 @@ export default function ImmersiveFreestylePage() {
         navigatePrevious()
         return
       }
-      navigateToIndex(currentIndex + 1)
+      navigateNext()
     }
     window.addEventListener('keydown', handleQuestionNavigation, true)
     return () => window.removeEventListener('keydown', handleQuestionNavigation, true)
-  }, [currentIndex, navigatePrevious, navigateToIndex])
+  }, [navigateNext, navigatePrevious])
 
   /**
    * After finger/wheel inertia ends: apply deferred restudy placement, then pin
@@ -540,14 +647,51 @@ export default function ImmersiveFreestylePage() {
   const flushScrollSettled = useCallback(() => {
     userScrollingRef.current = false
     if (programmaticScrollRef.current) return
+    const visual = visualIndexRef.current
+    if (
+      isSequentialPalaceBlocked(
+        cards,
+        currentIndexRef.current,
+        visual,
+        ratedCardIds,
+        config.palace_order,
+      )
+    ) {
+      setVisualIndex(currentIndexRef.current)
+      visualIndexRef.current = currentIndexRef.current
+      scrollToIndex(currentIndexRef.current, 'auto')
+      return
+    }
+    if (visual !== currentIndexRef.current) {
+      navigateToIndex(visual, { scroll: false, reorderRestudy: false })
+    }
     const pinned = flushDeferredRestudy()
+    setVisualIndex(pinned)
+    visualIndexRef.current = pinned
     const node = scrollRef.current
-    if (!node?.clientHeight) return
-    const expectedTop = pinned * node.clientHeight
+    const pageHeight = pageHeightRef.current || node?.clientHeight || 0
+    if (!node || !pageHeight) return
+    const expectedTop = pinned * pageHeight
     if (Math.abs(node.scrollTop - expectedTop) > 2) {
       scrollToIndex(pinned, 'auto')
     }
-  }, [flushDeferredRestudy, scrollToIndex])
+  }, [cards, config.palace_order, flushDeferredRestudy, navigateToIndex, ratedCardIds, scrollToIndex])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const updatePageHeight = () => {
+      pageHeightRef.current = node.clientHeight
+    }
+    updatePageHeight()
+    const observer = new ResizeObserver(updatePageHeight)
+    observer.observe(node)
+    window.visualViewport?.addEventListener('resize', updatePageHeight)
+    return () => {
+      observer.disconnect()
+      window.visualViewport?.removeEventListener('resize', updatePageHeight)
+    }
+  }, [loading, cards.length])
 
   useEffect(() => {
     const node = scrollRef.current
@@ -603,6 +747,15 @@ export default function ImmersiveFreestylePage() {
     cards.length,
   ])
 
+  useEffect(() => {
+    const handlePageShow = () => {
+      if (!isActive || loading || userScrollingRef.current) return
+      scrollToIndex(currentIndexRef.current, 'auto')
+    }
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [isActive, loading, scrollToIndex])
+
   const acknowledgeQuizCard = useCallback(
     (card: FreestyleQuizCard) => {
       if (acknowledgedCardIdsRef.current.has(card.id)) return
@@ -629,26 +782,58 @@ export default function ImmersiveFreestylePage() {
     [completeCard, timer],
   )
 
+  const handleBatchCardsSettled = useCallback(
+    (
+      entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
+    ) => {
+      setSaveError('')
+      timer.registerActivity('practice_interaction', { source: 'freestyle_palace_rate' })
+      completeCardBatch(entries, entries[0]?.cardId)
+    },
+    [completeCardBatch, timer],
+  )
+
+  const recordChannelSample = useCallback((cardId: string, rating: UnitRating) => {
+    setChannelLog((current) => recordChannelRating(current, cardId, rating))
+  }, [])
+
   /**
    * Opt-in auto-advance. Passing rates only: a weak rate leaves the learner on the
    * card they still need to look at (and triggers a silent restudy rebuild, which
    * must not race a page turn). The delay lets the undo chip register before leaving.
    */
   const handleRatingSettled = useCallback(
-    (cardId: string, passed: boolean) => {
+    (cardId: string, passed: boolean, rating: UnitRating) => {
+      // Feed the challenge–skill channel first: it must see every rate, including the
+      // weak ones that never reach the auto-advance path below.
+      recordChannelSample(cardId, rating)
       if (!autoAdvance || !passed) return
       if (autoAdvanceTimerRef.current != null) {
         window.clearTimeout(autoAdvanceTimerRef.current)
       }
       autoAdvanceTimerRef.current = window.setTimeout(() => {
         autoAdvanceTimerRef.current = null
+        // A dialog opened during the delay owns the screen; turning the feed behind
+        // it would drop the learner on a different card when they close it.
+        if (isFreestyleOverlayOpen()) return
         // Resolve the index at fire time: settling may have reordered the feed.
-        const index = queueRef.current.findIndex((card) => card.id === cardId)
+        const list = queueRef.current
+        const index = list.findIndex((card) => card.id === cardId)
         if (index < 0 || index !== currentIndexRef.current) return
-        navigateToIndex(index + 1)
+        const rated = new Set(
+          getFreestyleRatedCardIds(
+            list,
+            queueStateRef.current.completedIds,
+            queueStateRef.current.unitEncountersByCardId,
+          ),
+        )
+        const next = ratingScope === 'palace'
+          ? findNextPalaceIndex(list, index)
+          : list.findIndex((item, itemIndex) => itemIndex > index && !rated.has(item.id))
+        if (next != null && next >= 0) navigateToIndex(next)
       }, AUTO_ADVANCE_DELAY_MS)
     },
-    [autoAdvance, navigateToIndex],
+    [autoAdvance, navigateToIndex, ratingScope, recordChannelSample],
   )
 
   useEffect(() => {
@@ -663,6 +848,7 @@ export default function ImmersiveFreestylePage() {
     (cardId: string) => {
       // Do not mark completed — still-due units must stay eligible (vs Insights queue).
       dropStaleCard(cardId)
+      toast.info('这张已在其他设备复习，或内容刚被改过')
     },
     [dropStaleCard],
   )
@@ -706,25 +892,26 @@ export default function ImmersiveFreestylePage() {
   }, [acknowledgeQuizCard, cards, currentIndex, progress.questionStates])
 
   const mounted = useMemo(
-    () => visibleMountIndices(currentIndex, cards.length),
-    [cards.length, currentIndex],
+    () => visibleMountIndices(visualIndex, cards.length),
+    [cards.length, visualIndex],
   )
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       if (programmaticScrollRef.current) return
       const element = event.currentTarget
-      if (!element.clientHeight || cards.length === 0) return
+      const pageHeight = pageHeightRef.current || element.clientHeight
+      if (!pageHeight || cards.length === 0) return
       userScrollingRef.current = true
       const nextIndex = Math.max(
         0,
-        Math.min(cards.length - 1, Math.round(element.scrollTop / element.clientHeight)),
+        Math.min(cards.length - 1, Math.round(element.scrollTop / pageHeight)),
       )
       timer.registerActivity('practice_interaction', { source: 'freestyle_scroll' })
-      if (nextIndex !== currentIndex) {
-        // Index only — do not call scrollTo; CSS snap + the user's gesture own the viewport.
-        // Defer restudy reordering until the gesture settles (see flushScrollSettled).
-        navigateToIndex(nextIndex, { scroll: false, reorderRestudy: false })
+      if (nextIndex !== visualIndexRef.current) {
+        // Visual index only — do not flip `active` or close/open encounters mid-gesture.
+        visualIndexRef.current = nextIndex
+        setVisualIndex(nextIndex)
       }
       if (scrollIdleTimerRef.current != null) {
         window.clearTimeout(scrollIdleTimerRef.current)
@@ -735,7 +922,7 @@ export default function ImmersiveFreestylePage() {
         flushScrollSettled()
       }, 120)
     },
-    [cards.length, currentIndex, flushScrollSettled, navigateToIndex, timer],
+    [cards.length, flushScrollSettled, timer],
   )
 
   /**
@@ -773,7 +960,8 @@ export default function ImmersiveFreestylePage() {
         requestedScrollIndexRef.current = null
       })
     })
-  }, [cards, config.palace_order, currentIndex, getIncompleteUnitSummary, ratedCardIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
+    // Same as navigateToIndex: the blocked reason is rendered on the card, not here.
+  }, [cards, config.palace_order, currentIndex, ratedCardIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
   const handleGoToPreviousPalace = useCallback(() => {
     const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
@@ -804,14 +992,14 @@ export default function ImmersiveFreestylePage() {
       }
       if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
         event.preventDefault()
-        navigateToIndex(currentIndex + 1)
+        navigateNext()
       }
       if (event.key === 'ArrowUp' || event.key === 'PageUp') {
         event.preventDefault()
         navigatePrevious()
       }
     },
-    [currentIndex, navigatePrevious, navigateToIndex],
+    [navigateNext, navigatePrevious],
   )
 
   const progressSummary = useMemo(
@@ -836,24 +1024,146 @@ export default function ImmersiveFreestylePage() {
     return `还有 ${pending} 个单元未评分，忘记/困难会安排稍后重练`
   }, [canGoNextPalace, cards, currentIndex, getIncompleteUnitSummary, nextPalaceIndex])
 
-  const roundComplete = isFreestyleRoundComplete(cards, queueState.unitEncountersByCardId)
+  const roundComplete = isFreestyleRoundComplete(
+    cards,
+    queueState.unitEncountersByCardId,
+    queueState.completedIds,
+  )
   const roundCompletion = useMemo(
     () => buildFreestyleRoundCompletion(
       cards,
       queueState.unitEncountersByCardId,
       roundMeta.candidate_count,
+      {
+        completedIds: queueState.completedIds,
+        scheduledCount: roundMeta.scheduled_count || roundPlan?.scheduledCount,
+      },
     ),
-    [cards, queueState.unitEncountersByCardId, roundMeta.candidate_count],
+    [
+      cards,
+      queueState.completedIds,
+      queueState.unitEncountersByCardId,
+      roundMeta.candidate_count,
+      roundMeta.scheduled_count,
+      roundPlan?.scheduledCount,
+    ],
   )
+
+  const channelReading = useMemo(
+    () => readChallengeChannel(channelLogSamples(channelLog)),
+    [channelLog],
+  )
+
+  const activeChannelAdjustment = useMemo(
+    () => channelAdjustment(channelReading, config),
+    [channelReading, config],
+  )
+
+  /**
+   * The hint appears only at the two exits from the channel, only when there is an
+   * actual correction to offer, and not again within the cooldown after a dismissal —
+   * a suggestion the learner already declined becomes an interruption if it returns.
+   */
+  const channelHintVisible = Boolean(
+    shouldSurfaceChannelHint(channelReading)
+    && activeChannelAdjustment
+    && cards.length > 0
+    && !roundComplete
+    && !loading
+    && !error
+    && !channelHintSuppressed,
+  )
+
+  useEffect(() => {
+    if (loading || error || cards.length === 0) {
+      setPalaceClearance(null)
+      return
+    }
+    const card = cards[currentIndex]
+    const palaceId = cardPalaceId(card)
+    if (palaceId == null || !card) {
+      setPalaceClearance(null)
+      return
+    }
+    const key = `${queueState.roundId}:${palaceId}`
+    const cleared = isPalaceRoundCleared({
+      cards,
+      palaceId,
+      plan: roundPlan,
+      encountersByCardId: queueState.unitEncountersByCardId,
+      completedIds: queueState.completedIds,
+      pendingRestudyIds: pendingRestudyCardIds,
+      hiddenIds: queueState.hiddenIds,
+    })
+    if (!cleared) {
+      setPalaceClearance(null)
+      return
+    }
+    if (announcedPalaceClearanceRef.current === key) return
+    announcedPalaceClearanceRef.current = key
+    const clearance = buildPalaceClearance(
+      cards,
+      palaceId,
+      leftoverDueForPalace(roundMeta.palace_leftover_due, palaceId),
+    )
+    setPalaceClearance(clearance)
+    signalPalaceCleared()
+  }, [
+    cards,
+    currentIndex,
+    error,
+    loading,
+    pendingRestudyCardIds,
+    queueState.completedIds,
+    queueState.hiddenIds,
+    queueState.roundId,
+    queueState.unitEncountersByCardId,
+    roundMeta.palace_leftover_due,
+    roundPlan,
+    signalPalaceCleared,
+  ])
+
+  /**
+   * Apply the correction without leaving the feed. Silent + preferCardId so the round
+   * keeps its finished work and the learner stays on the card under the viewport: the
+   * correction has to cost less attention than the drift it fixes.
+   */
+  const suppressChannelHint = useCallback(() => {
+    setChannelHintSuppressed(true)
+    if (channelHintCooldownRef.current != null) {
+      window.clearTimeout(channelHintCooldownRef.current)
+    }
+    channelHintCooldownRef.current = window.setTimeout(() => {
+      channelHintCooldownRef.current = null
+      setChannelHintSuppressed(false)
+    }, CHANNEL_HINT_COOLDOWN_MS)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (channelHintCooldownRef.current != null) {
+        window.clearTimeout(channelHintCooldownRef.current)
+      }
+    }
+  }, [])
+
+  const handleApplyChannelAdjustment = useCallback(() => {
+    if (!activeChannelAdjustment) return
+    setChannelAdjusting(true)
+    suppressChannelHint()
+    // The reading described the round before this change; keeping it would have the
+    // hint immediately re-offer the same correction.
+    setChannelLog(EMPTY_CHANNEL_LOG)
+    setConfigAndPersist(activeChannelAdjustment.apply, {
+      silent: true,
+      preferCardId: currentCard?.id ?? null,
+    })
+    setChannelAppliedHint('未做部分已按更易/更难重排，已完成保留')
+    setChannelAdjusting(false)
+  }, [activeChannelAdjustment, currentCard?.id, setConfigAndPersist, suppressChannelHint])
 
   const mindmapCount = cards.filter(isMindMapBranchCard).length
   const quizCount = cards.filter(isQuizCard).length
-  const unitReviewActive = Boolean(
-    currentCard
-    && currentCard.type === 'mindmap_branch'
-    && currentCard.unit_id
-    && currentCard.unit_revision != null,
-  )
   const resolvedQuiz = cards.filter(
     (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
   ).length
@@ -988,6 +1298,30 @@ export default function ImmersiveFreestylePage() {
           )}
         />
 
+        {!yesterdayHintDismissed && isQueueStateFromPreviousDay(queueState) ? (
+          <div
+            data-testid="freestyle-yesterday-hint"
+            className="absolute left-1/2 top-[4.25rem] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-amber-300/25 bg-amber-950/92 px-3 py-2 text-xs text-amber-50 shadow-lg"
+          >
+            <span>这是昨天未完成的一轮</span>
+            <button type="button" className="underline" onClick={() => setYesterdayHintDismissed(true)}>
+              知道了
+            </button>
+          </div>
+        ) : null}
+
+        {channelAppliedHint ? (
+          <div
+            data-testid="freestyle-channel-applied"
+            className="absolute left-1/2 top-[4.25rem] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/15 bg-zinc-950/92 px-3 py-2 text-xs text-zinc-100 shadow-lg"
+          >
+            <span>{channelAppliedHint}</span>
+            <button type="button" className="underline" onClick={() => setChannelAppliedHint('')}>
+              关闭
+            </button>
+          </div>
+        ) : null}
+
         {saveError ? (
           <div className="absolute left-1/2 top-[4.25rem] z-30 max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-2xl border border-rose-400/30 bg-rose-950/95 px-4 py-2.5 text-sm text-rose-100 shadow-lg">
             {saveError}
@@ -1001,12 +1335,25 @@ export default function ImmersiveFreestylePage() {
           </div>
         ) : null}
 
+        {palaceClearance ? <FreestylePalaceClearedBanner clearance={palaceClearance} /> : null}
+
+        {channelHintVisible && activeChannelAdjustment ? (
+          <FreestyleChannelHint
+            state={channelReading.state as 'anxious' | 'bored'}
+            hint={activeChannelAdjustment.hint}
+            actionLabel={activeChannelAdjustment.actionLabel}
+            busy={channelAdjusting || loading}
+            onApply={handleApplyChannelAdjustment}
+            onDismiss={suppressChannelHint}
+          />
+        ) : null}
+
         <div
           ref={scrollRef}
           data-page-history-scroll-key="freestyle-immersive"
           // overflow-anchor-none: reordering cards for「下个宫殿」must not let the
           // browser keep the old card glued to the viewport (looks like no jump).
-          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-y"
+          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           onScroll={handleScroll}
         >
           {loading ? (
@@ -1075,6 +1422,10 @@ export default function ImmersiveFreestylePage() {
                           onAutoAdvanceChange={updateAutoAdvance}
                           blockedHint={index === currentIndex ? sequentialBlockedHint : null}
                           onRatingSettled={handleRatingSettled}
+                          ratingScope={ratingScope}
+                          onRatingScopeChange={updateRatingScope}
+                          palaceTarget={index === currentIndex ? palaceRatingTarget : null}
+                          onBatchCardsSettled={handleBatchCardsSettled}
                           onEnsureEncounter={ensureUnitEncounter}
                           onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
@@ -1151,57 +1502,29 @@ export default function ImmersiveFreestylePage() {
         </div>
 
         {/*
-          Nav dock: desktop only. On phones the feed is driven by swipe and the rail,
-          so the dock was four redundant targets colliding with the retry badge.
+          Prev/next stay on PWA: one-finger swipe over the map still misses snap.
+          Palace skip stays desktop-only so the phone dock is two large targets.
         */}
-        <div className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 lg:block">
-          <div className="pointer-events-auto flex flex-col gap-1 rounded-2xl border border-white/12 bg-zinc-950/90 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-md">
-            <button
-              type="button"
-              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"
-              title="上一张：返回上一个单元"
-              aria-label="上一张"
-              disabled={!canGoPrevious || cards.length === 0}
-              onClick={navigatePrevious}
-            >
-              <ChevronUp className="size-5 sm:size-4" />
-            </button>
-            <button
-              type="button"
-              className="inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10"
-              title="下一张"
-              aria-label="下一张"
-              disabled={cards.length === 0 || currentIndex >= cards.length - 1}
-              onClick={() => navigateToIndex(currentIndex + 1)}
-            >
-              <ChevronDown className="size-5 sm:size-4" />
-            </button>
-            {/* Action language, not scheduler language: the learner moves between
-                topics, not between "palace #37". */}
-            <button
-              type="button"
-              className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
-              title="回到上一组内容"
-              aria-label="上一组"
-              disabled={!canGoPreviousPalace}
-              onClick={handleGoToPreviousPalace}
-            >
-              <ChevronsUp className="size-4 shrink-0" />
-              <span className="leading-none">上一组</span>
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1"
-              title={sequentialBlockedHint ?? '跳过本组：剩余内容移到队尾'}
-              aria-label="跳过本组"
-              disabled={!canGoNextPalace}
-              onClick={handleSkipToNextPalace}
-            >
-              <Waypoints className="size-4 shrink-0" />
-              <span className="leading-none">跳过</span>
-            </button>
-          </div>
-        </div>
+        <FreestyleFeedPager
+          canGoPrevious={
+            ratingScope === 'palace'
+              ? canGoPreviousPalace
+              : canGoPrevious && cards.length > 0
+          }
+          canGoNext={
+            ratingScope === 'palace'
+              ? canGoNextPalace
+              : cards.length > 0 && currentIndex < cards.length - 1
+          }
+          canGoPreviousPalace={canGoPreviousPalace}
+          canGoNextPalace={canGoNextPalace}
+          sequentialBlockedHint={sequentialBlockedHint}
+          palaceMode={ratingScope === 'palace'}
+          onPrevious={navigatePrevious}
+          onNext={navigateNext}
+          onPreviousPalace={handleGoToPreviousPalace}
+          onSkipPalace={handleSkipToNextPalace}
+        />
       </div>
     </TooltipProvider>
   )

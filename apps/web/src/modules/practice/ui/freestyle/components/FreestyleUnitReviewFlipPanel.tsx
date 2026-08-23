@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import {
   PalaceReviewUnitsPanel,
@@ -21,6 +21,8 @@ import type {
   UnitReviewSessionDto,
 } from '@/modules/practice/public'
 import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
+import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
+import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { toast } from '@/shared/feedback/toast'
 import {
   buildEditorParentMap,
@@ -101,6 +103,8 @@ export function FreestyleUnitReviewFlipPanel({
     revealConfig: flipCardRevealSettings.settings,
     allowedNodeIds: allowedRevealNodeIds,
   })
+  const { handleNodeContextMenu, handleTargetNodeClick, root } = reveal
+  const { signalReveal } = useFreestyleFlowFeedback()
 
   // Header chip: this unit's membership only (not whole-palace node count).
   useEffect(() => {
@@ -113,6 +117,33 @@ export function FreestyleUnitReviewFlipPanel({
     unit.anchor_uid,
     unit.node_uids,
   ])
+
+  /**
+   * Immediate confirmation for the flip itself — the highest-frequency action in
+   * freestyle, and the one that was completely silent while formal review has always
+   * played a tone per reveal.
+   *
+   * Counted off the whole reveal map rather than the unit-scoped header progress:
+   * the default flip mode is `free`, where any node in the palace is flippable, so a
+   * unit-scoped count would leave most flips silent and simply relocate the defect.
+   *
+   * The baseline is keyed by encounter so a fresh card's first report cannot sound as
+   * though the learner had just flipped something.
+   */
+  const revealedCount = useMemo(
+    () => Object.values(reveal.revealMap).filter((state) => state === 'revealed').length,
+    [reveal.revealMap],
+  )
+  const revealBaselineKey = `${card.id}:${unit.encounter?.id ?? 'none'}`
+  const revealBaselineRef = useRef<{ key: string; revealed: number } | null>(null)
+
+  useEffect(() => {
+    const baseline = revealBaselineRef.current
+    revealBaselineRef.current = { key: revealBaselineKey, revealed: revealedCount }
+    if (!active) return
+    if (baseline?.key !== revealBaselineKey) return
+    if (revealedCount > baseline.revealed) signalReveal()
+  }, [active, revealBaselineKey, revealedCount, signalReveal])
 
   const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [editEditorState, setEditEditorState] = useState<MindMapEditorState>(editorState)
@@ -139,6 +170,66 @@ export function FreestyleUnitReviewFlipPanel({
   const isEditMode = displayMode === 'edit'
   editEditorStateRef.current = editEditorState
   displayModeRef.current = displayMode
+
+  useLayoutEffect(() => {
+    if (!active || isEditMode) return
+
+    const anchorUid = String(unit.anchor_uid || '').trim()
+    if (!anchorUid) return
+
+    const targetSelection: MindMapSelection = {
+      uid: anchorUid,
+      text: unit.title || card.palace_title || '复习目标',
+      note: '',
+      memoryAnkiId: null,
+      memoryAnkiNodeType: null,
+      rawData: {},
+    }
+    const rootSelection: MindMapSelection = {
+      ...targetSelection,
+      uid: root.id,
+      text: root.text || card.palace_title || '宫殿',
+    }
+    const handleTargetShortcut = (event: globalThis.KeyboardEvent) => {
+      const isEnter = event.key === 'Enter'
+      const isShift = event.key === 'Shift'
+      if (
+        event.defaultPrevented
+        || (!isEnter && !isShift)
+        || event.ctrlKey
+        || event.altKey
+        || event.metaKey
+        || (isEnter && event.shiftKey)
+        || (isShift && event.repeat)
+        || isFreestyleShortcutBlocked(event.target)
+      ) {
+        return
+      }
+      if (event.target instanceof HTMLElement && event.target.closest('button, a')) return
+
+      event.preventDefault()
+      if (isShift) {
+        // Right-clicking the root hides every descendant while retaining the
+        // root card, which is the keyboard equivalent of returning to root.
+        handleNodeContextMenu([rootSelection])
+        return
+      }
+      handleTargetNodeClick([targetSelection])
+    }
+
+    window.addEventListener('keydown', handleTargetShortcut, true)
+    return () => window.removeEventListener('keydown', handleTargetShortcut, true)
+  }, [
+    active,
+    card.palace_title,
+    handleNodeContextMenu,
+    handleTargetNodeClick,
+    isEditMode,
+    root.id,
+    root.text,
+    unit.anchor_uid,
+    unit.title,
+  ])
 
   // Session reload (stale rebuild) refreshes the edit baseline only while learning.
   useEffect(() => {
@@ -588,7 +679,11 @@ export function FreestyleUnitReviewFlipPanel({
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
         preserveViewOnSync
         initialViewPolicy={isEditMode ? 'preserve' : 'reset'}
-        className="h-full min-h-0"
+        /* flex-1 rather than h-full: the card surface is now a flex column whose first
+           row is the unit identity chip, so h-full would overflow it by that row.
+           The phone bottom inset keeps fitView centering inside the visible area
+           instead of under the opaque rating bar. */
+        className="min-h-0 flex-1 max-sm:pb-[6.25rem]"
         surfaceClassName="h-full min-h-0"
       />
       <NodeBoundQuizDialog

@@ -19,6 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   getUnitReviewSessionApi: vi.fn(),
   startFreestyleUnitReviewSessionApi: vi.fn(),
   rateReviewUnitApi: vi.fn(),
+  ratePalaceDueUnitsApi: vi.fn(),
   undoReviewUnitRatingApi: vi.fn(),
   cancelUnratedUnitReviewEncounterApi: vi.fn().mockResolvedValue({ abandoned: false }),
 }))
@@ -50,6 +51,7 @@ vi.mock('@/modules/practice/public', () => ({
   getUnitReviewSessionApi: apiMocks.getUnitReviewSessionApi,
   startFreestyleUnitReviewSessionApi: apiMocks.startFreestyleUnitReviewSessionApi,
   rateReviewUnitApi: apiMocks.rateReviewUnitApi,
+  ratePalaceDueUnitsApi: apiMocks.ratePalaceDueUnitsApi,
   undoReviewUnitRatingApi: apiMocks.undoReviewUnitRatingApi,
   cancelUnratedUnitReviewEncounterApi: apiMocks.cancelUnratedUnitReviewEncounterApi,
 }))
@@ -276,15 +278,27 @@ function renderCard(
     readOnly?: boolean
     encounter?: FreestyleUnitEncounterState
     roundId?: string
+    ratingScope?: 'unit' | 'palace'
+    palaceTarget?: {
+      palaceId: number
+      dueCount: number
+      excludeUnitIds: string[]
+      includeUnitIds: string[]
+      settleCards: Array<{ cardId: string; unitId: string }>
+    }
+    onRatingSettled?: (cardId: string, passed: boolean, rating: number) => void
   } = {},
 ) {
   const callbacks = {
     onEnsureEncounter: vi.fn(() => options.encounter ?? queueEncounter()),
     onEncounterChange: vi.fn(),
     onBranchComplete: vi.fn(),
+    onBatchCardsSettled: vi.fn(),
     onStaleDrop: vi.fn(),
     onSaveFailed: vi.fn(),
     onUnitsReconciled: vi.fn(),
+    onRatingSettled: options.onRatingSettled ?? vi.fn(),
+    onRatingScopeChange: vi.fn(),
   }
   const props = {
     card,
@@ -293,6 +307,8 @@ function renderCard(
     roundId: options.roundId ?? 'round-1',
     encounter: options.encounter ?? queueEncounter(),
     retryAfterCards: 3,
+    ratingScope: options.ratingScope,
+    palaceTarget: options.palaceTarget,
     ...callbacks,
   }
   const renderResult = render(<FreestyleUnitReviewCardView {...props} />)
@@ -378,6 +394,8 @@ describe('FreestyleUnitReviewCardView', () => {
       'encounter-1',
     )
     expect(capturedPanelProps?.activeUnitNodeUids).toEqual(['unit-node', 'unit-child'])
+    // auto (the FlipCard default): phone still uses the tight camera, but the map stays pannable.
+    expect(capturedPanelProps?.mobileViewPolicy).toBeUndefined()
     expect(capturedPanelProps?.countBadgeByNodeUid).toEqual(quizBindingMocks.countBadgeByNodeUid)
     expect(typeof capturedPanelProps?.onCountBadgeClick).toBe('function')
     expect(
@@ -738,6 +756,116 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(capturedPanelProps?.visibleEditorState).toBeTruthy()
   })
 
+  it('uses Enter to reveal the active unit anchor through the same progressive flip flow', async () => {
+    const card = buildCard('unit-enter-reveal')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const revealTarget = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealTarget))
+    expect(revealTarget.defaultPrevented).toBe(true)
+    flushRevealFrame()
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: { root: { children: Array<{ data: { text: string } }> } }
+      }).editor_doc.root.children[0]?.data.text,
+    ).toBe('当前单元')
+
+    const revealChild = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealChild))
+    flushRevealFrame()
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: {
+          root: { children: Array<{ children: Array<{ data: { text: string } }> }> }
+        }
+      }).editor_doc.root.children[0]?.children[0]?.data.text,
+    ).toBe('待回忆')
+  })
+
+  it('uses Shift to right-click the root and return the card to its root node', async () => {
+    const card = buildCard('unit-shift-hide')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const revealTarget = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealTarget))
+    flushRevealFrame()
+
+    const revealChild = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealChild))
+    flushRevealFrame()
+
+    const hideTarget = new KeyboardEvent('keydown', {
+      key: 'Shift',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(hideTarget))
+    expect(hideTarget.defaultPrevented).toBe(true)
+    flushRevealFrame()
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: { root: { children: unknown[] } }
+      }).editor_doc.root.children,
+    ).toEqual([])
+  })
+
+  it('ignores Enter outside the active review surface and while editing or typing', async () => {
+    const card = buildCard('unit-enter-guards')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const view = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    await act(async () => {
+      view.rerenderCard({ active: false })
+      await Promise.resolve()
+    })
+    const inactiveEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    act(() => window.dispatchEvent(inactiveEvent))
+    expect(inactiveEvent.defaultPrevented).toBe(false)
+
+    await act(async () => {
+      view.rerenderCard({ active: true })
+      await Promise.resolve()
+    })
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    try {
+      const typingEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      act(() => input.dispatchEvent(typingEvent))
+      expect(typingEvent.defaultPrevented).toBe(false)
+    } finally {
+      input.remove()
+    }
+
+    const toolbarExtensions = capturedPanelProps?.toolbarExtensions as {
+      moreActions: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => toolbarExtensions.moreActions.find((action) => action.label === '进入编辑')?.onClick())
+    const editingEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    act(() => window.dispatchEvent(editingEvent))
+    expect(editingEvent.defaultPrevented).toBe(false)
+  })
+
   it('starts a retry encounter from the root instead of the prior reveal state', async () => {
     const card = buildCard('unit-retry-fresh-reveal')
     const firstSession = buildSession(card.unit_id!)
@@ -849,6 +977,156 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { restudy: false })
     expect(screen.getByTestId('flip-card-mind-map-panel')).not.toBeNull()
+  })
+
+  it('rates the palace due set through the batch command', async () => {
+    const card = buildCard('unit-palace-rate')
+    const session = buildSession(card.unit_id!)
+    const unitResult = ratingResult(session, 3, 'batch-palace')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.ratePalaceDueUnitsApi.mockResolvedValue({
+      batch_id: 'batch-palace',
+      palace_id: card.palace_id,
+      rating: 3,
+      items: [
+        unitResult,
+        { ...unitResult, operation_id: 'batch-palace:unit-b', unit: { ...unitResult.unit, id: 'unit-b' } },
+      ],
+      rated_unit_ids: [card.unit_id, 'unit-b'],
+      remaining_due_count: 0,
+      current: unitResult,
+    })
+    const { onBatchCardsSettled, onBranchComplete } = renderCard(card, {
+      ratingScope: 'palace',
+      palaceTarget: {
+        palaceId: card.palace_id,
+        dueCount: 2,
+        excludeUnitIds: [],
+        includeUnitIds: [card.unit_id, 'unit-b'],
+        settleCards: [
+          { cardId: card.id, unitId: card.unit_id },
+          { cardId: 'card-b', unitId: 'unit-b' },
+        ],
+      },
+    })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    await screen.findByText('已选记得 · 今日 2 个到期小节，各自按阶梯改期')
+    expect(apiMocks.ratePalaceDueUnitsApi).toHaveBeenCalledTimes(1)
+    expect(apiMocks.ratePalaceDueUnitsApi.mock.calls[0][1].includeUnitIds).toEqual([
+      card.unit_id,
+      'unit-b',
+    ])
+    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
+    expect(onBranchComplete).not.toHaveBeenCalled()
+    expect(onBatchCardsSettled).toHaveBeenCalledWith([
+      { cardId: card.id, restudy: false, rating: 3, retryAfterCards: 0 },
+      { cardId: 'card-b', restudy: false, rating: 3, retryAfterCards: 0 },
+    ])
+  })
+
+  it('marks the tapped rating as chosen while the rate is still in flight', async () => {
+    const card = buildCard('unit-pending-rate')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    let resolveRate: ((value: unknown) => void) | null = null
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        new Promise((resolve) => {
+          resolveRate = () => resolve(ratingResult(session, rating, operationId))
+        }),
+    )
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+
+    // The bar used to stay silent until the POST landed, so a slow network read
+    // as a dropped tap.
+    const pressed = await screen.findByTestId('freestyle-rating-pending-3')
+    expect(pressed).toBeTruthy()
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('正在记录记得')
+
+    await act(async () => {
+      resolveRate?.(null)
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('freestyle-rating-pending-3')).toBeNull()
+    })
+    expect(screen.getByText('已选记得 · 1天后复习 · 7月28日')).toBeTruthy()
+  })
+
+  /**
+   * Rate confirmation lives at the card's own edge, not at screen center.
+   *
+   * The earlier attempt dispatched a global `save_success`, which GlobalFeedbackProvider
+   * draws at its default point — the middle of the map the learner is reading — and
+   * which is gated only by the global sound/animation switches, so it still fired under
+   * the 专注 preset whose whole purpose is silent learning.
+   */
+  it('confirms a settled rate at the card edge, not with a screen-center burst', async () => {
+    const card = buildCard('unit-rate-feedback')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+    const events: string[] = []
+    const listener = (event: Event) => {
+      events.push((event as CustomEvent<{ event: string }>).detail.event)
+    }
+    window.addEventListener('memory-anki-global-feedback-request', listener)
+
+    try {
+      renderCard(card)
+      await screen.findByTestId('flip-card-mind-map-panel')
+      fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+      await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
+
+      const breath = await screen.findByTestId('freestyle-flow-breath')
+      expect(breath.getAttribute('data-breath')).toBe('affirm')
+      expect(events).toEqual([])
+    } finally {
+      window.removeEventListener('memory-anki-global-feedback-request', listener)
+    }
+  })
+
+  it('marks a weak rate as a neutral note, never a failure alarm', async () => {
+    const card = buildCard('unit-rate-weak-feedback')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+
+    renderCard(card)
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /忘记/ }))
+    await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
+
+    const breath = await screen.findByTestId('freestyle-flow-breath')
+    expect(breath.getAttribute('data-breath')).toBe('note')
+  })
+
+  it('reports the rating up so the challenge–skill channel can read it', async () => {
+    const card = buildCard('unit-rate-channel')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+    const onRatingSettled = vi.fn()
+
+    renderCard(card, { onRatingSettled })
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+
+    await waitFor(() => expect(onRatingSettled).toHaveBeenCalledWith(card.id, true, 3))
   })
 
   it('rates with the server-owned encounter round when the queue round is stale', async () => {

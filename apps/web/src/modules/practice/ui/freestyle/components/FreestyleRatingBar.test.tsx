@@ -147,10 +147,66 @@ describe('FreestyleRatingBar', () => {
     expect(screen.getByTestId('freestyle-sequential-hint').textContent).toBe('还有 5 个单元未评分')
   })
 
+  it('switches the preview to a palace count instead of one unit interval', () => {
+    const onRatingScopeChange = vi.fn()
+    renderBar({
+      ratingScope: 'palace',
+      palaceDueCount: 5,
+      onRatingScopeChange,
+    })
+
+    expect(screen.getByTestId('freestyle-rating-scope-palace').textContent).toBe('宫殿 · 今日 5')
+    expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得5小节')
+    expect(screen.getByTestId('freestyle-rating-button-1').textContent).toBe('忘记5小节重练')
+    fireEvent.click(screen.getByTestId('freestyle-rating-scope-unit'))
+    expect(onRatingScopeChange).toHaveBeenCalledWith('unit')
+  })
+
   it('reports the locked selection after a closed encounter', () => {
     renderBar({ selectedRating: 3, locked: true })
 
     expect(screen.getByText(/已选记得 · 1天后复习 · 7月28日/)).toBeTruthy()
     expect(screen.getByText('已锁定')).toBeTruthy()
+  })
+
+  describe('in-flight rate', () => {
+    it('shows the tapped rating as chosen before the server answers', () => {
+      // Without this the bar went silent on tap: nothing moved until the POST landed.
+      renderBar({ pendingRating: 2, busy: true })
+
+      const pressed = screen.getByTestId('freestyle-rating-button-2')
+      expect(pressed.getAttribute('aria-pressed')).toBe('true')
+      expect(pressed.getAttribute('aria-busy')).toBe('true')
+      expect(screen.getByTestId('freestyle-rating-pending-2')).toBeTruthy()
+    })
+
+    it('names the pending rating 正在记录 instead of 已选', () => {
+      renderBar({ pendingRating: 3, busy: true })
+
+      expect(screen.getByTestId('freestyle-rating-effect-line').textContent)
+        .toContain('正在记录记得')
+    })
+
+    it('does not mark a pending rate as 已锁定 while it is still in flight', () => {
+      renderBar({ pendingRating: 3, busy: true, locked: true })
+
+      expect(screen.queryByText('已锁定')).toBeNull()
+    })
+
+    it('keeps the chosen button at full opacity while the others dim', () => {
+      renderBar({ selectedRating: 3 })
+
+      expect(screen.getByTestId('freestyle-rating-button-3').className)
+        .toContain('disabled:opacity-100')
+      expect(screen.getByTestId('freestyle-rating-button-1').className)
+        .toContain('disabled:opacity-55')
+    })
+
+    it('leaves the pending spinner out of the button text', () => {
+      renderBar({ pendingRating: 3, busy: true })
+
+      // The schedule preview is the whole readable label; a spinner must not join it.
+      expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后')
+    })
   })
 })

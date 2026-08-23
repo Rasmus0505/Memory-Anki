@@ -184,6 +184,36 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.extension).toBe('revealed')
   })
 
+  it('reveals a hidden nested target through its prerequisite click path', () => {
+    const nested: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '宫殿', uid: 'root' },
+          children: [
+            {
+              data: { text: '阶段', uid: 'group' },
+              children: [
+                { data: { text: '目标卡片', uid: 'target' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result } = renderHook(() =>
+      useRevealSession({ title: '宫殿', editorState: nested }),
+    )
+
+    act(() => {
+      result.current.handleTargetNodeClick([selection('target', '目标卡片')])
+    })
+    flushRevealFrame()
+
+    expect(result.current.revealMap.group).toBe('revealed')
+    expect(result.current.revealMap.target).toBe('revealed')
+  })
+
   it('batches reveal and hide actions without revealing hidden cards during recovery-style input', () => {
     const { result } = renderHook(() =>
       useRevealSession({ title: '宫殿', editorState }),

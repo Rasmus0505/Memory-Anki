@@ -24,6 +24,9 @@ function passedGapDays(effect: UnitRatingEffectDto) {
 }
 
 export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
+  if (effect.passed && effect.schedule_changed === false) {
+    return `记下，不改期 · ${localDateLabel(effect.target_due_date)}`
+  }
   if (effect.passed) {
     return `${passedGapDays(effect)}天后复习 · ${localDateLabel(effect.target_due_date)}`
   }
@@ -49,6 +52,7 @@ export function compactRatingEffectLabel(
   effect: UnitRatingEffectDto,
   retryAfterCards: number,
 ) {
+  if (effect.passed && effect.schedule_changed === false) return '不改期'
   if (effect.passed) return `${passedGapDays(effect)}天后`
   const count = clampRetryGap(retryAfterCards)
   return count === 0 ? '立即重练' : `${count}张后`

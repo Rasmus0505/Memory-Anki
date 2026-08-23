@@ -4,6 +4,7 @@ import { createRoundPlan, updateRoundPlanCard } from '@/modules/practice/domain/
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
+  progressHudText,
   progressRailLabel,
   segmentTone,
 } from './freestyleProgressSegments'
@@ -51,16 +52,26 @@ describe('buildFreestyleProgressSummary', () => {
 
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
     expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.palaceId)).toEqual([1, 1, 1])
+    expect(summary.segments.every((segment) => segment.palaceDone === false)).toBe(true)
     expect(summary.doneCount).toBe(1)
     expect(summary.retryCount).toBe(1)
+    expect(summary.scheduledBase).toBe(3)
+    expect(summary.positionBase).toBe(3)
+    expect(summary.retryInserted).toBe(0)
+    expect(summary.passedCount).toBe(1)
   })
 
   it('draws both retry segments a weak rating produces', () => {
     // Production marks the source card retry AND inserts a retry occurrence that is
     // also retry, so one weak rating widens the amber band by two.
-    const cards = [card('one'), card('one-retry'), card('two')]
+    const cards = [
+      card('one'),
+      { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
+      card('two'),
+    ]
     const marked = updateRoundPlanCard(plan(cards), 'one', { status: 'retry' })
-    const withOccurrence = updateRoundPlanCard(marked, 'one-retry', {
+    const withOccurrence = updateRoundPlanCard(marked, 'retry:round-1:one:1', {
       status: 'retry',
       occurrenceKind: 'retry',
       sourceCardId: 'one',
@@ -69,6 +80,19 @@ describe('buildFreestyleProgressSummary', () => {
 
     expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'current'])
     expect(summary.retryCount).toBe(2)
+    expect(summary.scheduledBase).toBe(2)
+    expect(summary.retryInserted).toBe(1)
+    expect(progressHudText(summary)).toBe('2/2 · 重练 +1')
+  })
+
+  it('marks a palace group done only when every rendered segment of it is done', () => {
+    const cards = [
+      card('one'),
+      { ...card('two'), palace_id: 2, palace_title: '宫殿 B' },
+      { ...card('three'), palace_id: 2, palace_title: '宫殿 B' },
+    ]
+    const summary = buildFreestyleProgressSummary(cards, plan(cards), ['one', 'two', 'three'], [], 'three')
+    expect(summary.segments.map((segment) => segment.palaceDone)).toEqual([true, true, true])
   })
 
   it('drops excluded cards and counts position among rendered segments only', () => {
@@ -105,7 +129,8 @@ describe('progressRailLabel', () => {
     const withRetry = updateRoundPlanCard(plan(cards), 'two', { status: 'retry' })
     const summary = buildFreestyleProgressSummary(cards, withRetry, ['one'], [], 'three')
 
-    expect(progressRailLabel(summary)).toBe('本轮进度 3/3，已通过 1，待重练 1。点击查看本轮安排')
+    expect(progressRailLabel(summary)).toBe('本轮进度 3/3，已通过 1。点击查看本轮安排')
+    expect(progressHudText(summary)).toBe('3/3 · 过 1')
   })
 
   it('omits zero counts', () => {

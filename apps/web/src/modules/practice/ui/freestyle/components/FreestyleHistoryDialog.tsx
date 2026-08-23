@@ -76,7 +76,7 @@ function SummaryStrip({ summary }: { summary: FreestyleHistorySummary }) {
   const legacy = summary.legacy_quiz
   const ai = summary.legacy_ai_logs
   return (
-    <div className="grid gap-2 border-b border-border/70 px-5 py-3 text-xs sm:grid-cols-3">
+    <div className="grid shrink-0 gap-2 border-b border-border/70 px-5 py-3 text-xs sm:grid-cols-3">
       <div className="rounded-md border border-border/70 bg-muted/40 px-3 py-2">
         <div className="text-muted-foreground">新记录</div>
         <div className="mt-1 font-medium">
@@ -207,7 +207,12 @@ export function FreestyleHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[86vh] max-w-4xl bg-background p-0" floatingId="freestyle-history">
+      {/* max-w-none: `max-w-4xl` beat the floating window width, so dragging the edge
+          wider did nothing. Width itself stays capped for the centered/phone fallback. */}
+      <DialogContent
+        className="max-h-[min(88vh,100dvh-1rem)] w-[min(56rem,calc(100vw-1rem))] max-w-none bg-background p-0"
+        floatingId="freestyle-history"
+      >
         <DialogHeader>
           <div className="min-w-0">
             <DialogTitle className="flex items-center gap-2">
@@ -226,7 +231,7 @@ export function FreestyleHistoryDialog({
           onValueChange={(value) => setTab(value as HistoryTab)}
           className="flex min-h-0 flex-1 flex-col px-5 py-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
               <TabsList>
                 <TabsTrigger value="attempts">做题记录</TabsTrigger>
                 <TabsTrigger value="explanations">AI 讲解</TabsTrigger>
@@ -256,10 +261,18 @@ export function FreestyleHistoryDialog({
             </div>
           </div>
 
-          <TabsContent value="attempts" className={cn('max-h-[48vh] overflow-y-auto pr-1', loading && 'opacity-70')}>
+          {/* min-h-0 flex-1: a fixed 48vh list left dead space in a resized floating
+              window and clipped short of the panel's own bottom edge. */}
+          <TabsContent
+            value="attempts"
+            className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1', loading && 'opacity-70')}
+          >
             <AttemptList items={attempts} />
           </TabsContent>
-          <TabsContent value="explanations" className={cn('max-h-[48vh] overflow-y-auto pr-1', loading && 'opacity-70')}>
+          <TabsContent
+            value="explanations"
+            className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1', loading && 'opacity-70')}
+          >
             <ExplanationList items={explanations} />
           </TabsContent>
         </Tabs>

@@ -17,6 +17,8 @@ export interface UnitRatingEffectDto {
   target_due_date: string
   retry_after_cards: number
   stage_action: 'reset' | 'lower' | 'keep' | 'advance'
+  /** False when a fill / not-due pass was recorded without moving the ladder. */
+  schedule_changed?: boolean
 }
 
 export interface UnitReviewEncounterDto {
@@ -77,6 +79,7 @@ export interface UnitRatingResultDto {
   rating: UnitRating
   rating_label: string
   session_status: ReviewUnitDto['session_status']
+  schedule_changed?: boolean
   encounter: UnitReviewEncounterDto
 }
 
@@ -380,6 +383,58 @@ export async function openUnitReviewEncounterApi(
 
 export async function getUnitReviewSessionApi(id: string) {
   const response = await request<{ item: UnitReviewSessionDto }>(`/review/session/${id}`)
+  return response.item
+}
+
+export interface PalaceDueRatingCurrentPayload {
+  study_session_id: string
+  unit_id: string
+  unit_revision: number
+  encounter_id: string
+}
+
+export interface PalaceDueRatingResultDto {
+  batch_id: string
+  palace_id: number
+  rating: UnitRating
+  items: UnitRatingResultDto[]
+  rated_unit_ids: string[]
+  remaining_due_count: number
+  current: UnitRatingResultDto | null
+}
+
+export async function ratePalaceDueUnitsApi(
+  palaceId: number,
+  payload: {
+    operationId: string
+    rating: UnitRating
+    roundId: string
+    current: PalaceDueRatingCurrentPayload
+    excludeUnitIds: string[]
+    includeUnitIds?: string[]
+  },
+) {
+  const response = await request<{ item: PalaceDueRatingResultDto }>(
+    `/review/palaces/${palaceId}/due-units/ratings`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        operation_id: payload.operationId,
+        rating: payload.rating,
+        round_id: payload.roundId,
+        current: payload.current,
+        exclude_unit_ids: payload.excludeUnitIds,
+        include_unit_ids: payload.includeUnitIds ?? [],
+      }),
+      persistence: {
+        resourceKey: `review-palace-due-rate:${payload.operationId}`,
+        description: 'Rate palace due units',
+        replayMode: 'auto',
+      },
+    },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
   return response.item
 }
 

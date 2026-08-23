@@ -26,3 +26,15 @@ export function getFreestyleChoiceIndex(key: string): number | null {
   const letterIndex = 'abcd'.indexOf(normalized)
   return letterIndex >= 0 ? letterIndex : null
 }
+
+/**
+ * True while a modal owns the screen (linked-question window, config, history…).
+ * Auto-advance must not turn the feed underneath one: the learner would close the
+ * dialog onto a different card than the one they were working on.
+ */
+export function isFreestyleOverlayOpen() {
+  if (typeof document === 'undefined') return false
+  return Boolean(
+    document.querySelector('[data-keyboard-shortcuts-suspended="true"], [role="dialog"]'),
+  )
+}

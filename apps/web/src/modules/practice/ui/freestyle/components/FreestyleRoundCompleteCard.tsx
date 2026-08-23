@@ -47,7 +47,9 @@ export function FreestyleRoundCompleteCard({
             <div className="text-2xl font-bold text-amber-200 sm:text-3xl">
               {completion.retryCount}
             </div>
-            <div className="mt-1 text-[11px] text-zinc-400 sm:text-xs">待重练</div>
+            <div className="mt-1 text-[11px] text-zinc-400 sm:text-xs">
+              {completion.retryCount > 0 ? '本轮重练过' : '重练'}
+            </div>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-center">
             <div className="text-2xl font-bold tabular-nums sm:text-3xl">

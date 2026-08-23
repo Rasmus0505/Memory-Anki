@@ -516,3 +516,47 @@ select:focus-visible,
     stroke-dashoffset: 0;
   }
 }
+
+/* === FREESTYLE FLOW CONFIRMATION ===
+   One breath at the edge of the card the learner is already looking at. Peripheral by
+   construction: an inset ring, no scale, no motion across the surface, nothing at
+   screen center. Answers "recorded" without asking to be read. */
+
+/* Its own keyed element rather than a ::after on the card: two rates inside one
+   breath window must restart the animation, and re-adding an identical class to a
+   surviving element does not. */
+.memory-anki-freestyle-breath {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: inherit;
+  animation: memory-anki-freestyle-breath 520ms ease-out forwards;
+}
+
+.memory-anki-freestyle-breath-affirm {
+  box-shadow: inset 0 0 0 2px rgba(16, 185, 129, 0.3), inset 0 0 42px rgba(16, 185, 129, 0.13);
+}
+
+/* 忘记/困难 is information, not a loss: a neutral slate note, never a red alarm. */
+.memory-anki-freestyle-breath-note {
+  box-shadow: inset 0 0 0 2px rgba(148, 163, 184, 0.28), inset 0 0 38px rgba(148, 163, 184, 0.12);
+}
+
+@keyframes memory-anki-freestyle-breath {
+  0% {
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-anki-freestyle-breath {
+    animation-duration: 1ms;
+  }
+}

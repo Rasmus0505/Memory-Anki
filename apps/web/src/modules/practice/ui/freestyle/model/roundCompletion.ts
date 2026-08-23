@@ -1,57 +1,99 @@
-import type { FreestyleUnitEncounterState } from '@/modules/practice/public'
+import {
+  isRetryOccurrence,
+  sourceCardId,
+  type FreestyleUnitEncounterState,
+} from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 export interface FreestyleRoundCompletion {
   ratedCount: number
   passedCount: number
+  /** Sources that were weakly rated at some point this round (already restudied). */
+  retriedCount: number
+  /** Kept for older callers; same as retriedCount once the round is complete. */
   retryCount: number
   /** Candidates the round limit left out, so 「再来一轮」 has an honest expectation. */
   remainingCandidates: number
+}
+
+function sourceIdOf(card: FreestyleCard) {
+  return sourceCardId(card) || card.id
+}
+
+function isHandled(
+  card: FreestyleCard,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
+) {
+  if (encountersByCardId[card.id]?.selectedRating != null) return true
+  const completed = new Set(Array.from(completedIds, String))
+  return completed.has(card.id) || completed.has(sourceIdOf(card))
 }
 
 /**
  * A round needs an ending. The feed used to simply run out after the last rate,
  * which is the least satisfying way to close a session.
  *
- * Counts come from encounters rather than the plan: an encounter records what the
- * learner actually did, and survives the silent queue rebuilds that restudy
- * re-insertion triggers.
+ * Counts are source-deduped: a failed source plus its later passed retry is one
+ * unit that was restudied, not "passed 1 + still retrying 1". Remaining
+ * candidates use the backend scheduled count, never the live feed length
+ * (retry insertions must not shrink the leftover).
  */
 export function buildFreestyleRoundCompletion(
   cards: FreestyleCard[],
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   candidateCount: number,
+  options?: {
+    completedIds?: Iterable<string>
+    scheduledCount?: number
+  },
 ): FreestyleRoundCompletion {
-  let passedCount = 0
-  let retryCount = 0
-  let ratedCount = 0
-  const seen = new Set<string>()
+  const completedIds = options?.completedIds ?? []
+  const scheduledCount = options?.scheduledCount ?? cards.filter((card) => !isRetryOccurrence(card)).length
+  const sources = new Map<string, { passed: boolean; retried: boolean; handled: boolean }>()
+
   for (const card of cards) {
+    const sourceId = sourceIdOf(card)
+    const current = sources.get(sourceId) ?? { passed: false, retried: false, handled: false }
     const encounter = encountersByCardId[card.id]
-    if (!encounter || encounter.selectedRating == null) continue
-    // Retry occurrences share a source; count the learner's decisions once each.
-    if (seen.has(card.id)) continue
-    seen.add(card.id)
-    ratedCount += 1
-    if (encounter.passed) passedCount += 1
-    else retryCount += 1
+    const handled = isHandled(card, encountersByCardId, completedIds)
+    if (handled) current.handled = true
+    if (encounter?.passed === true || (handled && encounter?.passed !== false && !isRetryOccurrence(card))) {
+      current.passed = true
+    }
+    if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
+    sources.set(sourceId, current)
   }
+
+  let ratedCount = 0
+  let passedCount = 0
+  let retriedCount = 0
+  sources.forEach((entry) => {
+    if (!entry.handled) return
+    ratedCount += 1
+    if (entry.passed) passedCount += 1
+    if (entry.retried) retriedCount += 1
+  })
+
   return {
     ratedCount,
     passedCount,
-    retryCount,
-    remainingCandidates: Math.max(0, candidateCount - cards.length),
+    retriedCount,
+    retryCount: retriedCount,
+    remainingCandidates: Math.max(0, candidateCount - scheduledCount),
   }
 }
 
 /**
- * True only when every card in the feed carries a rating, so the summary slot
- * cannot appear while work is still pending.
+ * True when every card in the feed has been handled: a unit rating, or a quiz
+ * acknowledge written to completedIds. Retry occurrences still need their own
+ * rating before the summary slot can appear.
  */
 export function isFreestyleRoundComplete(
   cards: FreestyleCard[],
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
 ): boolean {
   if (cards.length === 0) return false
-  return cards.every((card) => encountersByCardId[card.id]?.selectedRating != null)
+  return cards.every((card) => isHandled(card, encountersByCardId, completedIds))
 }

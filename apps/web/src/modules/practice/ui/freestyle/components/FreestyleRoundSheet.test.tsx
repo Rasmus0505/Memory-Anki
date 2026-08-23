@@ -62,7 +62,7 @@ describe('FreestyleRoundSheet', () => {
     renderSheet()
 
     expect(await screen.findByText('宫殿 A')).toBeTruthy()
-    expect(screen.getByText('已安排 2 张 · 候选 8 · 上限 50')).toBeTruthy()
+    expect(screen.getByText('本轮 2 张 · 今天库里还到期 6 张没进本轮 · 上限 50')).toBeTruthy()
   })
 
   it('supports batch exclusion', () => {

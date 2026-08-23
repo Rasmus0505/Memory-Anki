@@ -1,8 +1,14 @@
 import { useEffect } from 'react'
+import { LoaderCircle } from 'lucide-react'
 import type {
+  FreestyleRatingScope,
   UnitRating,
   UnitRatingEffectDto,
 } from '@/modules/practice/public'
+import {
+  palaceRatingEffectLine,
+  palaceRatingPreviewLabel,
+} from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import {
   compactRatingEffectLabel,
   ratingEffectLabel,
@@ -48,12 +54,16 @@ export function FreestyleRatingBar({
   selectedRating,
   retryAfterCards,
   busy,
+  pendingRating = null,
   locked,
   reviewReady,
   hasEncounter,
   actionError,
   blockedHint,
   shortcutsActive,
+  ratingScope = 'unit',
+  palaceDueCount = 1,
+  onRatingScopeChange,
   onRate,
   onDismissError,
 }: {
@@ -61,6 +71,8 @@ export function FreestyleRatingBar({
   selectedRating: UnitRating | null
   retryAfterCards: number
   busy: boolean
+  /** The rating being submitted right now — shown as selected before the server answers. */
+  pendingRating?: UnitRating | null
   locked: boolean
   reviewReady: boolean
   hasEncounter: boolean
@@ -69,10 +81,17 @@ export function FreestyleRatingBar({
   blockedHint?: string | null
   /** Only the card under the viewport owns the 1-4 shortcuts. */
   shortcutsActive: boolean
+  ratingScope?: FreestyleRatingScope
+  palaceDueCount?: number
+  onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   onRate: (rating: UnitRating) => void
   onDismissError?: () => void
 }) {
-  const selectedEffect = ratingEffects.find((effect) => effect.rating === selectedRating)
+  // Optimistic: the tapped button reads as chosen while the POST is in flight, so a
+  // slow network no longer looks like a dropped tap.
+  const shownRating = pendingRating ?? selectedRating
+  const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
+  const palaceMode = ratingScope === 'palace'
 
   useEffect(() => {
     if (!shortcutsActive || locked || busy) return
@@ -120,27 +139,91 @@ export function FreestyleRatingBar({
           </div>
         ) : null}
         {selectedEffect ? (
-          <div className="mb-1.5 truncate rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 sm:text-xs">
-            已选{selectedEffect.label} · {ratingEffectLabel(selectedEffect, retryAfterCards)}
-            {locked ? <span className="ml-2 text-zinc-500">已锁定</span> : null}
+          <div
+            data-testid="freestyle-rating-effect-line"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 sm:text-xs"
+          >
+            {pendingRating != null ? (
+              <LoaderCircle className="size-3 shrink-0 animate-spin text-zinc-300" aria-hidden />
+            ) : null}
+            <span className="min-w-0 truncate">
+              {pendingRating != null
+                ? `正在记录${selectedEffect.label}`
+                : palaceMode
+                  ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
+                  : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
+            </span>
+            {locked && pendingRating == null ? (
+              <span className="shrink-0 text-zinc-500">已锁定</span>
+            ) : null}
           </div>
         ) : null}
         {blockedHint ? (
           <div
             data-testid="freestyle-sequential-hint"
-            className="mb-1.5 truncate rounded-lg border border-amber-300/25 bg-amber-300/8 px-2.5 py-1 text-[11px] text-amber-100"
+            /* The gate explanation is two clauses ("还有 N 个单元未评分" + what 忘记/困难 do);
+               truncating it at phone width cut the half that says why. */
+            className="mb-1.5 line-clamp-2 rounded-lg border border-amber-300/25 bg-amber-300/8 px-2.5 py-1 text-[11px] leading-snug text-amber-100"
           >
             {blockedHint}
+          </div>
+        ) : null}
+        {onRatingScopeChange ? (
+          <div
+            data-testid="freestyle-rating-scope"
+            className="mb-1.5 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.06] p-0.5"
+            role="tablist"
+            aria-label="评分范围"
+          >
+            {([
+              { value: 'unit' as const, label: '小节' },
+              { value: 'palace' as const, label: `宫殿 · 今日 ${Math.max(1, palaceDueCount)}` },
+            ]).map((item) => {
+              const selected = ratingScope === item.value
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  data-testid={`freestyle-rating-scope-${item.value}`}
+                  disabled={busy}
+                  className={cn(
+                    'rounded-[0.7rem] px-2 py-1 text-[11px] font-semibold transition-colors sm:text-xs',
+                    selected
+                      ? 'bg-white/16 text-zinc-50 shadow-sm'
+                      : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200',
+                  )}
+                  onClick={() => onRatingScopeChange(item.value)}
+                >
+                  {item.label}
+                </button>
+              )
+            })}
           </div>
         ) : null}
         <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
           {FREESTYLE_RATINGS.map((item) => {
             const effect = ratingEffects.find((value) => value.rating === item.value)
+            const palaceKind = effect
+              ? effect.passed
+                ? palaceDueCount <= 1 && effect.schedule_changed === false
+                  ? 'locked'
+                  : 'pass'
+                : 'fail'
+              : null
             const hint = effect
-              ? ratingEffectLabel(effect, retryAfterCards)
+              ? palaceMode && palaceKind
+                ? palaceRatingEffectLine(effect.label, palaceDueCount)
+                : ratingEffectLabel(effect, retryAfterCards)
               : reviewReady ? '计划不可用' : '加载中'
-            const preview = effect ? compactRatingEffectLabel(effect, retryAfterCards) : null
-            const selected = selectedRating === item.value
+            const preview = effect
+              ? palaceMode && palaceKind
+                ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)
+                : compactRatingEffectLabel(effect, retryAfterCards)
+              : null
+            const selected = shownRating === item.value
+            const pending = pendingRating === item.value
             return (
               <button
                 data-testid={`freestyle-rating-button-${item.value}`}
@@ -148,15 +231,29 @@ export function FreestyleRatingBar({
                 type="button"
                 disabled={busy || locked || selected || !hasEncounter}
                 aria-pressed={selected}
+                aria-busy={pending || undefined}
+                data-pending={pending ? 'true' : undefined}
                 aria-label={`${item.label}：${hint}`}
                 title={actionError || hint}
                 className={cn(
-                  'flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-2',
+                  // transition-[colors,transform] + scale-95: the old transition-colors
+                  // never animated the active scale, so a tap had no felt response.
+                  'relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center transition-[color,background-color,border-color,transform,box-shadow] duration-150 active:scale-95 disabled:pointer-events-none sm:min-h-12 sm:rounded-2xl sm:px-2',
                   item.className,
                   selected && item.selectedClassName,
+                  // Keep the chosen button legible: the shared 55% dim made the
+                  // learner's own selection the faintest thing on the bar.
+                  selected ? 'disabled:opacity-100' : 'disabled:opacity-55',
                 )}
                 onClick={() => onRate(item.value)}
               >
+                {pending ? (
+                  <LoaderCircle
+                    data-testid={`freestyle-rating-pending-${item.value}`}
+                    className="absolute right-1 top-1 size-3 animate-spin opacity-80"
+                    aria-hidden
+                  />
+                ) : null}
                 <span className="text-xs font-semibold leading-none sm:text-sm">{item.label}</span>
                 {/* Touch has no hover: the schedule consequence must be readable pre-tap. */}
                 {preview ? (

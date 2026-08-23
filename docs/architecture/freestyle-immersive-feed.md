@@ -25,13 +25,26 @@ completed, excluded, retry, and stale entries visible in the plan; a card that r
 stale rebuild is reset to pending. Exclude/restore and drag operations affect only this round,
 never the underlying review schedule. “Finish palace then next” is a gate over all planned
 review-unit cards in the current palace: a failed/hard card remains retry work and cannot permit
-the next palace to become active. Retry placement targets at most three usable intervening cards,
-with an explicit shorter-gap explanation when fewer cards remain.
+the next palace to become active. The gate is **forward-only** — looking back at a previous
+palace is never blocked. Retry placement inserts a copy after the learner leaves the source
+card, at most three usable intervening cards later; the source card stays in place so swipe-back
+is geometric. Finger/wheel paging commits `active` only after scroll settle so a mid-gesture
+index change cannot close one encounter and open another. The review map stays
+pannable (`mobileViewPolicy` defaults to `auto`); 上一张 / 下一张 on the pager
+change cards. Palace skip stays desktop-only.
 
-The top HUD opens a large two-pane “本轮安排” dialog. The left pane groups stable plan entries by
-palace and supports jump, drag, batch exclude/restore, and reset-round. The right pane edits the
-complete `FreestyleFeedConfig`; saving preserves finished/excluded records and only reorders
-unstarted work. Configuration and round state remain client-local per device/day.
+When every review-unit card of a palace in this round is handled (retries included; skip /
+exclude do not count), the current card shows a chapter banner. Copy is `《宫殿》今日安排已清`
+when that palace has no leftover due units outside the round, otherwise
+`《宫殿》本轮已清，今日还剩 N`. Queue `round_meta.palace_leftover_due` is the leftover due
+count per palace. The banner is not a snap page. Audio uses `all_clear_ready` on the review
+scene, locally — never `dispatchGlobalFeedback`.
+
+The top HUD opens a bottom “本轮安排” sheet. It groups stable plan entries by palace and supports
+jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. Configuration is a
+separate dialog. Saving a config preserves finished/excluded records and only reorders unstarted
+work. An unfinished round survives local midnight; the page says it is yesterday's work until the
+learner starts a new round. Configuration and round state remain client-local per device.
 
 ## Training Directions and Three Streams
 
@@ -69,10 +82,18 @@ only unstarted entries are rebuilt against the new streams.
 - Card identity carries stable `unit_id` and `unit_revision`; a permanent-mark change or a reconciled content demotion invalidates the old card.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
-- `困难` and `忘记` reinsert the unit after at most three cards. `记得` and `轻松` finish it for the current encounter.
+- The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units`: every still-due unit of the current palace today, plus every still-unrated review-unit card of that palace already in this round (fill cards are `schedule_locked`). Units already rated in this round are not overwritten. Each unit keeps its own ladder; leftover due units that were not in the round are rated without inserting feed copies. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
+- `忘记` (and first-learning `困难`) insert a retry copy after the learner leaves, at most three
+  cards later, with no per-round cap. The just-rated source card does not move.
+  `记得` / `轻松`, and `困难` on an already-passed unit, finish the current encounter.
 - `due_first_then_expand` and `all_content_due_weighted` mark fill cards explicitly; their freestyle
   session start carries `allow_not_due` so the shared review service does not reject a configured
-  non-due card. Formal review calls keep the default due-only guard.
+  non-due card. Formal review calls keep the default due-only guard. A fill / not-yet-due pass is
+  `schedule_locked`: the review is recorded, the due date does not move. The card shows a 「补充」 badge
+  and the rating buttons say 「不改期」.
+- The HUD progress line is `位置/原安排 · 重练 +N`. Retry insertions lengthen the amber rail but do
+  not change the planned denominator. Mixed and quiz-only rounds become complete when every card is
+  rated or acknowledged; the closing card counts sources once.
 - Queue rebuilds exclude palaces without permanent marks.
 - Stale encounter or `unit_revision` mismatch is rebuildable: drop/rebuild the card or open a fresh encounter from the current Reviews projection. Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
 
@@ -91,6 +112,41 @@ completion must not change a palace review unit. Anki front/back data remains in
 source content, but is no longer emitted by the freestyle streams or mixed queue.
 
 Practice receives topology only through `memory.public.get_palace_unit_projection`. It must not import the mind-map split function, apply node-count limits, or derive due state from member nodes.
+
+## Flow Feedback and the Challenge–Skill Channel
+
+Freestyle feedback follows the feedback论 in 《心流》 rather than reward mechanics. The
+rules are enforced in `model/freestyleFlowFeedback.ts` and `model/freestyleChallengeChannel.ts`,
+both framework-free and unit-tested.
+
+- Every learner action gets an immediate answer. Reveal (flip) and unit rating were both
+  silent; reveal now sounds on the `review` scene — the same one formal review has always
+  used per reveal — and a rate adds one breath at the edge of its own card.
+- Reveal is counted off the whole `revealMap` in `FreestyleUnitReviewFlipPanel`, not off
+  the unit-scoped header progress. The default flip mode is `free`, where every palace node
+  is flippable, so a unit-scoped count would leave most flips silent.
+- Feedback stays peripheral. Nothing is drawn at screen center: `dispatchGlobalFeedback`
+  is deliberately not used for rating, because its burst lands mid-map and is gated only by
+  the global sound/animation switches, so it would still fire under the `focus` preset.
+  Freestyle feedback respects `scenes.review` and the `learningSounds` channel.
+- A weak rating is information, never a loss. `忘记`/`困难` never use
+  `quiz_result_incorrect`; they use a neutral acknowledgement and a slate breath. There is
+  no streak that can break, and freestyle adds no combo counter, milestone, or confetti of
+  its own — quiz cards keep their existing shared-path feedback and are not double-signalled.
+- Reveal audio is rate-limited (90ms) so fast flipping stays information rather than texture.
+  A rate is never rate-limited.
+
+The challenge–skill channel reads the last `CHANNEL_WINDOW` distinct rated cards and
+reports `anxious` / `flow` / `bored` / `unknown`. A hint appears only at the two exits,
+never to confirm flow, and only when a correction exists; it is dismissible with a
+cooldown so a declined suggestion cannot return as an interruption.
+
+**In-feed corrections must never change palace scope.** A `specific_palace_ids` /
+`subject_scope` change makes `setConfigAndPersist` call `startNewRound`, clearing
+completedIds, encounters and the round plan — it would destroy the round the correction is
+meant to rescue. Corrections move `due_policy`, quiz mastery buckets and weak-priority
+only, and rebuild with `silent` + `preferCardId` so finished work and the learner's
+position survive. `freestylePalaceScopeUnchanged` guards this and is asserted directly.
 
 ## Quiz pool config (feed settings)
 

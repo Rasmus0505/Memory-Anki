@@ -149,16 +149,20 @@ export function FreestyleRoundSheet({
       <SheetContent
         side="bottom"
         data-testid="freestyle-round-sheet"
-        className="flex max-h-[min(85vh,100dvh-2rem)] flex-col gap-0 rounded-t-2xl p-0"
+        className="flex max-h-[min(70dvh,100dvh-2rem)] flex-col gap-0 rounded-t-2xl p-0"
       >
         <SheetHeader className="shrink-0 space-y-1 border-b border-border/60 px-4 py-3 text-left sm:px-5">
           <SheetTitle className="text-base">本轮安排</SheetTitle>
           <SheetDescription className="text-xs">
-            已安排 {roundPlan?.scheduledCount ?? rows.length} 张 · 候选 {roundPlan?.candidateCount ?? rows.length} · 上限 {roundPlan?.queueLimit ?? queueLimit}
+            本轮 {roundPlan?.scheduledCount ?? rows.length} 张
+            {roundPlan && roundPlan.candidateCount > (roundPlan.scheduledCount || 0)
+              ? ` · 今天库里还到期 ${Math.max(0, roundPlan.candidateCount - roundPlan.scheduledCount)} 张没进本轮`
+              : ''}
+            {' · '}上限 {roundPlan?.queueLimit ?? queueLimit}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 sm:px-5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:px-5">
           <Button
             type="button"
             size="sm"
@@ -299,16 +303,46 @@ export function FreestyleRoundSheet({
                                 status === 'excluded' && 'opacity-65',
                               )}
                             >
-                              <button
-                                type="button"
-                                draggable={false}
-                                disabled={!canDrag}
-                                className="inline-flex size-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing disabled:cursor-not-allowed"
-                                aria-label={`拖动${rowLabel(entry)}`}
-                                title="拖动调整顺序"
-                              >
-                                <GripVertical className="size-4" />
-                              </button>
+                              <div className="flex shrink-0 items-center">
+                                <button
+                                  type="button"
+                                  draggable={false}
+                                  disabled={!canDrag}
+                                  className="hidden size-8 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing disabled:cursor-not-allowed sm:inline-flex"
+                                  aria-label={`拖动${rowLabel(entry)}`}
+                                  title="拖动调整顺序"
+                                >
+                                  <GripVertical className="size-4" />
+                                </button>
+                                <div className="flex flex-col sm:hidden">
+                                  <button
+                                    type="button"
+                                    disabled={!canDrag}
+                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
+                                    aria-label={`上移${rowLabel(entry)}`}
+                                    onClick={() => {
+                                      const index = roundPlan?.orderIds.indexOf(entry.cardId) ?? -1
+                                      const previousId = index > 0 ? roundPlan?.orderIds[index - 1] : null
+                                      if (previousId) moveRow(entry.cardId, previousId)
+                                    }}
+                                  >
+                                    <ChevronDown className="size-3.5 rotate-180" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!canDrag}
+                                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
+                                    aria-label={`下移${rowLabel(entry)}`}
+                                    onClick={() => {
+                                      const index = roundPlan?.orderIds.indexOf(entry.cardId) ?? -1
+                                      const nextId = index >= 0 ? roundPlan?.orderIds[index + 1] : null
+                                      if (nextId) moveRow(entry.cardId, nextId)
+                                    }}
+                                  >
+                                    <ChevronDown className="size-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                               <input
                                 type="checkbox"
                                 checked={isSelected}

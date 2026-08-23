@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
+  progressHudText,
   progressRailLabel,
   type FreestyleProgressSummary,
   type FreestyleSegmentTone,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import type { SessionStatus } from '@/shared/hooks/timedSessionModel'
 import { cn } from '@/shared/lib/utils'
-
-type TimerStatus = 'idle' | 'running' | 'paused' | 'stopped'
 
 /** Collapse the expanded clock after a glance so seconds stop pulling focus. */
 const TIMER_PEEK_MS = 4_000
@@ -25,7 +25,7 @@ const TIMER_DOT_CLASS: Record<'running' | 'paused' | 'idle', string> = {
   idle: 'bg-zinc-500',
 }
 
-function timerTone(status: TimerStatus): 'running' | 'paused' | 'idle' {
+function timerTone(status: SessionStatus): 'running' | 'paused' | 'idle' {
   if (status === 'running') return 'running'
   if (status === 'paused') return 'paused'
   return 'idle'
@@ -40,7 +40,7 @@ export function FreestyleProgressRail({
   overflow,
 }: {
   summary: FreestyleProgressSummary
-  timerStatus: TimerStatus
+  timerStatus: SessionStatus
   effectiveSeconds: number
   onOpenPlan: () => void
   onTimerToggle: () => void
@@ -50,6 +50,7 @@ export function FreestyleProgressRail({
   const [timerExpanded, setTimerExpanded] = useState(false)
   const peekTimerRef = useRef<number | null>(null)
   const tone = timerTone(timerStatus)
+  const timerCompleted = timerStatus === 'completed'
 
   useEffect(() => {
     return () => {
@@ -66,13 +67,8 @@ export function FreestyleProgressRail({
   }
 
   const handleTimerClick = () => {
-    // First tap reveals the clock; a tap while expanded starts/pauses it.
-    if (!timerExpanded) {
-      setTimerExpanded(true)
-      schedulePeekCollapse()
-      return
-    }
-    onTimerToggle()
+    if (!timerCompleted) onTimerToggle()
+    setTimerExpanded(true)
     schedulePeekCollapse()
   }
 
@@ -89,22 +85,39 @@ export function FreestyleProgressRail({
         {summary.segments.length === 0 ? (
           <span className="h-0.5 w-full bg-white/10" aria-hidden />
         ) : (
-          summary.segments.map((segment) => (
+          summary.segments.map((segment, index) => (
             <span
               key={segment.cardId}
               data-testid="freestyle-progress-segment"
               data-tone={segment.tone}
+              data-palace-done={segment.palaceDone ? 'true' : 'false'}
               aria-hidden
               className={cn(
                 'h-0.5 min-w-px flex-1 transition-colors',
-                SEGMENT_TONE_CLASS[segment.tone],
+                index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
+                  ? 'ml-0.5'
+                  : null,
+                segment.palaceDone ? 'bg-emerald-400' : SEGMENT_TONE_CLASS[segment.tone],
               )}
             />
           ))
         )}
       </button>
 
-      <div className="flex items-start justify-end gap-1 px-2 pt-1 sm:px-3">
+      <div className="flex items-start justify-between gap-1 px-2 pt-1 sm:px-3">
+        {progressHudText(summary) ? (
+          <button
+            type="button"
+            data-testid="freestyle-progress-hud"
+            className="pointer-events-auto mt-0.5 max-w-[60%] truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-zinc-200/88 hover:text-white"
+            aria-hidden
+            onClick={onOpenPlan}
+          >
+            {progressHudText(summary)}
+          </button>
+        ) : (
+          <span />
+        )}
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/82 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <button
             type="button"
@@ -123,7 +136,9 @@ export function FreestyleProgressRail({
                   ? '暂停计时'
                   : timerStatus === 'paused'
                     ? '继续计时'
-                    : '开始计时'
+                    : timerCompleted
+                      ? '本次计时已完成'
+                      : '开始计时'
                 : '查看计时'
             }
             aria-label={
@@ -132,7 +147,9 @@ export function FreestyleProgressRail({
                   ? '暂停计时'
                   : timerStatus === 'paused'
                     ? '继续计时'
-                    : '开始计时'
+                    : timerCompleted
+                      ? '本次计时已完成'
+                      : '开始计时'
                 : '查看计时'
             }
             onClick={handleTimerClick}
@@ -140,7 +157,7 @@ export function FreestyleProgressRail({
             <span className={cn('size-2 shrink-0 rounded-full', TIMER_DOT_CLASS[tone])} aria-hidden />
             {timerExpanded ? (
               <span data-testid="freestyle-timer-readout">
-                {timerStatus === 'idle' || timerStatus === 'stopped'
+                {timerStatus === 'idle'
                   ? '开始'
                   : formatTimer(effectiveSeconds)}
               </span>

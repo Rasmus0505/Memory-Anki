@@ -104,7 +104,7 @@ export function FreestyleRoundConfigDialog({
         <DialogContent
           floatingId="freestyle-round-config"
           data-testid="freestyle-round-config-dialog"
-          className="flex max-h-[min(92vh,100dvh-1rem)] w-[min(34rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
+          className="flex max-h-[min(70dvh,100dvh-2rem)] w-[min(34rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
         >
           <DialogHeader>
             <div className="min-w-0">

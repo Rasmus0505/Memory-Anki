@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getFreestyleChoiceIndex,
   getFreestyleQuestionDirection,
+  isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
 } from './freestyleKeyboard'
 
@@ -31,5 +32,35 @@ describe('freestyle keyboard shortcuts', () => {
     } finally {
       scope.remove()
     }
+  })
+
+  describe('isFreestyleOverlayOpen', () => {
+    it('is false on a bare feed', () => {
+      expect(isFreestyleOverlayOpen()).toBe(false)
+    })
+
+    it('reports the linked-question window that suspends shortcuts', () => {
+      const scope = document.createElement('div')
+      scope.dataset.keyboardShortcutsSuspended = 'true'
+      document.body.appendChild(scope)
+
+      try {
+        expect(isFreestyleOverlayOpen()).toBe(true)
+      } finally {
+        scope.remove()
+      }
+    })
+
+    it('reports any open dialog so auto-advance cannot turn the feed behind it', () => {
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      document.body.appendChild(dialog)
+
+      try {
+        expect(isFreestyleOverlayOpen()).toBe(true)
+      } finally {
+        dialog.remove()
+      }
+    })
   })
 })

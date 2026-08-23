@@ -80,6 +80,12 @@ describe('compactRatingEffectLabel', () => {
     )).toBe('362天后')
   })
 
+  it('says a locked fill pass will not move the due date', () => {
+    const locked = effect({ schedule_changed: false, target_due_date: '2026-09-01' })
+    expect(ratingEffectLabel(locked, 0)).toBe('记下，不改期 · 9月1日')
+    expect(compactRatingEffectLabel(locked, 0)).toBe('不改期')
+  })
+
   it('shows the retry position for failing ratings', () => {
     const failing = effect({ passed: false, retry_after_cards: 3 })
     expect(compactRatingEffectLabel(failing, 3)).toBe('3张后')
