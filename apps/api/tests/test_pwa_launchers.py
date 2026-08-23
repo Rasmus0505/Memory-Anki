@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -12,6 +13,39 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import pwa_server  # noqa: E402
+
+
+def _write_release_artifacts(
+    web_dist: Path,
+    *,
+    release_assets: list[str],
+    precache_assets: list[str] | None = None,
+) -> None:
+    release_id = "release-test"
+    (web_dist / "assets").mkdir(parents=True)
+    (web_dist / "releases").mkdir()
+    for asset in release_assets:
+        (web_dist / asset).write_text("asset", encoding="utf-8")
+    (web_dist / "release.json").write_text(
+        json.dumps({"releaseId": release_id}), encoding="utf-8"
+    )
+    (web_dist / "releases" / f"{release_id}.json").write_text(
+        json.dumps({"files": release_assets}), encoding="utf-8"
+    )
+    index_asset = release_assets[0]
+    (web_dist / "index.html").write_text(
+        f'<meta name="memory-anki-release" content="{release_id}"><script src="/{index_asset}"></script>',
+        encoding="utf-8",
+    )
+    (web_dist / "manifest.webmanifest").write_text("{}", encoding="utf-8")
+    (web_dist / "offline.html").write_text("offline", encoding="utf-8")
+    precache = precache_assets if precache_assets is not None else [f"/{asset}" for asset in release_assets]
+    (web_dist / "sw.js").write_text(
+        f"const RELEASE_ID = '{release_id}'\n"
+        f"const PRECACHE_RELEASE_ASSETS = {json.dumps(precache)}\n"
+        "// release assets injected by the build\n",
+        encoding="utf-8",
+    )
 
 
 def test_start_reuses_healthy_shared_service():
@@ -60,6 +94,44 @@ def test_start_restarts_healthy_service_when_database_is_behind_head():
         assert pwa_server.start(supervise=False) == 0
 
     assert call_order == ["stop", "prepare", "start"]
+
+
+def test_release_validation_requires_every_current_asset_in_service_worker_precache(tmp_path):
+    web_dist = tmp_path / "dist"
+    release_assets = [
+        "assets/main.js",
+        "assets/ImmersiveFreestylePage.js",
+        "assets/PalaceEditPage-legacyhash.js",
+    ]
+    _write_release_artifacts(web_dist, release_assets=release_assets)
+
+    with patch.object(pwa_server, "WEB_DIST", web_dist):
+        assert pwa_server._validate_web_release() is True
+
+
+def test_release_validation_rejects_a_partial_service_worker_precache(tmp_path):
+    web_dist = tmp_path / "dist"
+    release_assets = ["assets/main.js", "assets/ImmersiveFreestylePage.js"]
+    _write_release_artifacts(
+        web_dist,
+        release_assets=release_assets,
+        precache_assets=["/assets/main.js"],
+    )
+
+    with patch.object(pwa_server, "WEB_DIST", web_dist):
+        assert pwa_server._validate_web_release() is False
+
+
+def test_pwa_dist_readiness_rejects_a_partial_service_worker_precache(tmp_path):
+    web_dist = tmp_path / "dist"
+    _write_release_artifacts(
+        web_dist,
+        release_assets=["assets/main.js", "assets/InsightsPage.js"],
+        precache_assets=["/assets/main.js"],
+    )
+
+    with patch.object(pwa_server, "WEB_DIST", web_dist):
+        assert pwa_server._pwa_dist_ready() is False
 
 
 def test_start_prepares_migrations_before_starting_backend():
@@ -165,6 +237,30 @@ def test_supervise_exits_zero_when_service_taken_over(tmp_path):
         patch.object(pwa_server.signal, "signal"),
     ):
         assert pwa_server._supervise(process) == 0
+    assert not reason_file.exists()
+
+
+def test_windows_supervisor_leaves_detached_service_running_when_launcher_closes(tmp_path):
+    process = SimpleNamespace(returncode=0, poll=lambda: None, pid=1234)
+    signal_handlers = {}
+    reason_file = tmp_path / "pwa-stop-reason.txt"
+
+    def record_handler(signal_number, handler):
+        signal_handlers[signal_number] = handler
+
+    def close_launcher(_seconds):
+        signal_handlers[pwa_server.signal.SIGINT](pwa_server.signal.SIGINT, None)
+
+    with (
+        patch.object(pwa_server, "PWA_STOP_REASON_FILE", reason_file),
+        patch.object(pwa_server.os, "name", "nt"),
+        patch.object(pwa_server.signal, "signal", side_effect=record_handler),
+        patch.object(pwa_server.time, "sleep", side_effect=close_launcher),
+        patch.object(pwa_server.dev_server, "kill_process_tree") as kill_process,
+    ):
+        assert pwa_server._supervise(process) == 0
+
+    kill_process.assert_not_called()
     assert not reason_file.exists()
 
 

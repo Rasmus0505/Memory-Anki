@@ -44,12 +44,12 @@ PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露�
 ## 日常使用
 
 1. 电脑开机并确保 Tailscale 已连接。
-2. 如果已安装自启，PWA 服务会随 Windows 登录自动启动；否则运行根目录的 `start-all.bat`。后端窗口会保持可见，便于直接查看启动和运行错误；不要关闭这个窗口。
+2. 如果已安装自启，PWA 服务会随 Windows 登录自动启动；否则运行根目录的 `start-all.bat`。启动窗口只负责显示检查和错误信息；共享服务已在后台独立运行，关闭启动窗口不会停止它。
 3. 手机打开 Tailscale。
 4. 用 Safari 或 Chrome 打开 `tools\configure-tailscale-pwa.bat` 输出的 HTTPS 地址，并访问 `/freestyle`。
 5. 第一次打开后，使用浏览器菜单添加到主屏幕。
 
-电脑和手机同时使用时，直接运行 `start-all.bat`。启动和迁移期间手机可能短暂断开，随后 Electron 与手机 PWA 会共同使用 `8012` 服务。关闭 Electron 窗口不会停止 PWA；需要停止服务时运行 `tools\stop.bat`。
+电脑和手机同时使用时，直接运行 `start-all.bat`。启动和迁移期间手机可能短暂断开，随后 Electron 与手机 PWA 会共同使用 `8012` 服务。关闭 Electron 或启动窗口都不会停止 PWA；需要停止服务时运行 `tools\stop.bat`。
 
 ## 首次配置与启动
 
@@ -131,7 +131,7 @@ tools\uninstall-pwa-autostart.bat
 - `tools\uninstall-pwa-autostart.bat`：移除 Windows 登录自启快捷方式。
 - `tools/pwa_launcher.ps1`：共享脚本入口，统一处理 Python/Node 探测、日志和自启快捷方式。
 - `tools/pwa_server.py`：实际的 PWA 后端启动器。
-- `tools/pwa_tray.ps1`：为 Desktop 提供共享服务托盘菜单；统一启动入口与登录自启不隐藏后端。
+- `tools/pwa_tray.ps1`：为 Desktop 提供共享服务托盘菜单；启动器会记录后端日志，关闭启动窗口不会停止已启动的共享服务。
 
 统一启动入口会先检查前端、后端和迁移指纹；无变化时立即继续启动，有变化时自动执行必要的停止、构建和迁移。
 

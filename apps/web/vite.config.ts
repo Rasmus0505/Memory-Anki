@@ -117,6 +117,7 @@ function stableChunkCompatPlugin() {
     apply: 'build' as const,
     async configResolved(config) {
       outDir = path.resolve(config.root, config.build.outDir)
+      compatAliasFiles.length = 0
       try {
         const assetDir = path.join(outDir, 'assets')
         const entries = await fs.readdir(assetDir, { withFileTypes: true })
@@ -179,19 +180,28 @@ function releaseArtifactsPlugin() {
       const release = { releaseId, builtAt: new Date().toISOString() }
       await fs.writeFile(path.join(outDir, 'release.json'), `${JSON.stringify(release, null, 2)}\n`, 'utf8')
 
-      // 入口链路资产（index.html 实际引用的 JS/CSS）注入 sw.js 预缓存清单，
-      // 让 PWA 离线冷启动不依赖“曾经运行时缓存过”。
+      // 当前版本的全部构建资源都要进入 sw.js 预缓存清单。入口页会马上
+      // 动态导入 DesktopApp 和 /freestyle 等路由；只缓存 index.html 的静态
+      // import 链会留下“HTML 能打开、React 永远起不来”的半份 PWA。
       const indexHtml = await fs.readFile(path.join(outDir, 'index.html'), 'utf8')
       const entryAssets = Array.from(
         new Set(indexHtml.match(/assets\/[^"']+/g) ?? []),
         (assetPath) => `/${assetPath}`,
       )
+      const releaseFiles = Array.from(new Set([
+        ...bundleAssetFiles.filter((fileName) => fileName.startsWith('assets/')),
+        ...compatAliasFiles,
+      ])).sort()
+      const precacheAssets = Array.from(new Set([
+        ...entryAssets,
+        ...releaseFiles.map((fileName) => `/${fileName}`),
+      ])).sort()
       const serviceWorkerPath = path.join(outDir, 'sw.js')
       const serviceWorker = await fs.readFile(serviceWorkerPath, 'utf8')
       await fs.writeFile(
         serviceWorkerPath,
         serviceWorker
-          .replaceAll("'__MEMORY_ANKI_PRECACHE_ASSETS__'", JSON.stringify(entryAssets))
+          .replaceAll("'__MEMORY_ANKI_PRECACHE_ASSETS__'", JSON.stringify(precacheAssets))
           .replaceAll('__MEMORY_ANKI_RELEASE_ID__', releaseId),
         'utf8',
       )
@@ -203,7 +213,7 @@ function releaseArtifactsPlugin() {
       const releaseManifest = {
         releaseId,
         builtAt: release.builtAt,
-        files: Array.from(new Set([...bundleAssetFiles, ...compatAliasFiles])).sort(),
+        files: releaseFiles,
       }
       await fs.writeFile(
         path.join(releasesDir, `${releaseId}.json`),

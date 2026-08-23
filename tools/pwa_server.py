@@ -312,7 +312,7 @@ def _pwa_dist_ready() -> bool:
         WEB_DIST / "sw.js",
         WEB_DIST / "offline.html",
     ]
-    return all(path.exists() for path in required)
+    return all(path.exists() for path in required) and _validate_web_release()
 
 
 def _validate_web_release() -> bool:
@@ -321,6 +321,9 @@ def _validate_web_release() -> bool:
         release_id = str(release.get("releaseId") or "")
         index_html = (WEB_DIST / "index.html").read_text(encoding="utf-8")
         service_worker = (WEB_DIST / "sw.js").read_text(encoding="utf-8")
+        release_manifest = json.loads(
+            (WEB_DIST / "releases" / f"{release_id}.json").read_text(encoding="utf-8")
+        )
     except (OSError, ValueError, TypeError) as exc:
         print(f"[!] PWA release metadata is invalid: {exc}")
         return False
@@ -333,6 +336,40 @@ def _validate_web_release() -> bool:
     if "__MEMORY_ANKI_RELEASE_ID__" in service_worker:
         print("[!] PWA service worker still contains an unresolved release placeholder.")
         return False
+
+    precache_match = re.search(
+        r"const PRECACHE_RELEASE_ASSETS\s*=\s*(\[[\s\S]*?\])\s*(?:\r?\n|//)",
+        service_worker,
+    )
+    if precache_match is None:
+        print("[!] PWA service worker does not declare the release asset precache list.")
+        return False
+    try:
+        precache_assets = json.loads(precache_match.group(1))
+    except json.JSONDecodeError as exc:
+        print(f"[!] PWA service worker release asset list is invalid JSON: {exc}")
+        return False
+    release_files = release_manifest.get("files") if isinstance(release_manifest, dict) else None
+    if not isinstance(release_files, list) or not all(isinstance(item, str) for item in release_files):
+        print("[!] PWA release manifest does not contain a valid files list.")
+        return False
+    if not isinstance(precache_assets, list) or not all(isinstance(item, str) for item in precache_assets):
+        print("[!] PWA service worker release asset list is not a string array.")
+        return False
+
+    expected_assets = {f"/{item}" for item in release_files if item.startswith("assets/")}
+    actual_assets = {item for item in precache_assets if item.startswith("/assets/")}
+    missing_from_precache = sorted(expected_assets - actual_assets)
+    if missing_from_precache:
+        print(f"[!] PWA service worker omits release assets from precache: {missing_from_precache}")
+        return False
+    missing_precache_files = [
+        asset for asset in sorted(actual_assets) if not (WEB_DIST / asset.lstrip("/")).is_file()
+    ]
+    if missing_precache_files:
+        print(f"[!] PWA service worker precaches missing assets: {missing_precache_files}")
+        return False
+
     asset_paths = re.findall(r'(?:src|href)="(/assets/[^"]+)"', index_html)
     missing = [asset for asset in asset_paths if not (WEB_DIST / asset.lstrip("/")).is_file()]
     if missing:
@@ -632,13 +669,23 @@ def _resolve_tailscale_cli() -> str | None:
     return None
 
 
-def _supervise(process: subprocess.Popen) -> int:
-    print("[i] PWA server is running. Keep this process alive, or use stop-pwa.bat to stop it.")
+def _supervise(process: subprocess.Popen | _DetachedProcess) -> int:
+    if os.name == "nt":
+        print(
+            "[i] Shared Memory Anki service is running. The launcher may be closed; "
+            "use tools\\stop-pwa.bat to stop the service."
+        )
+    else:
+        print("[i] PWA server is running. Keep this process alive, or use stop-pwa.bat to stop it.")
     stopping = False
 
     def stop_child(*args) -> None:
         nonlocal stopping
         stopping = True
+        if os.name == "nt":
+            # Windows backends are launched outside this console Job. Closing the
+            # visible launcher must not make the phone PWA lose its shared service.
+            return
         _mark_service_stop_reason(_STOP_REASON_REQUESTED)
         if process.poll() is None:
             dev_server.kill_process_tree(process.pid)
