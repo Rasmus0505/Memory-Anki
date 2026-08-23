@@ -13,6 +13,36 @@ describe("DashboardPage overview", () => {
     setupDashboardPageTest();
   });
 
+  it("replaces a timed-out dashboard skeleton with a retryable error state", async () => {
+    getDashboardApi
+      .mockRejectedValueOnce(new Error("请求超过 20 秒未响应：GET /api/v1/dashboard"))
+      .mockResolvedValueOnce({
+        due_count: 0,
+        reviews: [],
+        stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+        today_review_duration_seconds: 0,
+        weekly_review_duration_seconds: 0,
+        today_total_review_duration_seconds: 0,
+        monthly_total_review_duration_seconds: 0,
+        weekly_total_review_duration_seconds: 0,
+        weekly_formal_review_duration_seconds: 0,
+        recent_palaces: [],
+        today_learning_palaces: [],
+        today_new_palace_count: 0,
+        today_new_palaces: [],
+      });
+
+    renderDashboardPage();
+
+    expect(await screen.findByText("仪表盘加载失败")).toBeTruthy();
+    expect(screen.getByText("请求超过 20 秒未响应：GET /api/v1/dashboard")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+
+    expect(await screen.findByText("今日待处理")).toBeTruthy();
+    expect(getDashboardApi).toHaveBeenCalledTimes(2);
+  });
+
   it("renders learning breakdown and today new palace hierarchy", async () => {
     getDashboardApi.mockResolvedValue({
       due_count: 2,

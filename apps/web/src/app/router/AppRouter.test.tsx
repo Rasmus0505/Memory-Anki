@@ -2,7 +2,7 @@ import * as React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppRouter } from '@/app/router/AppRouter'
+import { AppRouter, withActiveResidentRoute } from '@/app/router/AppRouter'
 
 const residencySubscriptionState = vi.hoisted(() => ({
   active: new Set<string>(),
@@ -108,6 +108,29 @@ describe('AppRouter residency', () => {
     expect((screen.getByLabelText('input:/alpha') as HTMLInputElement).value).toBe('persisted alpha')
     expect(screen.getByDisplayValue('persisted beta')).toBeTruthy()
     expect(screen.getAllByTestId(/page:\//)).toHaveLength(2)
+  })
+
+  it('adds a new active pathname to the render list before the residency effect runs', () => {
+    const alpha = { pathname: '/alpha', search: '', hash: '', state: null, key: 'alpha' }
+    const beta = { pathname: '/beta', search: '', hash: '', state: null, key: 'beta' }
+    const routes = {
+      '/alpha': {
+        location: alpha,
+        becameActiveAt: 10,
+        lastActiveOrder: 0,
+      },
+    }
+
+    const renderedRoutes = withActiveResidentRoute(routes, beta, 1, 20)
+
+    expect(renderedRoutes).toEqual({
+      '/alpha': routes['/alpha'],
+      '/beta': {
+        location: beta,
+        becameActiveAt: 20,
+        lastActiveOrder: 1,
+      },
+    })
   })
 
   it('evicts the least recently active resident route when the cache reaches its limit', () => {

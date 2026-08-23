@@ -226,6 +226,14 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   }, [hash, pathname, search])
 
   useEffect(() => {
+    // Do not wait for requestIdleCallback: freestyle keeps the main thread busy,
+    // so idle warmup often has not fetched the insights chunk before the user
+    // clicks 洞察 and the route falls back to an empty-looking page.
+    prefetchDashboardApi()
+    void preloadDashboardPage()
+  }, [])
+
+  useEffect(() => {
     return scheduleIdleWarmup(() => {
       preloadPracticeRoutes()
       prefetchPalaceSubjectShelfApi()
@@ -241,7 +249,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
     if (pathname !== '/' && pathname !== '/dashboard') return
     return scheduleIdleWarmup(() => {
       void preloadPalaceEditPage()
-      prefetchDashboardApi()
     })
   }, [pathname])
 

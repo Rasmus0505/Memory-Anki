@@ -358,7 +358,20 @@ export function TodayLearningWorkspace() {
     )
   }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <ErrorState
+        title="今日学习概览加载失败"
+        description="没有拿到学习概览数据。"
+        action={
+          <Button onClick={() => void reload()}>
+            <RefreshCw />
+            重试
+          </Button>
+        }
+      />
+    )
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-5">

@@ -1,4 +1,4 @@
-import {
+﻿import {
   PAGE_HISTORY_MAX_DEVICE_SNAPSHOTS,
   PAGE_HISTORY_TTL_MS,
   PAGE_HISTORY_VERSION,
@@ -33,6 +33,10 @@ const emptySessionState = (): SessionHistoryState => ({
   snapshots: {},
 })
 
+function isRestorableWorkspacePath(fullPath: string) {
+  return fullPath !== '/' && !fullPath.startsWith('/?') && !fullPath.startsWith('/#')
+}
+
 function isSnapshot(value: unknown): value is PageHistorySnapshot {
   if (!value || typeof value !== 'object') return false
   const snapshot = value as Partial<PageHistorySnapshot>
@@ -61,7 +65,10 @@ function readDeviceState(): DeviceHistoryState {
       sectionLastUrls: parsed.sectionLastUrls && typeof parsed.sectionLastUrls === 'object'
         ? parsed.sectionLastUrls
         : {},
-      lastWorkspacePath: typeof parsed.lastWorkspacePath === 'string' ? parsed.lastWorkspacePath : null,
+      lastWorkspacePath: typeof parsed.lastWorkspacePath === 'string' &&
+        isRestorableWorkspacePath(parsed.lastWorkspacePath)
+        ? parsed.lastWorkspacePath
+        : null,
     }
   } catch {
     return emptyDeviceState()
@@ -145,9 +152,11 @@ export function savePageHistorySnapshot(snapshot: PageHistorySnapshot) {
   device.snapshots = [mergedDeviceSnapshot, ...device.snapshots.filter((item) => item.pageKey !== snapshot.pageKey)]
     .filter((item) => item.expiresAt > Date.now())
     .slice(0, PAGE_HISTORY_MAX_DEVICE_SNAPSHOTS)
-  device.lastWorkspacePath = mergedDeviceSnapshot.fullPath
-  if (mergedDeviceSnapshot.sectionKey !== 'other') {
-    device.sectionLastUrls[mergedDeviceSnapshot.sectionKey] = mergedDeviceSnapshot.fullPath
+  if (isRestorableWorkspacePath(mergedDeviceSnapshot.fullPath)) {
+    device.lastWorkspacePath = mergedDeviceSnapshot.fullPath
+    if (mergedDeviceSnapshot.sectionKey !== 'other') {
+      device.sectionLastUrls[mergedDeviceSnapshot.sectionKey] = mergedDeviceSnapshot.fullPath
+    }
   }
   writeDeviceState(device)
 }
@@ -170,7 +179,7 @@ export function clearPageHistorySnapshot(pageKey: string) {
 }
 
 export function recordPageHistorySectionVisit(sectionKey: PageHistorySectionKey, fullPath: string) {
-  if (sectionKey === 'other') return
+  if (sectionKey === 'other' || !isRestorableWorkspacePath(fullPath)) return
   const state = readDeviceState()
   state.sectionLastUrls[sectionKey] = fullPath
   state.lastWorkspacePath = fullPath
@@ -178,7 +187,8 @@ export function recordPageHistorySectionVisit(sectionKey: PageHistorySectionKey,
 }
 
 export function readPageHistorySectionUrl(sectionKey: PageHistorySectionKey) {
-  return readDeviceState().sectionLastUrls[sectionKey] ?? null
+  const fullPath = readDeviceState().sectionLastUrls[sectionKey]
+  return fullPath && isRestorableWorkspacePath(fullPath) ? fullPath : null
 }
 
 export function readLastPageHistoryWorkspacePath() {

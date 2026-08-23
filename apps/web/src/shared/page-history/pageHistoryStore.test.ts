@@ -2,14 +2,17 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   createPageHistorySnapshot,
   PAGE_HISTORY_DEVICE_STORAGE_KEY,
+  readLastPageHistoryWorkspacePath,
   readPageHistorySectionUrl,
   readPageHistorySnapshot,
+  recordPageHistorySectionVisit,
   resetPageHistoryStoreForTest,
   savePageHistorySnapshot,
 } from './pageHistoryStore'
 import {
   PAGE_HISTORY_MAX_DEVICE_SNAPSHOTS,
   PAGE_HISTORY_TTL_MS,
+  PAGE_HISTORY_VERSION,
 } from './pageHistoryTypes'
 
 function snapshot(pageKey: string, locationKey: string, savedAt: number, fullPath = `/${pageKey}`) {
@@ -67,5 +70,26 @@ describe('pageHistoryStore', () => {
     const expiredAt = Date.now() - PAGE_HISTORY_TTL_MS - 1
     savePageHistorySnapshot(snapshot('palace:view:expired', 'expired-entry', expiredAt))
     expect(readPageHistorySnapshot('expired-entry', 'palace:view:expired')).toBeNull()
+  })
+
+  it('does not let the root redirect replace the remembered workspace', () => {
+    recordPageHistorySectionVisit('dashboard', '/dashboard')
+    recordPageHistorySectionVisit('dashboard', '/')
+    savePageHistorySnapshot(snapshot('startup-redirect', 'entry-root', baseTime, '/'))
+
+    expect(readLastPageHistoryWorkspacePath()).toBe('/dashboard')
+    expect(readPageHistorySectionUrl('dashboard')).toBe('/dashboard')
+  })
+
+  it('ignores a legacy root path stored as the last workspace', () => {
+    window.localStorage.setItem(PAGE_HISTORY_DEVICE_STORAGE_KEY, JSON.stringify({
+      version: PAGE_HISTORY_VERSION,
+      snapshots: [],
+      sectionLastUrls: { dashboard: '/' },
+      lastWorkspacePath: '/',
+    }))
+
+    expect(readLastPageHistoryWorkspacePath()).toBeNull()
+    expect(readPageHistorySectionUrl('dashboard')).toBeNull()
   })
 })

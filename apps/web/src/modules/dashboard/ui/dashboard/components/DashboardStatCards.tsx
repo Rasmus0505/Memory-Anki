@@ -103,13 +103,13 @@ export function DashboardStatCards({
     },
     {
       label: '英语',
-      value: formatDuration(data.english_stats.today_total_seconds),
+      value: formatDuration(data.english_stats?.today_total_seconds ?? 0),
       icon: BookOpen,
       color: '',
-      subtitle: `英语听力未完成 ${data.english_stats.unfinished_courses} 门 · 累计 ${formatDuration(data.english_stats.total_seconds)}`,
+      subtitle: `英语听力未完成 ${data.english_stats?.unfinished_courses ?? 0} 门 · 累计 ${formatDuration(data.english_stats?.total_seconds ?? 0)}`,
       extra: (
         <div className="mt-3 text-xs text-muted-foreground">
-          本周英语时长 {formatDuration(data.english_stats.weekly_total_seconds)}
+          本周英语时长 {formatDuration(data.english_stats?.weekly_total_seconds ?? 0)}
         </div>
       ),
     },

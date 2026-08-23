@@ -11,7 +11,6 @@ import {
 } from '@/modules/session/public'
 import {
   DashboardNewPalacesCard,
-  DashboardSkeleton,
   DashboardStatCards,
   DashboardTodayLearningCard,
   StudyHeatmap,
@@ -22,6 +21,7 @@ import {
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
+import { InsightsPageLoading } from '@/pages/insights/InsightsPageLoading'
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null)
@@ -82,12 +82,7 @@ export default function Dashboard() {
   }
 
   if (!data) {
-    return (
-      <div className="flex flex-col gap-4">
-        <InsightsSectionNav />
-        <DashboardSkeleton />
-      </div>
-    )
+    return <InsightsPageLoading />
   }
 
   const rangeLabel = formatTimeRecordRangeLabel(timeRecordsDashboard.filter)

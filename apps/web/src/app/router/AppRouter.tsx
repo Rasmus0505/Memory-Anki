@@ -12,6 +12,24 @@ interface ResidentRoute {
   lastActiveOrder: number
 }
 
+export function withActiveResidentRoute(
+  routes: Record<string, ResidentRoute>,
+  location: Location,
+  nextActiveOrder: number,
+  now = Date.now(),
+) {
+  const existing = routes[location.pathname]
+  if (existing?.location === location) return routes
+  return {
+    ...routes,
+    [location.pathname]: {
+      location,
+      becameActiveAt: existing?.becameActiveAt ?? now,
+      lastActiveOrder: existing?.lastActiveOrder ?? nextActiveOrder,
+    },
+  }
+}
+
 function ResidentRouteHistory({ location }: { location: Location }) {
   usePageHistoryAdapter({ location })
   return <AppRoutes location={location} />
@@ -83,7 +101,14 @@ export function AppRouter() {
     }
   }, [activePathname, location])
 
-  const entries = useMemo(() => Object.entries(residentRoutes), [residentRoutes])
+  // `useEffect` below persists and prunes the route after commit. Include the
+  // active route here as well so navigation never commits a frame with every
+  // resident page hidden.
+  const routesForRender = useMemo(
+    () => withActiveResidentRoute(residentRoutes, location, activationOrderRef.current + 1),
+    [location, residentRoutes],
+  )
+  const entries = useMemo(() => Object.entries(routesForRender), [routesForRender])
 
   return (
     <>

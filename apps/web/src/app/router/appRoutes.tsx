@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
-import { Navigate, Route, Routes, type Location } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
+import { InsightsPageLoading } from '@/pages/insights/InsightsPageLoading'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
@@ -58,7 +59,9 @@ const ProfileBackupsPage = lazyWithRetry(
 )
 const DevTokensPage = lazyWithRetry(() => import('@/app/dev/DevTokensPage'))
 
-function RouteFallback() {
+function RouteFallback({ pathname }: { pathname: string }) {
+  if (pathname === '/dashboard') return <InsightsPageLoading />
+  if (pathname === '/today') return <LoadingState text="正在整理今日学习工作台…" />
   return <LoadingState text="正在加载页面…" />
 }
 
@@ -71,14 +74,20 @@ function RouteNotFound({ pathname }: { pathname: string }) {
   return <Navigate to={target} replace />
 }
 
+export function resolveStartupRedirectTarget(lastWorkspacePath: string | null) {
+  const pathname = lastWorkspacePath?.split(/[?#]/, 1)[0]
+  return pathname && pathname !== '/' ? lastWorkspacePath : '/freestyle'
+}
+
 function StartupRedirect() {
-  return <Navigate to={readLastPageHistoryWorkspacePath() || '/freestyle'} replace />
+  return <Navigate to={resolveStartupRedirectTarget(readLastPageHistoryWorkspacePath())} replace />
 }
 
 export function AppRoutes({ location }: { location?: Location }) {
-  const fallbackPathname = location?.pathname || '/'
+  const routerLocation = useLocation()
+  const fallbackPathname = (location ?? routerLocation).pathname || '/'
   return (
-    <Suspense fallback={<RouteFallback />}>
+    <Suspense fallback={<RouteFallback pathname={fallbackPathname} />}>
       <RouteErrorBoundary resetKey={fallbackPathname}>
         <Routes location={location}>
           <Route path="/" element={<StartupRedirect />} />

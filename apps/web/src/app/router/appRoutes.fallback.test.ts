@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveRouteFallbackTarget } from '@/app/router/appRoutes'
+import { resolveRouteFallbackTarget, resolveStartupRedirectTarget } from '@/app/router/appRoutes'
 
 describe('resolveRouteFallbackTarget', () => {
   it('normalizes trailing slashes back to registered routes', () => {
@@ -28,5 +28,17 @@ describe('resolveRouteFallbackTarget', () => {
 
   it('keeps dev-only token routes out of the production fallback allowlist', () => {
     expect(resolveRouteFallbackTarget('/dev/tokens')).toBe('/freestyle')
+  })
+})
+
+describe('resolveStartupRedirectTarget', () => {
+  it('does not redirect the root route back to itself', () => {
+    expect(resolveStartupRedirectTarget('/')).toBe('/freestyle')
+    expect(resolveStartupRedirectTarget('/?legacy=1')).toBe('/freestyle')
+    expect(resolveStartupRedirectTarget('/#legacy')).toBe('/freestyle')
+  })
+
+  it('restores a previously visited workspace route', () => {
+    expect(resolveStartupRedirectTarget('/dashboard?range=week')).toBe('/dashboard?range=week')
   })
 })
