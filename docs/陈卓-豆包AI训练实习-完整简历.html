@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>陈卓｜豆包 AI Agent 训练实习生</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    :root { --ink:#172b4d; --muted:#64748b; --blue:#1d568d; --line:#dce5ee; --pale:#f5f8fb; --rail:54mm; --main-pad:13mm; --density:1; --leading:1.5; --section-gap:6mm; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#e8eef4; color:var(--ink); font-family:"Microsoft YaHei","DengXian",Arial,sans-serif; font-size:calc(9.6pt * var(--density)); line-height:var(--leading); }
+    .page { width:210mm; min-height:297mm; margin:0 auto; background:#fff; display:grid; grid-template-columns:var(--rail) 1fr; box-shadow:0 8px 28px #31465b22; }
+    .rail { padding:14mm 7.5mm 13mm; background:#f6f9fc; border-right:1px solid var(--line); }
+    .main { padding:14mm var(--main-pad) 12mm 12mm; }
+    .photo { width:35mm; height:44mm; object-fit:cover; display:block; margin:0 auto 6mm; border:4px solid #fff; box-shadow:0 3px 10px #61758a3b; }
+    .name { text-align:center; font-size:25pt; letter-spacing:1px; font-weight:800; color:#143b68; margin:0; }
+    .target { text-align:center; color:var(--blue); font-size:8.2pt; line-height:1.45; margin:2mm 0 8mm; font-weight:700; }
+    .rail-title { font-size:9.2pt; font-weight:800; color:var(--blue); letter-spacing:1px; border-bottom:1px solid #a9c2d9; padding-bottom:1.5mm; margin:7mm 0 3mm; }
+    .contact { font-size:8.5pt; line-height:1.72; word-break:break-word; }
+    .contact b { color:#334155; }
+    .rail ul { padding-left:4mm; margin:1mm 0; }
+    .rail li { margin:1.3mm 0; }
+    .skill { margin:2.8mm 0; line-height:1.48; }
+    .skill b { color:#334155; }
+    .hero { border-bottom:2px solid var(--blue); padding-bottom:5mm; margin-bottom:7mm; }
+    .hero h1 { font-size:21pt; color:#143b68; margin:0 0 1mm; letter-spacing:0; }
+    .hero p { margin:0; color:#475569; font-size:9.3pt; }
+    .section { margin-top:var(--section-gap); }
+    .section-title { display:flex; align-items:center; gap:3mm; color:var(--blue); font-size:12pt; font-weight:800; margin:0 0 3.5mm; }
+    .section-title::before { content:""; width:3px; height:4.2mm; background:var(--blue); display:inline-block; }
+    .section-title::after { content:""; height:1px; background:var(--line); flex:1; }
+    .entry { margin:0 0 4.5mm; padding-left:1mm; }
+    .entry-head { display:flex; justify-content:space-between; align-items:baseline; gap:4mm; font-size:10.2pt; font-weight:800; }
+    .entry-head .date { white-space:nowrap; color:var(--muted); font-size:8.5pt; font-weight:600; }
+    .entry-sub { color:var(--muted); font-size:8.7pt; margin-top:.5mm; }
+    ul { margin:1.5mm 0 0; padding-left:5mm; }
+    li { margin:1mm 0; }
+    .project { border:1px solid #d9e5ef; border-left:4px solid #5f91c5; background:var(--pale); padding:3.5mm 4.5mm 2.5mm; margin-bottom:4mm; box-shadow:0 2px 5px #58718a0d; }
+    .project .entry-head { color:#173b67; }
+    .tag { display:inline-block; color:#285d91; background:#dceaf7; padding:.5mm 1.5mm; margin:0 1mm 1mm 0; font-size:8pt; border-radius:2px; }
+    .footer { margin-top:5mm; padding-top:3mm; border-top:1px solid var(--line); color:var(--muted); font-size:8pt; }
+    [contenteditable="true"] { outline:0; border-radius:3px; transition:background .15s, box-shadow .15s; }
+    [contenteditable="true"]:hover { background:#fff9d8; }
+    [contenteditable="true"]:focus { background:#fffbea; box-shadow:0 0 0 2px #f4c95d; }
+    body.edit-mode .editable-block:hover { outline:1px dashed #8bb7df; outline-offset:2px; }
+    body.edit-mode .selected-block { outline:2px solid #f0a735; outline-offset:3px; }
+    body.preview-mode [contenteditable="true"] { pointer-events:none; background:none !important; box-shadow:none !important; }
+    body.preview-mode .selected-block { outline:0; }
+    body.preview-mode .edit-control { display:none; }
+    .context-menu { position:fixed; z-index:100; min-width:170px; padding:5px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 8px 24px #0f172a2b; }
+    .context-menu[hidden] { display:none; }
+    .context-menu button { display:block; width:100%; border:0; background:transparent; color:#1e293b; text-align:left; padding:8px 10px; border-radius:4px; font:13px "Microsoft YaHei",sans-serif; cursor:pointer; }
+    .context-menu button:hover { background:#eaf2fb; }
+    .context-menu button.danger { color:#b42318; }
+    .editor-bar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; gap:7px; align-items:center; padding:10px 14px; background:#102b4d; color:#fff; box-shadow:0 2px 12px #091b2c44; font:13px "Microsoft YaHei",sans-serif; }
+    .editor-bar strong { margin-right:7px; }
+    .editor-bar button, .editor-bar select, .editor-bar input[type="color"] { height:30px; border:0; border-radius:4px; padding:0 9px; background:#fff; color:#173b67; font:inherit; cursor:pointer; }
+    .editor-bar button[data-action="mode"] { background:#f4c95d; font-weight:800; }
+    .editor-bar button:hover { background:#e5f0fb; }
+    .editor-bar input[type="range"] { width:90px; accent-color:#7db4e8; }
+    .editor-bar .hint { opacity:.8; margin-left:auto; font-size:12px; }
+    .editor-bar input[type="file"] { display:none; }
+    @media print { body { background:#fff; } .page { margin:0; } .editor-bar { display:none; } [contenteditable="true"] { background:none !important; box-shadow:none !important; } .selected-block { outline:0 !important; } }
+  </style>
+</head>
+<body>
+  <nav class="editor-bar" aria-label="简历编辑工具">
+    <strong>简历编辑器</strong>
+    <button type="button" data-action="mode">浏览模式</button>
+    <button type="button" data-action="save">保存修改</button>
+    <button type="button" data-action="undo" class="edit-control">撤销</button>
+    <button type="button" data-action="reset">恢复初始版</button>
+    <button type="button" data-action="print">打印 / 导出 PDF</button>
+    <button type="button" data-action="delete" class="edit-control">删除选中区块</button>
+    <button type="button" data-action="cleanup" class="edit-control">清理空白占位</button>
+    <label class="edit-control">字号 <input data-control="density" type="range" min="0.88" max="1.12" step="0.01" value="1"></label>
+    <label class="edit-control">左栏 <input data-control="rail" type="range" min="48" max="72" step="1" value="57"> mm</label>
+    <label class="edit-control">页边距 <input data-control="pad" type="range" min="8" max="20" step="1" value="12"> mm</label>
+    <label class="edit-control">行距 <input data-control="leading" type="range" min="1.25" max="1.8" step="0.01" value="1.48"></label>
+    <label class="edit-control">区块间距 <input data-control="gap" type="range" min="2" max="10" step="1" value="5"> mm</label>
+    <label class="edit-control">颜色 <input data-control="color" type="color" value="#24558f"></label>
+    <button type="button" data-action="photo">替换照片</button>
+    <input id="photo-input" type="file" accept="image/*">
+    <span class="hint">编辑模式：点击文字修改；点击区块后可删除</span>
+  </nav>
+  <menu class="context-menu" id="block-context-menu" hidden>
+    <li><button type="button" data-context-action="delete" class="danger">删除此区块</button></li>
+    <li><button type="button" data-context-action="cleanup">清理空白占位</button></li>
+    <li><button type="button" data-context-action="undo">撤销上一步</button></li>
+  </menu>
+  <article class="page">
+    <aside class="rail">
+      <img class="photo" src="resume-assets/source-12.jpeg" alt="陈卓证件照">
+      <h1 class="name">陈卓</h1>
+      <div class="target">AI 训练 / 数据工程实习生<br>经济学本科 · Python / 统计分析 · AI 协同开发</div>
+
+      <div class="rail-title">联系方式</div>
+      <div class="contact">
+        <div><b>电话</b>　19934314117</div>
+        <div><b>邮箱</b>　992519622@qq.com</div>
+        <div><b>籍贯</b>　重庆市万州区</div>
+        <div><b>GitHub</b>　github.com/Rasmus0505/Memory-Anki</div>
+      </div>
+
+      <div class="rail-title">教育背景</div>
+      <div><b>西南财经大学</b></div>
+      <div>经济学（国家经济学基础人才培养基地班）</div>
+      <div>本科</div>
+      <div class="entry-sub">微观经济学、宏观经济学、数学分析、概率论与数理统计、Python 应用基础、智能体设计与商业创新</div>
+
+      <div class="rail-title">核心技能</div>
+      <div class="skill"><b>数据分析</b><br>Excel 整理、筛选、函数、透视分析、图表；Python 基础；统计分析；消费者调研</div>
+      <div class="skill"><b>AI 任务</b><br>Prompt 编写、任务拆解、上下文组织、格式约束、结构化解析、人工审核</div>
+      <div class="skill"><b>工程实践</b><br>FastAPI、React、SQLite、OpenAI-compatible API、JSON、Git、pytest、Vitest、Electron/PWA</div>
+      <div class="skill"><b>协同工具</b><br>Codex、Claude：需求拆解、实现、测试、排错和迭代验收</div>
+
+    </aside>
+
+    <main class="main">
+      <header class="hero">
+        <h1>陈卓｜AI Agent 训练与数据质量方向</h1>
+        <p>经济学与统计分析背景，具备市场调研、消费者分析和 AI 协同开发经验；能够将垂直领域需求转化为结构化任务，并对模型输出进行事实、逻辑、格式和完整性检查。</p>
+      </header>
+
+      <section class="section">
+        <h2 class="section-title">核心项目</h2>
+        <div class="project">
+          <div class="entry-head"><span>Memory Anki｜AI 辅助学习与知识训练平台</span><span class="date">个人开源项目 · 438 次提交</span></div>
+          <div class="entry-sub"><span class="tag">FastAPI</span><span class="tag">React</span><span class="tag">SQLite</span><span class="tag">LLM Gateway</span><span class="tag">PWA / Electron</span></div>
+          <ul>
+            <li>独立维护 AI 学习平台，从需求拆解到功能验收，使用 Codex/Claude 协同完成 FastAPI、React 和 SQLite 的开发迭代。</li>
+            <li>围绕知识内容设计提问、解释、出题和纠错任务；组织上下文与 Prompt，并将出题、纠错结果解析为可审核的 JSON。</li>
+            <li>加入“预览—逐项审核—确认应用”流程，模型生成的题目和修改建议不会未经确认直接写入知识库。</li>
+            <li>实现统一模型接口和运行记录，处理流式响应、失败重试、异常记录与重复请求；用 pytest、Vitest 和端到端测试验证关键流程。</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">实践经历</h2>
+        <div class="entry">
+          <div class="entry-head"><span>新媒体宣传中心｜部长</span><span class="date">2024.04–2024.07</span></div>
+          <ul>
+            <li>负责校级活动策划、院级官方公众号运营和活动影像记录，完成信息整理、内容撰写、发布审核与项目总结。</li>
+            <li>根据活动目标组织宣传内容和执行流程，协调成员完成素材采集、编辑和交付。</li>
+          </ul>
+        </div>
+        <div class="entry">
+          <div class="entry-head"><span>市场调研与产品策划实践</span><span class="date">竞赛 / 社会实践</span></div>
+          <ul>
+            <li>负责“小挑战杯”市场数据统计、消费者调研分析和产品创意设计，完成数据整理、问题归纳、结论表达与方案输出。</li>
+            <li>负责西部调研大赛宏观背景调查研究和理论逻辑梳理；在光华创新创业大赛中负责市场营销计划、线下产品服务设计及 8 项产品内容设计。</li>
+          </ul>
+        </div>
+        <div class="entry">
+          <div class="entry-head"><span>网络游戏俱乐部运营｜个人项目</span><span class="date">运营与内容实践</span></div>
+          <ul>
+            <li>通过内容剪辑、用户引流和活动策划实现暑期周收入约 <b>1.4k–2k</b>，累计盈利 <b>1w+</b>；根据用户反馈调整活动和内容安排。</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">补充说明</h2>
+        <div class="entry">
+          <ul>
+            <li>当前 AI 经验主要来自结构化任务设计、Prompt 组织、输出审核和 AI 协同开发，未将自己包装为已有正式大模型训练或参数调优经验。</li>
+            <li>可接受远程协作，能够按任务规范持续完成资料整理、数据分析、AI 交互和质量审核工作。</li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="footer">应聘方向：豆包 AI Agent 大模型训练数据工程师实习生　｜　可根据岗位要求补充 Excel 案例、项目演示和 GitHub 说明</div>
+    </main>
+  </article>
+  <script>
+    (() => {
+      document.body.classList.add('edit-mode');
+      const root = document.documentElement;
+      const storageKey = 'memory-anki-resume-editor-v1';
+      const blockSelector = '.hero, .section, .footer, .project, .entry, .contact, .skill, .rail-title, .name, .target, ul, li';
+      const makeEditable = () => {
+        document.querySelectorAll('.page h1, .page h2, .page p, .page li, .page span, .page b, .rail > div, .contact, .skill, .entry-head, .entry-sub, .footer, .target, .rail-title').forEach((node) => {
+          if (!node.closest('.editor-bar') && !node.querySelector('img')) { node.contentEditable = 'true'; node.spellcheck = false; }
+        });
+        document.querySelectorAll(blockSelector).forEach((node) => node.classList.add('editable-block'));
+      };
+      makeEditable();
+      const controls = {
+        density: document.querySelector('[data-control="density"]'),
+        rail: document.querySelector('[data-control="rail"]'),
+        pad: document.querySelector('[data-control="pad"]'),
+        leading: document.querySelector('[data-control="leading"]'),
+        gap: document.querySelector('[data-control="gap"]'),
+        color: document.querySelector('[data-control="color"]'),
+      };
+      const photoInput = document.getElementById('photo-input');
+      const initial = { html: document.querySelector('.page').innerHTML, settings: { density: 1, rail: 57, pad: 12, leading: 1.48, gap: 5, color: '#24558f' } };
+      const applySettings = (settings) => {
+        root.style.setProperty('--density', settings.density);
+        root.style.setProperty('--rail', `${settings.rail}mm`);
+        root.style.setProperty('--main-pad', `${settings.pad}mm`);
+        root.style.setProperty('--leading', settings.leading);
+        root.style.setProperty('--section-gap', `${settings.gap}mm`);
+        root.style.setProperty('--blue', settings.color);
+        controls.density.value = settings.density;
+        controls.rail.value = settings.rail;
+        controls.pad.value = settings.pad;
+        controls.leading.value = settings.leading;
+        controls.gap.value = settings.gap;
+        controls.color.value = settings.color;
+      };
+      const snapshot = () => { const clone = document.querySelector('.page').cloneNode(true); clone.querySelectorAll('.selected-block').forEach((node) => node.classList.remove('selected-block')); return { html: clone.innerHTML, settings: { density: controls.density.value, rail: controls.rail.value, pad: controls.pad.value, leading: controls.leading.value, gap: controls.gap.value, color: controls.color.value } }; };
+      const cleanupEmptyBlocks = () => {
+        document.querySelectorAll('.page li').forEach((node) => {
+          if (!node.textContent.trim()) node.remove();
+        });
+        document.querySelectorAll('.page ul, .page ol').forEach((node) => {
+          if (!node.querySelector('li') || !node.textContent.trim()) node.remove();
+        });
+        document.querySelectorAll('.page .entry, .page .project').forEach((node) => {
+          const hasContent = [...node.querySelectorAll('li, .entry-head, .entry-sub, .tag')].some((item) => item.textContent.trim());
+          if (!hasContent) node.remove();
+        });
+        document.querySelectorAll('.page .section').forEach((node) => {
+          const hasBody = [...node.children].some((child) => !child.matches('.section-title') && child.textContent.trim());
+          if (!hasBody) node.remove();
+        });
+        document.querySelectorAll('.page .contact > div, .page .skill, .page .footer').forEach((node) => {
+          if (!node.textContent.trim()) node.remove();
+        });
+        if (selectedBlock && !document.documentElement.contains(selectedBlock)) selectedBlock = null;
+      };
+      const save = () => { cleanupEmptyBlocks(); localStorage.setItem(storageKey, JSON.stringify(snapshot())); };
+      const load = (data) => { document.querySelector('.page').innerHTML = data.html; applySettings({ ...initial.settings, ...data.settings }); makeEditable(); };
+      let selectedBlock = null;
+      let contextTarget = null;
+      const contextMenu = document.getElementById('block-context-menu');
+      const history = [];
+      let editHistoryCaptured = false;
+      const pushHistory = () => {
+        history.push(snapshot());
+        if (history.length > 40) history.shift();
+      };
+      const resolveBlock = (target) => {
+        // 先命中实际可编辑节点，避免右键段落时向上扩大到 hero/section。
+        const editableNode = target.closest('[contenteditable="true"]');
+        if (editableNode && editableNode.closest('.page')) return editableNode;
+        const listItem = target.closest('li');
+        if (listItem) return listItem;
+        const entry = target.closest('.entry');
+        if (entry) return entry;
+        const project = target.closest('.project');
+        if (project) return project;
+        const skillOrContactLine = target.closest('.skill, .contact > div');
+        if (skillOrContactLine) return skillOrContactLine;
+        const section = target.closest('.section');
+        if (section) return section;
+        return target.closest('.hero, .footer, .rail-title, .name, .target, ul');
+      };
+      document.querySelector('.page').addEventListener('click', (event) => {
+        if (!document.body.classList.contains('edit-mode')) return;
+        const block = resolveBlock(event.target);
+        if (!block) return;
+        if (selectedBlock) selectedBlock.classList.remove('selected-block');
+        selectedBlock = block; selectedBlock.classList.add('selected-block');
+      });
+      const hideContextMenu = () => { contextMenu.hidden = true; };
+      document.querySelector('.page').addEventListener('contextmenu', (event) => {
+        if (!document.body.classList.contains('edit-mode')) return;
+        const block = resolveBlock(event.target);
+        if (!block) return;
+        event.preventDefault();
+        if (selectedBlock) selectedBlock.classList.remove('selected-block');
+        // Freeze the exact node at the moment the native right-click occurred.
+        // Menu clicks must never re-run resolveBlock or change this target.
+        contextTarget = block;
+        selectedBlock = contextTarget;
+        selectedBlock.classList.add('selected-block');
+        contextMenu.hidden = false;
+        contextMenu.style.left = `${Math.min(event.clientX, window.innerWidth - 185)}px`;
+        contextMenu.style.top = `${Math.min(event.clientY, window.innerHeight - 145)}px`;
+      });
+      contextMenu.addEventListener('click', (event) => {
+        const action = event.target.closest('[data-context-action]')?.dataset.contextAction;
+        if (!action) return;
+        const lockedTarget = contextTarget;
+        if (action === 'delete') {
+          if (lockedTarget && document.querySelector('.page').contains(lockedTarget) && confirm('删除当前区块？删除后不会保留空白占位。')) {
+            pushHistory();
+            lockedTarget.remove();
+            selectedBlock = null;
+            contextTarget = null;
+            cleanupEmptyBlocks();
+            save();
+          }
+        } else if (action === 'cleanup') {
+          pushHistory();
+          cleanupEmptyBlocks();
+          save();
+        } else if (action === 'undo') {
+          const previous = history.pop();
+          if (previous) { load(previous); save(); }
+        }
+        hideContextMenu();
+        contextTarget = null;
+      });
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('#block-context-menu')) {
+          hideContextMenu();
+          contextTarget = null;
+        }
+      });
+      window.addEventListener('scroll', hideContextMenu, true);
+      let saveTimer;
+      document.querySelector('.page').addEventListener('beforeinput', (event) => {
+        if (event.target.closest('[contenteditable="true"]') && !editHistoryCaptured) {
+          pushHistory();
+          editHistoryCaptured = true;
+        }
+      });
+      document.querySelector('.page').addEventListener('input', () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 700); });
+      document.querySelector('.page').addEventListener('focusout', () => { editHistoryCaptured = false; });
+      document.querySelector('.page').addEventListener('keydown', (event) => {
+        if (event.key === 'Backspace' || event.key === 'Delete') {
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(cleanupEmptyBlocks, 900);
+        }
+      });
+      document.querySelector('[data-action="mode"]').onclick = (event) => {
+        hideContextMenu();
+        const editing = document.body.classList.toggle('edit-mode');
+        document.body.classList.toggle('preview-mode', !editing);
+        event.currentTarget.textContent = editing ? '浏览模式' : '编辑模式';
+        if (!editing && selectedBlock) { selectedBlock.classList.remove('selected-block'); selectedBlock = null; }
+      };
+      document.querySelector('[data-action="save"]').onclick = save;
+      document.querySelector('[data-action="undo"]').onclick = () => {
+        const previous = history.pop();
+        if (!previous) { alert('没有可撤销的修改。'); return; }
+        load(previous);
+        save();
+      };
+      document.querySelector('[data-action="reset"]').onclick = () => { if (confirm('恢复初始版会清除当前本地修改，确定吗？')) { localStorage.removeItem(storageKey); load(initial); } };
+      document.querySelector('[data-action="print"]').onclick = () => window.print();
+      document.querySelector('[data-action="delete"]').onclick = () => { if (!selectedBlock) { alert('请先点击要删除的区块。'); return; } if (confirm('删除当前区块？删除后不会保留空白占位。')) { pushHistory(); selectedBlock.remove(); selectedBlock = null; cleanupEmptyBlocks(); save(); } };
+      document.querySelector('[data-action="cleanup"]').onclick = () => { pushHistory(); cleanupEmptyBlocks(); save(); };
+      document.querySelector('[data-action="photo"]').onclick = () => photoInput.click();
+      photoInput.onchange = () => { const file = photoInput.files && photoInput.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const currentPhoto = document.querySelector('.photo'); if (currentPhoto) currentPhoto.src = reader.result; save(); }; reader.readAsDataURL(file); };
+      Object.values(controls).forEach((control) => control.addEventListener('pointerdown', pushHistory, { once: false }));
+      controls.density.oninput = (event) => root.style.setProperty('--density', event.target.value);
+      controls.rail.oninput = (event) => root.style.setProperty('--rail', `${event.target.value}mm`);
+      controls.pad.oninput = (event) => root.style.setProperty('--main-pad', `${event.target.value}mm`);
+      controls.leading.oninput = (event) => root.style.setProperty('--leading', event.target.value);
+      controls.gap.oninput = (event) => root.style.setProperty('--section-gap', `${event.target.value}mm`);
+      controls.color.oninput = (event) => root.style.setProperty('--blue', event.target.value);
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        try {
+          const saved = JSON.parse(stored);
+          // Replace the previous verbose project copy while preserving the user's layout settings.
+          if (saved.html.includes('建立 AI 运行记录') || saved.html.includes('将 AI 能力应用于知识脑图拆分')) {
+            load({ html: initial.html, settings: saved.settings });
+            save();
+          } else {
+            load(saved);
+          }
+        } catch { localStorage.removeItem(storageKey); }
+      }
+      cleanupEmptyBlocks();
+    })();
+  </script>
+</body>
+</html>
