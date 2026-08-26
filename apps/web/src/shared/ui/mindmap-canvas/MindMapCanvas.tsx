@@ -20,6 +20,10 @@ import type { ContextMenuAction } from './NodeContextMenu'
 import type { GraphData } from './adapter'
 import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
+import {
+  MINDMAP_DEFAULT_ZOOM,
+  normalizeMindMapManualZoom,
+} from './mindMapViewportConfig'
 import { useMindMapCanvasState } from './useMindMapCanvasState'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { logAppError } from '@/shared/logs/model/appLogs'
@@ -119,6 +123,13 @@ export interface MindMapCanvasProps {
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
+  /**
+   * Host-owned manual zoom preference. The canvas keeps each mounted map's
+   * local pan while applying this value when it changes.
+   */
+  preferredZoom?: number
+  /** Reports only user-originated zoom changes, never fit/center camera work. */
+  onUserZoomChange?: (zoom: number) => void
   /**
    * Product scene identity (edit / review / practice / rating / learn…).
    * When it changes, the canvas re-centers the previous viewport-center card.
@@ -342,6 +353,8 @@ function MindMapCanvasInner({
           onRefreshHost={onHostRefresh}
           onFitWholeTree={() => state.runFitView(240)}
           onFitSelectionBranch={state.fitSelectionBranch}
+          onZoomIn={props.onUserZoomChange ? state.zoomInCanvas : undefined}
+          onZoomOut={props.onUserZoomChange ? state.zoomOutCanvas : undefined}
           onExpandSelectionSubtree={
             props.practiceModeActive ? undefined : state.expandSelectionSubtree
           }
@@ -440,27 +453,35 @@ function MindMapCanvasInner({
   )
 }
 
-const DEFAULT_MINDMAP_VIEWPORT: Viewport = { x: 4, y: 18, zoom: 0.99 }
+const DEFAULT_MINDMAP_VIEWPORT: Viewport = { x: 4, y: 18, zoom: MINDMAP_DEFAULT_ZOOM }
 
 export function MindMapCanvas(props: MindMapCanvasProps) {
   const [hostEpoch, setHostEpoch] = useState(0)
   // Fit-after-ready only for manual 刷新脑图 (not silent auto-recover remounts).
   const [manualRefreshEpoch, setManualRefreshEpoch] = useState(0)
   // 相机状态放在 Provider 外层，容器重建或短暂零尺寸时也不会丢失用户视口。
-  const [controlledViewport, setControlledViewport] = useState<Viewport>(DEFAULT_MINDMAP_VIEWPORT)
+  const [controlledViewport, setControlledViewport] = useState<Viewport>(() => ({
+    ...DEFAULT_MINDMAP_VIEWPORT,
+    zoom: normalizeMindMapManualZoom(props.preferredZoom) ?? DEFAULT_MINDMAP_VIEWPORT.zoom,
+  }))
   const autoRecoveredSignaturesRef = useRef<Set<string>>(new Set())
   const hostResetKey = `${String(props.recoveryKey ?? '')}:${hostEpoch}`
   const remountHost = useCallback((options?: { resetViewport?: boolean; manual?: boolean }) => {
     if (options?.resetViewport) {
       // Manual 刷新脑图 / error-boundary recover: drop a far-off camera so the map
-      // is not blank after edit↔review document switches.
-      setControlledViewport(DEFAULT_MINDMAP_VIEWPORT)
+      // is not blank after edit↔review document switches, while retaining the
+      // host's shared zoom preference.
+      const preferredZoom = normalizeMindMapManualZoom(props.preferredZoom)
+      setControlledViewport({
+        ...DEFAULT_MINDMAP_VIEWPORT,
+        zoom: preferredZoom ?? DEFAULT_MINDMAP_VIEWPORT.zoom,
+      })
     }
     if (options?.manual) {
       setManualRefreshEpoch((version) => version + 1)
     }
     setHostEpoch((version) => version + 1)
-  }, [])
+  }, [props.preferredZoom])
   const refreshHost = useCallback(() => {
     dispatchGlobalFeedback('toolbar_action', {
       origin: 'toolbar',

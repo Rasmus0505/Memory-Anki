@@ -279,6 +279,8 @@ function renderCard(
     encounter?: FreestyleUnitEncounterState
     roundId?: string
     ratingScope?: 'unit' | 'palace'
+    preferredZoom?: number
+    onUserZoomChange?: (zoom: number) => void
     palaceTarget?: {
       palaceId: number
       dueCount: number
@@ -308,7 +310,9 @@ function renderCard(
     encounter: options.encounter ?? queueEncounter(),
     retryAfterCards: 3,
     ratingScope: options.ratingScope,
+    preferredZoom: options.preferredZoom,
     palaceTarget: options.palaceTarget,
+    ...(options.onUserZoomChange ? { onUserZoomChange: options.onUserZoomChange } : {}),
     ...callbacks,
   }
   const renderResult = render(<FreestyleUnitReviewCardView {...props} />)
@@ -403,6 +407,24 @@ describe('FreestyleUnitReviewCardView', () => {
         editor_doc: { root: { data: { uid: string } } }
       }).editor_doc.root.data.uid,
     ).toBe('root')
+  })
+
+  it('forwards the shared freestyle zoom preference to the map panel', async () => {
+    const card = buildCard('unit-shared-zoom')
+    const onUserZoomChange = vi.fn()
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card, { preferredZoom: 0.72, onUserZoomChange })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(capturedPanelProps).toMatchObject({
+      preferredZoom: 0.72,
+      onUserZoomChange,
+    })
+    const panelOnUserZoomChange = capturedPanelProps?.onUserZoomChange as
+      | ((zoom: number) => void)
+      | undefined
+    panelOnUserZoomChange?.(0.84)
+    expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
   })
 
   it('keeps four disabled rating buttons visible while the session is loading', async () => {
@@ -975,7 +997,11 @@ describe('FreestyleUnitReviewCardView', () => {
     fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
     await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
-    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { restudy: false })
+    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, {
+      restudy: false,
+      rating: 4,
+      retryAfterCards: 0,
+    })
     expect(screen.getByTestId('flip-card-mind-map-panel')).not.toBeNull()
   })
 
@@ -1024,6 +1050,57 @@ describe('FreestyleUnitReviewCardView', () => {
       { cardId: card.id, restudy: false, rating: 3, retryAfterCards: 0 },
       { cardId: 'card-b', restudy: false, rating: 3, retryAfterCards: 0 },
     ])
+  })
+
+  it('keeps failed sibling units in palace batch settlement for restudy', async () => {
+    const card = buildCard('unit-palace-retry')
+    const session = buildSession(card.unit_id!)
+    const currentResult = ratingResult(session, 2, 'batch-palace-retry')
+    const siblingResult = {
+      ...ratingResult(session, 2, 'batch-palace-retry:unit-b'),
+      operation_id: 'batch-palace-retry:unit-b',
+      unit: { ...currentResult.unit, id: 'unit-b' },
+    }
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.ratePalaceDueUnitsApi.mockResolvedValue({
+      batch_id: 'batch-palace-retry',
+      palace_id: card.palace_id,
+      rating: 2,
+      items: [currentResult, siblingResult],
+      rated_unit_ids: [card.unit_id, 'unit-b'],
+      remaining_due_count: 2,
+      current: currentResult,
+    })
+    const { onBatchCardsSettled, onEncounterChange } = renderCard(card, {
+      ratingScope: 'palace',
+      palaceTarget: {
+        palaceId: card.palace_id,
+        dueCount: 2,
+        excludeUnitIds: [],
+        includeUnitIds: [card.unit_id, 'unit-b'],
+        settleCards: [
+          { cardId: card.id, unitId: card.unit_id },
+          { cardId: 'card-b', unitId: 'unit-b' },
+        ],
+      },
+    })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
+    await waitFor(() => {
+      expect(onBatchCardsSettled).toHaveBeenCalledWith([
+        { cardId: card.id, restudy: true, rating: 2, retryAfterCards: 3 },
+        { cardId: 'card-b', restudy: true, rating: 2, retryAfterCards: 3 },
+      ])
+    })
+    expect(onEncounterChange).toHaveBeenCalledWith(
+      'card-b',
+      expect.objectContaining({
+        selectedRating: 2,
+        passed: false,
+        retryAfterCards: 3,
+      }),
+    )
   })
 
   it('marks the tapped rating as chosen while the rate is still in flight', async () => {

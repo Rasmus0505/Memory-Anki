@@ -616,10 +616,19 @@ describe('MindMapCanvas recovery', () => {
       // Park the controlled camera far from the laid-out forest so the map looks empty.
       const farViewport = { x: -8000, y: -8000, zoom: 1 }
       act(() => {
+        const onMoveStart = reactFlowMockState.reactFlowProps?.onMoveStart as
+          | ((event: MouseEvent, viewport: typeof farViewport) => void)
+          | undefined
         const onViewportChange = reactFlowMockState.reactFlowProps?.onViewportChange as
           | ((viewport: { x: number; y: number; zoom: number }) => void)
           | undefined
+        const onMoveEnd = reactFlowMockState.reactFlowProps?.onMoveEnd as
+          | ((event: MouseEvent, viewport: typeof farViewport) => void)
+          | undefined
+        const gesture = new MouseEvent('pointermove')
+        onMoveStart?.(gesture, farViewport)
         onViewportChange?.(farViewport)
+        onMoveEnd?.(gesture, farViewport)
       })
       reactFlowMockState.viewport = { ...farViewport }
       reactFlowMockState.setCenter.mockClear()

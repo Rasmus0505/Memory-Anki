@@ -38,6 +38,7 @@ export {
   cardPalaceId,
   sourceCardId,
   getFreestyleRatedCardIds,
+  getFreestylePassedCardIds,
   isRetryOccurrence,
   createRetryOccurrence,
   insertRetryOccurrenceAfterGap,

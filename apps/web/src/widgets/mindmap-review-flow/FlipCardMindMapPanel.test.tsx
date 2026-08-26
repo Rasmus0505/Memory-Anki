@@ -63,6 +63,25 @@ describe('FlipCardMindMapPanel', () => {
     })
   })
 
+  it('forwards host-owned manual zoom without assigning persistence semantics', () => {
+    const onUserZoomChange = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        preferredZoom={0.72}
+        onUserZoomChange={onUserZoomChange}
+      />,
+    )
+
+    const surfaceProps = getLatestMindMapEditorSurfaceProps()
+    expect(surfaceProps).toMatchObject({
+      preferredZoom: 0.72,
+      onUserZoomChange,
+    })
+    surfaceProps?.onUserZoomChange?.(0.84)
+    expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
+  })
+
   it('hides the mobile guided rail in compact freestyle (tap nodes to reveal)', () => {
     renderInRouter(
       <FlipCardMindMapPanel

@@ -52,6 +52,8 @@ export function FreestyleUnitReviewFlipPanel({
   onFreestyleFlipModeChange,
   autoAdvance = false,
   onAutoAdvanceChange,
+  preferredZoom,
+  onUserZoomChange,
   onEditingChange,
   onSaveFailed,
   onEditorStateSaved,
@@ -71,6 +73,8 @@ export function FreestyleUnitReviewFlipPanel({
   /** Advance after a passing rate; surfaced in 翻卡设置. */
   autoAdvance?: boolean
   onAutoAdvanceChange?: (value: boolean) => void
+  preferredZoom?: number
+  onUserZoomChange?: (zoom: number) => void
   /** Parent hides rating overlay while inline editing. */
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
@@ -668,6 +672,8 @@ export function FreestyleUnitReviewFlipPanel({
         freestyleAutoAdvance={onAutoAdvanceChange
           ? { value: autoAdvance, onChange: onAutoAdvanceChange }
           : undefined}
+        preferredZoom={preferredZoom}
+        onUserZoomChange={onUserZoomChange}
         toolbarCenterContent={
           <PalaceLadderProgress
             palaceId={session.palace_id}

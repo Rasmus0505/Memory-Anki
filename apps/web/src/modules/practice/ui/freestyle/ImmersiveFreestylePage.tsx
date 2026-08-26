@@ -75,6 +75,7 @@ import {
   cardPalaceId,
   findNextPalaceIndex,
   findPreviousPalaceIndex,
+  getFreestylePassedCardIds,
   getFreestyleRatedCardIds,
   isSequentialPalaceBlocked,
   popViewHistory,
@@ -217,6 +218,9 @@ export default function ImmersiveFreestylePage() {
   const [ratingScope, setRatingScope] = useState<FreestyleRatingScope>(
     () => readFreestyleDisplaySettings().rating_scope,
   )
+  const [mindmapZoom, setMindmapZoom] = useState(
+    () => readFreestyleDisplaySettings().mindmap_zoom,
+  )
   const [freestyleFullscreen, setFreestyleFullscreen] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [readOnlyHistoryCardId, setReadOnlyHistoryCardId] = useState<string | null>(null)
@@ -270,6 +274,7 @@ export default function ImmersiveFreestylePage() {
       setFlipMode(settings.flip_mode)
       setAutoAdvance(settings.auto_advance)
       setRatingScope(settings.rating_scope)
+      setMindmapZoom(settings.mindmap_zoom)
     })
   }, [])
 
@@ -344,6 +349,11 @@ export default function ImmersiveFreestylePage() {
     saveFreestyleDisplaySettings({ auto_advance: next })
   }, [])
 
+  const updateMindmapZoom = useCallback((next: number) => {
+    const saved = saveFreestyleDisplaySettings({ mindmap_zoom: next })
+    setMindmapZoom(saved.mindmap_zoom)
+  }, [])
+
   const saveFreestyleConfig = useCallback((nextConfig: FreestyleFeedConfig) => {
     setConfigAndPersist(nextConfig)
     // A shelf link is a launch hint. Remove it after saving so refresh cannot
@@ -366,15 +376,15 @@ export default function ImmersiveFreestylePage() {
       encountersByCardId: queueState.unitEncountersByCardId,
     })
   }, [cards, currentCard, queueState.completedIds, queueState.unitEncountersByCardId, roundMeta.palace_leftover_due])
-  const ratedCardIds = useMemo(
-    () => getFreestyleRatedCardIds(cards, queueState.completedIds, queueState.unitEncountersByCardId),
+  const passedCardIds = useMemo(
+    () => getFreestylePassedCardIds(cards, queueState.completedIds, queueState.unitEncountersByCardId),
     [cards, queueState.completedIds, queueState.unitEncountersByCardId],
   )
 
   const getIncompleteUnitSummary = useCallback(
     (palaceId: number | null) => {
       const seen = new Set<string>()
-      const rated = new Set(ratedCardIds)
+      const rated = new Set(passedCardIds)
       return cards
         .filter((card): card is FreestyleMindMapBranchCard => cardPalaceId(card) === palaceId && card.type === 'mindmap_branch' && Boolean(card.unit_id))
         .filter((card) => {
@@ -385,7 +395,7 @@ export default function ImmersiveFreestylePage() {
         })
         .map(incompleteUnitLabel)
     },
-    [cards, ratedCardIds],
+    [cards, passedCardIds],
   )
 
   const refreshCanGoPrevious = useCallback(
@@ -512,7 +522,7 @@ export default function ImmersiveFreestylePage() {
           cards,
           currentIndex,
           next,
-          ratedCardIds,
+          passedCardIds,
           config.palace_order,
         )
       ) {
@@ -565,7 +575,7 @@ export default function ImmersiveFreestylePage() {
     },
     // getIncompleteUnitSummary is intentionally absent: the hint moved onto the card
     // (see sequentialBlockedHint), so this callback no longer reads it.
-    [cards, config.palace_order, currentIndex, goToIndex, ratedCardIds, refreshCanGoPrevious, scrollToIndex],
+    [cards, config.palace_order, currentIndex, goToIndex, passedCardIds, refreshCanGoPrevious, scrollToIndex],
   )
 
   /**
@@ -606,7 +616,7 @@ export default function ImmersiveFreestylePage() {
           cards,
           currentIndex,
           nextPalaceIndex,
-          ratedCardIds,
+          passedCardIds,
           config.palace_order,
         )
       ) {
@@ -616,7 +626,7 @@ export default function ImmersiveFreestylePage() {
       return
     }
     navigateToIndex(currentIndex + 1)
-  }, [cards, config.palace_order, currentIndex, navigateToIndex, ratedCardIds, ratingScope])
+  }, [cards, config.palace_order, currentIndex, navigateToIndex, passedCardIds, ratingScope])
 
   useEffect(() => {
     if (requestedScrollIndexRef.current !== currentIndex) return
@@ -653,7 +663,7 @@ export default function ImmersiveFreestylePage() {
         cards,
         currentIndexRef.current,
         visual,
-        ratedCardIds,
+        passedCardIds,
         config.palace_order,
       )
     ) {
@@ -675,7 +685,7 @@ export default function ImmersiveFreestylePage() {
     if (Math.abs(node.scrollTop - expectedTop) > 2) {
       scrollToIndex(pinned, 'auto')
     }
-  }, [cards, config.palace_order, flushDeferredRestudy, navigateToIndex, ratedCardIds, scrollToIndex])
+  }, [cards, config.palace_order, flushDeferredRestudy, navigateToIndex, passedCardIds, scrollToIndex])
 
   useEffect(() => {
     const node = scrollRef.current
@@ -939,7 +949,7 @@ export default function ImmersiveFreestylePage() {
         cards,
         currentIndex,
         nextPalaceIndex,
-        ratedCardIds,
+        passedCardIds,
         config.palace_order,
       )
     ) {
@@ -961,7 +971,7 @@ export default function ImmersiveFreestylePage() {
       })
     })
     // Same as navigateToIndex: the blocked reason is rendered on the card, not here.
-  }, [cards, config.palace_order, currentIndex, ratedCardIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
+  }, [cards, config.palace_order, currentIndex, passedCardIds, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
 
   const handleGoToPreviousPalace = useCallback(() => {
     const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
@@ -977,7 +987,7 @@ export default function ImmersiveFreestylePage() {
       cards,
       currentIndex,
       nextPalaceIndex,
-      ratedCardIds,
+      passedCardIds,
       config.palace_order,
     )
 
@@ -1420,6 +1430,8 @@ export default function ImmersiveFreestylePage() {
                           onFreestyleFlipModeChange={updateFlipMode}
                           autoAdvance={autoAdvance}
                           onAutoAdvanceChange={updateAutoAdvance}
+                          preferredZoom={mindmapZoom}
+                          onUserZoomChange={updateMindmapZoom}
                           blockedHint={index === currentIndex ? sequentialBlockedHint : null}
                           onRatingSettled={handleRatingSettled}
                           ratingScope={ratingScope}

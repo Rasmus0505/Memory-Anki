@@ -71,6 +71,41 @@ describe('MindMapCanvasToolbar', () => {
     expect(onCollapseDeepBranches).toHaveBeenCalledTimes(1)
   })
 
+  it('renders explicit zoom controls only for hosts that opt into manual zoom persistence', () => {
+    const onZoomIn = vi.fn()
+    const onZoomOut = vi.fn()
+    const { rerender } = render(
+      <MindMapCanvasToolbar
+        focusMode={false}
+        canUndo={false}
+        canRedo={false}
+        showHistoryControls={false}
+        onRefreshHost={vi.fn()}
+        onZoomIn={onZoomIn}
+        onZoomOut={onZoomOut}
+        onToggleFocusMode={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByTitle('缩小'))
+    fireEvent.click(screen.getByTitle('放大'))
+    expect(onZoomOut).toHaveBeenCalledTimes(1)
+    expect(onZoomIn).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <MindMapCanvasToolbar
+        focusMode={false}
+        canUndo={false}
+        canRedo={false}
+        showHistoryControls={false}
+        onRefreshHost={vi.fn()}
+        onToggleFocusMode={vi.fn()}
+      />,
+    )
+    expect(screen.queryByTitle('缩小')).toBeNull()
+    expect(screen.queryByTitle('放大')).toBeNull()
+  })
+
   it('renders center content after canvas tools', () => {
     render(
       <MindMapCanvasToolbar

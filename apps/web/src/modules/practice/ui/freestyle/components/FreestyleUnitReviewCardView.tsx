@@ -213,6 +213,8 @@ export function FreestyleUnitReviewCardView({
   onFreestyleFlipModeChange,
   autoAdvance = false,
   onAutoAdvanceChange,
+  preferredZoom,
+  onUserZoomChange,
   blockedHint = null,
   onRatingSettled,
   ratingScope = 'unit',
@@ -254,6 +256,9 @@ export function FreestyleUnitReviewCardView({
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
   autoAdvance?: boolean
   onAutoAdvanceChange?: (value: boolean) => void
+  /** Shared manual zoom across all currently mounted freestyle maps. */
+  preferredZoom?: number
+  onUserZoomChange?: (zoom: number) => void
   ratingScope?: FreestyleRatingScope
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   palaceTarget?: PalaceRatingTarget | null
@@ -647,7 +652,7 @@ export function FreestyleUnitReviewCardView({
         const entries = palaceTarget.settleCards.flatMap((settle) => {
           const item = itemsByUnit.get(settle.unitId)
           if (!item && !ratedUnits.has(settle.unitId) && settle.cardId !== card.id) return []
-          if (item && settle.cardId !== card.id && item.passed) {
+          if (item && settle.cardId !== card.id) {
             onEncounterChange(settle.cardId, {
               encounterId: item.encounter.id,
               unitRevision: item.unit.revision,
@@ -666,7 +671,14 @@ export function FreestyleUnitReviewCardView({
               retryAfterCards: item?.retry_after_cards ?? unitResult.retry_after_cards,
             }]
           }
-          if (item && !item.passed) return []
+          if (item) {
+            return [{
+              cardId: settle.cardId,
+              restudy: !item.passed,
+              rating: item.rating,
+              retryAfterCards: item.retry_after_cards,
+            }]
+          }
           return [{
             cardId: settle.cardId,
             restudy: false,
@@ -680,6 +692,8 @@ export function FreestyleUnitReviewCardView({
         lastSettledCardIdsRef.current = [card.id]
         onBranchComplete(card.id, {
           restudy: !unitResult.passed,
+          rating: unitResult.rating,
+          retryAfterCards: unitResult.retry_after_cards,
         })
       }
       revealUndo()
@@ -751,7 +765,11 @@ export function FreestyleUnitReviewCardView({
           onBranchComplete(card.id, { cleared: true })
         }
       } else {
-        onBranchComplete(card.id, { restudy: !result.encounter.passed })
+        onBranchComplete(card.id, {
+          restudy: !result.encounter.passed,
+          rating: result.encounter.selected_rating ?? undefined,
+          retryAfterCards: result.encounter.retry_after_cards,
+        })
       }
     } catch (error) {
       const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: lastOperationId, stage: '撤销评分' })
@@ -863,6 +881,8 @@ export function FreestyleUnitReviewCardView({
             onFreestyleFlipModeChange={onFreestyleFlipModeChange}
             autoAdvance={autoAdvance}
             onAutoAdvanceChange={onAutoAdvanceChange}
+            preferredZoom={preferredZoom}
+            onUserZoomChange={onUserZoomChange}
             onEditingChange={setInlineEditing}
             onSaveFailed={onSaveFailed}
             onEditorStateSaved={setSavedEditorState}

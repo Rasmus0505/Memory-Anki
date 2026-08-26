@@ -112,13 +112,27 @@ def rate_unit(
     current_stage = clamp_stage(stage_index)
     normalized = normalize_rating(rating)
 
-    # 忘记 is the only failing grade: relearn today, landing proportional to the
+    # 忘记 is a failing grade: relearn today, landing proportional to the
     # strength already earned. A lapse is honest evidence whether or not the unit
     # was due, so it is applied even while the schedule is locked -- only the
     # promoting direction needs protection.
     if normalized == 1:
         return UnitScheduleResult(
             lapse_stage(current_stage, has_passed),
+            current_day,
+            False,
+            RETRY_AFTER_CARDS,
+        )
+
+    # 困难 is also retry work. It keeps the unit due today so the learner gets
+    # another chance after a short queue gap, while preserving the one-step
+    # penalty for a unit that had already earned a ladder position. Handle this
+    # before the schedule lock so ahead-of-date filler cards follow the same
+    # retry contract as due cards.
+    if normalized == 2:
+        penalized_stage = max(0, current_stage - 1) if has_passed else 0
+        return UnitScheduleResult(
+            penalized_stage,
             current_day,
             False,
             RETRY_AFTER_CARDS,
@@ -139,25 +153,14 @@ def rate_unit(
         )
 
     if not has_passed:
-        # Still in first learning. 困难 keeps the unit in the same-day slot;
-        # only an actual recall promotes it out.
-        if normalized == 2:
-            return UnitScheduleResult(0, current_day, False, RETRY_AFTER_CARDS)
         passed_stage = 1 if normalized == 3 else 2
     elif had_failure_in_encounter:
         # Relearning inside an encounter that already failed: a pass restores
         # position but never advances beyond it.
-        if normalized == 2:
-            passed_stage = current_stage - 1
-        elif normalized == 3:
+        if normalized == 3:
             passed_stage = current_stage
         else:
             passed_stage = current_stage + 1
-    elif normalized == 2:
-        # 困难 is a pass with a shortened interval, not a failure. It must be
-        # able to hold a real interval, otherwise honest use only ratchets a
-        # unit downwards and the grade becomes unusable.
-        passed_stage = current_stage - 1
     elif normalized == 3:
         passed_stage = current_stage + 1
     else:

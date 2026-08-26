@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   findPreviousPalaceIndex,
+  getFreestylePassedCardIds,
   getFreestyleRatedCardIds,
   moveRemainingPalaceToTail,
   createRetryOccurrence,
@@ -53,5 +54,55 @@ describe('freestyle palace navigation', () => {
 
     expect(rated).toEqual(expect.arrayContaining([source.id, retry.id]))
     expect(rated).not.toContain(cards[1].id)
+  })
+
+  it('does not treat a weak rating as passed until its retry passes', () => {
+    const source = cards[0]
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const passedBeforeRetry = getFreestylePassedCardIds(
+      [source, retry, cards[1], cards[2]],
+      [],
+      {
+        [source.id]: {
+          encounterId: 'encounter-1',
+          roundId: 'round-1',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: 'session-1',
+          selectedRating: 2,
+          passed: false,
+          retryAfterCards: 3,
+        },
+      },
+    )
+    expect(passedBeforeRetry).not.toContain(source.id)
+
+    const passedAfterRetry = getFreestylePassedCardIds(
+      [source, retry, cards[1], cards[2]],
+      [],
+      {
+        [source.id]: {
+          encounterId: 'encounter-1',
+          roundId: 'round-1',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: 'session-1',
+          selectedRating: 2,
+          passed: false,
+          retryAfterCards: 3,
+        },
+        [retry.id]: {
+          encounterId: 'encounter-2',
+          roundId: 'round-1',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: 'session-1',
+          selectedRating: 3,
+          passed: true,
+          retryAfterCards: 0,
+        },
+      },
+    )
+    expect(passedAfterRetry).toEqual(expect.arrayContaining([source.id, retry.id]))
   })
 })

@@ -121,13 +121,25 @@ describe('buildFreestyleRoundCompletion', () => {
 })
 
 describe('isFreestyleRoundComplete', () => {
-  it('is complete only once every card carries a rating', () => {
+  it('is complete only once every unit passes, including a weak-rating retry', () => {
     const cards = [card('one'), card('two')]
 
     expect(isFreestyleRoundComplete(cards, { one: encounter() })).toBe(false)
     expect(isFreestyleRoundComplete(cards, {
       one: encounter(),
       two: encounter({ selectedRating: 2, passed: false }),
+    })).toBe(false)
+
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    expect(isFreestyleRoundComplete([cards[0], cards[1], retry], {
+      one: encounter(),
+      two: encounter({ selectedRating: 2, passed: false }),
+      [retry.id]: encounter({ selectedRating: 3, passed: true }),
     })).toBe(true)
   })
 

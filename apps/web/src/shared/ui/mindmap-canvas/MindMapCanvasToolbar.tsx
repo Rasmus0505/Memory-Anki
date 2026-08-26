@@ -11,6 +11,8 @@ import {
   Scan,
   Shrink,
   Undo2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -35,6 +37,9 @@ interface MindMapCanvasToolbarProps {
   centerContent?: ReactNode
   /** Remount host and fit the tree after ready. */
   onRefreshHost: () => void
+  /** Host opts into persisted manual zoom controls. */
+  onZoomIn?: () => void
+  onZoomOut?: () => void
   /** Fit the whole currently visible (collapse-aware) tree into the viewport. */
   onFitWholeTree?: () => void
   /** Fit the selected branch (or root) into the viewport. */
@@ -83,6 +88,8 @@ export function MindMapCanvasToolbar({
   leadingContent,
   centerContent,
   onRefreshHost,
+  onZoomIn,
+  onZoomOut,
   onFitWholeTree,
   onFitSelectionBranch,
   onExpandSelectionSubtree,
@@ -111,6 +118,26 @@ export function MindMapCanvasToolbar({
       >
         <RefreshCw className="size-4" />
       </button>
+      {onZoomOut ? (
+        <button
+          type="button"
+          onClick={onZoomOut}
+          className={plainToolbarButtonClass()}
+          title="缩小"
+        >
+          <ZoomOut className="size-4" />
+        </button>
+      ) : null}
+      {onZoomIn ? (
+        <button
+          type="button"
+          onClick={onZoomIn}
+          className={plainToolbarButtonClass()}
+          title="放大"
+        >
+          <ZoomIn className="size-4" />
+        </button>
+      ) : null}
       {onFitWholeTree ? (
         <button
           type="button"

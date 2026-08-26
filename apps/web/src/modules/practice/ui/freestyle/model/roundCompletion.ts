@@ -20,14 +20,31 @@ function sourceIdOf(card: FreestyleCard) {
   return sourceCardId(card) || card.id
 }
 
+function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
+  const rating = Number(encounter?.selectedRating)
+  return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+}
+
 function isHandled(
   card: FreestyleCard,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
+  cards: ReadonlyArray<FreestyleCard> = [card],
 ) {
-  if (encountersByCardId[card.id]?.selectedRating != null) return true
   const completed = new Set(Array.from(completedIds, String))
-  return completed.has(card.id) || completed.has(sourceIdOf(card))
+  if (completed.has(card.id) || completed.has(sourceIdOf(card))) return true
+  // A weak rating is an acknowledged attempt, but not completion: its retry
+  // occurrence must still be rated before the round can close.
+  const encounter = encountersByCardId[card.id]
+  if (encounterPassed(encounter)) return true
+  if (encounter?.selectedRating != null) {
+    const sourceId = sourceIdOf(card)
+    return cards.some(
+      (candidate) => sourceIdOf(candidate) === sourceId
+        && encounterPassed(encountersByCardId[candidate.id]),
+    )
+  }
+  return false
 }
 
 /**
@@ -49,16 +66,24 @@ export function buildFreestyleRoundCompletion(
   },
 ): FreestyleRoundCompletion {
   const completedIds = options?.completedIds ?? []
+  const completed = new Set(Array.from(completedIds, String))
   const scheduledCount = options?.scheduledCount ?? cards.filter((card) => !isRetryOccurrence(card)).length
-  const sources = new Map<string, { passed: boolean; retried: boolean; handled: boolean }>()
+  const sources = new Map<string, { passed: boolean; retried: boolean; handled: boolean; attempted: boolean }>()
 
   for (const card of cards) {
     const sourceId = sourceIdOf(card)
-    const current = sources.get(sourceId) ?? { passed: false, retried: false, handled: false }
+    const current = sources.get(sourceId) ?? { passed: false, retried: false, handled: false, attempted: false }
     const encounter = encountersByCardId[card.id]
-    const handled = isHandled(card, encountersByCardId, completedIds)
+    const handled = isHandled(card, encountersByCardId, completedIds, cards)
     if (handled) current.handled = true
-    if (encounter?.passed === true || (handled && encounter?.passed !== false && !isRetryOccurrence(card))) {
+    if (
+      encounter?.selectedRating != null
+      || completed.has(card.id)
+      || completed.has(sourceId)
+    ) {
+      current.attempted = true
+    }
+    if (encounterPassed(encounter) || (handled && !isRetryOccurrence(card) && !encounter)) {
       current.passed = true
     }
     if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
@@ -69,7 +94,7 @@ export function buildFreestyleRoundCompletion(
   let passedCount = 0
   let retriedCount = 0
   sources.forEach((entry) => {
-    if (!entry.handled) return
+    if (!entry.attempted) return
     ratedCount += 1
     if (entry.passed) passedCount += 1
     if (entry.retried) retriedCount += 1
@@ -95,5 +120,5 @@ export function isFreestyleRoundComplete(
   completedIds: Iterable<string> = [],
 ): boolean {
   if (cards.length === 0) return false
-  return cards.every((card) => isHandled(card, encountersByCardId, completedIds))
+  return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards))
 }

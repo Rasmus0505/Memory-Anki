@@ -39,6 +39,7 @@ import type {
 import {
   MINDMAP_FIT_MAX_ZOOM,
   MINDMAP_FIT_MIN_ZOOM,
+  normalizeMindMapManualZoom,
   MINDMAP_MOBILE_FIT_MAX_ZOOM,
   MINDMAP_MOBILE_FIT_MIN_ZOOM,
 } from './mindMapViewportConfig'
@@ -61,6 +62,10 @@ interface UseMindMapViewportInput {
   viewCommand: MindMapCanvasViewCommand | null
   /** Host 刷新脑图 epoch — fit once after remount so blank off-screen maps recover. */
   hostRefreshEpoch?: number
+  /** Host-owned manual zoom preference; only this field is synced externally. */
+  preferredZoom?: number
+  /** Reports user-originated zoom changes after a gesture or explicit zoom control. */
+  onUserZoomChange?: (zoom: number) => void
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
 
@@ -79,6 +84,8 @@ export function useMindMapViewport({
   sceneTransitionKey = null,
   viewCommand,
   hostRefreshEpoch = 0,
+  preferredZoom: preferredZoomInput,
+  onUserZoomChange,
   setNodeSizeVersion,
 }: UseMindMapViewportInput) {
   const { fitView, getViewport, setViewport, zoomIn, zoomOut, setCenter, screenToFlowPosition } =
@@ -92,7 +99,10 @@ export function useMindMapViewport({
   const restoreViewportFrameRef = useRef<number | null>(null)
   const explicitViewportChangeRef = useRef(false)
   const manualViewportGestureRef = useRef(false)
+  const userGestureStartZoomRef = useRef<number | null>(null)
   const explicitViewportTimeoutRef = useRef<number | null>(null)
+  const controlledViewportRef = useRef<Viewport>(controlledViewport)
+  const lastAppliedPreferredZoomRef = useRef<number | null>(null)
   /** Card nearest the viewport center while the scene is stable. */
   const lastStableCenterNodeIdRef = useRef<string | null>(null)
   /** After a scene switch, re-center this node once layout is ready. */
@@ -115,12 +125,46 @@ export function useMindMapViewport({
   const yieldOneFingerPan = mobileViewPolicy === 'guided'
   const preserveViewport = contentChangeViewportPolicy === 'preserve'
   const graphContentSignature = useMemo(() => JSON.stringify(graphNodes), [graphNodes])
+  const normalizedPreferredZoom = normalizeMindMapManualZoom(preferredZoomInput)
+
+  const commitControlledViewport = useCallback(
+    (viewport: Viewport) => {
+      controlledViewportRef.current = viewport
+      onControlledViewportChange(viewport)
+    },
+    [onControlledViewportChange],
+  )
 
   useLayoutEffect(() => {
+    controlledViewportRef.current = controlledViewport
     // Never let a mid-restore / programmatic camera write overwrite the lock.
     if (explicitViewportChangeRef.current) return
     preservedViewportRef.current = controlledViewport
   }, [controlledViewport])
+
+  /** Apply a host preference without moving the map's current local pan. */
+  const syncPreferredZoom = useCallback(
+    (zoom: number) => {
+      const current = controlledViewportRef.current
+      if (Math.abs(current.zoom - zoom) < 0.0001) return
+      const next = { ...current, zoom }
+      preservedViewportRef.current = next
+      controlledViewportRef.current = next
+      onControlledViewportChange(next)
+      void setViewport(next, { duration: 0 })
+    },
+    [onControlledViewportChange, setViewport],
+  )
+
+  useLayoutEffect(() => {
+    if (normalizedPreferredZoom === undefined) {
+      lastAppliedPreferredZoomRef.current = null
+      return
+    }
+    if (lastAppliedPreferredZoomRef.current === normalizedPreferredZoom) return
+    lastAppliedPreferredZoomRef.current = normalizedPreferredZoom
+    syncPreferredZoom(normalizedPreferredZoom)
+  }, [normalizedPreferredZoom, syncPreferredZoom])
 
   /**
    * True freeze: re-assert the locked {x,y,zoom} when React Flow drifts during
@@ -162,19 +206,23 @@ export function useMindMapViewport({
         ) {
           void setViewport(locked, { duration: 0 })
         }
-        onControlledViewportChange(locked)
+        commitControlledViewport(locked)
         preservedViewportRef.current = locked
         explicitViewportChangeRef.current = false
       })
     })
-  }, [getViewport, onControlledViewportChange, preserveViewport, setViewport])
+  }, [commitControlledViewport, getViewport, preserveViewport, setViewport])
 
-  const handleMoveStart = useCallback<OnMove>((event) => {
+  const handleMoveStart = useCallback<OnMove>((event, viewport) => {
+    // Keep the existing auto-fit behavior for hosts that do not preserve a
+    // user camera. Freestyle opts into preserve mode, so it still gets the
+    // user-zoom notification below without changing other scenes.
     if (!preserveViewport) return
     // RF passes a DOM event for pointer/wheel pans; programmatic moves use null/undefined.
     // Also accept WheelEvent-like objects so panOnScroll does not get yanked by restore.
     if (event) {
       manualViewportGestureRef.current = true
+      userGestureStartZoomRef.current = viewport.zoom
     }
   }, [preserveViewport])
 
@@ -184,63 +232,91 @@ export function useMindMapViewport({
     // the old camera under React Flow controlled mode, so toolbar fit appears dead.
     if (explicitViewportChangeRef.current) {
       preservedViewportRef.current = viewport
-      onControlledViewportChange(viewport)
+      commitControlledViewport(viewport)
       return
     }
     if (!preserveViewport || manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
-      onControlledViewportChange(viewport)
+      commitControlledViewport(viewport)
     }
     // In preserve mode without a user gesture, drop RF-driven drift entirely.
-  }, [onControlledViewportChange, preserveViewport])
+  }, [commitControlledViewport, preserveViewport])
 
   const handleMove = useCallback<OnMove>((event, viewport) => {
     if (!preserveViewport) return
     if (explicitViewportChangeRef.current) return
     // Wheel pan sometimes skips a solid moveStart; treat any event-backed move as manual.
     if (event) {
+      if (!manualViewportGestureRef.current) {
+        userGestureStartZoomRef.current = controlledViewportRef.current.zoom
+      }
       manualViewportGestureRef.current = true
     }
     if (manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
-      onControlledViewportChange(viewport)
+      commitControlledViewport(viewport)
       return
     }
     restorePreservedViewport(viewport)
-  }, [onControlledViewportChange, preserveViewport, restorePreservedViewport])
+  }, [commitControlledViewport, preserveViewport, restorePreservedViewport])
+
+  const notifyUserZoomChange = useCallback(
+    (zoom: number) => {
+      const normalizedZoom = normalizeMindMapManualZoom(zoom)
+      if (normalizedZoom !== undefined) onUserZoomChange?.(normalizedZoom)
+    },
+    [onUserZoomChange],
+  )
 
   const handleMoveEnd = useCallback<OnMove>((event, viewport) => {
     if (!preserveViewport) return
     if (explicitViewportChangeRef.current) {
       manualViewportGestureRef.current = false
+      userGestureStartZoomRef.current = null
       return
     }
     if (event) {
+      if (!manualViewportGestureRef.current) {
+        userGestureStartZoomRef.current = controlledViewportRef.current.zoom
+      }
       manualViewportGestureRef.current = true
     }
+    const userGestureCompleted = manualViewportGestureRef.current
+    const gestureStartZoom = userGestureStartZoomRef.current
     if (manualViewportGestureRef.current) {
       preservedViewportRef.current = viewport
-      onControlledViewportChange(viewport)
-    } else {
+      commitControlledViewport(viewport)
+    } else if (preserveViewport) {
       restorePreservedViewport(viewport)
     }
     manualViewportGestureRef.current = false
-  }, [onControlledViewportChange, preserveViewport, restorePreservedViewport])
-
-  const runExplicitViewportChange = useCallback((change: () => void, duration: number) => {
-    explicitViewportChangeRef.current = true
-    if (explicitViewportTimeoutRef.current !== null) {
-      window.clearTimeout(explicitViewportTimeoutRef.current)
+    userGestureStartZoomRef.current = null
+    if (
+      userGestureCompleted &&
+      (gestureStartZoom === null || Math.abs(viewport.zoom - gestureStartZoom) >= 0.0001)
+    ) {
+      notifyUserZoomChange(viewport.zoom)
     }
-    change()
-    explicitViewportTimeoutRef.current = window.setTimeout(() => {
-      const viewport = getViewport()
-      preservedViewportRef.current = viewport
-      onControlledViewportChange(viewport)
-      explicitViewportChangeRef.current = false
-      explicitViewportTimeoutRef.current = null
-    }, duration + 40)
-  }, [getViewport, onControlledViewportChange])
+  }, [commitControlledViewport, notifyUserZoomChange, preserveViewport, restorePreservedViewport])
+
+  const runExplicitViewportChange = useCallback(
+    (change: () => void, duration: number, onSettled?: (viewport: Viewport) => void) => {
+      explicitViewportChangeRef.current = true
+      if (explicitViewportTimeoutRef.current !== null) {
+        window.clearTimeout(explicitViewportTimeoutRef.current)
+      }
+      change()
+      explicitViewportTimeoutRef.current = window.setTimeout(() => {
+        const viewport = getViewport()
+        preservedViewportRef.current = viewport
+        commitControlledViewport(viewport)
+        onSettled?.(viewport)
+        explicitViewportChangeRef.current = false
+        explicitViewportTimeoutRef.current = null
+      }, duration + 40)
+    },
+    [commitControlledViewport, getViewport],
+  )
   const childrenByParent = useMemo(() => {
     const next = new Map<string, string[]>()
     for (const node of graphNodes) {
@@ -254,7 +330,7 @@ export function useMindMapViewport({
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
   const runFitView = useCallback(
-    (duration = 300) => {
+    (duration = 300, onSettled?: () => void) => {
       if (!isCanvasReady) return
       requestAnimationFrame(() => {
         runExplicitViewportChange(() => void fitView({
@@ -263,7 +339,7 @@ export function useMindMapViewport({
           includeHiddenNodes: false,
           minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
-        }), duration)
+        }), duration, onSettled ? () => onSettled() : undefined)
       })
     },
     [fitView, focusMode, isCanvasReady, mobileGuidedActive, runExplicitViewportChange],
@@ -707,16 +783,24 @@ export function useMindMapViewport({
       origin: 'toolbar',
       label: 'ZOOM',
     })
+    const currentZoom = normalizeMindMapManualZoom(getViewport().zoom)
+    if (currentZoom !== undefined) {
+      notifyUserZoomChange(currentZoom * 1.2)
+    }
     runExplicitViewportChange(() => void zoomIn({ duration: 180 }), 180)
-  }, [runExplicitViewportChange, zoomIn])
+  }, [getViewport, notifyUserZoomChange, runExplicitViewportChange, zoomIn])
 
   const zoomOutCanvas = useCallback(() => {
     dispatchGlobalFeedback('toolbar_action', {
       origin: 'toolbar',
       label: 'ZOOM',
     })
+    const currentZoom = normalizeMindMapManualZoom(getViewport().zoom)
+    if (currentZoom !== undefined) {
+      notifyUserZoomChange(currentZoom / 1.2)
+    }
     runExplicitViewportChange(() => void zoomOut({ duration: 180 }), 180)
-  }, [runExplicitViewportChange, zoomOut])
+  }, [getViewport, notifyUserZoomChange, runExplicitViewportChange, zoomOut])
 
   useEffect(() => {
     if (!viewCommand || !isCanvasReady) return
@@ -736,8 +820,13 @@ export function useMindMapViewport({
     if (handledHostRefreshEpochRef.current === hostRefreshEpoch) return
     if (nodes.length === 0) return
     handledHostRefreshEpochRef.current = hostRefreshEpoch
-    runFitView(0)
-  }, [hostRefreshEpoch, isCanvasReady, nodes.length, runFitView])
+    runFitView(
+      0,
+      normalizedPreferredZoom === undefined
+        ? undefined
+        : () => syncPreferredZoom(normalizedPreferredZoom),
+    )
+  }, [hostRefreshEpoch, isCanvasReady, nodes.length, normalizedPreferredZoom, runFitView, syncPreferredZoom])
 
   useEffect(() => {
     return () => {

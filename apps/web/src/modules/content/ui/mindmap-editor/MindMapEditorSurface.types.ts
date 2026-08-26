@@ -57,6 +57,10 @@ export interface MindMapEditorSurfaceProps {
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
+  /** Optional host-owned zoom preference; pan remains local to each canvas instance. */
+  preferredZoom?: number
+  /** Reports manual user zoom changes without coupling the canvas to host persistence. */
+  onUserZoomChange?: (zoom: number) => void
   className?: string
   /** Generic frame chrome key; hosts map product modes (edit/review/practice/rating). */
   sceneChrome?: 'default' | 'edit' | 'review' | 'practice' | 'rating'

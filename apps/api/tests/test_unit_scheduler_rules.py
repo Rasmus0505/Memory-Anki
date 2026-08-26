@@ -1,4 +1,4 @@
-"""Ladder transition rules: hard passes, proportional lapses, spread, invariants.
+"""Ladder transition rules: hard retries, proportional lapses, spread, invariants.
 
 These pin the 2026-08 scheduling fixes. The ladder itself (stage count and
 nominal intervals) is deliberately unchanged — `unit_ladder_progress` ships
@@ -21,24 +21,13 @@ TODAY = date(2026, 8, 7)
 TOP_STAGE = len(INTERVAL_DAYS) - 1
 
 
-def _gap(stage_index: int, rating: int, *, has_passed: bool, prior_failure: bool = False) -> int:
-    result = rate_unit(
-        stage_index=stage_index,
-        has_passed=has_passed,
-        rating=rating,
-        had_failure_in_encounter=prior_failure,
-        today=TODAY,
-    )
-    return (result.due_date - TODAY).days
-
-
 def test_ladder_shape_is_unchanged():
     """The toolbar histogram and `ladder` payload depend on this exact shape."""
     assert INTERVAL_DAYS == (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
 
 
-def test_hard_on_a_mature_unit_passes_with_a_shorter_real_interval():
-    """困难 used to mean due-today + not-passed, so it could never advance time."""
+def test_hard_on_a_mature_unit_retries_after_three_cards():
+    """困难 lowers earned credit but remains retry work until a pass."""
     result = rate_unit(
         stage_index=9,
         has_passed=True,
@@ -46,26 +35,29 @@ def test_hard_on_a_mature_unit_passes_with_a_shorter_real_interval():
         had_failure_in_encounter=False,
         today=TODAY,
     )
-    assert result.passed is True
-    assert result.retry_after_cards == 0
+    assert result.passed is False
+    assert result.retry_after_cards == 3
     assert result.stage_index == 8
-    assert (result.due_date - TODAY).days == INTERVAL_DAYS[8]
-
-    # Shorter than 记得 at the same position, but still a real forward booking.
-    assert _gap(9, 2, has_passed=True) < _gap(9, 3, has_passed=True)
-    assert _gap(9, 2, has_passed=True) > 0
+    assert result.due_date == TODAY
 
 
-def test_hard_is_monotonic_below_remember_across_the_whole_ladder():
+def test_hard_always_retries_and_penalizes_mature_stage():
     for stage in range(1, len(INTERVAL_DAYS)):
-        hard = _gap(stage, 2, has_passed=True)
-        remember = _gap(stage, 3, has_passed=True)
-        easy = _gap(stage, 4, has_passed=True)
-        assert 0 < hard <= remember <= easy, f"stage {stage}"
+        result = rate_unit(
+            stage_index=stage,
+            has_passed=True,
+            rating=2,
+            had_failure_in_encounter=False,
+            today=TODAY,
+        )
+        assert result.passed is False, f"stage {stage}"
+        assert result.retry_after_cards == 3, f"stage {stage}"
+        assert result.stage_index == stage - 1, f"stage {stage}"
+        assert result.due_date == TODAY, f"stage {stage}"
 
 
 def test_hard_on_a_never_passed_unit_still_retries_same_day():
-    """First-learning behaviour is unchanged: no interval until a real pass."""
+    """First-learning hard ratings keep the unit at stage 0."""
     result = rate_unit(
         stage_index=0,
         has_passed=False,
@@ -75,6 +67,20 @@ def test_hard_on_a_never_passed_unit_still_retries_same_day():
     )
     assert (result.stage_index, result.due_date, result.passed) == (0, TODAY, False)
     assert result.retry_after_cards == 3
+
+
+def test_hard_after_a_prior_failure_retries_again_with_stage_penalty():
+    result = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=True,
+        today=TODAY,
+    )
+    assert result.passed is False
+    assert result.retry_after_cards == 3
+    assert result.stage_index == 4
+    assert result.due_date == TODAY
 
 
 def test_forgetting_a_mature_unit_keeps_proportional_credit():
@@ -177,6 +183,24 @@ def test_forget_still_lapses_when_the_schedule_is_locked():
     assert result.schedule_changed is True
     assert result.due_date == TODAY
     assert result.stage_index == 2
+
+
+def test_hard_on_a_locked_fill_unit_still_retries_and_changes_schedule():
+    booked = date(2026, 9, 1)
+    result = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=False,
+        today=TODAY,
+        schedule_locked=True,
+        locked_due_date=booked,
+    )
+    assert result.passed is False
+    assert result.retry_after_cards == 3
+    assert result.schedule_changed is True
+    assert result.stage_index == 4
+    assert result.due_date == TODAY
 
 
 def test_without_a_fuzz_key_intervals_are_exactly_nominal():

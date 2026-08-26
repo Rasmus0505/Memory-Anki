@@ -6,6 +6,11 @@ export const FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT = 'memory-anki-freestyle-d
 export type FreestyleFlipMode = 'free' | 'focused'
 export type FreestyleRatingScope = 'unit' | 'palace'
 
+// Keep the preference model independent from the shared React canvas while
+// matching its manual viewport bounds.
+const FREESTYLE_MINDMAP_MIN_ZOOM = 0.12
+const FREESTYLE_MINDMAP_MAX_ZOOM = 1.4
+
 export interface FreestyleDisplaySettings {
   rating_mode: boolean
   flip_mode: FreestyleFlipMode
@@ -17,6 +22,8 @@ export interface FreestyleDisplaySettings {
   auto_advance: boolean
   /** Section vs whole-palace due rating. Defaults to the current unit only. */
   rating_scope: FreestyleRatingScope
+  /** Shared manual mind-map zoom for all freestyle palaces. */
+  mindmap_zoom: number
 }
 
 export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
@@ -24,6 +31,7 @@ export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
   flip_mode: 'free',
   auto_advance: false,
   rating_scope: 'unit',
+  mindmap_zoom: 0.99,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +40,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFreestyleDisplaySettings(value: unknown): value is FreestyleDisplaySettings {
   return isRecord(value) && typeof value.rating_mode === 'boolean'
+}
+
+function sanitizeMindmapZoom(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_FREESTYLE_DISPLAY_SETTINGS.mindmap_zoom
+  }
+  return Math.min(FREESTYLE_MINDMAP_MAX_ZOOM, Math.max(FREESTYLE_MINDMAP_MIN_ZOOM, value))
 }
 
 export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDisplaySettings {
@@ -47,6 +62,7 @@ export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDispl
       ? raw.auto_advance
       : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.auto_advance,
     rating_scope: raw.rating_scope === 'palace' ? 'palace' : 'unit',
+    mindmap_zoom: sanitizeMindmapZoom(raw.mindmap_zoom),
   }
 }
 

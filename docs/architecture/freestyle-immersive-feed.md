@@ -83,9 +83,9 @@ only unstarted entries are rebuilt against the new streams.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
 - The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units`: every still-due unit of the current palace today, plus every still-unrated review-unit card of that palace already in this round (fill cards are `schedule_locked`). Units already rated in this round are not overwritten. Each unit keeps its own ladder; leftover due units that were not in the round are rated without inserting feed copies. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
-- `忘记` (and first-learning `困难`) insert a retry copy after the learner leaves, at most three
-  cards later, with no per-round cap. The just-rated source card does not move.
-  `记得` / `轻松`, and `困难` on an already-passed unit, finish the current encounter.
+- `忘记` and every `困难` insert a retry copy after the learner leaves, at most three cards later,
+  with no per-round cap. The just-rated source card does not move. Only `记得` / `轻松` finish
+  the current encounter; a mature-unit `困难` remains retry work just like first-learning `困难`.
 - `due_first_then_expand` and `all_content_due_weighted` mark fill cards explicitly; their freestyle
   session start carries `allow_not_due` so the shared review service does not reject a configured
   non-due card. Formal review calls keep the default due-only guard. A fill / not-yet-due pass is

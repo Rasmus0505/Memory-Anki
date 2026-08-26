@@ -17,6 +17,11 @@ function sourceIdOf(card: FreestyleCard) {
   return sourceCardId(card) || card.id
 }
 
+function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
+  const rating = Number(encounter?.selectedRating)
+  return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+}
+
 function isReviewUnitCard(card: FreestyleCard): boolean {
   return card.type === 'mindmap_branch' && Boolean(card.unit_id)
 }
@@ -25,9 +30,16 @@ function isHandled(
   card: FreestyleCard,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: ReadonlySet<string>,
+  passedSources: ReadonlySet<string>,
 ) {
-  if (encountersByCardId[card.id]?.selectedRating != null) return true
   const sourceId = sourceIdOf(card)
+  if (completedIds.has(card.id) || completedIds.has(sourceId)) return true
+  // `selectedRating` only means the learner attempted this unit. Failed
+  // ratings remain pending until their retry occurrence passes.
+  if (encounterPassed(encountersByCardId[card.id])) return true
+  if (encountersByCardId[card.id]?.selectedRating != null) {
+    return passedSources.has(sourceIdOf(card))
+  }
   return completedIds.has(card.id) || completedIds.has(sourceId)
 }
 
@@ -54,11 +66,16 @@ export function isPalaceRoundCleared(input: {
     (card) => isReviewUnitCard(card) && cardPalaceId(card) === palaceId,
   )
   if (units.length === 0) return false
+  const passedSources = new Set(
+    units
+      .filter((card) => encounterPassed(input.encountersByCardId[card.id]))
+      .map(sourceIdOf),
+  )
 
   for (const card of units) {
     const sourceId = sourceIdOf(card)
     if (pendingRestudy.has(card.id) || pendingRestudy.has(sourceId)) return false
-    if (!isHandled(card, input.encountersByCardId, completed)) return false
+    if (!isHandled(card, input.encountersByCardId, completed, passedSources)) return false
   }
 
   const planCards = input.plan?.cardsById ?? {}
@@ -121,6 +138,11 @@ export function palaceHasPendingRetry(
   const completed = new Set(Array.from(completedIds ?? [], String))
   return palaceReviewUnitCards(cards, palaceId).some((card) => {
     if (!isRetryOccurrence(card)) return false
-    return !isHandled(card, encountersByCardId, completed)
+    const passedSources = new Set(
+      palaceReviewUnitCards(cards, palaceId)
+        .filter((candidate) => encounterPassed(encountersByCardId[candidate.id]))
+        .map(sourceIdOf),
+    )
+    return !isHandled(card, encountersByCardId, completed, passedSources)
   })
 }

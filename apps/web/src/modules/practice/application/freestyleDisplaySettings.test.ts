@@ -21,12 +21,14 @@ describe('freestyle display settings', () => {
       flip_mode: 'free',
       auto_advance: false,
       rating_scope: 'unit',
+      mindmap_zoom: 0.99,
     })
     expect(sanitizeFreestyleDisplaySettings({ rating_mode: true, flip_mode: 'focused' })).toEqual({
       rating_mode: true,
       flip_mode: 'focused',
       auto_advance: false,
       rating_scope: 'unit',
+      mindmap_zoom: 0.99,
     })
   })
 
@@ -48,11 +50,27 @@ describe('freestyle display settings', () => {
       flip_mode: 'free',
       auto_advance: true,
       rating_scope: 'unit',
+      mindmap_zoom: 0.99,
     })
   })
 
   it('keeps an explicit palace rating scope', () => {
     expect(sanitizeFreestyleDisplaySettings({ rating_scope: 'palace' }).rating_scope).toBe('palace')
     expect(sanitizeFreestyleDisplaySettings({ rating_scope: 'section' }).rating_scope).toBe('unit')
+  })
+
+  it('keeps valid mind-map zoom and clamps finite values to the canvas bounds', () => {
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 0.76 }).mindmap_zoom).toBe(0.76)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 0.12 }).mindmap_zoom).toBe(0.12)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 1.4 }).mindmap_zoom).toBe(1.4)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 0.01 }).mindmap_zoom).toBe(0.12)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 2 }).mindmap_zoom).toBe(1.4)
+  })
+
+  it('falls back to the default zoom for absent or non-finite values', () => {
+    expect(sanitizeFreestyleDisplaySettings({}).mindmap_zoom).toBe(0.99)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: '0.8' }).mindmap_zoom).toBe(0.99)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Number.NaN }).mindmap_zoom).toBe(0.99)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Infinity }).mindmap_zoom).toBe(0.99)
   })
 })

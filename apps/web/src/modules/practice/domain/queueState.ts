@@ -290,9 +290,10 @@ export function sourceCardId(card: FreestyleCard | null | undefined): string {
 
 /**
  * Cards that have already received a rating in the current freestyle round.
- * Weak ratings intentionally remain eligible for a later retry, but should
- * not keep the finish-palace gate closed. Retry occurrences are folded back
- * onto their source card so one unit is never counted twice.
+ * Weak ratings intentionally remain in this set for local "already attempted"
+ * navigation, while {@link getFreestylePassedCardIds} is used by completion
+ * and palace gates. Retry occurrences are folded back onto their source card
+ * so one unit is never counted twice.
  */
 export function getFreestyleRatedCardIds(
   cards: ReadonlyArray<FreestyleCard>,
@@ -316,6 +317,37 @@ export function getFreestyleRatedCardIds(
     }
   })
   return [...rated]
+}
+
+/**
+ * Cards that have actually passed in the current freestyle round.
+ *
+ * This is deliberately separate from {@link getFreestyleRatedCardIds}: a
+ * weak rating has an encounter and is therefore "rated", but it remains work
+ * in progress until a later retry passes. Palace navigation and completion
+ * gates must use this set so a 忘记/困难 score cannot unlock the next palace.
+ * Explicit completed ids are included for quiz acknowledgements and for unit
+ * settlements whose local encounter state has already been compacted.
+ */
+export function getFreestylePassedCardIds(
+  cards: ReadonlyArray<FreestyleCard>,
+  completedIds: Iterable<string>,
+  encounters: Record<string, FreestyleUnitEncounterState> = {},
+): string[] {
+  const passedIds = new Set(
+    Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
+  )
+  Object.entries(encounters).forEach(([cardId, encounter]) => {
+    const rating = Number(encounter?.selectedRating)
+    const isPassed = encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+    if (!isPassed) return
+    const card = cards.find((item) => item.id === cardId)
+    const id = String(card?.id || cardId).trim()
+    if (id) passedIds.add(id)
+    const sourceId = sourceCardId(card)
+    if (sourceId) passedIds.add(sourceId)
+  })
+  return [...passedIds]
 }
 
 export function isRetryOccurrence(card: FreestyleCard | null | undefined): boolean {

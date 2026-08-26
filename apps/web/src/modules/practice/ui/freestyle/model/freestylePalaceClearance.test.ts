@@ -87,6 +87,29 @@ describe('isPalaceRoundCleared', () => {
     })).toBe(false)
   })
 
+  it('keeps a weak-rated source unfinished until the retry passes', () => {
+    const source = unit('a', 1, '卢梭')
+    const retry = createRetryOccurrence(source, 'r', 1, 3)
+    const cards = [source, retry]
+    expect(isPalaceRoundCleared({
+      cards,
+      palaceId: 1,
+      plan: createRoundPlan('r', cards, DEFAULT_FREESTYLE_FEED_CONFIG),
+      encountersByCardId: { a: { selectedRating: 2, passed: false } as never },
+      completedIds: [],
+    })).toBe(false)
+    expect(isPalaceRoundCleared({
+      cards,
+      palaceId: 1,
+      plan: createRoundPlan('r', cards, DEFAULT_FREESTYLE_FEED_CONFIG),
+      encountersByCardId: {
+        a: { selectedRating: 2, passed: false } as never,
+        [retry.id]: { selectedRating: 3, passed: true } as never,
+      },
+      completedIds: [],
+    })).toBe(true)
+  })
+
   it('treats an unrated retry occurrence as unfinished', () => {
     const source = unit('a', 1, '卢梭')
     const retry = createRetryOccurrence(source, 'r', 1, 3)

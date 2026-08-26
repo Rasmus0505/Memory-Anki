@@ -42,8 +42,8 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 ## Scheduling Invariants
 
 - The only interval ladder is `0 (initial learning), 1, 3, 7, 14, 30, 60, 120, 240, 365` local calendar days. A unit that has never passed occupies the initial-learning stage; its first `记得` always schedules the one-day stage for tomorrow.
-- `记得` advances one level and `轻松` advances two. `困难` on a unit that has already passed is itself a pass with a shorter interval; `困难` on a never-passed unit stays in first-learning and retries the same day. `忘记` lapses: never-passed units return to first-learning, previously passed units keep about half their ladder position.
-- Only failing grades (`忘记`, and first-learning `困难`) remain immediately due and return after at most three other units. There is no per-round retry cap.
+- `记得` advances one level and `轻松` advances two. Every `困难` rating is retry work: it keeps the unit due today, returns after at most three other units, and lowers an already-earned ladder position by one step (never-passed units stay in first-learning). `忘记` lapses: never-passed units return to first-learning, previously passed units keep about half their ladder position. Only `记得` and `轻松` pass the unit.
+- Failing grades (`忘记` and `困难`) remain immediately due and return after at most three other units. There is no per-round retry cap, and this rule also applies to ahead-of-date fill cards.
 - A unit reviewed ahead of its booked due date (freestyle fill cards) records a passing grade without moving the ladder or due date. `忘记` still lapses. Preview and commit share this `schedule_locked` rule.
 - One encounter has one effective rating. Before leaving, another rating atomically replaces it from the frozen pre-encounter baseline; the replaced choice has no scheduling effect.
 - Closing a `困难` or `忘记` encounter preserves its penalty in the next encounter. A later `记得` settles at that penalized level; a later `轻松` recovers only one level.

@@ -44,7 +44,6 @@ import {
   selectedInteraction,
   type MindMapInteractionState,
 } from './mindMapEditorSurfaceKeyboard'
-
 const EMPTY_SEGMENTS: NonNullable<MindMapEditorSurfaceProps['segments']> = []
 const EMPTY_UIDS: string[] = []
 const EMPTY_MASTERY_BY_UID: NonNullable<MindMapEditorSurfaceProps['masteryByNodeUid']> = {}
@@ -54,7 +53,6 @@ const EMPTY_SEGMENT_RANGE_DRAFT: NonNullable<MindMapEditorSurfaceProps['segmentR
   selectedNodeUids: [],
   overriddenConflictNodeUids: [],
 }
-
 export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps>(function MindMapEditorSurface({
   editorState,
   capabilities: providedCapabilities,
@@ -72,6 +70,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   mobileViewPolicy = 'auto',
   nodeClickViewportPolicy,
   contentChangeViewportPolicy,
+  preferredZoom, onUserZoomChange,
   className,
   sceneChrome = 'default',
   sceneTransitionKey = null,
@@ -686,6 +685,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
+        preferredZoom={preferredZoom} onUserZoomChange={onUserZoomChange}
         sceneTransitionKey={resolvedSceneTransitionKey}
         viewCommand={viewCommand}
         recoveryKey={canvasRecoveryKey}
