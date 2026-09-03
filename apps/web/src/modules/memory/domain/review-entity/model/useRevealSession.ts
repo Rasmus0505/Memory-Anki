@@ -42,6 +42,8 @@ interface UseRevealSessionOptions {
   /** Optional freestyle-only scope for cards that may be revealed. */
   allowedNodeIds?: Iterable<string>
   revealConfig?: FlipCardRevealConfig
+  /** Remote live-study reveal map. Replaces local state when the JSON changes. */
+  syncedRevealMap?: Record<string, RevealState> | null
 }
 
 const EMPTY_CHECKPOINT_IDS: string[] = []
@@ -77,6 +79,7 @@ export function useRevealSession({
   focusNodeIds = EMPTY_FOCUS_NODE_IDS,
   allowedNodeIds,
   revealConfig = DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+  syncedRevealMap = null,
 }: UseRevealSessionOptions) {
   const parsedDoc = React.useMemo(
     () => parseEditorDoc(editorState?.editor_doc ?? null),
@@ -167,6 +170,13 @@ export function useRevealSession({
   React.useEffect(() => {
     revealMapRef.current = revealMap
   }, [revealMap])
+
+  const syncedRevealKey = JSON.stringify(syncedRevealMap ?? null)
+  React.useEffect(() => {
+    if (syncedRevealMap == null) return
+    if (JSON.stringify(revealMapRef.current) === syncedRevealKey) return
+    setRevealMap(syncedRevealMap)
+  }, [syncedRevealKey, syncedRevealMap])
 
   React.useEffect(() => {
     hoveredNodeIdRef.current = hoveredNodeId

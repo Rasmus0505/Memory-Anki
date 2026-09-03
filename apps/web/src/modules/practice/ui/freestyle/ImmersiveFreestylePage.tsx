@@ -36,6 +36,9 @@ import {
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
+import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
+import type { FreestyleAnkiFlipLiveState } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
+import type { QuizRuntimeState } from '@/modules/quiz/public'
 import { parseFreestyleEntryPalaceId } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
   isMindMapBranchCard,
@@ -212,6 +215,8 @@ export default function ImmersiveFreestylePage() {
   const [flipMode, setFlipMode] = useState<FreestyleFlipMode>(
     () => readFreestyleDisplaySettings().flip_mode,
   )
+  const [liveAnkiFlip, setLiveAnkiFlip] = useState<FreestyleAnkiFlipLiveState | null>(null)
+  const [liveRevealMap, setLiveRevealMap] = useState<Record<string, string> | null>(null)
   const [autoAdvance, setAutoAdvance] = useState(
     () => readFreestyleDisplaySettings().auto_advance,
   )
@@ -424,6 +429,7 @@ export default function ImmersiveFreestylePage() {
   }, [queueState.roundId])
 
   const timer = useTimedSession({
+    sessionKey: 'freestyle',
     kind: 'quiz',
     title: '随心模式',
     palaceId: null,
@@ -451,7 +457,6 @@ export default function ImmersiveFreestylePage() {
   } = useFreestyleQuizFlow({
     mode: 'free',
     queueRef,
-    timer,
     reducedMotion,
     promptForAiOptions,
     // Avoid restoring prior choice states that disable options on reappearance.
@@ -783,13 +788,11 @@ export default function ImmersiveFreestylePage() {
       // The card-level diagnostic remains visible until dismissed, while a
       // subsequent successful settlement clears the transient banner.
       setSaveError('')
-      // Mind-map settles often stopPropagation; register here so idle timers start.
-      timer.registerActivity('practice_interaction', { source: 'freestyle_branch_complete' })
       // A passed unit marks completedIds and rebuilds silently; stay on card.
       // Weak ratings (restudy) skip completedIds; never auto-flip to the next unit.
       completeCard(cardId, options)
     },
-    [completeCard, timer],
+    [completeCard],
   )
 
   const handleBatchCardsSettled = useCallback(
@@ -797,10 +800,9 @@ export default function ImmersiveFreestylePage() {
       entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
     ) => {
       setSaveError('')
-      timer.registerActivity('practice_interaction', { source: 'freestyle_palace_rate' })
       completeCardBatch(entries, entries[0]?.cardId)
     },
-    [completeCardBatch, timer],
+    [completeCardBatch],
   )
 
   const recordChannelSample = useCallback((cardId: string, rating: UnitRating) => {
@@ -917,7 +919,6 @@ export default function ImmersiveFreestylePage() {
         0,
         Math.min(cards.length - 1, Math.round(element.scrollTop / pageHeight)),
       )
-      timer.registerActivity('practice_interaction', { source: 'freestyle_scroll' })
       if (nextIndex !== visualIndexRef.current) {
         // Visual index only — do not flip `active` or close/open encounters mid-gesture.
         visualIndexRef.current = nextIndex
@@ -932,7 +933,7 @@ export default function ImmersiveFreestylePage() {
         flushScrollSettled()
       }, 120)
     },
-    [cards.length, flushScrollSettled, timer],
+    [cards.length, flushScrollSettled],
   )
 
   /**
@@ -1039,6 +1040,45 @@ export default function ImmersiveFreestylePage() {
     queueState.unitEncountersByCardId,
     queueState.completedIds,
   )
+  const seekLiveCardId = useCallback((cardId: string) => {
+    const index = cards.findIndex((card) => card.id === cardId)
+    if (index >= 0) navigateToIndex(index, { reorderRestudy: false })
+  }, [cards, navigateToIndex])
+  const applyLiveQuestionState = useCallback((questionId: number, state: QuizRuntimeState) => {
+    updateQuestionState(questionId, (current) => (
+      JSON.stringify(current) === JSON.stringify(state) ? current : state
+    ))
+  }, [updateQuestionState])
+  const applyLiveAnkiFlip = useCallback((flip: FreestyleAnkiFlipLiveState | null) => {
+    setLiveAnkiFlip((current) => (
+      JSON.stringify(current) === JSON.stringify(flip) ? current : flip
+    ))
+  }, [])
+  const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
+    setLiveRevealMap((current) => (
+      JSON.stringify(current) === JSON.stringify(map) ? current : map
+    ))
+  }, [])
+  const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])
+  useFreestyleLiveMirror({
+    route: fullPath,
+    palaceId: entryPalaceId,
+    currentCardId: currentCard?.id ?? null,
+    currentIndex,
+    queueCardIds,
+    roundComplete,
+    questionId: currentCard && isQuizCard(currentCard) ? currentCard.question.id : null,
+    questionState: currentCard && isQuizCard(currentCard)
+      ? progress.questionStates[currentCard.question.id]
+      : undefined,
+    ankiFlip: liveAnkiFlip,
+    revealMap: liveRevealMap,
+    seekCardId: seekLiveCardId,
+    applyQuestionState: applyLiveQuestionState,
+    applyAnkiFlip: applyLiveAnkiFlip,
+    applyRevealMap: applyLiveRevealMap,
+    isActive,
+  })
   const roundCompletion = useMemo(
     () => buildFreestyleRoundCompletion(
       cards,
@@ -1450,6 +1490,8 @@ export default function ImmersiveFreestylePage() {
                               preferCardId: card.id,
                             })
                           }}
+                          liveRevealMap={index === currentIndex ? liveRevealMap : null}
+                          onLiveRevealMapChange={applyLiveRevealMap}
                         />
                       ) : (
                         <StaleUnitReviewCard
@@ -1463,6 +1505,18 @@ export default function ImmersiveFreestylePage() {
                         active={isActive && index === currentIndex}
                         onBranchComplete={handleBranchComplete}
                         reducedMotion={reducedMotion}
+                        flipState={
+                          liveAnkiFlip?.cardId === card.id
+                            ? {
+                                flipped: liveAnkiFlip.flipped,
+                                revealedBacks: liveAnkiFlip.revealedBacks,
+                                focusUid: liveAnkiFlip.focusUid,
+                              }
+                            : undefined
+                        }
+                        onFlipStateChange={(next) => {
+                          setLiveAnkiFlip({ cardId: card.id, ...next })
+                        }}
                       />
                     )
                   ) : isQuizCard(card) ? (

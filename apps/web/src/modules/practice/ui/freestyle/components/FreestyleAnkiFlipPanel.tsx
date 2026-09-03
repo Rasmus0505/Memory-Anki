@@ -76,16 +76,26 @@ function resolveAnkiBinding(
  * Anki-style freestyle surface: front → flip → multi-back placeholders → ratings.
  * Ratings are applied to front + all backs by default, or a single selected face.
  */
+export type FreestyleAnkiFlipState = {
+  flipped: boolean
+  revealedBacks: string[]
+  focusUid: string | null
+}
+
 export function FreestyleAnkiFlipPanel({
   card,
   editorState,
   busy,
   onRateGroup,
   onRateSingle,
+  flipState,
+  onFlipStateChange,
 }: {
   card: FreestyleAnkiCard
   editorState: MindMapEditorState | null
   busy?: boolean
+  flipState?: FreestyleAnkiFlipState
+  onFlipStateChange?: (next: FreestyleAnkiFlipState) => void
   /** Default: rate front + all backs with the same rating, then settle. */
   onRateGroup: (rating: FreestyleAnkiRating) => void | Promise<void>
   /** Optional single-node score (front or one back). */
@@ -96,27 +106,37 @@ export function FreestyleAnkiFlipPanel({
     () => resolveAnkiBinding(card, editorState),
     [card, editorState],
   )
-  const [flipped, setFlipped] = useState(false)
-  const [revealedBacks, setRevealedBacks] = useState<Set<string>>(() => new Set())
-  const [focusUid, setFocusUid] = useState<string | null>(null)
+  const [uncontrolled, setUncontrolled] = useState<FreestyleAnkiFlipState>({
+    flipped: false,
+    revealedBacks: [],
+    focusUid: null,
+  })
+  const currentFlip = flipState ?? uncontrolled
+  const flipped = currentFlip.flipped
+  const revealedBacks = useMemo(() => new Set(currentFlip.revealedBacks), [currentFlip.revealedBacks])
+  const focusUid = currentFlip.focusUid
+  const commitFlip = useCallback((next: FreestyleAnkiFlipState) => {
+    if (onFlipStateChange) onFlipStateChange(next)
+    else setUncontrolled(next)
+  }, [onFlipStateChange])
 
   const frontText = texts[frontUid] || frontUid
 
   const handleFlip = useCallback(() => {
-    setFlipped(true)
-    if (backUids.length <= 1) {
-      setRevealedBacks(new Set(backUids))
-    }
-  }, [backUids])
+    commitFlip({
+      flipped: true,
+      revealedBacks: backUids.length <= 1 ? [...backUids] : currentFlip.revealedBacks,
+      focusUid: currentFlip.focusUid,
+    })
+  }, [backUids, commitFlip, currentFlip.focusUid, currentFlip.revealedBacks])
 
   const revealBack = useCallback((uid: string) => {
-    setRevealedBacks((current) => {
-      const next = new Set(current)
-      next.add(uid)
-      return next
+    commitFlip({
+      flipped: true,
+      revealedBacks: Array.from(new Set([...currentFlip.revealedBacks, uid])),
+      focusUid: uid,
     })
-    setFocusUid(uid)
-  }, [])
+  }, [commitFlip, currentFlip.revealedBacks])
 
   const handleGroupRate = useCallback(
     (rating: FreestyleAnkiRating) => {
@@ -143,7 +163,11 @@ export function FreestyleAnkiFlipPanel({
         disabled={busy}
         onClick={() => {
           if (!flipped) handleFlip()
-          else setFocusUid(frontUid)
+          else commitFlip({
+            flipped: true,
+            revealedBacks: currentFlip.revealedBacks,
+            focusUid: frontUid,
+          })
         }}
         className={cn(
           'min-h-[7rem] w-full rounded-2xl border px-4 py-5 text-left transition',
@@ -177,7 +201,11 @@ export function FreestyleAnkiFlipPanel({
                   key={uid}
                   type="button"
                   disabled={busy}
-                  onClick={() => (revealed ? setFocusUid(uid) : revealBack(uid))}
+                  onClick={() => (revealed ? commitFlip({
+                    flipped: true,
+                    revealedBacks: currentFlip.revealedBacks,
+                    focusUid: uid,
+                  }) : revealBack(uid))}
                   className={cn(
                     'w-full rounded-xl border px-3 py-3 text-left transition',
                     focused
@@ -231,7 +259,11 @@ export function FreestyleAnkiFlipPanel({
             <button
               type="button"
               className="text-xs text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline"
-              onClick={() => setFocusUid(frontUid)}
+              onClick={() => commitFlip({
+                flipped: true,
+                revealedBacks: currentFlip.revealedBacks,
+                focusUid: frontUid,
+              })}
             >
               改回整卡评分（正面+全部反面）
             </button>

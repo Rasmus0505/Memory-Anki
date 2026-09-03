@@ -221,6 +221,8 @@ export function FreestyleUnitReviewCardView({
   onRatingScopeChange,
   palaceTarget = null,
   onBatchCardsSettled,
+  liveRevealMap = null,
+  onLiveRevealMapChange,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -265,6 +267,8 @@ export function FreestyleUnitReviewCardView({
   onBatchCardsSettled?: (
     entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
   ) => void
+  liveRevealMap?: Record<string, string> | null
+  onLiveRevealMapChange?: (revealMap: Record<string, string>) => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
@@ -888,6 +892,8 @@ export function FreestyleUnitReviewCardView({
             onEditorStateSaved={setSavedEditorState}
             onUnitsReconciled={onUnitsReconciled}
             onRevealProgressChange={handleRevealProgressChange}
+            syncedRevealMap={liveRevealMap}
+            onRevealMapChange={onLiveRevealMapChange}
           />
           </div>
         ) : (

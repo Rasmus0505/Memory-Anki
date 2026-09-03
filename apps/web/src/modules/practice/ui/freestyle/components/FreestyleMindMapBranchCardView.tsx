@@ -3,7 +3,7 @@ import type {
   FreestyleAnkiCard,
   MindMapEditorState,
 } from '@/shared/api/contracts'
-import { FreestyleAnkiFlipPanel, type FreestyleAnkiRating } from './FreestyleAnkiFlipPanel'
+import { FreestyleAnkiFlipPanel, type FreestyleAnkiFlipState, type FreestyleAnkiRating } from './FreestyleAnkiFlipPanel'
 import {
   loadPalaceEditor,
   palaceEditorCache,
@@ -24,11 +24,15 @@ export function FreestyleMindMapBranchCardView({
   active,
   onBranchComplete,
   reducedMotion,
+  flipState,
+  onFlipStateChange,
 }: {
   card: FreestyleAnkiCard
   active: boolean
   onBranchComplete: (cardId: string, options?: { restudy?: boolean }) => void
   reducedMotion: boolean
+  flipState?: FreestyleAnkiFlipState
+  onFlipStateChange?: (next: FreestyleAnkiFlipState) => void
 }) {
   const [editorState, setEditorState] = useState<MindMapEditorState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -134,6 +138,8 @@ export function FreestyleMindMapBranchCardView({
             busy={busy}
             onRateGroup={settle}
             onRateSingle={settle}
+            flipState={flipState}
+            onFlipStateChange={onFlipStateChange}
           />
         ) : null}
 

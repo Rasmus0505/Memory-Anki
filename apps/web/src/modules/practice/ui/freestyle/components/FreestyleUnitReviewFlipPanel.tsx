@@ -6,6 +6,7 @@ import {
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession } from '@/modules/memory/public'
+import type { RevealState } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
@@ -59,6 +60,8 @@ export function FreestyleUnitReviewFlipPanel({
   onEditorStateSaved,
   onUnitsReconciled,
   onRevealProgressChange,
+  syncedRevealMap = null,
+  onRevealMapChange,
 }: {
   card: FreestyleReviewUnitCard
   session: UnitReviewSessionDto
@@ -84,6 +87,8 @@ export function FreestyleUnitReviewFlipPanel({
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
   /** Adopt the saved doc so review shows the edited content after returning. */
   onEditorStateSaved?: (state: MindMapEditorState) => void
+  syncedRevealMap?: Record<string, string> | null
+  onRevealMapChange?: (revealMap: Record<string, string>) => void
 }) {
   const flipCardRevealSettings = useFlipCardRevealSettings()
   const allowedRevealNodeIds = useMemo(() => {
@@ -106,16 +111,23 @@ export function FreestyleUnitReviewFlipPanel({
     editorState,
     revealConfig: flipCardRevealSettings.settings,
     allowedNodeIds: allowedRevealNodeIds,
+    syncedRevealMap: syncedRevealMap as Record<string, RevealState> | null,
   })
   const { handleNodeContextMenu, handleTargetNodeClick, root } = reveal
   const { signalReveal } = useFreestyleFlowFeedback()
 
+  const lastNotifiedRevealKeyRef = useRef('')
   // Header chip: this unit's membership only (not whole-palace node count).
   useEffect(() => {
     onRevealProgressChange?.(
       countUnitFlipProgress(reveal.revealMap, unit.node_uids, unit.anchor_uid),
     )
+    const key = JSON.stringify(reveal.revealMap)
+    if (key === lastNotifiedRevealKeyRef.current) return
+    lastNotifiedRevealKeyRef.current = key
+    onRevealMapChange?.(reveal.revealMap)
   }, [
+    onRevealMapChange,
     onRevealProgressChange,
     reveal.revealMap,
     unit.anchor_uid,
