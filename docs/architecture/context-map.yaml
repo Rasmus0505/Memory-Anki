@@ -263,10 +263,25 @@
         "adapter": "modules/session/infrastructure",
         "capabilities": [
           "identity",
+          "sessionKeyRegistry",
           "timing",
+          "foregroundIntervals",
           "pause",
           "complete",
+          "singleTerminalWrite",
+          "versionedWrite",
           "idempotentSave"
+        ]
+      },
+      "LiveStudyPresencePort": {
+        "owner": "modules/session/application",
+        "adapter": "modules/session/application/live_study_room.py",
+        "capabilities": [
+          "inProcessProjection",
+          "sseStream",
+          "commandPublish",
+          "controllerElection",
+          "opaqueViewEnvelope"
         ]
       },
       "PersistencePort": {
@@ -374,6 +389,37 @@
           "navigation.back",
           "overlay.close"
         ]
+      },
+      "session.liveProjection.updated": {
+        "owner": "session",
+        "port": "LiveStudyPresencePort",
+        "contract": "LiveStudyProjection",
+        "invariants": [
+          "projection is process memory only",
+          "session does not parse surface view payloads",
+          "only the controller client accumulates foreground seconds",
+          "operation_id is idempotent and client_id suppresses echo"
+        ],
+        "tests": [
+          "test_live_study_presence.py",
+          "liveStudyModel.test.ts"
+        ]
+      },
+      "session.persistTimedRecord": {
+        "owner": "session",
+        "port": "SessionPort",
+        "contract": "StudySessionPayload",
+        "invariants": [
+          "session_key identifies one learning target across page scenes",
+          "effective_seconds comes only from foreground activity intervals",
+          "client_revision is monotonic and operation_id is idempotent",
+          "a timer session emits at most one terminal record",
+          "duration_edited is reserved for explicit history edits"
+        ],
+        "tests": [
+          "timedSessionRecordBuilder.test.ts",
+          "time-record-recovery.test.ts"
+        ]
       }
     },
     "frontendModules": {
@@ -416,7 +462,11 @@
         "publicEntry": "src/modules/search/public.ts"
       },
       "session": {
-        "publicEntry": "src/modules/session/public.ts"
+        "publicEntry": "src/modules/session/public.ts",
+        "architectureDoc": "docs/architecture/timed-session.md",
+        "extraArchitectureDocs": [
+          "docs/architecture/live-study-presence.md"
+        ]
       },
       "settings": {
         "publicEntry": "src/modules/settings/public.ts"

@@ -95,6 +95,7 @@ export default defineConfig([
       'src/modules/quiz/ui/palace-quiz/PalaceQuizPage.tsx',
       'src/modules/settings/ui/profile/ProfileSettingsPage.tsx',
       'src/shared/components/session/SessionTimerBar.tsx',
+      'src/shared/components/session/GlobalTimerProvider.tsx',
       'src/shared/components/session/timer-automation-config.ts',
       'src/shared/hooks/timedSessionModel.ts',
       'src/shared/hooks/timedSessionRecovery.ts',

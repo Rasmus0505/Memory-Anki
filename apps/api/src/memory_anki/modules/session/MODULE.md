@@ -4,7 +4,7 @@
 active — owns study sessions, timing, and scene attribution.
 
 ## Owns
-Study sessions, timing, scene attribution
+Study sessions, timing, scene attribution, and the in-process live study room.
 
 ## Migrates from
 - sessions

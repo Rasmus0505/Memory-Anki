@@ -8,7 +8,7 @@ import { createAppQueryClient } from '@/shared/api/queryClient'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
-import { usePendingTimeRecordRecoveryAutoSync } from '@/modules/session/public'
+import { LiveStudyPresenceProvider, usePendingTimeRecordRecoveryAutoSync } from '@/modules/session/public'
 import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
@@ -59,18 +59,20 @@ export function AppProviders({ children }: PropsWithChildren) {
       <PalaceCatalogQueryInvalidationBridge />
       <BrowserRouter>
         <PageHistoryCoordinator>
-          <RouteProgressBar />
-          <GlobalErrorBoundary>
-            <GlobalFeedbackProvider>
-              <GlobalTimerProvider>
-                <QuizLauncherProvider>
-                  {children}
-                  <NativeDialogProvider />
-                  <Toaster position="bottom-right" richColors />
-                </QuizLauncherProvider>
-              </GlobalTimerProvider>
-            </GlobalFeedbackProvider>
-          </GlobalErrorBoundary>
+          <LiveStudyPresenceProvider>
+            <RouteProgressBar />
+            <GlobalErrorBoundary>
+              <GlobalFeedbackProvider>
+                <GlobalTimerProvider>
+                  <QuizLauncherProvider>
+                    {children}
+                    <NativeDialogProvider />
+                    <Toaster position="bottom-right" richColors />
+                  </QuizLauncherProvider>
+                </GlobalTimerProvider>
+              </GlobalFeedbackProvider>
+            </GlobalErrorBoundary>
+          </LiveStudyPresenceProvider>
         </PageHistoryCoordinator>
       </BrowserRouter>
     </QueryClientProvider>

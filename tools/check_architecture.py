@@ -219,6 +219,10 @@ BASELINE_OVERSIZED_FILES = {
     "apps/web/src/pages/create/PalaceMindMapWorkspace.tsx",
     "apps/web/src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx",
     "apps/api/src/memory_anki/modules/memory/application/unit_review_service.py",
+    # Session write validation grew with revision/operation race protection;
+    # keep the existing service boundary tracked while the next extraction is
+    # scheduled.
+    "apps/api/src/memory_anki/modules/session/application/study_session_service.py",
 }
 
 MAX_WEB_FILE_LINES = 750
@@ -842,6 +846,93 @@ def check_study_session_legacy_usage(errors: list[str]) -> None:
                     f"{path.relative_to(REPO_ROOT)}: production backend modules must use "
                     "modules.session StudySession services instead of TimeRecord/time_records."
                 )
+
+
+def check_timed_session_architecture(errors: list[str]) -> None:
+    """Keep the foreground timer contract and its architecture note in sync."""
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
+    required_doc_markers = (
+        "session_key",
+        "client_revision",
+        "operation_id",
+        "foreground",
+        "duration_edited",
+    )
+    if not architecture_doc.exists():
+        errors.append(
+            "docs/architecture/timed-session.md: foreground timer architecture document is missing."
+        )
+    else:
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in required_doc_markers:
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: timer architecture must document `{marker}`."
+                )
+
+    api_path = WEB_SRC / "modules" / "session" / "domain" / "study-session-entity" / "api" / "studySessionApi.ts"
+    api_source = api_path.read_text(encoding="utf-8", errors="ignore") if api_path.exists() else ""
+    for marker in ("session_key", "client_revision", "operation_id"):
+        if marker not in api_source:
+            errors.append(
+                f"{api_path.relative_to(REPO_ROOT)}: StudySession API must expose version field `{marker}`."
+            )
+
+    context = load_context_map()
+    runtime = context.get("runtime") if isinstance(context.get("runtime"), dict) else {}
+    ports = runtime.get("ports") if isinstance(runtime.get("ports"), dict) else {}
+    session_port = ports.get("SessionPort") if isinstance(ports.get("SessionPort"), dict) else {}
+    capabilities = session_port.get("capabilities") if isinstance(session_port.get("capabilities"), list) else []
+    for capability in ("sessionKeyRegistry", "foregroundIntervals", "singleTerminalWrite", "versionedWrite"):
+        if capability not in capabilities:
+            errors.append(
+                f"docs/architecture/context-map.yaml: SessionPort must declare `{capability}`."
+            )
+
+
+def check_live_study_presence(errors: list[str]) -> None:
+    """PWA/desktop study mirroring stays in session and never hits SQLite."""
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "live-study-presence.md"
+    if not architecture_doc.exists():
+        errors.append("docs/architecture/live-study-presence.md: live study presence document is missing.")
+    else:
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("controller_client_id", "SSE", "不写数据库"):
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: live study presence must document `{marker}`."
+                )
+
+    room = API_SRC / "modules" / "session" / "application" / "live_study_room.py"
+    if not room.exists():
+        errors.append(f"{room.relative_to(REPO_ROOT)}: live study room is missing.")
+    else:
+        source = room.read_text(encoding="utf-8", errors="ignore")
+        if "sqlite" in source.lower():
+            errors.append(f"{room.relative_to(REPO_ROOT)}: live study room must not mention or use sqlite.")
+        for forbidden in ("modules.practice", "modules.quiz", "modules.content"):
+            if forbidden in source:
+                errors.append(
+                    f"{room.relative_to(REPO_ROOT)}: session live room must not import {forbidden}."
+                )
+
+    sw_path = WEB_ROOT / "public" / "sw.js"
+    sw_source = sw_path.read_text(encoding="utf-8", errors="ignore") if sw_path.exists() else ""
+    if "isLiveStudyStream" not in sw_source or "/api/v1/session/live" not in sw_source:
+        errors.append("apps/web/public/sw.js: live study SSE must be explicitly excluded from fetch handling.")
+
+    context = load_context_map()
+    runtime = context.get("runtime") if isinstance(context.get("runtime"), dict) else {}
+    ports = runtime.get("ports") if isinstance(runtime.get("ports"), dict) else {}
+    live_port = ports.get("LiveStudyPresencePort") if isinstance(ports.get("LiveStudyPresencePort"), dict) else {}
+    capabilities = live_port.get("capabilities") if isinstance(live_port.get("capabilities"), list) else []
+    for capability in ("inProcessProjection", "sseStream", "controllerElection", "opaqueViewEnvelope"):
+        if capability not in capabilities:
+            errors.append(
+                f"docs/architecture/context-map.yaml: LiveStudyPresencePort must declare `{capability}`."
+            )
 
 
 def check_runtime_data_ignored(errors: list[str]) -> None:
@@ -2419,6 +2510,8 @@ def main() -> int:
     check_frontend_runtime_module_boundaries(errors)
     check_removed_focus_practice(errors)
     check_study_session_legacy_usage(errors)
+    check_timed_session_architecture(errors)
+    check_live_study_presence(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
     check_storage_layout_contract(errors)

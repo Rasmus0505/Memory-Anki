@@ -1743,3 +1743,33 @@ def test_ai_credential_tombstones_allow_compatibility_imports(
     check_architecture.check_ai_credential_tombstones(errors)
 
     assert errors == []
+
+
+def test_live_study_presence_rejects_sqlite_and_missing_sw_bypass(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_root = tmp_path / "apps" / "web"
+    write_file(
+        tmp_path / "docs" / "architecture" / "live-study-presence.md",
+        "controller_client_id SSE 不写数据库\n",
+    )
+    write_file(
+        api_src / "modules" / "session" / "application" / "live_study_room.py",
+        "import sqlite3\nprojection = {}\n",
+    )
+    write_file(web_root / "public" / "sw.js", "self.addEventListener('fetch', () => {})\n")
+    context_map = tmp_path / "docs" / "architecture" / "context-map.yaml"
+    write_file(context_map, json.dumps({"runtime": {"ports": {}}}))
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_ROOT", web_root)
+    monkeypatch.setattr(check_architecture, "CONTEXT_MAP_PATH", context_map)
+
+    errors: list[str] = []
+    check_architecture.check_live_study_presence(errors)
+
+    assert any("sqlite" in error for error in errors)
+    assert any("live study SSE" in error for error in errors)
+    assert any("LiveStudyPresencePort" in error for error in errors)
+

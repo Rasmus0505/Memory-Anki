@@ -224,6 +224,7 @@ self.addEventListener('notificationclick', (event) => {
 })
 
 function isSameOrigin(url) { return url.origin === self.location.origin }
+function isLiveStudyStream(url) { return url.pathname.startsWith('/api/v1/session/live') }
 function isOfflineCapableApi(url) { return OFFLINE_API_ALLOWLIST.includes(url.pathname) }
 function isVersionMetadata(url) { return url.pathname === '/release.json' || url.pathname === '/sw.js' }
 function isStaticAsset(request, url) {
@@ -340,6 +341,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (!isSameOrigin(url)) return
+  // Never buffer the live study SSE body through startFetch().arrayBuffer().
+  if (isLiveStudyStream(url)) return
   if (request.mode === 'navigate') { event.respondWith(navigationFallback(request)); return }
   if (isVersionMetadata(url)) { event.respondWith(versionMetadata(request)); return }
   if (isOfflineCapableApi(url)) { event.respondWith(networkFirstOfflineApi(request)); return }

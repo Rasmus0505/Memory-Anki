@@ -51,6 +51,8 @@ PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露�
 
 电脑和手机同时使用时，直接运行 `start-all.bat`。启动和迁移期间手机可能短暂断开，随后 Electron 与手机 PWA 会共同使用 `8012` 服务。关闭 Electron 或启动窗口都不会停止 PWA；需要停止服务时运行 `tools\stop.bat`。
 
+同时打开时，随心模式的当前卡片、翻面和计时器通过本机 API 的 live room 镜像，不必手动刷新任一端。这不是文件同步，也不允许两台电脑同时写 SQLite。
+
 ## 首次配置与启动
 
 ### 1. 启动 PWA 后端

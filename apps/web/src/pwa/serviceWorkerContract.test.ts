@@ -264,6 +264,13 @@ describe('PWA service worker contract', () => {
     expect(sw).toContain('NAVIGATION_CACHE_PATHS.includes(new URL(request.url).pathname)')
   })
 
+  it('does not intercept the live study SSE stream', () => {
+    const sw = readFileSync(publicSwPath, 'utf8')
+    expect(sw).toContain("url.pathname.startsWith('/api/v1/session/live')")
+    expect(sw).toContain('if (isLiveStudyStream(url)) return')
+    expect(sw).toContain('Never buffer the live study SSE body')
+  })
+
   it('skips release polling while the tab is hidden', () => {
     const registration = readFileSync(registerServiceWorkerPath, 'utf8')
 

@@ -88,6 +88,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
 - Review context boundary: `docs/architecture/review-boundary.md`
+- Live study presence (PWA/desktop mirror): `docs/architecture/live-study-presence.md`
 - Read-model purity: `docs/architecture/read-models.md`
 - Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
 - Palace Quiz boundary: `docs/architecture/palace-quiz-boundary.md`

@@ -27,3 +27,27 @@ export function parseSseEventBlock(block: string): { event: string; data: string
   if (dataLines.length === 0) return null
   return { event, data: dataLines.join('\n') }
 }
+
+export async function* iterateSseBlocks(
+  stream: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncGenerator<{ event: string; data: string }> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (!signal?.aborted) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split(/\r?\n\r?\n/)
+      buffer = parts.pop() ?? ''
+      for (const block of parts) {
+        const parsed = parseSseEventBlock(block)
+        if (parsed) yield parsed
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}

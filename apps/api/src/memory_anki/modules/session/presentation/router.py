@@ -1,9 +1,14 @@
 from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.session.application.live_study_room import (
+    apply_live_study_command,
+    stream_live_study_events,
+)
 from memory_anki.modules.session.application.serialization import _parse_datetime
 from memory_anki.modules.session.application.study_session_commands import (
     abandon_study_session_command,
@@ -30,6 +35,7 @@ from memory_anki.modules.session.application.time_record_read_model import (
     TimeRecordQueryError,
 )
 from memory_anki.modules.session.domain.schemas import (
+    LiveStudyCommand,
     StudySessionAbandon,
     StudySessionBulkDelete,
     StudySessionComplete,
@@ -51,6 +57,14 @@ def _payload(data) -> dict:
     return data.model_dump(exclude_unset=True, exclude_none=False)
 
 
+def _payload_with_mutation_operation(payload: dict, mutation_identity) -> dict:
+    """Persist the HTTP mutation id as the row's operation id when absent."""
+
+    if mutation_identity is None or payload.get("operation_id") or payload.get("operationId"):
+        return payload
+    return {**payload, "operation_id": mutation_identity.operation_id}
+
+
 def _raise_not_found() -> NoReturn:
     raise HTTPException(status_code=404, detail="not found")
 
@@ -69,7 +83,7 @@ def api_create_study_session(
     try:
         return create_study_session_command(
             session,
-            _payload(data),
+            _payload_with_mutation_operation(_payload(data), mutation_identity),
             uow=SqlAlchemyUnitOfWork(session),
             before_commit=lambda response: mutation_store.save(
                 mutation_identity, response
@@ -292,13 +306,16 @@ def api_complete_study_session(
     existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    response = complete_study_session_command(
-        session,
-        study_session_id,
-        _payload(data),
-        uow=SqlAlchemyUnitOfWork(session),
-        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
-    )
+    try:
+        response = complete_study_session_command(
+            session,
+            study_session_id,
+            _payload_with_mutation_operation(_payload(data), mutation_identity),
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if response is None:
         _raise_not_found()
     return response
@@ -316,13 +333,16 @@ def api_abandon_study_session(
     existing_response = mutation_store.get(mutation_identity)
     if existing_response is not None:
         return existing_response
-    response = abandon_study_session_command(
-        session,
-        study_session_id,
-        _payload(data),
-        uow=SqlAlchemyUnitOfWork(session),
-        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
-    )
+    try:
+        response = abandon_study_session_command(
+            session,
+            study_session_id,
+            _payload_with_mutation_operation(_payload(data), mutation_identity),
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if response is None:
         _raise_not_found()
     return response
@@ -361,7 +381,7 @@ def api_create_study_session_from_time_record(
     try:
         return create_study_session_from_time_record_command(
             session,
-            data,
+            _payload_with_mutation_operation(data, mutation_identity),
             uow=SqlAlchemyUnitOfWork(session),
             before_commit=lambda response: mutation_store.save(
                 mutation_identity, response
@@ -369,3 +389,27 @@ def api_create_study_session_from_time_record(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/session/live/stream")
+def api_live_study_stream(
+    client_id: str = Query(..., min_length=1, max_length=80),
+):
+    return StreamingResponse(
+        stream_live_study_events(client_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.post("/session/live/commands")
+def api_live_study_command(data: LiveStudyCommand):
+    try:
+        return apply_live_study_command(data.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
