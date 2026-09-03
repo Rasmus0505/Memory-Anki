@@ -152,12 +152,10 @@ export default function PalaceEdit() {
   const editorMode = page.editorMode
   const exitInlinePractice = page.exitInlinePractice
   const pageHandleMindMapNodeActive = page.handleMindMapNodeActive
-  const registerTimerActivity = page.timer.registerActivity
   const lastBuildActivationRef = useRef<number | null>(null)
   const handleMindMapNodeActive = useCallback((nodes: MindMapSelection[]) => {
-    registerTimerActivity('node_switch', { source: 'node_active' })
     pageHandleMindMapNodeActive(nodes)
-  }, [pageHandleMindMapNodeActive, registerTimerActivity])
+  }, [pageHandleMindMapNodeActive])
   useEffect(() => {
     if (!isActive || lastBuildActivationRef.current === becameActiveAt) return
     lastBuildActivationRef.current = becameActiveAt

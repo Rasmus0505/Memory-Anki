@@ -88,9 +88,8 @@ export function useMindMapReviewFlowController({
   });
 
   const handleActiveNodes = React.useCallback((nodes: MindMapSelection[]) => {
-    flow.timer.registerActivity("practice_interaction", { source: "review_node_navigation" });
     setActiveNodes(nodes);
-  }, [flow.timer]);
+  }, []);
   const inlineEditEnabled =
     typeof onModeToggle === "function" &&
     typeof onEditEditorStateChange === "function" &&
@@ -136,15 +135,9 @@ React.useEffect(() => {
       flow.timer.logEvent("enter_edit_mode", {
         source: "review_inline_edit",
       });
-      flow.timer.registerActivity("edit_operation", {
-        source: "review_inline_edit_enter",
-      });
     } else {
       flow.timer.logEvent("exit_edit_mode", {
         source: "review_inline_edit",
-      });
-      flow.timer.registerActivity("practice_interaction", {
-        source: "review_inline_edit_exit",
       });
     }
     previousDisplayModeRef.current = resolvedDisplayMode;
@@ -152,12 +145,9 @@ React.useEffect(() => {
 
   const handleEditorStateChange = React.useCallback(
     (nextState: MindMapEditorState) => {
-      flow.timer.registerActivity("edit_operation", {
-        source: "review_inline_edit",
-      });
       onEditEditorStateChange?.(nextState);
     },
-    [flow.timer, onEditEditorStateChange],
+    [onEditEditorStateChange],
   );
 
 
@@ -287,9 +277,6 @@ React.useEffect(() => {
 
 
   const handleQuizBreakOpen = React.useCallback(() => {
-    flow.timer.registerActivity("practice_interaction", {
-      source: "quiz_launcher_open",
-    });
     if (!palaceId) return;
     openQuizLauncher({
       palaceId,
@@ -297,7 +284,6 @@ React.useEffect(() => {
       reviewEditorDoc: reviewEditorState.editor_doc,
     });
   }, [
-    flow.timer,
     openQuizLauncher,
     palaceId,
     reviewEditorState.editor_doc,
@@ -388,4 +374,3 @@ React.useEffect(() => {
 export type MindMapReviewFlowController = ReturnType<
   typeof useMindMapReviewFlowController
 >;
-

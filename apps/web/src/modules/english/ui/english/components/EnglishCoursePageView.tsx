@@ -45,13 +45,11 @@ import {
 } from '@/modules/english-lookup/public'
 import { createEnglishReadingVocabularyNoteApi } from '@/modules/english-reading/public'
 import type { useEnglishWordTyping } from '@/modules/english/ui/english/useEnglishWordTyping'
-import type { useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { cn } from '@/shared/lib/utils'
 
 type EnglishCourseSentence = EnglishCourseDetail['sentences'][number]
 type EnglishTypingState = ReturnType<typeof useEnglishWordTyping>['typingState']
-type EnglishCourseTimer = ReturnType<typeof useTimedSession>
 type TranslationMode = 'placeholder' | 'previous' | 'current'
 type SidePanelTab = 'info' | 'shortcuts' | 'rhythm'
 
@@ -61,7 +59,6 @@ interface EnglishCoursePageViewProps {
   course: EnglishCourseDetail | null
   videoRef: React.RefObject<HTMLVideoElement | null>
   typingInputRef: React.RefObject<HTMLInputElement | null>
-  timer: EnglishCourseTimer
   mediaUrl: string
   isCourseDisplayCompleted: boolean
   activeSentence: EnglishCourseSentence | null
@@ -108,7 +105,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
     course,
     videoRef,
     typingInputRef,
-    timer,
     mediaUrl,
     isCourseDisplayCompleted,
     activeSentence,
@@ -138,12 +134,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
   } = props
   const navigate = useNavigate()
   const { isActive } = useRouteResidency()
-  const lookup = useEnglishLookup({
-    isActive,
-    onActivity: (source) => {
-      timer.registerActivity('practice_interaction', { source })
-    },
-  })
+  const lookup = useEnglishLookup({ isActive })
   const [videoCollapsed, setVideoCollapsed] = useState(preferCollapsedVideo)
 
   useEffect(() => {

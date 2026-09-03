@@ -7,7 +7,6 @@ import {
   renderPalaceEditPage,
   screen,
   setupPalaceEditPageTestDefaults,
-  timedSessionMock,
   waitFor,
 } from '@/pages/create/PalaceEditorPage.test-support'
 
@@ -181,9 +180,6 @@ describe('usePalaceEditPage inline practice mode', () => {
       })
     })
 
-    expect(timedSessionMock.registerActivity).toHaveBeenCalledWith('practice_interaction', {
-      source: 'inline_practice_click',
-    })
   })
 
   it('keeps camera continuity across edit and practice mode switches without forced node focus', async () => {
@@ -309,8 +305,5 @@ describe('usePalaceEditPage inline practice mode', () => {
       })
     })
 
-    expect(timedSessionMock.registerActivity).toHaveBeenCalledWith('practice_interaction', {
-      source: 'inline_practice_contextmenu',
-    })
   })
 })

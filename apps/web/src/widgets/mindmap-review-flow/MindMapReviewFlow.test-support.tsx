@@ -51,6 +51,8 @@ export const openQuizLauncherMock = vi.fn();
 
 vi.mock("@/shared/hooks/useTimedSession", () => ({
   useTimedSession: (args: unknown) => useTimedSessionMock(args),
+  shouldAutoStartOnPageEnter: (config: { autoStartOnPageEnter?: boolean }) =>
+    config.autoStartOnPageEnter === true,
 }));
 
 vi.mock("@/widgets/quiz-launcher", () => ({
@@ -302,6 +304,10 @@ export function setupMindMapReviewFlowTest() {
   persistStudySessionRecordMock.mockReset();
   persistStudySessionRecordMock.mockResolvedValue(null);
   timer.complete.mockClear();
+  timer.start.mockClear();
+  timer.resume.mockClear();
+  timer.pause.mockClear();
+  timer.setSceneActive.mockClear();
   timer.registerActivity.mockClear();
   timer.logEvent.mockClear();
   timer.reset.mockClear();

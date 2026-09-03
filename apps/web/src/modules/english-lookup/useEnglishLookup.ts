@@ -69,10 +69,9 @@ const EMPTY_PANEL: EnglishLookupPanelState = {
 
 export interface UseEnglishLookupOptions {
   isActive: boolean
-  onActivity?: (source: string) => void
 }
 
-export function useEnglishLookup({ isActive, onActivity }: UseEnglishLookupOptions) {
+export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
   const [panel, setPanel] = useState<EnglishLookupPanelState>(EMPTY_PANEL)
   const [anchor, setAnchor] = useState<LookupAnchorState | null>(null)
   const [historyMeta, setHistoryMeta] = useState({ index: -1, length: 0 })
@@ -221,7 +220,6 @@ export function useEnglishLookup({ isActive, onActivity }: UseEnglishLookupOptio
         return
       }
 
-      onActivity?.('dictionary_lookup')
       setAnchor(null)
 
       const queryId = queryIdRef.current + 1
@@ -339,7 +337,7 @@ export function useEnglishLookup({ isActive, onActivity }: UseEnglishLookupOptio
         })
       }
     },
-    [closePanel, maybeAutoPlay, onActivity, pushHistory],
+    [closePanel, maybeAutoPlay, pushHistory],
   )
 
   /** Click a single token → open/toggle panel directly (no anchor). */

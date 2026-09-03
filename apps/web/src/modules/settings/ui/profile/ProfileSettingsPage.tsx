@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ProfileSkeleton } from './ProfileSkeleton'
-import { HardDriveDownload, Keyboard, RefreshCw, Settings } from 'lucide-react'
+import { HardDriveDownload, Keyboard, RefreshCw, Settings, Save } from 'lucide-react'
 
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
@@ -11,6 +11,8 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { resetPwaRuntime } from '@/pwa/resetPwa'
 import { ThemeSettingsCard } from '@/modules/settings/ui/profile/ThemeSettingsCard'
+import { getRuntimeInfoApi, updateRuntimeConfigApi } from '@/modules/settings/domain/runtime-entity/api'
+import { Input } from '@/shared/components/ui/input'
 
 interface ProfileSettingsPageProps {
   shortcutsSettings: ReactNode
@@ -23,6 +25,8 @@ export default function ProfileSettingsPage({
   const [loading, setLoading] = useState(true)
   const [clientPreferencesReady, setClientPreferencesReady] = useState(false)
   const [pwaResetting, setPwaResetting] = useState(false)
+  const [appHome, setAppHome] = useState('')
+  const [savingAppHome, setSavingAppHome] = useState(false)
 
   useEffect(() => {
     void getClientPreferencesApi()
@@ -30,6 +34,24 @@ export default function ProfileSettingsPage({
       .catch(() => setClientPreferencesReady(false))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    void getRuntimeInfoApi().then((info) => setAppHome(info.app_home ?? '')).catch(() => undefined)
+  }, [])
+
+  const handleSaveAppHome = async () => {
+    if (!appHome.trim()) return
+    setSavingAppHome(true)
+    try {
+      const result = await updateRuntimeConfigApi(appHome.trim())
+      setAppHome(result.local_app_home)
+      toast.success('数据库目录已保存。请重启 Memory Anki 后生效。')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '数据库目录保存失败')
+    } finally {
+      setSavingAppHome(false)
+    }
+  }
 
   const handleResetPwa = async () => {
     setPwaResetting(true)
@@ -106,6 +128,21 @@ export default function ProfileSettingsPage({
               快捷键、反馈、计时自动化和视图偏好已由本机后端托管保存。
             </div>
           ) : null}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">数据库位置</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">数据库与附件使用本机目录保存。修改后请重启应用。</p>
+              <div className="flex gap-2">
+                <Input value={appHome} onChange={(event) => setAppHome(event.target.value)} placeholder="例如 F:\\memory anki data" />
+                <Button type="button" onClick={() => void handleSaveAppHome()} loading={savingAppHome} loadingText="保存中">
+                  <Save className="size-4" />
+                  保存
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">

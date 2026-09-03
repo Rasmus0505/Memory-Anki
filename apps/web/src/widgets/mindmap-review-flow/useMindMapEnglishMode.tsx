@@ -17,7 +17,6 @@ export function useMindMapEnglishMode() {
   const readingContentRef = useRef<HTMLDivElement | null>(null)
   const lookup = useEnglishLookup({
     isActive: englishModeActive,
-    onActivity: () => undefined,
   })
 
   const handleLookupWordRef = useRef(lookup.handleTokenClick)

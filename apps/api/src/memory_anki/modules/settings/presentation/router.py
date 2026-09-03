@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.core.config import DEFAULTS
+from memory_anki.core.local_config import save_local_app_home
 from memory_anki.core.runtime import build_runtime_health, build_runtime_info
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import Config
@@ -197,6 +198,13 @@ def api_review_settings_update(data: dict, s: Session = Depends(session_dep)):
 @router.get("/runtime-info", response_model=RuntimeInfoResponse)
 def api_runtime_info():
     return build_runtime_info()
+
+
+@router.put("/runtime-config")
+def api_runtime_config_update(data: dict[str, Any]):
+    raw_home = str(data.get("local_app_home") or "").strip()
+    config = save_local_app_home(raw_home)
+    return {"local_app_home": str(config.local_app_home), "restart_required": True}
 
 
 @router.get("/runtime-health", response_model=RuntimeHealthResponse)

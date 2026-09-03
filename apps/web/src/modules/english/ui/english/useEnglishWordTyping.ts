@@ -13,7 +13,6 @@ import {
 
 interface UseEnglishWordTypingOptions {
   tokens: string[]
-  onActivitySignal?: () => void
   onTypingDone?: (sentenceInputText: string) => void
   playKeySound?: () => void
   playWrongSound?: () => void
@@ -24,7 +23,6 @@ const WRONG_FLASH_MS = 220
 
 export function useEnglishWordTyping({
   tokens,
-  onActivitySignal,
   onTypingDone,
   playKeySound,
   playWrongSound,
@@ -87,14 +85,13 @@ export function useEnglishWordTyping({
     clearWrongFlashTimer()
     const currentState = cloneWordState(typingStateRef.current)
     if (currentState.activeWordIndex >= currentState.wordInputs.length) return
-    onActivitySignal?.()
     playKeySound?.()
     const nextInput = currentState.currentWordInput.slice(0, -1)
     currentState.currentWordInput = nextInput
     currentState.wordInputs[currentState.activeWordIndex] = nextInput
     currentState.wordStatuses[currentState.activeWordIndex] = 'active'
     applyTypingState(currentState)
-  }, [applyTypingState, clearWrongFlashTimer, onActivitySignal, playKeySound])
+  }, [applyTypingState, clearWrongFlashTimer, playKeySound])
 
   const handleCharacterInput = useCallback(
     (key: string) => {
@@ -105,7 +102,6 @@ export function useEnglishWordTyping({
       const expectedToken = tokens[activeWordIndex] || ''
       if (!expectedToken) return
 
-      onActivitySignal?.()
       playKeySound?.()
 
       const nextInput = `${currentState.currentWordInput}${key}`
@@ -143,7 +139,6 @@ export function useEnglishWordTyping({
       clearWrongFlashTimer,
       flashWrongAndClear,
       handleTypingCompleted,
-      onActivitySignal,
       playCorrectSound,
       playKeySound,
       playWrongSound,

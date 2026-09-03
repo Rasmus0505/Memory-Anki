@@ -9,7 +9,6 @@ import {
   renderInRouter,
   setupMindMapReviewFlowTest,
   timer,
-  useTimedSessionMock,
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 
@@ -43,14 +42,6 @@ describe("MindMapReviewFlow modes", () => {
     await waitFor(() => {
       expect(screen.getByText("frame-readonly-immersive")).toBeTruthy();
     });
-    expect(timer.registerActivity).toHaveBeenCalledWith(
-      "practice_interaction",
-      { source: "review_fullscreen_enter" },
-    );
-    expect(useTimedSessionMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ autoPauseMs: 24 * 60 * 60 * 1000 }),
-    );
-
     fireEvent.click(screen.getByRole("button", { name: "退出原生全屏" }));
     await waitFor(() => {
       expect(screen.getByText("frame-readonly-immersive")).toBeTruthy();
@@ -191,10 +182,6 @@ describe("MindMapReviewFlow modes", () => {
     expect(timer.logEvent).toHaveBeenCalledWith("enter_edit_mode", {
       source: "review_inline_edit",
     });
-    expect(timer.registerActivity).toHaveBeenCalledWith("edit_operation", {
-      source: "review_inline_edit_enter",
-    });
-
     fireEvent.click(screen.getByRole("button", { name: "复习" }));
 
     await waitFor(() => {
@@ -204,9 +191,6 @@ describe("MindMapReviewFlow modes", () => {
     expect(screen.getByRole("button", { name: /完成/ })).toBeTruthy();
     expect(timer.logEvent).toHaveBeenCalledWith("exit_edit_mode", {
       source: "review_inline_edit",
-    });
-    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", {
-      source: "review_inline_edit_exit",
     });
   });
 
@@ -260,12 +244,6 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "宿主编辑保存" }));
-    await waitFor(() => {
-      expect(timer.registerActivity).toHaveBeenCalledWith("edit_operation", {
-        source: "review_inline_edit",
-      });
-    });
-
     fireEvent.click(screen.getByRole("button", { name: "复习" }));
 
     await waitFor(() => {
@@ -344,9 +322,6 @@ describe("MindMapReviewFlow modes", () => {
       grandchild: "待回忆",
     });
 
-    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", {
-      source: "left_click",
-    });
   });
 
   it("uses Space to advance the currently selected review node without firing inside inputs", async () => {
@@ -379,10 +354,6 @@ describe("MindMapReviewFlow modes", () => {
       child: "待回忆",
       grandchild: null,
     });
-    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", {
-      source: "left_click",
-    });
-
     const input = document.createElement("input");
     document.body.appendChild(input);
     try {
@@ -569,9 +540,6 @@ describe("MindMapReviewFlow modes", () => {
       });
     });
 
-    expect(timer.registerActivity).toHaveBeenCalledWith("practice_interaction", {
-      source: "right_click",
-    });
   });
 
   it("lets root right-click hide revealed descendants while keeping the root visible", async () => {

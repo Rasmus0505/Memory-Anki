@@ -162,8 +162,15 @@ export function useEnglishReadingWorkflow({
   const readingPanelRef = useRef<HTMLDivElement | null>(null);
   const hardUnloadRef = useRef(false);
   const versionResetMaterialIdRef = useRef<number | null>(null);
+  const readingSessionKey =
+    resolvedMaterialId != null && Number.isFinite(resolvedMaterialId) && resolvedMaterialId > 0
+      ? `english-reading:${resolvedMaterialId}`
+      : material?.id != null && Number.isFinite(material.id) && material.id > 0
+        ? `english-reading:${material.id}`
+        : "english-reading:pending";
 
   const timer = useTimedSession({
+    sessionKey: readingSessionKey,
     kind: "practice",
     title: material ? `英语阅读 · ${material.title}` : "英语阅读",
     palaceId: null,
