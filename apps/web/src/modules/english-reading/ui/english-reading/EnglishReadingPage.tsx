@@ -8,6 +8,15 @@ import {
   type ReactNode,
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useLiveStudySurfaceMirror } from '@/modules/session/public'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
+import {
+  applyEnglishReadingLiveView,
+  decodeEnglishReadingLiveView,
+  englishReadingSameInteraction,
+  shouldClearEnglishReadingSelection,
+  type EnglishReadingLiveView,
+} from '@/modules/english-reading/ui/english-reading/model/englishReadingLiveView'
 import { BookOpen, ChevronRight, FilePlus2, LoaderCircle, Sparkles, Trash2, X } from 'lucide-react'
 import { EnglishZoneLayout } from '@/modules/english/public'
 import {
@@ -83,6 +92,7 @@ function resolveBubblePosition(rect: DOMRect) {
 
 export default function EnglishReadingPage() {
   const navigate = useNavigate()
+  const { isActive } = useRouteResidency()
   const { materialId } = useParams()
   const articleId = Number(materialId || 0)
   const lookup = useEnglishLookup({ isActive: true })
@@ -98,6 +108,51 @@ export default function EnglishReadingPage() {
   const [busy, setBusy] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const [config, setConfig] = useState<ReadingArticleGenerationConfig>(DEFAULT_READING_GENERATION_CONFIG)
+  const liveReadingViewRef = useRef<EnglishReadingLiveView | null>(null)
+  const readingLiveView = useMemo<EnglishReadingLiveView>(() => ({
+    articleId: articleId || null,
+    selectedIds,
+    targetId: bubble?.targetId ?? null,
+    quote: bubble?.quote ?? null,
+  }), [articleId, bubble?.quote, bubble?.targetId, selectedIds])
+  const applyReadingChrome = useCallback((next: EnglishReadingLiveView, source: ReadingArticle | null) => {
+    setSelectedIds(next.selectedIds)
+    if (next.targetId != null && source) {
+      const target = source.targets.find((item) => item.id === next.targetId)
+      if (target) {
+        setBubble({
+          type: target.type,
+          quote: next.quote || target.quote,
+          startOffset: target.startOffset,
+          endOffset: target.endOffset,
+          left: BUBBLE_MARGIN,
+          top: BUBBLE_MARGIN,
+          targetId: target.id,
+        })
+        return
+      }
+    }
+    if (next.targetId == null) setBubble(null)
+  }, [])
+  const applyReadingLiveView = useCallback((remote: EnglishReadingLiveView) => {
+    const next = applyEnglishReadingLiveView(readingLiveView, remote)
+    liveReadingViewRef.current = next
+    if (next.articleId && next.articleId !== articleId) {
+      navigate(`/english/reading/materials/${next.articleId}`)
+      return
+    }
+    applyReadingChrome(next, article)
+  }, [applyReadingChrome, article, articleId, navigate, readingLiveView])
+  useLiveStudySurfaceMirror({
+    surface: 'english_reading',
+    route: articleId ? `/english/reading/materials/${articleId}` : '/english/reading',
+    view: readingLiveView,
+    decode: decodeEnglishReadingLiveView,
+    apply: applyReadingLiveView,
+    sameInteraction: englishReadingSameInteraction,
+    publishWhen: Boolean(articleId),
+    isActive,
+  })
 
   const refreshTree = useCallback(async () => {
     const response = await listEnglishReadingArticlesApi()
@@ -120,16 +175,29 @@ export default function EnglishReadingPage() {
   }, [articleId, navigate])
 
   useEffect(() => {
+    const live = liveReadingViewRef.current
+    const keepLiveSelection = !shouldClearEnglishReadingSelection(articleId || null, live)
     if (!articleId) {
       setArticle(null)
-      setBubble(null)
-      setSelectedIds([])
+      if (!keepLiveSelection) {
+        setBubble(null)
+        setSelectedIds([])
+      }
       return
     }
-    setBubble(null)
-    setSelectedIds([])
-    void refreshArticle(articleId).catch((error) => toast.error(error instanceof Error ? error.message : '加载文章失败'))
-  }, [articleId, refreshArticle])
+    if (!keepLiveSelection) {
+      setBubble(null)
+      setSelectedIds([])
+    }
+    void refreshArticle(articleId)
+      .then((response) => {
+        const nextLive = liveReadingViewRef.current
+        if (!shouldClearEnglishReadingSelection(articleId, nextLive) && nextLive) {
+          applyReadingChrome(nextLive, response)
+        }
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : '加载文章失败'))
+  }, [applyReadingChrome, articleId, refreshArticle])
 
   useEffect(() => {
     if (!bubble) return

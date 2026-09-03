@@ -8,6 +8,7 @@ import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 const mocks = vi.hoisted(() => ({
   useTimedSession: vi.fn(),
   useGlobalTimerRegistration: vi.fn(),
+  usePalacePracticeMode: vi.fn(),
   setSceneActive: vi.fn(),
 }))
 
@@ -44,6 +45,7 @@ const timer = {
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
   useTimedSession: (...args: unknown[]) => mocks.useTimedSession(...args),
+  shouldAutoStartOnPageEnter: () => false,
 }))
 
 vi.mock('@/shared/components/session/GlobalTimerProvider', () => ({
@@ -79,6 +81,14 @@ vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({ openQuizLauncher: vi.fn() }),
 }))
 
+vi.mock('@/modules/content/public', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/content/public')>()
+  return {
+    ...actual,
+    usePalacePracticeMode: (...args: unknown[]) => mocks.usePalacePracticeMode(...args),
+  }
+})
+
 vi.mock('@/modules/content/ui/mindmap-editor', () => ({
   MindMapEditorSurface: React.forwardRef(function MindMapEditorSurfaceMock(
     _props: unknown,
@@ -98,9 +108,15 @@ describe('PalaceViewPage timer registration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.useTimedSession.mockReturnValue(timer)
+    mocks.usePalacePracticeMode.mockReturnValue({
+      editorMode: 'edit',
+      activeMindMapEditorState: null,
+      handleInlinePracticeNodeClick: vi.fn(),
+      handleInlinePracticeNodeContextMenu: vi.fn(),
+    })
   })
 
-  it('registers the active read-only palace route so page clicks can start or resume its timer', async () => {
+  it('registers the active read-only palace route without starting its timer by default', async () => {
     render(
       <MemoryRouter initialEntries={['/palaces/101']}>
         <RouteResidencyProvider
@@ -120,6 +136,7 @@ describe('PalaceViewPage timer registration', () => {
 
     expect(await screen.findByText('测试宫殿')).toBeTruthy()
     expect(mocks.useTimedSession).toHaveBeenCalledWith({
+      sessionKey: 'palace:101',
       kind: 'practice',
       title: '测试宫殿 · 宫殿学习',
       palaceId: 101,
@@ -138,5 +155,13 @@ describe('PalaceViewPage timer registration', () => {
     await waitFor(() => {
       expect(mocks.setSceneActive).toHaveBeenCalledWith(true, { source: 'route_active' })
     })
+    expect(timer.start).not.toHaveBeenCalled()
+    expect(mocks.usePalacePracticeMode).toHaveBeenCalledWith(expect.objectContaining({
+      palaceId: 101,
+      currentNodeUid: null,
+      onCurrentNodeUid: expect.any(Function),
+      studyRoute: '/palaces/101',
+      isActive: true,
+    }))
   })
 })

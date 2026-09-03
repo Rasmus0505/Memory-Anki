@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
@@ -33,12 +33,23 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
+import { useLiveStudySurfaceMirror } from '@/modules/session/public'
+import {
+  applyPalaceQuizLiveView,
+  decodePalaceQuizLiveView,
+  palaceQuizSameInteraction,
+  type PalaceQuizLiveView,
+} from '@/modules/quiz/ui/palace-quiz/model/palaceQuizLiveView'
 
 export default function PalaceQuizPage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const palaceId = id ? Number(id) : null
+  const parsedPalaceId = id ? Number(id) : null
+  const palaceId =
+    parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
+      ? parsedPalaceId
+      : null
   const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
@@ -91,6 +102,10 @@ export default function PalaceQuizPage() {
     })
   const miniPalaces = palace?.segments || []
   const timer = useTimedSession({
+    sessionKey:
+      palaceId != null && Number.isFinite(palaceId)
+        ? `palace:${palaceId}`
+        : `palace:pending:${id ?? 'none'}`,
     kind: 'quiz',
     title: palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题',
     palaceId,
@@ -109,9 +124,9 @@ export default function PalaceQuizPage() {
   const timerRef = useRef(timer)
   const hardUnloadRef = useRef(false)
 
-  const registerQuizActivity = (source: string) => {
-    timer.registerActivity('practice_interaction', { source })
-  }
+  // Child quiz hooks retain this callback for API compatibility; timer state is
+  // now driven only by explicit start/pause/resume and system visibility events.
+  const registerQuizActivity = useCallback((_source: string) => undefined, [])
 
   const emitQuizFeedback = (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
@@ -190,12 +205,66 @@ export default function PalaceQuizPage() {
   }, [])
 
   useEffect(() => {
-    if (!palaceId) return
+    if (!palaceId || !palace) return
     if (!isActive) return
     if (timer.status !== 'idle') return
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
-  }, [isActive, palaceId, timer])
+  }, [isActive, palace, palaceId, timer])
+
+  const quizLiveView = useMemo<PalaceQuizLiveView>(() => ({
+    palaceId,
+    tab: activeTab,
+    viewMode: browser.viewMode,
+    questionId: browser.currentQuestion?.id ?? null,
+    questionIndex: browser.currentQuestionIndex,
+    questionState: browser.currentQuestion
+      ? {
+          questionId: browser.currentQuestion.id,
+          state: practice.questionStates[browser.currentQuestion.id] || {},
+        }
+      : null,
+  }), [
+    activeTab,
+    browser.currentQuestion,
+    browser.currentQuestionIndex,
+    browser.viewMode,
+    palaceId,
+    practice.questionStates,
+  ])
+  const applyQuizLiveView = useCallback((remote: PalaceQuizLiveView) => {
+    const questionIds = browser.filteredQuestions.map((question) => question.id)
+    const next = applyPalaceQuizLiveView(
+      {
+        tab: activeTab,
+        viewMode: browser.viewMode,
+        questionIndex: browser.currentQuestionIndex,
+        questionStates: practice.questionStates,
+      },
+      remote,
+      questionIds,
+    )
+    if (!next.ready) return false
+    setActiveTab(next.tab)
+    browser.setViewMode(next.viewMode)
+    browser.setCurrentQuestionIndex(next.questionIndex)
+    practice.setQuestionStates(next.questionStates)
+    return true
+  }, [
+    activeTab,
+    browser,
+    practice,
+  ])
+  useLiveStudySurfaceMirror({
+    surface: 'palace_quiz',
+    route: fullPath,
+    view: quizLiveView,
+    decode: decodePalaceQuizLiveView,
+    apply: applyQuizLiveView,
+    sameInteraction: palaceQuizSameInteraction,
+    isActive,
+    publishWhen: browser.filteredQuestions.length > 0,
+  })
 
   const pageTabs: Array<{ key: PalaceQuizTabKey; label: string }> = [
     { key: 'practice', label: '做题' },
@@ -212,13 +281,11 @@ export default function PalaceQuizPage() {
   }
 
   const handleViewModeChange = (viewMode: typeof browser.viewMode, label: string) => {
-    registerQuizActivity(viewMode === 'single' ? 'view_mode_single' : 'view_mode_list')
     emitQuizFeedback('quiz_nav_view_switch', { label, audioScope: 'global' })
     browser.setViewMode(viewMode)
   }
 
   const handleQuestionNavigate = (direction: 'prev' | 'next') => {
-    registerQuizActivity(direction === 'prev' ? 'question_prev' : 'question_next')
     emitQuizFeedback(
       direction === 'prev' ? 'quiz_nav_question_prev' : 'quiz_nav_question_next',
       { label: direction === 'prev' ? '上一题' : '下一题', audioScope: 'local' },
@@ -291,9 +358,6 @@ export default function PalaceQuizPage() {
   return (
     <div
       className="space-y-5"
-      onClickCapture={() => registerQuizActivity('page_click')}
-      onKeyDownCapture={() => registerQuizActivity('page_keydown')}
-      onChangeCapture={() => registerQuizActivity('page_change')}
     >
       {aiRunConfigDialog}
       <ConfirmDialog
@@ -350,7 +414,6 @@ export default function PalaceQuizPage() {
             type="button"
             variant={activeTab === tab.key ? 'default' : 'outline'}
             onClick={() => {
-              registerQuizActivity(`tab_${tab.key}`)
               emitQuizFeedback('quiz_nav_tab_switch', { label: tab.label, audioScope: 'global' })
               setActiveTab(tab.key)
             }}
@@ -458,5 +521,3 @@ export default function PalaceQuizPage() {
     </div>
   )
 }
-
-

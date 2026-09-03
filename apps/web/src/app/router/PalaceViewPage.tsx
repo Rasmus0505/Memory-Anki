@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
@@ -17,8 +17,10 @@ import { cn } from '@/shared/lib/utils'
 import { readMindMapEditorState } from '@/modules/content/public'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { useTimedSession } from '@/shared/hooks/useTimedSession'
+import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
+import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
+import { usePalacePracticeMode } from '@/modules/content/public'
 
 interface PalaceMeta {
   id: number
@@ -32,7 +34,15 @@ export default function PalaceView() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const { openQuizLauncher } = useQuizLauncher()
-  const palaceId = id ? Number(id) : null
+  const parsedPalaceId = id ? Number(id) : null
+  const palaceId =
+    parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
+      ? parsedPalaceId
+      : null
+  const palaceSessionKey =
+    palaceId != null && Number.isFinite(palaceId)
+      ? `palace:${palaceId}`
+      : `palace:pending:${id ?? 'none'}`
   const isPwaClient = detectClientSource() === 'pwa'
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
@@ -53,7 +63,24 @@ export default function PalaceView() {
 
   const palace = meta as PalaceMeta | null
   const timerTitle = palace?.title ? `${palace.title} · 宫殿学习` : '宫殿学习'
+  const [currentNodeUid, setCurrentNodeUid] = useState<string | null>(null)
+  const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
+    setCurrentNodeUid(uid)
+  }, [])
+  const practice = usePalacePracticeMode({
+    palaceId,
+    editorState,
+    title: palace?.title || timerTitle,
+    currentNodeUid,
+    onCurrentNodeUid: handlePracticeCurrentNodeUid,
+    studyRoute: fullPath,
+    isActive,
+  })
+  const displayedEditorState = practice.editorMode === 'recall'
+    ? practice.activeMindMapEditorState
+    : editorState
   const timer = useTimedSession({
+    sessionKey: palaceSessionKey,
     kind: 'practice',
     title: timerTitle,
     palaceId,
@@ -73,6 +100,13 @@ export default function PalaceView() {
   useEffect(() => {
     timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
   }, [isActive, timer])
+
+  useEffect(() => {
+    if (!palaceId || !palace || !editorState || !isActive) return
+    if (timer.status !== 'idle') return
+    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
+    timer.start({ source: 'page_enter' })
+  }, [editorState, isActive, palace, palaceId, timer])
 
   useEffect(() => {
     if (!palace || !editorState) {
@@ -195,12 +229,20 @@ export default function PalaceView() {
                 <MindMapEditorSurface
                   ref={mindMapFrameRef}
                   key={`readonly-${palace.id}`}
-                  editorState={editorState}
-                  readonly
+                  editorState={displayedEditorState || editorState}
+                  readonly={practice.editorMode !== 'recall'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   mobileViewPolicy="map"
                   immersiveModeActive={mindMapFullscreen}
                   onEditorStateChange={() => {}}
+                  onNodeClick={(nodes) => {
+                    setCurrentNodeUid(nodes[0]?.uid ? String(nodes[0].uid) : null)
+                    practice.handleInlinePracticeNodeClick(nodes)
+                  }}
+                  onNodeContextMenu={(nodes) => {
+                    setCurrentNodeUid(nodes[0]?.uid ? String(nodes[0].uid) : null)
+                    practice.handleInlinePracticeNodeContextMenu(nodes)
+                  }}
                   onFullscreenToggle={setMindMapFullscreen}
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}

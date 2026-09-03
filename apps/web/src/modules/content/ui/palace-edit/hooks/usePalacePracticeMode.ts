@@ -15,21 +15,32 @@ import type { MindMapEditorState, SessionProgressSnapshot } from '@/shared/api/c
 import type { EditorMode } from '@/modules/content/ui/palace-edit/model/mindmap-editor'
 import { useReviewFeedback } from '@/modules/memory/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
+import { useLiveStudySurfaceMirror } from '@/modules/session/public'
+import {
+  applyPalacePracticeLiveView,
+  decodePalacePracticeLiveView,
+  palacePracticeSameInteraction,
+  type PalacePracticeLiveView,
+} from '@/modules/content/ui/palace-edit/model/palacePracticeLiveView'
 
 interface PalacePracticeModeOptions {
   palaceId: number | null
   editorState: MindMapEditorState | null
   title: string
-  timer: {
-    registerActivity: (kind: string, meta?: Record<string, unknown>) => void
-  }
+  currentNodeUid?: string | null
+  onCurrentNodeUid?: (uid: string | null) => void
+  studyRoute?: string
+  isActive?: boolean
 }
 
 export function usePalacePracticeMode({
   palaceId,
   editorState,
   title,
-  timer,
+  currentNodeUid = null,
+  onCurrentNodeUid,
+  studyRoute,
+  isActive = true,
 }: PalacePracticeModeOptions) {
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
   const flipCardRevealSettings = useFlipCardRevealSettings()
@@ -127,19 +138,16 @@ export function usePalacePracticeMode({
   }, [palaceId, practiceSnapshotLoaded, redNodeIds, revealMap, root])
 
   const enterInlinePractice = useCallback(() => {
-    timer.registerActivity('practice_interaction', { source: 'inline_practice_enter' })
     setEditorMode('recall')
-  }, [timer])
+  }, [])
 
   const exitInlinePractice = useCallback(() => {
-    timer.registerActivity('practice_interaction', { source: 'inline_practice_exit' })
     setEditorMode('edit')
-  }, [timer])
+  }, [])
 
   const enterPreview = useCallback(() => {
-    timer.registerActivity('practice_interaction', { source: 'inline_preview_enter' })
     setEditorMode('preview')
-  }, [timer])
+  }, [])
 
   const toggleInlinePractice = useCallback(() => {
     if (editorMode === 'recall') {
@@ -151,15 +159,13 @@ export function usePalacePracticeMode({
 
   const handleInlinePracticeNodeClick = useCallback((nodes: MindMapSelection[]) => {
     if (editorMode !== 'recall') return
-    timer.registerActivity('practice_interaction', { source: 'inline_practice_click' })
     handleNodeClick(nodes)
-  }, [editorMode, handleNodeClick, timer])
+  }, [editorMode, handleNodeClick])
 
   const handleInlinePracticeNodeContextMenu = useCallback((nodes: MindMapSelection[]) => {
     if (editorMode !== 'recall') return
-    timer.registerActivity('practice_interaction', { source: 'inline_practice_contextmenu' })
     handleNodeContextMenu(nodes)
-  }, [editorMode, handleNodeContextMenu, timer])
+  }, [editorMode, handleNodeContextMenu])
 
   const restartInlinePractice = useCallback(async () => {
     reset()
@@ -167,8 +173,7 @@ export function usePalacePracticeMode({
     if (palaceId) {
       await clearPracticeSessionProgressApi(palaceId)
     }
-    timer.registerActivity('practice_interaction', { source: 'inline_practice_restart' })
-  }, [feedback, palaceId, reset, timer])
+  }, [feedback, palaceId, reset])
 
   const activeMindMapEditorState = useMemo<MindMapEditorState | null>(
     () => (editorMode === 'recall' ? (visibleEditorState ?? editorState ?? null) : (editorState ?? null)),
@@ -183,6 +188,34 @@ export function usePalacePracticeMode({
       }),
     [docFingerprint, redNodeIds, revealMap],
   )
+
+  const practiceLiveView = useMemo<PalacePracticeLiveView>(() => ({
+    palaceId,
+    editorMode,
+    currentNodeUid,
+    revealMap,
+    redNodeIds: [...redNodeIds],
+  }), [currentNodeUid, editorMode, palaceId, redNodeIds, revealMap])
+  const applyPracticeLiveView = useCallback((remote: PalacePracticeLiveView) => {
+    const next = applyPalacePracticeLiveView(practiceLiveView, remote)
+    setEditorMode(next.editorMode)
+    if (next.revealMap) setRevealMap(next.revealMap as Record<string, RevealState>)
+    setRedNodeIds(new Set(next.redNodeIds))
+    onCurrentNodeUid?.(next.currentNodeUid)
+  }, [onCurrentNodeUid, practiceLiveView, setRedNodeIds, setRevealMap])
+  const practiceStudyRoute = editorMode === 'recall' && palaceId
+    ? `/palaces/${palaceId}`
+    : (studyRoute || (palaceId ? `/palaces/${palaceId}` : ''))
+  useLiveStudySurfaceMirror({
+    surface: 'mindmap_review',
+    route: practiceStudyRoute,
+    view: practiceLiveView,
+    decode: decodePalacePracticeLiveView,
+    apply: applyPracticeLiveView,
+    sameInteraction: palacePracticeSameInteraction,
+    publishWhen: editorMode === 'recall',
+    isActive,
+  })
 
   return {
     activeMindMapEditorState,

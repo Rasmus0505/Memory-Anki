@@ -32,6 +32,14 @@ import { useEnglishTypingFeedbackSounds } from '@/modules/english/ui/english/use
 import { useEnglishWordTyping } from '@/modules/english/ui/english/useEnglishWordTyping'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
+import { useLiveStudySurfaceMirror } from '@/modules/session/public'
+import {
+  applyEnglishCourseLiveView,
+  decodeEnglishCourseLiveView,
+  englishCourseSameInteraction,
+  resolveEnglishCourseProgressAfterLoad,
+  type EnglishCourseLiveView,
+} from '@/modules/english/ui/english/model/englishCourseLiveView'
 
 const FOCUS_RESTORE_DELAY_MS = 180
 const EMPTY_TOKENS: string[] = []
@@ -80,6 +88,9 @@ export default function EnglishCoursePage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const courseId = Number(id)
+  const courseSessionKey = Number.isFinite(courseId)
+    ? `english:${courseId}`
+    : `english:pending:${id ?? 'none'}`
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const typingInputRef = useRef<HTMLInputElement | null>(null)
   const focusRestoreTimerRef = useRef<number | null>(null)
@@ -105,6 +116,7 @@ export default function EnglishCoursePage() {
   const isTouchDevice = useMemo(() => isTouchPrimaryInputDevice(), [])
 
   const timer = useTimedSession({
+    sessionKey: courseSessionKey,
     kind: 'practice',
     title: course ? `英语听写 · ${course.title}` : '英语听写',
     palaceId: null,
@@ -132,16 +144,37 @@ export default function EnglishCoursePage() {
     sentencePhase === 'locally_completed' || sentencePhase === 'chain_playing',
   )
 
+  const liveCourseViewRef = useRef<EnglishCourseLiveView | null>(null)
+  useEffect(() => {
+    liveCourseViewRef.current = null
+  }, [courseId])
   const loadCourse = useCallback(async () => {
     if (!Number.isFinite(courseId)) return
     setLoading(true)
     try {
       const nextCourse = await getEnglishCourseApi(courseId)
       const nextTypingIndex = resolveDisplaySentenceIndex(nextCourse)
+      const loadedPhase = nextTypingIndex >= nextCourse.sentences.length ? 'locally_completed' : 'listening_wait_input'
+      const progress = resolveEnglishCourseProgressAfterLoad(
+        courseId,
+        {
+          typingSentenceIndex: nextTypingIndex,
+          translationSentenceIndex: findLastCompletedSentenceIndex(nextCourse, nextTypingIndex),
+          sentencePhase: loadedPhase,
+        },
+        liveCourseViewRef.current,
+      )
       autoPreviewKeyRef.current = ''
-      setTypingSentenceIndex(nextTypingIndex)
-      setTranslationSentenceIndex(findLastCompletedSentenceIndex(nextCourse, nextTypingIndex))
-      setSentencePhase(nextTypingIndex >= nextCourse.sentences.length ? 'locally_completed' : 'listening_wait_input')
+      setTypingSentenceIndex(progress.typingSentenceIndex)
+      setTranslationSentenceIndex(progress.translationSentenceIndex)
+      if (
+        progress.sentencePhase === 'listening_wait_input'
+        || progress.sentencePhase === 'locally_completed'
+        || progress.sentencePhase === 'chain_playing'
+        || progress.sentencePhase === 'server_rejected'
+      ) {
+        setSentencePhase(progress.sentencePhase)
+      }
       setCourse(nextCourse)
       setFeedback(null)
       setStatusNotice(null)
@@ -199,6 +232,37 @@ export default function EnglishCoursePage() {
     timer.start({ source: 'page_enter', scene: 'english_course' })
   }, [course, isActive, timer])
 
+  const courseLiveView = useMemo<EnglishCourseLiveView>(() => ({
+    courseId: Number.isFinite(courseId) ? courseId : 0,
+    typingSentenceIndex,
+    translationSentenceIndex,
+    sentencePhase,
+  }), [courseId, sentencePhase, translationSentenceIndex, typingSentenceIndex])
+  const applyCourseLiveView = useCallback((remote: EnglishCourseLiveView) => {
+    const next = applyEnglishCourseLiveView(courseLiveView, remote)
+    liveCourseViewRef.current = next
+    setTypingSentenceIndex(next.typingSentenceIndex)
+    setTranslationSentenceIndex(next.translationSentenceIndex)
+    if (
+      next.sentencePhase === 'listening_wait_input'
+      || next.sentencePhase === 'locally_completed'
+      || next.sentencePhase === 'chain_playing'
+      || next.sentencePhase === 'server_rejected'
+    ) {
+      setSentencePhase(next.sentencePhase)
+    }
+  }, [courseLiveView])
+  useLiveStudySurfaceMirror({
+    surface: 'english_course',
+    route: fullPath,
+    view: courseLiveView,
+    decode: decodeEnglishCourseLiveView,
+    apply: applyCourseLiveView,
+    sameInteraction: englishCourseSameInteraction,
+    publishWhen: Number.isFinite(courseId),
+    isActive,
+  })
+
   const activeSentence = course?.sentences[typingSentenceIndex] ?? null
   const translationSentence =
     translationSentenceIndex != null ? course?.sentences[translationSentenceIndex] ?? null : null
@@ -237,7 +301,6 @@ export default function EnglishCoursePage() {
     revealWord,
   } = useEnglishWordTyping({
     tokens: activeSentenceTokens,
-    onActivitySignal: () => timer.registerActivity('practice_interaction', { source: 'english_typing' }),
     playKeySound,
     playWrongSound,
     playCorrectSound,
@@ -325,8 +388,8 @@ export default function EnglishCoursePage() {
     ({
       startSentence,
       endSentence,
-      source,
-      countReplay = true,
+      source: _source,
+      countReplay: _countReplay = true,
       nextSentenceSwitchSec = null,
       onNextSentenceStart = null,
       onEnded = null,
@@ -354,9 +417,6 @@ export default function EnglishCoursePage() {
       }
 
       element.currentTime = Math.max(0, startSentence.startMs / 1000)
-      if (countReplay) {
-        timer.registerActivity('practice_interaction', { source })
-      }
       setIsSegmentPlaying(true)
 
       void element.play().catch(() => {
@@ -371,7 +431,7 @@ export default function EnglishCoursePage() {
 
       return true
     },
-    [timer],
+    [],
   )
 
   const rollbackToSentence = useCallback(
@@ -671,9 +731,6 @@ export default function EnglishCoursePage() {
       autoPreviewKeyRef.current = ''
       localCompletionKeyRef.current = ''
       stopSegmentPlayback()
-      timer.registerActivity('practice_interaction', {
-        source: delta > 0 ? 'english_next_sentence' : 'english_previous_sentence',
-      })
       setTypingSentenceIndex(targetIndex)
       setTranslationSentenceIndex(
         targetIndex >= currentCourse.sentences.length
@@ -691,7 +748,7 @@ export default function EnglishCoursePage() {
         void handlePersistProgress(targetIndex, currentCourse.progress.completedSentenceIndexes)
       }
     },
-    [courseRef, handlePersistProgress, sentencePhaseRef, stopSegmentPlayback, timer, typingSentenceIndexRef],
+    [courseRef, handlePersistProgress, sentencePhaseRef, stopSegmentPlayback, typingSentenceIndexRef],
   )
 
   const toggleSingleSentenceLoop = useCallback(() => {
@@ -845,7 +902,6 @@ export default function EnglishCoursePage() {
       course={course}
       videoRef={videoRef}
       typingInputRef={typingInputRef}
-      timer={timer}
       mediaUrl={mediaUrl}
       isCourseDisplayCompleted={isCourseDisplayCompleted}
       activeSentence={activeSentence}

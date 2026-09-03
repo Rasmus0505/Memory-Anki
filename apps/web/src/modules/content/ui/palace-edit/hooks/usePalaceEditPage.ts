@@ -29,7 +29,15 @@ export function usePalaceEditPage() {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
-  const palaceId = id ? Number(id) : null
+  const parsedPalaceId = id ? Number(id) : null
+  const palaceId =
+    parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
+      ? parsedPalaceId
+      : null
+  const palaceSessionKey =
+    palaceId != null && Number.isFinite(palaceId)
+      ? `palace:${palaceId}`
+      : `palace:pending:${id ?? 'new'}`
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
@@ -42,12 +50,13 @@ export function usePalaceEditPage() {
   const selectedNodesRef = useRef<MindMapSelection[]>([])
 
   const timer = useTimedSession({
+    sessionKey: palaceSessionKey,
     kind: 'palace_edit',
     title: '未命名宫殿',
     palaceId,
+    sourceKind: palaceId != null ? 'palace' : null,
     persistKey: palaceId ? `palace_edit:${palaceId}` : null,
   })
-  const timerRef = useRef(timer)
 
   const documentState = usePalaceEditorDocument({
     palaceId,
@@ -62,7 +71,6 @@ export function usePalaceEditPage() {
   const meta = usePalaceMetaController({
     palace,
     reload: documentState.reload,
-    timer,
   })
   useGlobalTimerRegistration({
     scene: 'palace_edit',
@@ -73,11 +81,24 @@ export function usePalaceEditPage() {
     routePath: fullPath,
   })
 
+  const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
+    selectedNodeUidRef.current = uid
+    if (!uid) {
+      setSelectedNodes([])
+      return
+    }
+    setSelectedNodes((current) => (
+      current[0]?.uid === uid ? current : [{ uid } as MindMapSelection]
+    ))
+  }, [])
   const practice = usePalacePracticeMode({
     palaceId,
     editorState: documentState.editorState,
     title: meta.title || palaceTitle,
-    timer,
+    currentNodeUid: selectedNodeUid,
+    onCurrentNodeUid: handlePracticeCurrentNodeUid,
+    studyRoute: fullPath,
+    isActive,
   })
 
   const versions = usePalaceVersionsController({
@@ -158,9 +179,7 @@ export function usePalaceEditPage() {
 
   const handleMindMapEditorStateChange = useCallback(
     (nextState: MindMapEditorState) => {
-      documentState.handleMindMapEditorStateChange(nextState, () => {
-        timerRef.current.registerActivity('edit_operation', { source: 'mind_map_edit' })
-      })
+      documentState.handleMindMapEditorStateChange(nextState)
     },
     [documentState],
   )
@@ -211,10 +230,6 @@ export function usePalaceEditPage() {
   useEffect(() => {
     timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
   }, [isActive, timer])
-
-  useEffect(() => {
-    timerRef.current = timer
-  }, [timer])
 
   useEffect(() => {
     if (isActive) return
@@ -275,11 +290,10 @@ export function usePalaceEditPage() {
 
   const toggleMindMapFullscreen = useCallback(
     (active?: boolean) => {
-      timer.registerActivity('edit_operation', { source: 'mind_map_immersive_toggle' })
       emitFeedbackFx('mode_switch', { source: 'mind_map_immersive_toggle' })
       setMindMapFullscreen((current) => (typeof active === 'boolean' ? active : !current))
     },
-    [emitFeedbackFx, timer],
+    [emitFeedbackFx],
   )
 
   const handleOpenEnglishArea = useCallback(async () => {
@@ -317,7 +331,6 @@ export function usePalaceEditPage() {
       })
     },
     onApplied: ({ mode, nodeCount }) => {
-      timer.registerActivity('edit_operation', { source: 'mindmap_ai_split_applied' })
       emitFeedbackFx('node_create', {
         nodeUid: selectedNodeUidRef.current,
         relatedNodeUids: selectedNodeUidRef.current ? [selectedNodeUidRef.current] : [],
@@ -339,7 +352,6 @@ export function usePalaceEditPage() {
         toast.error('请先选中要分卡的目标节点。')
         return
       }
-      timer.registerActivity('edit_operation', { source: 'mindmap_ai_split_open' })
       const editorDoc = documentState.editorState.editor_doc as MindMapDoc
       await aiSplitWorkbench.openWorkbench({
         targetNodeUid: payload.target_node_uid,
@@ -348,7 +360,7 @@ export function usePalaceEditPage() {
         editorDoc,
       })
     },
-    [aiSplitWorkbench, documentState.editorState, palaceId, practice.editorMode, timer],
+    [aiSplitWorkbench, documentState.editorState, palaceId, practice.editorMode],
   )
 
   const statusBadge: StatusBadgeState = versions.statusBadge
