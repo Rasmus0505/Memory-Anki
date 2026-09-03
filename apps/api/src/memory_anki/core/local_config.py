@@ -118,6 +118,20 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def save_local_app_home(app_home: str | Path, *, config_path: Path | None = None) -> LocalRuntimeConfig:
+    """Persist the per-device runtime data directory and return the resolved config."""
+    resolved_path = config_path or LOCAL_CONFIG_PATH
+    resolved_home = _resolve_path(str(app_home), repo_root=REPO_ROOT)
+    if resolved_home is None:
+        raise RuntimeError("数据库目录不能为空。")
+    resolved_home = resolved_home.expanduser().resolve()
+    resolved_home.mkdir(parents=True, exist_ok=True)
+    payload = _read_json(resolved_path) if resolved_path.exists() else {}
+    payload["local_app_home"] = str(resolved_home)
+    _write_json(resolved_path, payload)
+    return load_local_runtime_config(config_path=resolved_path)
+
+
 def load_local_runtime_config(
     *,
     config_path: Path | None = None,
@@ -166,4 +180,5 @@ __all__ = [
     "PLACEHOLDER_DEVICE_ID",
     "default_app_home",
     "load_local_runtime_config",
+    "save_local_app_home",
 ]

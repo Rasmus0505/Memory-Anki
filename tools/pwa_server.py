@@ -480,8 +480,48 @@ def _ensure_runtime_initialized() -> bool:
     return True
 
 
+def _pick_runtime_folder(error: Exception) -> bool:
+    """Let a Windows user repair a missing removable/configured data folder."""
+    if os.name != "nt":
+        return False
+    print(f"[!] 运行时数据库目录不可用: {error}")
+    print("[i] 请在随后弹出的窗口中选择数据库文件夹；取消则保持启动失败。")
+    script = r'''
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = '选择 Memory Anki 数据库文件夹'
+$dialog.ShowNewFolderButton = $true
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }
+'''
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    selected = next((line.strip() for line in result.stdout.splitlines() if line.strip()), "")
+    if not selected:
+        return False
+    try:
+        from memory_anki.core.local_config import save_local_app_home
+
+        save_local_app_home(selected)
+    except Exception as exc:
+        print(f"[!] 保存数据库目录失败: {exc}")
+        return False
+    print(f"[ok] 已将数据库目录设置为: {selected}")
+    return True
+
+
 def _backend_env() -> dict[str, str]:
-    env = dev_server._backend_env()
+    try:
+        env = dev_server._backend_env()
+    except RuntimeError as exc:
+        if not _pick_runtime_folder(exc):
+            raise
+        env = dev_server._backend_env()
     env["MEMORY_ANKI_WEB_DIST"] = str(WEB_DIST)
     env["MEMORY_ANKI_CHANNEL"] = "pwa"
     env["MEMORY_ANKI_STARTUP_MODE"] = "healthcheck"
