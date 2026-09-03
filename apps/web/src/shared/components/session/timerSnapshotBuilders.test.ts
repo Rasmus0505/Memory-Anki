@@ -1,18 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_BREAK_GUARD_CONFIG } from '@/shared/components/session/break-guard-config'
-import { DEFAULT_TIMER_AUTOMATION_CONFIG } from '@/shared/components/session/timer-automation-config'
-import { DEFAULT_TIMER_FOCUS_CONFIG } from '@/shared/components/session/timer-focus-config'
+import { buildStudyTimerSnapshot } from '@/shared/components/session/timerSnapshotBuilders'
 import type { GlobalTimerRegistration } from '@/shared/components/session/globalTimerModel'
-import {
-  buildBreakTimerSnapshot,
-  buildStudyTimerSnapshot,
-} from '@/shared/components/session/timerSnapshotBuilders'
 import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 
-function createEntry(overrides?: Partial<TimedSessionController>): GlobalTimerRegistration {
+function createEntry(overrides: Partial<TimedSessionController> = {}): GlobalTimerRegistration {
   const timer = {
     sessionId: 'session-1',
-    effectiveSeconds: 0,
+    sessionKey: 'freestyle',
+    effectiveSeconds: 42,
     idleSeconds: 0,
     pauseCount: 0,
     status: 'running',
@@ -36,11 +31,11 @@ function createEntry(overrides?: Partial<TimedSessionController>): GlobalTimerRe
     acknowledgeFocusGoal: vi.fn(),
     startNextFocusRound: vi.fn(),
     adjustDuration: vi.fn(),
+    getEffectiveSeconds: vi.fn(() => 42),
     complete: vi.fn(),
     reset: vi.fn(),
     ...overrides,
   } as TimedSessionController
-
   return {
     sessionId: timer.sessionId,
     scene: 'freestyle',
@@ -53,88 +48,28 @@ function createEntry(overrides?: Partial<TimedSessionController>): GlobalTimerRe
 }
 
 describe('buildStudyTimerSnapshot', () => {
-  it('uses effective elapsed time as the main clock and exposes the goal prompt', () => {
-    const snapshot = buildStudyTimerSnapshot({
-      activeEntry: createEntry({ effectiveSeconds: 1_502 }),
-      focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
-      automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
-      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
-    })
-
-    expect(snapshot.displaySeconds).toBe(1_502)
-    expect(snapshot.ownerSessionId).toBe('session-1')
-    expect(snapshot.studyPhase).toBe('goal_reached')
-    expect(snapshot.roundElapsedSeconds).toBe(1_502)
-    expect(snapshot.roundTargetSeconds).toBe(1_500)
-    expect(snapshot.suggestedBreakMinutes).toBe(5)
-    expect(snapshot.availableActions).toEqual(['continueRound', 'startGoalBreak'])
-  })
-
-  it('opens the idle warning before the total timeout and counts down to pause', () => {
-    const snapshot = buildStudyTimerSnapshot({
-      // The 30s warning starts at 90s and ends at the 120s total idle deadline.
-      activeEntry: createEntry({ effectiveSeconds: 90, idleSeconds: 90 }),
-      focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
-      automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
-      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
-    })
-
+  it('publishes the effective clock and only pause/resume actions', () => {
+    const snapshot = buildStudyTimerSnapshot({ activeEntry: createEntry() })
+    expect(snapshot.mode).toBe('study')
     expect(snapshot.status).toBe('running')
-    expect(snapshot.studyPhase).toBe('idle_warning')
-    expect(snapshot.idleWarningRemainingSeconds).toBe(30)
+    expect(snapshot.displaySeconds).toBe(42)
+    expect(snapshot.ownerSessionKey).toBe('freestyle')
     expect(snapshot.availableActions).toEqual(['pause'])
+    expect(snapshot.progressMode).toBe('elapsed')
   })
 
-  it('keeps total elapsed time while resetting only the next round progress', () => {
+  it('freezes a manually paused session without idle or focus metadata', () => {
     const snapshot = buildStudyTimerSnapshot({
-      activeEntry: createEntry({
-        effectiveSeconds: 1_620,
-        focusRound: {
-          roundIndex: 2,
-          startedAtEffectiveSeconds: 1_500,
-          acknowledgedIntervalCount: 0,
-          goalCelebrated: false,
-        },
-      }),
-      focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
-      automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
-      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
+      activeEntry: createEntry({ status: 'paused', effectiveSeconds: 90 }),
     })
-
-    expect(snapshot.displaySeconds).toBe(1_620)
-    expect(snapshot.roundElapsedSeconds).toBe(120)
-    expect(snapshot.roundIndex).toBe(2)
+    expect(snapshot.availableActions).toEqual(['resume'])
+    expect(snapshot.semanticState).toBe('paused')
   })
 
-  it('does not expose a resume owner when no study session is active', () => {
-    const snapshot = buildStudyTimerSnapshot({
-      activeEntry: null,
-      focusConfig: DEFAULT_TIMER_FOCUS_CONFIG,
-      automationConfig: DEFAULT_TIMER_AUTOMATION_CONFIG,
-      breakConfig: DEFAULT_BREAK_GUARD_CONFIG,
-    })
-
-    expect(snapshot.ownerSessionId).toBeNull()
+  it('returns a neutral idle snapshot without an owner', () => {
+    const snapshot = buildStudyTimerSnapshot({ activeEntry: null })
     expect(snapshot.status).toBe('idle')
-  })
-})
-
-describe('buildBreakTimerSnapshot', () => {
-  it('requires an explicit start-study command after break expiry', () => {
-    const snapshot = buildBreakTimerSnapshot({
-      breakState: {
-        status: 'expired',
-        startedAt: 1,
-        plannedMinutes: 5,
-        expiresAt: 2,
-        snoozeCount: 0,
-        logId: null,
-      },
-      config: DEFAULT_BREAK_GUARD_CONFIG,
-      paused: false,
-    })
-
-    expect(snapshot.availableActions).toEqual(['snooze', 'startStudy'])
-    expect(snapshot.primaryText).toContain('手动开始学习')
+    expect(snapshot.ownerSessionId).toBeNull()
+    expect(snapshot.availableActions).toEqual([])
   })
 })

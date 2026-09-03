@@ -20,12 +20,14 @@ describe('resolveFloatingTimerLayout', () => {
       width: 320,
       height: 208,
       collapsed: false,
+      hidden: false,
     })).toEqual({
       x: 1096,
       y: 668,
       width: 320,
       height: 208,
       collapsed: false,
+      hidden: false,
     })
   })
 
@@ -39,12 +41,14 @@ describe('resolveFloatingTimerLayout', () => {
       width: 320,
       height: 208,
       collapsed: false,
+      hidden: false,
     })).toEqual({
       x: 1096,
       y: 668,
       width: 320,
       height: 208,
       collapsed: false,
+      hidden: false,
     })
   })
 
@@ -58,6 +62,7 @@ describe('resolveFloatingTimerLayout', () => {
       width: 320,
       height: 208,
       collapsed: false,
-    })).toMatchObject({ x: 40, y: 120 })
+      hidden: false,
+    })).toMatchObject({ x: 40, y: 120, hidden: false })
   })
 })

@@ -4,6 +4,8 @@ export interface TimerOverlayLayout {
   width: number
   height: number
   collapsed: boolean
+  /** True-hide: panel/capsule replaced by a corner restore control. */
+  hidden: boolean
 }
 
 export const TIMER_OVERLAY_LAYOUT_STORAGE_KEY = 'memory-anki-timer-overlay-layout'
@@ -16,6 +18,7 @@ export const DEFAULT_TIMER_OVERLAY_LAYOUT: TimerOverlayLayout = {
   width: 320,
   height: 208,
   collapsed: false,
+  hidden: false,
 }
 
 function sanitizeNumber(value: unknown, fallback: number) {
@@ -32,6 +35,8 @@ export function sanitizeTimerOverlayLayout(value: unknown): TimerOverlayLayout {
     width: Math.max(TIMER_OVERLAY_MIN_WIDTH, sanitizeNumber(raw.width, DEFAULT_TIMER_OVERLAY_LAYOUT.width)),
     height: Math.max(TIMER_OVERLAY_MIN_HEIGHT, sanitizeNumber(raw.height, DEFAULT_TIMER_OVERLAY_LAYOUT.height)),
     collapsed: Boolean(raw.collapsed),
+    // Old persisted layouts omit `hidden`; treat missing as false.
+    hidden: Boolean(raw.hidden),
   }
 }
 

@@ -11,76 +11,51 @@ export type UnifiedTimerStatus =
 
 export type UnifiedTimerStudyPhase =
   | 'idle'
+  | 'running'
+  | 'paused'
+  | 'completed'
   | 'focusing'
   | 'idle_warning'
   | 'goal_reached'
-  | 'paused'
-  | 'completed'
-
-export interface UnifiedTimerFeedbackSignal {
-  eventId: string
-  kind: 'interval' | 'goal'
-  ordinal: number
-  roundIndex: number
-  occurredAt: number
-}
 
 export type UnifiedTimerAction =
-  | 'startBreak'
+  | 'start'
   | 'pause'
   | 'resume'
-  | 'snooze'
-  | 'finishBreak'
-  | 'openTarget'
   | 'collapse'
-  | 'continueRound'
-  | 'startGoalBreak'
-  | 'startStudy'
   | 'closeOverlay'
+  | 'openTimerSettings'
 
 export interface UnifiedTimerSnapshot {
   mode: UnifiedTimerMode
   status: UnifiedTimerStatus
   /** Stable owner used by the desktop shell to resume only the timer it paused. */
   ownerSessionId?: string | null
+  ownerSessionKey?: string | null
   title: string
   scene: string
   displaySeconds: number | null
   primaryText: string
   secondaryText: string
-  snoozeCount: number
+  snoozeCount?: number
   availableActions: UnifiedTimerAction[]
-  presetMinutes: number[]
+  presetMinutes?: number[]
   allowCustomMinutes?: boolean
-  snoozeMinutes: number[]
+  snoozeMinutes?: number[]
   targetPath: string
   updatedAt: number
   studyPhase?: UnifiedTimerStudyPhase | null
   effectiveSeconds?: number
-  roundElapsedSeconds?: number
-  roundTargetSeconds?: number
-  roundIndex?: number
-  idleWarningRemainingSeconds?: number | null
-  suggestedBreakMinutes?: number
-  feedbackSignal?: UnifiedTimerFeedbackSignal | null
-  semanticState?: 'running' | 'paused' | 'warning' | 'goal' | 'break' | 'expired' | 'idle'
-  progressMode?: 'focus_round' | 'idle_timeout' | 'break_countdown' | 'frozen' | 'empty'
+  semanticState?: 'running' | 'paused' | 'idle'
+  progressMode?: 'elapsed' | 'frozen' | 'empty'
   progressValue?: number
 }
 
 export type UnifiedTimerCommand =
-  | { type: 'promptBreak' }
-  | { type: 'returnToStudy' }
-  | { type: 'startBreak'; minutes: number }
+  | { type: 'start' }
   | { type: 'pause' }
   | { type: 'resume' }
-  | { type: 'snooze'; minutes: number }
-  | { type: 'finishBreak'; openTarget?: boolean }
-  | { type: 'openTarget'; path: string }
   | { type: 'collapse'; collapsed: boolean }
-  | { type: 'continueRound' }
-  | { type: 'startGoalBreak'; minutes?: number }
-  | { type: 'startStudy' }
   | { type: 'closeOverlay' }
   | { type: 'openTimerSettings' }
 
@@ -91,10 +66,6 @@ export interface DesktopTimerBridge {
   onDesktopFlushRequest?: (
     handler: (request: { requestId: string; reason?: string; requestedAt?: number }) => Promise<unknown> | unknown,
   ) => () => void
-  onMainWindowBlur?: (handler: () => void) => () => void
-  onPauseActiveTimer?: (handler: () => void) => () => void
-  requestMainPause?: () => void
-  openMainTarget?: (path: string) => void
   setOverlayCollapsed?: (collapsed: boolean) => void
   publishTimerSnapshot?: (snapshot: UnifiedTimerSnapshot) => void
   onTimerSnapshot?: (handler: (snapshot: UnifiedTimerSnapshot) => void) => () => void

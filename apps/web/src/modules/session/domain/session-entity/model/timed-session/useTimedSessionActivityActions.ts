@@ -1,9 +1,5 @@
 import * as React from 'react'
 import type { SessionEventRecord } from '../session-records'
-import {
-  isActivityEnabled,
-  type TimerAutomationActivityKind,
-} from '@/shared/components/session/timer-automation-config'
 import type { SessionStatus, TimedSessionMeta } from '@/shared/hooks/timedSessionModel'
 
 type MutableValueRef<T> = { current: T }
@@ -29,23 +25,16 @@ export function useTimedSessionActivityActions({
   start,
   statusRef,
 }: TimedSessionActivityActionsInput) {
-  const registerActivity = React.useCallback((
-    activityKind: TimerAutomationActivityKind,
-    meta?: TimedSessionMeta,
-  ) => {
-    if (!sceneActiveRef.current || !isActivityEnabled(activityKind)) return
-    if (statusRef.current === 'idle') {
-      start({ source: 'auto', ...(meta ?? {}) })
-      return
-    }
-    if (statusRef.current === 'paused') {
-      resume({ source: 'auto', ...(meta ?? {}) })
-      return
-    }
-    if (statusRef.current === 'running') {
-      lastActivityAtRef.current = Date.now()
-      armAutoPause()
-    }
+  // Activity is deliberately not part of the live timer contract. Keep this
+  // compatibility hook for old imports, but never start/resume or alter time.
+  const registerActivity = React.useCallback((...args: unknown[]) => {
+    void args
+    void armAutoPause
+    void lastActivityAtRef
+    void resume
+    void sceneActiveRef
+    void start
+    void statusRef
   }, [armAutoPause, lastActivityAtRef, resume, sceneActiveRef, start, statusRef])
 
   const logEvent = React.useCallback((type: SessionEventRecord['type'], meta?: TimedSessionMeta) => {

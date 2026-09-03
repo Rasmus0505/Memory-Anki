@@ -1,1146 +1,276 @@
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import * as React from 'react'
+import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useTimedSession } from '@/shared/hooks/useTimedSession'
-import { TIMER_AUTOMATION_STORAGE_KEY } from '@/shared/components/session/timer-automation-config'
-import { setApiToken } from '@/shared/api/apiToken'
-// Spy the leaf module timedSessionRecordBuilder imports — public barrel spies do not
-// intercept that binding under Vite ESM.
 import * as sessionRecordsStore from '@/modules/session/domain/session-entity/model/session-records-store'
 import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
-import { readQueuedMutations, resetMutationQueueForTest } from '@/shared/persistence/mutationQueue'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
-import {
-  clearPendingTimeRecordRecoveriesForTest,
-  listPendingTimeRecordRecoveries,
-} from '@/modules/session/public'
-import {
-  flushMicrotasks,
-  readPersistedTimedSessionTestSnapshot,
-  TimedSessionTestHarness,
-} from '@/shared/hooks/useTimedSession.test-support'
+import { buildTimedSessionStorageKey } from '@/shared/hooks/timedSessionStorage'
+import { useTimedSession } from '@/shared/hooks/useTimedSession'
 
-describe('useTimedSession automation config', () => {
-  const persistStudySessionRecordSpy = vi.spyOn(sessionRecordsStore, 'persistStudySessionRecord')
+let testKey = 0
 
-  beforeEach(async () => {
+function nextSessionKey() {
+  testKey += 1
+  return `test-session:${testKey}`
+}
+
+function createOptions(sessionKey = nextSessionKey()) {
+  return {
+    sessionKey,
+    kind: 'practice' as const,
+    title: '测试计时',
+    palaceId: null,
+  }
+}
+
+function useTestTimedSession(sessionKey?: string) {
+  const options = React.useMemo(() => createOptions(sessionKey), [sessionKey])
+  return useTimedSession(options)
+}
+
+describe('useTimedSession foreground clock', () => {
+  const persistSpy = vi.spyOn(sessionRecordsStore, 'persistStudySessionRecord')
+
+  beforeEach(() => {
     vi.useFakeTimers()
-    await resetMutationQueueForTest()
+    // Flush the zero-delay finalizers scheduled by the previous test's unmount
+    // before resetting the persistence spy for this test.
+    vi.advanceTimersByTime(0)
     window.localStorage.clear()
-    resetClientPreferenceCacheForTest()
     window.sessionStorage.clear()
-    clearPendingTimeRecordRecoveriesForTest()
+    resetClientPreferenceCacheForTest()
     resetAutoSaveCoordinatorForTest()
-    if (!('sendBeacon' in navigator)) {
-      Object.defineProperty(navigator, 'sendBeacon', {
-        configurable: true,
-        writable: true,
-        value: vi.fn(),
-      })
-    }
-    persistStudySessionRecordSpy.mockReset()
-    persistStudySessionRecordSpy.mockResolvedValue(null)
+    persistSpy.mockReset()
+    persistSpy.mockImplementation(async (record) => record)
+    window.dispatchEvent(new Event('focus'))
   })
 
-  afterEach(async () => {
-    delete window.memoryAnkiDesktopTimer
-    await resetMutationQueueForTest()
+  afterEach(() => {
+    window.dispatchEvent(new Event('focus'))
     resetAutoSaveCoordinatorForTest()
     resetClientPreferenceCacheForTest()
     vi.useRealTimers()
   })
 
-  it('keeps the controller identity stable across unrelated rerenders', () => {
-    const { result, rerender } = renderHook(
-      ({ title }) => useTimedSession({
-        kind: 'practice',
-        title,
-        palaceId: null,
-      }),
-      { initialProps: { title: '随心模式' } },
-    )
-    const initialController = result.current
+  it('starts idle and only begins after an explicit start', () => {
+    const { result } = renderHook(() => useTestTimedSession())
 
-    rerender({ title: '随心模式' })
-
-    expect(result.current).toBe(initialController)
-  })
-
-  it('arms the default inactivity pause at the 120s total idle window', () => {
-    const timeoutSpy = vi.spyOn(window, 'setTimeout')
-
-    render(<TimedSessionTestHarness kind="palace_edit" />)
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 120_000)).toBe(true)
-  })
-
-  it('pauses at three minutes and removes the full idle window from effective time', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        idleTimeoutSeconds: 180,
-        idleGraceSeconds: 30,
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="palace_edit" />)
+    expect(result.current.status).toBe('idle')
+    expect(result.current.effectiveSeconds).toBe(0)
 
     act(() => {
-      vi.advanceTimersByTime(180_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-    expect(screen.getByTestId('seconds').textContent).toBe('0')
-    expect(screen.getByTestId('idle-seconds').textContent).toBe('0')
-  })
-
-  it('treats explicit autoPauseMs overrides as milliseconds', () => {
-    const timeoutSpy = vi.spyOn(window, 'setTimeout')
-
-    render(<TimedSessionTestHarness kind="palace_edit" autoPauseMs={20_000} />)
-
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000)).toBe(true)
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 20_000_000)).toBe(false)
-  })
-
-  it('starts from the first practice interaction after repairing a schema v3 config', async () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        schemaVersion: 3,
-        mode: 'global',
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: false,
-          countPracticeInteractionsAsActivity: false,
-        },
-        shared: {
-          autoStartOnPageEnter: false,
-          inactiveAutoPauseSeconds: 120,
-        },
-      }),
-    )
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    render(<TimedSessionTestHarness kind="review" autoStart={false} />)
-
-    expect(screen.getByTestId('status').textContent).toBe('idle')
-    fireEvent.click(screen.getByRole('button', { name: 'practice-op' }))
-    expect(screen.getByTestId('status').textContent).toBe('running')
-
-    await act(async () => {
+      result.current.start({ source: 'test' })
       vi.advanceTimersByTime(2_200)
-      fireEvent.click(screen.getByRole('button', { name: 'complete' }))
-      await Promise.resolve()
     })
 
-    expect(persistStudySessionRecordSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        completionMethod: 'manual_complete',
-        effectiveSeconds: 2,
-      }),
-    )
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(2)
   })
 
-  it('queues a pending recovery record and prefers sendBeacon on pagehide', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:unload-beacon"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(4_200)
-      window.dispatchEvent(new Event('pagehide'))
-    })
-
-    await flushMicrotasks()
-
-    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 4,
-    })
-  })
-
-  it('uses authenticated keepalive fetch instead of sendBeacon for remote PWA unload', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    setApiToken('pwa-token')
-    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
-    const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ item: null }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    )
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:unload-authenticated"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_100)
-      window.dispatchEvent(new Event('pagehide'))
-    })
-
-    await flushMicrotasks()
-
-    expect(sendBeaconSpy).not.toHaveBeenCalled()
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/v1/study-sessions/from-time-record',
-      expect.objectContaining({
-        keepalive: true,
-        method: 'POST',
-        headers: expect.objectContaining({
-          'X-Memory-Anki-Token': 'pwa-token',
-        }),
-      }),
-    )
-  })
-
-  it('falls back to keepalive fetch when sendBeacon returns false', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(false)
-    const fetchSpy = vi.spyOn(window, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ item: null }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    )
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:unload-keepalive"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_100)
-      window.dispatchEvent(new Event('pagehide'))
-    })
-
-    await flushMicrotasks()
-
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/v1/study-sessions/from-time-record',
-      expect.objectContaining({
-        keepalive: true,
-        method: 'POST',
-      }),
-    )
-  })
-  it('keeps the recovery draft when unload transports are unavailable', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(false)
-    vi.spyOn(window, 'fetch').mockImplementation(() => {
-      throw new Error('fetch unavailable')
-    })
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:unload-queued"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_900)
-      window.dispatchEvent(new Event('beforeunload'))
-    })
-
-    await flushMicrotasks()
-
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(
-      (await readQueuedMutations()).some((item) =>
-        item.resourceKey.startsWith('time-record:'),
-      ),
-    ).toBe(true)
-  })
-
-  it('flushes the active timer when the desktop shell asks before closing', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
-    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
-    window.memoryAnkiDesktopTimer = {
-      onDesktopFlushRequest: (handler) => {
-        desktopFlushHandler = () =>
-          handler({
-            requestId: 'desktop-close-1',
-            reason: 'main_window_close',
-            requestedAt: Date.now(),
-          })
-        return () => {
-          desktopFlushHandler = null
-        }
-      },
-    }
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:desktop-close"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(3_600)
-      await desktopFlushHandler?.()
-    })
-
-    await flushMicrotasks()
-
-    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 3,
-      events: expect.arrayContaining([
-        expect.objectContaining({
-          type: 'leave_scene',
-          meta: expect.objectContaining({
-            source: 'main_window_close',
-          }),
-        }),
-      ]),
-    })
-  })
-
-  it('deduplicates desktop flush and pagehide when both fire during shutdown', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const sendBeaconSpy = vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
-    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
-    window.memoryAnkiDesktopTimer = {
-      onDesktopFlushRequest: (handler) => {
-        desktopFlushHandler = () =>
-          handler({
-            requestId: 'desktop-close-2',
-            reason: 'app_before_quit',
-            requestedAt: Date.now(),
-          })
-        return () => {
-          desktopFlushHandler = null
-        }
-      },
-    }
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:desktop-pagehide-dedupe"
-      />,
-    )
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(4_400)
-      const flushPromise = desktopFlushHandler?.()
-      window.dispatchEvent(new Event('pagehide'))
-      await flushPromise
-    })
-
-    await flushMicrotasks()
-
-    expect(sendBeaconSpy).toHaveBeenCalledTimes(1)
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
-      effectiveSeconds: 4,
-    })
-  })
-
-  it('saves on desktop flush even when the session has no restore snapshot key', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    vi.spyOn(navigator, 'sendBeacon').mockReturnValue(true)
-    let desktopFlushHandler: (() => Promise<unknown> | unknown) | null = null
-    window.memoryAnkiDesktopTimer = {
-      onDesktopFlushRequest: (handler) => {
-        desktopFlushHandler = () =>
-          handler({
-            requestId: 'desktop-close-no-key',
-            reason: 'app_before_quit',
-            requestedAt: Date.now(),
-          })
-        return () => {
-          desktopFlushHandler = null
-        }
-      },
-    }
-
-    render(<TimedSessionTestHarness kind="review" autoPauseMs={60_000} />)
-    await flushMicrotasks()
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_100)
-      await desktopFlushHandler?.()
-    })
-
-    await flushMicrotasks()
-
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
-      kind: 'review',
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-    })
-  })
-
-
-
-
-  it('persists running sessions as resumable snapshots on pagehide without counting time away', () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const { unmount } = render(
-      <TimedSessionTestHarness kind="practice" autoPauseMs={60_000} persistKey="practice:restore-test" />,
-    )
+  it('freezes a manual pause and resumes only after an explicit resume', () => {
+    const { result } = renderHook(() => useTestTimedSession())
 
     act(() => {
-      vi.advanceTimersByTime(3_200)
-      window.dispatchEvent(new Event('pagehide'))
+      result.current.start()
+      vi.advanceTimersByTime(2_600)
+      result.current.pause({ source: 'manual' })
     })
 
-    expect(listPendingTimeRecordRecoveries()).toHaveLength(1)
-    expect(listPendingTimeRecordRecoveries()[0]?.record).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 3,
+    const pausedSeconds = result.current.effectiveSeconds
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('manual')
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds)
+
+    act(() => {
+      result.current.resume({ source: 'manual' })
+      vi.advanceTimersByTime(1_200)
+    })
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds + 1)
+  })
+
+  it('pauses immediately on blur and automatically resumes only that system pause', () => {
+    const { result } = renderHook(() => useTestTimedSession())
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(2_100)
+      window.dispatchEvent(new Event('blur'))
     })
 
-    unmount()
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('window_blur')
+    const pausedSeconds = result.current.effectiveSeconds
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+      window.dispatchEvent(new Event('focus'))
+      vi.advanceTimersByTime(1_100)
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds + 1)
+  })
+
+  it('pauses immediately on visibility hidden and resumes when visible', () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    const { result } = renderHook(() => useTestTimedSession())
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(2_100)
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('document_hidden')
+    const pausedSeconds = result.current.effectiveSeconds
+
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+      visibility.mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(1_100)
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds + 1)
+    visibility.mockRestore()
+  })
+
+  it('does not resume a manual pause after focus, navigation, or activity events', () => {
+    const { result } = renderHook(() => useTestTimedSession())
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(1_100)
+      result.current.pause()
+      result.current.setSceneActive(false, { source: 'route_inactive' })
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('manual')
+  })
+
+  it('makes repeated blur/focus events idempotent', () => {
+    const { result } = renderHook(() => useTestTimedSession())
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(1_100)
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    expect(result.current.pauseCount).toBe(1)
+    expect(result.current.status).toBe('running')
+  })
+
+  it('does not create duplicate tickers under StrictMode', () => {
+    const sessionKey = nextSessionKey()
+    function StrictModeTimer() {
+      const timer = useTestTimedSession(sessionKey)
+      React.useEffect(() => {
+        timer.start({ source: 'strict-mode-test' })
+      }, [timer])
+      return <div data-testid="strict-seconds">{timer.effectiveSeconds}</div>
+    }
+
+    const view = render(
+      <React.StrictMode>
+        <StrictModeTimer />
+      </React.StrictMode>,
+    )
+
+    act(() => vi.advanceTimersByTime(2_200))
+    expect(screen.getByTestId('strict-seconds').textContent).toBe('2')
+    view.unmount()
+  })
+
+  it('restores an old snapshot as paused without adding offline time', () => {
+    const sessionKey = nextSessionKey()
+    const startedAt = new Date(Date.now() - 60_000).toISOString()
+    window.sessionStorage.setItem(
+      buildTimedSessionStorageKey(sessionKey),
+      JSON.stringify({
+        version: 1,
+        kind: 'practice',
+        palaceId: null,
+        sourceKind: null,
+        englishCourseId: null,
+        title: '旧快照',
+        effectiveSeconds: 7,
+        pauseCount: 1,
+        status: 'running',
+        startedAt,
+        durationEdited: false,
+        events: [{ type: 'start', at: startedAt }],
+        persistedAt: new Date(Date.now() - 30_000).toISOString(),
+      }),
+    )
+
+    const { result } = renderHook(() => useTestTimedSession(sessionKey))
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('restored')
+    expect(result.current.effectiveSeconds).toBe(7)
 
     act(() => {
       vi.advanceTimersByTime(30_000)
     })
-
-    render(
-      <TimedSessionTestHarness
-        kind="practice"
-        autoPauseMs={60_000}
-        persistKey="practice:restore-test"
-        autoStart={false}
-      />,
-    )
-
-    expect(screen.getByTestId('status').textContent).toBe('running')
-    expect(screen.getByTestId('seconds').textContent).toBe('3')
-  })
-
-  it('resumes the same record id within the resume window and overwrites the final completion method', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result, unmount } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:resume-window',
-      }),
-    )
+    expect(result.current.effectiveSeconds).toBe(7)
 
     act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_400)
+      result.current.resume()
+      vi.advanceTimersByTime(1_100)
     })
-
-    await act(async () => {
-      await result.current.leaveScene({ source: 'route_leave' })
-    })
-
-    const snapshot = readPersistedTimedSessionTestSnapshot('practice:resume-window')
-    const firstRecord = persistStudySessionRecordSpy.mock.calls[0]?.[0]
-
-    expect(firstRecord).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-    })
-    expect(snapshot?.recordId).toBe(firstRecord?.id)
-    expect(snapshot?.resumeDeadlineAt).toBeTruthy()
-
-    unmount()
-
-    act(() => {
-      vi.advanceTimersByTime(15_000)
-    })
-
-    const { result: resumedResult } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:resume-window',
-      }),
-    )
-
-    expect(resumedResult.current.status).toBe('running')
-    expect(resumedResult.current.effectiveSeconds).toBe(2)
-
-    await act(async () => {
-      await resumedResult.current.complete('manual_complete', { source: 'test_complete' })
-    })
-
-    expect(persistStudySessionRecordSpy).toHaveBeenCalledTimes(2)
-    expect(persistStudySessionRecordSpy.mock.calls[1]?.[0]).toMatchObject({
-      id: firstRecord?.id,
-      startedAt: firstRecord?.startedAt,
-      completionMethod: 'manual_complete',
-      effectiveSeconds: 2,
-    })
-  })
-
-  it('can suspend and resume the active scene without relying on unmount', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:scene-toggle',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_000)
-      result.current.setSceneActive(false, { source: 'route_inactive' })
-    })
-
-    expect(result.current.status).toBe('paused')
-    const snapshot = readPersistedTimedSessionTestSnapshot('practice:scene-toggle')
-    expect(snapshot?.resumeDeadlineAt).toBeTruthy()
-    expect(snapshot?.sceneSegments).toEqual([
-      expect.objectContaining({
-        scene: 'practice',
-        effectiveSeconds: 2,
-      }),
-    ])
-    // Route leave must write a completed left_page record (PWA has no desktop flush).
-    await vi.waitFor(() => {
-      expect(persistStudySessionRecordSpy).toHaveBeenCalled()
-    })
-    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-    })
-
-    act(() => {
-      vi.advanceTimersByTime(10_000)
-      result.current.setSceneActive(true, { source: 'route_active' })
-    })
-
     expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBe(2)
+    expect(result.current.effectiveSeconds).toBe(8)
   })
 
-  it('persists an expired suspended session as left_page when another timer enters later', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result, unmount } = renderHook(() =>
-      useTimedSession({
-        kind: 'review',
-        title: '过期恢复测试',
-        palaceId: 1,
-        autoPauseMs: 5_000,
-        persistKey: 'review:expired-suspend-save',
-      }),
-    )
+  it('writes one final record when completion and leave are repeated', async () => {
+    const { result } = renderHook(() => useTestTimedSession())
 
     act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_200)
-      result.current.setSceneActive(false, { source: 'route_inactive' })
-    })
-
-    unmount()
-
-    act(() => {
-      vi.advanceTimersByTime(6_000)
-    })
-
-    renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '后续场景',
-        palaceId: 2,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:after-expired-review',
-      }),
-    )
-
-    await vi.waitFor(() => {
-      expect(persistStudySessionRecordSpy).toHaveBeenCalledTimes(1)
-    })
-
-    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
-      kind: 'review',
-      title: '过期恢复测试',
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-    })
-  })
-
-  it('does not count time away while a scene is inactive', () => {
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:scene-pause',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(3_000)
-      result.current.setSceneActive(false, { source: 'route_inactive' })
-      vi.advanceTimersByTime(20_000)
-      result.current.setSceneActive(true, { source: 'route_active' })
-    })
-
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBe(3)
-  })
-
-  it('drops expired suspended snapshots instead of resuming them', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result, unmount } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 5_000,
-        persistKey: 'practice:expired-window',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_000)
-    })
-
-    await act(async () => {
-      await result.current.leaveScene({ source: 'route_leave' })
-    })
-
-    unmount()
-
-    act(() => {
-      vi.advanceTimersByTime(6_000)
-    })
-
-    const { result: resumedResult } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 5_000,
-        persistKey: 'practice:expired-window',
-      }),
-    )
-
-    expect(resumedResult.current.status).toBe('idle')
-    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:expired-window')).toBeNull()
-    expect(persistStudySessionRecordSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('adopts another scene suspended snapshot when a new scene enters', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result, unmount } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '场景 A',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:scene-a',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(1_000)
-    })
-
-    await act(async () => {
-      await result.current.leaveScene({ source: 'route_leave' })
-    })
-
-    unmount()
-
-    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeTruthy()
-
-    const { result: nextSceneResult } = renderHook(() =>
-      useTimedSession({
-        kind: 'review',
-        title: '场景 B',
-        palaceId: 2,
-        autoPauseMs: 60_000,
-        persistKey: 'review:scene-b',
-      }),
-    )
-
-    expect(nextSceneResult.current.status).toBe('running')
-    expect(nextSceneResult.current.effectiveSeconds).toBe(1)
-    expect(window.sessionStorage.getItem('memory-anki-timed-session:practice:scene-a')).toBeNull()
-  })
-
-  it('records scene segments across multiple scene handoffs while keeping one session record', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const firstScene = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '场景 A',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:scene-a',
-      }),
-    )
-
-    act(() => {
-      firstScene.result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_000)
-      firstScene.result.current.setSceneActive(false, { source: 'route_inactive' })
-    })
-    firstScene.unmount()
-
-    const secondScene = renderHook(() =>
-      useTimedSession({
-        kind: 'review',
-        title: '场景 B',
-        palaceId: 2,
-        autoPauseMs: 60_000,
-        persistKey: 'review:scene-b',
-      }),
-    )
-
-    act(() => {
-      vi.advanceTimersByTime(3_000)
-      secondScene.result.current.setSceneActive(false, { source: 'route_inactive' })
-    })
-    secondScene.unmount()
-
-    const thirdScene = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '场景 C',
-        palaceId: 3,
-        autoPauseMs: 60_000,
-        persistKey: 'practice:scene-c',
-      }),
-    )
-
-    act(() => {
-      vi.advanceTimersByTime(1_000)
-    })
-
-    await act(async () => {
-      await thirdScene.result.current.complete('manual_complete', { source: 'test_complete' })
-    })
-
-    // Each scene leave now writes left_page (so PWA/route residency is durable);
-    // the final complete is the authoritative multi-segment record.
-    expect(persistStudySessionRecordSpy.mock.calls.length).toBeGreaterThanOrEqual(1)
-    const finalRecord =
-      persistStudySessionRecordSpy.mock.calls[
-        persistStudySessionRecordSpy.mock.calls.length - 1
-      ]?.[0]
-    expect(finalRecord).toMatchObject({
-      completionMethod: 'manual_complete',
-      effectiveSeconds: 6,
-      sceneSegments: [
-        expect.objectContaining({ scene: 'practice', title: '场景 A', effectiveSeconds: 2 }),
-        expect.objectContaining({ scene: 'review', title: '场景 B', effectiveSeconds: 3 }),
-        expect.objectContaining({ scene: 'practice', title: '场景 C', effectiveSeconds: 1 }),
-      ],
-    })
-  })
-
-  it('persists left_page when the document is hidden and resumes on return within the window', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const visibility = vi.spyOn(document, 'visibilityState', 'get')
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'quiz',
-        title: 'PWA 做题',
-        palaceId: null,
-        autoPauseMs: 60_000,
-        hiddenPauseMs: 0,
-        persistKey: 'quiz:pwa-visibility',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
+      result.current.start()
       vi.advanceTimersByTime(2_100)
     })
 
-    visibility.mockReturnValue('hidden')
+    let firstRecord: Awaited<ReturnType<typeof result.current.leaveScene>>
     await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-      // hiddenPauseMs=0 schedules leaveScene on the next timer tick.
-      vi.advanceTimersByTime(0)
-      await Promise.resolve()
+      firstRecord = await result.current.leaveScene({ source: 'route_leave' })
+      await result.current.complete('manual_complete', { source: 'duplicate_complete' })
     })
 
-    expect(result.current.status).toBe('paused')
-    await vi.waitFor(() => {
-      expect(
-        persistStudySessionRecordSpy.mock.calls.some(
-          ([record]) => record?.completionMethod === 'left_page',
-        ),
-      ).toBe(true)
-    })
-    const leftPage = persistStudySessionRecordSpy.mock.calls.find(
-      ([record]) => record?.completionMethod === 'left_page',
-    )?.[0]
-    expect(leftPage).toMatchObject({
-      completionMethod: 'left_page',
-      effectiveSeconds: 2,
-      title: 'PWA 做题',
-    })
-
-    visibility.mockReturnValue('visible')
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    })
-
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBe(2)
-    visibility.mockRestore()
+    expect(firstRecord!).toMatchObject({ completionMethod: 'left_page', effectiveSeconds: 2 })
+    expect(result.current.status).toBe('completed')
+    expect(persistSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps one continuous session through a brief background dip without left_page or hang-up credit', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const visibility = vi.spyOn(document, 'visibilityState', 'get')
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'quiz',
-        title: 'PWA 做题',
-        palaceId: null,
-        hiddenPauseMs: 20_000,
-        persistKey: 'quiz:pwa-background-grace',
-      }),
-    )
+  it('does not persist ordinary ticks, pause, or resume', async () => {
+    const sessionKey = nextSessionKey()
+    const { result } = renderHook(() => useTestTimedSession(sessionKey))
 
     act(() => {
-      result.current.start({ source: 'test' })
+      result.current.start()
       vi.advanceTimersByTime(2_100)
+      result.current.pause()
+      result.current.resume()
+      vi.advanceTimersByTime(1_100)
     })
-    const secondsBeforeHide = result.current.effectiveSeconds
-
-    // Pulling down the notification shade / taking a call briefly hides the page.
-    // Clock freezes immediately: hidden gap must not enter effectiveSeconds.
-    visibility.mockReturnValue('hidden')
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-      vi.advanceTimersByTime(5_000)
-      await Promise.resolve()
-    })
-
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
-
-    visibility.mockReturnValue('visible')
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-      vi.advanceTimersByTime(1_000)
-      await Promise.resolve()
-    })
-
-    expect(result.current.status).toBe('running')
-    // Only post-return visible time may accrue — not the 5s hidden gap.
-    expect(result.current.effectiveSeconds).toBeGreaterThanOrEqual(secondsBeforeHide)
-    expect(result.current.effectiveSeconds).toBeLessThan(secondsBeforeHide + 5)
-    expect(
-      persistStudySessionRecordSpy.mock.calls.some(
-        ([record]) => record?.completionMethod === 'left_page',
-      ),
-    ).toBe(false)
-    visibility.mockRestore()
-  })
-
-  it('does not credit multi-minute hang-up when background timers never fire', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const visibility = vi.spyOn(document, 'visibilityState', 'get')
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'quiz',
-        title: 'PWA 挂机',
-        palaceId: null,
-        autoPauseMs: 24 * 60 * 60 * 1000,
-        hiddenPauseMs: 20_000,
-        persistKey: 'quiz:pwa-hangup-freeze',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_100)
-    })
-    const secondsBeforeHide = result.current.effectiveSeconds
-    const hideAt = Date.now()
-
-    visibility.mockReturnValue('hidden')
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-      await Promise.resolve()
-    })
-
-    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
-
-    // Jump wall clock past grace without running pending leave timeouts
-    // (mobile PWA freezes setTimeout while Date.now continues).
-    visibility.mockReturnValue('visible')
-    await act(async () => {
-      vi.setSystemTime(hideAt + 10 * 60_000)
-      document.dispatchEvent(new Event('visibilitychange'))
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    // Hang-up must not be baked into effective seconds.
-    expect(result.current.effectiveSeconds).toBe(secondsBeforeHide)
-    await vi.waitFor(() => {
-      expect(
-        persistStudySessionRecordSpy.mock.calls.some(
-          ([record]) => record?.completionMethod === 'left_page',
-        ),
-      ).toBe(true)
-    })
-    const leftPage = persistStudySessionRecordSpy.mock.calls.find(
-      ([record]) => record?.completionMethod === 'left_page',
-    )?.[0]
-    expect(leftPage?.effectiveSeconds).toBe(secondsBeforeHide)
-    visibility.mockRestore()
-  })
-
-  it('checkpoints immediately on hide so the debounce window cannot lose the session', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-    const visibility = vi.spyOn(document, 'visibilityState', 'get')
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'quiz',
-        title: 'PWA 做题',
-        palaceId: null,
-        hiddenPauseMs: 20_000,
-        persistKey: 'quiz:pwa-background-checkpoint',
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(2_100)
-    })
-
-    visibility.mockReturnValue('hidden')
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'))
-      await Promise.resolve()
-    })
-
-    // Written before the grace timer even starts, as a crash-safe checkpoint.
-    await vi.waitFor(() => {
-      expect(
-        persistStudySessionRecordSpy.mock.calls.some(
-          ([record]) => record?.completionMethod === 'saved',
-        ),
-      ).toBe(true)
-    })
-    visibility.mockRestore()
-  })
-
-  it('does not auto resume on focus when window return is disabled', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: true,
-          countPracticeInteractionsAsActivity: true,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="review" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(20_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-
-    act(() => {
-      window.dispatchEvent(new Event('focus'))
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-  })
-
-
-  it('ignores node switch activity when that category is disabled', () => {
-    window.localStorage.setItem(
-      TIMER_AUTOMATION_STORAGE_KEY,
-      JSON.stringify({
-        actions: {
-          autoResumeOnWindowReturn: false,
-          countNodeSwitchAsActivity: false,
-          countEditOperationsAsActivity: false,
-          countPracticeInteractionsAsActivity: false,
-        },
-      }),
-    )
-
-    render(<TimedSessionTestHarness kind="palace_edit" />)
-
-    act(() => {
-      window.dispatchEvent(new Event('blur'))
-      vi.advanceTimersByTime(20_000)
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-
-    act(() => {
-      screen.getByRole('button', { name: 'node-switch' }).click()
-    })
-
-    expect(screen.getByTestId('status').textContent).toBe('paused')
-  })
-
-
-
-  it('can skip persisting completion records while still returning a finished session payload', async () => {
-    render(
-      <TimedSessionTestHarness
-        kind="review"
-        autoPauseMs={60_000}
-        persistCompletionRecord={false}
-      />,
-    )
-
-    act(() => {
-      vi.advanceTimersByTime(3_000)
-    })
+    expect(persistSpy.mock.calls.filter(([record]) => record.sessionKey === sessionKey)).toHaveLength(0)
 
     await act(async () => {
-      screen.getByRole('button', { name: 'complete' }).click()
+      await result.current.complete('manual_complete')
     })
-
-    expect(persistStudySessionRecordSpy).not.toHaveBeenCalled()
-    expect(screen.getByTestId('status').textContent).toBe('completed')
-  })
-
-  it('does not persist leave or autosave records when formal-review persistence is disabled', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'review',
-        title: '俄国近代教育',
-        palaceId: 35,
-        autoPauseMs: 60_000,
-        persistKey: 'review:no-ghost-timer',
-        persistCompletionRecord: false,
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(3_000)
-    })
-
-    await act(async () => {
-      await result.current.leaveScene({ source: 'route_leave' })
-    })
-
-    expect(persistStudySessionRecordSpy).not.toHaveBeenCalled()
-    expect(result.current.status).toBe('paused')
-  })
-
-  it('returns the completed record when persistence fails after the API layer queues it', async () => {
-    persistStudySessionRecordSpy.mockRejectedValueOnce(new Error('network down'))
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'review',
-        title: '测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(3_000)
-    })
-
-    let record: Awaited<ReturnType<typeof result.current.complete>> | null = null
-    await act(async () => {
-      record = await result.current.complete('manual_complete', { source: 'test_complete' })
-    })
-
-    expect(persistStudySessionRecordSpy).toHaveBeenCalledTimes(1)
-    expect(record).toMatchObject({
-      kind: 'review',
-      palaceId: 1,
-      title: '测试',
-      completionMethod: 'manual_complete',
-    })
-    expect(record?.id).toBeTruthy()
-  })
-
-  it('autosaves an in-progress session to the local database on the background schedule', async () => {
-    persistStudySessionRecordSpy.mockImplementation(async (record) => record)
-
-    const { result } = renderHook(() =>
-      useTimedSession({
-        kind: 'practice',
-        title: '自动保存测试',
-        palaceId: 1,
-        autoPauseMs: 60_000,
-      }),
-    )
-
-    act(() => {
-      result.current.start({ source: 'test' })
-      vi.advanceTimersByTime(31_000)
-    })
-
-    await flushMicrotasks()
-
-    expect(persistStudySessionRecordSpy).toHaveBeenCalled()
-    expect(persistStudySessionRecordSpy.mock.calls[0]?.[0]).toMatchObject({
-      title: '自动保存测试',
-      completionMethod: 'saved',
-      effectiveSeconds: 30,
-    })
+    expect(persistSpy.mock.calls.filter(([record]) => record.sessionKey === sessionKey)).toHaveLength(1)
   })
 })

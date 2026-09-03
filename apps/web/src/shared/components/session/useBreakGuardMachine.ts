@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import {
   appendBreakGuardLog,
   BREAK_GUARD_UPDATED_EVENT,
@@ -32,7 +31,6 @@ export function useBreakGuardMachine({
   const [breakReturnPath, setBreakReturnPath] = React.useState<string | null>(null)
   const [breakTick, setBreakTick] = React.useState(0)
   const promptTimerRef = React.useRef<number | null>(null)
-  const breakAutoOpenedKeyRef = React.useRef<string | null>(null)
   const breakStateRef = React.useRef(breakState)
   const breakConfigRef = React.useRef(breakConfig)
   const breakPausedRef = React.useRef(breakPaused)
@@ -44,20 +42,6 @@ export function useBreakGuardMachine({
 
   React.useEffect(() => {
     breakStateRef.current = breakState
-  }, [breakState])
-
-  React.useEffect(() => {
-    if (breakState.status !== 'expired') {
-      breakAutoOpenedKeyRef.current = null
-      return
-    }
-    if (breakConfigRef.current.alertStrength !== 'strong') return
-    const autoOpenKey = `${breakState.startedAt ?? 'idle'}:${breakState.snoozeCount}`
-    if (breakAutoOpenedKeyRef.current === autoOpenKey) return
-    const bridge = getDesktopTimerBridge()
-    if (!bridge?.openMainTarget) return
-    breakAutoOpenedKeyRef.current = autoOpenKey
-    bridge.openMainTarget(sanitizeTargetPath(breakReturnPathRef.current))
   }, [breakState])
 
   React.useEffect(() => {

@@ -4,6 +4,7 @@ import { enqueueMutation } from '@/shared/persistence/mutationQueue'
 import {
   buildTimeRecordRecoveryMutationId,
   removePendingTimeRecordRecovery,
+  serializeStudySessionRecordPayload,
   upsertPendingTimeRecordRecovery,
 } from '@/modules/session/public'
 import type { TimeSessionRecord } from '@/modules/session/public'
@@ -18,7 +19,7 @@ export interface TimedSessionUnloadPersistenceResult {
 }
 
 function buildTimeRecordRequestBody(record: TimeSessionRecord) {
-  return JSON.stringify(record)
+  return JSON.stringify(serializeStudySessionRecordPayload(record))
 }
 
 function buildTimeRecordRequestHeaders(mutationId: string, apiToken = getApiToken()) {
@@ -38,6 +39,9 @@ function queueTimeRecordRecovery(
   return enqueueMutation({
     mutationId,
     resourceKey: `time-record:${record.id}`,
+    // pagehide and beforeunload can both fire, and a failed keepalive can be
+    // queued again before the first item replays. Keep one body per record.
+    coalesceKey: `time-record:${record.id}`,
     description: `恢复学习时长：${record.title || record.kind}`,
     url: STUDY_SESSION_RECOVERY_URL,
     method: 'POST',

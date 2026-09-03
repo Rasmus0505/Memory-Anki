@@ -1,18 +1,74 @@
-import type { TimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
 import { TIMER_FOCUS_SCENE_LABELS } from '@/shared/components/session/timer-scenes'
-import type { BreakGuardConfig } from '@/shared/components/session/break-guard-config'
-import type { BreakGuardState } from '@/shared/components/session/breakGuardModel'
 import type {
-  UnifiedTimerFeedbackSignal,
+  UnifiedTimerAction,
   UnifiedTimerSnapshot,
-  UnifiedTimerStudyPhase,
+  UnifiedTimerStatus,
 } from '@/shared/components/session/desktopTimerBridge'
 import {
   formatClock,
+  selectActiveTimerEntry,
   type GlobalTimerRegistration,
 } from '@/shared/components/session/globalTimerModel'
 
+/** Keep the bridge snapshot deliberately boring: one elapsed clock and three controls. */
+export function buildStudyTimerSnapshot({
+  activeEntry,
+}: {
+  activeEntry: GlobalTimerRegistration | null
+  automationConfig?: unknown
+  focusConfig?: unknown
+  breakConfig?: unknown
+}): UnifiedTimerSnapshot {
+  const status: UnifiedTimerStatus = activeEntry?.timer.status ?? 'idle'
+  const effectiveSeconds = Math.max(0, Math.round(activeEntry?.timer.effectiveSeconds ?? 0))
+  const scene = activeEntry?.scene ?? null
+  const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '学习计时'
+  const primaryText = !activeEntry
+    ? '当前无学习会话'
+    : status === 'running'
+      ? '正在计时'
+      : status === 'paused'
+        ? '已暂停'
+        : status === 'completed'
+          ? '已完成'
+          : '等待开始'
+  const secondaryText = activeEntry
+    ? `有效学习时间 ${formatClock(effectiveSeconds)}`
+    : '进入学习页面后手动开始'
+  const availableActions: UnifiedTimerAction[] = !activeEntry
+    ? []
+    : status === 'running'
+      ? ['pause'] as UnifiedTimerAction[]
+      : status === 'paused' || status === 'idle'
+        ? ['resume'] as UnifiedTimerAction[]
+        : []
+
+  return {
+    mode: 'study',
+    status,
+    ownerSessionId: activeEntry?.sessionId ?? null,
+    ownerSessionKey: activeEntry?.timer.sessionKey ?? null,
+    title: activeEntry?.title ?? '待开始',
+    scene: sceneLabel,
+    displaySeconds: activeEntry ? effectiveSeconds : null,
+    primaryText,
+    secondaryText,
+    snoozeCount: 0,
+    availableActions,
+    presetMinutes: [],
+    allowCustomMinutes: false,
+    snoozeMinutes: [],
+    targetPath: activeEntry?.routePath ?? '/freestyle',
+    updatedAt: Date.now(),
+    effectiveSeconds,
+    semanticState:
+      status === 'running' ? 'running' : status === 'paused' ? 'paused' : status === 'completed' ? 'paused' : 'idle',
+    progressMode: status === 'paused' ? 'frozen' : status === 'idle' ? 'empty' : 'elapsed',
+    progressValue: 0,
+  }
+}
+
+/** Legacy snapshots are intentionally no longer produced. */
 export function createBreakLogId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -20,214 +76,17 @@ export function createBreakLogId() {
   return `break-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+/** @deprecated Break countdowns were removed; retain a stable empty study snapshot for old imports. */
+export function buildBreakTimerSnapshot(_options?: unknown) {
+  return buildStudyTimerSnapshot({ activeEntry: null })
+}
+
+/** Compatibility helper for consumers that only have an entry list. */
+export function buildActiveStudyTimerSnapshot(entries: GlobalTimerRegistration[]) {
+  return buildStudyTimerSnapshot({ activeEntry: selectActiveTimerEntry(entries) })
+}
+
 export function formatTimerSnapshotClock(seconds: number | null) {
   if (seconds == null) return '--:--'
   return formatClock(seconds)
-}
-
-export function buildStudyTimerSnapshot({
-  activeEntry,
-  focusConfig,
-  automationConfig,
-  breakConfig,
-  feedbackSignal = null,
-}: {
-  activeEntry: GlobalTimerRegistration | null
-  focusConfig: TimerFocusConfig
-  automationConfig: TimerAutomationConfig
-  breakConfig: BreakGuardConfig
-  feedbackSignal?: UnifiedTimerFeedbackSignal | null
-}): UnifiedTimerSnapshot {
-  const scene = activeEntry?.scene ?? null
-  const sceneLabel = scene ? TIMER_FOCUS_SCENE_LABELS[scene] : '计时器'
-  const primarySeconds = Math.max(60, focusConfig.primaryMinutes * 60)
-  const effectiveSeconds = activeEntry?.timer.effectiveSeconds ?? 0
-  const roundState = activeEntry?.timer.focusRound
-  const roundStartedAt = Math.min(
-    effectiveSeconds,
-    Math.max(0, roundState?.startedAtEffectiveSeconds ?? 0),
-  )
-  const roundElapsedSeconds = Math.max(0, effectiveSeconds - roundStartedAt)
-  const roundIndex = Math.max(1, roundState?.roundIndex ?? 1)
-  const status = activeEntry?.timer.status ?? 'idle'
-  const goalReached = Boolean(activeEntry && roundElapsedSeconds >= primarySeconds)
-  const idleSeconds = activeEntry?.timer.idleSeconds ?? 0
-  const idleWindowSeconds = Math.max(0, automationConfig.idleTimeoutSeconds)
-  const graceSeconds = Math.min(idleWindowSeconds, Math.max(0, automationConfig.idleGraceSeconds))
-  const warningThreshold = Math.max(0, idleWindowSeconds - graceSeconds)
-  // The warning is inside the idle window and counts down to the final pause.
-  const idleWarningRemainingSeconds =
-    activeEntry && status === 'running' && idleWindowSeconds > 0 && idleSeconds >= warningThreshold
-      ? Math.max(0, idleWindowSeconds - idleSeconds)
-      : null
-  const studyPhase: UnifiedTimerStudyPhase = !activeEntry
-    ? 'idle'
-    : status === 'paused'
-      ? 'paused'
-      : status === 'completed'
-        ? 'completed'
-        : goalReached
-          ? 'goal_reached'
-          : idleWarningRemainingSeconds != null
-            ? 'idle_warning'
-            : 'focusing'
-  const primaryText =
-    studyPhase === 'goal_reached'
-      ? `第 ${roundIndex} 轮已达标，继续学习或休息一下`
-      : studyPhase === 'idle_warning'
-        ? `仍在学习吗？${idleWarningRemainingSeconds} 秒后自动暂停`
-        : studyPhase === 'paused'
-          ? '计时已暂停，本轮进度已保留'
-          : studyPhase === 'completed'
-            ? '本次学习已经完成'
-            : activeEntry && scene
-              ? `专注中 · 闲置 ${idleSeconds}/${idleWindowSeconds} 秒`
-              : '当前无学习会话'
-  const secondaryText = activeEntry
-    ? `本轮 ${formatClock(Math.min(roundElapsedSeconds, primarySeconds))}/${formatClock(primarySeconds)} · 第 ${roundIndex} 轮`
-    : `本轮 ${formatClock(0)}/${formatClock(primarySeconds)}`
-  // The first break preset is the suggested length after a round. Focus config
-  // used to define this separately, so the two could silently disagree.
-  const suggestedBreakMinutes = Math.max(1, Math.round(breakConfig.presetMinutes[0] ?? 5))
-  const semanticState = studyPhase === 'goal_reached'
-    ? 'goal'
-    : studyPhase === 'idle_warning'
-      ? 'warning'
-      : studyPhase === 'paused' || studyPhase === 'completed'
-        ? 'paused'
-        : studyPhase === 'focusing'
-          ? 'running'
-          : 'idle'
-  const focusProgress = primarySeconds > 0 ? Math.min(1, roundElapsedSeconds / primarySeconds) : 0
-  const idleProgress = idleWindowSeconds > 0 ? Math.max(0, 1 - idleSeconds / idleWindowSeconds) : 0
-  return {
-    mode: 'study',
-    status,
-    ownerSessionId: activeEntry?.sessionId ?? null,
-    title: activeEntry?.title ?? '待开始',
-    scene: sceneLabel,
-    displaySeconds: effectiveSeconds,
-    primaryText,
-    secondaryText,
-    snoozeCount: 0,
-    availableActions: activeEntry
-      ? studyPhase === 'goal_reached'
-        ? ['continueRound', 'startGoalBreak']
-        : status === 'running'
-          ? ['pause']
-          : status === 'paused' || status === 'idle'
-            ? ['resume']
-            : []
-      : [],
-    presetMinutes: [],
-    snoozeMinutes: [],
-    targetPath: '/freestyle',
-    updatedAt: Date.now(),
-    studyPhase,
-    effectiveSeconds,
-    roundElapsedSeconds,
-    roundTargetSeconds: primarySeconds,
-    roundIndex,
-    idleWarningRemainingSeconds,
-    suggestedBreakMinutes,
-    feedbackSignal,
-    semanticState,
-    progressMode: studyPhase === 'idle_warning' ? 'idle_timeout' : studyPhase === 'paused' ? 'frozen' : studyPhase === 'idle' ? 'empty' : 'focus_round',
-    progressValue: studyPhase === 'goal_reached' ? 1 : studyPhase === 'idle_warning' ? idleProgress : studyPhase === 'idle' ? 0 : focusProgress,
-  }
-}
-
-export function buildBreakTimerSnapshot({
-  breakState,
-  config,
-  paused,
-  pausedRemainingMs,
-  targetPath,
-  now = Date.now(),
-}: {
-  breakState: BreakGuardState
-  config: BreakGuardConfig
-  paused: boolean
-  pausedRemainingMs?: number | null
-  targetPath?: string | null
-  now?: number
-}): UnifiedTimerSnapshot {
-  const remainingMs =
-    paused && pausedRemainingMs != null
-      ? pausedRemainingMs
-      : breakState.status === 'counting_down' && breakState.expiresAt != null
-        ? Math.max(0, breakState.expiresAt - now)
-        : breakState.status === 'expired'
-        ? 0
-        : null
-  const displaySeconds = remainingMs == null ? null : Math.ceil(remainingMs / 1000)
-  const plannedText = breakState.plannedMinutes ? `计划 ${breakState.plannedMinutes} 分钟` : '选择这次休息多久'
-  const snoozeText = `延后 ${breakState.snoozeCount} 次`
-  const resolvedTargetPath = targetPath ?? config.targetPath
-  const breakTotalSeconds = Math.max(1, Math.round((breakState.plannedMinutes ?? 1) * 60))
-  const breakProgress = breakState.status === 'expired'
-    ? 1
-    : displaySeconds == null
-      ? 0
-      : Math.max(0, Math.min(1, 1 - displaySeconds / breakTotalSeconds))
-  if (breakState.status === 'prompting') {
-    return {
-      mode: 'break',
-      status: 'prompting',
-      ownerSessionId: null,
-      title: '要开始休息吗？',
-      scene: '休息询问',
-      displaySeconds: null,
-      primaryText: '离开学习页一会儿了',
-      secondaryText: '开始休息会暂停当前学习计时',
-      snoozeCount: breakState.snoozeCount,
-      availableActions: ['startBreak'],
-      presetMinutes: config.presetMinutes,
-      allowCustomMinutes: config.allowCustomMinutes,
-      snoozeMinutes: config.snoozeMinutes,
-      targetPath: resolvedTargetPath,
-      updatedAt: now,
-    }
-  }
-
-  if (breakState.status === 'expired') {
-    return {
-      mode: 'break',
-      status: 'expired',
-      ownerSessionId: null,
-      title: '该回来了',
-      scene: '休息到点',
-      displaySeconds: 0,
-      primaryText: '休息已经结束，准备好后手动开始学习',
-      secondaryText: `${plannedText} · ${snoozeText}`,
-      snoozeCount: breakState.snoozeCount,
-      availableActions: ['snooze', 'startStudy'],
-      presetMinutes: config.presetMinutes,
-      allowCustomMinutes: config.allowCustomMinutes,
-      snoozeMinutes: config.snoozeMinutes,
-      targetPath: resolvedTargetPath,
-      updatedAt: now,
-    }
-  }
-
-  return {
-    mode: 'break',
-    status: paused ? 'paused' : 'running',
-    ownerSessionId: null,
-    title: paused ? '休息已暂停' : '休息倒计时',
-    scene: '休息中',
-    displaySeconds,
-    primaryText: plannedText,
-    secondaryText: snoozeText,
-    snoozeCount: breakState.snoozeCount,
-    availableActions: [paused ? 'resume' : 'pause', 'startStudy'],
-    presetMinutes: config.presetMinutes,
-    allowCustomMinutes: config.allowCustomMinutes,
-    snoozeMinutes: config.snoozeMinutes,
-    targetPath: resolvedTargetPath,
-    updatedAt: now,
-    semanticState: breakState.status === 'counting_down' ? 'break' : 'idle',
-    progressMode: breakState.status === 'counting_down' ? 'break_countdown' : 'empty',
-    progressValue: breakProgress,
-  }
 }

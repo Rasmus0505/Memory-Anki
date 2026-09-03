@@ -1,5 +1,3 @@
-import type { SessionKind } from '@/modules/session/public'
-
 import {
   getClientPreferenceCacheStatus,
   hasLoadedClientPreferences,
@@ -7,17 +5,9 @@ import {
 } from '@/shared/preferences/clientPreferences'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
-export type TimerAutomationScene = SessionKind | 'freestyle' | 'english' | 'english_reading'
-
-/**
- * One flat rule for every study page.
- *
- * Schema v4 dropped the per-scene rules and the `mode` switch: v3 already
- * collapsed them to a single shared rule during sanitize, so the extra shape
- * only ever produced settings that were silently discarded on save.
- */
+/** One flat rule for every study page. */
 export interface TimerAutomationConfig {
-  schemaVersion?: number
+  schemaVersion: number
   /** Start counting as soon as a study page mounts. */
   autoStartOnPageEnter: boolean
   /**
@@ -26,66 +16,34 @@ export interface TimerAutomationConfig {
    * suspends the timer, so this is a timing rule, not a way of responding.
    */
   keepScreenAwake: boolean
-  /** Total idle window before pausing; the warning grace is included in it. */
-  idleTimeoutSeconds: number
-  /**
-   * "Still studying?" warning shown near the end of {@link idleTimeoutSeconds}.
-   * The warning duration is included in the total idle window and does not
-   * extend the pause deadline.
-   */
-  idleGraceSeconds: number
-  /** Debounce before backgrounding the app leaves the scene. 0 = pause at once. */
-  backgroundGraceSeconds: number
+  /** @deprecated Ignored. Idle automation was removed in schema v6. */
+  idleTimeoutSeconds?: number
+  /** @deprecated Ignored. Idle automation was removed in schema v6. */
+  idleGraceSeconds?: number
+  /** @deprecated Ignored. Background grace was removed in schema v6. */
+  backgroundGraceSeconds?: number
 }
 
+/** @deprecated Activity renewal is no longer part of timer automation. */
 export type TimerAutomationActivityKind =
   | 'window_return'
   | 'node_switch'
   | 'edit_operation'
   | 'practice_interaction'
 
-/**
- * Which signals renew the idle countdown. Fixed rather than configurable:
- * returning to the window is not evidence of studying, and node switches fire
- * from programmatic navigation too.
- */
-const ACTIVITY_ENABLED: Readonly<Record<TimerAutomationActivityKind, boolean>> = Object.freeze({
-  window_return: false,
-  node_switch: false,
-  edit_operation: true,
-  practice_interaction: true,
-})
-
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
-export const TIMER_AUTOMATION_CONFIG_VERSION = 5
-export const MAX_TIMER_IDLE_SECONDS = 3 * 60
+export const TIMER_AUTOMATION_CONFIG_VERSION = 6
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
   autoStartOnPageEnter: false,
   keepScreenAwake: true,
-  idleTimeoutSeconds: 120,
-  idleGraceSeconds: 30,
-  backgroundGraceSeconds: 20,
-}
-
-function sanitizeSeconds(value: unknown, fallback: number) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback
-  return Math.round(parsed)
 }
 
 function sanitizeBoolean(value: unknown, fallback: boolean) {
   if (typeof value === 'boolean') return value
   return fallback
-}
-
-function sanitizeIdleTimeoutSeconds(value: unknown) {
-  return Math.min(
-    MAX_TIMER_IDLE_SECONDS,
-    sanitizeSeconds(value, DEFAULT_TIMER_AUTOMATION_CONFIG.idleTimeoutSeconds),
-  )
 }
 
 export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationConfig {
@@ -108,11 +66,6 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
         raw.keepScreenAwake,
         DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
       ),
-      idleTimeoutSeconds: sanitizeIdleTimeoutSeconds(legacyShared.inactiveAutoPauseSeconds),
-      // Deliberately ignore the stored grace/hidden values: v3 sanitize forced
-      // both to 0, which is exactly the behaviour this schema bump fixes.
-      idleGraceSeconds: DEFAULT_TIMER_AUTOMATION_CONFIG.idleGraceSeconds,
-      backgroundGraceSeconds: DEFAULT_TIMER_AUTOMATION_CONFIG.backgroundGraceSeconds,
     }
   }
 
@@ -125,15 +78,6 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     keepScreenAwake: sanitizeBoolean(
       raw.keepScreenAwake,
       DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
-    ),
-    idleTimeoutSeconds: sanitizeIdleTimeoutSeconds(raw.idleTimeoutSeconds),
-    idleGraceSeconds: sanitizeSeconds(
-      raw.idleGraceSeconds,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.idleGraceSeconds,
-    ),
-    backgroundGraceSeconds: sanitizeSeconds(
-      raw.backgroundGraceSeconds,
-      DEFAULT_TIMER_AUTOMATION_CONFIG.backgroundGraceSeconds,
     ),
   }
 }
@@ -187,10 +131,11 @@ export function resetTimerAutomationConfig() {
   return nextConfig
 }
 
-export function isActivityEnabled(kind: TimerAutomationActivityKind) {
-  return ACTIVITY_ENABLED[kind] ?? false
-}
-
 export function shouldAutoStartOnPageEnter(config: TimerAutomationConfig) {
   return config.autoStartOnPageEnter
+}
+
+/** @deprecated Kept for old callers; every activity signal is ignored. */
+export function isActivityEnabled(_kind: TimerAutomationActivityKind) {
+  return false
 }

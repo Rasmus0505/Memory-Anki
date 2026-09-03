@@ -14,10 +14,8 @@ import {
   sanitizeBreakGuardConfig,
 } from '@/shared/components/session/break-guard-config'
 
-export type FieldKey =
-  | 'idleTimeoutSeconds'
-  | 'idleGraceSeconds'
-  | 'backgroundGraceSeconds'
+/** Kept as a narrow compatibility type for settings-page callers. */
+export type FieldKey = never
 export type FocusFieldKey = 'primaryMinutes' | 'secondaryMinutes'
 export type BreakNumberFieldKey = 'promptDelaySeconds'
 export type BreakTextFieldKey = 'targetPath' | 'presetMinutes' | 'snoozeMinutes'
@@ -41,9 +39,6 @@ export function toDraft(config: TimerAutomationConfig) {
   return {
     autoStartOnPageEnter: config.autoStartOnPageEnter,
     keepScreenAwake: config.keepScreenAwake,
-    idleTimeoutSeconds: String(config.idleTimeoutSeconds),
-    idleGraceSeconds: String(config.idleGraceSeconds),
-    backgroundGraceSeconds: String(config.backgroundGraceSeconds),
   }
 }
 
@@ -80,9 +75,6 @@ export function parseAutomationDraft(draft: AutomationDraft): TimerAutomationCon
     schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
     autoStartOnPageEnter: draft.autoStartOnPageEnter,
     keepScreenAwake: draft.keepScreenAwake,
-    idleTimeoutSeconds: draft.idleTimeoutSeconds,
-    idleGraceSeconds: draft.idleGraceSeconds,
-    backgroundGraceSeconds: draft.backgroundGraceSeconds,
   })
 }
 

@@ -17,6 +17,7 @@ import {
 
 interface TimedSessionSnapshotSource {
   recordId: string | null
+  sessionKey: string
   kind: SessionKind
   palaceId: number | null
   sourceKind: TimedSessionSourceKind
@@ -54,6 +55,7 @@ export function buildPersistedTimedSessionSnapshot(
   return {
     version: SNAPSHOT_VERSION,
     recordId: source.recordId,
+    sessionKey: source.sessionKey,
     kind: source.kind,
     palaceId: source.palaceId,
     sourceKind: source.sourceKind,
@@ -184,6 +186,7 @@ export function buildRecordFromExpiredSuspendedSnapshot(
   }
   return {
     id: snapshot.recordId ?? createStableRecordId(),
+    sessionKey: snapshot.sessionKey || null,
     kind: snapshot.kind,
     palaceId: snapshot.palaceId,
     sourceKind: snapshot.sourceKind,

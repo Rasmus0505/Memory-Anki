@@ -6,7 +6,6 @@ import type { TimedSessionController } from '@/shared/hooks/useTimedSession'
 export interface GlobalTimerActions {
   upsertTimer: (entry: GlobalTimerRegistration) => void
   removeTimer: (sessionId: string) => void
-  notifyStudyActivity: (sessionId: string) => boolean
 }
 
 export const GlobalTimerActionsContext = React.createContext<GlobalTimerActions | null>(null)
@@ -29,10 +28,7 @@ export function useGlobalTimerRegistration(entry: {
     routePath,
   } = entry
 
-  const registeredTimer = React.useMemo<TimedSessionController>(() => ({
-    ...timer,
-    registerActivity: () => undefined,
-  }), [timer])
+  const registeredTimer = React.useMemo<TimedSessionController>(() => timer, [timer])
 
   React.useEffect(() => {
     if (!context) return

@@ -31,22 +31,6 @@ contextBridge.exposeInMainWorld('memoryAnkiDesktopTimer', {
     desktopFlushHandlers.add(handler)
     return () => desktopFlushHandlers.delete(handler)
   },
-  onMainWindowBlur(handler) {
-    const listener = () => handler()
-    ipcRenderer.on('memory-anki-main-window-blur', listener)
-    return () => ipcRenderer.removeListener('memory-anki-main-window-blur', listener)
-  },
-  onPauseActiveTimer(handler) {
-    const listener = () => handler()
-    ipcRenderer.on('memory-anki-desktop-pause-active-timer', listener)
-    return () => ipcRenderer.removeListener('memory-anki-desktop-pause-active-timer', listener)
-  },
-  requestMainPause() {
-    ipcRenderer.send('memory-anki-request-main-pause')
-  },
-  openMainTarget(path) {
-    ipcRenderer.send('memory-anki-open-main-target', path)
-  },
   setOverlayCollapsed(collapsed) {
     ipcRenderer.send('memory-anki-timer-collapse', Boolean(collapsed))
   },

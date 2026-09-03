@@ -5,7 +5,9 @@
 }
 
 .memory-anki-global-timer-panel,
-.memory-anki-global-timer-capsule {
+.memory-anki-global-timer-capsule,
+.memory-anki-global-timer-capsule-row,
+.memory-anki-global-timer-restore {
   pointer-events: auto;
 }
 
@@ -369,6 +371,12 @@
   cursor: nesw-resize;
 }
 
+.memory-anki-global-timer-capsule-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .memory-anki-global-timer-capsule {
   min-height: 46px;
   backdrop-filter: blur(14px);
@@ -376,6 +384,35 @@
 }
 
 .memory-anki-global-timer-capsule:active {
+  cursor: grabbing;
+}
+
+.memory-anki-global-timer-capsule-hide,
+.memory-anki-global-timer-restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--timer-surface-border);
+  background: var(--timer-surface-bg, var(--timer-surface-background));
+  color: #0f172a;
+  box-shadow: var(--timer-capsule-shadow);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+}
+
+.memory-anki-global-timer-capsule-hide {
+  width: 32px;
+  height: 32px;
+}
+
+.memory-anki-global-timer-restore {
+  width: 40px;
+  height: 40px;
+  cursor: grab;
+}
+
+.memory-anki-global-timer-restore:active {
   cursor: grabbing;
 }
 

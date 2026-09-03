@@ -1,7 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
-const { createDesktopPauseOwnership } = require('./desktopPauseOwnership.cjs')
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
 const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
@@ -10,7 +9,6 @@ const READY_FILE = process.env.MEMORY_ANKI_DESKTOP_READY_FILE || ''
 let mainWindow = null
 let timerWindow = null
 let lastTimerSnapshot = null
-let mainBlurPromptTimer = null
 let pendingFlush = null
 let allowMainWindowClose = false
 let desktopReadyWritten = false
@@ -18,7 +16,6 @@ let mainWindowLoaded = false
 let timerWindowLoaded = false
 
 const FLUSH_TIMEOUT_MS = 1800
-const desktopPauseOwnership = createDesktopPauseOwnership()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 function writeDesktopReady() {
@@ -53,12 +50,6 @@ if (!hasSingleInstanceLock) {
     ensureMainWindow()
     ensureTimerWindow()
   })
-}
-
-function clearMainBlurPromptTimer() {
-  if (mainBlurPromptTimer == null) return
-  clearTimeout(mainBlurPromptTimer)
-  mainBlurPromptTimer = null
 }
 
 function requestMainWindowFlush(reason) {
@@ -107,23 +98,6 @@ function closeMainWindowAfterFlush(reason, options = {}) {
   })
 }
 
-function scheduleExternalMainBlurPrompt() {
-  clearMainBlurPromptTimer()
-  mainBlurPromptTimer = setTimeout(() => {
-    mainBlurPromptTimer = null
-    if (!mainWindow || mainWindow.isDestroyed()) return
-    if (mainWindow.isFocused()) return
-    const focusedWindow = BrowserWindow.getFocusedWindow()
-    if (focusedWindow && focusedWindow === timerWindow) return
-    const pausedOwnerId = desktopPauseOwnership.armForExternalBlur(lastTimerSnapshot)
-    if (pausedOwnerId) {
-      mainWindow.webContents.send('memory-anki-desktop-pause-active-timer')
-    }
-    mainWindow.webContents.send('memory-anki-main-window-blur')
-    mainWindow.webContents.send('memory-anki-timer-command', { type: 'promptBreak' })
-  }, 100)
-}
-
 function publishMainWindowFullscreen(active) {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send('memory-anki-main-window-fullscreen-change', Boolean(active))
@@ -169,20 +143,9 @@ function createMainWindow() {
     event.preventDefault()
     closeMainWindowAfterFlush('main_window_close', { quitApp: true })
   })
-  mainWindow.on('blur', () => {
-    scheduleExternalMainBlurPrompt()
-  })
-  mainWindow.on('focus', () => {
-    clearMainBlurPromptTimer()
-    if (desktopPauseOwnership.consumeResume(lastTimerSnapshot)) {
-      mainWindow?.webContents.send('memory-anki-timer-command', { type: 'resume' })
-    }
-    mainWindow?.webContents.send('memory-anki-timer-command', { type: 'returnToStudy' })
-  })
   mainWindow.on('enter-full-screen', () => publishMainWindowFullscreen(true))
   mainWindow.on('leave-full-screen', () => publishMainWindowFullscreen(false))
   mainWindow.on('closed', () => {
-    clearMainBlurPromptTimer()
     allowMainWindowClose = false
     mainWindow = null
   })
@@ -223,6 +186,8 @@ function createTimerWindow() {
     if (lastTimerSnapshot) {
       timerWindow?.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
     }
+    // 强制桌面版启动时显示计时器窗口
+    timerWindow?.show()
   })
   timerWindow.on('closed', () => {
     timerWindow = null
@@ -274,12 +239,12 @@ ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
 
 ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
   lastTimerSnapshot = snapshot
-  desktopPauseOwnership.observeSnapshot(snapshot)
   timerWindow?.webContents.send('memory-anki-timer-snapshot', snapshot)
 })
 
 ipcMain.on('memory-anki-timer-command', (_event, command) => {
-  desktopPauseOwnership.clearForCommand(command)
+  const supportedCommands = new Set(['start', 'pause', 'resume', 'collapse', 'closeOverlay', 'openTimerSettings'])
+  if (!command || typeof command.type !== 'string' || !supportedCommands.has(command.type)) return
   if (command?.type === 'closeOverlay') {
     timerWindow?.hide()
     return
@@ -291,7 +256,7 @@ ipcMain.on('memory-anki-timer-command', (_event, command) => {
     }
     return
   }
-  if (command?.type === 'openTimerSettings' || command?.type === 'openTarget' || (command?.type === 'finishBreak' && command.openTarget)) {
+  if (command?.type === 'openTimerSettings') {
     ensureMainWindow()
   }
   mainWindow?.webContents.send('memory-anki-timer-command', command)
@@ -305,10 +270,6 @@ ipcMain.on('memory-anki-desktop-flush-complete', (_event, result) => {
   })
 })
 
-ipcMain.on('memory-anki-request-main-pause', () => {
-  mainWindow?.webContents.send('memory-anki-desktop-pause-active-timer')
-})
-
 ipcMain.on('memory-anki-main-window-fullscreen', (event, active) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return
   const next = Boolean(active)
@@ -317,12 +278,6 @@ ipcMain.on('memory-anki-main-window-fullscreen', (event, active) => {
     return
   }
   mainWindow.setFullScreen(next)
-})
-
-ipcMain.on('memory-anki-open-main-target', (_event, targetPath) => {
-  const safePath = typeof targetPath === 'string' && targetPath.startsWith('/') ? targetPath : '/freestyle'
-  ensureMainWindow()
-  mainWindow?.loadURL(`${APP_URL.replace(/\/$/, '')}${safePath}`)
 })
 
 app.on('window-all-closed', () => {
@@ -343,7 +298,5 @@ app.on('activate', () => {
 })
 
 app.on('will-quit', () => {
-  clearMainBlurPromptTimer()
-  desktopPauseOwnership.clear()
   globalShortcut.unregisterAll()
 })

@@ -9,23 +9,13 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import type { TimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import { DEFAULT_TIMER_AUTOMATION_CONFIG } from '@/shared/components/session/timer-automation-config'
+import {
+  DEFAULT_TIMER_AUTOMATION_CONFIG,
+} from '@/shared/components/session/timer-automation-config'
 import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
-import {
-  DEFAULT_TIMER_FOCUS_CONFIG,
-  resetTimerFocusConfig,
-  saveTimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
 import type { BreakGuardConfig } from '@/shared/components/session/break-guard-config'
-import {
-  DEFAULT_BREAK_GUARD_CONFIG,
-  resetBreakGuardConfig,
-  saveBreakGuardConfig,
-} from '@/shared/components/session/break-guard-config'
 import { TimerAutomationSection } from '@/shared/components/session/TimerAutomationSection'
-import { TimerBreakGuardSection } from '@/shared/components/session/TimerBreakGuardSection'
-import { TimerFocusSection } from '@/shared/components/session/TimerFocusSection'
-import { toBreakDraft, toDraft, toFocusDraft } from '@/shared/components/session/timerAutomationDialogModel'
+import { toDraft, parseAutomationDraft } from '@/shared/components/session/timerAutomationDialogModel'
 import { useTimerConfigDrafts } from '@/shared/components/session/useTimerConfigDrafts'
 
 interface TimerAutomationDialogProps {
@@ -34,6 +24,7 @@ interface TimerAutomationDialogProps {
   onOpenChange: (open: boolean) => void
   onSave: (config: TimerAutomationConfig) => void
   onReset: () => void
+  /** Deprecated compatibility props; live timer no longer edits these settings. */
   focusConfig?: TimerFocusConfig
   onFocusConfigSave?: (config: TimerFocusConfig) => void
   breakConfig?: BreakGuardConfig
@@ -46,36 +37,18 @@ export function TimerAutomationDialog({
   onOpenChange,
   onSave,
   onReset,
-  focusConfig = DEFAULT_TIMER_FOCUS_CONFIG,
-  onFocusConfigSave,
-  breakConfig = DEFAULT_BREAK_GUARD_CONFIG,
-  onBreakConfigSave,
 }: TimerAutomationDialogProps) {
-  const {
-    draft,
-    focusDraft,
-    breakDraft,
-    setDraft,
-    setFocusDraft,
-    setBreakDraft,
-    handleFieldChange,
-    handleAutoStartChange,
-    handleKeepScreenAwakeChange,
-    handleFocusFieldChange,
-    handleBreakBooleanChange,
-    handleBreakNumberChange,
-    handleBreakTextChange,
-    handleBreakAlertStrengthChange,
-    parsedConfig,
-    parsedFocusConfig,
-    parsedBreakConfig,
-  } = useTimerConfigDrafts({ active: open, config, focusConfig, breakConfig })
+  const drafts = useTimerConfigDrafts({
+    active: open,
+    config,
+  })
+  const draftConfig = parseAutomationDraft(drafts.draft)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-timer-activity="ignore"
-        className="flex h-[min(88vh,820px)] w-[min(1100px,calc(100vw-24px))] max-w-[1100px] flex-col overflow-hidden rounded-lg border-border/70 bg-background/98 p-0"
+        className="flex w-[min(560px,calc(100vw-24px))] max-w-[560px] flex-col overflow-hidden rounded-lg border-border/70 bg-background/98 p-0"
       >
         <DialogHeader>
           <div className="flex min-w-0 items-center gap-3">
@@ -83,42 +56,20 @@ export function TimerAutomationDialog({
               <Settings2 className="size-5" />
             </div>
             <div>
-              <DialogTitle>专注计时设置</DialogTitle>
+              <DialogTitle>计时器设置</DialogTitle>
               <DialogDescription className="mt-1">
-                学习中常用的几项。完整设置（后台宽限、休息高级项、反馈细则）在「计时与休息」页。
+                只统计页面可见且窗口有效的前台时间。后台和失焦立即暂停。
               </DialogDescription>
             </div>
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>
 
-        <div
-          data-testid="timer-automation-dialog-content"
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
-        >
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
           <TimerAutomationSection
-            variant="compact"
-            draft={draft}
-            onFieldChange={handleFieldChange}
-            onAutoStartChange={handleAutoStartChange}
-            onKeepScreenAwakeChange={handleKeepScreenAwakeChange}
-          />
-          <TimerFocusSection
-            variant="compact"
-            focusDraft={focusDraft}
-            parsedFocusConfig={parsedFocusConfig}
-            parsedBreakConfig={parsedBreakConfig}
-            onFocusFieldChange={handleFocusFieldChange}
-          />
-          <TimerBreakGuardSection
-            variant="compact"
-            breakDraft={breakDraft}
-            parsedBreakConfig={parsedBreakConfig}
-            onBreakBooleanChange={handleBreakBooleanChange}
-            onBreakNumberChange={handleBreakNumberChange}
-            onBreakTextChange={handleBreakTextChange}
-            onBreakAlertStrengthChange={handleBreakAlertStrengthChange}
-            onNotifyOnBreakExpiredChange={() => {}}
+            draft={drafts.draft}
+            onAutoStartChange={drafts.handleAutoStartChange}
+            onKeepScreenAwakeChange={drafts.handleKeepScreenAwakeChange}
           />
         </div>
 
@@ -129,13 +80,7 @@ export function TimerAutomationDialog({
             size="sm"
             onClick={() => {
               onReset()
-              const resetFocusConfig = resetTimerFocusConfig()
-              const resetBreakConfig = resetBreakGuardConfig()
-              setDraft(toDraft(DEFAULT_TIMER_AUTOMATION_CONFIG))
-              setFocusDraft(toFocusDraft(resetFocusConfig))
-              setBreakDraft(toBreakDraft(resetBreakConfig))
-              onFocusConfigSave?.(resetFocusConfig)
-              onBreakConfigSave?.(resetBreakConfig)
+              drafts.setDraft(toDraft(DEFAULT_TIMER_AUTOMATION_CONFIG))
             }}
           >
             <RotateCcw className="mr-2 size-4" />
@@ -149,17 +94,7 @@ export function TimerAutomationDialog({
               type="button"
               size="sm"
               onClick={() => {
-                onSave(parsedConfig)
-                if (onFocusConfigSave) {
-                  onFocusConfigSave(parsedFocusConfig)
-                } else {
-                  saveTimerFocusConfig(parsedFocusConfig)
-                }
-                if (onBreakConfigSave) {
-                  onBreakConfigSave(parsedBreakConfig)
-                } else {
-                  saveBreakGuardConfig(parsedBreakConfig)
-                }
+                onSave(draftConfig)
                 onOpenChange(false)
               }}
             >

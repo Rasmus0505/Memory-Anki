@@ -6,21 +6,26 @@ import type {
   SessionSceneSegment,
   TimeSessionRecord,
 } from '@/modules/session/public'
-import type {
-  TimerAutomationActivityKind,
-  TimerAutomationScene,
-} from '@/shared/components/session/timer-automation-config'
 import { formatUtcApiDateTime } from '@/shared/lib/dateTime'
 
-export const AUTO_PAUSE_MS = 2 * 60 * 1000
-export const HIDDEN_PAUSE_MS = 15 * 1000
+/** Kept as compatibility exports for older callers; the live timer has no idle grace. */
+export const AUTO_PAUSE_MS = 0
+export const HIDDEN_PAUSE_MS = 0
 export const SNAPSHOT_STORAGE_PREFIX = 'memory-anki-timed-session:'
 export const SNAPSHOT_VERSION = 2
 
 export type TimedSessionMeta = Record<string, boolean | number | string | null>
 export type TimedSessionSourceKind = 'palace' | 'english' | 'english_reading' | null
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'completed'
+export type TimerAutomationScene = SessionKind | 'freestyle' | 'english' | 'english_reading'
 export type GlowState = 'idle' | 'running' | 'paused'
+export type TimedSessionPauseReason =
+  | null
+  | 'manual'
+  | 'window_blur'
+  | 'document_hidden'
+  | 'restored'
+  | 'scene_inactive'
 export type PersistedSessionStatus = Extract<SessionStatus, 'running' | 'paused'>
 
 export interface TimedSessionFocusRoundState {
@@ -56,39 +61,33 @@ export function sanitizeTimedSessionFocusRound(
 }
 
 export interface TimedSessionOptions {
+  /** Stable learning-target identity shared by all pages for that target. */
+  sessionKey: string
   kind: SessionKind
   title: string
   palaceId: number | null
   automationScene?: TimerAutomationScene
   sourceKind?: TimedSessionSourceKind
   englishCourseId?: number | null
-  autoPauseMs?: number
-  hiddenPauseMs?: number
   persistKey?: string | null
   persistCompletionRecord?: boolean
 }
 
 export interface TimedSessionController {
   sessionId: string
+  sessionKey: string
   effectiveSeconds: number
-  idleSeconds: number
   pauseCount: number
   status: SessionStatus
+  pauseReason?: TimedSessionPauseReason
   startedAt: string | null
-  durationEdited: boolean
   glowState: GlowState
-  focusRound: TimedSessionFocusRoundState
   start: (meta?: TimedSessionMeta) => void
   pause: (meta?: TimedSessionMeta) => void
   resume: (meta?: TimedSessionMeta) => void
   setSceneActive: (active: boolean, meta?: TimedSessionMeta) => void
   leaveScene: (meta?: TimedSessionMeta) => Promise<TimeSessionRecord | null>
-  registerActivity: (activityKind: TimerAutomationActivityKind, meta?: TimedSessionMeta) => void
   logEvent: (type: SessionEventRecord['type'], meta?: TimedSessionMeta) => void
-  acknowledgeFocusInterval: (count: number, meta?: TimedSessionMeta) => void
-  acknowledgeFocusGoal: (meta?: TimedSessionMeta) => void
-  startNextFocusRound: (meta?: TimedSessionMeta) => void
-  adjustDuration: (seconds: number) => void
   getEffectiveSeconds: () => number
   complete: (
     method: SessionCompletionMethod,
@@ -116,6 +115,8 @@ export interface ActiveSceneSegmentSnapshot {
 export interface PersistedTimedSessionSnapshotV2 {
   version: 2
   recordId: string | null
+  /** Stable target identity used to reconnect a snapshot to the registry. */
+  sessionKey: string
   kind: SessionKind
   palaceId: number | null
   sourceKind: TimedSessionSourceKind
@@ -158,6 +159,7 @@ export interface LegacyPersistedTimedSessionSnapshot {
 export interface RestorableTimedSessionSnapshot {
   version: 2
   recordId: string | null
+  sessionKey: string
   kind: SessionKind
   palaceId: number | null
   sourceKind: TimedSessionSourceKind
@@ -229,6 +231,7 @@ export function normalizeSnapshot(
     return {
       version: 2,
       recordId: null,
+      sessionKey: typeof raw.sessionKey === 'string' ? raw.sessionKey : '',
       kind: raw.kind as SessionKind,
       palaceId: typeof raw.palaceId === 'number' ? raw.palaceId : null,
       sourceKind:
@@ -273,6 +276,7 @@ export function normalizeSnapshot(
   return {
     version: 2,
     recordId: typeof raw.recordId === 'string' && raw.recordId ? raw.recordId : null,
+    sessionKey: typeof raw.sessionKey === 'string' ? raw.sessionKey : '',
     kind: raw.kind as SessionKind,
     palaceId: typeof raw.palaceId === 'number' ? raw.palaceId : null,
     sourceKind:
