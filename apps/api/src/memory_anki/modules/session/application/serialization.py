@@ -70,6 +70,11 @@ def _normalize_payload_datetime(payload: dict[str, Any], key: str, default: date
 def study_session_json(row: StudySession) -> dict[str, Any]:
     return {
         "id": row.id,
+        "session_key": row.session_key,
+        "client_revision": int(row.client_revision or 0),
+        "last_operation_id": row.last_operation_id,
+        # Keep the request-facing name alongside the storage-facing audit name.
+        "operation_id": row.last_operation_id,
         "status": row.status,
         "scene": row.scene,
         "target_type": row.target_type,

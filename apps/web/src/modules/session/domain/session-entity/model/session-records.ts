@@ -53,6 +53,12 @@ export interface SessionSceneSegment {
 
 export interface TimeSessionRecord {
   id: string
+  /** Stable learning-target identity shared across page scenes. */
+  sessionKey?: string | null
+  /** Last server-accepted client revision, when this row came from the API. */
+  clientRevision?: number
+  /** Operation identity echoed by the API for idempotent writes. */
+  operationId?: string | null
   kind: SessionKind
   palaceId: number | null
   palaceSegmentId?: number | null

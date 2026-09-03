@@ -15,7 +15,6 @@ from .serialization import (
     _int_or_none,
     _json_dumps,
     _json_loads,
-    _normalize_payload_datetime,
     _normalize_scene,
     _normalize_status,
     _normalize_target_type,
@@ -36,6 +35,11 @@ from .study_session_constants import (
 )
 from .study_session_constants import (
     STUDY_DASHBOARD_SCENES as STUDY_DASHBOARD_SCENES,
+)
+from .study_session_duration import (
+    normalize_effective_seconds,
+    should_ignore_terminal_write,
+    write_metadata,
 )
 from .study_session_stats import (
     build_study_session_stats as build_study_session_stats,
@@ -90,18 +94,216 @@ from .time_record_read_model import (
 )
 
 
+def _duration_edited(payload: dict[str, Any], summary: dict[str, Any] | None = None) -> bool:
+    """Read the explicit user-duration override used by timer payloads."""
+
+    for key in ("duration_edited", "durationEdited"):
+        if key in payload:
+            value = payload.get(key)
+            if isinstance(value, str):
+                return value.strip().lower() in {"1", "true", "yes", "on"}
+            return bool(value)
+    summary_payload = summary if isinstance(summary, dict) else payload.get("summary")
+    if not isinstance(summary_payload, dict):
+        return False
+    value = summary_payload.get("duration_edited", summary_payload.get("durationEdited"))
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _incoming_completion_method(payload: dict[str, Any], default: str = "") -> str:
+    return str(payload.get("completion_method") or payload.get("completionMethod") or default)
+
+
+_PAYLOAD_ALIASES = {
+    "sessionKey": "session_key",
+    "clientRevision": "client_revision",
+    "operationId": "operation_id",
+    "startedAt": "started_at",
+    "endedAt": "ended_at",
+    "effectiveSeconds": "effective_seconds",
+    "idleSeconds": "idle_seconds",
+    "pauseCount": "pause_count",
+    "completionMethod": "completion_method",
+    "durationEdited": "duration_edited",
+}
+
+
+def _canonical_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    for legacy_name, canonical_name in _PAYLOAD_ALIASES.items():
+        if canonical_name not in normalized and legacy_name in normalized:
+            normalized[canonical_name] = normalized[legacy_name]
+    return normalized
+
+
+def _duration_input(payload: dict[str, Any], default: int = 0) -> object:
+    return payload.get("effective_seconds", default)
+
+
+def _summary_with_duration_edit(
+    summary: dict[str, Any],
+    *,
+    duration_edited: bool,
+) -> dict[str, Any]:
+    if not duration_edited:
+        return summary
+    return {**summary, "duration_edited": True}
+
+
 def create_study_session(
     session: Session,
     payload: dict[str, Any],
     *,
     commit: bool = True,
 ) -> dict[str, Any]:
+    payload = _canonical_payload(payload)
     now = utc_now_naive()
     session_id = str(payload.get("id") or uuid4())
-    started_at = _normalize_payload_datetime(payload, "started_at", now) or now
+    raw_started_at = payload.get("started_at")
+    started_at = _parse_datetime(raw_started_at)
+    if started_at is None:
+        if "started_at" in payload and raw_started_at not in (None, ""):
+            raise ValueError("开始时间格式无效。")
+        started_at = now
+    raw_ended_at = payload.get("ended_at")
+    ended_at = _parse_datetime(raw_ended_at)
+    if ended_at is None and "ended_at" in payload and raw_ended_at not in (None, ""):
+        raise ValueError("结束时间格式无效。")
+    if started_at is not None and ended_at is not None and started_at > ended_at:
+        raise ValueError("开始时间不能晚于结束时间。")
+    status = _normalize_status(payload.get("status"))
+    completion_method = _incoming_completion_method(payload)
+    session_key, client_revision, operation_id = write_metadata(payload)
+    raw_summary = payload.get("summary")
+    summary_payload = raw_summary if isinstance(raw_summary, dict) else {}
+    duration_edited = _duration_edited(payload, summary_payload)
+    effective_seconds = normalize_effective_seconds(
+        _duration_input(payload),
+        started_at=started_at,
+        ended_at=ended_at if status == "completed" else None,
+        duration_edited=duration_edited,
+        now=now,
+    )
+    existing = session.query(StudySession).filter_by(id=session_id).first()
+    if existing is None and session_key is not None:
+        # A legacy snapshot may have lost its record id during migration. Bind
+        # its first write to the still-open target session instead of creating
+        # a second final record for the same learning target.
+        existing = (
+            session.query(StudySession)
+            .filter(
+                StudySession.session_key == session_key,
+                StudySession.status.in_(ACTIVE_STATUSES),
+                StudySession.deleted_at.is_(None),
+            )
+            .order_by(StudySession.updated_at.desc(), StudySession.started_at.desc())
+            .first()
+        )
+    if existing is not None:
+        # A create call can be a replayed checkpoint. Missing fields must keep
+        # the stored values; otherwise a sparse retry would erase progress.
+        if "status" not in payload:
+            status = existing.status
+        if "completion_method" not in payload:
+            completion_method = existing.completion_method
+        if "started_at" not in payload:
+            started_at = existing.started_at
+        if "ended_at" not in payload:
+            ended_at = existing.ended_at
+        if started_at is not None and ended_at is not None and started_at > ended_at:
+            raise ValueError("开始时间不能晚于结束时间。")
+        if "effective_seconds" not in payload:
+            # A sparse retry is not a duration write. Preserve a historical
+            # value exactly, including a value explicitly edited by the user;
+            # re-capping it here would silently rewrite old records.
+            effective_seconds = int(existing.effective_seconds or 0)
+    if existing is not None:
+        if should_ignore_terminal_write(
+            existing_status=existing.status,
+            existing_completion_method=existing.completion_method,
+            incoming_status=status,
+            incoming_completion_method=completion_method,
+            existing_effective_seconds=int(existing.effective_seconds or 0),
+            incoming_effective_seconds=effective_seconds,
+            incoming_duration_edited=duration_edited,
+            existing_client_revision=int(existing.client_revision or 0),
+            incoming_client_revision=client_revision,
+            existing_operation_id=existing.last_operation_id,
+            incoming_operation_id=operation_id,
+        ):
+            return study_session_json(existing)
+        # A newer create/checkpoint for the same client id updates the existing
+        # row in place.  ``merge`` would reset fields omitted by the checkpoint.
+        if "status" in payload:
+            existing.status = status
+        if "scene" in payload:
+            existing.scene = _normalize_scene(payload.get("scene"))
+        for field, converter in (
+            ("target_type", _normalize_target_type),
+            ("target_id", _int_or_none),
+            ("palace_id", _int_or_none),
+            ("palace_segment_id", _int_or_none),
+            ("mini_palace_id", _int_or_none),
+            ("english_course_id", _int_or_none),
+            ("english_reading_material_id", _int_or_none),
+        ):
+            if field in payload:
+                setattr(existing, field, converter(payload.get(field)))
+        if "title" in payload:
+            existing.title = str(payload.get("title") or "")
+        if "started_at" in payload:
+            parsed_started = _parse_datetime(payload.get("started_at"))
+            if parsed_started is not None:
+                existing.started_at = parsed_started
+        if "ended_at" in payload:
+            existing.ended_at = (
+                _parse_datetime(payload.get("ended_at"))
+                if status == "completed"
+                else None
+            )
+        existing.effective_seconds = effective_seconds
+        if "idle_seconds" in payload:
+            existing.idle_seconds = max(0, int(payload.get("idle_seconds") or 0))
+        if "pause_count" in payload:
+            existing.pause_count = max(0, int(payload.get("pause_count") or 0))
+        if "completion_method" in payload:
+            existing.completion_method = completion_method
+        if "progress" in payload:
+            existing.progress_json = _json_dumps(payload.get("progress") or {}, "{}")
+        if "events" in payload:
+            existing.events_json = _json_dumps(payload.get("events") or [], "[]")
+        if "summary" in payload or duration_edited:
+            current_summary: dict[str, Any] = _json_loads(existing.summary_json, {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
+            existing.summary_json = _json_dumps(
+                {**current_summary, **_summary_with_duration_edit(summary_payload, duration_edited=duration_edited)},
+                "{}",
+            )
+        if session_key is not None:
+            existing.session_key = session_key
+        if client_revision is not None:
+            # Keep the server-side revision monotonic even when an explicit
+            # history edit is based on an older revision.
+            existing.client_revision = max(int(existing.client_revision or 0), client_revision)
+        if operation_id is not None:
+            existing.last_operation_id = operation_id
+        existing.updated_at = now
+        if commit:
+            session.commit()
+            session.refresh(existing)
+        else:
+            session.flush()
+        return study_session_json(existing)
+    summary_payload = _summary_with_duration_edit(summary_payload, duration_edited=duration_edited)
     row = StudySession(
         id=session_id,
-        status=_normalize_status(payload.get("status")),
+        session_key=session_key,
+        client_revision=client_revision or 0,
+        last_operation_id=operation_id,
+        status=status,
         scene=_normalize_scene(payload.get("scene")),
         target_type=_normalize_target_type(payload.get("target_type")),
         target_id=_int_or_none(payload.get("target_id")),
@@ -112,14 +314,14 @@ def create_study_session(
         english_reading_material_id=_int_or_none(payload.get("english_reading_material_id")),
         title=str(payload.get("title") or ""),
         started_at=started_at,
-        ended_at=_normalize_payload_datetime(payload, "ended_at"),
-        effective_seconds=max(0, int(payload.get("effective_seconds") or 0)),
+        ended_at=ended_at if status == "completed" else None,
+        effective_seconds=effective_seconds,
         idle_seconds=max(0, int(payload.get("idle_seconds") or 0)),
         pause_count=max(0, int(payload.get("pause_count") or 0)),
-        completion_method=str(payload.get("completion_method") or ""),
+        completion_method=completion_method,
         progress_json=_json_dumps(payload.get("progress") or {}, "{}"),
         events_json=_json_dumps(payload.get("events") or [{"type": "start", "at": started_at.isoformat()}], "[]"),
-        summary_json=_json_dumps(payload.get("summary") or {}, "{}"),
+        summary_json=_json_dumps(summary_payload, "{}"),
         created_at=now,
         updated_at=now,
     )
@@ -138,9 +340,77 @@ def get_study_session(session: Session, session_id: str) -> dict[str, Any] | Non
 
 
 def patch_study_session(session: Session, session_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    payload = _canonical_payload(payload)
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
+    current_summary: dict[str, Any] = _json_loads(row.summary_json, {})
+    if not isinstance(current_summary, dict):
+        current_summary = {}
+    raw_summary = payload.get("summary")
+    next_summary = raw_summary if isinstance(raw_summary, dict) else {}
+    merged_summary = {**current_summary, **next_summary}
+    incoming_status = (
+        _normalize_status(payload.get("status"), row.status)
+        if "status" in payload
+        else row.status
+    )
+    incoming_completion_method = (
+        _incoming_completion_method(payload, row.completion_method)
+        if "completion_method" in payload or "completionMethod" in payload
+        else row.completion_method
+    )
+    incoming_started_at = row.started_at
+    if "started_at" in payload:
+        parsed = _parse_datetime(payload.get("started_at"))
+        if parsed is None and payload.get("started_at") not in (None, ""):
+            raise ValueError("开始时间格式无效。")
+        if parsed is not None:
+            incoming_started_at = parsed
+    incoming_ended_at = row.ended_at
+    if "ended_at" in payload:
+        parsed = _parse_datetime(payload.get("ended_at"))
+        if parsed is None and payload.get("ended_at") not in (None, ""):
+            raise ValueError("结束时间格式无效。")
+        incoming_ended_at = parsed
+    has_duration_write = "effective_seconds" in payload
+    incoming_effective_seconds = (
+        max(0, int(payload.get("effective_seconds") or 0))
+        if has_duration_write
+        else int(row.effective_seconds or 0)
+    )
+    # Only an explicit flag on this request can opt out of the wall-clock cap.
+    # Do not inherit ``duration_edited`` from the stored summary: a late timer
+    # write must never turn a prior manual edit into a bypass token.
+    duration_edited = _duration_edited(payload, next_summary)
+    if (
+        incoming_started_at is not None
+        and incoming_ended_at is not None
+        and incoming_started_at > incoming_ended_at
+    ):
+        raise ValueError("开始时间不能晚于结束时间。")
+    if has_duration_write:
+        incoming_effective_seconds = normalize_effective_seconds(
+            incoming_effective_seconds,
+            started_at=incoming_started_at,
+            ended_at=incoming_ended_at if incoming_status == "completed" else None,
+            duration_edited=duration_edited,
+            now=utc_now_naive(),
+        )
+    if should_ignore_terminal_write(
+        existing_status=row.status,
+        existing_completion_method=row.completion_method,
+        incoming_status=incoming_status,
+        incoming_completion_method=incoming_completion_method,
+        existing_effective_seconds=int(row.effective_seconds or 0),
+        incoming_effective_seconds=incoming_effective_seconds,
+        incoming_duration_edited=duration_edited,
+        existing_client_revision=int(row.client_revision or 0),
+        incoming_client_revision=write_metadata(payload)[1],
+        existing_operation_id=row.last_operation_id,
+        incoming_operation_id=write_metadata(payload)[2],
+    ):
+        return study_session_json(row)
     mapping: dict[str, tuple[str, Callable[[Any], Any]]] = {
         "status": ("status", lambda value: _normalize_status(value, row.status)),
         "scene": ("scene", _normalize_scene),
@@ -152,7 +422,7 @@ def patch_study_session(session: Session, session_id: str, payload: dict[str, An
         "english_course_id": ("english_course_id", _int_or_none),
         "english_reading_material_id": ("english_reading_material_id", _int_or_none),
         "title": ("title", str),
-        "effective_seconds": ("effective_seconds", lambda value: max(0, int(value or 0))),
+        "effective_seconds": ("effective_seconds", lambda value: incoming_effective_seconds),
         "idle_seconds": ("idle_seconds", lambda value: max(0, int(value or 0))),
         "pause_count": ("pause_count", lambda value: max(0, int(value or 0))),
         "completion_method": ("completion_method", str),
@@ -162,22 +432,27 @@ def patch_study_session(session: Session, session_id: str, payload: dict[str, An
             setattr(row, field, transform(payload[key]))
     if "started_at" in payload:
         parsed = _parse_datetime(payload.get("started_at"))
+        if parsed is None and payload.get("started_at") not in (None, ""):
+            raise ValueError("开始时间格式无效。")
         if parsed is not None:
             row.started_at = parsed
     if "ended_at" in payload:
-        row.ended_at = _parse_datetime(payload.get("ended_at"))
+        row.ended_at = incoming_ended_at if incoming_status == "completed" else None
     if "progress" in payload:
         row.progress_json = _json_dumps(payload.get("progress") or {}, "{}")
     if "summary" in payload:
-        current_summary: dict[str, Any] = _json_loads(row.summary_json, {})
-        raw_summary = payload.get("summary")
-        next_summary = raw_summary if isinstance(raw_summary, dict) else {}
-        if isinstance(current_summary, dict):
-            row.summary_json = _json_dumps({**current_summary, **next_summary}, "{}")
-        else:
-            row.summary_json = _json_dumps(next_summary, "{}")
+        row.summary_json = _json_dumps(merged_summary, "{}")
     if "events" in payload:
         row.events_json = _json_dumps(payload.get("events") or [], "[]")
+    if duration_edited:
+        row.summary_json = _json_dumps({**merged_summary, "duration_edited": True}, "{}")
+    session_key, client_revision, operation_id = write_metadata(payload)
+    if session_key is not None:
+        row.session_key = session_key
+    if client_revision is not None:
+        row.client_revision = max(int(row.client_revision or 0), client_revision)
+    if operation_id is not None:
+        row.last_operation_id = operation_id
     row.updated_at = utc_now_naive()
     session.commit()
     session.refresh(row)
@@ -215,20 +490,69 @@ def complete_study_session(
     *,
     commit: bool = True,
 ) -> dict[str, Any] | None:
+    payload = _canonical_payload(payload)
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
-    ended_at = _parse_datetime(payload.get("ended_at")) or utc_now_naive()
+    raw_ended_at = payload.get("ended_at")
+    ended_at = _parse_datetime(raw_ended_at)
+    if ended_at is None:
+        if "ended_at" in payload and raw_ended_at not in (None, ""):
+            raise ValueError("结束时间格式无效。")
+        ended_at = utc_now_naive()
+    raw_summary = payload.get("summary")
+    summary_payload = raw_summary if isinstance(raw_summary, dict) else {}
+    current_summary: dict[str, Any] = _json_loads(row.summary_json, {})
+    if not isinstance(current_summary, dict):
+        current_summary = {}
+    merged_summary = {**current_summary, **summary_payload}
+    completion_method = _incoming_completion_method(
+        payload, row.completion_method or "manual_complete"
+    )
+    duration_edited = _duration_edited(payload, summary_payload)
+    session_key, client_revision, operation_id = write_metadata(payload)
+    effective_seconds = normalize_effective_seconds(
+        payload.get("effective_seconds", row.effective_seconds or 0),
+        started_at=row.started_at,
+        ended_at=ended_at,
+        duration_edited=duration_edited,
+        now=utc_now_naive(),
+    )
+    if should_ignore_terminal_write(
+        existing_status=row.status,
+        existing_completion_method=row.completion_method,
+        incoming_status="completed",
+        incoming_completion_method=completion_method,
+        existing_effective_seconds=int(row.effective_seconds or 0),
+        incoming_effective_seconds=effective_seconds,
+        incoming_duration_edited=duration_edited,
+        existing_client_revision=int(row.client_revision or 0),
+        incoming_client_revision=client_revision,
+        existing_operation_id=row.last_operation_id,
+        incoming_operation_id=operation_id,
+    ):
+        return study_session_json(row)
     row.status = "completed"
     row.ended_at = ended_at
-    row.effective_seconds = max(0, int(payload.get("effective_seconds", row.effective_seconds or 0)))
+    row.effective_seconds = effective_seconds
     row.idle_seconds = max(0, int(payload.get("idle_seconds", row.idle_seconds or 0)))
     row.pause_count = max(0, int(payload.get("pause_count", row.pause_count or 0)))
-    row.completion_method = str(payload.get("completion_method") or row.completion_method or "manual_complete")
+    row.completion_method = completion_method
     if "progress" in payload:
         row.progress_json = _json_dumps(payload.get("progress") or {}, "{}")
     if "summary" in payload:
-        row.summary_json = _json_dumps(payload.get("summary") or {}, "{}")
+        row.summary_json = _json_dumps(
+            _summary_with_duration_edit(merged_summary, duration_edited=duration_edited),
+            "{}",
+        )
+    elif duration_edited:
+        row.summary_json = _json_dumps({**merged_summary, "duration_edited": True}, "{}")
+    if session_key is not None:
+        row.session_key = session_key
+    if client_revision is not None:
+        row.client_revision = max(int(row.client_revision or 0), client_revision)
+    if operation_id is not None:
+        row.last_operation_id = operation_id
     event = {
         "type": row.completion_method or "complete",
         "at": ended_at.isoformat(),
@@ -252,13 +576,53 @@ def abandon_study_session(
     *,
     commit: bool = True,
 ) -> dict[str, Any] | None:
+    payload = _canonical_payload(payload)
     row = session.query(StudySession).filter_by(id=session_id).first()
     if row is None:
         return None
-    ended_at = _parse_datetime(payload.get("ended_at")) or utc_now_naive()
+    raw_ended_at = payload.get("ended_at")
+    ended_at = _parse_datetime(raw_ended_at)
+    if ended_at is None:
+        if "ended_at" in payload and raw_ended_at not in (None, ""):
+            raise ValueError("结束时间格式无效。")
+        ended_at = utc_now_naive()
+    current_summary: dict[str, Any] = _json_loads(row.summary_json, {})
+    if not isinstance(current_summary, dict):
+        current_summary = {}
+    duration_edited = _duration_edited(payload)
+    session_key, client_revision, operation_id = write_metadata(payload)
+    effective_seconds = normalize_effective_seconds(
+        row.effective_seconds or 0,
+        started_at=row.started_at,
+        ended_at=ended_at,
+        duration_edited=duration_edited,
+        now=utc_now_naive(),
+    )
+    completion_method = str(payload.get("completion_method") or "abandoned")
+    if should_ignore_terminal_write(
+        existing_status=row.status,
+        existing_completion_method=row.completion_method,
+        incoming_status="abandoned",
+        incoming_completion_method=completion_method,
+        existing_effective_seconds=int(row.effective_seconds or 0),
+        incoming_effective_seconds=effective_seconds,
+        incoming_duration_edited=duration_edited,
+        existing_client_revision=int(row.client_revision or 0),
+        incoming_client_revision=client_revision,
+        existing_operation_id=row.last_operation_id,
+        incoming_operation_id=operation_id,
+    ):
+        return study_session_json(row)
     row.status = "abandoned"
     row.ended_at = ended_at
-    row.completion_method = str(payload.get("completion_method") or "abandoned")
+    row.effective_seconds = effective_seconds
+    row.completion_method = completion_method
+    if session_key is not None:
+        row.session_key = session_key
+    if client_revision is not None:
+        row.client_revision = max(int(row.client_revision or 0), client_revision)
+    if operation_id is not None:
+        row.last_operation_id = operation_id
     row.updated_at = utc_now_naive()
     if commit:
         session.commit()

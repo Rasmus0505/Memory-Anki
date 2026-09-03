@@ -12,6 +12,7 @@ import {
   getTimeRecordReadModelApi,
   listStudySessionsApi,
   patchStudySessionApi,
+  serializeStudySessionRecordPayload,
   type StudySessionPayload,
   type StudySessionItem,
   type TimeRecordKind,
@@ -134,15 +135,17 @@ export async function getStudySessionRecordAnalytics(options: {
 }
 
 export async function createStudySessionRecord(record: Omit<TimeSessionRecord, 'id'> & { id?: string }) {
+  const id = record.id ?? crypto.randomUUID()
   const result = await createStudySessionFromTimeRecordApi({
-    ...record,
-    id: record.id ?? crypto.randomUUID(),
+    ...serializeStudySessionRecordPayload({ ...record, id }),
   })
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function persistStudySessionRecord(record: TimeSessionRecord) {
-  const result = await createStudySessionFromTimeRecordApi(record)
+  const result = await createStudySessionFromTimeRecordApi(
+    serializeStudySessionRecordPayload(record),
+  )
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
@@ -167,6 +170,9 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
   const activityTagLabel = readOptionalString(summary.activity_tag_label)
   return {
     id: item.id,
+    sessionKey: item.session_key ?? null,
+    clientRevision: Math.max(0, Math.round(item.client_revision ?? 0)),
+    operationId: item.operation_id ?? item.last_operation_id ?? null,
     kind: studySceneToSessionKind(item.scene),
     palaceId: item.palace_id,
     palaceSegmentId: item.palace_segment_id,
@@ -233,6 +239,11 @@ function timeRecordPatchToStudySessionPatch(
   const patch: Partial<StudySessionPayload> = {}
   if ('kind' in updater && updater.kind) patch.scene = sessionKindToStudyScene(updater.kind, updater.sourceKind)
   if ('sourceKind' in updater) patch.scene = sessionKindToStudyScene(updater.kind || 'practice', updater.sourceKind)
+  if ('sessionKey' in updater) patch.session_key = updater.sessionKey ?? null
+  if ('clientRevision' in updater && updater.clientRevision != null) {
+    patch.client_revision = Math.max(0, Math.round(updater.clientRevision))
+  }
+  if ('operationId' in updater) patch.operation_id = updater.operationId ?? null
   if ('palaceId' in updater) {
     patch.palace_id = updater.palaceId ?? null
     if (updater.palaceId != null) {

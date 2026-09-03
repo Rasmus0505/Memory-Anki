@@ -1,16 +1,19 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db.models import Base, StudySession
 from memory_anki.modules.session.application.study_session_bridge import (
     reclassify_ghost_formal_review_time_sessions,
 )
 from memory_anki.modules.session.application.study_session_service import (
+    complete_study_session,
     create_completed_study_session_from_time_payload,
+    create_study_session,
     list_study_sessions,
     patch_study_session,
     summarize_study_sessions_by_client_source,
@@ -441,3 +444,146 @@ def test_demote_inflated_hang_sessions_caps_segments_and_abandons_overnight():
         assert capped.status == "completed"
         assert capped.effective_seconds == 1500
         assert session.query(StudySession).filter_by(id="edited-keep").one().effective_seconds == 20_000
+
+
+def test_unedited_time_payload_is_capped_to_wall_clock():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        item = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "wall-cap",
+                "kind": "practice",
+                "startedAt": "2026-07-30T08:00:00",
+                "endedAt": "2026-07-30T08:10:00",
+                "effectiveSeconds": 999,
+                "completionMethod": "left_page",
+            },
+        )
+
+        assert item is not None
+        assert item["effective_seconds"] == 600
+
+
+def test_explicit_duration_edit_is_not_capped():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        item = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "wall-cap-edited",
+                "kind": "practice",
+                "startedAt": "2026-07-30T08:00:00",
+                "endedAt": "2026-07-30T08:10:00",
+                "effectiveSeconds": 999,
+                "durationEdited": True,
+                "completionMethod": "manual_complete",
+            },
+        )
+
+        assert item is not None
+        assert item["effective_seconds"] == 999
+
+
+def test_invalid_time_interval_is_rejected():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        try:
+            create_completed_study_session_from_time_payload(
+                session,
+                {
+                    "id": "invalid-wall-range",
+                    "kind": "practice",
+                    "startedAt": "2026-07-30T08:10:00",
+                    "endedAt": "2026-07-30T08:00:00",
+                    "effectiveSeconds": 10,
+                },
+            )
+        except ValueError as exc:
+            assert "开始时间不能晚于结束时间" in str(exc)
+        else:
+            raise AssertionError("expected invalid time interval to be rejected")
+
+
+def test_active_checkpoint_is_capped_against_server_now():
+    SessionLocal = build_session_factory()
+    started_at = utc_now_naive() - timedelta(seconds=10)
+
+    with SessionLocal() as session:
+        item = create_study_session(
+            session,
+            {
+                "id": "active-wall-cap",
+                "status": "active",
+                "scene": "practice",
+                "started_at": started_at.isoformat(),
+                "effective_seconds": 120,
+            },
+        )
+
+        assert item["effective_seconds"] <= 12
+
+
+def test_late_autosave_cannot_reopen_completed_row_and_manual_completion_wins():
+    SessionLocal = build_session_factory()
+
+    with SessionLocal() as session:
+        completed = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "terminal-order",
+                "kind": "practice",
+                "startedAt": "2026-07-30T08:00:00",
+                "endedAt": "2026-07-30T08:10:00",
+                "effectiveSeconds": 600,
+                "completionMethod": "left_page",
+            },
+        )
+        assert completed is not None
+
+        stale = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "terminal-order",
+                "kind": "practice",
+                "startedAt": "2026-07-30T08:00:00",
+                "endedAt": "2026-07-30T08:11:00",
+                "effectiveSeconds": 660,
+                "completionMethod": "saved",
+            },
+        )
+        assert stale is not None
+        assert stale["status"] == "completed"
+        assert stale["completion_method"] == "left_page"
+
+        final = complete_study_session(
+            session,
+            "terminal-order",
+            {
+                "ended_at": "2026-07-30T08:09:00",
+                "effective_seconds": 500,
+                "completion_method": "manual_complete",
+            },
+        )
+        assert final is not None
+        assert final["completion_method"] == "manual_complete"
+        assert final["effective_seconds"] == 500
+
+        older_same_priority = create_completed_study_session_from_time_payload(
+            session,
+            {
+                "id": "terminal-order",
+                "kind": "practice",
+                "startedAt": "2026-07-30T08:00:00",
+                "endedAt": "2026-07-30T08:08:00",
+                "effectiveSeconds": 480,
+                "completionMethod": "left_page",
+            },
+        )
+        assert older_same_priority is not None
+        persisted = session.query(StudySession).filter_by(id="terminal-order").one()
+        assert persisted.completion_method == "manual_complete"
+        assert persisted.effective_seconds == 500

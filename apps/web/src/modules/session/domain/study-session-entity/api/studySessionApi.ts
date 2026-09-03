@@ -30,6 +30,14 @@ export interface StudySessionEvent {
 export interface StudySessionItem {
   id: string
   status: StudySessionStatus
+  /** Stable target identity used to merge page scenes into one session. */
+  session_key?: string | null
+  /** Monotonic client-side write revision. Older/equal writes are ignored. */
+  client_revision?: number
+  /** Storage spelling retained for audit/debug projections. */
+  last_operation_id?: string | null
+  /** Request spelling mirrored by the API response. */
+  operation_id?: string | null
   scene: StudySessionScene | string
   target_type: StudySessionTargetType | string
   target_id: number | null
@@ -55,6 +63,12 @@ export interface StudySessionItem {
 
 export interface StudySessionPayload {
   id?: string
+  /** Stable target identity used to merge page scenes into one session. */
+  session_key?: string | null
+  /** Monotonic client-side write revision. */
+  client_revision?: number | null
+  /** Idempotency identity for this logical write. */
+  operation_id?: string | null
   status?: StudySessionStatus
   scene: StudySessionScene | string
   target_type?: StudySessionTargetType | string
@@ -77,6 +91,14 @@ export interface StudySessionPayload {
 
 export interface StudySessionRecordPayload {
   id?: string
+  /** Camel-case record facade fields are normalized to the API names below. */
+  sessionKey?: string | null
+  clientRevision?: number | null
+  operationId?: string | null
+  /** Accepted for callers that already use the wire contract. */
+  session_key?: string | null
+  client_revision?: number | null
+  operation_id?: string | null
   kind: string
   palaceId?: number | null
   palaceSegmentId?: number | null
@@ -213,10 +235,135 @@ function listPath(options?: StudySessionListOptions) {
   return suffix ? `/study-sessions?${suffix}` : '/study-sessions'
 }
 
+function createOperationId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}:${crypto.randomUUID()}`
+  }
+  return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`
+}
+
+function readPayloadField<T>(
+  payload: Record<string, unknown>,
+  snakeName: string,
+  camelName: string,
+) {
+  if (Object.prototype.hasOwnProperty.call(payload, snakeName)) {
+    return payload[snakeName] as T
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, camelName)) {
+    return payload[camelName] as T
+  }
+  return undefined
+}
+
+/**
+ * Normalize version metadata at the session API boundary.
+ *
+ * Timer records are still represented in camelCase internally for compatibility,
+ * while the HTTP contract is snake_case. Keeping this conversion here means
+ * beacon/queue callers and ordinary fetch callers can share the same payload
+ * semantics without each page reimplementing it.
+ */
+export function normalizeStudySessionWritePayload<T extends object>(
+  payload: T & { id?: unknown },
+  options?: { operationId?: string | null; defaultOperationId?: string },
+) {
+  const source = payload as Record<string, unknown>
+  const {
+    sessionKey: _sessionKey,
+    clientRevision: _clientRevision,
+    operationId: _operationId,
+    ...wirePayload
+  } = source
+  const sessionKey = readPayloadField<string | null>(source, 'session_key', 'sessionKey')
+  const clientRevision = readPayloadField<number | null>(source, 'client_revision', 'clientRevision')
+  const operationId =
+    readPayloadField<string | null>(source, 'operation_id', 'operationId') ??
+    options?.operationId ??
+    options?.defaultOperationId
+
+  return {
+    ...wirePayload,
+    ...(sessionKey !== undefined ? { session_key: sessionKey } : {}),
+    ...(clientRevision !== undefined ? { client_revision: clientRevision } : {}),
+    ...(operationId ? { operation_id: operationId } : {}),
+  }
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>) {
+  return values.find((value) => typeof value === 'string' && value.trim().length > 0) ?? null
+}
+
+function deriveRecordSessionKey(source: Record<string, unknown>, id: string) {
+  const explicit = firstNonBlank(
+    readPayloadField<string | null>(source, 'session_key', 'sessionKey'),
+  )
+  if (explicit) return explicit
+  const sourceKind = readPayloadField<string | null>(source, 'source_kind', 'sourceKind')
+  const palaceId = readPayloadField<number | null>(source, 'palace_id', 'palaceId')
+  const englishCourseId = readPayloadField<number | null>(source, 'english_course_id', 'englishCourseId')
+  if (sourceKind === 'english' && englishCourseId != null) return `english:${englishCourseId}`
+  if (sourceKind === 'english_reading') {
+    const materialId = readPayloadField<number | null>(
+      source,
+      'english_reading_material_id',
+      'englishReadingMaterialId',
+    )
+    if (materialId != null) return `english-reading:${materialId}`
+  }
+  if (palaceId != null) return `palace:${palaceId}`
+  return `record:${id}`
+}
+
+/** Convert a local camelCase timer record to the canonical wire payload. */
+export function serializeStudySessionRecordPayload<T extends object>(
+  record: T & { id?: unknown },
+) {
+  const source = record as Record<string, unknown>
+  const id = String(source.id ?? createOperationId('record'))
+  const rawRevision = readPayloadField<number | null>(source, 'client_revision', 'clientRevision')
+  const revision = rawRevision == null || !Number.isFinite(Number(rawRevision))
+    ? 1
+    : Math.max(1, Math.round(Number(rawRevision)))
+  const explicitOperation = firstNonBlank(
+    readPayloadField<string | null>(source, 'operation_id', 'operationId'),
+  )
+  const operationId = explicitOperation ?? `timer:${id}:r${revision}`
+  const normalized = normalizeStudySessionWritePayload({ ...source, id }, {
+    operationId,
+  })
+  const sessionKey = deriveRecordSessionKey(source, id)
+  const durationEdited = Boolean(
+    readPayloadField<boolean | null>(source, 'duration_edited', 'durationEdited'),
+  )
+  const {
+    durationEdited: _durationEdited,
+    ...withoutCamelDurationEdit
+  } = normalized as Record<string, unknown>
+  return {
+    ...withoutCamelDurationEdit,
+    id,
+    session_key: sessionKey,
+    client_revision: revision,
+    operation_id: operationId,
+    ...(durationEdited ? { duration_edited: true } : {}),
+  }
+}
+
+function normalizeStudySessionPayload(
+  payload: Partial<StudySessionPayload>,
+  operationPrefix: string,
+) {
+  const normalized = normalizeStudySessionWritePayload(payload, {
+    defaultOperationId: payload.operation_id ?? createOperationId(operationPrefix),
+  })
+  return normalized as StudySessionPayload
+}
+
 export function createStudySessionApi(payload: StudySessionPayload) {
   return request<{ item: StudySessionItem }>('/study-sessions', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizeStudySessionPayload(payload, 'study-session:create')),
     persistence: {
       resourceKey: `study-session:${payload.id ?? payload.scene}:create`,
       description: 'Create study session',
@@ -266,9 +413,10 @@ export function patchStudySessionApi(
   payload: Partial<StudySessionPayload>,
   options?: { persistence?: PersistedRequestInit['persistence'] },
 ) {
+  const normalizedPayload = normalizeStudySessionPayload(payload, `study-session:${id}:patch`)
   return request<{ item: StudySessionItem }>(`/study-sessions/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
     persistence: options?.persistence ?? {
         resourceKey: `study-session:${id}`,
         coalesceKey: `study-session:${id}`,
@@ -291,9 +439,10 @@ export function appendStudySessionEventsApi(id: string, events: StudySessionEven
 }
 
 export function completeStudySessionApi(id: string, payload: Partial<StudySessionPayload>) {
+  const normalizedPayload = normalizeStudySessionPayload(payload, `study-session:${id}:complete`)
   return request<{ item: StudySessionItem }>(`/study-sessions/${id}/complete`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
     persistence: {
       resourceKey: `study-session:${id}:complete`,
       description: 'Complete study session',
@@ -303,9 +452,10 @@ export function completeStudySessionApi(id: string, payload: Partial<StudySessio
 }
 
 export function abandonStudySessionApi(id: string, payload: Partial<StudySessionPayload>) {
+  const normalizedPayload = normalizeStudySessionPayload(payload, `study-session:${id}:abandon`)
   return request<{ item: StudySessionItem }>(`/study-sessions/${id}/abandon`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
     persistence: {
       resourceKey: `study-session:${id}:abandon`,
       description: 'Abandon study session',
@@ -326,23 +476,41 @@ export function getActiveStudySessionByTargetApi(params: {
   return request<{ item: StudySessionItem | null }>(`/study-sessions/by-target?${query}`)
 }
 
-export function createStudySessionFromTimeRecordApi(
-  payload: object & { id?: unknown },
+export function createStudySessionFromTimeRecordApi<T extends object>(
+  payload: T & { id?: unknown },
   options?: {
     mutationId?: string
     persistence?: PersistedRequestInit['persistence']
   },
 ) {
+  const payloadSource = payload as Record<string, unknown>
+  const resourceKey = `study-session:time-record:${String(payloadSource.id ?? '')}`
+  const operationId = firstNonBlank(
+    readPayloadField<string | null>(payloadSource, 'operation_id', 'operationId'),
+    options?.mutationId,
+    `timer:${String(payloadSource.id ?? 'new')}:${String(
+      readPayloadField<string | null>(payloadSource, 'completion_method', 'completionMethod') ??
+      'completed',
+    )}`,
+  )
+  const source = payloadSource
+  const normalizedPayload = {
+    ...normalizeStudySessionWritePayload(payload, { operationId }),
+    ...(readPayloadField<number | null>(source, 'client_revision', 'clientRevision') === undefined
+      ? { client_revision: 1 }
+      : {}),
+  }
   return request<{ item: StudySessionItem | null }>('/study-sessions/from-time-record', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizedPayload),
     headers: options?.mutationId
       ? {
           'X-Memory-Anki-Mutation-ID': options.mutationId,
         }
       : undefined,
     persistence: options?.persistence ?? {
-        resourceKey: `study-session:time-record:${String(payload.id ?? '')}`,
+        resourceKey,
+        coalesceKey: resourceKey,
         description: 'Create study session from time record',
         replayMode: 'auto',
       },
@@ -366,7 +534,7 @@ export async function createStudySessionRecordApi(
         }
       : options.persistence
   const result = await createStudySessionFromTimeRecordApi(
-    { ...record, id },
+    serializeStudySessionRecordPayload({ ...record, id }),
     {
       mutationId: options?.mutationId,
       persistence,

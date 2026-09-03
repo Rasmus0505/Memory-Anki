@@ -26,9 +26,16 @@ class StudySession(Base):
         ),
         Index("ix_study_sessions_palace_started", "palace_id", "started_at"),
         Index("ix_study_sessions_deleted_started", "deleted_at", "started_at"),
+        Index("ix_study_sessions_session_key", "session_key", "status", "updated_at"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Stable client-side target identity.  Older rows are backfilled from id.
+    session_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    # Monotonic client revision used to reject late autosaves/checkpoints.
+    client_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Last mutation operation accepted for this row; repeated operations are idempotent.
+    last_operation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     scene: Mapped[str] = mapped_column(String(40), nullable=False)
     target_type: Mapped[str] = mapped_column(String(40), nullable=False, default="none")

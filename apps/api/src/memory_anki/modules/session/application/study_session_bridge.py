@@ -28,14 +28,28 @@ def _normalize_client_source(value: Any) -> str | None:
     return None
 
 
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 def _is_ghost_formal_review_time_payload(payload: dict[str, Any]) -> bool:
     kind = str(payload.get("kind") or "practice")
     if kind != "review":
         return False
-    method = str(
-        payload.get("completionMethod") or payload.get("completion_method") or ""
-    )
-    return method in GHOST_FORMAL_REVIEW_COMPLETION_METHODS
+    raw_summary = payload.get("summary")
+    summary = raw_summary if isinstance(raw_summary, dict) else {}
+    # Formal review records are authoritative only when the review submit
+    # endpoint supplied its completion receipt. A timer payload, regardless of
+    # its completion label, is an ordinary practice interval. Explicit history
+    # edits remain supported through durationEdited=true.
+    if isinstance(summary.get("completion_receipt"), dict):
+        return False
+    duration_edited = payload.get("durationEdited", payload.get("duration_edited"))
+    if _coerce_bool(duration_edited):
+        return False
+    return True
 
 
 def create_completed_study_session_from_time_payload(
@@ -73,10 +87,14 @@ def create_completed_study_session_from_time_payload(
         target_type, target_id = "palace", palace_id
     raw_summary = payload.get("summary")
     summary_payload = raw_summary if isinstance(raw_summary, dict) else {}
+    duration_edited = payload.get(
+        "durationEdited",
+        payload.get("duration_edited", summary_payload.get("duration_edited", False)),
+    )
     summary_payload = {
         **summary_payload,
         "scene_segments": payload.get("sceneSegments") or payload.get("scene_segments") or [],
-        "duration_edited": bool(payload.get("durationEdited", payload.get("duration_edited", False))),
+        "duration_edited": _coerce_bool(duration_edited),
     }
     activity_tag = _normalize_activity_tag(
         payload.get("activityTag")
@@ -112,6 +130,9 @@ def create_completed_study_session_from_time_payload(
     completion_method = str(
         payload.get("completionMethod") or payload.get("completion_method") or "manual_complete"
     )
+    session_key = payload.get("sessionKey") or payload.get("session_key")
+    client_revision = payload.get("clientRevision", payload.get("client_revision"))
+    operation_id = payload.get("operationId", payload.get("operation_id"))
     # Background autosave is a crash checkpoint, not a finished study record.
     # Writing status=completed made "保存结束" ghosts appear in the time-record list
     # whenever the client remounted with a new id before a real leave/complete.
@@ -120,6 +141,9 @@ def create_completed_study_session_from_time_payload(
         session,
         {
             "id": str(payload.get("id") or uuid4()),
+            "session_key": session_key,
+            "client_revision": client_revision,
+            "operation_id": operation_id,
             "status": status,
             "scene": scene,
             "target_type": target_type,
