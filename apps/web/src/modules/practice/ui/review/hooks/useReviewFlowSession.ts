@@ -2,7 +2,11 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import { useRevealSession } from '@/modules/memory/public'
-import { useTimedSession } from '@/shared/hooks/useTimedSession'
+import {
+  shouldAutoStartOnPageEnter,
+  useTimedSession,
+} from '@/shared/hooks/useTimedSession'
+import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { revealRemainingNodes, type ReviewFlowSnapshot } from '@/modules/memory/public'
 import { useReviewFeedback } from '@/modules/memory/public'
 import type { RevealFlowMode } from '@/modules/memory/public'
@@ -31,8 +35,6 @@ interface UseReviewFlowSessionOptions {
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = []
 const EMPTY_FOCUS_NODE_UIDS: string[] = []
-const IMMERSIVE_REVIEW_AUTO_PAUSE_MS = 24 * 60 * 60 * 1000
-
 export function useReviewFlowSession({
   title,
   palaceId,
@@ -51,16 +53,19 @@ export function useReviewFlowSession({
 }: UseReviewFlowSessionOptions) {
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   const [fullscreen, setFullscreen] = React.useState(false)
+  const sessionKey =
+    palaceId != null && Number.isFinite(palaceId)
+      ? `palace:${palaceId}`
+      : `palace:pending:${persistKey ?? sessionKind}`
   const timer = useTimedSession({
+    sessionKey,
     kind: sessionKind,
     title,
     palaceId,
     sourceKind: palaceId != null ? 'palace' : null,
-    autoPauseMs: fullscreen ? IMMERSIVE_REVIEW_AUTO_PAUSE_MS : undefined,
     persistKey,
     persistCompletionRecord: sessionKind !== 'review',
   })
-  const registerTimerActivity = timer.registerActivity
   useGlobalTimerRegistration({
     scene: persistProgress ? 'practice' : 'review',
     title,
@@ -89,7 +94,6 @@ export function useReviewFlowSession({
   })
   const completionPendingRef = React.useRef(false)
   const autoStartedSessionRef = React.useRef<string | null>(null)
-  const previousFullscreenRef = React.useRef(false)
   const timerRef = React.useRef(timer)
   const hardUnloadRef = React.useRef(false)
   const lastSnapshotPayloadRef = React.useRef('')
@@ -100,15 +104,16 @@ export function useReviewFlowSession({
 
   React.useEffect(() => {
     if (!isActive || completionPendingRef.current) return
-    const sessionKey = `${persistKey ?? `${sessionKind}:${palaceId ?? 'none'}`}:${becameActiveAt ?? 'initial'}`
-    if (autoStartedSessionRef.current === sessionKey) return
-    autoStartedSessionRef.current = sessionKey
-    if (timer.status === 'idle') {
+    const autoStartToken = `${sessionKey}:${becameActiveAt ?? 'initial'}`
+    if (autoStartedSessionRef.current === autoStartToken) return
+    if (
+      timer.status === 'idle' &&
+      shouldAutoStartOnPageEnter(readTimerAutomationConfig())
+    ) {
+      autoStartedSessionRef.current = autoStartToken
       timer.start({ source: 'review_route_ready' })
-    } else if (timer.status === 'paused') {
-      timer.resume({ source: 'review_route_ready' })
     }
-  }, [becameActiveAt, isActive, palaceId, persistKey, sessionKind, timer])
+  }, [becameActiveAt, isActive, sessionKey, timer])
 
   React.useEffect(() => {
     if (isActive) return
@@ -116,19 +121,13 @@ export function useReviewFlowSession({
   }, [isActive])
 
   React.useEffect(() => {
-    if (fullscreen !== previousFullscreenRef.current) {
-      previousFullscreenRef.current = fullscreen
-      registerTimerActivity('practice_interaction', {
-        source: fullscreen ? 'review_fullscreen_enter' : 'review_fullscreen_exit',
-      })
-    }
     if (!fullscreen) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = previousOverflow
     }
-  }, [fullscreen, registerTimerActivity])
+  }, [fullscreen])
 
   React.useEffect(() => {
     onFullscreenChange?.(fullscreen)
@@ -279,19 +278,17 @@ export function useReviewFlowSession({
   const handleNodeClick = React.useCallback(
     (nodes: MindMapSelection[]) => {
       if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'left_click' })
       reveal.handleNodeClick(nodes)
     },
-    [reveal.completed, reveal.handleNodeClick, timer.registerActivity],
+    [reveal.completed, reveal.handleNodeClick],
   )
 
   const handleNodeContextMenu = React.useCallback(
     (nodes: MindMapSelection[]) => {
       if (reveal.completed) return
-      timer.registerActivity('practice_interaction', { source: 'right_click' })
       reveal.handleNodeContextMenu(nodes)
     },
-    [reveal.completed, reveal.handleNodeContextMenu, timer.registerActivity],
+    [reveal.completed, reveal.handleNodeContextMenu],
   )
 
   const handleNodeHover = React.useCallback(
@@ -306,31 +303,24 @@ export function useReviewFlowSession({
     (fallbackNodeId: string | null = null): boolean => {
       if (reveal.completed) return false
       const handled = reveal.handleBulkRevealSubtree(fallbackNodeId)
-      if (handled) {
-        timer.registerActivity('practice_interaction', { source: 'bulk_flip_subtree' })
-      }
       return handled
     },
-    [reveal.completed, reveal.handleBulkRevealSubtree, timer.registerActivity],
+    [reveal.completed, reveal.handleBulkRevealSubtree],
   )
 
   const handleBulkRevealDirectChildren = React.useCallback(
     (fallbackNodeId: string | null = null): boolean => {
       if (reveal.completed) return false
       const handled = reveal.handleBulkRevealDirectChildren(fallbackNodeId)
-      if (handled) {
-        timer.registerActivity('practice_interaction', { source: 'bulk_flip_direct_children' })
-      }
       return handled
     },
-    [reveal.completed, reveal.handleBulkRevealDirectChildren, timer.registerActivity],
+    [reveal.completed, reveal.handleBulkRevealDirectChildren],
   )
 
   const handleSpacePour = React.useCallback(() => {
     if (reveal.completed || revealMode !== 'segment-checkpoint') return
-    timer.registerActivity('practice_interaction', { source: 'segment_checkpoint_space_pour' })
     reveal.handleSpacePour()
-  }, [reveal.completed, reveal.handleSpacePour, revealMode, timer.registerActivity])
+  }, [reveal.completed, reveal.handleSpacePour, revealMode])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   const handleRestart = React.useCallback(async () => {
@@ -339,7 +329,6 @@ export function useReviewFlowSession({
     reveal.reset()
     feedback.emitManualEvent('session_reset')
     timer.reset()
-    timer.registerActivity('practice_interaction', { source: 'restart' })
   }, [feedback, onRestart, reveal, timer])
 
   const screenGlowClass =

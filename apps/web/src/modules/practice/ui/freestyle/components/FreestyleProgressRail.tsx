@@ -1,23 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
+  palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
   type FreestyleProgressSummary,
-  type FreestyleSegmentTone,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import type { SessionStatus } from '@/shared/hooks/timedSessionModel'
 import { cn } from '@/shared/lib/utils'
 
 /** Collapse the expanded clock after a glance so seconds stop pulling focus. */
 const TIMER_PEEK_MS = 4_000
-
-const SEGMENT_TONE_CLASS: Record<FreestyleSegmentTone, string> = {
-  done: 'bg-emerald-400/85',
-  retry: 'bg-amber-300/85',
-  current: 'bg-zinc-100',
-  pending: 'bg-white/14',
-}
 
 const TIMER_DOT_CLASS: Record<'running' | 'paused' | 'idle', string> = {
   running: 'bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.18)]',
@@ -90,6 +83,7 @@ export function FreestyleProgressRail({
               key={segment.cardId}
               data-testid="freestyle-progress-segment"
               data-tone={segment.tone}
+              data-palace-id={segment.palaceId == null ? '' : String(segment.palaceId)}
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
               aria-hidden
               className={cn(
@@ -97,7 +91,7 @@ export function FreestyleProgressRail({
                 index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
                   ? 'ml-0.5'
                   : null,
-                segment.palaceDone ? 'bg-emerald-400' : SEGMENT_TONE_CLASS[segment.tone],
+                palaceAccentToneClass(segment.palaceId, segment.tone),
               )}
             />
           ))

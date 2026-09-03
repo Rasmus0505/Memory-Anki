@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FreestyleProgressSummary } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import {
+  palaceAccent,
+  palaceAccentToneClass,
+  type FreestyleProgressSummary,
+} from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { FreestyleProgressRail } from './FreestyleProgressRail'
 
 function summary(overrides: Partial<FreestyleProgressSummary> = {}): FreestyleProgressSummary {
@@ -46,6 +50,40 @@ describe('FreestyleProgressRail', () => {
     expect(segments).toHaveLength(4)
     expect(segments.map((node) => node.getAttribute('data-tone')))
       .toEqual(['done', 'retry', 'current', 'pending'])
+  })
+
+  it('colors segments by palace identity, not a whole-palace emerald override', () => {
+    renderRail({
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: true },
+          { cardId: 'two', tone: 'done', palaceId: 1, palaceDone: true },
+          { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false },
+          { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false },
+          { cardId: 'five', tone: 'pending', palaceId: null, palaceDone: false },
+        ],
+      }),
+    })
+
+    const segments = screen.getAllByTestId('freestyle-progress-segment')
+    expect(segments.map((node) => node.getAttribute('data-palace-id')))
+      .toEqual(['1', '1', '2', '2', ''])
+
+    expect(palaceAccent(1)).not.toBe(palaceAccent(2))
+    expect(palaceAccent(null)).toBe('neutral')
+
+    // Same palace + same tone → identical fill class.
+    expect(segments[0].className).toContain(palaceAccentToneClass(1, 'done'))
+    expect(segments[1].className).toContain(palaceAccentToneClass(1, 'done'))
+    expect(segments[0].className).toBe(segments[1].className)
+
+    // Different palaces keep distinct accents even when tones match.
+    expect(segments[3].className).toContain(palaceAccentToneClass(2, 'pending'))
+    expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
+
+    // Done no longer forces emerald via palaceDone.
+    expect(segments[0].className).not.toContain('bg-emerald-400')
+    expect(segments[4].className).toContain(palaceAccentToneClass(null, 'pending'))
   })
 
   it('speaks the counts the decorative rail cannot', () => {

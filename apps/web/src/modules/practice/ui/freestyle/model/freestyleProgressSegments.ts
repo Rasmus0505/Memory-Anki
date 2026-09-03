@@ -40,11 +40,10 @@ export interface FreestyleProgressSummary {
 }
 
 /**
- * A 2px rail cannot carry six colors legibly, so the plan's statuses collapse:
- * `excluded` leaves the rail entirely (it is not part of the round, and drawing it
- * would make progress look artificially slow), and `stale` is too transient to earn
- * its own hue. `current` stays distinct because restudy re-insertion reorders the
- * feed mid-round — without it, "where am I" is lost in the shuffle.
+ * Palace identity is the primary rail hue; tone only modulates opacity / overlay.
+ * Plan statuses still collapse: `excluded` leaves the rail (not part of the round),
+ * and `stale` is too transient for its own treatment. `current` stays distinct
+ * because restudy re-insertion reorders the feed mid-round.
  */
 export function segmentTone(
   status: FreestyleRoundPlanCardStatus,
@@ -61,6 +60,101 @@ export function segmentTone(
     default:
       return 'pending'
   }
+}
+
+/** Fixed accents readable on the dark immersive chrome (~8 slots). */
+const PALACE_ACCENT_KEYS = [
+  'sky',
+  'violet',
+  'rose',
+  'teal',
+  'indigo',
+  'green',
+  'fuchsia',
+  'pink',
+] as const
+
+export type PalaceAccentKey = (typeof PALACE_ACCENT_KEYS)[number] | 'neutral'
+
+type AccentToneClass = Record<FreestyleSegmentTone, string>
+
+/** pending: dim · current: bright · done: strong fill · retry: palace + amber mix */
+const PALACE_ACCENT_TONE_CLASS: Record<(typeof PALACE_ACCENT_KEYS)[number], AccentToneClass> = {
+  sky: {
+    pending: 'bg-sky-400/32',
+    current: 'bg-sky-300',
+    done: 'bg-sky-400/90',
+    retry: 'bg-[color-mix(in_srgb,#38bdf8_55%,#fcd34d_45%)]',
+  },
+  violet: {
+    pending: 'bg-violet-400/32',
+    current: 'bg-violet-300',
+    done: 'bg-violet-400/90',
+    retry: 'bg-[color-mix(in_srgb,#a78bfa_55%,#fcd34d_45%)]',
+  },
+  rose: {
+    pending: 'bg-rose-400/32',
+    current: 'bg-rose-300',
+    done: 'bg-rose-400/90',
+    retry: 'bg-[color-mix(in_srgb,#fb7185_55%,#fcd34d_45%)]',
+  },
+  teal: {
+    pending: 'bg-teal-400/32',
+    current: 'bg-teal-300',
+    done: 'bg-teal-400/90',
+    retry: 'bg-[color-mix(in_srgb,#2dd4bf_55%,#fcd34d_45%)]',
+  },
+  indigo: {
+    pending: 'bg-indigo-400/32',
+    current: 'bg-indigo-300',
+    done: 'bg-indigo-400/90',
+    retry: 'bg-[color-mix(in_srgb,#818cf8_55%,#fcd34d_45%)]',
+  },
+  green: {
+    pending: 'bg-green-400/32',
+    current: 'bg-green-300',
+    done: 'bg-green-400/90',
+    retry: 'bg-[color-mix(in_srgb,#4ade80_55%,#fcd34d_45%)]',
+  },
+  fuchsia: {
+    pending: 'bg-fuchsia-400/32',
+    current: 'bg-fuchsia-300',
+    done: 'bg-fuchsia-400/90',
+    retry: 'bg-[color-mix(in_srgb,#e879f9_55%,#fcd34d_45%)]',
+  },
+  pink: {
+    pending: 'bg-pink-400/32',
+    current: 'bg-pink-300',
+    done: 'bg-pink-400/90',
+    retry: 'bg-[color-mix(in_srgb,#f472b6_55%,#fcd34d_45%)]',
+  },
+}
+
+const NEUTRAL_ACCENT_TONE_CLASS: AccentToneClass = {
+  pending: 'bg-white/14',
+  current: 'bg-zinc-100',
+  done: 'bg-zinc-400/85',
+  retry: 'bg-amber-300/90',
+}
+
+/**
+ * Stable palaceId → fixed palette slot. null → neutral fallback.
+ * Same id always maps to the same accent; different ids prefer different slots.
+ */
+export function palaceAccent(palaceId: number | null): PalaceAccentKey {
+  if (palaceId == null) return 'neutral'
+  const slot = ((palaceId % PALACE_ACCENT_KEYS.length) + PALACE_ACCENT_KEYS.length) % PALACE_ACCENT_KEYS.length
+  return PALACE_ACCENT_KEYS[slot]
+}
+
+/** Tailwind fill for a segment: palace accent modulated by tone. */
+export function palaceAccentToneClass(
+  palaceId: number | null,
+  tone: FreestyleSegmentTone,
+): string {
+  const accent = palaceAccent(palaceId)
+  if (accent === 'neutral') return NEUTRAL_ACCENT_TONE_CLASS[tone]
+  return PALACE_ACCENT_TONE_CLASS[accent][tone]
 }
 
 export function buildFreestyleProgressSummary(

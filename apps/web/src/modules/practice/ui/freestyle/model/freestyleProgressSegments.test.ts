@@ -4,6 +4,8 @@ import { createRoundPlan, updateRoundPlanCard } from '@/modules/practice/domain/
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
+  palaceAccent,
+  palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
   segmentTone,
@@ -30,15 +32,30 @@ function plan(cards: FreestyleCard[]) {
 }
 
 describe('segmentTone', () => {
-  it('collapses the plan statuses into the four tones a 2px rail can carry', () => {
+  it('collapses plan statuses into tones; palace accent carries identity hue', () => {
     expect(segmentTone('active')).toBe('current')
     expect(segmentTone('completed')).toBe('done')
     expect(segmentTone('retry')).toBe('retry')
     expect(segmentTone('pending')).toBe('pending')
-    // Too transient to earn its own hue.
+    // Too transient for its own treatment.
     expect(segmentTone('stale')).toBe('pending')
     // Not part of the round: drawing it would make progress look artificially slow.
     expect(segmentTone('excluded')).toBeNull()
+  })
+})
+
+describe('palaceAccent', () => {
+  it('maps the same palaceId to a stable accent and null to neutral', () => {
+    expect(palaceAccent(1)).toBe(palaceAccent(1))
+    expect(palaceAccent(null)).toBe('neutral')
+    expect(palaceAccent(1)).not.toBe(palaceAccent(2))
+  })
+
+  it('reuses a fixed palette so tone only changes opacity/overlay classes', () => {
+    expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(1, 'current'))
+    expect(palaceAccentToneClass(1, 'done')).not.toContain('bg-emerald-400')
+    expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
+    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/14')
   })
 })
 

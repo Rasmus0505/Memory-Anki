@@ -34,15 +34,12 @@ import {
   resolveFeedbackChannels,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { toast } from '@/shared/feedback/toast'
-import type { useTimedSession } from '@/shared/hooks/useTimedSession'
 
-type FreestyleTimer = ReturnType<typeof useTimedSession>
 type PromptForAiOptions = ReturnType<typeof useAiRunConfigDialog>['promptForAiOptions']
 
 export function useFreestyleQuizFlow({
   mode,
   queueRef,
-  timer,
   reducedMotion,
   promptForAiOptions,
   updateFeedQuestion,
@@ -55,7 +52,6 @@ export function useFreestyleQuizFlow({
 }: {
   mode: FreestyleMode
   queueRef: MutableRefObject<FreestyleCard[]>
-  timer: FreestyleTimer
   reducedMotion: boolean
   promptForAiOptions: PromptForAiOptions
   updateFeedQuestion: (question: FreestyleQuizCard['question']) => void
@@ -153,9 +149,6 @@ export function useFreestyleQuizFlow({
     shortAnswerEntrypointKey: 'freestyle-short-answer-feedback',
     resultFeedbackMode: 'external',
     emitFeedback: dispatchGlobalFeedback,
-    onChoiceStart: () => {
-      timer.registerActivity('practice_interaction', { source: 'freestyle_choice' })
-    },
   })
 
   const handleChoiceResolve = useCallback(
