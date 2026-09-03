@@ -1,883 +1,771 @@
 import * as React from 'react'
-import { useStableTimedSessionController } from './useStableTimedSessionController'
+import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
+import {
+  buildTimedSessionStorageKey,
+  clearPersistedTimedSessionSnapshot,
+} from '@/shared/hooks/timedSessionStorage'
+import {
+  buildPersistedTimedSessionSnapshot,
+  writePersistedTimedSessionSnapshot,
+} from '@/shared/hooks/timedSessionSnapshot'
+import {
+  buildTimedSessionController,
+  createStableRecordId,
+  DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+  normalizeSnapshot,
+  nowIso,
+  type GlowState,
+  type SessionSceneSegment,
+  type SessionStatus,
+  type TimedSessionFocusRoundState,
+  type TimedSessionMeta,
+  type TimedSessionOptions,
+  type TimedSessionPauseReason,
+} from '@/shared/hooks/timedSessionModel'
 import {
   removePendingTimeRecordRecovery,
   type SessionCompletionMethod,
   type SessionEventRecord,
   type TimeSessionRecord,
 } from '@/modules/session/domain/session-entity/model'
+import { persistTimedSessionRecord } from './timedSessionRecordBuilder'
+import { useStableTimedSessionController } from './useStableTimedSessionController'
 import {
-  readTimerAutomationConfig,
-  type TimerAutomationConfig,
-} from '@/shared/components/session/timer-automation-config'
-import {
-  advanceTickState,
-  buildTimedSessionController,
-  createStableRecordId,
-  DEFAULT_TIMED_SESSION_FOCUS_ROUND,
-  nowIso,
-  resolveTimedSessionAutomation,
-  type ActiveSceneSegmentSnapshot,
-  type GlowState,
-  type PersistedSessionStatus,
-  type RestorableTimedSessionSnapshot,
-  type SessionSceneSegment,
-  type SessionStatus,
-  type TimedSessionMeta,
-  type TimedSessionFocusRoundState,
-  type TimedSessionOptions,
-} from '@/shared/hooks/timedSessionModel'
-import {
-  buildTimedSessionStorageKey,
-  clearCompetingTimedSessionSnapshots,
-  clearPersistedTimedSessionSnapshot,
-} from '@/shared/hooks/timedSessionStorage'
-import {
-  buildPersistedTimedSessionSnapshot,
-  buildRestorableTimedSessionSnapshot,
-  writePersistedTimedSessionSnapshot,
-} from '@/shared/hooks/timedSessionSnapshot'
-import { markDirty, registerAutoSaveTarget } from '@/shared/persistence/autosaveCoordinator'
-import { useTimedSessionAutoPause } from '@/shared/hooks/timedSessionAutoPause'
-import {
-  clearTimedSessionInterval,
-  clearTimedSessionTimeout,
-  useTimedSessionAutomationConfigSubscription,
-  useTimedSessionBrowserPauseEffects,
-  useTimedSessionGlowReset,
-  useTimedSessionUnloadPersistence,
-} from '@/shared/hooks/timedSessionBrowserEffects'
-import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
-import { useTimedSessionSnapshotRestore } from '@/shared/hooks/timedSessionRestore'
-import { useTimedSessionSceneLeave } from './timedSessionSceneLeave'
-import { useTimedSessionActivityActions } from './useTimedSessionActivityActions'
-import { useTimedSessionFocusActions } from './useTimedSessionFocusActions'
-import {
-  closeSceneSegment,
-  createActiveSceneSegment,
-} from './timedSessionSegments'
-import {
-  buildRecordFromExpiredSuspendedTimedSessionSnapshot,
-  buildTimedSessionRecord,
-  persistTimedSessionRecord,
-  saveInProgressTimedSessionRecord,
-} from './timedSessionRecordBuilder'
+  isLiveForegroundClockSuppressed,
+  subscribeLiveForegroundClock,
+} from './liveClockOwnership'
 
-export function useTimedSession({
-  kind,
-  title,
-  palaceId,
-  automationScene = kind,
-  sourceKind = null,
-  englishCourseId = null,
-  autoPauseMs,
-  hiddenPauseMs,
-  persistKey = null,
-  persistCompletionRecord = true,
-}: TimedSessionOptions) {
-  const sessionScene = automationScene
-  const sessionIdRef = React.useRef(createStableRecordId())
-  const [effectiveSeconds, setEffectiveSeconds] = React.useState(0)
-  const [idleSeconds, setIdleSeconds] = React.useState(0)
-  const [pauseCount, setPauseCount] = React.useState(0)
-  const [status, setStatus] = React.useState<SessionStatus>('idle')
-  const [startedAt, setStartedAt] = React.useState<string | null>(null)
-  const [durationEdited, setDurationEdited] = React.useState(false)
-  const [glowState, setGlowState] = React.useState<GlowState>('idle')
-  const [focusRound, setFocusRound] = React.useState<TimedSessionFocusRoundState>(() => ({
-    ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
-  }))
+interface TimerStoreSnapshot {
+  sessionId: string
+  sessionKey: string
+  effectiveSeconds: number
+  idleSeconds: number
+  pauseCount: number
+  status: SessionStatus
+  pauseReason: TimedSessionPauseReason
+  startedAt: string | null
+  durationEdited: boolean
+  glowState: GlowState
+  focusRound: TimedSessionFocusRoundState
+}
 
-  const statusRef = React.useRef<SessionStatus>('idle')
-  const recordIdRef = React.useRef<string | null>(null)
-  const lastTickAtRef = React.useRef<number | null>(null)
-  const lastActivityAtRef = React.useRef<number | null>(null)
-  const eventsRef = React.useRef<SessionEventRecord[]>([])
-  const effectiveSecondsRef = React.useRef(0)
-  const idleSecondsRef = React.useRef(0)
-  const pauseCountRef = React.useRef(0)
-  const startedAtRef = React.useRef<string | null>(null)
-  const durationEditedRef = React.useRef(false)
-  const tickerRef = React.useRef<number | null>(null)
-  const autoPauseRef = React.useRef<number | null>(null)
-  const autoPauseDeadlineAtRef = React.useRef<number | null>(null)
-  const hiddenPauseRef = React.useRef<number | null>(null)
-  const restoredStorageKeyRef = React.useRef<string | null>(null)
-  const leaveHandledRef = React.useRef(false)
-  const sceneActiveRef = React.useRef(true)
-  const suspendedAtRef = React.useRef<string | null>(null)
-  const resumeDeadlineAtRef = React.useRef<string | null>(null)
-  const leaveMetaRef = React.useRef<TimedSessionMeta | null>(null)
-  const sceneSegmentsRef = React.useRef<SessionSceneSegment[]>([])
-  const activeSceneSegmentRef = React.useRef<ActiveSceneSegmentSnapshot | null>(null)
-  const focusRoundRef = React.useRef<TimedSessionFocusRoundState>({
-    ...DEFAULT_TIMED_SESSION_FOCUS_ROUND,
+interface TimerAttachment {
+  scene: string
+  kind: TimedSessionOptions['kind']
+  title: string
+  active: boolean
+}
+
+interface TimerStore {
+  key: string
+  storageKey: string | null
+  snapshot: TimerStoreSnapshot
+  kind: TimedSessionOptions['kind']
+  scene: string
+  palaceId: number | null
+  sourceKind: TimedSessionOptions['sourceKind']
+  englishCourseId: number | null
+  title: string
+  persistCompletionRecord: boolean
+  recordId: string | null
+  startedAtMs: number | null
+  runningSinceMs: number | null
+  effectiveMs: number
+  events: SessionEventRecord[]
+  sceneSegments: SessionSceneSegment[]
+  activeSegment: {
+    scene: SessionSceneSegment['scene']
+    kind: SessionSceneSegment['kind']
+    palaceId: number | null
+    sourceKind: SessionSceneSegment['sourceKind']
+    englishCourseId: number | null
+    title: string
+    startedAt: string
+    startEffectiveSeconds: number
+  } | null
+  listeners: Set<() => void>
+  attachments: Map<string, TimerAttachment>
+  finalizeTimer: number | null
+  tickTimer: number | null
+  finalRecord: TimeSessionRecord | null
+  finalPersist: Promise<TimeSessionRecord | null> | null
+  unloadFinalized: boolean
+}
+
+const stores = new Map<string, TimerStore>()
+let browserListenersInstalled = false
+let windowFocused = true
+let windowBlurred = false
+
+function stableSessionKey(options: TimedSessionOptions) {
+  const sessionKey = options.sessionKey.trim()
+  if (!sessionKey) throw new Error('TimedSessionOptions.sessionKey must not be empty')
+  return sessionKey
+}
+
+function readSnapshot(storageKey: string | null): Record<string, unknown> | null {
+  if (!storageKey || typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(storageKey)
+    if (!raw) return null
+    const value = JSON.parse(raw)
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+function notify(store: TimerStore) {
+  for (const listener of store.listeners) listener()
+}
+
+function currentEffectiveMs(store: TimerStore, currentMs = Date.now()) {
+  if (store.runningSinceMs == null) return store.effectiveMs
+  return store.effectiveMs + Math.max(0, currentMs - store.runningSinceMs)
+}
+
+function updateEffectiveSnapshot(store: TimerStore, currentMs = Date.now()) {
+  const nextSeconds = Math.max(0, Math.floor(currentEffectiveMs(store, currentMs) / 1000))
+  if (nextSeconds === store.snapshot.effectiveSeconds) return false
+  store.snapshot = { ...store.snapshot, effectiveSeconds: nextSeconds }
+  return true
+}
+
+function persistSnapshot(store: TimerStore) {
+  if (!store.storageKey) return
+  if (!store.snapshot.startedAt || store.snapshot.status === 'idle' || store.snapshot.status === 'completed') {
+    clearPersistedTimedSessionSnapshot(store.storageKey)
+    return
+  }
+  updateEffectiveSnapshot(store)
+  const snapshot = buildPersistedTimedSessionSnapshot({
+    recordId: store.recordId,
+    sessionKey: store.key,
+    kind: store.kind,
+    palaceId: store.palaceId,
+    sourceKind: store.sourceKind,
+    englishCourseId: store.englishCourseId,
+    title: store.title,
+    effectiveSeconds: store.snapshot.effectiveSeconds,
+    pauseCount: store.snapshot.pauseCount,
+    status: store.snapshot.status === 'running' ? 'running' : 'paused',
+    startedAt: store.snapshot.startedAt,
+    durationEdited: false,
+    events: [...store.events],
+    sceneSegments: [...store.sceneSegments],
+    activeSceneSegment: store.activeSegment,
+    focusRound: { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND },
+    lastActivityAtMs: null,
+    autoPauseDeadlineAtMs: null,
+  }, {
+    suspended: false,
   })
-  const lastTickPersistAtRef = React.useRef<number | null>(null)
-  /** Wall-clock moment the document hid while study was still accruing. Null when visible. */
-  const clockFrozenAtMsRef = React.useRef<number | null>(null)
-  const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
-    readTimerAutomationConfig(),
-  )
-  const timedSessionAutoSaveKey = React.useMemo(() => `timed-session:${sessionIdRef.current}`, [])
+  writePersistedTimedSessionSnapshot(store.storageKey, snapshot)
+}
 
-  const resolvedAutomation = React.useMemo(
-    () => resolveTimedSessionAutomation(automationConfig, { autoPauseMs, hiddenPauseMs }),
-    [autoPauseMs, automationConfig, hiddenPauseMs],
-  )
+function canRunForegroundClock() {
+  if (isLiveForegroundClockSuppressed()) return false
+  if (windowBlurred || !windowFocused) return false
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return false
+  return true
+}
 
-  const storageKey = persistKey ? buildTimedSessionStorageKey(persistKey) : null
+function settleRunning(store: TimerStore, currentMs = Date.now()) {
+  if (store.runningSinceMs == null) return
+  store.effectiveMs = currentEffectiveMs(store, currentMs)
+  store.runningSinceMs = null
+  updateEffectiveSnapshot(store, currentMs)
+}
 
-  const clearPersistedSnapshot = React.useCallback(() => clearPersistedTimedSessionSnapshot(storageKey), [storageKey])
-  const clearCompetingSnapshots = React.useCallback(() => clearCompetingTimedSessionSnapshots(storageKey), [storageKey])
+function stopTicker(store: TimerStore) {
+  if (store.tickTimer != null && typeof window !== 'undefined') {
+    window.clearInterval(store.tickTimer)
+  }
+  store.tickTimer = null
+}
 
-  const persistSnapshot = React.useCallback(
-    (options?: {
-      statusOverride?: PersistedSessionStatus
-      suspended?: boolean
-      suspendedAt?: string | null
-      resumeDeadlineAt?: string | null
-      leaveMeta?: TimedSessionMeta | null
-    }) => {
-      if (!storageKey) return
-      const snapshotStatus = options?.statusOverride ?? statusRef.current
+function startTicker(store: TimerStore) {
+  stopTicker(store)
+  if (typeof window === 'undefined') return
+  store.tickTimer = window.setInterval(() => {
+    if (store.snapshot.status !== 'running') return
+    if (!activeAttachments(store).some((item) => item.active)) {
+      // A route can be inactive while its component remains mounted. Freeze the
+      // active interval without changing the public status so a same-target
+      // page can continue it when it attaches again.
+      settleRunning(store)
+      persistSnapshot(store)
+      stopTicker(store)
+      notify(store)
+      return
+    }
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
+      return
+    }
+    if (windowBlurred) {
+      pauseStore(store, 'window_blur', { source: 'window_blur' })
+      return
+    }
+    if (updateEffectiveSnapshot(store)) {
+      // SessionStorage is the crash-safe checkpoint. The ticker only refreshes
+      // this local snapshot once per displayed second; it never writes the API.
+      persistSnapshot(store)
+      notify(store)
+    }
+  }, 250)
+}
+
+function pushEvent(store: TimerStore, type: SessionEventRecord['type'], meta?: TimedSessionMeta) {
+  store.events.push({ type, at: nowIso(), ...(meta ? { meta } : {}) })
+}
+
+function closeActiveSegment(store: TimerStore, endedAt = nowIso()) {
+  const active = store.activeSegment
+  if (!active) return
+  const seconds = Math.max(0, store.snapshot.effectiveSeconds - active.startEffectiveSeconds)
+  if (seconds > 0) {
+    store.sceneSegments.push({
+      scene: active.scene,
+      kind: active.kind,
+      palaceId: active.palaceId,
+      sourceKind: active.sourceKind,
+      englishCourseId: active.englishCourseId,
+      title: active.title,
+      startedAt: active.startedAt,
+      endedAt,
+      effectiveSeconds: seconds,
+    })
+  }
+  store.activeSegment = null
+}
+
+function openSegment(store: TimerStore, attachment?: TimerAttachment) {
+  const scene = attachment?.scene ?? store.scene
+  if (store.activeSegment?.scene === scene) return
+  closeActiveSegment(store)
+  store.activeSegment = {
+    scene: scene as SessionSceneSegment['scene'],
+    kind: (attachment?.kind ?? store.kind) as SessionSceneSegment['kind'],
+    palaceId: store.palaceId,
+    sourceKind: store.sourceKind,
+    englishCourseId: store.englishCourseId,
+    title: attachment?.title ?? store.title,
+    startedAt: nowIso(),
+    startEffectiveSeconds: store.snapshot.effectiveSeconds,
+  }
+}
+
+/** Settle the current foreground interval before changing scene metadata. */
+function switchSegment(store: TimerStore, attachment?: TimerAttachment) {
+  const scene = attachment?.scene ?? store.scene
+  if (store.activeSegment?.scene === scene) return
+
+  const wasRunning = store.snapshot.status === 'running' && store.runningSinceMs != null
+  if (wasRunning) settleRunning(store)
+  closeActiveSegment(store)
+  openSegment(store, attachment)
+
+  // A scene handoff is not a pause/resume transition. Continue the same
+  // target-level interval after the new segment is opened.
+  if (wasRunning) {
+    store.runningSinceMs = Date.now()
+  }
+}
+
+function activeAttachments(store: TimerStore) {
+  return Array.from(store.attachments.values()).filter((item) => item.active)
+}
+
+function pauseStore(store: TimerStore, reason: Exclude<TimedSessionPauseReason, null>, meta?: TimedSessionMeta) {
+  if (store.snapshot.status !== 'running') return
+  settleRunning(store)
+  stopTicker(store)
+  store.snapshot = {
+    ...store.snapshot,
+    status: 'paused',
+    pauseReason: reason,
+    pauseCount: store.snapshot.pauseCount + 1,
+    glowState: 'paused',
+  }
+  pushEvent(store, 'pause', { reason, ...(meta ?? {}) })
+  persistSnapshot(store)
+  notify(store)
+}
+
+function startStore(store: TimerStore, meta?: TimedSessionMeta) {
+  if (store.snapshot.status !== 'idle') return
+  if (!canRunForegroundClock()) return
+  if (store.startedAtMs == null) {
+    store.startedAtMs = Date.now()
+    store.snapshot = { ...store.snapshot, startedAt: nowIso() }
+  }
+  if (!store.recordId) store.recordId = createStableRecordId()
+  store.runningSinceMs = Date.now()
+  store.snapshot = {
+    ...store.snapshot,
+    status: 'running',
+    pauseReason: null,
+    glowState: 'running',
+  }
+  openSegment(store, Array.from(store.attachments.values()).find((item) => item.active))
+  pushEvent(store, 'start', meta)
+  startTicker(store)
+  persistSnapshot(store)
+  notify(store)
+}
+
+function resumeStore(store: TimerStore, meta?: TimedSessionMeta) {
+  if (store.snapshot.status !== 'paused') return
+  if (!canRunForegroundClock()) return
+  if (!activeAttachments(store).some((item) => item.active)) return
+  store.runningSinceMs = Date.now()
+  store.snapshot = { ...store.snapshot, status: 'running', pauseReason: null, glowState: 'running' }
+  openSegment(store, Array.from(store.attachments.values()).find((item) => item.active))
+  pushEvent(store, 'resume', meta)
+  startTicker(store)
+  persistSnapshot(store)
+  notify(store)
+}
+
+function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt = nowIso()) {
+  if (!store.snapshot.startedAt || !store.recordId) return null
+  settleRunning(store)
+  updateEffectiveSnapshot(store)
+  closeActiveSegment(store, endedAt)
+  return {
+    id: store.recordId,
+    sessionKey: store.key,
+    kind: store.kind,
+    palaceId: store.palaceId,
+    sourceKind: store.sourceKind,
+    englishCourseId: store.englishCourseId,
+    title: store.title,
+    startedAt: store.snapshot.startedAt,
+    endedAt,
+    effectiveSeconds: store.snapshot.effectiveSeconds,
+    pauseCount: store.snapshot.pauseCount,
+    completionMethod: method,
+    durationEdited: false,
+    events: [...store.events],
+    sceneSegments: [...store.sceneSegments],
+  } satisfies TimeSessionRecord
+}
+
+async function completeStore(
+  store: TimerStore,
+  method: SessionCompletionMethod,
+  meta?: TimedSessionMeta,
+  options?: { persistRecord?: boolean },
+) {
+  if (store.snapshot.status === 'completed') return store.finalRecord
+  stopTicker(store)
+  settleRunning(store)
+  pushEvent(store, method === 'manual_complete' ? 'manual_complete' : method === 'auto_complete' ? 'auto_complete' : 'complete', meta)
+  const record = buildRecord(store, method)
+  store.finalRecord = record
+  store.snapshot = { ...store.snapshot, status: 'completed', pauseReason: null, glowState: 'idle' }
+  if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
+  if (record) removePendingTimeRecordRecovery(record.id)
+  notify(store)
+  if (!record || !store.persistCompletionRecord || options?.persistRecord === false) {
+    releaseStoreAfterCompletion(store)
+    return record
+  }
+  if (!store.finalPersist) {
+    store.finalPersist = persistTimedSessionRecord(record).then((persisted) => persisted ?? record)
+  }
+  releaseStoreAfterCompletion(store)
+  return store.finalPersist
+}
+
+function releaseStoreAfterCompletion(store: TimerStore) {
+  if (typeof window === 'undefined') return
+  window.setTimeout(() => {
+    if (store.attachments.size === 0 && stores.get(store.key) === store) {
+      stores.delete(store.key)
+    }
+  }, 0)
+}
+
+function resetStore(store: TimerStore) {
+  stopTicker(store)
+  if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
+  store.recordId = null
+  store.startedAtMs = null
+  store.runningSinceMs = null
+  store.effectiveMs = 0
+  store.events = []
+  store.sceneSegments = []
+  store.activeSegment = null
+  store.finalRecord = null
+  store.finalPersist = null
+  store.unloadFinalized = false
+  store.snapshot = {
+    ...store.snapshot,
+    effectiveSeconds: 0,
+    idleSeconds: 0,
+    pauseCount: 0,
+    status: 'idle',
+    pauseReason: null,
+    startedAt: null,
+    glowState: 'idle',
+  }
+  notify(store)
+}
+
+function scheduleFinalizeIfUnused(store: TimerStore) {
+  if (store.finalizeTimer != null || typeof window === 'undefined') return
+  store.finalizeTimer = window.setTimeout(() => {
+    store.finalizeTimer = null
+    const active = Array.from(store.attachments.values()).some((item) => item.active)
+    if (!active && store.snapshot.status !== 'idle' && store.snapshot.status !== 'completed') {
+      void completeStore(store, 'left_page', { source: 'scene_inactive' })
+    }
+  }, 0)
+}
+
+function attachStore(store: TimerStore, id: string, attachment: TimerAttachment) {
+  if (store.finalizeTimer != null && typeof window !== 'undefined') {
+    window.clearTimeout(store.finalizeTimer)
+    store.finalizeTimer = null
+  }
+  store.attachments.set(id, attachment)
+  if (store.snapshot.status === 'running') {
+    if (store.runningSinceMs == null && canRunForegroundClock()) {
+      store.runningSinceMs = Date.now()
+    }
+    if (store.runningSinceMs != null) {
+      switchSegment(store, attachment)
+      if (store.tickTimer == null) startTicker(store)
+    }
+  }
+  notify(store)
+}
+
+function detachStore(store: TimerStore, id: string) {
+  store.attachments.delete(id)
+  const active = activeAttachments(store)
+  if (active.length === 0) {
+    // Unmount can happen between timer ticks. Freeze the interval before
+    // closing its segment so the final visible fraction is included.
+    settleRunning(store)
+    stopTicker(store)
+    closeActiveSegment(store)
+    persistSnapshot(store)
+  } else if (
+    store.activeSegment &&
+    !active.some((item) => item.scene === store.activeSegment?.scene)
+  ) {
+    switchSegment(store, active[0])
+    persistSnapshot(store)
+  }
+  scheduleFinalizeIfUnused(store)
+  if (store.attachments.size === 0 && store.snapshot.status === 'idle') {
+    stores.delete(store.key)
+  }
+}
+
+function setSceneActiveStore(store: TimerStore, id: string, active: boolean, _meta?: TimedSessionMeta) {
+  const attachment = store.attachments.get(id)
+  if (!attachment || attachment.active === active) return
+  attachment.active = active
+  if (!active) {
+    const remainingActive = activeAttachments(store)
+    if (remainingActive.length === 0) {
+      // Route changes stop the current active interval, but are not a system or
+      // manual pause. This lets a same-target page attach and continue without
+      // changing the public pause state or auto-resuming a paused session.
+      settleRunning(store)
+      stopTicker(store)
+      closeActiveSegment(store)
+      persistSnapshot(store)
+      scheduleFinalizeIfUnused(store)
+    } else if (
+      store.activeSegment &&
+      !remainingActive.some((item) => item.scene === store.activeSegment?.scene)
+    ) {
+      switchSegment(store, remainingActive[0])
+      persistSnapshot(store)
+      notify(store)
+    }
+  } else {
+    // Scene activation is a route event, never a resume command. Only explicit
+    // resume() or visibility/focus recovery can leave a paused state.
+    if (
+      store.snapshot.status === 'running' &&
+      store.runningSinceMs == null &&
+      canRunForegroundClock()
+    ) {
+      store.runningSinceMs = Date.now()
+      switchSegment(store, attachment)
+      if (store.tickTimer == null) startTicker(store)
+    }
+    notify(store)
+  }
+}
+
+function hydrateStore(store: TimerStore) {
+  const raw = readSnapshot(store.storageKey)
+  const snapshot = normalizeSnapshot(raw)
+  if (!snapshot || !snapshot.startedAt) return
+  const seconds = Math.max(0, Math.round(snapshot.effectiveSeconds))
+  // The first page owns the session metadata. On reload the snapshot must win
+  // over whichever later scene happened to mount first.
+  if (snapshot.kind) store.kind = snapshot.kind
+  store.scene = snapshot.activeSceneSegment?.scene ?? snapshot.sceneSegments.at(-1)?.scene ?? store.scene
+  store.palaceId = snapshot.palaceId
+  store.sourceKind = snapshot.sourceKind
+  store.englishCourseId = snapshot.englishCourseId
+  if (snapshot.title) store.title = snapshot.title
+  store.recordId = snapshot.recordId ?? createStableRecordId()
+  store.startedAtMs = new Date(snapshot.startedAt).getTime()
+  store.effectiveMs = seconds * 1000
+  store.events = [...snapshot.events]
+  store.sceneSegments = [...snapshot.sceneSegments]
+  store.activeSegment = snapshot.activeSceneSegment
+  store.snapshot = {
+    ...store.snapshot,
+    effectiveSeconds: seconds,
+    pauseCount: snapshot.pauseCount,
+    status: 'paused',
+    pauseReason: 'restored',
+    startedAt: snapshot.startedAt,
+  }
+}
+
+function createStore(key: string, options: TimedSessionOptions): TimerStore {
+  const store: TimerStore = {
+    key,
+    storageKey: buildTimedSessionStorageKey(key),
+    snapshot: {
+      sessionId: createStableRecordId(),
+      sessionKey: key,
+      effectiveSeconds: 0,
+      idleSeconds: 0,
+      pauseCount: 0,
+      status: 'idle',
+      pauseReason: null,
+      startedAt: null,
+      durationEdited: false,
+      glowState: 'idle',
+      focusRound: { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND },
+    },
+    kind: options.kind,
+    scene: options.automationScene ?? options.kind,
+    palaceId: options.palaceId,
+    sourceKind: options.sourceKind ?? null,
+    englishCourseId: options.englishCourseId ?? null,
+    title: options.title,
+    persistCompletionRecord: options.persistCompletionRecord !== false,
+    recordId: null,
+    startedAtMs: null,
+    runningSinceMs: null,
+    effectiveMs: 0,
+    events: [],
+    sceneSegments: [],
+    activeSegment: null,
+    listeners: new Set(),
+    attachments: new Map(),
+    finalizeTimer: null,
+    tickTimer: null,
+    finalRecord: null,
+    finalPersist: null,
+    unloadFinalized: false,
+  }
+  hydrateStore(store)
+  return store
+}
+
+function getStore(key: string, options: TimedSessionOptions) {
+  const existing = stores.get(key)
+  if (existing) return existing
+  const store = createStore(key, options)
+  stores.set(key, store)
+  installBrowserListeners()
+  return store
+}
+
+function systemResume(store: TimerStore, source: string) {
+  if (store.snapshot.status !== 'paused') return
+  if (store.snapshot.pauseReason !== 'document_hidden' && store.snapshot.pauseReason !== 'window_blur') return
+  if (!Array.from(store.attachments.values()).some((item) => item.active)) return
+  if (!canRunForegroundClock()) return
+  resumeStore(store, { source })
+}
+
+function syncStoresToLiveClockGate() {
+  const suppressed = isLiveForegroundClockSuppressed()
+  for (const store of stores.values()) {
+    if (suppressed) {
+      if (store.runningSinceMs == null) continue
+      settleRunning(store)
+      stopTicker(store)
+      persistSnapshot(store)
+      notify(store)
+      continue
+    }
+    if (
+      store.snapshot.status === 'running' &&
+      store.runningSinceMs == null &&
+      canRunForegroundClock() &&
+      activeAttachments(store).length > 0
+    ) {
+      store.runningSinceMs = Date.now()
+      if (store.tickTimer == null) startTicker(store)
+      persistSnapshot(store)
+      notify(store)
+    }
+  }
+}
+
+export function adoptLiveTimerSnapshot(input: {
+  sessionKey: string
+  status: SessionStatus | string
+  effectiveSeconds: number
+}) {
+  const store = stores.get(input.sessionKey)
+  if (!store) return
+  const seconds = Math.max(0, Math.round(input.effectiveSeconds))
+  settleRunning(store)
+  store.effectiveMs = seconds * 1000
+  const nextStatus: SessionStatus =
+    input.status === 'running' || input.status === 'paused' || input.status === 'completed' || input.status === 'idle'
+      ? input.status
+      : store.snapshot.status
+  store.snapshot = {
+    ...store.snapshot,
+    effectiveSeconds: seconds,
+    status: nextStatus,
+    pauseReason: nextStatus === 'paused' ? store.snapshot.pauseReason ?? 'manual' : null,
+    glowState: nextStatus === 'running' ? 'running' : nextStatus === 'paused' ? 'paused' : 'idle',
+  }
+  if (nextStatus === 'running' && canRunForegroundClock() && activeAttachments(store).length > 0) {
+    store.runningSinceMs = Date.now()
+    if (store.tickTimer == null) startTicker(store)
+  } else {
+    stopTicker(store)
+  }
+  persistSnapshot(store)
+  notify(store)
+}
+
+function installBrowserListeners() {
+  if (browserListenersInstalled || typeof window === 'undefined') return
+  browserListenersInstalled = true
+  // A newly mounted browser window is considered usable until an explicit blur
+  // event says otherwise. `document.hasFocus()` is false in jsdom and briefly
+  // false during real window startup, so it is not a safe initial gate.
+  windowFocused = true
+  windowBlurred = false
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      windowFocused = false
+      for (const store of stores.values()) pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
+    } else {
+      // Visibility returning is enough to recover a document-hidden pause when
+      // no separate focus event is emitted. An actual blur remains gated until
+      // the matching focus event arrives.
+      if (!windowBlurred) windowFocused = true
+      for (const store of stores.values()) systemResume(store, 'document_visible')
+    }
+  })
+  window.addEventListener('blur', () => {
+    windowFocused = false
+    windowBlurred = true
+    for (const store of stores.values()) pauseStore(store, 'window_blur', { source: 'window_blur' })
+  })
+  window.addEventListener('focus', () => {
+    windowFocused = true
+    windowBlurred = false
+    for (const store of stores.values()) systemResume(store, 'window_focus')
+  })
+  const finalizeOnUnload = () => {
+    for (const store of stores.values()) {
       if (
-        !startedAtRef.current ||
-        (snapshotStatus !== 'running' && snapshotStatus !== 'paused')
-      ) {
-        clearPersistedSnapshot()
-        return
-      }
-      const snapshot = buildPersistedTimedSessionSnapshot({
-        recordId: recordIdRef.current,
-        kind,
-        palaceId,
-        sourceKind,
-        englishCourseId,
-        title,
-        effectiveSeconds: effectiveSecondsRef.current,
-        pauseCount: pauseCountRef.current,
-        status: snapshotStatus,
-        startedAt: startedAtRef.current,
-        durationEdited: durationEditedRef.current,
-        events: [...eventsRef.current],
-        sceneSegments: [...sceneSegmentsRef.current],
-        activeSceneSegment: activeSceneSegmentRef.current,
-        focusRound: focusRoundRef.current,
-        lastActivityAtMs: lastActivityAtRef.current,
-        autoPauseDeadlineAtMs: autoPauseDeadlineAtRef.current,
-      }, options)
-      writePersistedTimedSessionSnapshot(storageKey, snapshot)
-    },
-    [clearPersistedSnapshot, englishCourseId, kind, palaceId, sourceKind, storageKey, title],
-  )
-
-  const clearSuspendedState = React.useCallback(() => {
-    suspendedAtRef.current = null
-    resumeDeadlineAtRef.current = null
-    leaveMetaRef.current = null
-    leaveHandledRef.current = false
-  }, [])
-
-  const buildActiveSceneSegment = React.useCallback((): ActiveSceneSegmentSnapshot => (
-    createActiveSceneSegment({
-      scene: sessionScene,
-      kind,
-      palaceId,
-      sourceKind,
-      englishCourseId,
-      title,
-      startedAt: nowIso(),
-      effectiveSecondsAtStart: effectiveSecondsRef.current,
-    })
-  ), [englishCourseId, kind, palaceId, sessionScene, sourceKind, title])
-
-  const maybeStartSceneSegment = React.useCallback(() => {
-    if (activeSceneSegmentRef.current) return
-    activeSceneSegmentRef.current = buildActiveSceneSegment()
-  }, [buildActiveSceneSegment])
-
-  const closeActiveSceneSegment = React.useCallback((endedAt = nowIso()) => {
-    const next = closeSceneSegment({
-      active: activeSceneSegmentRef.current,
-      segments: sceneSegmentsRef.current,
-      endedAt,
-      effectiveSecondsNow: effectiveSecondsRef.current,
-    })
-    sceneSegmentsRef.current = next.segments
-    activeSceneSegmentRef.current = next.active
-  }, [])
-
-  const ensureRecordId = React.useCallback(() => {
-    if (!recordIdRef.current) {
-      recordIdRef.current = createStableRecordId()
+        store.unloadFinalized ||
+        store.snapshot.status === 'idle' ||
+        store.snapshot.status === 'completed'
+      ) continue
+      store.unloadFinalized = true
+      stopTicker(store)
+      const record = buildRecord(store, 'left_page')
+      store.finalRecord = record
+      if (record && store.persistCompletionRecord) void fireAndQueueTimeRecordOnUnload(record)
+      if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
+      store.snapshot = { ...store.snapshot, status: 'completed', pauseReason: null }
     }
-    return recordIdRef.current
-  }, [])
+  }
+  window.addEventListener('pagehide', finalizeOnUnload)
+  window.addEventListener('beforeunload', finalizeOnUnload)
+  subscribeLiveForegroundClock(syncStoresToLiveClockGate)
+}
 
-  const pushEvent = React.useCallback((
-    type: SessionEventRecord['type'],
-    meta?: TimedSessionMeta,
-    options?: { persist?: boolean },
-  ) => {
-    eventsRef.current.push({ type, at: nowIso(), ...(meta ? { meta } : {}) })
-    if (options?.persist !== false) {
-      persistSnapshot()
-    }
-  }, [persistSnapshot])
-
-  const resolveTickBoundaryMs = React.useCallback((currentMs = Date.now()) => {
-    const frozenAt = clockFrozenAtMsRef.current
-    if (frozenAt != null && Number.isFinite(frozenAt)) {
-      return Math.min(currentMs, frozenAt)
-    }
-    return currentMs
-  }, [])
-
-  const syncTick = React.useCallback((currentMs = Date.now()) => {
-    if (statusRef.current !== 'running' || lastTickAtRef.current == null) return
-    // Never credit wall time after the document hid / clock freeze boundary.
-    if (clockFrozenAtMsRef.current != null) return
-    const tickState = advanceTickState({
-      previousEffectiveSeconds: effectiveSecondsRef.current,
-      previousIdleSeconds: idleSecondsRef.current,
-      lastTickAtMs: lastTickAtRef.current,
-      lastActivityAtMs: lastActivityAtRef.current,
-      currentMs: resolveTickBoundaryMs(currentMs),
-    })
-    if (tickState.effectiveChanged) {
-      effectiveSecondsRef.current = tickState.effectiveSeconds
-      setEffectiveSeconds(effectiveSecondsRef.current)
-    }
-    lastTickAtRef.current = tickState.lastTickAtMs
-    if (tickState.idleChanged) {
-      idleSecondsRef.current = tickState.idleSeconds
-      setIdleSeconds(tickState.idleSeconds)
-    }
-    const changed = tickState.effectiveChanged || tickState.idleChanged
-    if (changed && (lastTickPersistAtRef.current == null || currentMs - lastTickPersistAtRef.current >= 5_000)) {
-      lastTickPersistAtRef.current = currentMs
-      persistSnapshot()
-      markDirty(timedSessionAutoSaveKey, 'tick')
-    }
-  }, [persistSnapshot, resolveTickBoundaryMs, timedSessionAutoSaveKey])
-
-  const startTicker = React.useCallback(() => {
-    clearTimedSessionInterval(tickerRef)
-    clockFrozenAtMsRef.current = null
-    lastTickAtRef.current = Date.now()
-    tickerRef.current = window.setInterval(() => {
-      syncTick()
-    }, 250)
-  }, [syncTick])
-
-  const stopTicker = React.useCallback((currentMs?: number) => {
-    const boundaryMs = currentMs == null ? resolveTickBoundaryMs() : resolveTickBoundaryMs(currentMs)
-    syncTick(boundaryMs)
-    clearTimedSessionInterval(tickerRef)
-    lastTickAtRef.current = null
-  }, [resolveTickBoundaryMs, syncTick])
-
-  const buildRecord = React.useCallback((
-    method: SessionCompletionMethod,
-    endedAt = nowIso(),
-  ): TimeSessionRecord | null => {
-    if (!startedAtRef.current) return null
-    closeActiveSceneSegment(endedAt)
-    return buildTimedSessionRecord({
-      id: ensureRecordId(),
-      kind,
-      palaceId,
-      sourceKind,
-      englishCourseId,
-      title,
-      startedAt: startedAtRef.current,
-      endedAt,
-      effectiveSeconds: effectiveSecondsRef.current,
-      pauseCount: pauseCountRef.current,
-      completionMethod: method,
-      durationEdited: durationEditedRef.current,
-      events: eventsRef.current,
-      sceneSegments: sceneSegmentsRef.current,
-    })
-  }, [closeActiveSceneSegment, englishCourseId, ensureRecordId, kind, palaceId, sourceKind, title])
-
-  // Formal review keeps a local timer only. Study-session rows (and mastery
-  // receipts) must come from /review/session/{id}/submit — never from leave,
-  // autosave, unload, or complete. Otherwise ghost scene=review rows appear in
-  // time records while mastery trend stays empty.
-  const persistRecord = React.useCallback(async (
-    record: TimeSessionRecord | null,
-  ) => {
-    if (!persistCompletionRecord) {
-      return record
-    }
-    return persistTimedSessionRecord(record)
-  }, [persistCompletionRecord])
-
-  const saveInProgressRecord = React.useCallback(async () => {
-    if (!persistCompletionRecord) {
-      return
-    }
-    await saveInProgressTimedSessionRecord({
-      startedAt: startedAtRef.current,
-      completed: statusRef.current === 'completed',
-      buildRecord: () => buildRecord('saved', nowIso()),
-      persistRecord,
-    })
-  }, [buildRecord, persistCompletionRecord, persistRecord])
-
-  // Written the moment the page hides, so the background debounce window can
-  // never cost a session if the OS kills the tab before the window closes.
-  // Reuses the stable session id, so the eventual completed record overwrites
-  // it server-side (create_study_session merges by primary key).
-  // Snapshot is frozen/paused so remount restore cannot wall-clock catch-up
-  // hang-up time (running + elapsedSincePersist was the old inflation path).
-  const persistBackgroundCheckpoint = React.useCallback(() => {
-    persistSnapshot({
-      statusOverride: 'paused',
-      suspended: false,
-    })
-    markDirty(timedSessionAutoSaveKey, 'document_hidden')
-    void saveInProgressRecord()
-  }, [persistSnapshot, saveInProgressRecord, timedSessionAutoSaveKey])
-
-  /**
-   * Stop accruing study seconds the instant the document hides. Status may stay
-   * `running` during the grace window so a brief notification shade does not
-   * look like a full pause, but the ticker and lastTickAt are cleared so no
-   * later wall-clock catch-up can inflate effectiveSeconds.
-   */
-  const freezeClockOnDocumentHidden = React.useCallback((meta?: TimedSessionMeta) => {
-    if (!startedAtRef.current) return
-    if (clockFrozenAtMsRef.current != null) return
-    if (statusRef.current !== 'running') return
-    const frozenAtMs = Date.now()
-    // Accrue only up to hide, then lock. Setting the freeze flag after stopTicker
-    // lets the final sync include the last visible second; later ticks no-op.
-    stopTicker(frozenAtMs)
-    clockFrozenAtMsRef.current = frozenAtMs
-    clearTimedSessionTimeout(autoPauseRef)
-    // Keep autoPauseDeadlineAt so restore still knows the idle boundary, but do
-    // not let a late setTimeout fire add hang-up time first.
-    lastTickPersistAtRef.current = null
-    pushEvent('pause', {
-      reason: 'document_hidden_freeze',
-      ...(meta ?? {}),
-    }, { persist: false })
-    persistSnapshot({
-      statusOverride: 'running',
-      suspended: false,
-    })
-  }, [persistSnapshot, pushEvent, stopTicker])
-
-  const persistExpiredSuspendedSnapshot = React.useCallback(async (
-    snapshot: RestorableTimedSessionSnapshot,
-  ) => {
-    if (!persistCompletionRecord) {
-      return null
-    }
-    return persistRecord(buildRecordFromExpiredSuspendedTimedSessionSnapshot(snapshot))
-  }, [persistCompletionRecord, persistRecord])
-
-  const finalizeExpiredSuspendedState = React.useCallback(() => {
-    const pendingSnapshot: RestorableTimedSessionSnapshot | null =
-      startedAtRef.current && suspendedAtRef.current
-        ? buildRestorableTimedSessionSnapshot({
-            recordId: recordIdRef.current,
-            kind,
-            palaceId,
-            sourceKind,
-            englishCourseId,
-            title,
-            effectiveSeconds: effectiveSecondsRef.current,
-            pauseCount: pauseCountRef.current,
-            status: 'paused',
-            startedAt: startedAtRef.current,
-            durationEdited: durationEditedRef.current,
-            events: [...eventsRef.current],
-            sceneSegments: [...sceneSegmentsRef.current],
-            activeSceneSegment: activeSceneSegmentRef.current,
-            focusRound: focusRoundRef.current,
-            lastActivityAtMs: lastActivityAtRef.current,
-            autoPauseDeadlineAtMs: autoPauseDeadlineAtRef.current,
-          }, {
-            suspended: true,
-            suspendedAt: suspendedAtRef.current,
-            resumeDeadlineAt: resumeDeadlineAtRef.current,
-            leaveMeta: leaveMetaRef.current,
-          })
-        : null
-    clearSuspendedState()
-    if (pendingSnapshot) {
-      void persistExpiredSuspendedSnapshot(pendingSnapshot)
-    }
-    if (statusRef.current === 'paused') {
-      persistSnapshot({
-        statusOverride: 'paused',
-      })
-      return
-    }
-    clearPersistedSnapshot()
-  }, [
-    clearPersistedSnapshot,
-    clearSuspendedState,
-    englishCourseId,
-    kind,
-    palaceId,
-    persistExpiredSuspendedSnapshot,
-    persistSnapshot,
-    sourceKind,
-    title,
-  ])
-
-  const armAutoPause = useTimedSessionAutoPause({
-    statusRef,
-    autoPauseRef,
-    autoPauseDeadlineAtRef,
-    lastActivityAtRef,
-    effectiveSecondsRef,
-    idleSecondsRef,
-    pauseCountRef,
-    resolvedAutomation,
-    timedSessionAutoSaveKey,
-    stopTicker,
-    pushEvent,
-    persistSnapshot,
-    setStatus,
-    setGlowState,
-    setEffectiveSeconds,
-    setIdleSeconds,
-    setPauseCount,
+export function useTimedSession(options: TimedSessionOptions) {
+  const sessionKey = stableSessionKey(options)
+  const store = React.useMemo(() => getStore(sessionKey, options), [options, sessionKey])
+  const attachmentIdRef = React.useRef<string>(createStableRecordId())
+  const [, forceRender] = React.useState(0)
+  const attachmentRef = React.useRef<TimerAttachment>({
+    scene: options.automationScene ?? options.kind,
+    kind: options.kind,
+    title: options.title,
+    active: true,
   })
-
-  const beginRunning = React.useCallback((eventType: 'start' | 'resume', meta?: TimedSessionMeta) => {
-    const nextStartedAt = startedAtRef.current ?? nowIso()
-    sceneActiveRef.current = true
-    setStartedAt(nextStartedAt)
-    startedAtRef.current = nextStartedAt
-    ensureRecordId()
-    clearSuspendedState()
-    clockFrozenAtMsRef.current = null
-    lastActivityAtRef.current = Date.now()
-    lastTickPersistAtRef.current = null
-    idleSecondsRef.current = 0
-    setIdleSeconds(0)
-    statusRef.current = 'running'
-    setStatus('running')
-    setGlowState('running')
-    maybeStartSceneSegment()
-    startTicker()
-    armAutoPause()
-    pushEvent(eventType, meta)
-    persistSnapshot()
-    markDirty(timedSessionAutoSaveKey, eventType)
-  }, [armAutoPause, clearSuspendedState, ensureRecordId, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker, timedSessionAutoSaveKey])
-
-  const resumeSuspendedScene = React.useCallback(
-    (meta?: TimedSessionMeta) => {
-      if (!startedAtRef.current || !suspendedAtRef.current || !resumeDeadlineAtRef.current) {
-        return false
-      }
-      const deadlineMs = new Date(resumeDeadlineAtRef.current).getTime()
-      if (!Number.isFinite(deadlineMs) || Date.now() > deadlineMs) {
-        finalizeExpiredSuspendedState()
-        return false
-      }
-
-      const previousLeaveMeta = leaveMetaRef.current
-      clearSuspendedState()
-      lastActivityAtRef.current = Date.now()
-      idleSecondsRef.current = 0
-      setIdleSeconds(0)
-      statusRef.current = 'running'
-      setStatus('running')
-      setGlowState('running')
-      maybeStartSceneSegment()
-      startTicker()
-      armAutoPause()
-      pushEvent('resume', {
-        reason: 'scene_return',
-        ...(previousLeaveMeta ?? {}),
-        ...(meta ?? {}),
-      })
-      persistSnapshot()
-      return true
-    },
-    [armAutoPause, clearSuspendedState, finalizeExpiredSuspendedState, maybeStartSceneSegment, persistSnapshot, pushEvent, startTicker],
-  )
-
-  const start = React.useCallback((meta?: TimedSessionMeta) => {
-    if (statusRef.current === 'running' || statusRef.current === 'completed') return
-    clearCompetingSnapshots()
-    beginRunning('start', meta)
-  }, [beginRunning, clearCompetingSnapshots])
-
-  const pause = React.useCallback((meta?: TimedSessionMeta) => {
-    if (statusRef.current !== 'running') return
-    stopTicker()
-    clockFrozenAtMsRef.current = null
-    clearTimedSessionTimeout(autoPauseRef)
-    autoPauseDeadlineAtRef.current = null
-    pauseCountRef.current += 1
-    setPauseCount(pauseCountRef.current)
-    statusRef.current = 'paused'
-    lastTickPersistAtRef.current = null
-    setStatus('paused')
-    setGlowState('paused')
-    pushEvent('pause', meta)
-    persistSnapshot()
-    markDirty(timedSessionAutoSaveKey, 'pause')
-  }, [persistSnapshot, pushEvent, stopTicker, timedSessionAutoSaveKey])
-
-  const resume = React.useCallback((meta?: TimedSessionMeta) => {
-    if (statusRef.current === 'completed') return
-    if (statusRef.current === 'idle') {
-      clearCompetingSnapshots()
-      beginRunning('start', meta)
-      return
-    }
-    if (statusRef.current === 'paused') {
-      beginRunning('resume', meta)
-    }
-  }, [beginRunning, clearCompetingSnapshots])
-
-  const persistRecordForUnload = React.useCallback(
-    async (record: TimeSessionRecord | null) => {
-      if (!record || !persistCompletionRecord) return record
-      await fireAndQueueTimeRecordOnUnload(record)
-      return record
-    },
-    [persistCompletionRecord],
-  )
-
-  const { leaveScene, leaveSceneForUnload } = useTimedSessionSceneLeave({
-    startedAtRef,
-    statusRef,
-    leaveHandledRef,
-    autoPauseRef,
-    autoPauseDeadlineAtRef,
-    hiddenPauseRef,
-    sceneActiveRef,
-    idleSecondsRef,
-    lastTickPersistAtRef,
-    suspendedAtRef,
-    resumeDeadlineAtRef,
-    leaveMetaRef,
-    resolvedAutomation,
-    stopTicker,
-    closeActiveSceneSegment,
-    pushEvent,
-    persistSnapshot,
-    buildRecord,
-    persistRecord,
-    persistRecordForUnload,
-    setStatus,
-    setGlowState,
-    setIdleSeconds,
-  })
-
-  const setSceneActive = React.useCallback(
-    (active: boolean, meta?: TimedSessionMeta) => {
-      if (active) {
-        if (sceneActiveRef.current === true) {
-          return
-        }
-        sceneActiveRef.current = true
-        // Route residency / PWA foreground: resume a still-valid suspended leave.
-        if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
-          resumeSuspendedScene(meta)
-        }
-        return
-      }
-
-      // Deactivate: always clear scene activity. If a timed session is running,
-      // finish it as left_page so PWA (no desktop flush bridge) still gets a
-      // completed time record in the dashboard list (status=completed only).
-      if (sceneActiveRef.current === false && leaveHandledRef.current) {
-        return
-      }
-      if (!startedAtRef.current || statusRef.current === 'completed') {
-        sceneActiveRef.current = false
-        return
-      }
-      void leaveScene({ source: 'scene_inactive', ...(meta ?? {}) })
-    },
-    [leaveScene, resumeSuspendedScene],
-  )
-
-  /**
-   * After document_hidden leaveScene, sceneActive is false while the freestyle
-   * route may still be resident (isActive never flipped). Re-arm and resume.
-   */
-  const resumeAfterVisibilityReturn = React.useCallback(
-    (meta?: TimedSessionMeta) => {
-      if (statusRef.current === 'completed') return
-      if (!startedAtRef.current) return
-      if (!suspendedAtRef.current || !resumeDeadlineAtRef.current) {
-        // Soft pause (blur-only) without a leave: keep paused until user activity.
-        return
-      }
-      sceneActiveRef.current = true
-      clockFrozenAtMsRef.current = null
-      resumeSuspendedScene(meta)
-    },
-    [resumeSuspendedScene],
-  )
-
-  /**
-   * Visibility return is the PWA-correct grace decision point. Background
-   * setTimeout often freezes, so we measure hidden duration with wall clock:
-   * - still frozen + within grace → resume same session without crediting gap
-   * - still frozen + beyond grace → durable leave at freeze boundary
-   * - already left/suspended → resume suspended scene if within resume window
-   */
-  const resolveVisibilityReturn = React.useCallback(
-    (meta?: TimedSessionMeta) => {
-      if (statusRef.current === 'completed') return
-      if (!startedAtRef.current) return
-
-      const frozenAtMs = clockFrozenAtMsRef.current
-      const hiddenMs =
-        frozenAtMs != null && Number.isFinite(frozenAtMs)
-          ? Math.max(0, Date.now() - frozenAtMs)
-          : 0
-      const graceMs = Math.max(0, resolvedAutomation.hiddenPauseMs)
-
-      if (suspendedAtRef.current && resumeDeadlineAtRef.current) {
-        resumeAfterVisibilityReturn(meta)
-        return
-      }
-
-      if (frozenAtMs != null && statusRef.current === 'running') {
-        // graceMs === 0 already left on hide; treat any residual freeze as leave.
-        if (graceMs > 0 && hiddenMs < graceMs) {
-          // Brief dip: keep one continuous session; seconds already frozen at hide.
-          sceneActiveRef.current = true
-          clockFrozenAtMsRef.current = null
-          lastActivityAtRef.current = Date.now()
-          idleSecondsRef.current = 0
-          setIdleSeconds(0)
-          startTicker()
-          armAutoPause()
-          pushEvent('resume', {
-            reason: 'document_visible_within_grace',
-            hidden_ms: hiddenMs,
-            ...(meta ?? {}),
-          })
-          persistSnapshot()
-          return
-        }
-        // Long hang-up (or zero grace residual): durable leave at freeze boundary.
-        void leaveScene({
-          reason: 'document_hidden_grace_exceeded',
-          hidden_ms: hiddenMs,
-          ...(meta ?? {}),
-        }).then(() => {
-          resumeAfterVisibilityReturn(meta)
-        })
-        return
-      }
-
-      // Soft blur pause or other non-leave paused states: do not auto-resume.
-    },
-    [
-      armAutoPause,
-      leaveScene,
-      persistSnapshot,
-      pushEvent,
-      resolvedAutomation.hiddenPauseMs,
-      resumeAfterVisibilityReturn,
-      startTicker,
-    ],
-  )
-
-  const { logEvent, registerActivity } = useTimedSessionActivityActions({
-    armAutoPause,
-    lastActivityAtRef,
-    pushEvent,
-    resume,
-    sceneActiveRef,
-    start,
-    statusRef,
-  })
-  const {
-    acknowledgeFocusGoal,
-    acknowledgeFocusInterval,
-    adjustDuration,
-    startNextFocusRound,
-  } = useTimedSessionFocusActions({
-    autoSaveKey: timedSessionAutoSaveKey,
-    durationEditedRef,
-    effectiveSecondsRef,
-    focusRoundRef,
-    persistSnapshot,
-    pushEvent,
-    setDurationEdited,
-    setEffectiveSeconds,
-    setFocusRound,
-  })
-  const getEffectiveSeconds = React.useCallback(() => effectiveSecondsRef.current, [])
-
-  const complete = React.useCallback(
-    async (
-      method: SessionCompletionMethod,
-      meta?: TimedSessionMeta,
-      completionOptions?: { persistRecord?: boolean },
-    ) => {
-      if (!startedAtRef.current) return null
-      if (statusRef.current === 'completed') return null
-      stopTicker()
-      clockFrozenAtMsRef.current = null
-      clearTimedSessionTimeout(autoPauseRef)
-      autoPauseDeadlineAtRef.current = null
-      clearTimedSessionTimeout(hiddenPauseRef)
-      statusRef.current = 'completed'
-      setStatus('completed')
-      setGlowState('idle')
-      clearSuspendedState()
-      pushEvent(
-        method === 'auto_complete'
-          ? 'auto_complete'
-          : method === 'manual_complete'
-            ? 'manual_complete'
-            : 'complete',
-        meta,
-      )
-
-      const record = buildRecord(method)
-      clearPersistedSnapshot()
-      if (record) {
-        removePendingTimeRecordRecovery(record.id)
-      }
-      if (!persistCompletionRecord || completionOptions?.persistRecord === false) {
-        return record
-      }
-      return persistRecord(record)
-    },
-    [autoPauseRef, buildRecord, clearPersistedSnapshot, clearSuspendedState, hiddenPauseRef, persistCompletionRecord, persistRecord, pushEvent, stopTicker],
-  )
-
-  const reset = React.useCallback(() => {
-    stopTicker()
-    clockFrozenAtMsRef.current = null
-    clearTimedSessionTimeout(autoPauseRef)
-    autoPauseDeadlineAtRef.current = null
-    clearTimedSessionTimeout(hiddenPauseRef)
-    eventsRef.current = []
-    sceneSegmentsRef.current = []
-    activeSceneSegmentRef.current = null
-    effectiveSecondsRef.current = 0
-    lastTickPersistAtRef.current = null
-    idleSecondsRef.current = 0
-    pauseCountRef.current = 0
-    startedAtRef.current = null
-    lastActivityAtRef.current = null
-    durationEditedRef.current = false
-    focusRoundRef.current = { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND }
-    recordIdRef.current = null
-    setEffectiveSeconds(0)
-    setIdleSeconds(0)
-    setPauseCount(0)
-    setStartedAt(null)
-    setDurationEdited(false)
-    setFocusRound({ ...DEFAULT_TIMED_SESSION_FOCUS_ROUND })
-    statusRef.current = 'idle'
-    sceneActiveRef.current = true
-    setStatus('idle')
-    setGlowState('idle')
-    clearSuspendedState()
-    clearPersistedSnapshot()
-  }, [autoPauseRef, clearPersistedSnapshot, clearSuspendedState, hiddenPauseRef, stopTicker])
-
-  useTimedSessionSnapshotRestore({
-    storageKey,
-    restoredStorageKeyRef,
-    recordIdRef,
-    eventsRef,
-    sceneSegmentsRef,
-    activeSceneSegmentRef,
-    focusRoundRef,
-    effectiveSecondsRef,
-    idleSecondsRef,
-    pauseCountRef,
-    startedAtRef,
-    durationEditedRef,
-    lastActivityAtRef,
-    autoPauseDeadlineAtRef,
-    suspendedAtRef,
-    resumeDeadlineAtRef,
-    leaveMetaRef,
-    sceneActiveRef,
-    statusRef,
-    setEffectiveSeconds,
-    setIdleSeconds,
-    setPauseCount,
-    setStartedAt,
-    setDurationEdited,
-    setGlowState,
-    setStatus,
-    setFocusRound,
-    clearPersistedSnapshot,
-    clearCompetingSnapshots,
-    persistExpiredSuspendedSnapshot,
-    persistSnapshot,
-    resumeSuspendedScene,
-    startTicker,
-    armAutoPause,
-  })
-
-  useTimedSessionGlowReset(glowState, setGlowState)
-
-  useTimedSessionBrowserPauseEffects({
-    sceneActiveRef,
-    statusRef,
-    hiddenPauseRef,
-    autoPauseRef,
-    tickerRef,
-    hiddenPauseMs: resolvedAutomation.hiddenPauseMs,
-    pause,
-    leaveScene,
-    freezeClockOnDocumentHidden,
-    persistBackgroundCheckpoint,
-    resolveVisibilityReturn,
-    clearTimer: clearTimedSessionTimeout,
-    clearIntervalTimer: clearTimedSessionInterval,
-  })
-
-  useTimedSessionUnloadPersistence(storageKey, leaveSceneForUnload)
-
-  useTimedSessionAutomationConfigSubscription(setAutomationConfig)
+  attachmentRef.current = {
+    ...attachmentRef.current,
+    scene: options.automationScene ?? options.kind,
+    kind: options.kind,
+    title: options.title,
+  }
 
   React.useEffect(() => {
-    return registerAutoSaveTarget(timedSessionAutoSaveKey, {
-      flush: async () => {
-        await saveInProgressRecord()
-      },
+    const attachmentId = attachmentIdRef.current
+    const listener = () => forceRender((value) => value + 1)
+    store.listeners.add(listener)
+    attachStore(store, attachmentId, {
+      // The registry metadata above remains fixed to the first page; this
+      // attachment carries only the current page's scene fragment.
+      ...attachmentRef.current,
     })
-  }, [saveInProgressRecord, timedSessionAutoSaveKey])
+    return () => {
+      store.listeners.delete(listener)
+      detachStore(store, attachmentId)
+    }
+  }, [store])
+
+  const start = React.useCallback((meta?: TimedSessionMeta) => startStore(store, meta), [store])
+  const pause = React.useCallback((meta?: TimedSessionMeta) => pauseStore(store, 'manual', meta), [store])
+  const resume = React.useCallback((meta?: TimedSessionMeta) => resumeStore(store, meta), [store])
+  const complete = React.useCallback((method: SessionCompletionMethod, meta?: TimedSessionMeta, options?: { persistRecord?: boolean }) => completeStore(store, method, meta, options), [store])
+  const reset = React.useCallback(() => resetStore(store), [store])
+  const setSceneActive = React.useCallback((active: boolean, meta?: TimedSessionMeta) => setSceneActiveStore(store, attachmentIdRef.current, active, meta), [store])
+  const leaveScene = React.useCallback((meta?: TimedSessionMeta) => completeStore(store, 'left_page', meta), [store])
+  const logEvent = React.useCallback((type: SessionEventRecord['type'], meta?: TimedSessionMeta) => {
+    pushEvent(store, type, meta)
+    persistSnapshot(store)
+    notify(store)
+  }, [store])
+  const getEffectiveSeconds = React.useCallback(() => {
+    updateEffectiveSnapshot(store)
+    return store.snapshot.effectiveSeconds
+  }, [store])
 
   return useStableTimedSessionController(buildTimedSessionController({
-    sessionId: sessionIdRef.current,
-    effectiveSeconds,
-    idleSeconds,
-    pauseCount,
-    status,
-    startedAt,
-    durationEdited,
-    glowState,
-    focusRound,
+    sessionId: store.snapshot.sessionId,
+    sessionKey: store.key,
+    effectiveSeconds: store.snapshot.effectiveSeconds,
+    pauseCount: store.snapshot.pauseCount,
+    status: store.snapshot.status,
+    pauseReason: store.snapshot.pauseReason,
+    startedAt: store.snapshot.startedAt,
+    glowState: store.snapshot.glowState,
     start,
     pause,
     resume,
     setSceneActive,
     leaveScene,
-    registerActivity,
     logEvent,
-    acknowledgeFocusInterval,
-    acknowledgeFocusGoal,
-    startNextFocusRound,
-    adjustDuration,
     getEffectiveSeconds,
     complete,
     reset,

@@ -9,36 +9,24 @@ import {
 } from '@/shared/components/session/timer-automation-config'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
-  readTimerFocusConfig,
-  resetTimerFocusConfig,
-  saveTimerFocusConfig,
-  TIMER_FOCUS_UPDATED_EVENT,
-  type TimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
-import {
   getDesktopTimerBridge,
   hasDesktopTimerBridge,
   type UnifiedTimerCommand,
 } from '@/shared/components/session/desktopTimerBridge'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
-  resetBreakGuardConfig,
-  saveBreakGuardConfig,
-  updateBreakGuardLog,
-} from '@/shared/components/session/break-guard-config'
+  adoptLiveTimerSnapshot,
+  interpolateTimerSeconds,
+  setLiveForegroundClockSuppressed,
+  useLiveStudyPresence,
+} from '@/modules/session/public'
 import { TimerAutomationDialog } from '@/shared/components/session/TimerAutomationDialog'
-import { snoozeBreakGuard } from '@/shared/components/session/breakGuardModel'
 import {
   selectActiveTimerEntry,
   type GlobalTimerRegistration,
 } from '@/shared/components/session/globalTimerModel'
-import {
-  buildBreakTimerSnapshot,
-  buildStudyTimerSnapshot,
-} from '@/shared/components/session/timerSnapshotBuilders'
-import { useBreakGuardMachine } from '@/shared/components/session/useBreakGuardMachine'
+import { buildStudyTimerSnapshot } from '@/shared/components/session/timerSnapshotBuilders'
 import { useDesktopTimerBridgeSync } from '@/shared/components/session/useDesktopTimerBridgeSync'
-import { useTimerFocusCycle } from '@/shared/components/session/useTimerFocusCycle'
 import { useScreenWakeLock } from '@/shared/hooks/useScreenWakeLock'
 import {
   GlobalTimerActionsContext,
@@ -49,46 +37,23 @@ export function GlobalTimerProvider({
   children,
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
-  // Desktop Electron uses the separate timer overlay window.
-  // Browser desktop keeps the in-page floating chrome.
-  // PWA hides the floating chrome (blocks the view) but still mounts headless
-  // overlay effects so focus celebrations / break alerts keep working; pages
-  // like freestyle expose start/pause on their own HUD.
+  // Desktop Electron uses the separate timer overlay window. Browser desktop
+  // keeps the in-page floating chrome; PWA mounts it headlessly.
   const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
   const [showFloatingTimerChrome] = React.useState(
     () => !hasDesktopTimerBridge() && detectClientSource() !== 'pwa',
   )
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
+  const presence = useLiveStudyPresence()
+  const [followerClockNow, setFollowerClockNow] = React.useState(() => Date.now())
+  const lastPublishedTimerAtRef = React.useRef(0)
+  const lastPublishedTimerStatusRef = React.useRef<string | null>(null)
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
-  const [focusConfig, setFocusConfig] = React.useState<TimerFocusConfig>(() =>
-    readTimerFocusConfig(),
-  )
-  const {
-    breakConfig,
-    breakState,
-    breakPaused,
-    breakPausedRemainingMs,
-    breakReturnPath,
-    breakTick,
-    breakStateRef,
-    breakConfigRef,
-    breakPausedRef,
-    breakPausedRemainingRef,
-    activeEntryRef,
-    notifyStudyActivity,
-    returnToStudy,
-    scheduleBreakPrompt,
-    startBreakCountdown,
-    finishBreak,
-    openTarget,
-    setBreakPaused,
-    setBreakPausedRemainingMs,
-    setBreakState,
-  } = useBreakGuardMachine({ activeEntry, entries })
-  const feedbackSignal = useTimerFocusCycle(activeEntry, focusConfig)
+  const activeEntryRef = React.useRef<GlobalTimerRegistration | null>(null)
+  activeEntryRef.current = activeEntry
 
   // One place covers every study scene: the registry always knows which timer
   // is live. Screen-off is what suspends timing on phones, so hold the lock
@@ -96,36 +61,12 @@ export function GlobalTimerProvider({
   useScreenWakeLock(automationConfig.keepScreenAwake && activeEntry?.timer.status === 'running')
 
   React.useEffect(() => {
-    const handleMainAppClick = (event: MouseEvent) => {
-      const target = event.target
-      if (
-        target instanceof Element &&
-        target.closest('[data-timer-overlay-root="true"], [data-timer-activity="ignore"]')
-      ) return
-      const entry = activeEntryRef.current
-      if (!entry?.isRouteActive) return
-      if (!notifyStudyActivity(entry.sessionId)) return
-      entry.timer.registerActivity('practice_interaction', { source: 'main_app_click' })
-    }
-    document.addEventListener('click', handleMainAppClick, true)
-    return () => document.removeEventListener('click', handleMainAppClick, true)
-  }, [activeEntryRef, notifyStudyActivity])
-  React.useEffect(() => {
     const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
       const nextConfig = detail || readTimerAutomationConfig()
       setAutomationConfig(nextConfig)
     })
-    const handleFocusChange = (event: Event) => {
-      const nextConfig =
-        event instanceof CustomEvent && event.detail
-          ? (event.detail as TimerFocusConfig)
-          : readTimerFocusConfig()
-      setFocusConfig(nextConfig)
-    }
-    window.addEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
     return () => {
       unsubscribeAutomation()
-      window.removeEventListener(TIMER_FOCUS_UPDATED_EVENT, handleFocusChange)
     }
   }, [])
 
@@ -162,199 +103,131 @@ export function GlobalTimerProvider({
     () => ({
       upsertTimer,
       removeTimer,
-      notifyStudyActivity,
     }),
-    [notifyStudyActivity, removeTimer, upsertTimer],
+    [removeTimer, upsertTimer],
   )
 
   const handleTimerCommand = React.useCallback((command: UnifiedTimerCommand) => {
-    const currentBreakState = breakStateRef.current
-    const config = breakConfigRef.current
     const currentActiveEntry = activeEntryRef.current
+    const remoteTimer = presence?.projection.timer
+    if (
+      presence &&
+      !presence.isController &&
+      (command.type === 'pause' || command.type === 'start' || command.type === 'resume')
+    ) {
+      setLiveForegroundClockSuppressed(false)
+      if (remoteTimer?.ownerSessionKey) {
+        adoptLiveTimerSnapshot({
+          sessionKey: remoteTimer.ownerSessionKey,
+          status:
+            remoteTimer.status === 'running' || remoteTimer.status === 'paused'
+              ? remoteTimer.status
+              : 'paused',
+          effectiveSeconds: interpolateTimerSeconds(remoteTimer),
+        })
+      }
+      presence.publish({
+        takeControl: true,
+        timer: remoteTimer ?? undefined,
+      })
+    }
 
     if (command.type === 'openTimerSettings') {
       setSettingsOpen(true)
       return
     }
 
-    if (command.type === 'promptBreak') {
-      if (config.promptOnWindowLeave) {
-        scheduleBreakPrompt(config, currentBreakState)
-      }
-      return
-    }
-
-    if (command.type === 'returnToStudy') {
-      returnToStudy()
-      return
-    }
-
-    if (command.type === 'startBreak') {
-      currentActiveEntry?.timer.logEvent('break_start', {
-        source: 'legacy_break_prompt',
-        planned_minutes: command.minutes,
-      })
-      startBreakCountdown(command.minutes)
-      return
-    }
-
-    if (command.type === 'continueRound') {
-      if (!currentActiveEntry) return
-      const goalSeconds = Math.max(60, Math.round(focusConfig.primaryMinutes * 60))
-      const roundElapsedSeconds = Math.max(
-        0,
-        currentActiveEntry.timer.effectiveSeconds -
-          currentActiveEntry.timer.focusRound.startedAtEffectiveSeconds,
-      )
-      if (roundElapsedSeconds < goalSeconds) return
-      currentActiveEntry.timer.startNextFocusRound({ source: 'goal_continue' })
-      return
-    }
-
-    if (command.type === 'startGoalBreak') {
-      if (!currentActiveEntry) return
-      const goalSeconds = Math.max(60, Math.round(focusConfig.primaryMinutes * 60))
-      const roundElapsedSeconds = Math.max(
-        0,
-        currentActiveEntry.timer.effectiveSeconds -
-          currentActiveEntry.timer.focusRound.startedAtEffectiveSeconds,
-      )
-      if (roundElapsedSeconds < goalSeconds) return
-      const minutes = Math.max(
-        1,
-        Math.round(command.minutes ?? breakConfigRef.current.presetMinutes[0] ?? 5),
-      )
-      currentActiveEntry.timer.logEvent('break_start', {
-        source: 'focus_goal',
-        planned_minutes: minutes,
-        round_index: currentActiveEntry.timer.focusRound.roundIndex,
-      })
-      currentActiveEntry.timer.startNextFocusRound({ source: 'focus_goal_break' })
-      startBreakCountdown(minutes)
-      return
-    }
-
-    if (command.type === 'startStudy') {
-      if (!currentActiveEntry) return
-      currentActiveEntry.timer.logEvent('break_end', {
-        source: 'manual_start_study',
-        break_status: currentBreakState.status,
-      })
-      finishBreak()
-      if (currentActiveEntry.timer.status === 'paused') {
-        currentActiveEntry.timer.resume({ source: 'break_complete_manual' })
-      } else if (currentActiveEntry.timer.status === 'idle') {
-        currentActiveEntry.timer.start({ source: 'break_complete_manual' })
-      }
-      return
-    }
-
     if (command.type === 'pause') {
-      if (currentBreakState.status === 'counting_down') {
-        const remaining = Math.max(0, (currentBreakState.expiresAt ?? Date.now()) - Date.now())
-        setBreakPaused(true)
-        setBreakPausedRemainingMs(remaining)
-        return
-      }
       currentActiveEntry?.timer.pause({ source: 'global_floating_timer' })
       return
     }
 
-    if (command.type === 'resume') {
-      if (currentBreakState.status === 'counting_down' && breakPausedRef.current) {
-        const remaining = breakPausedRemainingRef.current ?? 0
-        setBreakState((current) => ({
-          ...current,
-          expiresAt: Date.now() + remaining,
-        }))
-        setBreakPaused(false)
-        setBreakPausedRemainingMs(null)
-        return
+    if (command.type === 'start') {
+      currentActiveEntry?.timer.start({ source: 'global_floating_timer' })
+      // 强制桌面版也开始计时
+      const bridge = getDesktopTimerBridge()
+      if (bridge?.sendTimerCommand) {
+        bridge.sendTimerCommand({ type: 'start' })
       }
+      return
+    }
+
+    if (command.type === 'resume') {
       if (currentActiveEntry?.timer.status === 'paused') {
         currentActiveEntry.timer.resume({ source: 'global_floating_timer' })
       } else if (currentActiveEntry?.timer.status === 'idle') {
         currentActiveEntry.timer.start({ source: 'global_floating_timer' })
+        // 强制桌面版也开始计时
+        const bridge = getDesktopTimerBridge()
+        if (bridge?.sendTimerCommand) {
+          bridge.sendTimerCommand({ type: 'start' })
+        }
       }
-      return
-    }
-
-    if (command.type === 'snooze') {
-      if (currentBreakState.status !== 'expired' && currentBreakState.status !== 'counting_down') return
-      const nextState = snoozeBreakGuard(currentBreakState, command.minutes)
-      if (nextState.logId) {
-        updateBreakGuardLog(nextState.logId, { snoozeCount: nextState.snoozeCount })
-      }
-      setBreakPaused(false)
-      setBreakPausedRemainingMs(null)
-      setBreakState(nextState)
-      return
-    }
-
-    if (command.type === 'finishBreak') {
-      currentActiveEntry?.timer.logEvent('break_end', {
-        source: 'manual_finish_break',
-        break_status: currentBreakState.status,
-      })
-      finishBreak({ openTarget: command.openTarget })
-      return
-    }
-
-    if (command.type === 'openTarget') {
-      openTarget(command.path)
       return
     }
 
     if (command.type === 'collapse') {
       const bridge = getDesktopTimerBridge()
       bridge?.setOverlayCollapsed?.(command.collapsed)
+      return
+    }
+
+    // In-page floating overlay owns hide via layout.hidden. Desktop Electron
+    // hides the overlay window in main before this command would be forwarded.
+    if (command.type === 'closeOverlay') {
+      return
     }
   }, [
     activeEntryRef,
-    breakConfigRef,
-    breakPausedRef,
-    breakPausedRemainingRef,
-    breakStateRef,
-    finishBreak,
-    focusConfig,
-    openTarget,
-    returnToStudy,
-    scheduleBreakPrompt,
-    setBreakPaused,
-    setBreakPausedRemainingMs,
-    setBreakState,
-    startBreakCountdown,
+    presence,
   ])
 
+  const localTimerSnapshot = React.useMemo(
+    () => buildStudyTimerSnapshot({ activeEntry, automationConfig }),
+    [activeEntry, automationConfig],
+  )
+  const remoteTimer = presence?.projection.timer ?? null
+  const followingRemoteTimer = Boolean(
+    presence && !presence.isController && presence.projection.controllerClientId && remoteTimer,
+  )
   const timerSnapshot = React.useMemo(() => {
-    if (
-      breakState.status === 'prompting' ||
-      breakState.status === 'counting_down' ||
-      breakState.status === 'expired'
-    ) {
-      // The state object changes only on transitions; the tick forces countdown snapshots to refresh.
-      void breakTick
-      return buildBreakTimerSnapshot({
-        breakState,
-        config: breakConfig,
-        paused: breakPaused,
-        pausedRemainingMs: breakPausedRemainingMs,
-        targetPath: breakReturnPath,
-      })
+    if (!followingRemoteTimer || !remoteTimer) return localTimerSnapshot
+    const seconds = interpolateTimerSeconds(remoteTimer, followerClockNow)
+    return {
+      ...remoteTimer,
+      displaySeconds: seconds,
+      effectiveSeconds: seconds,
     }
-    return buildStudyTimerSnapshot({
-      activeEntry,
-      focusConfig,
-      automationConfig,
-      breakConfig,
-      feedbackSignal,
+  }, [followerClockNow, followingRemoteTimer, localTimerSnapshot, remoteTimer])
+
+  React.useEffect(() => {
+    if (!followingRemoteTimer || remoteTimer?.status !== 'running') return
+    const timer = window.setInterval(() => setFollowerClockNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [followingRemoteTimer, remoteTimer?.status])
+
+  React.useEffect(() => {
+    if (!presence) return
+    if (presence.projection.controllerClientId && !presence.isController) return
+    if (!activeEntry && localTimerSnapshot.status === 'idle') return
+    const now = Date.now()
+    const status = localTimerSnapshot.status
+    const runningTick =
+      status === 'running' &&
+      lastPublishedTimerStatusRef.current === 'running' &&
+      now - lastPublishedTimerAtRef.current < 1_000
+    if (runningTick) return
+    lastPublishedTimerAtRef.current = now
+    lastPublishedTimerStatusRef.current = status
+    presence.publish({
+      takeControl: false,
+      timer: localTimerSnapshot,
     })
-  }, [activeEntry, automationConfig, breakConfig, breakPaused, breakPausedRemainingMs, breakReturnPath, breakState, breakTick, feedbackSignal, focusConfig])
+  }, [activeEntry, localTimerSnapshot, presence])
 
   useDesktopTimerBridgeSync({
     timerSnapshot,
     handleTimerCommand,
-    activeEntryRef,
   })
 
   return (
@@ -371,16 +244,10 @@ export function GlobalTimerProvider({
       <TimerAutomationDialog
         open={settingsOpen}
         config={automationConfig}
-        focusConfig={focusConfig}
-        breakConfig={breakConfig}
         onOpenChange={setSettingsOpen}
         onSave={(nextConfig) => setAutomationConfig(saveTimerAutomationConfig(nextConfig))}
-        onFocusConfigSave={(nextConfig) => setFocusConfig(saveTimerFocusConfig(nextConfig))}
-        onBreakConfigSave={(nextConfig) => saveBreakGuardConfig(nextConfig)}
         onReset={() => {
           setAutomationConfig(resetTimerAutomationConfig())
-          setFocusConfig(resetTimerFocusConfig())
-          resetBreakGuardConfig()
         }}
       />    </GlobalTimerActionsContext.Provider>
   )
