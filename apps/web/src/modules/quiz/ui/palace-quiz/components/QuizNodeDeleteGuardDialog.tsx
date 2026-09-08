@@ -72,15 +72,27 @@ export function QuizNodeDeleteGuardDialog({
   // edge key -> target uid to move to; '' means drop the binding.
   const [targetByEdge, setTargetByEdge] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    setTargetByEdge({})
-    setSaving(false)
-  }, [request])
-
   const candidates = useMemo(
     () => (request ? survivingNodes(editorDoc, request.removedNodeUids) : []),
     [editorDoc, request],
   )
+  const defaultTargetUid = useMemo(
+    () => candidates.find((node) => node.depth === 0)?.uid ?? candidates[0]?.uid ?? '',
+    [candidates],
+  )
+
+  useEffect(() => {
+    setSaving(false)
+    if (!request) {
+      setTargetByEdge({})
+      return
+    }
+    const next: Record<string, string> = {}
+    for (const edge of request.affectedEdges) {
+      next[`${edge.question_id}:${edge.node_uid}`] = defaultTargetUid
+    }
+    setTargetByEdge(next)
+  }, [request, defaultTargetUid])
 
   const edges = useMemo(() => request?.affectedEdges ?? [], [request])
   const questionCount = useMemo(
@@ -135,7 +147,7 @@ export function QuizNodeDeleteGuardDialog({
           <DialogTitle>这些卡片上还挂着题目</DialogTitle>
           <DialogDescription>
             即将删除的卡片绑定了 {questionCount} 道题（共 {edges.length} 条绑定）。
-            逐条选择转移到哪张卡片；留空表示直接解除该条绑定。
+            默认转到根节点；可改选其他卡片，或选「解除绑定（不转移）」。
           </DialogDescription>
         </DialogHeader>
 
