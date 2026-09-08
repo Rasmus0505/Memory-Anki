@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import {
   isPendingLiveStudyApply,
+  isWeakerRevealMap,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
   useLiveStudyPresence,
@@ -78,7 +79,7 @@ export function useFreestyleLiveMirror({
       applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
     }
     applyAnkiFlip(decoded.flip)
-    applyRevealMap(decoded.revealMap)
+    if (decoded.revealMap) applyRevealMap(decoded.revealMap)
   }, [applyAnkiFlip, applyQuestionState, applyRevealMap, presence, seekCardId])
 
   useEffect(() => {
@@ -117,6 +118,9 @@ export function useFreestyleLiveMirror({
       interactionUnchanged,
     })
     if (!pendingApply) pendingApplyRef.current = false
+    const remoteReveal = presence.projection.surface === 'freestyle'
+      ? decodeFreestyleLiveView(presence.projection.view)?.revealMap
+      : null
     if (!shouldPublishLiveStudyView({
       isActive,
       publishWhen: true,
@@ -125,10 +129,12 @@ export function useFreestyleLiveMirror({
       isFollower,
       interactionUnchanged,
       pendingApply,
+      hydrated: presence.connected,
+      weakerThanRemote: isWeakerRevealMap(view.revealMap, remoteReveal),
     })) return
     lastSentRef.current = serialized
     presence.publish({
-      takeControl: true,
+      takeControl: false,
       surface: 'freestyle',
       route,
       view,

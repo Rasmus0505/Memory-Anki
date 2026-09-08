@@ -41,6 +41,9 @@ describe('liveStudyModel', () => {
     })
     expect(envelope.publisherClientId).toBe('desktop')
     expect(envelope.projection.controllerClientId).toBe('desktop')
+    expect(envelope.projection.controllerCardId).toBeNull()
+    expect(envelope.projection.controllerHeartbeatAt).toBeNull()
+    expect(envelope.projection.controllerLeaseExpiresAt).toBeNull()
     expect(envelope.projection.view).toEqual({ currentCardId: 'card-1' })
     expect(
       shouldFollowLiveRoute({
@@ -98,6 +101,79 @@ describe('liveStudyModel', () => {
       operation_id: 'op-1',
       take_control: true,
       surface: 'freestyle',
+    })
+  })
+
+  it('decodes controller lease fields from snake_case and camelCase', () => {
+    const snake = decodeLiveStudyEnvelope({
+      publisher_client_id: 'pwa',
+      projection: {
+        revision: 2,
+        controller_client_id: 'pwa',
+        controller_card_id: 'card-9',
+        controller_heartbeat_at: '2026-01-01T00:00:01Z',
+        controller_lease_expires_at: '2026-01-01T00:00:09Z',
+        route: '/freestyle',
+        surface: 'freestyle',
+        view: { currentCardId: 'card-9' },
+        timer: null,
+        updated_at: '2026-01-01T00:00:01Z',
+      },
+    }).projection
+    expect(snake.controllerClientId).toBe('pwa')
+    expect(snake.controllerCardId).toBe('card-9')
+    expect(snake.controllerHeartbeatAt).toBe('2026-01-01T00:00:01Z')
+    expect(snake.controllerLeaseExpiresAt).toBe('2026-01-01T00:00:09Z')
+
+    const camel = decodeLiveStudyEnvelope({
+      publisherClientId: 'desktop',
+      projection: {
+        revision: 3,
+        controllerClientId: 'desktop',
+        controllerCardId: 'card-2',
+        controllerHeartbeatAt: 't1',
+        controllerLeaseExpiresAt: 't2',
+        route: '/freestyle',
+        surface: 'freestyle',
+        view: null,
+        timer: null,
+        updatedAt: 't1',
+      },
+    }).projection
+    expect(camel.controllerClientId).toBe('desktop')
+    expect(camel.controllerCardId).toBe('card-2')
+    expect(camel.controllerHeartbeatAt).toBe('t1')
+    expect(camel.controllerLeaseExpiresAt).toBe('t2')
+  })
+
+  it('encodes take_control, heartbeat, and card_id', () => {
+    expect(
+      encodeLiveStudyCommand({
+        type: 'heartbeat',
+        clientId: 'pwa',
+        operationId: 'op-hb',
+        cardId: 'card-7',
+      }),
+    ).toEqual({
+      type: 'heartbeat',
+      client_id: 'pwa',
+      operation_id: 'op-hb',
+      card_id: 'card-7',
+    })
+    expect(
+      encodeLiveStudyCommand({
+        type: 'take_control',
+        clientId: 'desktop',
+        operationId: 'op-tc',
+        takeControl: true,
+        cardId: 'card-3',
+      }),
+    ).toEqual({
+      type: 'take_control',
+      client_id: 'desktop',
+      operation_id: 'op-tc',
+      take_control: true,
+      card_id: 'card-3',
     })
   })
 })

@@ -3,6 +3,7 @@ import type { LiveStudySurface } from '@/modules/session/domain/session-entity/m
 import { useLiveStudyPresence } from '@/modules/session/ui/live-presence/liveStudyPresenceContext'
 import {
   isPendingLiveStudyApply,
+  isWeakerRevealMap,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from '@/modules/session/ui/live-presence/shouldPublishLiveStudyView'
@@ -16,6 +17,7 @@ export function useLiveStudySurfaceMirror<TView>({
   sameInteraction,
   publishWhen = true,
   isActive = true,
+  takeControl = false,
 }: {
   surface: LiveStudySurface
   route: string
@@ -25,6 +27,7 @@ export function useLiveStudySurfaceMirror<TView>({
   sameInteraction?: (previous: TView, next: TView) => boolean
   publishWhen?: boolean
   isActive?: boolean
+  takeControl?: boolean
 }) {
   const presence = useLiveStudyPresence()
   const lastSentRef = useRef('')
@@ -73,6 +76,9 @@ export function useLiveStudySurfaceMirror<TView>({
       interactionUnchanged,
     })
     if (!pendingApply) pendingApplyRef.current = false
+    const remoteView = presence.projection.view
+    const localView = view && typeof view === 'object' ? view as Record<string, unknown> : null
+    const remoteRecord = remoteView && typeof remoteView === 'object' ? remoteView as Record<string, unknown> : null
     if (!shouldPublishLiveStudyView({
       isActive,
       publishWhen,
@@ -81,13 +87,15 @@ export function useLiveStudySurfaceMirror<TView>({
       isFollower,
       interactionUnchanged,
       pendingApply,
+      hydrated: presence.connected,
+      weakerThanRemote: isWeakerRevealMap(localView?.revealMap, remoteRecord?.revealMap),
     })) return
     lastSentRef.current = serialized
     presence.publish({
-      takeControl: true,
+      takeControl,
       surface,
       route,
       view,
     })
-  }, [decode, isActive, presence, publishWhen, route, sameInteraction, serialized, surface, view])
+  }, [decode, isActive, presence, publishWhen, route, sameInteraction, serialized, surface, takeControl, view])
 }

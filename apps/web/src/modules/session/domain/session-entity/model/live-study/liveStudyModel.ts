@@ -15,6 +15,9 @@ export type LiveStudySurface = (typeof LIVE_STUDY_SURFACES)[number]
 export interface LiveStudyProjection {
   revision: number
   controllerClientId: string | null
+  controllerCardId: string | null
+  controllerHeartbeatAt: string | null
+  controllerLeaseExpiresAt: string | null
   route: string
   surface: LiveStudySurface
   view: unknown
@@ -28,10 +31,11 @@ export interface LiveStudyEnvelope {
 }
 
 export interface LiveStudyCommandInput {
-  type?: 'publish' | 'hello'
+  type?: 'publish' | 'hello' | 'take_control' | 'heartbeat'
   clientId: string
   operationId: string
   takeControl?: boolean
+  cardId?: string
   route?: string | null
   surface?: LiveStudySurface
   view?: unknown
@@ -56,6 +60,9 @@ export function emptyLiveStudyProjection(): LiveStudyProjection {
   return {
     revision: 0,
     controllerClientId: null,
+    controllerCardId: null,
+    controllerHeartbeatAt: null,
+    controllerLeaseExpiresAt: null,
     route: '',
     surface: 'idle',
     view: null,
@@ -104,6 +111,13 @@ function readString(value: unknown) {
   return typeof value === 'string' ? value : ''
 }
 
+function readNullableString(record: Record<string, unknown>, snake: string, camel: string) {
+  const snakeValue = record[snake]
+  if (typeof snakeValue === 'string') return snakeValue
+  const camelValue = record[camel]
+  return typeof camelValue === 'string' ? camelValue : null
+}
+
 function readNumber(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
@@ -113,12 +127,10 @@ export function decodeLiveStudyProjection(raw: unknown): LiveStudyProjection {
   const surfaceRaw = record.surface
   return {
     revision: readNumber(record.revision),
-    controllerClientId:
-      typeof record.controller_client_id === 'string'
-        ? record.controller_client_id
-        : typeof record.controllerClientId === 'string'
-          ? record.controllerClientId
-          : null,
+    controllerClientId: readNullableString(record, 'controller_client_id', 'controllerClientId'),
+    controllerCardId: readNullableString(record, 'controller_card_id', 'controllerCardId'),
+    controllerHeartbeatAt: readNullableString(record, 'controller_heartbeat_at', 'controllerHeartbeatAt'),
+    controllerLeaseExpiresAt: readNullableString(record, 'controller_lease_expires_at', 'controllerLeaseExpiresAt'),
     route: readString(record.route),
     surface: isLiveStudySurface(surfaceRaw) ? surfaceRaw : 'idle',
     view: 'view' in record ? record.view : null,
@@ -150,6 +162,7 @@ export function encodeLiveStudyCommand(input: LiveStudyCommandInput) {
     operation_id: input.operationId,
   }
   if (input.takeControl != null) payload.take_control = input.takeControl
+  if (input.cardId !== undefined) payload.card_id = input.cardId
   if (input.route !== undefined) payload.route = input.route
   if (input.surface !== undefined) payload.surface = input.surface
   if (input.view !== undefined) payload.view = input.view

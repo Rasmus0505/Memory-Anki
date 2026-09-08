@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from memory_anki.modules.session.application.live_study_room import (
     CONTROLLER_DISCONNECT_GRACE_SECONDS,
+    CONTROLLER_LEASE_SECONDS,
     apply_live_study_command,
     expire_disconnected_controllers,
     get_live_study_projection,
@@ -108,6 +109,115 @@ def test_remaining_study_surfaces_are_last_write_wins() -> None:
     assert reading["projection"]["view"]["articleId"] == 9
 
 
+def test_publishing_view_without_take_control_does_not_steal_controller() -> None:
+    _publish(
+        "desktop",
+        "op-1",
+        take_control=True,
+        route="/freestyle",
+        surface="freestyle",
+        view={"currentCardId": "card-a"},
+        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 6},
+    )
+    mirrored = _publish(
+        "pwa",
+        "op-2",
+        route="/freestyle",
+        surface="freestyle",
+        view={"currentCardId": "card-b"},
+    )
+    projection = mirrored["projection"]
+    assert projection["controller_client_id"] == "desktop"
+    assert projection["controller_card_id"] == "card-a"
+    assert projection["view"]["currentCardId"] == "card-b"
+    assert projection["timer"]["status"] == "running"
+    assert projection["timer"]["effectiveSeconds"] == 6
+
+
+def test_take_control_by_pwa_pauses_desktop_timer_and_switches_controller() -> None:
+    _publish(
+        "desktop",
+        "op-1",
+        take_control=True,
+        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 20},
+        view={"currentCardId": "card-desktop"},
+    )
+    taken = apply_live_study_command(
+        {
+            "type": "take_control",
+            "client_id": "pwa",
+            "operation_id": "op-2",
+            "view": {"currentCardId": "card-pwa"},
+        }
+    )
+    projection = taken["projection"]
+    assert projection["controller_client_id"] == "pwa"
+    assert projection["controller_card_id"] == "card-pwa"
+    assert projection["timer"]["status"] == "paused"
+    assert projection["timer"]["semanticState"] == "paused"
+    assert projection["timer"]["effectiveSeconds"] == 20
+
+
+def test_heartbeat_timeout_pauses_without_adding_seconds() -> None:
+    _publish(
+        "desktop",
+        "op-1",
+        take_control=True,
+        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 8},
+    )
+    subscriber_id, _inbox = subscribe_live_study("desktop")
+    expire_disconnected_controllers(now=time.monotonic() + CONTROLLER_LEASE_SECONDS + 0.01)
+    projection = get_live_study_projection()
+    assert projection["controller_client_id"] is None
+    assert projection["controller_card_id"] is None
+    assert projection["controller_heartbeat_at"] is None
+    assert projection["controller_lease_expires_at"] is None
+    assert projection["timer"]["status"] == "paused"
+    assert projection["timer"]["semanticState"] == "paused"
+    assert projection["timer"]["effectiveSeconds"] == 8
+    unsubscribe_live_study(subscriber_id)
+
+
+def test_heartbeat_from_non_controller_is_ignored() -> None:
+    first = _publish(
+        "desktop",
+        "op-1",
+        take_control=True,
+        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 4},
+    )
+    ignored = apply_live_study_command(
+        {
+            "type": "heartbeat",
+            "client_id": "pwa",
+            "operation_id": "hb-pwa",
+        }
+    )
+    assert ignored["projection"]["controller_client_id"] == "desktop"
+    assert ignored["projection"]["controller_heartbeat_at"] == first["projection"]["controller_heartbeat_at"]
+    apply_live_study_command(
+        {
+            "type": "heartbeat",
+            "client_id": "desktop",
+            "operation_id": "hb-desktop",
+        }
+    )
+    expire_disconnected_controllers(now=time.monotonic() + CONTROLLER_LEASE_SECONDS / 2)
+    projection = get_live_study_projection()
+    assert projection["controller_client_id"] == "desktop"
+    assert projection["timer"]["status"] == "running"
+    assert projection["timer"]["effectiveSeconds"] == 4
+
+
+def test_timer_without_take_control_is_ignored_when_uncontrolled() -> None:
+    ignored = _publish(
+        "desktop",
+        "op-1",
+        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 5},
+    )
+    assert ignored["projection"]["controller_client_id"] is None
+    assert ignored["projection"]["timer"] is None
+
+
 def test_non_controller_timer_publish_is_ignored() -> None:
     _publish(
         "desktop",
@@ -201,9 +311,7 @@ def test_http_rejects_unknown_surface() -> None:
 def test_live_room_module_is_not_sqlite_backed() -> None:
     from pathlib import Path
 
-    source = Path(
-        "apps/api/src/memory_anki/modules/session/application/live_study_room.py"
-    ).read_text(encoding="utf-8")
+    source = Path(apply_live_study_command.__code__.co_filename).read_text(encoding="utf-8")
     assert "sqlite" not in source.lower()
     assert "get_session" not in source
     assert json.loads(json.dumps(get_live_study_projection()))["surface"] == "idle"

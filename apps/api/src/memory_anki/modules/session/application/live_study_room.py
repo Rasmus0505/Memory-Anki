@@ -11,9 +11,10 @@ import queue
 import threading
 import time
 import uuid
+from datetime import timedelta
 from typing import Any
 
-from memory_anki.core.time import iso_utc_now
+from memory_anki.core.time import iso_utc_now, utc_now
 
 LIVE_STUDY_SURFACES = frozenset(
     {
@@ -25,7 +26,9 @@ LIVE_STUDY_SURFACES = frozenset(
         "english_reading",
     }
 )
+LIVE_STUDY_COMMAND_TYPES = frozenset({"publish", "hello", "take_control", "heartbeat"})
 CONTROLLER_DISCONNECT_GRACE_SECONDS = 5.0
+CONTROLLER_LEASE_SECONDS = 8.0
 SUBSCRIBER_QUEUE_SIZE = 8
 OPERATION_CACHE_LIMIT = 64
 
@@ -35,12 +38,16 @@ _subscribers: dict[str, dict[str, Any]] = {}
 _operations: dict[str, dict[str, Any]] = {}
 _operation_order: list[str] = []
 _controller_grace_until: dict[str, float] = {}
+_controller_lease_until: float | None = None
 
 
 def _empty_projection() -> dict[str, Any]:
     return {
         "revision": 0,
         "controller_client_id": None,
+        "controller_card_id": None,
+        "controller_heartbeat_at": None,
+        "controller_lease_expires_at": None,
         "route": "",
         "surface": "idle",
         "view": None,
@@ -52,6 +59,7 @@ def _empty_projection() -> dict[str, Any]:
 def reset_live_study_room() -> None:
     """Test helper: drop subscribers and restore an empty projection."""
 
+    global _controller_lease_until
     with _lock:
         for item in _subscribers.values():
             inbox: queue.Queue[dict[str, Any] | None] = item["queue"]
@@ -63,6 +71,7 @@ def reset_live_study_room() -> None:
         _operations.clear()
         _operation_order.clear()
         _controller_grace_until.clear()
+        _controller_lease_until = None
         _projection.clear()
         _projection.update(_empty_projection())
 
@@ -137,6 +146,39 @@ def _pause_timer_locked() -> bool:
     return True
 
 
+def _clear_controller_locked() -> None:
+    global _controller_lease_until
+    _projection["controller_client_id"] = None
+    _projection["controller_card_id"] = None
+    _projection["controller_heartbeat_at"] = None
+    _projection["controller_lease_expires_at"] = None
+    _controller_lease_until = None
+
+
+def _refresh_controller_lease_locked(now: float | None = None) -> None:
+    global _controller_lease_until
+    moment = time.monotonic() if now is None else now
+    _controller_lease_until = moment + CONTROLLER_LEASE_SECONDS
+    _projection["controller_heartbeat_at"] = iso_utc_now()
+    _projection["controller_lease_expires_at"] = (
+        utc_now() + timedelta(seconds=CONTROLLER_LEASE_SECONDS)
+    ).isoformat()
+
+
+def _extract_controller_card_id(payload: dict[str, Any]) -> str | None:
+    raw = payload.get("card_id")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    view = payload.get("view")
+    if not isinstance(view, dict):
+        return None
+    for key in ("currentCardId", "current_card_id"):
+        value = view.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def expire_disconnected_controllers(now: float | None = None) -> None:
     moment = time.monotonic() if now is None else now
     with _lock:
@@ -150,13 +192,17 @@ def expire_disconnected_controllers(now: float | None = None) -> None:
                 continue
             expired.append(client_id)
             _controller_grace_until.pop(client_id, None)
-        if not expired:
-            return
         controller = _projection.get("controller_client_id")
-        if controller not in expired:
+        disconnected = controller is not None and controller in expired
+        lease_expired = (
+            controller is not None
+            and _controller_lease_until is not None
+            and moment >= _controller_lease_until
+        )
+        if not disconnected and not lease_expired:
             return
         _pause_timer_locked()
-        _projection["controller_client_id"] = None
+        _clear_controller_locked()
         _projection["revision"] = int(_projection.get("revision") or 0) + 1
         _projection["updated_at"] = iso_utc_now()
         _emit_locked("update", None)
@@ -232,7 +278,7 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("client_id is required")
     if not operation_id:
         raise ValueError("operation_id is required")
-    if command_type not in {"publish", "hello"}:
+    if command_type not in LIVE_STUDY_COMMAND_TYPES:
         raise ValueError(f"unsupported live study command: {command_type}")
 
     expire_disconnected_controllers()
@@ -251,23 +297,36 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
             _remember_operation(operation_id, response)
             return dict(response)
 
-        take_control = bool(payload.get("take_control"))
+        take_control = bool(payload.get("take_control")) or command_type == "take_control"
         has_route = "route" in payload and payload.get("route") is not None
         has_surface = "surface" in payload and payload.get("surface") is not None
         has_view = "view" in payload
         has_timer = "timer" in payload
         surface = _normalize_surface(payload.get("surface")) if has_surface else None
         route = str(payload.get("route") or "") if has_route else None
-        becomes_controller = take_control or has_route or has_surface or has_view
-        is_controller = _projection.get("controller_client_id") == client_id
-        accept_timer = has_timer and (
-            becomes_controller or is_controller or _projection.get("controller_client_id") is None
-        )
+        current_controller = _projection.get("controller_client_id")
+        is_controller = current_controller == client_id
+        # Timer ticks never elect a controller. Only explicit take_control does,
+        # including the empty-room case (controller is None AND take_control).
+        accept_timer = has_timer and (is_controller or take_control)
 
         changed = False
-        if becomes_controller and _projection.get("controller_client_id") != client_id:
+        if take_control and current_controller != client_id:
+            _pause_timer_locked()
             _projection["controller_client_id"] = client_id
+            is_controller = True
             changed = True
+        if take_control or is_controller:
+            card_id = _extract_controller_card_id(payload)
+            if take_control and current_controller != client_id and card_id is None:
+                if _projection.get("controller_card_id") is not None:
+                    _projection["controller_card_id"] = None
+                    changed = True
+            elif card_id is not None and _projection.get("controller_card_id") != card_id:
+                _projection["controller_card_id"] = card_id
+                changed = True
+            _refresh_controller_lease_locked()
+
         if route is not None and _projection.get("route") != route:
             _projection["route"] = route
             changed = True

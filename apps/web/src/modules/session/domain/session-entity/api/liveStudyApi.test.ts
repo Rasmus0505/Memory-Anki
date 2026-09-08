@@ -26,6 +26,7 @@ describe('liveStudyApi', () => {
       clientId: 'pwa',
       operationId: 'op-1',
       takeControl: true,
+      cardId: 'card-1',
       surface: 'freestyle',
       route: '/freestyle',
       view: { currentCardId: 'card-1' },
@@ -34,6 +35,10 @@ describe('liveStudyApi', () => {
     expect(fetchMock).toHaveBeenCalled()
     const init = fetchMock.mock.calls.at(0)?.at(1) as RequestInit | undefined
     expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      take_control: true,
+      card_id: 'card-1',
+    })
   })
 
   it('parses snapshot and update SSE events', async () => {

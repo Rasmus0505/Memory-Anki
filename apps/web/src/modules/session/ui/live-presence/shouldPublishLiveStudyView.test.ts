@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isPendingLiveStudyApply,
+  isWeakerRevealMap,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from './shouldPublishLiveStudyView'
@@ -18,6 +19,22 @@ describe('shouldPublishLiveStudyView', () => {
 
   it('does not publish from a hidden keep-alive study page', () => {
     expect(shouldPublishLiveStudyView({ ...base, isActive: false })).toBe(false)
+  })
+
+  it('does not publish before the live room snapshot has arrived', () => {
+    expect(shouldPublishLiveStudyView({ ...base, hydrated: false })).toBe(false)
+  })
+
+  it('does not overwrite a richer remote reveal map with a root-only local map', () => {
+    expect(isWeakerRevealMap(
+      { root: 'revealed', child: 'hidden' },
+      { root: 'revealed', child: 'revealed' },
+    )).toBe(true)
+    expect(shouldPublishLiveStudyView({
+      ...base,
+      hydrated: true,
+      weakerThanRemote: true,
+    })).toBe(false)
   })
 
   it('does not let a follower echo load/apply take control', () => {

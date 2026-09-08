@@ -18,13 +18,17 @@ export {
   type LiveStudySurface,
 } from './domain/session-entity/model/live-study/liveStudyModel'
 export {
+  isLiveForegroundClockSuppressed,
   setLiveForegroundClockSuppressed,
+  subscribeLiveForegroundClock,
 } from './domain/session-entity/model/timed-session/liveClockOwnership'
 export { LiveStudyPresenceProvider } from './ui/live-presence/LiveStudyPresenceProvider'
 export { useLiveStudyPresence } from './ui/live-presence/liveStudyPresenceContext'
 export { useLiveStudySurfaceMirror } from './ui/live-presence/useLiveStudySurfaceMirror'
 export {
+  countRevealedNodes,
   isPendingLiveStudyApply,
+  isWeakerRevealMap,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from './ui/live-presence/shouldPublishLiveStudyView'
