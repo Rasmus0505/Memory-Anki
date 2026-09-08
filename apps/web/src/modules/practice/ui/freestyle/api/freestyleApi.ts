@@ -11,6 +11,10 @@ import type {
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
+  FreestyleRoundActionRequest,
+  FreestyleRoundActiveRequest,
+  FreestyleRoundRatingRequest,
+  FreestyleRoundStatePayload,
   WrongQuestionsResponse,
 } from '@/shared/api/contracts'
 
@@ -111,4 +115,68 @@ export function getFreestyleHistorySummaryApi() {
 
 export function getWrongQuestionsApi(limit = 200) {
   return request<WrongQuestionsResponse>(`/palace-quiz-questions/wrong?limit=${limit}`)
+}
+
+export function getOrCreateFreestyleRoundApi(
+  payload: FreestyleRoundActiveRequest,
+  options?: Pick<RequestInit, 'signal'>,
+) {
+  return request<FreestyleRoundStatePayload>('/freestyle/rounds/active', {
+    ...options,
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: false,
+  })
+}
+
+export function getFreestyleRoundApi(roundId: string, options?: Pick<RequestInit, 'signal'>) {
+  return request<FreestyleRoundStatePayload>(`/freestyle/rounds/${encodeURIComponent(roundId)}`, {
+    ...options,
+    persistence: false,
+  })
+}
+
+export function applyFreestyleRoundActionApi(
+  roundId: string,
+  payload: FreestyleRoundActionRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/actions`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-round-action:${payload.operation_id}`,
+        description: '同步随心回合计划',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function startFreestyleRoundApi(payload: FreestyleRoundActiveRequest) {
+  return request<FreestyleRoundStatePayload>('/freestyle/rounds/start', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `freestyle-round-start:${payload.operation_id}`,
+      description: '开始新的随心回合',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function rateFreestyleRoundUnitApi(roundId: string, payload: FreestyleRoundRatingRequest) {
+  return request<{ item: unknown; round: FreestyleRoundStatePayload }>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/ratings`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-round-rate:${payload.operation_id}`,
+        description: '评分并更新随心回合计划',
+        replayMode: 'auto',
+      },
+    },
+  )
 }

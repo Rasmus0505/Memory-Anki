@@ -100,7 +100,7 @@ export interface ChannelAdjustment {
 
 /**
  * Adjustments deliberately never touch palace scope (`specific_palace_ids` /
- * `subject_scope`). Changing scope makes `useImmersiveQueue` call `startNewRound`,
+ * `subject_scope` / `subject_ids`). Changing scope makes `useImmersiveQueue` call `startNewRound`,
  * which clears completedIds, encounters and the round plan — it would destroy the
  * round this is trying to rescue. Difficulty is moved through `due_policy`,
  * quiz mastery buckets and weak-priority instead, all of which a rebuild can apply
@@ -113,7 +113,6 @@ export function channelAdjustment(
   if (reading.state === 'anxious') {
     const alreadyTightest =
       config.streams.memory_palace.due_policy === 'due_only' &&
-      config.streams.english.due_policy === 'due_only' &&
       !config.streams.quiz.mastery_buckets.includes('unseen')
     if (alreadyTightest) return null
     return {
@@ -126,7 +125,6 @@ export function channelAdjustment(
           streams: {
             ...current.streams,
             memory_palace: { ...current.streams.memory_palace, due_policy: 'due_only' },
-            english: { ...current.streams.english, due_policy: 'due_only' },
             quiz: {
               ...current.streams.quiz,
               mastery_buckets: current.streams.quiz.mastery_buckets.filter(
@@ -154,10 +152,6 @@ export function channelAdjustment(
             ...current.streams,
             memory_palace: {
               ...current.streams.memory_palace,
-              due_policy: 'all_content_due_weighted',
-            },
-            english: {
-              ...current.streams.english,
               due_policy: 'all_content_due_weighted',
             },
             quiz: { ...current.streams.quiz, weak_priority: true },

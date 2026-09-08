@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { buildFreestyleQueueApi } from '@/modules/practice/ui/freestyle/api'
+import {
+  applyFreestyleRoundActionApi,
+  buildFreestyleQueueApi,
+  getOrCreateFreestyleRoundApi,
+  startFreestyleRoundApi,
+} from '@/modules/practice/ui/freestyle/api'
+import {
+  cardsForServerPlan,
+  nextUnfinishedCardId,
+  serverPlanVersion,
+} from '@/modules/practice/domain/serverRoundPlan'
 import {
   applyDeferredPalaceOrder,
   applyRoundPlanOrder,
@@ -15,6 +25,9 @@ import {
   restoreCards,
   mergeQueuePreservingHistory,
   mergeRefreshQueue,
+  cardUnitId,
+  rebindCompletedIdsByUnit,
+  rebindUnitEncountersByUnitId,
   moveCardToTail,
   moveRemainingPalaceToTail,
   mutePalace,
@@ -47,6 +60,18 @@ import {
   applyFreestyleEntryScopeUnlessSaved,
   shouldUseFreestyleSelectionScope,
 } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
+import {
+  EMPTY_STALE_DROP_CIRCUIT,
+  STALE_REBUILD_DEBOUNCE_MS,
+  cardRevisionOf,
+  decideStaleDrop,
+  isCardBlockedByStaleKey,
+  makeStaleCardKey,
+  noteStableCard,
+  resetStaleDropCircuit,
+  type StaleDropCircuit,
+  type StaleDropDecision,
+} from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { onAppEvent } from '@/shared/events/appEvents'
 import { logAppError } from '@/shared/logs/model/appLogs'
 
@@ -179,9 +204,8 @@ function sameFeedConfig(left: FreestyleFeedConfig, right: FreestyleFeedConfig) {
   }
 }
 
-function staleCardKey(card: FreestyleCard, roundId: string) {
-  const revision = 'unit_revision' in card ? card.unit_revision : null
-  return `${roundId}:${card.id}:${revision ?? 'unknown'}`
+export type StaleDropResult = StaleDropDecision & {
+  dropped: boolean
 }
 
 export function useImmersiveQueue(entryPalaceId: number | null = null) {
@@ -222,16 +246,44 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
   const syncPendingRestudyIds = useCallback(() => {
     setPendingRestudyCardIds([...pendingRestudyByIdRef.current.keys()])
   }, [])
-  /** Cards rejected as stale stay out of the immediate rebuild response. */
+  /** Cards rejected as stale stay out of the round until revision changes. */
   const staleCardKeysRef = useRef<Set<string>>(new Set())
+  const staleCircuitRef = useRef<StaleDropCircuit>(EMPTY_STALE_DROP_CIRCUIT)
+  const staleRebuildTimerRef = useRef<number | null>(null)
+  const staleRebuildPreferCardIdRef = useRef<string | null>(null)
+  const [staleCircuitOpen, setStaleCircuitOpen] = useState(false)
+  const [staleRecoveryCardId, setStaleRecoveryCardId] = useState<string | null>(null)
+  const serverPlanVersionRef = useRef(0)
+  const [planVersion, setPlanVersion] = useState(0)
+  const [queueFrozen, setQueueFrozen] = useState(false)
   cardsRef.current = cards
   queueStateRef.current = queueState
   configRef.current = config
   currentIndexRef.current = currentIndex
 
   useEffect(() => {
-    return () => queueBuildControllerRef.current?.abort()
+    return () => {
+      queueBuildControllerRef.current?.abort()
+      if (staleRebuildTimerRef.current != null) {
+        window.clearTimeout(staleRebuildTimerRef.current)
+        staleRebuildTimerRef.current = null
+      }
+    }
   }, [])
+
+  const syncStaleCircuit = useCallback((next: StaleDropCircuit) => {
+    staleCircuitRef.current = next
+    setStaleCircuitOpen(next.open)
+    if (!next.open) setStaleRecoveryCardId(null)
+  }, [])
+
+  const resetStaleRecovery = useCallback(() => {
+    if (staleRebuildTimerRef.current != null) {
+      window.clearTimeout(staleRebuildTimerRef.current)
+      staleRebuildTimerRef.current = null
+    }
+    syncStaleCircuit(resetStaleDropCircuit())
+  }, [syncStaleCircuit])
 
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
     const sanitized = saveQueueState(next)
@@ -306,8 +358,11 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         ...setUnitEncounterState(queueStateRef.current, cardId, encounter),
         roundPlan: nextPlan,
       })
+      if (encounter.status === 'open' || encounter.status === 'closed') {
+        syncStaleCircuit(noteStableCard(staleCircuitRef.current))
+      }
     },
-    [persistQueueState],
+    [persistQueueState, syncStaleCircuit],
   )
 
   const applyCurrentIndex = useCallback(
@@ -362,6 +417,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           pendingRestudyByIdRef.current.clear()
           syncPendingRestudyIds()
           staleCardKeysRef.current.clear()
+          syncStaleCircuit(resetStaleDropCircuit())
           const freshRound = persistQueueState(startNewRound(queueStateRef.current, nextConfig.seed))
           persistQueueState({ ...freshRound, palaceScopeSignature: scopeSignature })
         }
@@ -393,21 +449,17 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           queueBuildController.signal,
         )
         // Stale response protection: only accept latest operation.
-        if (
-          response.operation_id !== operationIdRef.current
-          || (response.round_id && response.round_id !== queueStateRef.current.roundId)
-        ) {
+        // Server round_id is authoritative and may differ from a local draft.
+        if (response.operation_id !== operationIdRef.current) {
           return
         }
         const responseCards = response.cards || []
-        const responseKeys = new Set(
-          responseCards.map((card) => staleCardKey(card, queueStateRef.current.roundId)),
-        )
-        staleCardKeysRef.current.forEach((cardKey) => {
-          if (!responseKeys.has(cardKey)) staleCardKeysRef.current.delete(cardKey)
-        })
         const availableCards = responseCards.filter(
-          (card) => !staleCardKeysRef.current.has(staleCardKey(card, queueStateRef.current.roundId)),
+          (card) => !isCardBlockedByStaleKey(
+            staleCardKeysRef.current,
+            queueStateRef.current.roundId,
+            card,
+          ),
         )
         const excludedCardIds = new Set(
           responseCards
@@ -475,6 +527,23 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           pendingRestudyByIdRef.current.delete(restudyCardId)
           syncPendingRestudyIds()
         }
+        const reboundEncounters = rebindUnitEncountersByUnitId(
+          queueStateRef.current.unitEncountersByCardId,
+          previousCards,
+          nextCards,
+        )
+        const reboundCompleted = rebindCompletedIdsByUnit(
+          completedIds,
+          previousCards,
+          nextCards,
+        )
+        if (options?.preserveCompleted !== false) {
+          persistQueueState({
+            ...queueStateRef.current,
+            unitEncountersByCardId: reboundEncounters,
+            completedIds: reboundCompleted,
+          })
+        }
         const rawMeta = response.round_meta ?? {
           candidate_count: Number(response.phase_stats?.remaining_before_limit ?? nextCards.length),
           scheduled_count: nextCards.length,
@@ -504,11 +573,54 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           roundPlan: nextPlan,
         }
         persistQueueState(plannedState)
+        if (silent) setQueueFrozen(true)
+        let serverCurrentId: string | null = null
+        try {
+          const startNew = options?.preserveCompleted === false
+          const round = startNew
+            ? await startFreestyleRoundApi({
+              operation_id: createOperationId(),
+              scope_key: scopeSignature,
+              config: nextConfig,
+              cards: nextCards,
+              round_id: queueStateRef.current.roundId,
+            })
+            : await getOrCreateFreestyleRoundApi({
+              operation_id: createOperationId(),
+              scope_key: scopeSignature,
+              config: nextConfig,
+              cards: nextCards,
+              round_id: queueStateRef.current.roundId,
+            }, { signal: queueBuildController.signal })
+          if (operationIdRef.current !== operationId) return
+          const version = serverPlanVersion(round)
+          serverPlanVersionRef.current = version
+          setPlanVersion(version)
+          if (round.round_id && round.round_id !== queueStateRef.current.roundId) {
+            persistQueueState({ ...queueStateRef.current, roundId: round.round_id })
+          }
+          nextCards = cardsForServerPlan(nextCards, round.plan, round.round_id || queueStateRef.current.roundId)
+          serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
+          if (Array.isArray(round.plan?.completed_ids)) {
+            persistQueueState({
+              ...queueStateRef.current,
+              completedIds: round.plan.completed_ids.map(String),
+              hiddenIds: round.plan.excluded_ids?.map(String) ?? queueStateRef.current.hiddenIds,
+              currentCardId: serverCurrentId,
+            })
+          }
+        } catch {
+          // Offline draft keeps the local plan until the server is reachable.
+        }
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
-        // Cold start / remount: preferCardId falls through to persisted currentCardId.
+        // Cold start hydrates the server current card; silent rebuilds keep the DOM card.
         const preferCardId =
-          options?.preferCardId ?? userCardId ?? queueStateRef.current.currentCardId
+          options?.preferCardId
+          ?? (silent ? userCardId : null)
+          ?? serverCurrentId
+          ?? userCardId
+          ?? queueStateRef.current.currentCardId
         cardsRef.current = nextCards
         setCards(nextCards)
         setPhaseStats(response.phase_stats || {})
@@ -516,10 +628,12 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         const resolved = resolveRebuildIndex({
           nextCards,
           preferCardId,
-          userCardId,
+          userCardId: silent ? userCardId : (serverCurrentId ?? userCardId),
           fallbackIndex: currentIndexRef.current,
+          previousCards,
         })
         applyCurrentIndex(resolved, nextCards)
+        setQueueFrozen(false)
       } catch (err) {
         if (operationIdRef.current !== operationId) return
         const diagnostic = queueBuildDiagnostic({
@@ -549,10 +663,27 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         if (operationIdRef.current === operationId && !silent) {
           setLoading(false)
         }
+        if (operationIdRef.current === operationId) setQueueFrozen(false)
       }
     },
-    [applyCurrentIndex, persistQueueState, syncPendingRestudyIds],
+    [applyCurrentIndex, persistQueueState, syncPendingRestudyIds, syncStaleCircuit],
   )
+
+  const scheduleStaleRebuild = useCallback((preferCardId: string | null) => {
+    staleRebuildPreferCardIdRef.current = preferCardId
+    if (staleRebuildTimerRef.current != null) {
+      window.clearTimeout(staleRebuildTimerRef.current)
+    }
+    staleRebuildTimerRef.current = window.setTimeout(() => {
+      staleRebuildTimerRef.current = null
+      void buildQueue(configRef.current, {
+        preserveCompleted: true,
+        silent: true,
+        preferCardId: staleRebuildPreferCardIdRef.current,
+        reason: 'stale_card_rebuild',
+      })
+    }, STALE_REBUILD_DEBOUNCE_MS)
+  }, [buildQueue])
 
   useEffect(() => {
     void buildQueue(config, { preserveCompleted: true, reason: 'initial_load' })
@@ -565,6 +696,8 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     if (sameFeedConfig(next, configRef.current)) return
     pendingRestudyByIdRef.current.clear()
     syncPendingRestudyIds()
+    staleCardKeysRef.current.clear()
+    resetStaleRecovery()
     const freshRound = persistQueueState({
       ...startNewRound(queueStateRef.current, next.seed),
       palaceScopeSignature: freestylePalaceScopeSignature(next),
@@ -580,7 +713,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       hiddenIds: freshRound.hiddenIds,
       reason: 'entry_scope_changed',
     })
-  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, scopeEntryConfig, syncPendingRestudyIds])
+  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, syncPendingRestudyIds])
 
   // Backend preference bootstrap / cross-client updates can arrive after mount.
   useEffect(() => {
@@ -636,9 +769,11 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         freestylePalaceScopeSignature(current) !== freestylePalaceScopeSignature(next)
       configRef.current = next
       setConfig(next)
+      resetStaleRecovery()
       if (scopeChanged) {
         pendingRestudyByIdRef.current.clear()
         syncPendingRestudyIds()
+        staleCardKeysRef.current.clear()
         const freshRound = persistQueueState({
           ...startNewRound(queueStateRef.current, next.seed),
           palaceScopeSignature: freestylePalaceScopeSignature(next),
@@ -661,17 +796,19 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         preferCardId: options?.preferCardId ?? null,
       })
     },
-    [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, scopeEntryConfig, syncPendingRestudyIds],
+    [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, syncPendingRestudyIds],
   )
 
   const refreshQueue = useCallback(() => {
     staleCardKeysRef.current.clear()
+    resetStaleRecovery()
     void buildQueue(config, { preserveCompleted: true, reason: 'manual_refresh' })
-  }, [buildQueue, config])
+  }, [buildQueue, config, resetStaleRecovery])
 
   /** Reshuffle + clear this round's completed/hidden so still-due units can return. */
   const reshuffleQueue = useCallback(() => {
     staleCardKeysRef.current.clear()
+    resetStaleRecovery()
     const nextSeed = config.seed + 1
     const saved = saveFreestyleFeedConfig({ ...readFreestyleFeedConfig(), seed: nextSeed })
     const nextConfig = entryPalaceId != null && unlockedEntryPalaceIdRef.current === entryPalaceId
@@ -687,7 +824,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       hiddenIds: nextState.hiddenIds,
       reason: 'manual_new_round',
     })
-  }, [applyCurrentIndex, buildQueue, config, entryPalaceId, persistQueueState, scopeEntryConfig])
+  }, [applyCurrentIndex, buildQueue, config, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig])
 
   /**
    * Mark a card done for this round without removing it from the local feed.
@@ -700,6 +837,19 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         ? updateRoundPlanCard(currentPlan, cardId, { status: 'completed', attemptCount: (currentPlan.cardsById[cardId]?.attemptCount ?? 0) + 1 })
         : null
       persistQueueState({ ...markCompleted(queueStateRef.current, cardId), roundPlan: nextPlan })
+      const roundId = queueStateRef.current.roundId
+      void applyFreestyleRoundActionApi(roundId, {
+        operation_id: createOperationId(),
+        expected_version: serverPlanVersionRef.current,
+        action: 'complete',
+        card_id: cardId,
+      }).then((round) => {
+        if (queueStateRef.current.roundId !== roundId) return
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+      }).catch(() => {
+        // Local completion remains the offline draft.
+      })
     },
     [persistQueueState],
   )
@@ -918,63 +1068,74 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     const leftId = leavingCardId ? String(leavingCardId).trim() : ''
     if (!leftId || !pendingRestudyByIdRef.current.has(leftId)) return
     const pending = pendingRestudyByIdRef.current.get(leftId)
-    const previous = cardsRef.current
-    const nextCards = insertPendingRetryCopy(
-      previous,
-      leftId,
-      pending,
-      queueStateRef.current.roundId,
-    )
-    pendingRestudyByIdRef.current.delete(leftId)
-    syncPendingRestudyIds()
-    if (nextCards === previous) return
-    const sameOrder =
-      nextCards.length === previous.length &&
-      nextCards.every((card, index) => card.id === previous[index]?.id)
-    if (sameOrder) return
-    cardsRef.current = nextCards
-    setCards(nextCards)
-    if (pending && queueStateRef.current.roundPlan) {
-      const source = previous.find((card) => card.id === leftId)
-      const occurrenceId = source
-        ? `retry:${queueStateRef.current.roundId}:${sourceCardId(source) || leftId}:${pending.attempt}`
-        : ''
-      const occurrence = occurrenceId
-        ? nextCards.find((card) => card.id === occurrenceId)
-        : null
-      if (occurrence) {
-        const retryPlan = createRoundPlan(
-          queueStateRef.current.roundId,
-          nextCards,
-          configRef.current,
-          undefined,
-          queueStateRef.current.roundPlan,
-        )
-        persistQueueState({
-          ...queueStateRef.current,
-          roundPlan: updateRoundPlanCard(retryPlan, occurrence.id, {
-            status: 'retry',
-            lastRating: pending.rating ?? null,
-            retryAfterCards: pending.retryAfterCards,
-            attemptCount: pending.attempt,
-          }),
-        })
+    const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
+    const applyLocal = (cards: FreestyleCard[]) => {
+      if (cards === cardsRef.current) return
+      cardsRef.current = cards
+      setCards(cards)
+      if (viewingId) {
+        const resolved = cards.findIndex((card) => card.id === viewingId)
+        if (resolved >= 0) applyCurrentIndex(resolved, cards)
       }
     }
-  }, [persistQueueState, syncPendingRestudyIds])
+    pendingRestudyByIdRef.current.delete(leftId)
+    syncPendingRestudyIds()
+    const roundId = queueStateRef.current.roundId
+    void applyFreestyleRoundActionApi(roundId, {
+      operation_id: createOperationId(),
+      expected_version: serverPlanVersionRef.current,
+      action: 'leave_card',
+      card_id: leftId,
+    }).then((round) => {
+      if (queueStateRef.current.roundId !== roundId) return
+      if (round.conflict) {
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+      } else {
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+      }
+      const confirmed = cardsForServerPlan(
+        cardsRef.current,
+        round.plan,
+        round.round_id || roundId,
+      )
+      applyLocal(confirmed)
+    }).catch(() => {
+      const previous = cardsRef.current
+      applyLocal(insertPendingRetryCopy(previous, leftId, pending, roundId))
+    })
+  }, [applyCurrentIndex, syncPendingRestudyIds])
 
   /**
    * Drop a card whose formal due vanished between queue build and open.
    * Does **not** mark completed — still-due units must remain eligible after rebuild.
    * Clears local encounter state so a renewed card does not reuse a bad encounter_id.
+   *
+   * After a few consecutive drops the circuit opens: the current card stays on
+   * screen and the caller should show recovery instead of jumping.
    */
   const dropStaleCard = useCallback(
-    (cardId: string) => {
+    (cardId: string, options?: { force?: boolean }): StaleDropResult => {
+      const { circuit, decision } = decideStaleDrop(
+        staleCircuitRef.current,
+        Date.now(),
+        options,
+      )
+      syncStaleCircuit(circuit)
+      if (decision.action === 'hold') {
+        staleRebuildPreferCardIdRef.current = cardId
+        setStaleRecoveryCardId(cardId)
+        return { ...decision, dropped: false }
+      }
+
       const previous = cardsRef.current
       const staleCard = previous.find((card) => card.id === cardId)
-      const staleKey = staleCard
-        ? staleCardKey(staleCard, queueStateRef.current.roundId)
-        : `${queueStateRef.current.roundId}:${cardId}:unknown`
+      const staleKey = makeStaleCardKey(
+        queueStateRef.current.roundId,
+        cardId,
+        staleCard ? cardRevisionOf(staleCard) : 'unknown',
+      )
       staleCardKeysRef.current.add(staleKey)
       const index = previous.findIndex((card) => card.id === cardId)
       const filtered = previous.filter((card) => card.id !== cardId)
@@ -1002,14 +1163,26 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)),
         filtered,
       )
-      void buildQueue(configRef.current, {
-        preserveCompleted: true,
-        silent: true,
-        preferCardId,
-        reason: 'stale_card_rebuild',
-      })
+      scheduleStaleRebuild(preferCardId)
+      return { ...decision, dropped: true }
     },
-    [applyCurrentIndex, buildQueue, persistQueueState],
+    [applyCurrentIndex, persistQueueState, scheduleStaleRebuild, syncStaleCircuit],
+  )
+
+  const adoptLiveUnitRevision = useCallback(
+    (cardId: string, unitId: string, revision: number) => {
+      const previous = cardsRef.current
+      const nextCards = previous.map((card) => {
+        if (card.type !== 'mindmap_branch') return card
+        if (card.id !== cardId && card.unit_id !== unitId) return card
+        if (card.unit_revision === revision) return card
+        return { ...card, unit_revision: revision }
+      })
+      cardsRef.current = nextCards
+      setCards(nextCards)
+      scheduleStaleRebuild(cardId)
+    },
+    [scheduleStaleRebuild],
   )
 
   const skipCurrent = useCallback(() => {
@@ -1173,7 +1346,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         // Finger/wheel scroll must NOT reorder under the gesture — that shifts
         // indices while scrollTop stays put and makes swipe-back show the wrong card.
         // Button/keyboard paths may reorder immediately; scroll defers via flush.
-        if (reorderRestudy) {
+        if (reorderRestudy && next > previousIndex) {
           applyPendingRestudyPlacement(leaving?.id)
         }
         if (targetId) {
@@ -1242,6 +1415,10 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     updateUnitEncounter,
     acknowledgeCard,
     dropStaleCard,
+    adoptLiveUnitRevision,
+    staleCircuitOpen,
+    staleRecoveryCardId,
+    resetStaleRecovery,
     skipCurrent,
     skipToNextPalace,
     undoLastSkip,
@@ -1251,5 +1428,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     restorePlanCards,
     buildQueue,
     pendingRestudyCardIds,
+    planVersion,
+    queueFrozen,
   }
 }

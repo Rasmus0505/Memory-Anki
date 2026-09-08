@@ -8,6 +8,8 @@ import {
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
+  retryNodeClass,
+  retryNodeLabel,
   segmentTone,
 } from './freestyleProgressSegments'
 
@@ -70,6 +72,8 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
     expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'retry', 'current'])
     expect(summary.segments.map((segment) => segment.palaceId)).toEqual([1, 1, 1])
+    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'source', 'source'])
+    expect(summary.segments[1]).toMatchObject({ waitingRetry: true, retryAfterCards: 0 })
     expect(summary.segments.every((segment) => segment.palaceDone === false)).toBe(true)
     expect(summary.doneCount).toBe(1)
     expect(summary.retryCount).toBe(1)
@@ -77,6 +81,22 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.positionBase).toBe(3)
     expect(summary.retryInserted).toBe(0)
     expect(summary.passedCount).toBe(1)
+  })
+
+  it('marks a source card waiting for retry without turning it into a retry node', () => {
+    const cards = [card('one'), card('two')]
+    const withRetry = updateRoundPlanCard(plan(cards), 'one', { status: 'retry', retryAfterCards: 3 })
+    const summary = buildFreestyleProgressSummary(cards, withRetry, [], [], 'two')
+
+    expect(summary.segments[0]).toMatchObject({
+      cardId: 'one',
+      kind: 'source',
+      tone: 'retry',
+      waitingRetry: true,
+      retryAfterCards: 3,
+    })
+    expect(summary.segments[1].kind).toBe('source')
+    expect(summary.segments[1].waitingRetry).toBeFalsy()
   })
 
   it('draws both retry segments a weak rating produces', () => {
@@ -87,7 +107,7 @@ describe('buildFreestyleProgressSummary', () => {
       { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
       card('two'),
     ]
-    const marked = updateRoundPlanCard(plan(cards), 'one', { status: 'retry' })
+    const marked = updateRoundPlanCard(plan(cards), 'one', { status: 'retry', retryAfterCards: 3 })
     const withOccurrence = updateRoundPlanCard(marked, 'retry:round-1:one:1', {
       status: 'retry',
       occurrenceKind: 'retry',
@@ -96,10 +116,19 @@ describe('buildFreestyleProgressSummary', () => {
     const summary = buildFreestyleProgressSummary(cards, withOccurrence, [], [], 'two')
 
     expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
+    expect(summary.segments[0]).toMatchObject({ waitingRetry: true, retryAfterCards: 3 })
+    expect(summary.segments[1]).toMatchObject({
+      kind: 'retry',
+      retryAttempt: 1,
+      sourceCardId: 'one',
+      sourceLabel: 'one',
+    })
     expect(summary.retryCount).toBe(2)
     expect(summary.scheduledBase).toBe(2)
     expect(summary.retryInserted).toBe(1)
     expect(progressHudText(summary)).toBe('2/2 · 重练 +1')
+    expect(progressRailLabel(summary)).toBe('本轮进度 2/2，重练 1 张。点击查看本轮安排')
   })
 
   it('marks a palace group done only when every rendered segment of it is done', () => {
@@ -137,6 +166,33 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments).toEqual([])
     expect(summary.total).toBe(0)
     expect(summary.position).toBe(0)
+  })
+})
+
+describe('retryNodeLabel', () => {
+  it('names a retry node from the source label and attempt', () => {
+    expect(
+      retryNodeLabel({
+        cardId: 'retry:1',
+        tone: 'retry',
+        palaceId: 1,
+        palaceDone: false,
+        kind: 'retry',
+        retryAttempt: 2,
+        sourceLabel: '锚点',
+      }),
+    ).toBe('重练《锚点》第 2 次')
+    expect(
+      retryNodeLabel({
+        cardId: 'retry:1',
+        tone: 'retry',
+        palaceId: 1,
+        palaceDone: false,
+        kind: 'retry',
+        retryAttempt: 1,
+      }),
+    ).toBe('重练第 1 次')
+    expect(retryNodeClass).toContain('bg-amber-400')
   })
 })
 

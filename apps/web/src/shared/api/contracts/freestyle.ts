@@ -62,6 +62,8 @@ export type FreestyleMixStrategy = 'ratio' | 'random' | 'sequential'
 export interface FreestyleStreamScope {
   specific_palace_ids: number[]
   subject_scope: FreestyleSubjectScope
+  /** Empty means no subject filter (all subjects). Non-empty is the source of truth over subject_scope. */
+  subject_ids: number[]
 }
 
 export interface FreestylePalaceStreamConfig extends FreestyleStreamScope {
@@ -155,6 +157,7 @@ export interface FreestyleFeedConfig {
   quiz_scope: FreestyleQuizScope
   specific_palace_ids: number[]
   subject_scope: FreestyleSubjectScope
+  subject_ids: number[]
   question_type: FreestyleQuestionTypeFilter
   /** Pool-internal sort only; does not decide membership (see quiz_mastery_buckets). */
   weak_quiz_priority: boolean
@@ -287,6 +290,108 @@ export interface FreestyleFeedResponse {
   cards: FreestyleCard[]
   counts: Record<string, number>
   generated_at: string
+}
+
+export type FreestyleRoundOccurrenceStatus = 'pending' | 'inserted' | 'completed' | 'cancelled'
+
+export interface FreestyleRoundOriginalCard {
+  card_id: string
+  unit_id: string
+  unit_revision: number
+  kind: string
+  palace_id: number | null
+  palace_title: string
+  label: string
+}
+
+export interface FreestyleRoundOccurrence {
+  occurrence_id: string
+  source_card_id: string
+  source_unit_id: string
+  retry_attempt: number
+  rating: number | null
+  insert_target_index: number
+  status: FreestyleRoundOccurrenceStatus
+  encounter_id: string
+}
+
+export interface FreestyleRoundPlanPayload {
+  original_cards: FreestyleRoundOriginalCard[]
+  presented_ids: string[]
+  current_card_id: string | null
+  current_index: number
+  completed_ids: string[]
+  excluded_ids: string[]
+  occurrences: FreestyleRoundOccurrence[]
+  encounters: Record<string, {
+    encounter_id: string
+    status: string
+    unit_revision: number
+  }>
+}
+
+export interface FreestyleRoundStatePayload {
+  round_id: string
+  scope_key: string
+  status: 'active' | 'completed'
+  version: number
+  plan_version: number
+  config: FreestyleFeedConfig | Record<string, unknown>
+  plan: FreestyleRoundPlanPayload
+  current_card_id: string | null
+  last_operation_id: string | null
+  updated_at: string | null
+  conflict: boolean
+  duplicate: boolean
+}
+
+export interface FreestyleRoundActiveRequest {
+  operation_id: string
+  scope_key: string
+  config: FreestyleFeedConfig
+  cards?: FreestyleCard[]
+  round_id?: string
+}
+
+export interface FreestyleRoundActionRequest {
+  operation_id: string
+  expected_version: number
+  action:
+    | 'set_cursor'
+    | 'leave_card'
+    | 'skip'
+    | 'complete'
+    | 'exclude'
+    | 'restore'
+    | 'bind_cards'
+    | 'set_encounter'
+  card_id?: string
+  occurrence_id?: string
+  encounter_id?: string
+  cards?: FreestyleCard[]
+}
+
+export interface FreestyleRoundRatingRequest {
+  operation_id: string
+  expected_version: number
+  card_id: string
+  occurrence_id?: string
+  encounter_id: string
+  rating: number
+  study_session_id: string
+  unit_id: string
+  unit_revision: number
+  palace_batch?: {
+    palace_id: number
+    current?: {
+      study_session_id: string
+      unit_id: string
+      unit_revision: number
+      encounter_id: string
+    }
+    exclude_unit_ids?: string[]
+    include_unit_ids?: string[]
+  } | null
 }
 
 export interface FreestyleQueueBuildRequest {

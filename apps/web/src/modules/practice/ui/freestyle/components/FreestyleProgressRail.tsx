@@ -4,6 +4,9 @@ import {
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
+  retryNodeClass,
+  retryNodeLabel,
+  type FreestyleProgressSegment,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import type { SessionStatus } from '@/shared/hooks/timedSessionModel'
@@ -22,6 +25,50 @@ function timerTone(status: SessionStatus): 'running' | 'paused' | 'idle' {
   if (status === 'running') return 'running'
   if (status === 'paused') return 'paused'
   return 'idle'
+}
+
+function ProgressRailItem({
+  segment,
+  palaceGap,
+}: {
+  segment: FreestyleProgressSegment
+  palaceGap: boolean
+}) {
+  const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
+  if (segment.kind === 'retry') {
+    const label = retryNodeLabel(segment)
+    return (
+      <span
+        data-testid="freestyle-progress-retry-node"
+        data-tone={segment.tone}
+        data-palace-id={palaceId}
+        data-palace-done={segment.palaceDone ? 'true' : 'false'}
+        aria-label={label}
+        title={label}
+        className={cn(
+          'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tabular-nums leading-none',
+          palaceGap ? 'ml-0.5' : null,
+          retryNodeClass,
+        )}
+      >
+        {Math.max(1, Math.round(segment.retryAttempt || 1))}
+      </span>
+    )
+  }
+  return (
+    <span
+      data-testid="freestyle-progress-segment"
+      data-tone={segment.tone}
+      data-palace-id={palaceId}
+      data-palace-done={segment.palaceDone ? 'true' : 'false'}
+      aria-hidden
+      className={cn(
+        'h-0.5 min-w-px flex-1 transition-colors',
+        palaceGap ? 'ml-0.5' : null,
+        palaceAccentToneClass(segment.palaceId, segment.tone),
+      )}
+    />
+  )
 }
 
 export function FreestyleProgressRail({
@@ -72,27 +119,19 @@ export function FreestyleProgressRail({
         type="button"
         data-testid="freestyle-progress-rail"
         aria-label={progressRailLabel(summary)}
-        className="pointer-events-auto flex h-4 w-full items-start gap-px px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
+        className="pointer-events-auto flex h-4 w-full items-center gap-px px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
         onClick={onOpenPlan}
       >
         {summary.segments.length === 0 ? (
           <span className="h-0.5 w-full bg-white/10" aria-hidden />
         ) : (
           summary.segments.map((segment, index) => (
-            <span
+            <ProgressRailItem
               key={segment.cardId}
-              data-testid="freestyle-progress-segment"
-              data-tone={segment.tone}
-              data-palace-id={segment.palaceId == null ? '' : String(segment.palaceId)}
-              data-palace-done={segment.palaceDone ? 'true' : 'false'}
-              aria-hidden
-              className={cn(
-                'h-0.5 min-w-px flex-1 transition-colors',
+              segment={segment}
+              palaceGap={
                 index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
-                  ? 'ml-0.5'
-                  : null,
-                palaceAccentToneClass(segment.palaceId, segment.tone),
-              )}
+              }
             />
           ))
         )}

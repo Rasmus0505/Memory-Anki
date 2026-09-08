@@ -5,9 +5,11 @@ import type {
   FreestyleMixMode,
   FreestyleMixRatio,
   FreestylePalaceOrder,
+  FreestylePalaceStreamConfig,
   FreestyleQuestionTypeFilter,
   FreestyleQuizMasteryBucket,
   FreestyleQuizScope,
+  FreestyleStreamScope,
   FreestyleSubjectScope,
   FreestyleTrainingMode,
   FreestyleTrainingMix,
@@ -27,10 +29,21 @@ export const FREESTYLE_TRAINING_MODES: FreestyleTrainingMode[] = [
   'mixed',
 ]
 
+export const FREESTYLE_UI_TRAINING_MODES: Array<Exclude<FreestyleTrainingMode, 'english'>> = [
+  'memory_palace',
+  'quiz',
+  'mixed',
+]
+
 export const FREESTYLE_TRAINING_STREAMS: FreestyleTrainingStream[] = [
   'memory_palace',
   'quiz',
   'english',
+]
+
+export const FREESTYLE_UI_TRAINING_STREAMS: Array<'memory_palace' | 'quiz'> = [
+  'memory_palace',
+  'quiz',
 ]
 
 export const FREESTYLE_MIX_MODES: FreestyleMixMode[] = [
@@ -77,8 +90,8 @@ export interface FreestyleQuickPreset {
 
 export const FREESTYLE_QUICK_PRESETS: FreestyleQuickPreset[] = [
   { id: 'quiz', label: '刷题', description: '只进入练习题' },
-  { id: 'english', label: '英语', description: '只进入英语学科宫殿' },
-  { id: 'memory_palace', label: '记忆宫殿', description: '排除英语学科，只刷宫殿卡' },
+  { id: 'english', label: '英语', description: '记忆宫殿 + 英语学科' },
+  { id: 'memory_palace', label: '记忆宫殿', description: '只刷宫殿卡（全部学科）' },
 ]
 
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
@@ -87,7 +100,8 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   streams: {
     memory_palace: {
       specific_palace_ids: [],
-      subject_scope: 'non_english',
+      subject_scope: 'all',
+      subject_ids: [],
       due_policy: 'due_first_then_expand',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
@@ -95,6 +109,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     quiz: {
       specific_palace_ids: [],
       subject_scope: 'all',
+      subject_ids: [],
       question_type: 'all',
       mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
       quiz_scope: 'cross_palace_random',
@@ -103,6 +118,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     english: {
       specific_palace_ids: [],
       subject_scope: 'english',
+      subject_ids: [],
       due_policy: 'due_first_then_expand',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
@@ -138,6 +154,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   quiz_scope: 'cross_palace_random',
   specific_palace_ids: [],
   subject_scope: 'all',
+  subject_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
 }
@@ -230,13 +247,75 @@ function asMixStrategy(value: unknown): FreestyleTrainingMix['strategy'] {
 
 function streamScope(
   value: unknown,
-  fallback: { specific_palace_ids: number[]; subject_scope: FreestyleSubjectScope },
-): { specific_palace_ids: number[]; subject_scope: FreestyleSubjectScope } {
+  fallback: FreestyleStreamScope,
+): FreestyleStreamScope {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const subjectIds = asIdList(raw.subject_ids ?? fallback.subject_ids)
   return {
     specific_palace_ids: asIdList(raw.specific_palace_ids ?? fallback.specific_palace_ids),
-    subject_scope: asSubjectScope(raw.subject_scope ?? fallback.subject_scope),
+    subject_scope: subjectIds.length ? 'all' : asSubjectScope(raw.subject_scope ?? fallback.subject_scope),
+    subject_ids: subjectIds,
   }
+}
+
+function migrateEnglishTraining(
+  trainingMode: FreestyleTrainingMode,
+  mixedModes: FreestyleTrainingStream[],
+  memory: FreestylePalaceStreamConfig,
+  english: FreestylePalaceStreamConfig,
+): {
+  trainingMode: FreestyleTrainingMode
+  mixedModes: FreestyleTrainingStream[]
+  memory: FreestylePalaceStreamConfig
+} {
+  const hadEnglish = trainingMode === 'english' || mixedModes.includes('english')
+  if (!hadEnglish) return { trainingMode, mixedModes, memory }
+
+  const hadMemory = trainingMode === 'memory_palace' || mixedModes.includes('memory_palace')
+  const bothPalaceStreams = hadMemory && trainingMode !== 'english'
+  let nextMemory = memory
+
+  if (trainingMode === 'english' || !hadMemory) {
+    nextMemory = {
+      ...nextMemory,
+      due_policy: english.due_policy,
+      palace_order: english.palace_order,
+      unit_order: english.unit_order,
+      specific_palace_ids: nextMemory.specific_palace_ids.length
+        ? nextMemory.specific_palace_ids
+        : [...english.specific_palace_ids],
+    }
+  }
+
+  if (bothPalaceStreams) {
+    nextMemory = {
+      ...nextMemory,
+      subject_scope: 'all',
+      subject_ids: [],
+      specific_palace_ids: [...new Set([...nextMemory.specific_palace_ids, ...english.specific_palace_ids])],
+    }
+  } else {
+    nextMemory = {
+      ...nextMemory,
+      subject_scope: 'english',
+      subject_ids: nextMemory.subject_ids.length ? nextMemory.subject_ids : [...english.subject_ids],
+      specific_palace_ids: nextMemory.specific_palace_ids.length
+        ? nextMemory.specific_palace_ids
+        : [...english.specific_palace_ids],
+    }
+  }
+
+  let nextModes = mixedModes.filter((item) => item !== 'english')
+  if (!nextModes.includes('memory_palace')) nextModes = ['memory_palace', ...nextModes]
+  let nextMode = trainingMode
+  if (nextMode === 'english') {
+    nextMode = 'memory_palace'
+    nextModes = ['memory_palace']
+  } else if (nextMode === 'mixed' && nextModes.length < 2) {
+    nextMode = nextModes[0] ?? 'memory_palace'
+    nextModes = [nextMode]
+  }
+  return { trainingMode: nextMode, mixedModes: nextModes, memory: nextMemory }
 }
 
 function inferTrainingMode(
@@ -381,22 +460,32 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
   const rawEnglish = rawStreams.english && typeof rawStreams.english === 'object'
     ? rawStreams.english as Record<string, unknown>
     : {}
+  const memoryFallbackScope: FreestyleSubjectScope = Object.keys(raw).length === 0
+    ? 'all'
+    : hasExplicitNewConfig
+      ? 'all'
+      : legacySubjectScope === 'english'
+        ? 'non_english'
+        : legacySubjectScope
 
   const memoryScope = streamScope(rawMemory, {
     specific_palace_ids: legacySubjectScope === 'english' ? [] : legacyIds,
-    subject_scope: legacySubjectScope === 'english' ? 'non_english' : 'non_english',
+    subject_scope: memoryFallbackScope,
+    subject_ids: [],
   })
   const quizScope = streamScope(rawQuiz, {
     specific_palace_ids: legacyIds,
     subject_scope: legacySubjectScope,
+    subject_ids: [],
   })
   const englishScope = streamScope(rawEnglish, {
     specific_palace_ids: legacySubjectScope === 'english' ? legacyIds : [],
     subject_scope: 'english',
+    subject_ids: [],
   })
   englishScope.subject_scope = 'english'
 
-  const memoryStream = {
+  let memoryStream = {
     ...memoryScope,
     due_policy: asDuePolicy(rawMemory.due_policy, legacyDuePolicy),
     palace_order: asPalaceOrder(rawMemory.palace_order ?? legacyPalaceOrder),
@@ -434,6 +523,10 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     trainingMode = mixedModes[0] ?? 'memory_palace'
     mixedModes = [trainingMode]
   }
+  const migrated = migrateEnglishTraining(trainingMode, mixedModes, memoryStream, englishStream)
+  trainingMode = migrated.trainingMode
+  mixedModes = migrated.mixedModes
+  memoryStream = migrated.memory
 
   const rawMix = raw.mix && typeof raw.mix === 'object' ? raw.mix as Record<string, unknown> : {}
   const rawRatios = rawMix.ratios && typeof rawMix.ratios === 'object' ? rawMix.ratios as Record<string, unknown> : {}
@@ -517,6 +610,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     quiz_scope: quizStream.quiz_scope,
     specific_palace_ids: legacySpecificIds,
     subject_scope: legacyScope,
+    subject_ids: trainingMode === 'quiz' ? quizStream.subject_ids : memoryStream.subject_ids,
     question_type: legacyQuestionType,
     weak_quiz_priority: quizStream.weak_priority,
   }
@@ -528,14 +622,17 @@ export function freestylePalaceScopeSignature(config: FreestyleFeedConfig): stri
     memory_palace: {
       specific_palace_ids: [...config.streams.memory_palace.specific_palace_ids].sort((left, right) => left - right),
       subject_scope: config.streams.memory_palace.subject_scope,
+      subject_ids: [...config.streams.memory_palace.subject_ids].sort((left, right) => left - right),
     },
     quiz: {
       specific_palace_ids: [...config.streams.quiz.specific_palace_ids].sort((left, right) => left - right),
       subject_scope: config.streams.quiz.subject_scope,
+      subject_ids: [...config.streams.quiz.subject_ids].sort((left, right) => left - right),
     },
     english: {
       specific_palace_ids: [...config.streams.english.specific_palace_ids].sort((left, right) => left - right),
       subject_scope: config.streams.english.subject_scope,
+      subject_ids: [...config.streams.english.subject_ids].sort((left, right) => left - right),
     },
   })
 }
@@ -545,12 +642,7 @@ export function applyFreestyleQuickPreset(
   presetId: FreestyleQuickPresetId,
   palaces: FreestylePalaceContext[],
 ) {
-  const englishPalaceIds = palaces
-    .filter((palace) => palace.subject?.name.trim() === '英语')
-    .map((palace) => palace.id)
-  const nonEnglishPalaceIds = palaces
-    .filter((palace) => palace.subject?.name.trim() !== '英语')
-    .map((palace) => palace.id)
+  const englishSubjectId = palaces.find((palace) => palace.subject?.name.trim() === '英语')?.subject?.id
 
   if (presetId === 'quiz') {
     return sanitizeFreestyleFeedConfig({
@@ -563,6 +655,7 @@ export function applyFreestyleQuickPreset(
           ...config.streams.quiz,
           specific_palace_ids: [],
           subject_scope: 'all',
+          subject_ids: [],
         },
       },
     })
@@ -571,14 +664,15 @@ export function applyFreestyleQuickPreset(
   if (presetId === 'english') {
     return sanitizeFreestyleFeedConfig({
       ...config,
-      training_mode: 'english',
-      mixed_modes: ['english'],
+      training_mode: 'memory_palace',
+      mixed_modes: ['memory_palace'],
       streams: {
         ...config.streams,
-        english: {
-          ...config.streams.english,
-          specific_palace_ids: englishPalaceIds,
-          subject_scope: 'english',
+        memory_palace: {
+          ...config.streams.memory_palace,
+          specific_palace_ids: [],
+          subject_scope: englishSubjectId ? 'all' : 'english',
+          subject_ids: englishSubjectId ? [englishSubjectId] : [],
         },
       },
     })
@@ -592,8 +686,9 @@ export function applyFreestyleQuickPreset(
       ...config.streams,
       memory_palace: {
         ...config.streams.memory_palace,
-        specific_palace_ids: nonEnglishPalaceIds,
-        subject_scope: 'non_english',
+        specific_palace_ids: [],
+        subject_scope: 'all',
+        subject_ids: [],
       },
     },
   })

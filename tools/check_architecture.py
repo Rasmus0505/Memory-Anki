@@ -928,11 +928,27 @@ def check_live_study_presence(errors: list[str]) -> None:
     ports = runtime.get("ports") if isinstance(runtime.get("ports"), dict) else {}
     live_port = ports.get("LiveStudyPresencePort") if isinstance(ports.get("LiveStudyPresencePort"), dict) else {}
     capabilities = live_port.get("capabilities") if isinstance(live_port.get("capabilities"), list) else []
-    for capability in ("inProcessProjection", "sseStream", "controllerElection", "opaqueViewEnvelope"):
+    for capability in (
+        "inProcessProjection",
+        "sseStream",
+        "controllerElection",
+        "opaqueViewEnvelope",
+        "controlLease",
+        "takeoverHydrate",
+        "disconnectGracePause",
+    ):
         if capability not in capabilities:
             errors.append(
                 f"docs/architecture/context-map.yaml: LiveStudyPresencePort must declare `{capability}`."
             )
+
+    if architecture_doc.exists():
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("take_control", "接管计时", "lease"):
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: live study presence must document `{marker}`."
+                )
 
 
 def check_runtime_data_ignored(errors: list[str]) -> None:
@@ -1373,6 +1389,8 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         "merge_content_streams",
         "training_mode",
         "streams",
+        "list_active_palace_ids_by_subject_ids",
+        "subject_ids",
     ):
         if required not in source:
             errors.append(
@@ -1432,7 +1450,12 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
     else:
         contract_source = freestyle_contract.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("FreestyleTrainingMode", "FreestyleTrainingStreams", "FreestyleTrainingMix"):
+        for marker in (
+            "FreestyleTrainingMode",
+            "FreestyleTrainingStreams",
+            "FreestyleTrainingMix",
+            "subject_ids",
+        ):
             if marker not in contract_source:
                 errors.append(
                     f"{freestyle_contract.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
@@ -1491,6 +1514,77 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             f"{nav_path.relative_to(REPO_ROOT).as_posix()}: primary freestyle nav "
             "label must be 随心."
         )
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "remain client-local per device" in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: round plan must not "
+                "remain client-local per device; the backend plan is authoritative."
+            )
+        for marker in (
+            "backend-authoritative",
+            "occurrence_kind",
+            "scheduledBase",
+        ):
+            if marker not in feed_source and marker != "scheduledBase":
+                errors.append(
+                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must document `{marker}`."
+                )
+            elif marker == "scheduledBase" and marker not in feed_source:
+                errors.append(
+                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: HUD denominator must stay `scheduledBase`."
+                )
+    round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
+    if not round_service.exists():
+        errors.append(
+            f"{round_service.relative_to(REPO_ROOT).as_posix()}: authoritative round-plan service is required."
+        )
+    else:
+        service_source = round_service.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("expected_version", "operation_id", "plan_json"):
+            if marker not in service_source:
+                errors.append(
+                    f"{round_service.relative_to(REPO_ROOT).as_posix()}: must keep `{marker}`."
+                )
+    round_domain = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
+    if not round_domain.exists():
+        errors.append(
+            f"{round_domain.relative_to(REPO_ROOT).as_posix()}: round-plan domain is required."
+        )
+    else:
+        domain_source = round_domain.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("leave_card", "retry_attempt", "insert_retry"):
+            if marker not in domain_source:
+                errors.append(
+                    f"{round_domain.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
+                )
+    router_path = API_SRC / "modules" / "practice" / "presentation" / "router.py"
+    if router_path.exists():
+        router_source = router_path.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("/freestyle/rounds/active", "/freestyle/rounds/start"):
+            if marker not in router_source:
+                errors.append(
+                    f"{router_path.relative_to(REPO_ROOT).as_posix()}: must expose `{marker}`."
+                )
+    progress_path = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts"
+    )
+    if progress_path.exists():
+        progress_source = progress_path.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("scheduledBase", "retryInserted", "progressHudText"):
+            if marker not in progress_source:
+                errors.append(
+                    f"{progress_path.relative_to(REPO_ROOT).as_posix()}: HUD must keep `{marker}`."
+                )
+    page_path = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    if page_path.exists():
+        page_source = page_path.read_text(encoding="utf-8", errors="ignore")
+        if "handleRatingSettled" in page_source and "autoAdvance" in page_source:
+            if "plan_version" not in page_source and "planVersion" not in page_source:
+                errors.append(
+                    f"{page_path.relative_to(REPO_ROOT).as_posix()}: auto-advance must re-check plan version."
+                )
 
 
 def check_freestyle_return_save_ux(errors: list[str]) -> None:

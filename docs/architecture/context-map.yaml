@@ -281,7 +281,10 @@
           "sseStream",
           "commandPublish",
           "controllerElection",
-          "opaqueViewEnvelope"
+          "opaqueViewEnvelope",
+          "controlLease",
+          "takeoverHydrate",
+          "disconnectGracePause"
         ]
       },
       "PersistencePort": {
@@ -346,6 +349,34 @@
         "tests": [
           "test_freestyle_queue_builder.py",
           "feedConfig.test.ts"
+        ]
+      },
+      "practice.persistRoundPlan": {
+        "owner": "practice",
+        "facades": [
+          "memory.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/rounds/active",
+        "invariants": [
+          "SQLite freestyle_round_states is the authoritative retry order",
+          "expected_version rejects stale writers without overwrite",
+          "operation_id is idempotent",
+          "forget and hard append retry occurrences after leave with a 3-card gap"
+        ],
+        "tests": [
+          "test_freestyle_round_plan.py",
+          "test_freestyle_round_api.py"
+        ]
+      },
+      "practice.restoreRoundPlan": {
+        "owner": "practice",
+        "endpoint": "GET /api/v1/freestyle/rounds/{round_id}",
+        "invariants": [
+          "hydrate current card from the server plan, not queue head",
+          "rebind by unit_id when unit_revision changes"
+        ],
+        "tests": [
+          "test_freestyle_round_api.py"
         ]
       },
       "mindmap.enterFullscreen": {

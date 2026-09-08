@@ -16,7 +16,16 @@ export interface FreestyleProgressSegment {
   palaceId: number | null
   /** True when every rendered segment of this palace is `done`. */
   palaceDone: boolean
+  kind?: 'source' | 'retry'
+  retryAttempt?: number
+  sourceCardId?: string
+  sourceLabel?: string
+  waitingRetry?: boolean
+  retryAfterCards?: number
 }
+
+/** High-contrast amber fill for retry occurrence circles (not palace-mixed bars). */
+export const retryNodeClass = 'bg-amber-400 text-zinc-950'
 
 export interface FreestyleProgressSummary {
   segments: FreestyleProgressSegment[]
@@ -157,6 +166,28 @@ export function palaceAccentToneClass(
   return PALACE_ACCENT_TONE_CLASS[accent][tone]
 }
 
+function progressCardLabel(
+  card: FreestyleCard,
+  cards: FreestyleCard[],
+  roundPlan: FreestyleRoundPlanState | null,
+): string {
+  const sourceId = sourceCardId(card)
+  const fromPlan = roundPlan?.cardsById[sourceId]?.label || roundPlan?.cardsById[card.id]?.label
+  if (fromPlan) return fromPlan
+  const source = cards.find((item) => item.id === sourceId) ?? card
+  if ('context_path' in source && source.context_path?.length) {
+    const text = String(source.context_path.at(-1)?.text || '').trim()
+    if (text) return text
+  }
+  return sourceId || card.id
+}
+
+export function retryNodeLabel(segment: FreestyleProgressSegment): string {
+  const attempt = Math.max(1, Math.round(segment.retryAttempt || 1))
+  const label = String(segment.sourceLabel || '').trim()
+  return label ? `重练《${label}》第 ${attempt} 次` : `重练第 ${attempt} 次`
+}
+
 export function buildFreestyleProgressSummary(
   cards: FreestyleCard[],
   roundPlan: FreestyleRoundPlanState | null,
@@ -175,13 +206,34 @@ export function buildFreestyleProgressSummary(
       planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
     )
     if (!tone) continue
-    segments.push({ cardId: card.id, tone, palaceId: cardPalaceId(card), palaceDone: false })
-    if (isRetryOccurrence(card)) {
+    const retryKind = isRetryOccurrence(card)
+    const planEntry = roundPlan?.cardsById[card.id]
+    const waitingRetry = !retryKind && planEntry?.status === 'retry'
+    const sourceId = sourceCardId(card)
+    segments.push({
+      cardId: card.id,
+      tone,
+      palaceId: cardPalaceId(card),
+      palaceDone: false,
+      kind: retryKind ? 'retry' : 'source',
+      ...(retryKind
+        ? {
+            retryAttempt: Math.max(1, Math.round(Number(card.retry_attempt) || 1)),
+            sourceCardId: sourceId,
+            sourceLabel: progressCardLabel(card, cards, roundPlan),
+          }
+        : {
+            waitingRetry,
+            ...(waitingRetry
+              ? { retryAfterCards: Math.max(0, Math.round(Number(planEntry?.retryAfterCards) || 0)) }
+              : {}),
+          }),
+    })
+    if (retryKind) {
       retryInserted += 1
     } else {
       baseCards.push(card)
     }
-    const sourceId = sourceCardId(card)
     if (
       tone === 'done'
       || completed.has(card.id)

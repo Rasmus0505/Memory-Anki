@@ -38,6 +38,8 @@ def test_freestyle_facade_requires_round_plan_public_surface(
                 "merge_content_streams",
                 "training_mode",
                 "streams",
+                "list_active_palace_ids_by_subject_ids",
+                "subject_ids",
             ]
         ),
     )
@@ -47,7 +49,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "shared" / "api" / "contracts" / "freestyle.ts",
-        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix\n",
+        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix subject_ids\n",
     )
     write_file(
         web_src / "modules" / "practice" / "public.ts",
@@ -68,6 +70,30 @@ def test_freestyle_facade_requires_round_plan_public_surface(
         "def leftover_due_by_palace():\n    return {}\n",
     )
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "presentation" / "router.py",
+        "@router.post('/freestyle/rounds/active')\n@router.post('/freestyle/rounds/start')\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
+        "scheduledBase retryInserted progressHudText\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "handleRatingSettled autoAdvance planVersion\n",
+    )
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -76,6 +102,69 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
     assert errors == []
+
+
+def test_freestyle_facade_rejects_client_local_round_authority(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "queue_service.py",
+        "\n".join(
+            [
+                "from memory_anki.modules.content.public import x",
+                "from memory_anki.modules.memory.public import y",
+                "from memory_anki.modules.quiz.public import z",
+                "def build_freestyle_queue(): pass",
+                "merge_content_streams",
+                "training_mode",
+                "streams",
+                "list_active_palace_ids_by_subject_ids",
+                "subject_ids",
+            ]
+        ),
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "stream_mixer.py",
+        "def merge_content_streams(): pass\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix subject_ids\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "public.ts",
+        "sanitizeFreestyleFeedConfig applySkip mergeRefreshQueue visibleMountIndices "
+        "createRoundPlan reorderRoundPlan isSequentialPalaceBlocked\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
+        "createRoundPlan reorderRoundPlan planCardStatus\n"
+        "if (targetIndex < currentIndex) return false\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestylePalaceClearance.ts",
+        "export function isPalaceRoundCleared() { return true }\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "leftover_due.py",
+        "def leftover_due_by_palace():\n    return {}\n",
+    )
+    write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Configuration and round state remain client-local per device.\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_queue_facade_surface(errors)
+
+    assert any("client-local" in error for error in errors)
+    assert any("round-plan service is required" in error for error in errors)
 
 
 def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(

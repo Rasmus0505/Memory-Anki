@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   palaceAccent,
   palaceAccentToneClass,
+  retryNodeClass,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { FreestyleProgressRail } from './FreestyleProgressRail'
@@ -105,6 +106,42 @@ describe('FreestyleProgressRail', () => {
     })
 
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4 · 重练 +1 · 过 1')
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
+      .toBe('本轮进度 3/4，重练 1 张，已通过 1。点击查看本轮安排')
+  })
+
+  it('renders retry occurrences as numbered amber circles', () => {
+    renderRail({
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source' },
+          {
+            cardId: 'retry:round-1:one:2',
+            tone: 'retry',
+            palaceId: 1,
+            palaceDone: false,
+            kind: 'retry',
+            retryAttempt: 2,
+            sourceCardId: 'one',
+            sourceLabel: 'one',
+          },
+          { cardId: 'two', tone: 'current', palaceId: 1, palaceDone: false, kind: 'source' },
+        ],
+        retryInserted: 1,
+        scheduledBase: 2,
+        positionBase: 2,
+        passedCount: 1,
+      }),
+    })
+
+    const node = screen.getByTestId('freestyle-progress-retry-node')
+    expect(node.textContent).toBe('2')
+    expect(node.getAttribute('aria-label')).toBe('重练《one》第 2 次')
+    expect(node.getAttribute('title')).toBe('重练《one》第 2 次')
+    expect(node.className).toContain('rounded-full')
+    expect(node.className).toContain(retryNodeClass)
+    expect(screen.getAllByTestId('freestyle-progress-segment')).toHaveLength(2)
+    expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('2/2 · 重练 +1 · 过 1')
   })
 
   it('opens the round plan from the rail', () => {

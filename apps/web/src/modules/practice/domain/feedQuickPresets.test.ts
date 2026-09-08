@@ -17,15 +17,19 @@ describe('freestyle quick presets', () => {
     expect(config.content).toEqual({ mindmap_branch: false, anki_card: false, quiz_question: true })
   })
 
-  it('limits English to the English subject and memory palace to non-English subjects', () => {
+  it('selects the English subject chip on memory palace, and 全选 for the palace preset', () => {
     const english = applyFreestyleQuickPreset(DEFAULT_FREESTYLE_FEED_CONFIG, 'english', palaces)
-    expect(english.specific_palace_ids).toEqual([1])
-    expect(english.subject_scope).toBe('english')
+    expect(english.training_mode).toBe('memory_palace')
+    expect(english.mixed_modes).toEqual(['memory_palace'])
+    expect(english.streams.memory_palace.subject_ids).toEqual([1])
+    expect(english.streams.memory_palace.specific_palace_ids).toEqual([])
     expect(english.content.quiz_question).toBe(false)
 
     const memoryPalace = applyFreestyleQuickPreset(DEFAULT_FREESTYLE_FEED_CONFIG, 'memory_palace', palaces)
-    expect(memoryPalace.specific_palace_ids).toEqual([2])
-    expect(memoryPalace.subject_scope).toBe('non_english')
+    expect(memoryPalace.training_mode).toBe('memory_palace')
+    expect(memoryPalace.streams.memory_palace.subject_ids).toEqual([])
+    expect(memoryPalace.streams.memory_palace.subject_scope).toBe('all')
+    expect(memoryPalace.streams.memory_palace.specific_palace_ids).toEqual([])
     expect(memoryPalace.content.quiz_question).toBe(false)
   })
 })

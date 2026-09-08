@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 import { FreestyleRoundConfigDialog } from './FreestyleRoundConfigDialog'
@@ -47,6 +47,10 @@ describe('FreestyleRoundConfigDialog', () => {
     const { onSaveConfig } = renderDialog()
 
     await screen.findByText('快捷预设')
+    expect(screen.getByRole('radio', { name: /^记忆宫殿/ })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /^刷题/ })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /^混合模式/ })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: /英语宫殿/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
   })
@@ -104,5 +108,36 @@ describe('FreestyleRoundConfigDialog', () => {
         memory_palace: expect.objectContaining({ specific_palace_ids: [11] }),
       }),
     }))
+  })
+
+  it('lets the user pick subjects from chips instead of an English training mode', async () => {
+    vi.mocked(getPalacesGroupedApi).mockResolvedValue({
+      subjects: [
+        {
+          subject: { id: 1, name: '教育学', color: null },
+          chapter_groups: [],
+          ungrouped_palaces: [{ id: 11, title: 'Palace A', resolved_title: 'Palace A', chapters: [] }],
+        },
+        {
+          subject: { id: 2, name: '英语', color: null },
+          chapter_groups: [],
+          ungrouped_palaces: [{ id: 22, title: 'English', resolved_title: 'English', chapters: [] }],
+        },
+      ],
+    } as never)
+    const { onSaveConfig } = renderDialog()
+
+    const subjectGroup = await screen.findByRole('group', { name: '学科' })
+    fireEvent.click(await within(subjectGroup).findByRole('button', { name: '英语' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+
+    expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
+      streams: {
+        memory_palace: { subject_ids: [2], specific_palace_ids: [] },
+        quiz: { subject_ids: [2] },
+      },
+    })
+    expect(onSaveConfig.mock.calls[0][0].training_mode).not.toBe('english')
+    expect(onSaveConfig.mock.calls[0][0].mixed_modes).not.toContain('english')
   })
 })

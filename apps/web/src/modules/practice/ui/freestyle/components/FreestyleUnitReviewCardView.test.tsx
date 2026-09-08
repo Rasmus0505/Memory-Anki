@@ -19,6 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   getUnitReviewSessionApi: vi.fn(),
   startFreestyleUnitReviewSessionApi: vi.fn(),
   rateReviewUnitApi: vi.fn(),
+  rateFreestyleRoundUnitApi: vi.fn(),
   ratePalaceDueUnitsApi: vi.fn(),
   undoReviewUnitRatingApi: vi.fn(),
   cancelUnratedUnitReviewEncounterApi: vi.fn().mockResolvedValue({ abandoned: false }),
@@ -54,6 +55,10 @@ vi.mock('@/modules/practice/public', () => ({
   ratePalaceDueUnitsApi: apiMocks.ratePalaceDueUnitsApi,
   undoReviewUnitRatingApi: apiMocks.undoReviewUnitRatingApi,
   cancelUnratedUnitReviewEncounterApi: apiMocks.cancelUnratedUnitReviewEncounterApi,
+}))
+
+vi.mock('@/modules/practice/ui/freestyle/api', () => ({
+  rateFreestyleRoundUnitApi: apiMocks.rateFreestyleRoundUnitApi,
 }))
 
 vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => ({
@@ -297,6 +302,7 @@ function renderCard(
     onBranchComplete: vi.fn(),
     onBatchCardsSettled: vi.fn(),
     onStaleDrop: vi.fn(),
+    onRevisionAdopted: vi.fn(),
     onSaveFailed: vi.fn(),
     onUnitsReconciled: vi.fn(),
     onRatingSettled: options.onRatingSettled ?? vi.fn(),
@@ -365,6 +371,51 @@ describe('FreestyleUnitReviewCardView', () => {
       completion: null,
     })
     apiMocks.cancelUnratedUnitReviewEncounterApi.mockResolvedValue({ abandoned: false })
+    apiMocks.rateFreestyleRoundUnitApi.mockImplementation(async (roundId: string, payload: {
+      study_session_id: string
+      unit_id: string
+      unit_revision: number
+      encounter_id: string
+      rating: number
+      operation_id: string
+      palace_batch?: {
+        palace_id: number
+        current?: {
+          study_session_id: string
+          unit_id: string
+          unit_revision: number
+          encounter_id: string
+        }
+        exclude_unit_ids?: string[]
+        include_unit_ids?: string[]
+      } | null
+    }) => {
+      if (payload.palace_batch) {
+        const item = await apiMocks.ratePalaceDueUnitsApi(payload.palace_batch.palace_id, {
+          operationId: payload.operation_id,
+          rating: payload.rating,
+          roundId,
+          current: payload.palace_batch.current ?? {
+            study_session_id: payload.study_session_id,
+            unit_id: payload.unit_id,
+            unit_revision: payload.unit_revision,
+            encounter_id: payload.encounter_id,
+          },
+          excludeUnitIds: payload.palace_batch.exclude_unit_ids ?? [],
+          includeUnitIds: payload.palace_batch.include_unit_ids ?? [],
+        })
+        return { item, round: { conflict: false, version: 1, plan_version: 1 } }
+      }
+      const item = await apiMocks.rateReviewUnitApi(
+        payload.study_session_id,
+        { id: payload.unit_id, revision: payload.unit_revision },
+        payload.encounter_id,
+        payload.rating,
+        payload.operation_id,
+        roundId,
+      )
+      return { item, round: { conflict: false, version: 1, plan_version: 1 } }
+    })
     persistMocks.persistPalaceEditor.mockReset()
     persistMocks.persistPalaceEditor.mockImplementation(async (_palaceId, state) => ({
       state,
@@ -1203,7 +1254,15 @@ describe('FreestyleUnitReviewCardView', () => {
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
 
-    await waitFor(() => expect(onRatingSettled).toHaveBeenCalledWith(card.id, true, 3))
+    await waitFor(() => expect(onRatingSettled).toHaveBeenCalledWith(
+      card.id,
+      true,
+      3,
+      expect.objectContaining({
+        occurrenceId: card.id,
+        encounterId: 'encounter-1',
+      }),
+    ))
   })
 
   it('rates with the server-owned encounter round when the queue round is stale', async () => {
@@ -1291,14 +1350,40 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe(true)
   })
 
-  it('drops a card when its frozen unit revision is stale', async () => {
+  it('adopts a live unit revision instead of dropping when the session succeeds', async () => {
     const card = buildCard('unit-stale', 3)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!, 4))
+    const { onStaleDrop, onSaveFailed, onEncounterChange, onRevisionAdopted } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(onStaleDrop).not.toHaveBeenCalled()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(onRevisionAdopted).toHaveBeenCalledWith(card.id, card.unit_id, 4)
+    expect(onEncounterChange).toHaveBeenCalledWith(
+      card.id,
+      expect.objectContaining({ unitRevision: 4 }),
+    )
+  })
+
+  it('renders a successful session whose encounter is not open instead of auto-dropping', async () => {
+    const card = buildCard('unit-closed-glance')
+    const closed = buildEncounter({ status: 'closed', selected_rating: 3, passed: true })
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(
+      buildSession(card.unit_id!, 3, closed),
+    )
+    const { onStaleDrop } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(onStaleDrop).not.toHaveBeenCalled()
+  })
+
+  it('drops when the session payload has no matching unit', async () => {
+    const card = buildCard('unit-missing')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession('other-unit', 3))
     const { onStaleDrop, onSaveFailed } = renderCard(card)
 
     await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
     expect(onSaveFailed).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('flip-card-mind-map-panel')).toBeNull()
   })
 
   it('shows recovery actions instead of an endless loading state for a non-stale load failure', async () => {
@@ -1330,7 +1415,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onStaleDrop).toHaveBeenCalledTimes(1)
   })
 
-  it('drops silently when active unit review session is required', async () => {
+  it('shows a retryable load error when an active session is required', async () => {
     const card = buildCard('unit-session-required')
     apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue({
       status: 409,
@@ -1338,7 +1423,8 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     const { onStaleDrop, onSaveFailed } = renderCard(card)
 
-    await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))
-    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: '重试加载' })).toBeTruthy()
+    expect(onStaleDrop).not.toHaveBeenCalled()
+    expect(onSaveFailed).toHaveBeenCalled()
   })
 })

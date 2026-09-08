@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_FREESTYLE_FEED_CONFIG,
-  sanitizeFreestyleFeedConfig,
-} from './feedConfig'
-import {
   DEFAULT_QUEUE_STATE,
   applyDeferredPalaceOrder,
   applySkip,
@@ -33,109 +29,6 @@ import {
   canPopViewHistory,
 } from './queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
-
-describe('freestyle feed config', () => {
-  it('sanitizes bounds and removes Anki from legacy content', () => {
-    const config = sanitizeFreestyleFeedConfig({
-      node_limit: 99,
-      progress_scopes: ['reinforcement'],
-      include_calendar_today_due: true,
-      within_palace_order: 'deterministic_shuffle',
-      queue_length: 2,
-      content: { mindmap_branch: false, quiz_question: false, anki_card: false },
-      seed: 0,
-    })
-    expect(config.queue_length).toBe(5)
-    expect(config.seed).toBe(1)
-    expect(config.content.mindmap_branch).toBe(true)
-    expect(config.content.anki_card).toBe(false)
-    expect(config.content.quiz_question).toBe(true)
-    expect(config).not.toHaveProperty('node_limit')
-    expect(config).not.toHaveProperty('progress_scopes')
-    expect(config).not.toHaveProperty('include_calendar_today_due')
-    expect(config).not.toHaveProperty('within_palace_order')
-  })
-
-  it('keeps defaults for empty input', () => {
-    expect(sanitizeFreestyleFeedConfig(null)).toEqual(DEFAULT_FREESTYLE_FEED_CONFIG)
-  })
-
-  it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {
-    const config = sanitizeFreestyleFeedConfig({
-      weights: { mindmap_branch: 3, anki_card: 1, quiz_question: 2 },
-    })
-    expect(config.mix_mode).toBe('ratio')
-    expect(config.mix_ratio).toEqual({ mindmap: 3, quiz: 2 })
-    expect(config.bound_quiz_placement).toBe('into_mix')
-    expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce'])
-    expect(config.quiz_scope).toBe('cross_palace_random')
-  })
-
-  it('keeps explicit follow_unit and quiz progress scopes', () => {
-    const config = sanitizeFreestyleFeedConfig({
-      bound_quiz_placement: 'follow_unit',
-      quiz_mastery_buckets: ['unseen', 'stable'],
-      quiz_scope: 'single_palace_random',
-    })
-    expect(config.bound_quiz_placement).toBe('follow_unit')
-    expect(config.quiz_mastery_buckets).toEqual(['unseen', 'stable'])
-    expect(config.quiz_scope).toBe('single_palace_random')
-  })
-
-  it('maps legacy expand due_policy to include stable when scopes missing', () => {
-    const config = sanitizeFreestyleFeedConfig({
-      due_policy: 'due_first_then_expand',
-    })
-    expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce', 'stable'])
-  })
-
-  it('infers mindmap_only / quiz_only from content when mix_mode missing', () => {
-    expect(
-      sanitizeFreestyleFeedConfig({
-        content: { mindmap_branch: true, anki_card: false, quiz_question: false },
-      }).mix_mode,
-    ).toBe('mindmap_only')
-    expect(
-      sanitizeFreestyleFeedConfig({
-        content: { mindmap_branch: false, anki_card: false, quiz_question: true },
-      }).mix_mode,
-    ).toBe('quiz_only')
-  })
-
-  it('keeps explicit mix_mode and clamps mix_ratio', () => {
-    const config = sanitizeFreestyleFeedConfig({
-      mix_mode: 'random',
-      mix_ratio: { mindmap: 99, quiz: 0 },
-      bound_quiz_placement: 'into_mix',
-    })
-    expect(config.mix_mode).toBe('random')
-    expect(config.mix_ratio.mindmap).toBe(10)
-    expect(config.mix_ratio.quiz).toBe(1)
-    expect(config.bound_quiz_placement).toBe('into_mix')
-  })
-
-  it('migrates legacy directions into three streams and normalizes mixed selection', () => {
-    expect(sanitizeFreestyleFeedConfig({ mix_mode: 'quiz_only' })).toMatchObject({
-      training_mode: 'quiz',
-      mixed_modes: ['quiz'],
-    })
-    expect(sanitizeFreestyleFeedConfig({
-      subject_scope: 'english',
-      content: { mindmap_branch: true, anki_card: false, quiz_question: false },
-    })).toMatchObject({
-      training_mode: 'english',
-      mixed_modes: ['english'],
-      streams: { english: { subject_scope: 'english' } },
-    })
-    expect(sanitizeFreestyleFeedConfig({
-      training_mode: 'mixed',
-      mixed_modes: ['english'],
-    })).toMatchObject({
-      training_mode: 'english',
-      mixed_modes: ['english'],
-    })
-  })
-})
 
 describe('freestyle queue skip rules', () => {
   it('moves to tail on first skip and hides on second', () => {
@@ -232,6 +125,48 @@ describe('freestyle queue skip rules', () => {
         fallbackIndex: 1,
       }),
     ).toBe(1)
+  })
+
+  it('absorbs a newer unit revision in place instead of appending a second card', () => {
+    const previous = [
+      { id: 'review_unit:u1:r1', type: 'mindmap_branch', unit_id: 'u1', unit_revision: 1 },
+      { id: 'review_unit:u2:r1', type: 'mindmap_branch', unit_id: 'u2', unit_revision: 1 },
+    ] as FreestyleCard[]
+    const incoming = [
+      { id: 'review_unit:u1:r2', type: 'mindmap_branch', unit_id: 'u1', unit_revision: 2 },
+      { id: 'review_unit:u2:r1', type: 'mindmap_branch', unit_id: 'u2', unit_revision: 1 },
+    ] as FreestyleCard[]
+    const merged = mergeQueuePreservingHistory(previous, incoming, ['review_unit:u1:r1'])
+    expect(merged.map((card) => card.id)).toEqual(['review_unit:u1:r1', 'review_unit:u2:r1'])
+    expect(merged[0]).toMatchObject({ unit_id: 'u1', unit_revision: 2 })
+    expect(
+      resolveRebuildIndex({
+        nextCards: merged,
+        preferCardId: 'review_unit:u1:r1',
+        userCardId: 'review_unit:u1:r1',
+        fallbackIndex: 0,
+        previousCards: previous,
+      }),
+    ).toBe(0)
+  })
+
+  it('pins rebuild index by unit_id when the card id revision changes', () => {
+    const nextCards = [
+      { id: 'review_unit:u1:r2', type: 'mindmap_branch', unit_id: 'u1' },
+      { id: 'review_unit:u2:r1', type: 'mindmap_branch', unit_id: 'u2' },
+    ] as FreestyleCard[]
+    const previousCards = [
+      { id: 'review_unit:u1:r1', type: 'mindmap_branch', unit_id: 'u1' },
+    ] as FreestyleCard[]
+    expect(
+      resolveRebuildIndex({
+        nextCards,
+        preferCardId: 'review_unit:u1:r1',
+        userCardId: 'review_unit:u1:r1',
+        fallbackIndex: 1,
+        previousCards,
+      }),
+    ).toBe(0)
   })
 
   it('persists and sanitizes currentCardId for resume after route leave', () => {
@@ -645,7 +580,7 @@ describe('freestyle queue skip rules', () => {
   })
 })
 
-describe('restudy placement stays inside the current palace', () => {
+describe('restudy placement counts every presented card', () => {
   function branch(id: string, palaceId: number): FreestyleCard {
     return { id, type: 'mindmap_branch', palace_id: palaceId } as FreestyleCard
   }
@@ -654,7 +589,7 @@ describe('restudy placement stays inside the current palace', () => {
     const cards = [branch('a1', 1), branch('a2', 1), branch('b1', 2), branch('b2', 2)]
     const occurrence = createRetryOccurrence(cards[1], 'round-1', 2, 3)
     const next = insertRetryOccurrenceAfterGap(cards, occurrence, 1, 3)
-    expect(next.map((card) => card.id)).toEqual(['a1', 'a2', occurrence.id, 'b1', 'b2'])
+    expect(next.map((card) => card.id)).toEqual(['a1', 'a2', 'b1', 'b2', occurrence.id])
   })
 
   it('places a retry occurrence at the palace tail when fewer than gap same-palace cards remain', () => {
@@ -674,8 +609,8 @@ describe('restudy placement stays inside the current palace', () => {
       'a2',
       'a3',
       'a4',
-      occurrence.id,
       'b1',
+      occurrence.id,
       'b2',
       'b3',
     ])
@@ -693,6 +628,20 @@ describe('restudy placement stays inside the current palace', () => {
     const occurrence = createRetryOccurrence(cards[1], 'round-1', 2, 3)
     const next = insertRetryOccurrenceAfterGap(cards, occurrence, 1, 3)
     expect(next.map((card) => card.id)).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', occurrence.id, 'b1'])
+  })
+
+  it('counts quiz cards toward the retry gap', () => {
+    const cards = [
+      branch('a1', 1),
+      { id: 'q1', type: 'quiz_question' } as FreestyleCard,
+      { id: 'q2', type: 'quiz_question' } as FreestyleCard,
+      { id: 'q3', type: 'quiz_question' } as FreestyleCard,
+      branch('b1', 2),
+    ]
+    const occurrence = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 0, 3)
+    expect(next.map((card) => card.id)).toEqual(['a1', 'q1', 'q2', 'q3', occurrence.id, 'b1'])
+    expect(cardPalaceId(next[4])).toBe(1)
   })
 
   it('keeps a restudied unit inside its palace via placeRestudyCardWithMaxGap', () => {

@@ -1,5 +1,6 @@
 import type {
   FreestyleFeedConfig,
+  FreestyleStreamScope,
   FreestyleSubjectScope,
   PalaceGroupedItem,
   PalaceGroupedListResponse,
@@ -195,6 +196,27 @@ export function allFreestylePalaceIdsFromSubjects(subjects: FreestylePalaceScope
   ])))
 }
 
+export function filterSubjectsForStream(
+  subjects: FreestylePalaceScopeSubject[],
+  stream: Pick<FreestyleStreamScope, 'subject_ids' | 'subject_scope'>,
+) {
+  if (stream.subject_ids.length) {
+    const allowed = new Set(stream.subject_ids)
+    return subjects.filter((subject) => subject.id != null && allowed.has(subject.id))
+  }
+  if (stream.subject_scope === 'english') {
+    return subjects.filter((subject) => subject.title.trim() === '英语')
+  }
+  if (stream.subject_scope === 'non_english') {
+    return subjects.filter((subject) => subject.title.trim() !== '英语')
+  }
+  return subjects
+}
+
+export function namedFreestyleSubjectIds(subjects: FreestylePalaceScopeSubject[]) {
+  return subjects.flatMap((subject) => (subject.id != null && subject.id > 0 ? [subject.id] : []))
+}
+
 export function allFreestylePalaceIds(sections: FreestylePalaceScopeSection[]) {
   return Array.from(new Set(sections.flatMap((section) => section.groups.flatMap((group) => group.palaceIds))))
 }
@@ -224,10 +246,27 @@ function idsForSubjectScope(
 }
 
 export function getFreestylePalaceScopeSummary(
-  config: Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope'>,
+  config: Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope'> & { subject_ids?: number[] },
   subjects: FreestylePalaceScopeSubject[],
 ): FreestylePalaceScopeSummary {
   const selectedIds = uniqueIds(config.specific_palace_ids)
+  const subjectIds = uniqueIds(config.subject_ids ?? [])
+  if (subjectIds.length) {
+    const subjectScopeIds = allFreestylePalaceIdsFromSubjects(filterSubjectsForStream(subjects, {
+      subject_ids: subjectIds,
+      subject_scope: 'all',
+    }))
+    const subjectScopeSet = new Set(subjectScopeIds)
+    const extraIds = selectedIds.filter((id) => !subjectScopeSet.has(id))
+    return {
+      subjectScope: config.subject_scope,
+      subjectScopeIds,
+      selectedIds,
+      extraIds,
+      effectiveIds: selectedIds.length ? selectedIds : subjectScopeIds,
+      isUnrestricted: false,
+    }
+  }
   const subjectScopeIds = idsForSubjectScope(subjects, config.subject_scope)
   const subjectScopeSet = new Set(subjectScopeIds)
   const extraIds = config.subject_scope === 'all'
@@ -248,18 +287,33 @@ export function getFreestylePalaceScopeSummary(
 }
 
 export function normalizeFreestylePalaceSelection(
-  config: Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope'>,
+  config: Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope'> & { subject_ids?: number[] },
   selectedIds: number[],
   subjects: FreestylePalaceScopeSubject[],
-): Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope'> {
+): Pick<FreestyleFeedConfig, 'specific_palace_ids' | 'subject_scope' | 'subject_ids'> {
   const normalizedIds = uniqueIds(selectedIds)
+  const subjectIds = uniqueIds(config.subject_ids ?? [])
+  if (subjectIds.length) {
+    const subjectScopeIds = allFreestylePalaceIdsFromSubjects(filterSubjectsForStream(subjects, {
+      subject_ids: subjectIds,
+      subject_scope: 'all',
+    }))
+    if (!subjectScopeIds.length) {
+      return { specific_palace_ids: normalizedIds, subject_scope: config.subject_scope, subject_ids: subjectIds }
+    }
+    const selected = new Set(normalizedIds)
+    if (subjectScopeIds.every((id) => selected.has(id))) {
+      return { specific_palace_ids: [], subject_scope: config.subject_scope, subject_ids: subjectIds }
+    }
+    return { specific_palace_ids: normalizedIds, subject_scope: config.subject_scope, subject_ids: subjectIds }
+  }
   if (config.subject_scope === 'all') {
-    return { specific_palace_ids: normalizedIds, subject_scope: 'all' }
+    return { specific_palace_ids: normalizedIds, subject_scope: 'all', subject_ids: [] }
   }
 
   const subjectScopeIds = idsForSubjectScope(subjects, config.subject_scope)
   if (!subjectScopeIds.length) {
-    return { specific_palace_ids: normalizedIds, subject_scope: config.subject_scope }
+    return { specific_palace_ids: normalizedIds, subject_scope: config.subject_scope, subject_ids: [] }
   }
 
   const selected = new Set(normalizedIds)
@@ -268,10 +322,11 @@ export function normalizeFreestylePalaceSelection(
     return {
       specific_palace_ids: normalizedIds.filter((id) => !subjectScopeSet.has(id)),
       subject_scope: config.subject_scope,
+      subject_ids: [],
     }
   }
 
-  return { specific_palace_ids: normalizedIds, subject_scope: 'all' }
+  return { specific_palace_ids: normalizedIds, subject_scope: 'all', subject_ids: [] }
 }
 
 export function getFreestylePalaceGroupSelection(

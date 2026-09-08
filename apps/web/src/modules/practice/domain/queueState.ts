@@ -218,6 +218,76 @@ export function cardPalaceId(card: FreestyleCard | null | undefined): number | n
   return positivePalaceId(card.palace_context?.id)
 }
 
+export function cardUnitId(card: FreestyleCard | null | undefined): string {
+  if (!card || !('unit_id' in card)) return ''
+  return String(card.unit_id || '').trim()
+}
+
+export function reviewUnitIdFromCardId(cardId: string | null | undefined): string {
+  const text = String(cardId || '').trim()
+  if (!text.startsWith('review_unit:')) return ''
+  const rest = text.slice('review_unit:'.length)
+  const marker = rest.lastIndexOf(':r')
+  if (marker <= 0) return rest
+  const revision = rest.slice(marker + 2)
+  return /^\d+$/.test(revision) ? rest.slice(0, marker) : rest
+}
+
+function stableUnitId(card: FreestyleCard | null | undefined): string {
+  return cardUnitId(card) || reviewUnitIdFromCardId(card?.id)
+}
+
+function absorbUnitCard(previous: FreestyleCard, incoming: FreestyleCard): FreestyleCard {
+  if (previous.id === incoming.id) return incoming
+  return { ...incoming, id: previous.id }
+}
+
+export function rebindCompletedIdsByUnit(
+  completedIds: Iterable<string>,
+  previous: FreestyleCard[],
+  next: FreestyleCard[],
+): string[] {
+  const nextByUnit = new Map<string, string>()
+  next.forEach((card) => {
+    const unitId = stableUnitId(card)
+    if (unitId && !nextByUnit.has(unitId)) nextByUnit.set(unitId, card.id)
+  })
+  const previousById = new Map(previous.map((card) => [card.id, card]))
+  const seen = new Set<string>()
+  const result: string[] = []
+  Array.from(completedIds, (id) => String(id || '').trim()).forEach((id) => {
+    if (!id) return
+    const unitId = stableUnitId(previousById.get(id)) || reviewUnitIdFromCardId(id)
+    const rebound = unitId ? nextByUnit.get(unitId) : undefined
+    const nextId = rebound || id
+    if (seen.has(nextId)) return
+    seen.add(nextId)
+    result.push(nextId)
+  })
+  return result
+}
+
+export function rebindUnitEncountersByUnitId(
+  encounters: Record<string, FreestyleUnitEncounterState>,
+  previous: FreestyleCard[],
+  next: FreestyleCard[],
+): Record<string, FreestyleUnitEncounterState> {
+  const nextByUnit = new Map<string, string>()
+  next.forEach((card) => {
+    const unitId = stableUnitId(card)
+    if (unitId) nextByUnit.set(unitId, card.id)
+  })
+  const result = { ...encounters }
+  previous.forEach((card) => {
+    const unitId = stableUnitId(card)
+    const nextId = unitId ? nextByUnit.get(unitId) : undefined
+    if (!nextId || nextId === card.id) return
+    if (result[card.id] && !result[nextId]) result[nextId] = result[card.id]
+    delete result[card.id]
+  })
+  return result
+}
+
 export function applySkip(
   state: FreestyleSkipState,
   cardId: string,
@@ -372,6 +442,12 @@ export function createRetryOccurrence(
   }
 }
 
+/**
+ * Insert a retry occurrence after ``maxIntervening`` presented cards (default 3).
+ * Counts every remaining card — palace, quiz, and other retries — not a palace run.
+ * If fewer than the gap remain after the source, append at the end of this round.
+ * The source stays in place; the occurrence keeps its original palace identity.
+ */
 export function insertRetryOccurrenceAfterGap(
   cards: FreestyleCard[],
   occurrence: FreestyleCard,
@@ -388,21 +464,8 @@ export function insertRetryOccurrenceAfterGap(
       withoutExisting.length - 1,
     ),
   )
-  // A retry belongs to the palace where it was rated. Never rewrite its
-  // palace identity to make sequential navigation appear to progress: that
-  // makes the retry cross the palace boundary and can block the next palace.
-  const effectivePalace = cardPalaceId(occurrence)
-  let runEnd = withoutExisting.length
-  if (effectivePalace != null) {
-    for (let index = anchor + 1; index < withoutExisting.length; index += 1) {
-      if (cardPalaceId(withoutExisting[index]) !== effectivePalace) {
-        runEnd = index
-        break
-      }
-    }
-  }
   const gap = Math.max(0, Math.round(maxIntervening))
-  const insertAt = Math.min(anchor + 1 + gap, runEnd)
+  const insertAt = Math.min(anchor + 1 + gap, withoutExisting.length)
   const next = withoutExisting.slice()
   next.splice(insertAt, 0, occurrence)
   return next
@@ -483,35 +546,61 @@ export function mergeQueuePreservingHistory(
   if (previous.length === 0) return incoming
 
   const incomingById = new Map(incoming.map((card) => [card.id, card]))
+  const incomingByUnit = new Map<string, FreestyleCard>()
+  incoming.forEach((card) => {
+    const unitId = stableUnitId(card)
+    if (unitId && !incomingByUnit.has(unitId)) incomingByUnit.set(unitId, card)
+  })
+  const completedUnits = new Set<string>()
+  completed.forEach((id) => {
+    const unitId = reviewUnitIdFromCardId(id)
+    if (unitId) completedUnits.add(unitId)
+  })
+  previous.forEach((card) => {
+    if (!completed.has(card.id)) return
+    const unitId = stableUnitId(card)
+    if (unitId) completedUnits.add(unitId)
+  })
   const used = new Set<string>()
+  const usedUnits = new Set<string>()
   const result: FreestyleCard[] = []
 
+  const take = (card: FreestyleCard) => {
+    if (used.has(card.id)) return
+    used.add(card.id)
+    const unitId = stableUnitId(card)
+    if (unitId) usedUnits.add(unitId)
+    result.push(card)
+  }
+
   previous.forEach((card) => {
-    const id = card.id
-    if (used.has(id)) return
+    if (used.has(card.id)) return
     if (isRetryOccurrence(card)) {
-      result.push(card)
-      used.add(id)
+      take(card)
       return
     }
-    if (completed.has(id)) {
-      // Keep settled unit where the learner finished it (payload may be gone from due feed).
-      result.push(card)
-      used.add(id)
+    const unitId = stableUnitId(card)
+    const incomingMatch = incomingById.get(card.id) || (unitId ? incomingByUnit.get(unitId) : undefined)
+    const settled = completed.has(card.id) || Boolean(unitId && completedUnits.has(unitId))
+    if (settled) {
+      // Keep the parent unit in its slot. A newer revision is the same card,
+      // not new work — absorb payload but keep this-round identity.
+      take(incomingMatch ? absorbUnitCard(card, incomingMatch) : card)
+      if (incomingMatch) used.add(incomingMatch.id)
       return
     }
-    const refreshed = incomingById.get(id)
-    if (refreshed) {
-      result.push(refreshed)
-      used.add(id)
+    if (incomingMatch) {
+      take(absorbUnitCard(card, incomingMatch))
+      used.add(incomingMatch.id)
     }
     // Incomplete card no longer in feed → drop (stale due / deferred elsewhere).
   })
 
   incoming.forEach((card) => {
-    if (used.has(card.id)) return
-    result.push(card)
-    used.add(card.id)
+    const unitId = stableUnitId(card)
+    if (used.has(card.id) || (unitId && usedUnits.has(unitId))) return
+    if (unitId && completedUnits.has(unitId)) return
+    take(card)
   })
 
   return result
@@ -942,17 +1031,33 @@ export function visibleMountIndices(currentIndex: number, total: number) {
  * card. If they already swiped away before the rebuild resolved, keep their card.
  */
 export function resolveRebuildIndex(args: {
-  nextCards: ReadonlyArray<{ id: string }>
+  nextCards: ReadonlyArray<{ id: string; unit_id?: string }>
   preferCardId?: string | null
   userCardId?: string | null
   fallbackIndex: number
+  previousCards?: ReadonlyArray<{ id: string; unit_id?: string }>
 }): number {
-  const { nextCards, preferCardId, userCardId, fallbackIndex } = args
+  const { nextCards, preferCardId, userCardId, fallbackIndex, previousCards } = args
   if (!nextCards.length) return 0
+
+  const unitIdFor = (id: string) => {
+    const fromNext = nextCards.find((card) => card.id === id)
+    if (fromNext?.unit_id) return String(fromNext.unit_id)
+    const fromPrev = previousCards?.find((card) => card.id === id)
+    if (fromPrev?.unit_id) return String(fromPrev.unit_id)
+    return reviewUnitIdFromCardId(id)
+  }
 
   const findIndex = (id: string | null | undefined) => {
     if (!id) return -1
-    return nextCards.findIndex((card) => card.id === id)
+    const byId = nextCards.findIndex((card) => card.id === id)
+    if (byId >= 0) return byId
+    const unitId = unitIdFor(id)
+    if (!unitId) return -1
+    return nextCards.findIndex((card) => {
+      const cardUnit = 'unit_id' in card ? String(card.unit_id || '') : ''
+      return cardUnit === unitId || reviewUnitIdFromCardId(card.id) === unitId
+    })
   }
 
   // User already left the preferred card — follow them, never yank back.

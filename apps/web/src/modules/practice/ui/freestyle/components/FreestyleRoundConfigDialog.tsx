@@ -9,7 +9,10 @@ import {
 } from '@/modules/practice/domain/feedConfig'
 import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
+  allFreestylePalaceIdsFromSubjects,
   buildFreestylePalaceScopeSubjects,
+  filterSubjectsForStream,
+  normalizeFreestylePalaceSelection,
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
@@ -98,6 +101,19 @@ export function FreestyleRoundConfigDialog({
     setDraft((current) => applyFreestyleQuickPreset(current, presetId, palaces))
   }
 
+  const pickerSubjects = pickerStream
+    ? filterSubjectsForStream(scopeSubjects, draft.streams[pickerStream])
+    : scopeSubjects
+  const pickerValue = (() => {
+    if (!pickerStream) return []
+    const stream = draft.streams[pickerStream]
+    if (stream.specific_palace_ids.length) return stream.specific_palace_ids
+    if (stream.subject_ids.length || stream.subject_scope !== 'all') {
+      return allFreestylePalaceIdsFromSubjects(pickerSubjects)
+    }
+    return []
+  })()
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,18 +193,21 @@ export function FreestyleRoundConfigDialog({
       </Dialog>
       <FreestylePalacePickerDialog
         open={pickerStream != null}
-        subjects={scopeSubjects}
-        value={pickerStream ? draft.streams[pickerStream].specific_palace_ids : []}
+        subjects={pickerSubjects}
+        value={pickerValue}
         onOpenChange={(next) => { if (!next) setPickerStream(null) }}
         onConfirm={(ids) => {
           if (!pickerStream) return
+          const stream = draft.streams[pickerStream]
+          const filtered = filterSubjectsForStream(scopeSubjects, stream)
+          const normalized = normalizeFreestylePalaceSelection(stream, ids, filtered)
           const next = sanitizeFreestyleFeedConfig({
             ...draft,
             streams: {
               ...draft.streams,
               [pickerStream]: {
-                ...draft.streams[pickerStream],
-                specific_palace_ids: ids,
+                ...stream,
+                specific_palace_ids: normalized.specific_palace_ids,
               },
             },
           })

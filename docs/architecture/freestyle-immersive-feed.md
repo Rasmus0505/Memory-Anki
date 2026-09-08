@@ -14,24 +14,41 @@ completion screen; unknown retired `/review...` paths fall back to `/freestyle`.
 
 ## Round Plan State
 
-Each local freestyle round has a stable `roundId` and a persisted round plan owned by the
-practice domain. The plan records card IDs, palace grouping, order, rating/retry state,
-completion and current-round exclusions. Queue responses also expose `candidate_count`,
+Practice owns the backend-authoritative round plan in SQLite (`freestyle_round_states`).
+Each round has a stable `round_id`, a config snapshot, a palace-scope signature, and a
+monotonic `plan_version`. The plan records original card order and card versions, the current
+card, completion/exclusion, and retry `occurrence` rows (`occurrence_kind`, source card,
+`retry_attempt`, insert target, status). Queue responses also expose `candidate_count`,
 `scheduled_count`, `queue_limit`, and `limit_reached`; the page renders these separately so
 `5/5` cannot be mistaken for a configured limit of five.
 
-The plan reducer is the only place that reconciles rebuilds and manual ordering. Rebuilds keep
+The server plan is the only authority for retry order, current card, completion, and retry
+counts. PWA, desktop, and a restart of the same device restore that plan. Browser `localStorage`
+keeps display preferences and an offline draft only — it must not decide restudy order.
+An unfinished round survives local midnight and device switches until the learner explicitly
+starts a new round or the palace scope signature changes.
+
+Optimistic concurrency: writes carry `expected_version` and `operation_id`. A stale device that
+submits a lower version receives the latest plan with `conflict: true` and must not overwrite
+newer progress. Repeated terminal writes with the same `operation_id` return the accepted
+result.
+
+The frontend reducer applies optimistic patches and hydrates from the server. Rebuilds keep
 completed, excluded, retry, and stale entries visible in the plan; a card that returns after a
-stale rebuild is reset to pending. Exclude/restore and drag operations affect only this round,
+stale rebuild is rebound by stable `unit_id` to the latest `unit_revision` while ratings and
+retry counts stay. If the current card is missing or already completed, the next unfinished
+server-plan card becomes current. Exclude/restore and drag operations affect only this round,
 never the underlying review schedule. “Finish palace then next” is a gate over all planned
 review-unit cards in the current palace: a failed/hard card remains retry work and cannot permit
 the next palace to become active. The gate is **forward-only** — looking back at a previous
 palace is never blocked. Retry placement inserts a copy after the learner leaves the source
-card, at most three usable intervening cards later; the source card stays in place so swipe-back
-is geometric. Finger/wheel paging commits `active` only after scroll settle so a mid-gesture
-index change cannot close one encounter and open another. The review map stays
-pannable (`mobileViewPolicy` defaults to `auto`); 上一张 / 下一张 on the pager
-change cards. Palace skip stays desktop-only.
+card, at least three already-presented cards later (palace cards, quiz cards, and other retry
+occurrences all count); if fewer than three remain, the occurrence is appended to the end of
+the round. The source card stays in place so swipe-back is geometric. Looking back at history
+cards does not move the committed cursor and does not insert retries. Finger/wheel paging
+commits `active` only after scroll settle so a mid-gesture index change cannot close one
+encounter and open another. The review map stays pannable (`mobileViewPolicy` defaults to
+`auto`); 上一张 / 下一张 on the pager change cards. Palace skip stays desktop-only.
 
 When every review-unit card of a palace in this round is handled (retries included; skip /
 exclude do not count), the current card shows a chapter banner. Copy is `《宫殿》今日安排已清`
@@ -43,35 +60,47 @@ scene, locally — never `dispatchGlobalFeedback`.
 The top HUD opens a bottom “本轮安排” sheet. It groups stable plan entries by palace and supports
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. Configuration is a
 separate dialog. Saving a config preserves finished/excluded records and only reorders unstarted
-work. An unfinished round survives local midnight; the page says it is yesterday's work until the
-learner starts a new round. Configuration and round state remain client-local per device.
+work. The HUD line is `位置/原安排 · 重练 +N · 过 N`: the denominator is the original scheduled
+source cards (`scheduledBase`), never retry insertions. Retry occurrences render as independent
+amber circular nodes whose number is this-round `retry_attempt`. `retryInserted` lengthens the
+rail without changing that denominator.
 
-## Training Directions and Three Streams
+## Training Directions and Subject Chips
 
-The user-facing configuration starts with one training direction: `memory_palace`, `quiz`,
-`english`, or `mixed`. The first three directions activate exactly one queue stream. Mixed mode
-selects at least two of the three streams and keeps each stream's configuration while the user
-switches modes; a selection that falls to one stream is normalized back to that single direction.
+The user-facing configuration starts with one training direction: `memory_palace`, `quiz`, or
+`mixed`. English is a **subject chip**, not a training stream. Mixed mode combines memory-palace
+and quiz only; a selection that falls to one stream is normalized back to that single direction.
 
-`streams.memory_palace` builds marked palace review-unit cards. Its scope can be all or non-English
-palaces, with an optional explicit palace list, `due_first_then_expand`, `due_only`, or
-`all_content_due_weighted` selection, palace completion/interleaving order, and structured/random
-unit order. `streams.english` has the same review-unit semantics but is constrained to English
-subject palaces. English mode does not currently mean vocabulary or reading content; it is the
-English-palace review stream.
+Subject chips sit directly under the training direction. Multi-select and 全选 write
+`streams.*.subject_ids`. Empty `subject_ids` means all subjects (no subject filter). A non-empty
+list is the union of palaces belonging to those subjects. Selecting only 英语 is the old English
+palace mode; selecting 教育学+心理学 scopes both palace and quiz pools to those subjects.
+`subject_scope` remains a compatibility field for stored prefs: `'english'` / `'non_english'` with
+empty `subject_ids` still resolve by `Subject.name == "英语"`. When the UI writes `subject_ids`,
+`subject_scope` is `'all'` because the ids are the source of truth.
 
-`streams.quiz` builds question cards independently from palace review scheduling. It filters by
-subject, explicit palace scope, question type, mastery buckets, cross-palace/single-palace order,
-and weak-question priority. The mixed combiner then merges the available stream results with a
-stable seed using `ratio`, global `random`, or `sequential` strategy. Ratio mode uses the three
-stream weights in `mix.ratios`; sequential mode completes one selected stream before moving to
-the next. The combiner de-duplicates by stable card ID after all streams are built, so overlapping
-explicit scopes cannot show the same card twice. Candidate shortage is reported as the actual
-scheduled count: the queue never repeats cards or silently broadens a filter.
+`streams.memory_palace` builds marked palace review-unit cards. After the subject filter, the user
+can still pick a palace/chapter subset (`specific_palace_ids`), plus `due_first_then_expand`,
+`due_only`, or `all_content_due_weighted` selection, palace completion/interleaving order, and
+structured/random unit order. `streams.english` is kept only as a sanitized compatibility
+projection; queue builds for new configs do not activate a third English stream.
 
-The v1 local configuration remains readable only for migration. `quiz_only` becomes `quiz`, a
-palace-only configuration becomes `memory_palace`, an English-palace preset becomes `english`,
-and palace-plus-question content becomes `mixed`. Legacy Anki front/back fields remain in source
+`streams.quiz` builds question cards independently from palace review scheduling. It uses the same
+subject chips, then optional explicit palace scope, question type, mastery buckets,
+cross-palace/single-palace order, and weak-question priority. The mixed combiner merges the two
+stream results with a stable seed using `ratio`, global `random`, or `sequential` strategy.
+Ratio mode uses the stream weights in `mix.ratios`; sequential mode completes one selected stream
+before moving to the next. The combiner de-duplicates by stable card ID after all streams are
+built, so overlapping explicit scopes cannot show the same card twice. Candidate shortage is
+reported as the actual scheduled count: the queue never repeats cards or silently broadens a
+filter.
+
+Sanitize folds stored `training_mode: 'english'` into `memory_palace` with an English subject
+filter, copies customized english-stream due/order fields onto memory_palace, and drops
+`'english'` from `mixed_modes` (adding `memory_palace` if needed). Mixed palace+english becomes
+one palace stream over all subjects. The v1 local configuration remains readable only for
+migration. `quiz_only` becomes `quiz`, a palace-only configuration becomes `memory_palace`, and
+palace-plus-question content becomes `mixed`. Legacy Anki front/back fields remain in source
 data and compatibility projections but are excluded from the new freestyle streams and queue.
 When a configuration is saved, the round plan preserves completed, excluded, and retry entries;
 only unstarted entries are rebuilt against the new streams.
@@ -79,13 +108,22 @@ only unstarted entries are rebuilt against the new streams.
 ## Palace Review Cards
 
 - Palace cards are built only from active due review units returned by Reviews.
-- Card identity carries stable `unit_id` and `unit_revision`; a permanent-mark change or a reconciled content demotion invalidates the old card.
+- Card identity carries stable `unit_id` plus `unit_revision`. A permanent-mark membership change may drop a vanished unit. A content-only demotion rebinds the same parent unit in the current round; it does not mint a new unfinished card.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
 - The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units`: every still-due unit of the current palace today, plus every still-unrated review-unit card of that palace already in this round (fill cards are `schedule_locked`). Units already rated in this round are not overwritten. Each unit keeps its own ladder; leftover due units that were not in the round are rated without inserting feed copies. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
-- `忘记` and every `困难` insert a retry copy after the learner leaves, at most three cards later,
-  with no per-round cap. The just-rated source card does not move. Only `记得` / `轻松` finish
+- `忘记` and every `困难` create a retry occurrence. Insertion happens only after the learner
+  leaves the source card and the backend confirms the plan. The gap is at least three already-
+  presented cards (palace, quiz, and other occurrences); leftover cards append to the round
+  tail. There is no per-round cap. Each new failed encounter increments this-round
+  `retry_attempt`. A later `记得` / `轻松` settles the source card and every unfinished
+  occurrence together. The just-rated source card does not move. Only `记得` / `轻松` finish
   the current encounter; a mature-unit `困难` remains retry work just like first-learning `困难`.
+  Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version`. Silent
+  rebuilds keep the current DOM card by id, never by the old index. `auto_advance` may turn
+  the page only after a passing `记得` / `轻松`, and only after re-checking card id, encounter
+  id, plan version, and overlay state; `忘记` / `困难` never auto-advance. Queue rebuilds freeze
+  the current page so index churn cannot look like the next card.
 - `due_first_then_expand` and `all_content_due_weighted` mark fill cards explicitly; their freestyle
   session start carries `allow_not_due` so the shared review service does not reject a configured
   non-due card. Formal review calls keep the default due-only guard. A fill / not-yet-due pass is
@@ -95,7 +133,7 @@ only unstarted entries are rebuilt against the new streams.
   not change the planned denominator. Mixed and quiz-only rounds become complete when every card is
   rated or acknowledged; the closing card counts sources once.
 - Queue rebuilds exclude palaces without permanent marks.
-- Stale encounter or `unit_revision` mismatch is rebuildable: drop/rebuild the card or open a fresh encounter from the current Reviews projection. Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
+- Content edits bump `unit_revision` on the parent review unit. Freestyle adopts the live revision in place: the current card stays, remaining cards rebind by `unit_id`, and already-rated units keep this-round ratings. Starting a freestyle session with a stale revision opens a fresh encounter at the live revision instead of raising `review unit changed`. A newer revision must not appear as unfinished work in the same round; a new round with empty `completed_ids` may show the demoted unit. Stale recovery (skip / rebuild / open config) is only for a vanished unit, a non-fill card that is not due (reviewed elsewhere), or an encounter that belongs to another unit. Consecutive those drops still trip the circuit breaker (three in a row, or three within ~2s). Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
 
 ## Permanent Marks
 
@@ -142,7 +180,7 @@ never to confirm flow, and only when a correction exists; it is dismissible with
 cooldown so a declined suggestion cannot return as an interruption.
 
 **In-feed corrections must never change palace scope.** A `specific_palace_ids` /
-`subject_scope` change makes `setConfigAndPersist` call `startNewRound`, clearing
+`subject_scope` / `subject_ids` change makes `setConfigAndPersist` call `startNewRound`, clearing
 completedIds, encounters and the round plan — it would destroy the round the correction is
 meant to rescue. Corrections move `due_policy`, quiz mastery buckets and weak-priority
 only, and rebuild with `silent` + `preferCardId` so finished work and the learner's

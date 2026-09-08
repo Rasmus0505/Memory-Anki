@@ -5,6 +5,7 @@ import {
   buildFreestylePalaceScopeSections,
   buildFreestylePalaceScopeSubjects,
   allFreestylePalaceIdsFromSubjects,
+  filterSubjectsForStream,
   getFreestylePalaceScopeSummary,
   getFreestyleChapterSelection,
   getFreestylePalaceGroupSelection,
@@ -125,10 +126,45 @@ describe('freestyle palace scope model', () => {
     expect(normalizeFreestylePalaceSelection(config, [1, 2], subjects)).toEqual({
       subject_scope: 'english',
       specific_palace_ids: [2],
+      subject_ids: [],
     })
     expect(normalizeFreestylePalaceSelection(config, [2], subjects)).toEqual({
       subject_scope: 'all',
       specific_palace_ids: [2],
+      subject_ids: [],
     })
+  })
+
+  it('narrows palaces inside selected subject ids without dropping the subject filter', () => {
+    const subjects = [
+      {
+        key: 'subject:education',
+        id: 2,
+        title: '教育学',
+        chapters: [],
+        ungrouped: { key: 'education', title: '未归类宫殿', palaces: [palace(2, '卢梭'), palace(3, '杜威')], palaceIds: [2, 3] },
+      },
+      {
+        key: 'subject:english',
+        id: 1,
+        title: '英语',
+        chapters: [],
+        ungrouped: { key: 'english', title: '未归类宫殿', palaces: [palace(1, 'English')], palaceIds: [1] },
+      },
+    ]
+    const config = { subject_scope: 'all' as const, specific_palace_ids: [], subject_ids: [2] }
+    const summary = getFreestylePalaceScopeSummary(config, subjects)
+    expect(summary.effectiveIds).toEqual([2, 3])
+    expect(normalizeFreestylePalaceSelection(config, [2, 3], subjects)).toEqual({
+      subject_scope: 'all',
+      specific_palace_ids: [],
+      subject_ids: [2],
+    })
+    expect(normalizeFreestylePalaceSelection(config, [2], subjects)).toEqual({
+      subject_scope: 'all',
+      specific_palace_ids: [2],
+      subject_ids: [2],
+    })
+    expect(filterSubjectsForStream(subjects, { subject_ids: [2], subject_scope: 'all' }).map((item) => item.title)).toEqual(['教育学'])
   })
 })

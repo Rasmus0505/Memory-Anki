@@ -64,20 +64,20 @@ describe('round plan reducer', () => {
     const retry = createRetryOccurrence(cards[1], 'round-1', 1, 3)
     const next = insertRetryOccurrenceAfterGap(cards, retry, 1, 3)
 
-    expect(next.map((item) => item.id)).toEqual(['a', 'b', retry.id, 'c', 'd'])
-    expect(cardPalaceId(next[2])).toBe(1)
+    expect(next.map((item) => item.id)).toEqual(['a', 'b', 'c', 'd', retry.id])
+    expect(cardPalaceId(next[4])).toBe(1)
 
     const rebuilt = createRoundPlan('round-1', next, config, undefined, createRoundPlan('round-1', cards, config))
-    expect(rebuilt.orderIds).toEqual(['a', 'b', retry.id, 'c', 'd'])
+    expect(rebuilt.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id])
 
     const stalePlan = updateRoundPlanCard(
       createRoundPlan('round-1', next, config),
       retry.id,
       { status: 'retry' },
     )
-    stalePlan.orderIds = ['a', 'b', 'c', 'd', retry.id]
+    stalePlan.orderIds = ['a', 'b', retry.id, 'c', 'd']
     const repaired = createRoundPlan('round-1', next, config, undefined, stalePlan)
-    expect(repaired.orderIds).toEqual(['a', 'b', retry.id, 'c', 'd'])
+    expect(repaired.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id])
   })
 
   it.each([
@@ -85,12 +85,22 @@ describe('round plan reducer', () => {
     [1, ['a', 'b', 'retry', 'c', 'd', 'next']],
     [2, ['a', 'b', 'c', 'retry', 'd', 'next']],
     [3, ['a', 'b', 'c', 'd', 'retry', 'next']],
-  ])('places a retry after at most %i same-palace cards', (gap, expected) => {
+  ])('places a retry after at most %i presented cards', (gap, expected) => {
     const cards = [card('a', 1), card('b', 1), card('c', 1), card('d', 1), card('next', 2)]
     const retry = createRetryOccurrence(cards[0], 'round-1', 1, gap)
     const next = insertRetryOccurrenceAfterGap(cards, retry, 0, gap)
     const expectedIds = expected.map((id) => id === 'retry' ? retry.id : id)
     expect(next.map((item) => item.id)).toEqual(expectedIds)
+  })
+
+  it('counts quiz cards toward the retry gap', () => {
+    const quiz = (id: string): FreestyleCard =>
+      ({ id, type: 'quiz_question' }) as FreestyleCard
+    const cards = [card('a', 1), quiz('q1'), quiz('q2'), quiz('q3'), card('b', 2)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, retry, 0, 3)
+    expect(next.map((item) => item.id)).toEqual(['a', 'q1', 'q2', 'q3', retry.id, 'b'])
+    expect(cardPalaceId(next[4])).toBe(1)
   })
 
   it('keeps stable order and metadata across queue rebuilds', () => {

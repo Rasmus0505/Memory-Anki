@@ -38,6 +38,10 @@ import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/u
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
 import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
 import type { FreestyleAnkiFlipLiveState } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
+import {
+  readFreestyleRevealMap,
+  writeFreestyleRevealMap,
+} from '@/modules/practice/ui/freestyle/model/freestyleRevealCache'
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 import { parseFreestyleEntryPalaceId } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
@@ -114,6 +118,7 @@ import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 /** Long enough for the undo chip to register before the page turns. */
 const AUTO_ADVANCE_DELAY_MS = 700
+const FREESTYLE_STALE_TOAST_ID = 'freestyle-stale-card'
 
 const FREESTYLE_SECTION_LINKS = [
   { to: '/palaces', label: '知识' },
@@ -186,6 +191,8 @@ export default function ImmersiveFreestylePage() {
   const reducedMotion = usePrefersReducedMotion()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const queueRef = useRef<FreestyleCard[]>([])
+  const queueFrozenRef = useRef(false)
+  const planVersionRef = useRef(0)
   const programmaticScrollRef = useRef(false)
   /**
    * When set to an index, the next matching `currentIndex` effect will scrollTo.
@@ -263,12 +270,18 @@ export default function ImmersiveFreestylePage() {
     ensureUnitEncounter,
     updateUnitEncounter,
     dropStaleCard,
+    adoptLiveUnitRevision,
+    staleCircuitOpen,
+    staleRecoveryCardId,
+    resetStaleRecovery,
     reorderPlan,
     excludePlanCards,
     restorePlanCards,
     skipToNextPalace,
     buildQueue,
     pendingRestudyCardIds,
+    planVersion,
+    queueFrozen,
   } = useImmersiveQueue(entryPalaceId)
   const queueStateRef = useRef(queueState)
   const { signalPalaceCleared } = useFreestyleFlowFeedback()
@@ -360,13 +373,16 @@ export default function ImmersiveFreestylePage() {
   }, [])
 
   const saveFreestyleConfig = useCallback((nextConfig: FreestyleFeedConfig) => {
+    resetStaleRecovery()
     setConfigAndPersist(nextConfig)
     // A shelf link is a launch hint. Remove it after saving so refresh cannot
     // reapply the old single-palace scope over the saved selection.
     if (entryPalaceId != null) navigate('/freestyle', { replace: true })
-  }, [entryPalaceId, navigate, setConfigAndPersist])
+  }, [entryPalaceId, navigate, resetStaleRecovery, setConfigAndPersist])
 
   queueRef.current = cards
+  queueFrozenRef.current = queueFrozen
+  planVersionRef.current = planVersion
   currentIndexRef.current = currentIndex
   queueStateRef.current = queueState
   visualIndexRef.current = visualIndex
@@ -742,6 +758,7 @@ export default function ImmersiveFreestylePage() {
    */
   useLayoutEffect(() => {
     if (!isActive || loading || cards.length === 0) return
+    if (queueFrozen) return
     if (userScrollingRef.current || programmaticScrollRef.current) return
     if (indexChangeFromScrollRef.current) {
       indexChangeFromScrollRef.current = false
@@ -757,6 +774,7 @@ export default function ImmersiveFreestylePage() {
     becameActiveAt,
     loading,
     currentIndex,
+    queueFrozen,
     scrollToIndex,
     // cards.length only gates the early return; silent rebuilds must not re-scroll.
     cards.length,
@@ -815,23 +833,47 @@ export default function ImmersiveFreestylePage() {
    * must not race a page turn). The delay lets the undo chip register before leaving.
    */
   const handleRatingSettled = useCallback(
-    (cardId: string, passed: boolean, rating: UnitRating) => {
+    (
+      cardId: string,
+      passed: boolean,
+      rating: UnitRating,
+      meta?: { occurrenceId?: string; encounterId?: string; planVersion?: number },
+    ) => {
       // Feed the challenge–skill channel first: it must see every rate, including the
       // weak ones that never reach the auto-advance path below.
       recordChannelSample(cardId, rating)
-      if (!autoAdvance || !passed) return
+      if (!autoAdvance || !passed || rating < 3) return
       if (autoAdvanceTimerRef.current != null) {
         window.clearTimeout(autoAdvanceTimerRef.current)
       }
+      const expectedCardId = cardId
+      const expectedOccurrenceId = meta?.occurrenceId || cardId
+      const expectedEncounterId = meta?.encounterId || ''
+      const expectedPlanVersion = meta?.planVersion
       autoAdvanceTimerRef.current = window.setTimeout(() => {
         autoAdvanceTimerRef.current = null
         // A dialog opened during the delay owns the screen; turning the feed behind
         // it would drop the learner on a different card when they close it.
         if (isFreestyleOverlayOpen()) return
+        if (queueFrozenRef.current) return
         // Resolve the index at fire time: settling may have reordered the feed.
         const list = queueRef.current
-        const index = list.findIndex((card) => card.id === cardId)
+        const index = list.findIndex((card) => card.id === expectedCardId)
         if (index < 0 || index !== currentIndexRef.current) return
+        const current = list[index]
+        if (!current || current.id !== expectedCardId) return
+        if (expectedOccurrenceId && current.id !== expectedOccurrenceId && current.source_card_id !== expectedCardId) {
+          return
+        }
+        const encounter = queueStateRef.current.unitEncountersByCardId[expectedCardId]
+        if (expectedEncounterId && encounter?.encounterId !== expectedEncounterId) return
+        if (
+          expectedPlanVersion != null
+          && planVersionRef.current > 0
+          && expectedPlanVersion !== planVersionRef.current
+        ) {
+          return
+        }
         const rated = new Set(
           getFreestyleRatedCardIds(
             list,
@@ -859,11 +901,32 @@ export default function ImmersiveFreestylePage() {
   const handleStaleDrop = useCallback(
     (cardId: string) => {
       // Do not mark completed — still-due units must stay eligible (vs Insights queue).
-      dropStaleCard(cardId)
-      toast.info('这张已在其他设备复习，或内容刚被改过')
+      const result = dropStaleCard(cardId)
+      if (result.shouldToast) {
+        toast.info('这张已在其他设备复习，或内容刚被改过', { id: FREESTYLE_STALE_TOAST_ID })
+        return
+      }
+      if (result.circuitOpen) {
+        toast.dismiss(FREESTYLE_STALE_TOAST_ID)
+      }
     },
     [dropStaleCard],
   )
+
+  const handleSkipStaleRecovery = useCallback(() => {
+    const cardId = staleRecoveryCardId ?? cards[currentIndex]?.id
+    toast.dismiss(FREESTYLE_STALE_TOAST_ID)
+    if (cardId) dropStaleCard(cardId, { force: true })
+  }, [cards, currentIndex, dropStaleCard, staleRecoveryCardId])
+
+  const handleRebuildStaleRecovery = useCallback(() => {
+    toast.dismiss(FREESTYLE_STALE_TOAST_ID)
+    refreshQueue()
+  }, [refreshQueue])
+
+  const handleOpenStaleConfig = useCallback(() => {
+    setConfigOpen(true)
+  }, [])
 
   const handleCardSaveFailed = useCallback((message: string) => {
     setSaveError(message)
@@ -1055,10 +1118,17 @@ export default function ImmersiveFreestylePage() {
     ))
   }, [])
   const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
-    setLiveRevealMap((current) => (
-      JSON.stringify(current) === JSON.stringify(map) ? current : map
-    ))
-  }, [])
+    setLiveRevealMap((current) => {
+      if (JSON.stringify(current) === JSON.stringify(map)) return current
+      if (map) writeFreestyleRevealMap(currentCard?.id, map)
+      return map
+    })
+  }, [currentCard?.id])
+  useEffect(() => {
+    const cardId = currentCard?.id
+    if (!cardId) return
+    setLiveRevealMap(readFreestyleRevealMap(cardId))
+  }, [currentCard?.id])
   const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])
   useFreestyleLiveMirror({
     route: fullPath,
@@ -1398,6 +1468,42 @@ export default function ImmersiveFreestylePage() {
           />
         ) : null}
 
+        {staleCircuitOpen && currentCard?.id === staleRecoveryCardId ? (
+          <div
+            data-testid="freestyle-stale-recovery"
+            role="region"
+            aria-label="队列恢复"
+            className="pointer-events-none absolute inset-x-0 top-16 bottom-24 z-[19] flex items-center justify-center px-4 pr-16"
+          >
+            <div className="pointer-events-auto flex max-w-[min(22rem,100%)] flex-col gap-3 rounded-2xl border border-amber-300/30 bg-zinc-950/94 px-4 py-3.5 text-sm text-amber-50 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-md">
+              <p>多张卡片已在其他设备复习，或内容刚被改过</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-amber-200/35 bg-amber-300/15 px-3 py-1.5 text-xs font-medium hover:bg-amber-300/25"
+                  onClick={handleSkipStaleRecovery}
+                >
+                  跳过这张
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/10"
+                  onClick={handleRebuildStaleRecovery}
+                >
+                  重建队列
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/10"
+                  onClick={handleOpenStaleConfig}
+                >
+                  打开配置
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div
           ref={scrollRef}
           data-page-history-scroll-key="freestyle-immersive"
@@ -1460,6 +1566,7 @@ export default function ImmersiveFreestylePage() {
                           active={isActive && index === currentIndex}
                           readOnly={readOnlyHistoryCardId === card.id}
                           roundId={queueState.roundId}
+                          planVersion={planVersion}
                           encounter={queueState.unitEncountersByCardId[card.id]}
                           retryAfterCards={Math.min(3, Math.max(0, cards.length - index - 1))}
                           fullscreen={freestyleFullscreen && index === currentIndex}
@@ -1482,6 +1589,7 @@ export default function ImmersiveFreestylePage() {
                           onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
                           onStaleDrop={handleStaleDrop}
+                          onRevisionAdopted={adoptLiveUnitRevision}
                           onSaveFailed={handleCardSaveFailed}
                           onUnitsReconciled={() => {
                             void buildQueue(config, {

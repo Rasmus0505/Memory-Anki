@@ -22,6 +22,7 @@ import {
   type UnitRating,
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
+import { rateFreestyleRoundUnitApi } from '@/modules/practice/ui/freestyle/api'
 import type { PalaceRatingTarget } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import type {
   FreestyleReviewUnitCard,
@@ -33,6 +34,10 @@ import { cn } from '@/shared/lib/utils'
 import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { FLOW_BREATH_CLASS } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
+import {
+  decideLoadedUnitSession,
+  isStaleUnitError,
+} from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
@@ -112,28 +117,6 @@ function buildEditorState(session: UnitReviewSessionDto): MindMapEditorState | n
   }
 }
 
-function matchesCardUnit(card: FreestyleReviewUnitCard, unit: ReviewUnitDto | undefined) {
-  return Boolean(
-    unit
-    && unit.id === card.unit_id
-    && card.unit_revision != null
-    && unit.revision === card.unit_revision,
-  )
-}
-
-function isStaleUnitError(error: unknown) {
-  const requestError = error as { status?: number; message?: string }
-  const message = String(requestError?.message || '').toLowerCase()
-  return requestError?.status === 404
-    || message.includes('review unit not found')
-    || message.includes('review unit changed')
-    || message.includes('rebuild the queue')
-    || message.includes('not due')
-    || message.includes('no review units available')
-    || message.includes('encounter_id belongs to another review unit')
-    || message.includes('active unit review session required')
-}
-
 function formatUnitDiagnostic(input: {
   error: unknown
   card: FreestyleReviewUnitCard
@@ -205,6 +188,7 @@ export function FreestyleUnitReviewCardView({
   onEncounterChange,
   onBranchComplete,
   onStaleDrop,
+  onRevisionAdopted,
   onSaveFailed,
   onUnitsReconciled,
   fullscreen = false,
@@ -223,11 +207,13 @@ export function FreestyleUnitReviewCardView({
   onBatchCardsSettled,
   liveRevealMap = null,
   onLiveRevealMapChange,
+  planVersion = 0,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
   readOnly: boolean
   roundId: string
+  planVersion?: number
   encounter?: FreestyleUnitEncounterState
   retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
@@ -236,7 +222,16 @@ export function FreestyleUnitReviewCardView({
    * Fired after a successful rate so the page can auto-advance when enabled, and so
    * the challenge–skill channel can read what the learner actually reported.
    */
-  onRatingSettled?: (cardId: string, passed: boolean, rating: UnitRating) => void
+  onRatingSettled?: (
+    cardId: string,
+    passed: boolean,
+    rating: UnitRating,
+    meta?: {
+      occurrenceId?: string
+      encounterId?: string
+      planVersion?: number
+    },
+  ) => void
   onEnsureEncounter: (
     cardId: string,
     unitRevision: number,
@@ -248,6 +243,7 @@ export function FreestyleUnitReviewCardView({
     options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
   ) => void
   onStaleDrop: (cardId: string) => void
+  onRevisionAdopted?: (cardId: string, unitId: string, revision: number) => void
   onSaveFailed: (message: string) => void
   /** Silent freestyle queue rebuild after mark/leave unit reconcile changes. */
   onUnitsReconciled?: () => void
@@ -280,6 +276,8 @@ export function FreestyleUnitReviewCardView({
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [staleRecovery, setStaleRecovery] = useState(false)
+  /** Live Reviews revision when the queue card was built against an older freeze. */
+  const [adoptedRevision, setAdoptedRevision] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   /** Undo surfaces only right after a rate, then collapses to give the map the room. */
@@ -314,15 +312,17 @@ export function FreestyleUnitReviewCardView({
   const flipProgressKey = `${card.id}:${unit?.encounter?.id ?? 'none'}`
   const activeFlipProgress =
     flipProgress && flipProgress.key === flipProgressKey ? flipProgress : null
+  const effectiveRevision = adoptedRevision ?? card.unit_revision
   const cardUnitKey =
-    card.unit_id && card.unit_revision != null
-      ? `${card.id}:${card.unit_id}:${card.unit_revision}:${roundId}`
+    card.unit_id && effectiveRevision != null
+      ? `${card.id}:${card.unit_id}:${effectiveRevision}:${roundId}`
       : null
   // A freshly mounted unit card must not inherit a previous card's saved-doc override.
   useEffect(() => {
     setSavedEditorState(null)
     setStaleRecovery(false)
-  }, [cardUnitKey])
+    setAdoptedRevision(null)
+  }, [card.id, roundId])
 
   const revealUndo = useCallback(() => {
     if (undoTimerRef.current != null) window.clearTimeout(undoTimerRef.current)
@@ -357,6 +357,7 @@ export function FreestyleUnitReviewCardView({
     setSession(null)
     setLoadError(null)
     setStaleRecovery(false)
+    setAdoptedRevision(null)
     setActionError(null)
     setLoadAttempt((value) => value + 1)
   }, [])
@@ -471,11 +472,11 @@ export function FreestyleUnitReviewCardView({
 
   useEffect(() => {
     if (!active) return
-    if (!card.unit_id || card.unit_revision == null || !cardUnitKey) {
+    if (!card.unit_id || effectiveRevision == null || !cardUnitKey) {
       onStaleDrop(card.id)
       return
     }
-    const identity = onEnsureEncounter(card.id, card.unit_revision, !readOnly)
+    const identity = onEnsureEncounter(card.id, effectiveRevision, !readOnly)
     if (readOnly && identity.status !== 'closed') return
     const liveEncounter = unitRef.current?.encounter
     // Same live glance already loaded: skip. Do NOT key off parent `encounter` updates
@@ -506,18 +507,28 @@ export function FreestyleUnitReviewCardView({
     let mounted = true
     setLoadError(null)
     setActionError(null)
-    void loadSessionWithTimeout(card, identity, roundId).then((value) => {
+    const sessionCard =
+      effectiveRevision !== card.unit_revision
+        ? { ...card, unit_revision: effectiveRevision }
+        : card
+    void loadSessionWithTimeout(sessionCard, identity, roundId).then((value) => {
       if (!mounted || loadOperationRef.current !== requestIdentity) return
       const nextUnit = value.units.find((item) => item.id === card.unit_id)
-      if (!matchesCardUnit(card, nextUnit) || !nextUnit?.encounter) {
+      const decision = decideLoadedUnitSession({
+        cardUnitId: card.unit_id,
+        cardRevision: effectiveRevision,
+        unit: nextUnit,
+        identityStatus: identity.status,
+      })
+      if (decision.action === 'drop' || !nextUnit?.encounter) {
         onStaleDrop(card.id)
         return
       }
-      if (identity.status !== 'closed' && nextUnit.encounter.status !== 'open') {
-        onStaleDrop(card.id)
-        return
+      if (decision.action === 'adopt') {
+        setAdoptedRevision(nextUnit.revision)
+        if (card.unit_id) onRevisionAdopted?.(card.id, card.unit_id, nextUnit.revision)
       }
-      openedForKeyRef.current = cardUnitKey
+      openedForKeyRef.current = `${card.id}:${card.unit_id}:${nextUnit.revision}:${roundId}`
       setSession(value)
       setLoadError(null)
       setStaleRecovery(false)
@@ -552,6 +563,7 @@ export function FreestyleUnitReviewCardView({
     active,
     card,
     cardUnitKey,
+    effectiveRevision,
     // Only the stable identity fields — not selectedRating/passed — so a mid-score
     // parent patch cannot re-enter start/cancel.
     encounter?.encounterId,
@@ -560,6 +572,7 @@ export function FreestyleUnitReviewCardView({
     onEnsureEncounter,
     onSaveFailed,
     onStaleDrop,
+    onRevisionAdopted,
     readOnly,
     roundId,
     loadAttempt,
@@ -604,30 +617,62 @@ export function FreestyleUnitReviewCardView({
     setPendingRating(rating)
     busyRef.current = true
     const id = operationId()
+    const ratePayload = {
+      operation_id: id,
+      expected_version: planVersion,
+      card_id: card.id,
+      occurrence_id: card.occurrence_kind === 'retry' ? card.id : '',
+      encounter_id: currentEncounter.id,
+      rating,
+      study_session_id: session.id,
+      unit_id: unit.id,
+      unit_revision: unit.revision,
+    }
     try {
       const result = ratingScope === 'palace'
-        ? await ratePalaceDueUnitsApi(card.palace_id, {
-          operationId: id,
-          rating,
-          roundId: currentEncounter.round_id,
-          current: {
-            study_session_id: session.id,
-            unit_id: unit.id,
-            unit_revision: unit.revision,
-            encounter_id: currentEncounter.id,
-          },
-          excludeUnitIds: palaceTarget?.excludeUnitIds ?? [],
-          includeUnitIds: palaceTarget?.includeUnitIds ?? [],
-        })
+        ? (
+          roundId
+            ? (await rateFreestyleRoundUnitApi(roundId, {
+              ...ratePayload,
+              palace_batch: {
+                palace_id: card.palace_id,
+                current: {
+                  study_session_id: session.id,
+                  unit_id: unit.id,
+                  unit_revision: unit.revision,
+                  encounter_id: currentEncounter.id,
+                },
+                exclude_unit_ids: palaceTarget?.excludeUnitIds ?? [],
+                include_unit_ids: palaceTarget?.includeUnitIds ?? [],
+              },
+            })).item as Awaited<ReturnType<typeof ratePalaceDueUnitsApi>>
+            : await ratePalaceDueUnitsApi(card.palace_id, {
+              operationId: id,
+              rating,
+              roundId: currentEncounter.round_id,
+              current: {
+                study_session_id: session.id,
+                unit_id: unit.id,
+                unit_revision: unit.revision,
+                encounter_id: currentEncounter.id,
+              },
+              excludeUnitIds: palaceTarget?.excludeUnitIds ?? [],
+              includeUnitIds: palaceTarget?.includeUnitIds ?? [],
+            })
+        )
         : null
       const unitResult = result?.current ?? (result == null
-        ? await rateReviewUnitApi(
-          session.id,
-          unit,
-          currentEncounter.id,
-          rating,
-          id,
-          currentEncounter.round_id,
+        ? (
+          roundId
+            ? (await rateFreestyleRoundUnitApi(roundId, ratePayload)).item as Awaited<ReturnType<typeof rateReviewUnitApi>>
+            : await rateReviewUnitApi(
+              session.id,
+              unit,
+              currentEncounter.id,
+              rating,
+              id,
+              currentEncounter.round_id,
+            )
         )
         : null)
       if (!unitResult) {
@@ -714,7 +759,11 @@ export function FreestyleUnitReviewCardView({
        * review scene and the learning-sounds channel.
        */
       signalRating(rating, unitResult.passed)
-      onRatingSettled?.(card.id, unitResult.passed, rating)
+      onRatingSettled?.(card.id, unitResult.passed, rating, {
+        occurrenceId: card.occurrence_kind === 'retry' ? card.id : card.id,
+        encounterId: currentEncounter.id,
+        planVersion,
+      })
     } catch (error) {
       if (isStaleUnitError(error)) {
         const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: id, stage: '评分后卡片已过期' })
