@@ -569,8 +569,9 @@ def start_freestyle_unit_review_session(
     session.refresh(state)
     if not state.active:
         raise ValueError("review unit not found")
-    if int(unit_revision) != int(state.revision):
-        raise ValueError("review unit changed; rebuild the queue")
+    # Content edits bump revision and may invalidate the previous session.
+    # Freestyle adopts the live revision in place instead of failing the feed.
+    live_revision = int(state.revision)
 
     # Drop competing freestyle sessions from other units / clients before opening
     # this card. Prevents multi-palace wall-clock rows that all share one start.
@@ -610,17 +611,45 @@ def start_freestyle_unit_review_session(
                 summary["client_source"] = normalized_source
                 study.summary_json = json.dumps(summary, ensure_ascii=False)
                 session.commit()
-        # Keep any still-open encounter. Deleting it here raced with an in-flight
-        # rate that still held the old encounter_id ("open review encounter required").
-        # Unrated leave is cancelled explicitly via cancel_unrated_unit_review_encounter;
-        # competing sessions are released above / on other-unit start.
+        drifted = (
+            session.query(ReviewUnitEncounter)
+            .filter_by(
+                study_session_id=study.id,
+                unit_id=state.id,
+                status=ENCOUNTER_OPEN,
+            )
+            .one_or_none()
+        )
+        if drifted is not None and int(drifted.unit_revision) != live_revision:
+            drifted.status = ENCOUNTER_CLOSED
+            drifted.closed_at = utc_now_naive()
+            session.commit()
+
+    requested_encounter_id = str(encounter_id or "").strip()
+    requested = (
+        session.get(ReviewUnitEncounter, requested_encounter_id)
+        if requested_encounter_id
+        else None
+    )
+    if requested is not None:
+        usable = (
+            requested.study_session_id == study.id
+            and requested.unit_id == state.id
+            and int(requested.unit_revision) == live_revision
+            and requested.status == ENCOUNTER_OPEN
+        )
+        if not usable:
+            if requested.unit_id == state.id:
+                requested_encounter_id = str(uuid.uuid4())
+            elif requested.study_session_id != study.id:
+                raise ValueError("encounter_id belongs to another review unit")
 
     return open_unit_review_encounter(
         session,
         study_session_id=study.id,
         unit_id=state.id,
-        unit_revision=unit_revision,
-        encounter_id=encounter_id,
+        unit_revision=live_revision,
+        encounter_id=requested_encounter_id,
         round_id=round_id,
     )
 

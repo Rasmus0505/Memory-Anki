@@ -146,6 +146,54 @@ def test_invalidating_a_freestyle_session_closes_its_open_encounter(db_session):
     assert encounter.closed_at is not None
 
 
+def test_freestyle_start_adopts_live_revision_instead_of_failing(db_session):
+    state = _seed_review_unit(db_session)
+    opened = _start(db_session, state, "encounter-live")
+    old_revision = int(state.revision)
+    state.revision = old_revision + 1
+    db_session.commit()
+
+    resumed = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=old_revision,
+        encounter_id="encounter-live",
+        round_id="round-2026-07-27",
+    )
+    unit = resumed["units"][0]
+    assert unit["revision"] == old_revision + 1
+    assert unit["encounter"]["status"] == "open"
+    assert resumed["id"] == opened["id"]
+
+
+def test_freestyle_start_reopens_after_content_invalidation(db_session):
+    state = _seed_review_unit(db_session)
+    opened = _start(db_session, state, "encounter-old")
+    old_revision = int(state.revision)
+    adjust_unit_schedule(
+        db_session,
+        unit_id=state.id,
+        operation_id="invalidate-for-adopt",
+        stage_index=state.stage_index,
+    )
+    db_session.commit()
+    db_session.refresh(state)
+    assert int(state.revision) != old_revision
+
+    resumed = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=old_revision,
+        encounter_id="encounter-old",
+        round_id="round-2026-07-27",
+    )
+    unit = resumed["units"][0]
+    assert resumed["id"] != opened["id"]
+    assert unit["revision"] == int(state.revision)
+    assert unit["encounter"]["id"] != "encounter-old"
+    assert unit["encounter"]["status"] == "open"
+
+
 def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-amend")

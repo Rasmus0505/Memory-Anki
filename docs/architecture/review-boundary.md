@@ -56,8 +56,22 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 
 - A formal session freezes all due units for one palace, including member UIDs and revisions.
 - Rating never auto-opens nodes, scrolls the map, or switches the current unit.
+  Freestyle `auto_advance` is opt-in and may advance only after a passing `记得` / `轻松`
+  once card id, encounter id, and plan version still match; `忘记` / `困难` never auto-advance.
+  Practice persists the authoritative round plan (retry occurrences, cursor, completion) in
+  SQLite; Reviews still owns the ladder. A successful freestyle rating updates that plan in the
+  same practice use case (`round_id`, `encounter_id`, `operation_id`) so a later queue rebuild
+  cannot drop the retry. Reviews must not import Practice.
 - Leaving a card closes its encounter and locks the effective rating. Re-rendering or restoring the page resumes the same open encounter instead of opening another session.
-- Encounter duration is client-observed foreground activity: only the current open card while the document is visible accrues seconds. Browser background, suspension, lock-screen, and wall-clock gaps are never inferred from `closed_at - created_at`; close persists the stable encounter's observed `effective_seconds` and session completion sums those values. If the client reports more seconds than the encounter wall span, close clamps to that span — it does not 400. The rating is already committed; failing leave would trap the learner on the card.
+- Encounter duration is client-observed foreground activity: only the current open card, on the
+  live-study control lease holder, while the document is visible and the window is focused,
+  accrues seconds. Browser background, blur, suspension, lock-screen, card leave, controller
+  change, and wall-clock gaps are never inferred from `closed_at - created_at` and are never
+  backfilled; close persists the last confirmed foreground interval as `effective_seconds` and
+  session completion sums those values. If the client reports more seconds than the encounter
+  wall span, close clamps to that span — it does not 400. The rating is already committed;
+  failing leave would trap the learner on the card. Card switches close the old encounter
+  before opening the new one.
 - A session completes only after every frozen unit passes.
 - Quiz cards and standalone Anki cards never mutate palace unit scheduling.
 

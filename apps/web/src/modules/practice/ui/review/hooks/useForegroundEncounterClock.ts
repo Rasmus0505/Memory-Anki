@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
+import {
+  isLiveForegroundClockSuppressed,
+  subscribeLiveForegroundClock,
+} from '@/modules/session/public'
 
 const STORAGE_KEY_PREFIX = 'memory_anki_review_foreground_seconds:'
 const TICK_INTERVAL_MS = 1000
@@ -12,10 +16,12 @@ export function useForegroundEncounterClock({
   encounterId,
   active,
   open,
+  canAccumulate = true,
 }: {
   encounterId: string | null
   active: boolean
   open: boolean
+  canAccumulate?: boolean
 }) {
   const secondsRef = useRef(0)
   const tickAtRef = useRef<number | null>(null)
@@ -31,7 +37,14 @@ export function useForegroundEncounterClock({
   }, [storageKey])
 
   const tick = useCallback(() => {
-    if (!active || !open || document.visibilityState !== 'visible' || !isWindowFocused()) {
+    if (
+      !canAccumulate
+      || isLiveForegroundClockSuppressed()
+      || !active
+      || !open
+      || document.visibilityState !== 'visible'
+      || !isWindowFocused()
+    ) {
       tickAtRef.current = null
       return
     }
@@ -48,7 +61,7 @@ export function useForegroundEncounterClock({
       persist()
     }
     tickAtRef.current = now
-  }, [active, open, persist])
+  }, [active, canAccumulate, open, persist])
 
   useEffect(() => {
     secondsRef.current = 0
@@ -68,6 +81,7 @@ export function useForegroundEncounterClock({
     const interval = window.setInterval(tick, TICK_INTERVAL_MS)
     const onVisibilityChange = () => tick()
     const onWindowFocusChange = () => tick()
+    const stopLiveClock = subscribeLiveForegroundClock(() => tick())
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pagehide', onVisibilityChange)
     window.addEventListener('focus', onWindowFocusChange)
@@ -75,6 +89,7 @@ export function useForegroundEncounterClock({
     return () => {
       tick()
       window.clearInterval(interval)
+      stopLiveClock()
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', onVisibilityChange)
       window.removeEventListener('focus', onWindowFocusChange)

@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLiveForegroundClockSuppressed } from '@/modules/session/public'
 import { useForegroundEncounterClock } from './useForegroundEncounterClock'
 
 function setVisibility(value: DocumentVisibilityState) {
@@ -14,6 +15,7 @@ describe('useForegroundEncounterClock', () => {
   let now = 0
 
   beforeEach(() => {
+    setLiveForegroundClockSuppressed(false)
     vi.useFakeTimers()
     vi.spyOn(performance, 'now').mockImplementation(() => now)
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
@@ -22,6 +24,7 @@ describe('useForegroundEncounterClock', () => {
   })
 
   afterEach(() => {
+    setLiveForegroundClockSuppressed(false)
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -106,6 +109,27 @@ describe('useForegroundEncounterClock', () => {
       vi.advanceTimersByTime(1000)
     })
     expect(result.current.getEffectiveSeconds()).toBe(2)
+  })
+
+  it('does not count when canAccumulate is false', () => {
+    const { result } = renderHook(() => useForegroundEncounterClock({
+      encounterId: 'encounter-suppressed',
+      active: true,
+      open: true,
+      canAccumulate: false,
+    }))
+
+    act(() => {
+      now += 1000
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(0)
+
+    act(() => {
+      now += 1000
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(0)
   })
 
   it('restores by encounter identity and clears only that encounter', () => {
