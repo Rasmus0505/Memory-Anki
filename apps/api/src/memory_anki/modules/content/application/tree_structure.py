@@ -225,11 +225,39 @@ def list_active_palace_ids_by_subject_scope(session: Session, subject_scope: str
     ]
 
 
+def list_active_palace_ids_by_subject_ids(session: Session, subject_ids: list[int]) -> list[int]:
+    """Resolve palaces belonging to any of the given subjects."""
+    normalized = sorted({int(value) for value in subject_ids if int(value) > 0})
+    if not normalized:
+        return list_active_palace_ids_by_subject_scope(session, "all")
+    matched = {
+        int(row[0])
+        for row in (
+            session.query(Palace.id)
+            .filter(
+                Palace.archived == False,  # noqa: E712
+                Palace.deleted_at.is_(None),
+            )
+            .join(Palace.subjects)
+            .filter(Subject.id.in_(normalized))
+            .all()
+        )
+    }
+    if not matched:
+        return []
+    return [
+        palace_id
+        for palace_id in list_active_palace_ids_by_subject_scope(session, "all")
+        if palace_id in matched
+    ]
+
+
 __all__ = [
     "ancestor_path",
     "build_tree_from_editor_doc",
     "get_palace_tree_structure",
     "list_active_palace_tree_structures",
+    "list_active_palace_ids_by_subject_ids",
     "list_active_palace_ids_by_subject_scope",
     "stable_tree_order",
     "subtree_node_uids",

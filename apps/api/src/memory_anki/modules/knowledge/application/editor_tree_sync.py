@@ -5,6 +5,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
+from memory_anki.modules.knowledge.application.chapter_service import (
+    get_chapter_delete_impact,
+)
 from memory_anki.modules.mindmap_document.api import (
     NODE_ID_KEY,
     NODE_TYPE_KEY,
@@ -16,6 +19,12 @@ from memory_anki.modules.mindmap_document.api import (
     plain_editor_text,
     stringify_editor_value,
 )
+
+
+class ProtectedChapterDeleteError(ValueError):
+    def __init__(self, *, impact: dict[str, Any]):
+        super().__init__("学科脑图保存会删除仍有宫殿或题目的章节。")
+        self.impact = impact
 
 
 def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str, Any]) -> None:
@@ -79,9 +88,22 @@ def sync_subject_tree_from_doc(session: Session, subject: Subject, doc: dict[str
 
     removed_ids = {chapter.id for chapter in existing if chapter.id not in seen_ids}
     if removed_ids:
-        for chapter in existing:
-            if chapter.id in removed_ids and chapter.parent_id not in removed_ids:
-                _delete_chapter_tree(session, chapter)
+        roots_to_delete = [
+            chapter
+            for chapter in existing
+            if chapter.id in removed_ids and chapter.parent_id not in removed_ids
+        ]
+        blocked = {"chapter_count": 0, "linked_palace_count": 0, "question_count": 0}
+        for chapter in roots_to_delete:
+            impact = get_chapter_delete_impact(session, chapter)
+            if impact["linked_palace_count"] > 0 or impact["question_count"] > 0:
+                blocked["chapter_count"] += int(impact["chapter_count"])
+                blocked["linked_palace_count"] += int(impact["linked_palace_count"])
+                blocked["question_count"] += int(impact["question_count"])
+        if blocked["linked_palace_count"] > 0 or blocked["question_count"] > 0:
+            raise ProtectedChapterDeleteError(impact=blocked)
+        for chapter in roots_to_delete:
+            _delete_chapter_tree(session, chapter)
         session.flush()
 
 

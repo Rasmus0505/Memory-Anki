@@ -10,6 +10,7 @@ from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.knowledge.application import chapter_service, subject_service
 from memory_anki.modules.knowledge.application.editor_state_service import (
     EditorStateConflictError,
+    ProtectedChapterDeleteError,
 )
 from memory_anki.modules.knowledge.domain.schemas import (
     ChapterCreate,
@@ -149,6 +150,19 @@ def update_subject_editor(subject_id: int, data: dict, s: Session = Depends(sess
                     "code": "mindmap_conflict",
                     "message": str(exc),
                     "remoteSnapshot": exc.current_snapshot,
+                }
+            },
+        )
+    except ProtectedChapterDeleteError as exc:
+        uow.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "chapter_delete_blocked",
+                    "message": str(exc),
+                    "requires_force": True,
+                    **exc.impact,
                 }
             },
         )

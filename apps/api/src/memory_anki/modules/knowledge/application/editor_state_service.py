@@ -20,7 +20,7 @@ from memory_anki.modules.mindmap_document.api import (
 from memory_anki.platform.application import UnitOfWork
 
 from .editor_document_projection import build_subject_editor_doc
-from .editor_tree_sync import sync_subject_tree_from_doc
+from .editor_tree_sync import ProtectedChapterDeleteError, sync_subject_tree_from_doc
 
 
 def get_subject_editor_state(subject: Subject) -> dict[str, Any]:
@@ -84,6 +84,7 @@ def sync_subject_editor_root(subject: Subject) -> None:
 
 __all__ = [
     "EditorStateConflictError",
+    "ProtectedChapterDeleteError",
     "get_subject_editor_state",
     "save_subject_editor_state",
     "sync_subject_editor_root",

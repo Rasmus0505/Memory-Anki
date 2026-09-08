@@ -17,6 +17,10 @@ Chapter palace list cards may call the Reviews public facade for permanent-mark 
 
 `ChapterCreate` and `ChapterUpdate` belong to Knowledge request contracts and must not be defined in Palace domain schemas. Rolling backup triggering is an explicit post-commit capability exported by `backups.api`.
 
+## Subject editor document
+
+Chapter CRUD (`create_chapter` / `update_chapter` / `delete_chapter`) must rewrite the subject `editor_doc` from the chapter tree before commit, so GET editor fingerprints change immediately and a stale mind-map save 409s instead of silently dropping new chapters. Saving the subject mind-map still deletes empty chapters that were removed from the document, but it cannot bypass `delete_chapter` protection for chapters that still have palaces or quiz questions.
+
 ## Transaction Ownership
 
 All Knowledge subject and chapter write commands receive `platform.application.UnitOfWork`. FastAPI composition constructs `SqlAlchemyUnitOfWork`; application services never call `Session.commit()` or `Session.rollback()` directly. Rolling backups run only after a successful UoW commit.

@@ -7,13 +7,16 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from memory_anki.infrastructure.db._tables.knowledge import Chapter
+from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
     chapter_palace_table,
 )
 from memory_anki.modules.backups.api import maybe_create_rolling_backup
+from memory_anki.modules.knowledge.application.editor_document_projection import (
+    sync_subject_editor_doc_from_chapters,
+)
 from memory_anki.modules.knowledge.domain.schemas import ChapterCreate
 from memory_anki.platform.application import UnitOfWork
 
@@ -113,6 +116,13 @@ def get_chapter_detail(session: Session, chapter_id: int) -> dict | None:
     }
 
 
+def _sync_subject_editor_doc(session: Session, subject_id: int) -> None:
+    subject = session.query(Subject).filter_by(id=subject_id).first()
+    if subject is None:
+        return
+    sync_subject_editor_doc_from_chapters(session, subject)
+
+
 def create_chapter(
     session: Session,
     subject_id: int,
@@ -131,6 +141,7 @@ def create_chapter(
     session.add(c)
     session.flush()
     session.refresh(c)
+    _sync_subject_editor_doc(session, subject_id)
     result = chapter_json(c)
     if before_commit is not None:
         before_commit(result)
@@ -152,6 +163,8 @@ def update_chapter(
     for key in ("name", "notes", "sort_order", "parent_id"):
         if key in data:
             setattr(c, key, data[key])
+    session.flush()
+    _sync_subject_editor_doc(session, c.subject_id)
     uow.commit()
     uow.refresh(c)
     maybe_create_rolling_backup("rolling-update-chapter")
@@ -213,10 +226,13 @@ def delete_chapter(
         }
 
     subtree_ids = _collect_subtree_ids(c)
+    subject_id = c.subject_id
     session.query(PalaceQuizQuestion).filter(
         PalaceQuizQuestion.source_chapter_id.in_(subtree_ids)
     ).delete(synchronize_session=False)
     _delete_recursive(c, session)
+    session.flush()
+    _sync_subject_editor_doc(session, subject_id)
     uow.commit()
     maybe_create_rolling_backup("rolling-delete-chapter")
     return {"ok": True}

@@ -219,6 +219,125 @@ def test_subject_editor_roundtrip(client, subject_id):
     assert body["editor_doc"]["root"]["children"] == []
 
 
+def _editor_chapter_ids(payload: dict) -> list[int]:
+    children = payload["editor_doc"]["root"]["children"]
+    return [int(child["data"]["memoryAnkiId"]) for child in children]
+
+
+def test_create_chapter_appears_in_subject_editor(client, subject_id):
+    chapter = client.post(
+        f"/api/v1/subjects/{subject_id}/chapters",
+        json={"name": "第一章"},
+    ).json()
+
+    body = client.get(f"/api/v1/subjects/{subject_id}/editor").json()
+    children = body["editor_doc"]["root"]["children"]
+    assert len(children) == 1
+    assert children[0]["data"]["text"] == "第一章"
+    assert children[0]["data"]["memoryAnkiId"] == chapter["id"]
+
+
+def test_stale_subject_editor_save_after_create_chapter_conflicts(client, subject_id):
+    initial = client.get(f"/api/v1/subjects/{subject_id}/editor").json()
+    chapter = client.post(
+        f"/api/v1/subjects/{subject_id}/chapters",
+        json={"name": "第一章"},
+    ).json()
+
+    saved = client.put(
+        f"/api/v1/subjects/{subject_id}/editor",
+        json={
+            "editor_doc": initial["editor_doc"],
+            "expected_editor_fingerprint": initial["editor_fingerprint"],
+        },
+    )
+    assert saved.status_code == 409
+    assert saved.json()["detail"]["code"] == "mindmap_conflict"
+    tree = client.get(f"/api/v1/subjects/{subject_id}/tree").json()
+    assert [item["id"] for item in tree["chapters"]] == [chapter["id"]]
+
+
+def test_subject_editor_save_with_current_fingerprint_keeps_chapter(client, subject_id):
+    chapter = client.post(
+        f"/api/v1/subjects/{subject_id}/chapters",
+        json={"name": "第一章"},
+    ).json()
+    current = client.get(f"/api/v1/subjects/{subject_id}/editor").json()
+
+    saved = client.put(
+        f"/api/v1/subjects/{subject_id}/editor",
+        json={
+            "editor_doc": current["editor_doc"],
+            "expected_editor_fingerprint": current["editor_fingerprint"],
+        },
+    )
+    assert saved.status_code == 200
+    assert _editor_chapter_ids(saved.json()) == [chapter["id"]]
+
+
+def test_subject_editor_save_can_delete_empty_chapter(client, subject_id):
+    client.post(
+        f"/api/v1/subjects/{subject_id}/chapters",
+        json={"name": "第一章"},
+    )
+    current = client.get(f"/api/v1/subjects/{subject_id}/editor").json()
+    current["editor_doc"]["root"]["children"] = []
+
+    saved = client.put(
+        f"/api/v1/subjects/{subject_id}/editor",
+        json={
+            "editor_doc": current["editor_doc"],
+            "expected_editor_fingerprint": current["editor_fingerprint"],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["editor_doc"]["root"]["children"] == []
+    assert client.get(f"/api/v1/subjects/{subject_id}/tree").json()["chapters"] == []
+
+
+def test_subject_editor_save_cannot_delete_chapter_with_palace(make_client):
+    client = make_client(knowledge_router, palace_router)
+    subject = client.post("/api/v1/subjects", json={"name": "化学绑定"}).json()
+    chapter = client.post(
+        f"/api/v1/subjects/{subject['id']}/chapters",
+        json={"name": "第一章"},
+    ).json()
+    palace = client.post(
+        "/api/v1/palaces",
+        json={"title": "元素宫殿", "subject_ids": [subject["id"]]},
+    ).json()
+    bound = client.put(
+        f"/api/v1/palaces/{palace['id']}/knowledge-binding",
+        json={
+            "subject_ids": [subject["id"]],
+            "chapter_ids": [chapter["id"]],
+            "primary_chapter_id": chapter["id"],
+            "base_revision": 0,
+            "operation_id": "bind-protected-chapter",
+        },
+    )
+    assert bound.status_code == 200
+
+    current = client.get(f"/api/v1/subjects/{subject['id']}/editor").json()
+    current["editor_doc"]["root"]["children"] = []
+    saved = client.put(
+        f"/api/v1/subjects/{subject['id']}/editor",
+        json={
+            "editor_doc": current["editor_doc"],
+            "expected_editor_fingerprint": current["editor_fingerprint"],
+        },
+    )
+    assert saved.status_code == 409
+    detail = saved.json()["detail"]
+    assert detail["code"] == "chapter_delete_blocked"
+    assert detail["requires_force"] is True
+    assert detail["linked_palace_count"] >= 1
+    tree = client.get(f"/api/v1/subjects/{subject['id']}/tree").json()
+    assert [item["id"] for item in tree["chapters"]] == [chapter["id"]]
+    detail = client.get(f"/api/v1/chapters/{chapter['id']}").json()
+    assert any(item["id"] == palace["id"] for item in detail["palaces"])
+
+
 def test_palace_knowledge_binding_is_explicit_and_revisioned(make_client):
     client = make_client(knowledge_router, palace_router)
     subject = client.post("/api/v1/subjects", json={"name": "数学"}).json()
