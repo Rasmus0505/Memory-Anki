@@ -36,6 +36,28 @@ function idleSnapshot(): UnifiedTimerSnapshot {
   }
 }
 
+function OverlayIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      className="memory-anki-timer-overlay-icon-button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function TimerOverlayPage() {
   const bridge = React.useMemo(() => getDesktopTimerBridge(), [])
   const [snapshot, setSnapshot] = React.useState<UnifiedTimerSnapshot>(idleSnapshot)
@@ -70,12 +92,14 @@ export default function TimerOverlayPage() {
       <div className="memory-anki-timer-overlay-capsule" data-timer-overlay-root="true">
         <span className={cn('memory-anki-timer-overlay-dot', `memory-anki-timer-overlay-dot-${status}`)} />
         <span className="memory-anki-timer-overlay-capsule-label">{snapshot.title} {formatClock(seconds)}</span>
-        <button type="button" aria-label="展开计时器" onClick={() => setCollapsedAndNotify(false)}>
-          <ChevronsUp className="size-4" />
-        </button>
-        <button type="button" aria-label="隐藏计时器" onClick={() => send({ type: 'closeOverlay' })}>
-          <X className="size-4" />
-        </button>
+        <div className="memory-anki-timer-overlay-controls">
+          <OverlayIconButton label="展开计时器" onClick={() => setCollapsedAndNotify(false)}>
+            <ChevronsUp className="size-4" />
+          </OverlayIconButton>
+          <OverlayIconButton label="隐藏计时器" onClick={() => send({ type: 'closeOverlay' })}>
+            <X className="size-4" />
+          </OverlayIconButton>
+        </div>
       </div>
     )
   }
@@ -87,10 +111,16 @@ export default function TimerOverlayPage() {
           <div className="memory-anki-timer-overlay-kicker">{snapshot.scene}</div>
           <div className="memory-anki-timer-overlay-title" title={snapshot.title}>{snapshot.title}</div>
         </div>
-        <div className="flex items-center gap-1">
-          <button type="button" aria-label="打开计时器设置" onClick={() => send({ type: 'openTimerSettings' })}><Settings2 className="size-4" /></button>
-          <button type="button" aria-label="收起计时器" onClick={() => setCollapsedAndNotify(true)}><ChevronsDown className="size-4" /></button>
-          <button type="button" aria-label="隐藏计时器" onClick={() => send({ type: 'closeOverlay' })}><X className="size-4" /></button>
+        <div className="memory-anki-timer-overlay-controls">
+          <OverlayIconButton label="打开计时器设置" onClick={() => send({ type: 'openTimerSettings' })}>
+            <Settings2 className="size-4" />
+          </OverlayIconButton>
+          <OverlayIconButton label="收起计时器" onClick={() => setCollapsedAndNotify(true)}>
+            <ChevronsDown className="size-4" />
+          </OverlayIconButton>
+          <OverlayIconButton label="隐藏计时器" onClick={() => send({ type: 'closeOverlay' })}>
+            <X className="size-4" />
+          </OverlayIconButton>
         </div>
       </header>
       <div className="memory-anki-timer-overlay-digits">{formatClock(seconds)}</div>

@@ -225,6 +225,14 @@ export function GlobalTimerProvider({
     })
   }, [activeEntry, localTimerSnapshot, presence])
 
+  React.useEffect(() => {
+    if (!presence?.isController) return
+    const interval = window.setInterval(() => {
+      presence.publish({ takeControl: false })
+    }, 4_000)
+    return () => window.clearInterval(interval)
+  }, [presence])
+
   useDesktopTimerBridgeSync({
     timerSnapshot,
     handleTimerCommand,

@@ -69,6 +69,21 @@ describe('TimerOverlayPage', () => {
     expect(screen.queryByText(/专注/)).toBeNull()
   })
 
+  it('keeps settings, collapse, and hide as visible overlay chrome', async () => {
+    render(<TimerOverlayPage />)
+    await act(async () => {
+      await Promise.resolve()
+      snapshotHandler?.(snapshot())
+    })
+
+    const settings = screen.getByRole('button', { name: '打开计时器设置' })
+    const collapse = screen.getByRole('button', { name: '收起计时器' })
+    const hide = screen.getByRole('button', { name: '隐藏计时器' })
+    expect(settings.className).toContain('memory-anki-timer-overlay-icon-button')
+    expect(collapse.className).toContain('memory-anki-timer-overlay-icon-button')
+    expect(hide.className).toContain('memory-anki-timer-overlay-icon-button')
+  })
+
   it('supports collapse and hide without changing timer state', async () => {
     render(<TimerOverlayPage />)
     await act(async () => {
@@ -77,7 +92,11 @@ describe('TimerOverlayPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '收起计时器' }))
     expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'collapse', collapsed: true })
-    fireEvent.click(screen.getByRole('button', { name: '隐藏计时器' }))
+    const expand = screen.getByRole('button', { name: '展开计时器' })
+    const hide = screen.getByRole('button', { name: '隐藏计时器' })
+    expect(expand.className).toContain('memory-anki-timer-overlay-icon-button')
+    expect(hide.className).toContain('memory-anki-timer-overlay-icon-button')
+    fireEvent.click(hide)
     expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'closeOverlay' })
   })
 })

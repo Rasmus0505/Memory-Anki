@@ -158,9 +158,9 @@ function createMainWindow() {
 function createTimerWindow() {
   timerWindow = new BrowserWindow({
     width: 320,
-    height: 180,
-    minWidth: 220,
-    minHeight: 52,
+    height: 196,
+    minWidth: 280,
+    minHeight: 56,
     x: 80,
     y: 80,
     frame: false,
@@ -231,10 +231,10 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
 ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
   if (!timerWindow) return
   if (collapsed) {
-    timerWindow.setSize(230, 62)
+    timerWindow.setSize(280, 64)
     return
   }
-  timerWindow.setSize(320, 180)
+  timerWindow.setSize(320, 196)
 })
 
 ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
@@ -252,7 +252,7 @@ ipcMain.on('memory-anki-timer-command', (_event, command) => {
   if (command?.type === 'collapse') {
     const collapsed = Boolean(command.collapsed)
     if (timerWindow) {
-      timerWindow.setSize(collapsed ? 230 : 320, collapsed ? 62 : 180)
+      timerWindow.setSize(collapsed ? 280 : 320, collapsed ? 64 : 196)
     }
     return
   }
