@@ -169,6 +169,121 @@ def test_queue_build_unions_subject_scope_with_explicit_palace(session_factory, 
     assert {card["palace_id"] for card in payload["cards"]} == {english_id, education_id}
 
 
+def test_queue_build_subject_ids_does_not_include_other_subjects(session_factory, make_client):
+    session = session_factory()
+    english = Subject(name="英语")
+    education = Subject(name="教育学")
+    session.add_all([english, education])
+    session.flush()
+
+    def add_palace(title: str, subject: Subject, uid: str):
+        palace = Palace(
+            title=title,
+            subjects=[subject],
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"uid": f"{uid}-root", "text": title, "permanentSplitMark": True},
+                        "children": [{"data": {"uid": uid, "text": "Due branch"}, "children": []}],
+                    }
+                }
+            ),
+        )
+        session.add(palace)
+        session.flush()
+        reconcile_palace_units(session, palace.id)
+        return palace
+
+    add_palace("English palace", english, "english-branch")
+    education_palace = add_palace("卢梭的教育思想", education, "rousseau-branch")
+    session.commit()
+    education_subject_id = education.id
+    education_palace_id = education_palace.id
+    session.close()
+
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+    response = client.post(
+        "/api/v1/freestyle/queue/build",
+        json={
+            "operation_id": "op-subject-ids-education",
+            "config": {
+                "training_mode": "memory_palace",
+                "streams": {
+                    "memory_palace": {
+                        "subject_ids": [education_subject_id],
+                        "subject_scope": "all",
+                        "specific_palace_ids": [],
+                        "due_policy": "due_only",
+                    }
+                },
+                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "mix_mode": "mindmap_only",
+                "due_policy": "due_only",
+                "queue_length": 20,
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert {card["palace_id"] for card in payload["cards"]} == {education_palace_id}
+
+
+def test_queue_build_legacy_english_training_mode_uses_english_palaces(session_factory, make_client):
+    session = session_factory()
+    english = Subject(name="英语")
+    education = Subject(name="教育学")
+    session.add_all([english, education])
+    session.flush()
+
+    def add_palace(title: str, subject: Subject, uid: str):
+        palace = Palace(
+            title=title,
+            subjects=[subject],
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"uid": f"{uid}-root", "text": title, "permanentSplitMark": True},
+                        "children": [{"data": {"uid": uid, "text": "Due branch"}, "children": []}],
+                    }
+                }
+            ),
+        )
+        session.add(palace)
+        session.flush()
+        reconcile_palace_units(session, palace.id)
+        return palace
+
+    english_palace = add_palace("English palace", english, "english-branch")
+    add_palace("卢梭的教育思想", education, "rousseau-branch")
+    session.commit()
+    english_palace_id = english_palace.id
+    session.close()
+
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+    response = client.post(
+        "/api/v1/freestyle/queue/build",
+        json={
+            "operation_id": "op-legacy-english-mode",
+            "config": {
+                "training_mode": "english",
+                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "mix_mode": "mindmap_only",
+                "due_policy": "due_only",
+                "queue_length": 20,
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["config"]["training_mode"] == "memory_palace"
+    assert payload["config"]["streams"]["memory_palace"]["subject_scope"] == "english"
+    assert {card["palace_id"] for card in payload["cards"]} == {english_palace_id}
+
+
 def test_queue_revision_can_start_review_after_projection_reconciliation(
     session_factory,
     make_client,

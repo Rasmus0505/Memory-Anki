@@ -77,6 +77,35 @@ class StudySession(Base):
     )
 
 
+class FreestyleRoundState(Base):
+    """Authoritative resumable plan for one freestyle round.
+
+    The plan is intentionally JSON: queue cards are projections owned by Practice,
+    while Reviews remains the owner of scheduling and encounter state.
+    """
+
+    __tablename__ = "freestyle_round_states"
+    __table_args__ = (
+        Index("ix_freestyle_round_states_scope_status", "scope_key", "status", "updated_at"),
+        Index("ix_freestyle_round_states_updated", "updated_at"),
+    )
+
+    round_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    plan_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    current_card_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    last_operation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=utc_now_naive,
+        onupdate=utc_now_naive,
+    )
+
+
 class MindMapImportJob(Base):
     __tablename__ = "mindmap_import_jobs"
     __table_args__ = (

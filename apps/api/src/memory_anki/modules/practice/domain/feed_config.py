@@ -227,10 +227,82 @@ def _as_mix_strategy(value: Any) -> str:
 
 def _stream_scope(value: Any, *, ids: list[int], subject_scope: str) -> dict[str, Any]:
     raw = value if isinstance(value, dict) else {}
+    subject_ids = _as_positive_ids(raw.get("subject_ids", []))
+    resolved_scope = _as_subject_scope(raw.get("subject_scope", subject_scope))
+    if subject_ids:
+        resolved_scope = "all"
     return {
         "specific_palace_ids": _as_positive_ids(raw.get("specific_palace_ids", ids)),
-        "subject_scope": _as_subject_scope(raw.get("subject_scope", subject_scope)),
+        "subject_scope": resolved_scope,
+        "subject_ids": subject_ids,
     }
+
+
+def _migrate_english_training(
+    *,
+    training_mode: str,
+    mixed_modes: list[str],
+    memory: dict[str, Any],
+    english: dict[str, Any],
+) -> tuple[str, list[str], dict[str, Any]]:
+    had_english = training_mode == "english" or "english" in mixed_modes
+    if not had_english:
+        return training_mode, mixed_modes, memory
+
+    had_memory = training_mode == "memory_palace" or "memory_palace" in mixed_modes
+    both_palace_streams = had_memory and training_mode != "english"
+
+    if training_mode == "english" or not had_memory:
+        memory = {
+            **memory,
+            "due_policy": english["due_policy"],
+            "palace_order": english["palace_order"],
+            "unit_order": english["unit_order"],
+            "specific_palace_ids": (
+                list(memory["specific_palace_ids"])
+                if memory["specific_palace_ids"]
+                else list(english["specific_palace_ids"])
+            ),
+        }
+
+    if both_palace_streams:
+        memory = {
+            **memory,
+            "subject_scope": "all",
+            "subject_ids": [],
+            "specific_palace_ids": list(dict.fromkeys([
+                *memory["specific_palace_ids"],
+                *english["specific_palace_ids"],
+            ])),
+        }
+    else:
+        memory = {
+            **memory,
+            "subject_scope": "english",
+            "subject_ids": (
+                list(memory["subject_ids"])
+                if memory["subject_ids"]
+                else list(english.get("subject_ids") or [])
+            ),
+            "specific_palace_ids": (
+                list(memory["specific_palace_ids"])
+                if memory["specific_palace_ids"]
+                else list(english["specific_palace_ids"])
+            ),
+        }
+
+    mixed_modes = [item for item in mixed_modes if item != "english"]
+    if "memory_palace" not in mixed_modes:
+        mixed_modes = ["memory_palace", *mixed_modes]
+
+    if training_mode == "english":
+        training_mode = "memory_palace"
+        mixed_modes = ["memory_palace"]
+    elif training_mode == "mixed" and len(mixed_modes) < 2:
+        training_mode = mixed_modes[0] if mixed_modes else "memory_palace"
+        mixed_modes = [training_mode]
+
+    return training_mode, mixed_modes, memory
 
 
 def _infer_training_mode(
@@ -321,12 +393,15 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     raw_memory = _as_dict(raw_streams.get("memory_palace"))
     raw_quiz = _as_dict(raw_streams.get("quiz"))
     raw_english = _as_dict(raw_streams.get("english"))
+    memory_fallback_scope = "all"
+    if not has_new_config:
+        memory_fallback_scope = "non_english" if legacy_subject == "english" else legacy_subject
 
     memory = {
         **_stream_scope(
             raw_memory,
             ids=[] if legacy_subject == "english" else legacy_ids,
-            subject_scope="non_english",
+            subject_scope=memory_fallback_scope,
         ),
         "due_policy": str(raw_memory.get("due_policy") or legacy_due),
         "palace_order": str(raw_memory.get("palace_order") or legacy_order),
@@ -336,7 +411,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         memory["due_policy"] = DUE_POLICY_DUE_FIRST
     if memory["palace_order"] not in PALACE_ORDERS:
         memory["palace_order"] = PALACE_ORDER_SEQUENTIAL
-    memory["subject_scope"] = "non_english" if memory["subject_scope"] == "english" else memory["subject_scope"]
 
     english = {
         **_stream_scope(
@@ -386,6 +460,12 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     if training_mode == "mixed" and len(mixed_modes) < 2:
         training_mode = mixed_modes[0] if mixed_modes else "memory_palace"
         mixed_modes = [training_mode]
+    training_mode, mixed_modes, memory = _migrate_english_training(
+        training_mode=training_mode,
+        mixed_modes=mixed_modes,
+        memory=memory,
+        english=english,
+    )
 
     raw_mix = _as_dict(data.get("mix"))
     raw_ratios = _as_dict(raw_mix.get("ratios"))
@@ -458,6 +538,11 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "quiz_scope": quiz["quiz_scope"],
         "specific_palace_ids": legacy_specific_ids,
         "subject_scope": legacy_scope,
+        "subject_ids": (
+            list(quiz["subject_ids"])
+            if training_mode == "quiz"
+            else list(memory["subject_ids"])
+        ),
         "question_type": quiz["question_type"],
         "weak_quiz_priority": quiz["weak_priority"],
     }

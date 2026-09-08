@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.modules.content.public.queries import (
+    list_active_palace_ids_by_subject_ids,
     list_active_palace_ids_by_subject_scope,
     list_active_palace_tree_structures,
 )
@@ -54,11 +55,21 @@ def build_freestyle_queue(
         raw = stream_configs.get(stream_name) if isinstance(stream_configs, dict) else {}
         raw = raw if isinstance(raw, dict) else {}
         subject_scope = str(raw.get("subject_scope") or "all")
-        subject_ids = list_active_palace_ids_by_subject_scope(session, subject_scope)
+        requested_subject_ids = [
+            int(value)
+            for value in raw.get("subject_ids") or []
+            if str(value).strip().lstrip("-").isdigit() and int(value) > 0
+        ]
         specific_ids = [int(value) for value in raw.get("specific_palace_ids") or []]
+        if requested_subject_ids:
+            # Non-empty specific_palace_ids is an explicit subset (or extra list).
+            if specific_ids:
+                return specific_ids, "all"
+            return list_active_palace_ids_by_subject_ids(session, requested_subject_ids), "all"
+        subject_palaces = list_active_palace_ids_by_subject_scope(session, subject_scope)
         if subject_scope != "all":
-            # Subject presets are broad inclusion scopes; explicit IDs are additive.
-            specific_ids = list(dict.fromkeys([*subject_ids, *specific_ids]))
+            # Legacy subject presets are broad inclusion scopes; explicit IDs are additive.
+            specific_ids = list(dict.fromkeys([*subject_palaces, *specific_ids]))
         return specific_ids, subject_scope
 
     stream_ids: dict[str, list[int]] = {}

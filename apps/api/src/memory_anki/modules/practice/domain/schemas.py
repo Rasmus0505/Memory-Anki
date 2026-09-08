@@ -39,3 +39,44 @@ class FreestyleQueueBuildRequest(BaseModel):
     config: dict[str, Any] | None = None
     completed_ids: list[str] = Field(default_factory=list)
     hidden_ids: list[str] = Field(default_factory=list)
+
+
+class FreestyleRoundActiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    scope_key: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    cards: list[dict[str, Any]] = Field(default_factory=list)
+    round_id: str = ""
+
+
+class FreestyleRoundStartRequest(FreestyleRoundActiveRequest):
+    pass
+
+
+class FreestyleRoundActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    action: str
+    card_id: str = ""
+    occurrence_id: str = ""
+    encounter_id: str = ""
+    cards: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FreestyleRoundRatingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    card_id: str
+    occurrence_id: str = ""
+    encounter_id: str
+    rating: int
+    study_session_id: str
+    unit_id: str
+    unit_revision: int
+    palace_batch: dict[str, Any] | None = None

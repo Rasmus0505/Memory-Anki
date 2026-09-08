@@ -142,6 +142,20 @@ def unit_key(unit: ReviewUnitCandidate) -> str:
     return f"review_unit:{unit.unit_id}:r{unit.revision}"
 
 
+def review_unit_id_from_card_id(card_id: object) -> str:
+    """Stable parent unit id encoded in `review_unit:{unit_id}:r{revision}`."""
+    text = str(card_id or "").strip()
+    prefix = "review_unit:"
+    if not text.startswith(prefix):
+        return ""
+    rest = text[len(prefix):]
+    marker = rest.rfind(":r")
+    if marker <= 0:
+        return rest
+    revision = rest[marker + 2:]
+    return rest[:marker] if revision.isdigit() else rest
+
+
 def quiz_key(quiz: QuizCandidate) -> str:
     return f"quiz_question:{quiz.question_id}"
 
@@ -369,12 +383,25 @@ def filter_completed(
     completed_ids: set[str],
     hidden_ids: set[str],
 ) -> list[dict[str, Any]]:
-    return [
-        card
-        for card in cards
-        if str(card.get("id") or "") not in completed_ids
-        and str(card.get("id") or "") not in hidden_ids
-    ]
+    # Same-round rebuilds must not reinsert a newer revision of a unit that
+    # already has a parent rating. A new round passes empty completed_ids.
+    completed_units = {
+        review_unit_id_from_card_id(item) for item in completed_ids
+    }
+    completed_units.discard("")
+    result: list[dict[str, Any]] = []
+    for card in cards:
+        card_id = str(card.get("id") or "")
+        if card_id in completed_ids or card_id in hidden_ids:
+            continue
+        unit_id = str(card.get("unit_id") or "")
+        card_unit = review_unit_id_from_card_id(card_id)
+        if unit_id and unit_id in completed_units:
+            continue
+        if card_unit and card_unit in completed_units:
+            continue
+        result.append(card)
+    return result
 
 
 def assemble_queue(
@@ -760,5 +787,6 @@ __all__ = [
     "sort_due_phase_units",
     "sort_fill_phase_units",
     "sort_quiz_candidates",
+    "review_unit_id_from_card_id",
     "unit_key",
 ]

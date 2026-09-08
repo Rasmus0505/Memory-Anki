@@ -233,16 +233,38 @@ def test_sanitize_migrates_legacy_directions_and_removes_anki():
     assert sanitize_feed_config({
         "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
     })["training_mode"] == "memory_palace"
-    assert sanitize_feed_config({
+    english = sanitize_feed_config({
         "subject_scope": "english",
         "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
-    })["training_mode"] == "english"
+    })
+    assert english["training_mode"] == "memory_palace"
+    assert english["mixed_modes"] == ["memory_palace"]
+    assert english["streams"]["memory_palace"]["subject_scope"] == "english"
     migrated = sanitize_feed_config({
         "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": True},
     })
     assert migrated["training_mode"] == "mixed"
     assert migrated["mixed_modes"] == ["memory_palace", "quiz"]
     assert migrated["content"]["anki_card"] is False
+    folded = sanitize_feed_config({
+        "training_mode": "english",
+        "streams": {"english": {"due_policy": "due_only", "unit_order": "random"}},
+    })
+    assert folded["training_mode"] == "memory_palace"
+    assert folded["streams"]["memory_palace"]["due_policy"] == "due_only"
+    assert folded["streams"]["memory_palace"]["unit_order"] == "random"
+    mixed_english = sanitize_feed_config({
+        "training_mode": "mixed",
+        "mixed_modes": ["english", "quiz"],
+    })
+    assert mixed_english["mixed_modes"] == ["memory_palace", "quiz"]
+    assert mixed_english["streams"]["memory_palace"]["subject_scope"] == "english"
+    ids_win = sanitize_feed_config({
+        "training_mode": "memory_palace",
+        "streams": {"memory_palace": {"subject_ids": [3], "subject_scope": "english"}},
+    })
+    assert ids_win["streams"]["memory_palace"]["subject_ids"] == [3]
+    assert ids_win["streams"]["memory_palace"]["subject_scope"] == "all"
 
 
 def test_bound_quiz_follows_owning_review_unit():
@@ -288,12 +310,22 @@ def test_completed_unit_is_filtered_by_revisioned_card_id():
     assert result.cards == []
 
 
-def test_new_revision_is_not_hidden_by_completed_old_revision():
+def test_same_round_completed_unit_hides_newer_revision():
     unit = _unit("a", ("a",), unit_id="review-a", revision=8)
     result = _assemble(
         units=[unit],
         due_uids={"a"},
         completed_ids=["review_unit:review-a:r7"],
+    )
+    assert result.cards == []
+
+
+def test_new_round_without_completed_ids_still_emits_new_revision():
+    unit = _unit("a", ("a",), unit_id="review-a", revision=8)
+    result = _assemble(
+        units=[unit],
+        due_uids={"a"},
+        completed_ids=[],
     )
     assert [card["id"] for card in result.cards] == ["review_unit:review-a:r8"]
 

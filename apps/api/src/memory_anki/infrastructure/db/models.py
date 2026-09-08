@@ -8,7 +8,7 @@ importing the table registry for ``Base.metadata`` side effects.
 from memory_anki.infrastructure.db import _tables  # noqa: F401  (registers all tables)
 from memory_anki.infrastructure.db._tables._base import Base, engine, get_session, init_db
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
-from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "EnglishCourseProgress",
     "Palace",
     "StudySession",
+    "FreestyleRoundState",
     "engine",
     "get_session",
     "init_db",
