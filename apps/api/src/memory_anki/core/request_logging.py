@@ -5,30 +5,43 @@ import time
 import uuid
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_anki.core.request_context import set_request_id
 
 
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
+class RequestLoggingMiddleware:
+    """Request logging without BaseHTTPMiddleware, so live SSE is not buffered."""
+
     def __init__(self, app: ASGIApp):
-        super().__init__(app)
+        self.app = app
         self.logger = logging.getLogger("memory_anki.request")
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive)
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
         set_request_id(request_id)
         request.state.request_id = request_id
         started_at = time.perf_counter()
-        response = None
+        status_code = 500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message.get("status") or 500)
+                headers = MutableHeaders(raw=list(message.get("headers") or []))
+                headers["X-Request-ID"] = request_id
+                message["headers"] = headers.raw
+            await send(message)
+
         try:
-            response = await call_next(request)
-            response.headers["X-Request-ID"] = request_id
-            return response
+            await self.app(scope, receive, send_wrapper)
         finally:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            status_code = response.status_code if response is not None else 500
             self.logger.info(
                 "request handled",
                 extra={

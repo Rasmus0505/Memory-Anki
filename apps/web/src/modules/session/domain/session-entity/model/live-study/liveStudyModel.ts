@@ -56,6 +56,15 @@ const STUDY_FOLLOW_PATTERNS = [
   /^\/english\/reading\/materials\/\d+$/,
 ]
 
+export function preferNewerLiveStudyProjection(
+  current: LiveStudyProjection,
+  incoming: LiveStudyProjection,
+): LiveStudyProjection {
+  if (current.revision === incoming.revision && current.updatedAt === incoming.updatedAt) return current
+  if (incoming.revision < current.revision) return current
+  return incoming
+}
+
 export function emptyLiveStudyProjection(): LiveStudyProjection {
   return {
     revision: 0,

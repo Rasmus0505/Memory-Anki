@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { consumeLiveStudyStream, publishLiveStudyCommand } from '@/modules/session/domain/session-entity/api/liveStudyApi'
 import {
   emptyLiveStudyProjection,
+  preferNewerLiveStudyProjection,
   readLiveStudyClientId,
   shouldFollowLiveRoute,
   type LiveStudyProjection,
@@ -12,6 +13,9 @@ import {
   LiveStudyPresenceContext,
   type LiveStudyPublishPatch,
 } from '@/modules/session/ui/live-presence/liveStudyPresenceContext'
+
+const HELLO_SILENCE_MS = 2_000
+const HELLO_POLL_MS = 1_000
 
 function createOperationId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -43,9 +47,7 @@ export function LiveStudyPresenceProvider({ children }: PropsWithChildren) {
       view: patch.view,
       timer: patch.timer,
     }).then((response) => {
-      setProjection((current) => (
-        current.revision === response.projection.revision ? current : response.projection
-      ))
+      setProjection((current) => preferNewerLiveStudyProjection(current, response.projection))
     }).catch(() => {
       // Presence is best-effort; local study UI stays usable offline.
     })
@@ -54,27 +56,48 @@ export function LiveStudyPresenceProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let cancelled = false
     let retry = 0
-    let timer: number | null = null
+    let sseTimer: number | null = null
+    let pollTimer: number | null = null
     let controller: AbortController | null = null
+    let sseInFlight = false
+    let receivedStreamEnvelope = false
+    let lastEnvelopeAt = 0
+
+    const mergeProjection = (incoming: LiveStudyProjection) => {
+      setProjection((current) => preferNewerLiveStudyProjection(current, incoming))
+    }
+
+    const hello = async () => {
+      try {
+        const response = await publishLiveStudyCommand({
+          type: 'hello',
+          clientId,
+          operationId: createOperationId(),
+        })
+        if (cancelled) return
+        lastEnvelopeAt = Date.now()
+        setConnected(true)
+        mergeProjection(response.projection)
+      } catch {
+        // Keep current hydration; SSE or the next hello poll can recover.
+      }
+    }
+
     const connect = () => {
       controller?.abort()
       controller = new AbortController()
       const signal = controller.signal
+      sseInFlight = true
       void consumeLiveStudyStream(
         clientId,
         (envelope) => {
           if (cancelled) return
           retry = 0
+          receivedStreamEnvelope = true
+          lastEnvelopeAt = Date.now()
           setConnected(true)
           applyingRemoteRef.current = envelope.publisherClientId !== clientId
-          setProjection((current) => (
-            current.revision === envelope.projection.revision
-              && current.updatedAt === envelope.projection.updatedAt
-              ? current
-              : envelope.projection.revision < current.revision
-                ? current
-                : envelope.projection
-          ))
+          mergeProjection(envelope.projection)
           queueMicrotask(() => {
             applyingRemoteRef.current = false
           })
@@ -82,20 +105,33 @@ export function LiveStudyPresenceProvider({ children }: PropsWithChildren) {
         signal,
       )
         .catch(() => {
-          if (!cancelled) setConnected(false)
+          receivedStreamEnvelope = false
         })
         .finally(() => {
+          sseInFlight = false
           if (cancelled || signal.aborted) return
-          setConnected(false)
           const delay = Math.min(8_000, 500 * 2 ** retry)
           retry += 1
-          timer = window.setTimeout(connect, delay)
+          sseTimer = window.setTimeout(connect, delay)
         })
     }
+
+    void hello()
     connect()
+    const watch = () => {
+      if (cancelled) return
+      const healthySse = sseInFlight && receivedStreamEnvelope
+      if (!healthySse && Date.now() - lastEnvelopeAt >= HELLO_SILENCE_MS) {
+        void hello()
+      }
+      pollTimer = window.setTimeout(watch, HELLO_POLL_MS)
+    }
+    pollTimer = window.setTimeout(watch, HELLO_SILENCE_MS)
+
     return () => {
       cancelled = true
-      if (timer != null) window.clearTimeout(timer)
+      if (sseTimer != null) window.clearTimeout(sseTimer)
+      if (pollTimer != null) window.clearTimeout(pollTimer)
       controller?.abort()
     }
   }, [clientId])

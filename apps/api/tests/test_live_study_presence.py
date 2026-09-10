@@ -315,3 +315,137 @@ def test_live_room_module_is_not_sqlite_backed() -> None:
     assert "sqlite" not in source.lower()
     assert "get_session" not in source
     assert json.loads(json.dumps(get_live_study_projection()))["surface"] == "idle"
+
+
+def test_hello_returns_current_projection_without_bumping_revision() -> None:
+    _publish(
+        "desktop",
+        "op-hello-setup",
+        take_control=True,
+        route="/freestyle",
+        surface="freestyle",
+        view={"currentCardId": "card-hello", "revealMap": {"root": "revealed", "child": "revealed"}},
+    )
+    hello = apply_live_study_command(
+        {
+            "type": "hello",
+            "client_id": "pwa",
+            "operation_id": "hello-1",
+        }
+    )
+    assert hello["accepted"] is True
+    assert hello["projection"]["revision"] == 1
+    assert hello["projection"]["view"]["currentCardId"] == "card-hello"
+    assert hello["projection"]["controller_client_id"] == "desktop"
+
+
+def test_http_hello_hydrates_without_sse() -> None:
+    app = FastAPI()
+    app.include_router(sessions_router.router, prefix="/api/v1")
+    client = TestClient(app)
+    posted = client.post(
+        "/api/v1/session/live/commands",
+        json={
+            "type": "publish",
+            "client_id": "desktop",
+            "operation_id": "http-hello-setup",
+            "take_control": True,
+            "surface": "freestyle",
+            "route": "/freestyle",
+            "view": {"currentCardId": "card-http-hello"},
+        },
+    )
+    assert posted.status_code == 200
+    hello = client.post(
+        "/api/v1/session/live/commands",
+        json={
+            "type": "hello",
+            "client_id": "pwa",
+            "operation_id": "http-hello-1",
+        },
+    )
+    assert hello.status_code == 200
+    assert hello.json()["projection"]["view"]["currentCardId"] == "card-http-hello"
+    assert hello.json()["projection"]["revision"] == posted.json()["projection"]["revision"]
+
+
+def _build_full_middleware_app() -> FastAPI:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.middleware.cors import CORSMiddleware
+
+    from memory_anki.app.main import install_web_cache_headers
+    from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
+    from memory_anki.core.request_logging import RequestLoggingMiddleware
+
+    assert not issubclass(ApiTokenAuthMiddleware, BaseHTTPMiddleware)
+    assert not issubclass(RequestLoggingMiddleware, BaseHTTPMiddleware)
+
+    app = FastAPI()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(ApiTokenAuthMiddleware, token=None)
+    app.add_middleware(RequestLoggingMiddleware)
+    install_web_cache_headers(app)
+    app.include_router(sessions_router.router, prefix="/api/v1")
+    return app
+
+
+def test_full_middleware_live_stream_emits_snapshot_immediately() -> None:
+    import asyncio
+    import contextlib
+
+    _publish(
+        "desktop",
+        "op-stream-setup",
+        take_control=True,
+        route="/freestyle",
+        surface="freestyle",
+        view={"currentCardId": "card-stream"},
+    )
+    app = _build_full_middleware_app()
+
+    async def read_snapshot() -> bytes:
+        body = bytearray()
+        got_snapshot = asyncio.Event()
+
+        async def receive() -> dict:
+            await asyncio.sleep(3600)
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict) -> None:
+            if message["type"] == "http.response.body":
+                body.extend(message.get("body") or b"")
+                if b"event: snapshot" in body:
+                    got_snapshot.set()
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/v1/session/live/stream",
+            "raw_path": b"/api/v1/session/live/stream",
+            "query_string": b"client_id=pwa",
+            "headers": [(b"host", b"test"), (b"accept", b"text/event-stream")],
+            "client": ("127.0.0.1", 123),
+            "server": ("test", 80),
+        }
+        task = asyncio.create_task(app(scope, receive, send))
+        try:
+            await asyncio.wait_for(got_snapshot.wait(), timeout=2)
+        finally:
+            reset_live_study_room()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.wait_for(task, timeout=1)
+        return bytes(body)
+
+    payload = asyncio.run(read_snapshot())
+    assert b"event: snapshot" in payload
+    assert b"card-stream" in payload

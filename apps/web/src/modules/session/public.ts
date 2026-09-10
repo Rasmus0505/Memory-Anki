@@ -13,6 +13,7 @@ export {
   interpolateTimerSeconds,
   isFollowableStudyPath,
   liveStudySurfaceFromPath,
+  preferNewerLiveStudyProjection,
   shouldFollowLiveRoute,
   type LiveStudyProjection,
   type LiveStudySurface,
@@ -27,8 +28,10 @@ export { useLiveStudyPresence } from './ui/live-presence/liveStudyPresenceContex
 export { useLiveStudySurfaceMirror } from './ui/live-presence/useLiveStudySurfaceMirror'
 export {
   countRevealedNodes,
+  isPassiveLiveStudyFollower,
   isPendingLiveStudyApply,
   isWeakerRevealMap,
+  resolveFreestyleLiveFollowAction,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from './ui/live-presence/shouldPublishLiveStudyView'

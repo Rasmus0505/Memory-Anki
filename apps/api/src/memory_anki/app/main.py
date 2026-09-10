@@ -4,10 +4,12 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_anki.app.error_handlers import install_error_handlers
 from memory_anki.app.startup_runtime import (
@@ -83,20 +85,36 @@ class SinglePageAppStaticFiles(StaticFiles):
         return await super().get_response("index.html", scope)
 
 
+class WebCacheHeadersMiddleware:
+    """Pure ASGI cache headers so /session/live/stream is not buffered."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = str(scope.get("path") or "")
+
+        async def send_with_cache_headers(message: Message) -> None:
+            if message["type"] == "http.response.start" and not path.startswith("/api"):
+                headers = MutableHeaders(raw=list(message.get("headers") or []))
+                status_code = int(message.get("status") or 500)
+                if headers.get("Cache-Control") == "no-store":
+                    pass
+                elif status_code < 400 and HASHED_WEB_ASSET_PATTERN.match(path):
+                    headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                else:
+                    headers["Cache-Control"] = "no-cache"
+                message["headers"] = headers.raw
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache_headers)
+
+
 def install_web_cache_headers(app: FastAPI) -> None:
-    @app.middleware("http")
-    async def disable_web_static_cache(request: Request, call_next):
-        response = await call_next(request)
-        path = request.url.path
-        if path.startswith("/api"):
-            return response
-        if response.headers.get("Cache-Control") == "no-store":
-            return response
-        if response.status_code < 400 and HASHED_WEB_ASSET_PATTERN.match(path):
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            return response
-        response.headers["Cache-Control"] = "no-cache"
-        return response
+    app.add_middleware(WebCacheHeadersMiddleware)
 
 
 def _resolve_cors_origins() -> list[str]:

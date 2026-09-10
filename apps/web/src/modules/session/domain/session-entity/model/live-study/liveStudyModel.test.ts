@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   decodeLiveStudyEnvelope,
+  emptyLiveStudyProjection,
   encodeLiveStudyCommand,
   interpolateTimerSeconds,
   isFollowableStudyPath,
+  preferNewerLiveStudyProjection,
   shouldFollowLiveRoute,
 } from './liveStudyModel'
 import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
@@ -175,5 +177,35 @@ describe('liveStudyModel', () => {
       take_control: true,
       card_id: 'card-3',
     })
+  })
+
+  it('encodes hello without mutating omitted fields', () => {
+    expect(
+      encodeLiveStudyCommand({
+        type: 'hello',
+        clientId: 'pwa',
+        operationId: 'op-hello',
+      }),
+    ).toEqual({
+      type: 'hello',
+      client_id: 'pwa',
+      operation_id: 'op-hello',
+    })
+  })
+
+  it('keeps a newer live projection and ignores an older revision', () => {
+    const current = {
+      ...emptyLiveStudyProjection(),
+      revision: 4,
+      updatedAt: 't4',
+    }
+    const incoming = {
+      ...emptyLiveStudyProjection(),
+      revision: 5,
+      updatedAt: 't5',
+      view: { currentCardId: 'card-2' },
+    }
+    expect(preferNewerLiveStudyProjection(current, incoming).revision).toBe(5)
+    expect(preferNewerLiveStudyProjection(incoming, current).revision).toBe(5)
   })
 })

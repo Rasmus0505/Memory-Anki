@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { LiveStudySurface } from '@/modules/session/domain/session-entity/model/live-study/liveStudyModel'
 import { useLiveStudyPresence } from '@/modules/session/ui/live-presence/liveStudyPresenceContext'
 import {
+  isPassiveLiveStudyFollower,
   isPendingLiveStudyApply,
   isWeakerRevealMap,
   shouldApplyLiveStudyView,
@@ -38,7 +39,6 @@ export function useLiveStudySurfaceMirror<TView>({
   useEffect(() => {
     if (!presence || presence.isController) return
     if (presence.projection.surface !== surface) return
-    if (presence.projection.revision === lastAppliedRevisionRef.current) return
     const decoded = decode(presence.projection.view)
     if (!decoded) return
     const viewJson = JSON.stringify(decoded)
@@ -49,16 +49,24 @@ export function useLiveStudySurfaceMirror<TView>({
       lastAppliedViewJson: lastSentRef.current,
     })
     if (applyDecision === 'skip') return
-    lastAppliedRevisionRef.current = presence.projection.revision
-    if (applyDecision === 'consume-revision') return
+    if (applyDecision === 'consume-revision') {
+      lastAppliedRevisionRef.current = presence.projection.revision
+      return
+    }
     if (apply(decoded) === false) return
+    lastAppliedRevisionRef.current = presence.projection.revision
     lastSentRef.current = viewJson
     pendingApplyRef.current = true
   }, [apply, decode, presence, surface])
 
   useEffect(() => {
     if (!presence) return
-    const isFollower = Boolean(presence.projection.controllerClientId && !presence.isController)
+    const isFollower = isPassiveLiveStudyFollower({
+      isController: presence.isController,
+      controllerClientId: presence.projection.controllerClientId,
+      remoteSurface: presence.projection.surface,
+      localSurface: surface,
+    })
     let interactionUnchanged = false
     if (sameInteraction && lastSentRef.current) {
       try {

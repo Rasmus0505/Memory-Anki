@@ -32,6 +32,42 @@ export function isWeakerRevealMap(local: unknown, remote: unknown) {
   return countRevealedNodes(local) < remoteCount
 }
 
+export function isPassiveLiveStudyFollower(input: {
+  isController: boolean
+  controllerClientId: string | null
+  remoteSurface: string
+  localSurface?: string
+}) {
+  if (input.isController) return false
+  if (input.controllerClientId) return true
+  if (!input.remoteSurface || input.remoteSurface === 'idle') return false
+  if (input.localSurface) return input.remoteSurface === input.localSurface
+  return true
+}
+
+export type FreestyleLiveFollowAction =
+  | 'skip'
+  | 'wait-queue'
+  | 'seek'
+  | 'apply'
+  | 'consume-revision'
+  | 'abandon'
+
+export function resolveFreestyleLiveFollowAction(input: {
+  applyDecision: 'skip' | 'consume-revision' | 'apply'
+  remoteCardId: string | null
+  localCardId: string | null
+  queueCardIds: string[]
+}): FreestyleLiveFollowAction {
+  if (input.applyDecision === 'skip') return 'skip'
+  if (input.applyDecision === 'consume-revision') return 'consume-revision'
+  if (!input.remoteCardId) return 'apply'
+  if (input.localCardId === input.remoteCardId) return 'apply'
+  if (input.queueCardIds.includes(input.remoteCardId)) return 'seek'
+  if (input.queueCardIds.length === 0) return 'wait-queue'
+  return 'abandon'
+}
+
 export function shouldPublishLiveStudyView(input: {
   isActive: boolean
   publishWhen: boolean

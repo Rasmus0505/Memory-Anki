@@ -3,9 +3,8 @@ from __future__ import annotations
 import secrets
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 TOKEN_HEADER = "X-Memory-Anki-Token"
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -30,27 +29,40 @@ def _is_direct_loopback(request: Request) -> bool:
     return client is not None and client.host in LOOPBACK_HOSTS
 
 
-class ApiTokenAuthMiddleware(BaseHTTPMiddleware):
-    """Validate remote API token; allow when token is unset or request is local."""
+class ApiTokenAuthMiddleware:
+    """Validate remote API token; allow when token is unset or request is local.
+
+    Pure ASGI so GET /session/live/stream is not buffered by BaseHTTPMiddleware.
+    """
 
     def __init__(self, app: ASGIApp, token: str | None):
-        super().__init__(app)
+        self.app = app
         self.token = (token or "").strip()
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive)
         if not self.token:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
         path = request.url.path
         if not path.startswith("/api"):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
         if request.method == "OPTIONS":
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
         if _is_direct_loopback(request):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
         provided = _extract_token(request)
         if provided and secrets.compare_digest(provided, self.token):
-            return await call_next(request)
-        return JSONResponse(
+            await self.app(scope, receive, send)
+            return
+        response = JSONResponse(
             status_code=401,
             content={"detail": "缺少或错误的 API 令牌（MEMORY_ANKI_API_TOKEN）。"},
         )
+        await response(scope, receive, send)

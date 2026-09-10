@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isPassiveLiveStudyFollower,
   isPendingLiveStudyApply,
   isWeakerRevealMap,
+  resolveFreestyleLiveFollowAction,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from './shouldPublishLiveStudyView'
@@ -107,5 +109,58 @@ describe('shouldPublishLiveStudyView', () => {
       viewJson: '{"currentCardId":"b"}',
       lastAppliedViewJson: '{"currentCardId":"a"}',
     })).toBe('apply')
+  })
+})
+
+describe('live follow retry and passive follower', () => {
+  it('waits when the remote card is not in an empty queue', () => {
+    expect(resolveFreestyleLiveFollowAction({
+      applyDecision: 'apply',
+      remoteCardId: 'card-2',
+      localCardId: null,
+      queueCardIds: [],
+    })).toBe('wait-queue')
+  })
+
+  it('seeks once the queue contains the remote card', () => {
+    expect(resolveFreestyleLiveFollowAction({
+      applyDecision: 'apply',
+      remoteCardId: 'card-2',
+      localCardId: 'card-1',
+      queueCardIds: ['card-1', 'card-2'],
+    })).toBe('seek')
+  })
+
+  it('applies after the local card matches the remote card', () => {
+    expect(resolveFreestyleLiveFollowAction({
+      applyDecision: 'apply',
+      remoteCardId: 'card-2',
+      localCardId: 'card-2',
+      queueCardIds: ['card-1', 'card-2'],
+    })).toBe('apply')
+  })
+
+  it('abandons only after the hydrated queue truly lacks the card', () => {
+    expect(resolveFreestyleLiveFollowAction({
+      applyDecision: 'apply',
+      remoteCardId: 'missing',
+      localCardId: 'card-1',
+      queueCardIds: ['card-1', 'card-2'],
+    })).toBe('abandon')
+  })
+
+  it('follows a remote freestyle surface even when nobody is controller', () => {
+    expect(isPassiveLiveStudyFollower({
+      isController: false,
+      controllerClientId: null,
+      remoteSurface: 'freestyle',
+      localSurface: 'freestyle',
+    })).toBe(true)
+    expect(isPassiveLiveStudyFollower({
+      isController: false,
+      controllerClientId: null,
+      remoteSurface: 'idle',
+      localSurface: 'freestyle',
+    })).toBe(false)
   })
 })
