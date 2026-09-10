@@ -15,6 +15,18 @@ export type FreestyleUnitEncounterState = {
   abandoned?: boolean
 }
 
+export function shouldRenewFreestyleEncounter(
+  existing: FreestyleUnitEncounterState | undefined,
+  unitRevision: number,
+  allowRenew: boolean,
+) {
+  if (!existing) return true
+  if (existing.unitRevision !== unitRevision) return true
+  if (!allowRenew || existing.status !== 'closed') return false
+  // Failed cards restudy. Unrated leave (swipe away) must also reopen.
+  return existing.passed !== true
+}
+
 export type FreestyleSkipState = {
   roundId: string
   palaceScopeSignature: string
@@ -464,7 +476,8 @@ export function insertRetryOccurrenceAfterGap(
       withoutExisting.length - 1,
     ),
   )
-  const gap = Math.max(0, Math.round(maxIntervening))
+  const remainingOthers = Math.max(0, withoutExisting.length - anchor - 1)
+  const gap = restudyInterveningGap(remainingOthers, maxIntervening)
   const insertAt = Math.min(anchor + 1 + gap, withoutExisting.length)
   const next = withoutExisting.slice()
   next.splice(insertAt, 0, occurrence)
@@ -694,6 +707,62 @@ export function moveCardToTail(cards: FreestyleCard[], cardId: string): Freestyl
  * after 2 (end of remaining queue). Not a clock delay and not full end-of-batch tail.
  */
 export const RESTUDY_MAX_INTERVENING = 3
+
+/**
+ * Booked restudy gap: at most three other cards, at least one when anything else
+ * remains. Zero is allowed only when the unit is the last remaining card.
+ * A requested 0 with other cards still present is treated as the max gap — that
+ * 0 is the missing-plan default, not an intentional "insert next" signal.
+ */
+export function restudyInterveningGap(
+  remainingOtherCards: number,
+  requested: number = RESTUDY_MAX_INTERVENING,
+): number {
+  const others = Math.max(0, Math.round(Number(remainingOtherCards) || 0))
+  if (others <= 0) return 0
+  const wantedRaw = Math.round(Number(requested) || 0)
+  const wanted = wantedRaw > 0 ? wantedRaw : RESTUDY_MAX_INTERVENING
+  return Math.max(1, Math.min(RESTUDY_MAX_INTERVENING, wanted, others))
+}
+
+/** Retry rows in the round sheet inherit 3 when the booked gap was missing/0. */
+export function bookedRetryAfterCards(
+  card: Pick<FreestyleCard, 'occurrence_kind' | 'retry_after_cards'> | null | undefined,
+): number {
+  if (card?.occurrence_kind !== 'retry') return 0
+  const booked = Math.round(Number(card.retry_after_cards) || 0)
+  return booked > 0 ? Math.min(RESTUDY_MAX_INTERVENING, booked) : RESTUDY_MAX_INTERVENING
+}
+
+/**
+ * After leave_card confirms, pin whatever is under the viewport now.
+ * Never force the leaving/source card back onto the screen.
+ */
+export function resolveLeaveConfirmViewportId(args: {
+  leavingCardId: string
+  liveCardId: string | null | undefined
+}): string | null {
+  const live = String(args.liveCardId || '').trim()
+  return live || null
+}
+
+export function nextRetryAttempt(
+  cards: ReadonlyArray<FreestyleCard>,
+  cardId: string,
+  attemptCounts?: Record<string, { attemptCount?: number }> | null,
+): number {
+  const card = cards.find((item) => item.id === cardId)
+  const sourceId = sourceCardId(card) || String(cardId || '').trim()
+  const fromPlan = Math.max(
+    Number(attemptCounts?.[cardId]?.attemptCount) || 0,
+    Number(attemptCounts?.[sourceId]?.attemptCount) || 0,
+  )
+  const fromCards = cards.reduce((max, item) => {
+    if (!isRetryOccurrence(item) || sourceCardId(item) !== sourceId) return max
+    return Math.max(max, Number(item.retry_attempt) || 0)
+  }, 0)
+  return Math.max(fromPlan, fromCards) + 1
+}
 
 /**
  * @deprecated Prefer {@link placeRestudyCardWithMaxGap}. Kept for callers that still

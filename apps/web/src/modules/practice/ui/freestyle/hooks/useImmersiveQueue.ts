@@ -34,6 +34,10 @@ import {
 
   createRetryOccurrence,
   insertRetryOccurrenceAfterGap,
+  nextRetryAttempt,
+  resolveLeaveConfirmViewportId,
+  restudyInterveningGap,
+  RESTUDY_MAX_INTERVENING,
   removeRetryOccurrencesForSource,
   restoreExplicitlySelectedCards,
   sourceCardId,
@@ -46,6 +50,7 @@ import {
   reorderRoundPlan,
   type FreestyleRoundPlanState,
   setUnitEncounterState,
+  shouldRenewFreestyleEncounter,
   clearUnitEncounterState,
   applySkip,
   sanitizeFreestyleFeedConfig,
@@ -58,6 +63,7 @@ import {
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import {
   applyFreestyleEntryScopeUnlessSaved,
+  persistFreestyleConfigWithoutEntryLock,
   shouldUseFreestyleSelectionScope,
 } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
@@ -180,10 +186,18 @@ function insertPendingRetryCopy(
 ): FreestyleCard[] {
   if (!pending) return cards
   const source = cards.find((card) => card.id === sourceId)
+    || cards.find((card) => sourceCardId(card) === sourceId)
   if (!source) return cards
-  const occurrence = createRetryOccurrence(source, roundId, pending.attempt, pending.retryAfterCards)
+  const remainingOthers = Math.max(0, cards.length - pending.anchorIndex - 1)
+  const gap = restudyInterveningGap(remainingOthers, pending.retryAfterCards)
+  let attempt = Math.max(1, pending.attempt)
+  let occurrence = createRetryOccurrence(source, roundId, attempt, gap)
+  if (cards.some((card) => card.id === occurrence.id)) {
+    attempt = nextRetryAttempt(cards, source.id)
+    occurrence = createRetryOccurrence(source, roundId, attempt, gap)
+  }
   if (cards.some((card) => card.id === occurrence.id)) return cards
-  return insertRetryOccurrenceAfterGap(cards, occurrence, pending.anchorIndex, pending.retryAfterCards)
+  return insertRetryOccurrenceAfterGap(cards, occurrence, pending.anchorIndex, gap)
 }
 
 function asLeftoverDue(raw: unknown): Record<string, number> {
@@ -309,11 +323,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
   const ensureUnitEncounter = useCallback(
     (cardId: string, unitRevision: number, allowRenew: boolean) => {
       const existing = queueStateRef.current.unitEncountersByCardId[cardId]
-      if (
-        existing
-        && existing.unitRevision === unitRevision
-        && !(allowRenew && existing.status === 'closed' && existing.passed === false)
-      ) {
+      if (existing && !shouldRenewFreestyleEncounter(existing, unitRevision, allowRenew)) {
         return existing
       }
       const next: FreestyleUnitEncounterState = {
@@ -762,7 +772,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       const stored = readFreestyleFeedConfig()
       const nextToPersist = entryPalaceId == null || useSelectionScope
         ? requested
-        : { ...requested, specific_palace_ids: stored.specific_palace_ids, subject_scope: stored.subject_scope }
+        : persistFreestyleConfigWithoutEntryLock(requested, stored)
       const saved = saveFreestyleFeedConfig(nextToPersist)
       const next = useSelectionScope ? saved : scopeEntryConfig(saved)
       const scopeChanged =
@@ -896,8 +906,12 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       }
       if (options?.restudy) {
         const currentPlan = queueStateRef.current.roundPlan
-        const attempt = (currentPlan?.cardsById[cardId]?.attemptCount ?? currentPlan?.cardsById[logicalCardId]?.attemptCount ?? 0) + 1
-        const retryAfterCards = options.retryAfterCards ?? 3
+        const attempt = nextRetryAttempt(cardsRef.current, cardId, currentPlan?.cardsById)
+        const remainingOthers = Math.max(0, cardsRef.current.length - (settledIndex >= 0 ? settledIndex : 0) - 1)
+        const retryAfterCards = restudyInterveningGap(
+          remainingOthers,
+          options.retryAfterCards ?? RESTUDY_MAX_INTERVENING,
+        )
         // Keep the source card where it is. The retry copy is inserted only after
         // the learner leaves, so snap children do not grow under the current card.
         pendingRestudyByIdRef.current.set(cardId, {
@@ -911,8 +925,8 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           ? updateRoundPlanCard(currentPlan, cardId, {
               status: 'retry',
               lastRating: options.rating ?? currentPlan.cardsById[cardId]?.lastRating ?? null,
-              retryAfterCards: retryAfterCards ?? currentPlan.cardsById[cardId]?.retryAfterCards ?? 3,
-              attemptCount: (currentPlan.cardsById[cardId]?.attemptCount ?? 0) + 1,
+              retryAfterCards,
+              attemptCount: attempt,
             })
           : null
         const incomplete = persistQueueState({ ...markIncomplete(queueStateRef.current, logicalCardId), roundPlan: plan })
@@ -1004,8 +1018,12 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           continue
         }
         if (options.restudy) {
-          const attempt = (plan?.cardsById[cardId]?.attemptCount ?? plan?.cardsById[logicalCardId]?.attemptCount ?? 0) + 1
-          const retryAfterCards = options.retryAfterCards ?? 3
+          const attempt = nextRetryAttempt(nextCards, cardId, plan?.cardsById)
+          const remainingOthers = Math.max(0, nextCards.length - (settledIndex >= 0 ? settledIndex : 0) - 1)
+          const retryAfterCards = restudyInterveningGap(
+            remainingOthers,
+            options.retryAfterCards ?? RESTUDY_MAX_INTERVENING,
+          )
           pendingRestudyByIdRef.current.set(cardId, {
             anchorIndex: settledIndex >= 0 ? settledIndex : currentIndexRef.current,
             attempt,
@@ -1017,7 +1035,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
               status: 'retry',
               lastRating: options.rating ?? plan.cardsById[cardId]?.lastRating ?? null,
               retryAfterCards,
-              attemptCount: (plan.cardsById[cardId]?.attemptCount ?? 0) + 1,
+              attemptCount: attempt,
             })
           }
           nextState = markIncomplete(nextState, logicalCardId)
@@ -1068,19 +1086,28 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     const leftId = leavingCardId ? String(leavingCardId).trim() : ''
     if (!leftId || !pendingRestudyByIdRef.current.has(leftId)) return
     const pending = pendingRestudyByIdRef.current.get(leftId)
-    const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
-    const applyLocal = (cards: FreestyleCard[]) => {
-      if (cards === cardsRef.current) return
-      cardsRef.current = cards
-      setCards(cards)
-      if (viewingId) {
-        const resolved = cards.findIndex((card) => card.id === viewingId)
-        if (resolved >= 0) applyCurrentIndex(resolved, cards)
-      }
-    }
     pendingRestudyByIdRef.current.delete(leftId)
     syncPendingRestudyIds()
     const roundId = queueStateRef.current.roundId
+
+    const pinLiveViewport = (cards: FreestyleCard[]) => {
+      const liveId = resolveLeaveConfirmViewportId({
+        leavingCardId: leftId,
+        liveCardId: cardsRef.current[currentIndexRef.current]?.id ?? null,
+      })
+      if (cards !== cardsRef.current) {
+        cardsRef.current = cards
+        setCards(cards)
+      }
+      if (!liveId) return
+      const resolved = cards.findIndex((card) => card.id === liveId)
+      if (resolved >= 0) applyCurrentIndex(resolved, cards)
+    }
+
+    // Insert before the caller changes index so 下一张 can target the other card by id.
+    const optimistic = insertPendingRetryCopy(cardsRef.current, leftId, pending, roundId)
+    pinLiveViewport(optimistic)
+
     void applyFreestyleRoundActionApi(roundId, {
       operation_id: createOperationId(),
       expected_version: serverPlanVersionRef.current,
@@ -1088,22 +1115,16 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       card_id: leftId,
     }).then((round) => {
       if (queueStateRef.current.roundId !== roundId) return
-      if (round.conflict) {
-        serverPlanVersionRef.current = serverPlanVersion(round)
-        setPlanVersion(serverPlanVersion(round))
-      } else {
-        serverPlanVersionRef.current = serverPlanVersion(round)
-        setPlanVersion(serverPlanVersion(round))
-      }
+      serverPlanVersionRef.current = serverPlanVersion(round)
+      setPlanVersion(serverPlanVersion(round))
       const confirmed = cardsForServerPlan(
         cardsRef.current,
         round.plan,
         round.round_id || roundId,
       )
-      applyLocal(confirmed)
+      pinLiveViewport(confirmed)
     }).catch(() => {
-      const previous = cardsRef.current
-      applyLocal(insertPendingRetryCopy(previous, leftId, pending, roundId))
+      pinLiveViewport(insertPendingRetryCopy(cardsRef.current, leftId, pending, roundId))
     })
   }, [applyCurrentIndex, syncPendingRestudyIds])
 
@@ -1385,6 +1406,14 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     return currentIndexRef.current
   }, [applyCurrentIndex, applyPendingRestudyPlacement])
 
+  const adoptRoundVersion = useCallback((round: { plan_version?: number; version?: number } | null | undefined) => {
+    const version = serverPlanVersion(round)
+    if (version > 0) {
+      serverPlanVersionRef.current = version
+      setPlanVersion(version)
+    }
+  }, [])
+
   /** Reshuffle clears in-memory restudy anchors (new round membership). */
   const reshuffleQueueWithRestudyClear = useCallback(() => {
     pendingRestudyByIdRef.current.clear()
@@ -1429,6 +1458,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
+    adoptRoundVersion,
     queueFrozen,
   }
 }

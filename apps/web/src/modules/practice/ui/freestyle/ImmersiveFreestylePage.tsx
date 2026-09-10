@@ -37,6 +37,9 @@ import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImme
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
 import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
+import {
+  type FreestyleLiveRating,
+} from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
 import type { FreestyleAnkiFlipLiveState } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
 import {
   readFreestyleRevealMap,
@@ -85,6 +88,7 @@ import {
   getFreestylePassedCardIds,
   getFreestyleRatedCardIds,
   isSequentialPalaceBlocked,
+  RESTUDY_MAX_INTERVENING,
   popViewHistory,
   pushViewHistory,
   visibleMountIndices,
@@ -224,6 +228,7 @@ export default function ImmersiveFreestylePage() {
   )
   const [liveAnkiFlip, setLiveAnkiFlip] = useState<FreestyleAnkiFlipLiveState | null>(null)
   const [liveRevealMap, setLiveRevealMap] = useState<Record<string, string> | null>(null)
+  const seededRevealCardIdRef = useRef<string | null>(null)
   const [autoAdvance, setAutoAdvance] = useState(
     () => readFreestyleDisplaySettings().auto_advance,
   )
@@ -249,6 +254,7 @@ export default function ImmersiveFreestylePage() {
   const [channelAdjusting, setChannelAdjusting] = useState(false)
   const [channelAppliedHint, setChannelAppliedHint] = useState('')
   const [yesterdayHintDismissed, setYesterdayHintDismissed] = useState(false)
+  const [inlineEditing, setInlineEditing] = useState(false)
 
   const {
     config,
@@ -281,6 +287,7 @@ export default function ImmersiveFreestylePage() {
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
+    adoptRoundVersion,
     queueFrozen,
   } = useImmersiveQueue(entryPalaceId)
   const queueStateRef = useRef(queueState)
@@ -387,6 +394,12 @@ export default function ImmersiveFreestylePage() {
   queueStateRef.current = queueState
   visualIndexRef.current = visualIndex
   const currentCard = cards[currentIndex] ?? null
+  const currentCardId = currentCard?.id ?? null
+  const revealCacheKey = currentCardId
+  if (seededRevealCardIdRef.current !== revealCacheKey) {
+    seededRevealCardIdRef.current = revealCacheKey
+    setLiveRevealMap(revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null)
+  }
   const palaceRatingTarget = useMemo(() => {
     if (!currentCard || currentCard.type !== 'mindmap_branch' || !currentCard.unit_id) return null
     return buildPalaceRatingTarget({
@@ -437,6 +450,10 @@ export default function ImmersiveFreestylePage() {
     if (userScrollingRef.current) return
     setVisualIndex(currentIndex)
     visualIndexRef.current = currentIndex
+  }, [currentIndex])
+
+  useEffect(() => {
+    setInlineEditing(false)
   }, [currentIndex])
 
   useEffect(() => {
@@ -1120,15 +1137,66 @@ export default function ImmersiveFreestylePage() {
   const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
     setLiveRevealMap((current) => {
       if (JSON.stringify(current) === JSON.stringify(map)) return current
-      if (map) writeFreestyleRevealMap(currentCard?.id, map)
+      if (map && revealCacheKey) writeFreestyleRevealMap(revealCacheKey, map)
       return map
     })
-  }, [currentCard?.id])
-  useEffect(() => {
-    const cardId = currentCard?.id
-    if (!cardId) return
-    setLiveRevealMap(readFreestyleRevealMap(cardId))
-  }, [currentCard?.id])
+  }, [revealCacheKey])
+  const liveRating = useMemo<FreestyleLiveRating | null>(() => {
+    const settled = Object.entries(queueState.unitEncountersByCardId).flatMap(([cardId, encounter]) => {
+      if (encounter.selectedRating == null) return []
+      return [{
+        cardId,
+        rating: encounter.selectedRating,
+        passed: encounter.passed === true,
+        restudy: encounter.passed === false,
+        retryAfterCards: encounter.retryAfterCards ?? 0,
+      }]
+    })
+    const currentId = currentCard?.id ?? null
+    const current = currentId ? queueState.unitEncountersByCardId[currentId] : undefined
+    if (current?.selectedRating == null && settled.length === 0) return null
+    return {
+      planVersion,
+      currentCardId: currentId,
+      selectedRating: current?.selectedRating ?? settled[0]?.rating ?? 0,
+      passed: current?.passed === true,
+      settled,
+    }
+  }, [currentCard?.id, planVersion, queueState.unitEncountersByCardId])
+  const applyLiveRating = useCallback((rating: FreestyleLiveRating) => {
+    if (rating.planVersion > 0) {
+      adoptRoundVersion({ plan_version: rating.planVersion })
+    }
+    const entries = rating.settled.flatMap((settle) => {
+      const current = queueStateRef.current.unitEncountersByCardId[settle.cardId]
+      if (
+        current?.selectedRating === settle.rating
+        && current.passed === settle.passed
+        && current.retryAfterCards === settle.retryAfterCards
+      ) {
+        return []
+      }
+      updateUnitEncounter(settle.cardId, {
+        encounterId: current?.encounterId ?? settle.cardId,
+        roundId: current?.roundId,
+        unitRevision: current?.unitRevision ?? 0,
+        status: current?.status ?? 'open',
+        sessionId: current?.sessionId ?? null,
+        selectedRating: settle.rating,
+        passed: settle.passed,
+        retryAfterCards: settle.retryAfterCards,
+      })
+      return [{
+        cardId: settle.cardId,
+        restudy: settle.restudy,
+        rating: settle.rating,
+        retryAfterCards: settle.retryAfterCards,
+      }]
+    })
+    if (entries.length > 0) {
+      completeCardBatch(entries, rating.currentCardId ?? undefined)
+    }
+  }, [adoptRoundVersion, completeCardBatch, updateUnitEncounter])
   const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])
   useFreestyleLiveMirror({
     route: fullPath,
@@ -1143,10 +1211,12 @@ export default function ImmersiveFreestylePage() {
       : undefined,
     ankiFlip: liveAnkiFlip,
     revealMap: liveRevealMap,
+    rating: liveRating,
     seekCardId: seekLiveCardId,
     applyQuestionState: applyLiveQuestionState,
     applyAnkiFlip: applyLiveAnkiFlip,
     applyRevealMap: applyLiveRevealMap,
+    applyRating: applyLiveRating,
     isActive,
   })
   const roundCompletion = useMemo(
@@ -1299,8 +1369,8 @@ export default function ImmersiveFreestylePage() {
           // Flat near-black: the old top-center green glow pulled the eye up and away
           // from the card. A quiet field keeps attention on the map.
           'bg-[#0b0c0e]',
-          // Immersive freestyle hides mobile bottom nav; use almost full viewport height on phone.
-          'h-[calc(100dvh-env(safe-area-inset-bottom,0px))] min-h-0 rounded-xl border border-white/5 shadow-2xl max-lg:rounded-none max-lg:border-0 lg:h-[calc(100vh-88px)]',
+          // Shell already fills the viewport on mind-map hosts; keep the feed flush.
+          'flex h-full min-h-0 flex-1 flex-col rounded-none border-0',
           freestyleFullscreen && 'fixed inset-0 z-[80] h-[100dvh] max-w-none rounded-none border-0 shadow-none',
         )}
         onKeyDown={handleKeyDown}
@@ -1509,7 +1579,8 @@ export default function ImmersiveFreestylePage() {
           data-page-history-scroll-key="freestyle-immersive"
           // overflow-anchor-none: reordering cards for「下个宫殿」must not let the
           // browser keep the old card glued to the viewport (looks like no jump).
-          className="h-full snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          data-testid="freestyle-feed-scroller"
+          className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           onScroll={handleScroll}
         >
           {loading ? (
@@ -1543,7 +1614,7 @@ export default function ImmersiveFreestylePage() {
                 return (
                   <div
                     key={card.id}
-                    className="h-full min-h-full snap-start snap-always"
+                    className="h-full min-h-0 shrink-0 snap-start snap-always"
                     aria-hidden
                   />
                 )
@@ -1552,10 +1623,10 @@ export default function ImmersiveFreestylePage() {
                 <div
                   key={card.id}
                   className={cn(
-                    'relative box-border flex h-full min-h-full flex-col snap-start snap-always',
+                    'relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always',
                     // Only the 2px rail needs clearance now that the card header is gone;
                     // the title/flip chip floats inside the map surface.
-                    'px-1.5 pb-1.5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] sm:px-2.5 sm:pb-2.5 sm:pt-6',
+                    'p-0 pt-[env(safe-area-inset-top,0px)]',
                   )}
                 >
                   {isMindMapBranchCard(card) ? (
@@ -1568,7 +1639,7 @@ export default function ImmersiveFreestylePage() {
                           roundId={queueState.roundId}
                           planVersion={planVersion}
                           encounter={queueState.unitEncountersByCardId[card.id]}
-                          retryAfterCards={Math.min(3, Math.max(0, cards.length - index - 1))}
+                          retryAfterCards={RESTUDY_MAX_INTERVENING}
                           fullscreen={freestyleFullscreen && index === currentIndex}
                           onToggleFullscreen={(next) => {
                             setFreestyleFullscreen(next ?? !freestyleFullscreen)
@@ -1585,12 +1656,14 @@ export default function ImmersiveFreestylePage() {
                           onRatingScopeChange={updateRatingScope}
                           palaceTarget={index === currentIndex ? palaceRatingTarget : null}
                           onBatchCardsSettled={handleBatchCardsSettled}
+                          onRoundSync={adoptRoundVersion}
                           onEnsureEncounter={ensureUnitEncounter}
                           onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
                           onStaleDrop={handleStaleDrop}
                           onRevisionAdopted={adoptLiveUnitRevision}
                           onSaveFailed={handleCardSaveFailed}
+                          onEditingChange={index === currentIndex ? setInlineEditing : undefined}
                           onUnitsReconciled={() => {
                             void buildQueue(config, {
                               preserveCompleted: true,
@@ -1662,7 +1735,7 @@ export default function ImmersiveFreestylePage() {
           )}
           {/* Closing slot, appended rather than replacing the feed so 回看 still works. */}
           {!loading && !error && roundComplete ? (
-            <div className="relative box-border flex h-full min-h-full flex-col snap-start snap-always px-1.5 pb-1.5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] sm:px-2.5 sm:pb-2.5 sm:pt-6">
+            <div className="relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0 pt-[env(safe-area-inset-top,0px)]">
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
                 durationSeconds={timer.effectiveSeconds}
@@ -1679,6 +1752,7 @@ export default function ImmersiveFreestylePage() {
           Prev/next stay on PWA: one-finger swipe over the map still misses snap.
           Palace skip stays desktop-only so the phone dock is two large targets.
         */}
+        {!inlineEditing ? (
         <FreestyleFeedPager
           canGoPrevious={
             ratingScope === 'palace'
@@ -1699,6 +1773,7 @@ export default function ImmersiveFreestylePage() {
           onPreviousPalace={handleGoToPreviousPalace}
           onSkipPalace={handleSkipToNextPalace}
         />
+        ) : null}
       </div>
     </TooltipProvider>
   )

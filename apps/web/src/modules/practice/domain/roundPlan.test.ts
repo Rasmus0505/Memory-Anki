@@ -57,6 +57,17 @@ describe('round plan reducer', () => {
     const plan = createRoundPlan('round-1', cards, config)
     const retryPlan = createRoundPlan('round-1', next, config, undefined, plan)
     expect(retryPlan.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
+    expect(retryPlan.cardsById[retry.id].retryAfterCards).toBe(3)
+  })
+
+  it('repairs a retry row that was persisted with 0张后', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 0)
+    const next = [...cards, { ...retry, retry_after_cards: 0 }]
+    const previous = createRoundPlan('round-1', next, config)
+    previous.cardsById[retry.id] = { ...previous.cardsById[retry.id], retryAfterCards: 0 }
+    const repaired = createRoundPlan('round-1', next, config, undefined, previous)
+    expect(repaired.cardsById[retry.id].retryAfterCards).toBe(3)
   })
 
   it('keeps a retry occurrence in its original palace near the next palace', () => {
@@ -81,7 +92,7 @@ describe('round plan reducer', () => {
   })
 
   it.each([
-    [0, ['a', 'retry', 'b', 'c', 'd', 'next']],
+    [0, ['a', 'b', 'c', 'd', 'retry', 'next']],
     [1, ['a', 'b', 'retry', 'c', 'd', 'next']],
     [2, ['a', 'b', 'c', 'retry', 'd', 'next']],
     [3, ['a', 'b', 'c', 'd', 'retry', 'next']],

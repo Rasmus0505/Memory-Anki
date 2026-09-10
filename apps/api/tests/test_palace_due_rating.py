@@ -116,7 +116,7 @@ def test_palace_due_rating_scores_every_due_unit(db_session):
     assert db_session.get(ReviewUnitEncounter, "enc-current").status == "open"
 
 
-def test_palace_due_rating_skips_already_rated_and_excluded_units(db_session):
+def test_palace_due_rating_overwrites_already_rated_but_skips_excluded_units(db_session):
     palace, units = _seed_palace(db_session)
     kept, current, *rest = units
     first = _open(db_session, kept, "enc-kept")
@@ -131,8 +131,6 @@ def test_palace_due_rating_skips_already_rated_and_excluded_units(db_session):
         round_id="round-palace",
     )
     opened = _open(db_session, current, "enc-current")
-    before_kept_due = kept.due_date
-    before_kept_stage = kept.stage_index
 
     result = rate_palace_due_units(
         db_session,
@@ -142,14 +140,17 @@ def test_palace_due_rating_skips_already_rated_and_excluded_units(db_session):
         round_id="round-palace",
         current=_current(opened, current, "enc-current"),
         exclude_unit_ids=[unit.id for unit in rest],
+        include_unit_ids=[kept.id, current.id],
     )
 
-    assert kept.id not in result["rated_unit_ids"]
+    assert kept.id in result["rated_unit_ids"]
     assert all(unit.id not in result["rated_unit_ids"] for unit in rest)
     assert current.id in result["rated_unit_ids"]
+    assert result["current"] is not None
     db_session.refresh(kept)
-    assert kept.due_date == before_kept_due
-    assert kept.stage_index == before_kept_stage
+    db_session.refresh(current)
+    assert kept.due_date == current.due_date
+    assert kept.stage_index == current.stage_index
 
 
 def test_palace_due_rating_includes_current_fill_without_moving_it(db_session):

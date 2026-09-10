@@ -6,7 +6,7 @@ import {
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession } from '@/modules/memory/public'
-import type { RevealState } from '@/modules/session/public'
+import { isWeakerRevealMap, type RevealState } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
@@ -25,6 +25,10 @@ import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/uni
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { toast } from '@/shared/feedback/toast'
+import {
+  recordSessionRecorderUiAction,
+  summarizeRevealMapChange,
+} from '@/shared/debug/session-recorder'
 import {
   buildEditorParentMap,
   buildSplitMarkStatusChips,
@@ -124,12 +128,20 @@ export function FreestyleUnitReviewFlipPanel({
     )
     const key = JSON.stringify(reveal.revealMap)
     if (key === lastNotifiedRevealKeyRef.current) return
+    if (
+      lastNotifiedRevealKeyRef.current === ''
+      && syncedRevealMap
+      && isWeakerRevealMap(reveal.revealMap, syncedRevealMap)
+    ) {
+      return
+    }
     lastNotifiedRevealKeyRef.current = key
     onRevealMapChange?.(reveal.revealMap)
   }, [
     onRevealMapChange,
     onRevealProgressChange,
     reveal.revealMap,
+    syncedRevealMap,
     unit.anchor_uid,
     unit.node_uids,
   ])
@@ -181,11 +193,25 @@ export function FreestyleUnitReviewFlipPanel({
   const editBaselineRef = useRef(editorState)
   const editEditorStateRef = useRef(editorState)
   const displayModeRef = useRef<'review' | 'edit'>('review')
+  const persistGenerationRef = useRef(0)
+  const pendingPersistRef = useRef<{
+    state: MindMapEditorState
+    persistOptions?: PersistPalaceEditorOptions
+    quiet: boolean
+    generation: number
+  } | null>(null)
+  const activePersistRef = useRef(false)
+  const lastSavedFingerprintRef = useRef(editorState.editor_fingerprint || '')
+  const lastPersistResultRef = useRef<PersistPalaceEditorResult | null>(null)
   /** Mark-pass reconcile may finish while still editing; rebuild freestyle only after leaving edit. */
   const pendingQueueRebuildRef = useRef(false)
+  const editRevealSnapshotRef = useRef<Record<string, RevealState> | null>(null)
+  const lastRevealRecordKeyRef = useRef('')
+  const revealApiRef = useRef(reveal)
   const isEditMode = displayMode === 'edit'
   editEditorStateRef.current = editEditorState
   displayModeRef.current = displayMode
+  revealApiRef.current = reveal
 
   useLayoutEffect(() => {
     if (!active || isEditMode) return
@@ -252,11 +278,29 @@ export function FreestyleUnitReviewFlipPanel({
     if (isEditMode) return
     setEditEditorState(editorState)
     editBaselineRef.current = editorState
+    lastSavedFingerprintRef.current = editorState.editor_fingerprint || lastSavedFingerprintRef.current
   }, [editorState, isEditMode])
 
   useEffect(() => {
     onEditingChange?.(isEditMode)
   }, [isEditMode, onEditingChange])
+
+  useEffect(() => {
+    if (isEditMode) return
+    const key = JSON.stringify(reveal.revealMap)
+    if (key === lastRevealRecordKeyRef.current) return
+    const previous = lastRevealRecordKeyRef.current
+      ? JSON.parse(lastRevealRecordKeyRef.current) as Record<string, string>
+      : null
+    lastRevealRecordKeyRef.current = key
+    if (!previous) return
+    const detail = summarizeRevealMapChange(
+      previous,
+      reveal.revealMap,
+      (id) => reveal.nodeMap.get(id)?.text ?? '',
+    )
+    if (detail) recordSessionRecorderUiAction('mindmap', '翻卡', detail)
+  }, [isEditMode, reveal.nodeMap, reveal.revealMap])
 
   const showQuietStatus = useCallback((message: string) => {
     if (quietStatusTimerRef.current != null) {
@@ -322,39 +366,77 @@ export function FreestyleUnitReviewFlipPanel({
     state: MindMapEditorState,
     options?: PersistPalaceEditorOptions & { quiet?: boolean },
   ) => {
+    const { quiet, ...persistOptions } = options ?? {}
+    pendingPersistRef.current = {
+      state,
+      persistOptions: Object.keys(persistOptions).length > 0 ? persistOptions : undefined,
+      quiet: Boolean(quiet),
+      generation: persistGenerationRef.current,
+    }
     setSavingEdit(true)
     const previous = saveQueueRef.current.catch(() => null)
     const queued = previous.then(async () => {
+      let lastResult = lastPersistResultRef.current
+      activePersistRef.current = true
       try {
-        const { quiet, ...persistOptions } = options ?? {}
-        const result = await persistPalaceEditor(
-          session.palace_id,
-          state,
-          persistOptions && Object.keys(persistOptions).length > 0 ? persistOptions : undefined,
-        )
-        setEditEditorState(result.state)
-        editBaselineRef.current = result.state
-        editEditorStateRef.current = result.state
-        if (!quiet) {
-          showQuietStatus('已保存宫殿编辑')
+        while (pendingPersistRef.current) {
+          const job = pendingPersistRef.current
+          pendingPersistRef.current = null
+          const fingerprintHint = lastSavedFingerprintRef.current || job.state.editor_fingerprint
+          const payload = fingerprintHint
+            ? { ...job.state, editor_fingerprint: fingerprintHint }
+            : job.state
+          try {
+            const result = await persistPalaceEditor(
+              session.palace_id,
+              payload,
+              job.persistOptions,
+            )
+            const fingerprint = result.state.editor_fingerprint
+            if (fingerprint) lastSavedFingerprintRef.current = fingerprint
+            const adopted = {
+              ...job.state,
+              editor_fingerprint: fingerprint || job.state.editor_fingerprint,
+            }
+            const isLatest = persistGenerationRef.current === job.generation
+            if (isLatest) {
+              setEditEditorState(adopted)
+              editBaselineRef.current = adopted
+              editEditorStateRef.current = adopted
+              if (!job.quiet) {
+                showQuietStatus('已保存宫殿编辑')
+              }
+            }
+            if (job.persistOptions?.reconcileUnits || job.persistOptions?.syncReason) {
+              const stayEditingAfterFlush = (
+                (job.persistOptions.syncReason === 'mark_change' || job.persistOptions.syncReason === 'return_to_review')
+                && displayModeRef.current === 'edit'
+              )
+              notifyUnitReconcile(result.unitReconcile, {
+                rebuildQueue: !stayEditingAfterFlush,
+              })
+            }
+            lastResult = {
+              state: isLatest
+                ? adopted
+                : {
+                    ...editEditorStateRef.current,
+                    editor_fingerprint: fingerprint || editEditorStateRef.current.editor_fingerprint,
+                  },
+              unitReconcile: result.unitReconcile,
+            }
+            lastPersistResultRef.current = lastResult
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '保存宫殿失败'
+            onSaveFailed?.(message)
+            toast.error(message)
+            lastResult = null
+            lastPersistResultRef.current = null
+          }
         }
-        // Only surface reconcile feedback for explicit mark/leave flushes, not keystroke autosave.
-        if (persistOptions?.reconcileUnits || persistOptions?.syncReason) {
-          // mark_change / return_to_review while still editing must not rebuild freestyle mid-pass.
-          const stayEditingAfterFlush = (
-            (persistOptions.syncReason === 'mark_change' || persistOptions.syncReason === 'return_to_review')
-            && displayModeRef.current === 'edit'
-          )
-          notifyUnitReconcile(result.unitReconcile, {
-            rebuildQueue: !stayEditingAfterFlush,
-          })
-        }
-        return result
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '保存宫殿失败'
-        onSaveFailed?.(message)
-        toast.error(message)
-        return null
+        return lastResult
+      } finally {
+        activePersistRef.current = false
       }
     })
     saveQueueRef.current = queued
@@ -372,11 +454,15 @@ export function FreestyleUnitReviewFlipPanel({
   }, [])
 
   /** Typing autosave: plain path, no force reconcile, quiet toast. */
-  const schedulePersist = useCallback((state: MindMapEditorState) => {
+  const schedulePersist = useCallback(() => {
+    if (activePersistRef.current) {
+      clearPersistTimer()
+      return
+    }
     clearPersistTimer()
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null
-      void persistEdit(state, { quiet: true })
+      void persistEdit(editEditorStateRef.current, { quiet: true })
     }, 2000)
   }, [clearPersistTimer, persistEdit])
 
@@ -428,14 +514,28 @@ export function FreestyleUnitReviewFlipPanel({
     void flushPersistWithReconcileRef.current('editor_leave', undefined, true)
   }, [])
 
+  const restoreRevealSnapshot = useCallback((map: Record<string, RevealState> | null) => {
+    if (!map) return
+    revealApiRef.current.setRevealMap(map)
+    onRevealMapChange?.(map)
+  }, [onRevealMapChange])
+
   const handleToggleMode = useCallback(() => {
+    const currentReveal = revealApiRef.current.revealMap
+    const flipProgress = countUnitFlipProgress(currentReveal, unit.node_uids, unit.anchor_uid)
+    const flipDetail = `翻卡 ${flipProgress.revealed}/${flipProgress.total}`
     if (!isEditMode) {
+      editRevealSnapshotRef.current = { ...currentReveal }
+      onRevealMapChange?.(currentReveal)
+      recordSessionRecorderUiAction('mindmap', '进入编辑', flipDetail)
       setEditEditorState(editBaselineRef.current)
       setPermanentMarkMode(false)
       setDisplayMode('edit')
       setModeSyncVersion((value) => value + 1)
       return
     }
+    restoreRevealSnapshot(editRevealSnapshotRef.current)
+    recordSessionRecorderUiAction('mindmap', '返回学习', flipDetail)
     setPermanentMarkMode(false)
     // Optimistic return: switch to review right away and save in the background.
     // The card adopts the saved doc (onEditorStateSaved) once the flush settles;
@@ -451,16 +551,31 @@ export function FreestyleUnitReviewFlipPanel({
           setModeSyncVersion((value) => value + 1)
           return
         }
+        restoreRevealSnapshot(editRevealSnapshotRef.current)
         setReturnSaveState('idle')
         onEditorStateSaved?.(result.state)
       })
-  }, [flushPersistWithReconcile, isEditMode, onEditorStateSaved])
+  }, [
+    flushPersistWithReconcile,
+    isEditMode,
+    onEditorStateSaved,
+    onRevealMapChange,
+    restoreRevealSnapshot,
+    unit.anchor_uid,
+    unit.node_uids,
+  ])
 
   const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
+    persistGenerationRef.current += 1
     setEditEditorState(nextState)
     editBaselineRef.current = nextState
     editEditorStateRef.current = nextState
-    schedulePersist(nextState)
+    pendingPersistRef.current = {
+      state: nextState,
+      quiet: true,
+      generation: persistGenerationRef.current,
+    }
+    schedulePersist()
   }, [schedulePersist])
 
   /**
@@ -475,10 +590,16 @@ export function FreestyleUnitReviewFlipPanel({
     const result = togglePermanentMarkInDoc(doc, String(uid))
     if (result.doc === doc) return
     const nextState = { ...editEditorStateRef.current, editor_doc: result.doc }
+    persistGenerationRef.current += 1
     setEditEditorState(nextState)
     editBaselineRef.current = nextState
     editEditorStateRef.current = nextState
-    schedulePersist(nextState)
+    pendingPersistRef.current = {
+      state: nextState,
+      quiet: true,
+      generation: persistGenerationRef.current,
+    }
+    schedulePersist()
     // Per-node feedback: the chip on the node already shows the mark; a toast per
     // toggle turned a marking pass into a stream of interruptions.
     showQuietStatus(result.marked ? '已标记' : '已取消标记')
@@ -651,8 +772,10 @@ export function FreestyleUnitReviewFlipPanel({
             ? `freestyle-edit:${session.palace_id}:${modeSyncVersion}`
             : reveal.visibleEditorSyncKey
         }
-        unitScopeEditorState={isEditMode ? null : editorState}
-        activeUnitNodeUids={isEditMode ? null : [...new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))]}
+        unitScopeEditorState={editorState}
+        activeUnitNodeUids={[...new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))]}
+        scopeBranchUid={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace' ? (unit.anchor_uid || null) : null}
+        forceExpanded={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace'}
         countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
         onCountBadgeClick={handleOpenNodeQuiz}
         onEditorStateChange={isEditMode ? handleEditorStateChange : undefined}
@@ -695,13 +818,14 @@ export function FreestyleUnitReviewFlipPanel({
         }
         onNodeActive={() => undefined}
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
+        onPaneDoubleClick={handleToggleMode}
         preserveViewOnSync
-        initialViewPolicy={isEditMode ? 'preserve' : 'reset'}
+        initialViewPolicy="preserve"
+        sceneTransitionFallbackNodeId={unit.anchor_uid || null}
         /* flex-1 rather than h-full: the card surface is now a flex column whose first
            row is the unit identity chip, so h-full would overflow it by that row.
-           The phone bottom inset keeps fitView centering inside the visible area
-           instead of under the opaque rating bar. */
-        className="min-h-0 flex-1 max-sm:pb-[6.25rem]"
+           Rating-bar inset lives on the map shell so fitView stays above the overlay. */
+        className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />
       <NodeBoundQuizDialog

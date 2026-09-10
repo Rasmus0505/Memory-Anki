@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
 import {
+  isPassiveLiveStudyFollower,
   isPendingLiveStudyApply,
   isWeakerRevealMap,
+  resolveFreestyleLiveFollowAction,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
   useLiveStudyPresence,
@@ -9,8 +11,10 @@ import {
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 import {
   decodeFreestyleLiveView,
+  isWeakerLiveRating,
   serializeFreestyleLiveView,
   type FreestyleAnkiFlipLiveState,
+  type FreestyleLiveRating,
   type FreestyleLiveView,
 } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
 
@@ -25,10 +29,12 @@ export function useFreestyleLiveMirror({
   questionState,
   ankiFlip,
   revealMap,
+  rating,
   seekCardId,
   applyQuestionState,
   applyAnkiFlip,
   applyRevealMap,
+  applyRating,
   isActive = true,
 }: {
   route: string
@@ -41,10 +47,12 @@ export function useFreestyleLiveMirror({
   questionState: QuizRuntimeState | undefined
   ankiFlip: FreestyleAnkiFlipLiveState | null
   revealMap: Record<string, string> | null
+  rating: FreestyleLiveRating | null
   seekCardId: (cardId: string) => void
   applyQuestionState: (questionId: number, state: QuizRuntimeState) => void
   applyAnkiFlip: (flip: FreestyleAnkiFlipLiveState | null) => void
   applyRevealMap: (revealMap: Record<string, string> | null) => void
+  applyRating: (rating: FreestyleLiveRating) => void
   isActive?: boolean
 }) {
   const presence = useLiveStudyPresence()
@@ -52,8 +60,6 @@ export function useFreestyleLiveMirror({
   const lastSentRef = useRef('')
   const lastAppliedRevisionRef = useRef(-1)
   const pendingApplyRef = useRef(false)
-  const currentCardIdRef = useRef(currentCardId)
-  currentCardIdRef.current = currentCardId
   useEffect(() => {
     if (!presence || presence.isController) return
     if (presence.projection.surface !== 'freestyle') return
@@ -66,21 +72,54 @@ export function useFreestyleLiveMirror({
       viewJson,
       lastAppliedViewJson: lastSentRef.current,
     })
-    if (applyDecision === 'skip') return
+    const followAction = resolveFreestyleLiveFollowAction({
+      applyDecision,
+      remoteCardId: decoded.currentCardId,
+      localCardId: currentCardId,
+      queueCardIds,
+    })
+    if (followAction === 'skip') return
+    if (followAction === 'wait-queue') {
+      skipUntilCardIdRef.current = decoded.currentCardId
+      return
+    }
+    if (followAction === 'seek' && decoded.currentCardId) {
+      skipUntilCardIdRef.current = decoded.currentCardId
+      seekCardId(decoded.currentCardId)
+      return
+    }
+    if (followAction === 'abandon') {
+      lastAppliedRevisionRef.current = presence.projection.revision
+      skipUntilCardIdRef.current = null
+      return
+    }
     lastAppliedRevisionRef.current = presence.projection.revision
-    if (applyDecision === 'consume-revision') return
+    if (followAction === 'consume-revision') return
     lastSentRef.current = viewJson
     pendingApplyRef.current = true
     skipUntilCardIdRef.current = decoded.currentCardId
-    if (decoded.currentCardId && decoded.currentCardId !== currentCardIdRef.current) {
-      seekCardId(decoded.currentCardId)
-    }
     if (decoded.questionState) {
       applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
     }
     applyAnkiFlip(decoded.flip)
-    if (decoded.revealMap) applyRevealMap(decoded.revealMap)
-  }, [applyAnkiFlip, applyQuestionState, applyRevealMap, presence, seekCardId])
+    if (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap)) {
+      applyRevealMap(decoded.revealMap)
+    }
+    if (decoded.rating && !isWeakerLiveRating(decoded.rating, rating)) {
+      applyRating(decoded.rating)
+    }
+  }, [
+    applyAnkiFlip,
+    applyQuestionState,
+    applyRating,
+    applyRevealMap,
+    currentCardId,
+    presence,
+    queueCardIds,
+    rating,
+    revealMap,
+    seekCardId,
+  ])
 
   useEffect(() => {
     if (!presence) return
@@ -97,9 +136,15 @@ export function useFreestyleLiveMirror({
         : null,
       revealMap,
       roundComplete,
+      rating,
     }
     const serialized = serializeFreestyleLiveView(view)
-    const isFollower = Boolean(presence.projection.controllerClientId && !presence.isController)
+    const isFollower = isPassiveLiveStudyFollower({
+      isController: presence.isController,
+      controllerClientId: presence.projection.controllerClientId,
+      remoteSurface: presence.projection.surface,
+      localSurface: 'freestyle',
+    })
     const previous = lastSentRef.current
       ? decodeFreestyleLiveView(JSON.parse(lastSentRef.current) as unknown)
       : null
@@ -109,7 +154,8 @@ export function useFreestyleLiveMirror({
       && previous.roundComplete === view.roundComplete
       && JSON.stringify(previous.flip) === JSON.stringify(view.flip)
       && JSON.stringify(previous.questionState) === JSON.stringify(view.questionState)
-      && JSON.stringify(previous.revealMap) === JSON.stringify(view.revealMap),
+      && JSON.stringify(previous.revealMap) === JSON.stringify(view.revealMap)
+      && JSON.stringify(previous.rating) === JSON.stringify(view.rating),
     )
     const pendingApply = isPendingLiveStudyApply({
       applyCommitted: pendingApplyRef.current,
@@ -118,8 +164,8 @@ export function useFreestyleLiveMirror({
       interactionUnchanged,
     })
     if (!pendingApply) pendingApplyRef.current = false
-    const remoteReveal = presence.projection.surface === 'freestyle'
-      ? decodeFreestyleLiveView(presence.projection.view)?.revealMap
+    const remoteView = presence.projection.surface === 'freestyle'
+      ? decodeFreestyleLiveView(presence.projection.view)
       : null
     if (!shouldPublishLiveStudyView({
       isActive,
@@ -130,7 +176,8 @@ export function useFreestyleLiveMirror({
       interactionUnchanged,
       pendingApply,
       hydrated: presence.connected,
-      weakerThanRemote: isWeakerRevealMap(view.revealMap, remoteReveal),
+      weakerThanRemote: isWeakerRevealMap(view.revealMap, remoteView?.revealMap)
+        || isWeakerLiveRating(view.rating, remoteView?.rating),
     })) return
     lastSentRef.current = serialized
     presence.publish({
@@ -149,6 +196,7 @@ export function useFreestyleLiveMirror({
     questionId,
     questionState,
     queueCardIds,
+    rating,
     revealMap,
     roundComplete,
     route,

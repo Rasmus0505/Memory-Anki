@@ -4,11 +4,17 @@ import {
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
+  progressSegmentHoverLabel,
   retryNodeClass,
-  retryNodeLabel,
   type FreestyleProgressSegment,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/shared/components/ui/tooltip'
 import type { SessionStatus } from '@/shared/hooks/timedSessionModel'
 import { cn } from '@/shared/lib/utils'
 
@@ -30,44 +36,60 @@ function timerTone(status: SessionStatus): 'running' | 'paused' | 'idle' {
 function ProgressRailItem({
   segment,
   palaceGap,
+  hoverLabel,
 }: {
   segment: FreestyleProgressSegment
   palaceGap: boolean
+  hoverLabel: string
 }) {
   const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
   if (segment.kind === 'retry') {
-    const label = retryNodeLabel(segment)
     return (
-      <span
-        data-testid="freestyle-progress-retry-node"
-        data-tone={segment.tone}
-        data-palace-id={palaceId}
-        data-palace-done={segment.palaceDone ? 'true' : 'false'}
-        aria-label={label}
-        title={label}
-        className={cn(
-          'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tabular-nums leading-none',
-          palaceGap ? 'ml-0.5' : null,
-          retryNodeClass,
-        )}
-      >
-        {Math.max(1, Math.round(segment.retryAttempt || 1))}
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            data-testid="freestyle-progress-retry-node"
+            data-tone={segment.tone}
+            data-palace-id={palaceId}
+            data-palace-done={segment.palaceDone ? 'true' : 'false'}
+            aria-label={hoverLabel}
+            className={cn(
+              'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tabular-nums leading-none',
+              palaceGap ? 'ml-0.5' : null,
+              retryNodeClass,
+            )}
+          >
+            {Math.max(1, Math.round(segment.retryAttempt || 1))}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{hoverLabel}</TooltipContent>
+      </Tooltip>
     )
   }
   return (
-    <span
-      data-testid="freestyle-progress-segment"
-      data-tone={segment.tone}
-      data-palace-id={palaceId}
-      data-palace-done={segment.palaceDone ? 'true' : 'false'}
-      aria-hidden
-      className={cn(
-        'h-0.5 min-w-px flex-1 transition-colors',
-        palaceGap ? 'ml-0.5' : null,
-        palaceAccentToneClass(segment.palaceId, segment.tone),
-      )}
-    />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={hoverLabel}
+          className={cn(
+            'flex h-full min-w-px flex-1 items-center',
+            palaceGap ? 'ml-0.5' : null,
+          )}
+        >
+          <span
+            data-testid="freestyle-progress-segment"
+            data-tone={segment.tone}
+            data-palace-id={palaceId}
+            data-palace-done={segment.palaceDone ? 'true' : 'false'}
+            className={cn(
+              'h-0.5 w-full transition-colors',
+              palaceAccentToneClass(segment.palaceId, segment.tone),
+            )}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{hoverLabel}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -112,14 +134,18 @@ export function FreestyleProgressRail({
     schedulePeekCollapse()
   }
 
+  const railLabel = progressRailLabel(summary)
+  const hudText = progressHudText(summary)
+
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
+      <TooltipProvider delayDuration={200} skipDelayDuration={80}>
       {/* Peripheral progress: one segment per card, so restudy re-insertion is visible. */}
-      <button
-        type="button"
+      <div
         data-testid="freestyle-progress-rail"
-        aria-label={progressRailLabel(summary)}
-        className="pointer-events-auto flex h-4 w-full items-center gap-px px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
+        role="img"
+        aria-label={railLabel}
+        className="pointer-events-auto flex h-4 w-full cursor-pointer items-center gap-px px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
         onClick={onOpenPlan}
       >
         {summary.segments.length === 0 ? (
@@ -129,16 +155,17 @@ export function FreestyleProgressRail({
             <ProgressRailItem
               key={segment.cardId}
               segment={segment}
+              hoverLabel={progressSegmentHoverLabel(segment, index, summary.segments.length)}
               palaceGap={
                 index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
               }
             />
           ))
         )}
-      </button>
+      </div>
 
       <div className="flex items-start justify-between gap-1 px-2 pt-1 sm:px-3">
-        {progressHudText(summary) ? (
+        {hudText ? (
           <button
             type="button"
             data-testid="freestyle-progress-hud"
@@ -146,7 +173,7 @@ export function FreestyleProgressRail({
             aria-hidden
             onClick={onOpenPlan}
           >
-            {progressHudText(summary)}
+            {hudText}
           </button>
         ) : (
           <span />
@@ -199,6 +226,7 @@ export function FreestyleProgressRail({
           {overflow}
         </div>
       </div>
+      </TooltipProvider>
     </div>
   )
 }

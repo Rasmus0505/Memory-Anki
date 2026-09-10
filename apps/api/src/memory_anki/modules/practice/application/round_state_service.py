@@ -406,12 +406,8 @@ def rate_freestyle_round_unit(
     row = _row_by_id(session, round_id)
     if row is None:
         raise ValueError("freestyle round not found")
-    if (
-        int(expected_version or 0) > 0
-        and int(row.version or 0) != int(expected_version)
-        and row.last_operation_id != op_id
-    ):
-        return {"item": None, "round": _payload(row, conflict=True)}
+    # Ratings last-write-wins: a stale expected_version still applies so PWA
+    # and desktop cannot 409 each other after one side already scored.
 
     item: dict[str, Any] | None = None
     batch = palace_batch if isinstance(palace_batch, dict) else None
@@ -453,7 +449,7 @@ def rate_freestyle_round_unit(
         session,
         round_id=row.round_id,
         operation_id=op_id,
-        expected_version=int(row.version or 0),
+        expected_version=0,
         card_id=card_id,
         occurrence_id=occurrence_id or "",
         encounter_id=encounter_id,

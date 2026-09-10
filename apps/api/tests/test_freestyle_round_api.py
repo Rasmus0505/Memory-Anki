@@ -202,6 +202,47 @@ def test_rating_then_leave_inserts_at_plus_three(make_client):
     assert after["plan"]["presented_ids"].index(occ_id) == 4
 
 
+def test_stale_rating_overwrites_instead_of_conflict(make_client):
+    client = _client(make_client)
+    created = _create(client, operation_id="op-create", cards=_cards("a", "b", "c"))
+    round_id = created["round_id"]
+    first = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/ratings",
+        json={
+            "operation_id": "op-rate-first",
+            "expected_version": created["version"],
+            "card_id": "a",
+            "occurrence_id": "",
+            "encounter_id": "enc-1",
+            "rating": 1,
+            "study_session_id": "",
+            "unit_id": "",
+            "unit_revision": 0,
+        },
+    )
+    assert first.status_code == 200, first.text
+    first_round = first.json()["round"]
+    stale = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/ratings",
+        json={
+            "operation_id": "op-rate-latest",
+            "expected_version": created["version"],
+            "card_id": "a",
+            "occurrence_id": "",
+            "encounter_id": "enc-1",
+            "rating": 3,
+            "study_session_id": "",
+            "unit_id": "",
+            "unit_revision": 0,
+        },
+    )
+    assert stale.status_code == 200, stale.text
+    payload = stale.json()
+    assert payload["round"]["conflict"] is False
+    assert payload["round"]["version"] > first_round["version"]
+    assert payload["round"]["plan"]["encounters"]["a"]["status"] == "passed"
+
+
 def test_get_restores_same_current_card(make_client):
     client = _client(make_client)
     created = _create(client, operation_id="op-create", cards=_cards("a", "b", "c"))

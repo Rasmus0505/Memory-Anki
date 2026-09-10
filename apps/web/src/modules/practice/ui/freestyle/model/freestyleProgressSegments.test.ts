@@ -8,6 +8,7 @@ import {
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
+  progressSegmentHoverLabel,
   retryNodeClass,
   retryNodeLabel,
   segmentTone,
@@ -166,6 +167,35 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments).toEqual([])
     expect(summary.total).toBe(0)
     expect(summary.position).toBe(0)
+  })
+})
+
+describe('progressSegmentHoverLabel', () => {
+  it('names the hovered tick as that card, not the current card', () => {
+    const cards = [card('one'), card('two'), card('three')]
+    const summary = buildFreestyleProgressSummary(cards, plan(cards), ['one'], [], 'two')
+
+    expect(progressSegmentHoverLabel(summary.segments[0], 0, 3)).toBe('1/3 · 《one》 · 已过')
+    expect(progressSegmentHoverLabel(summary.segments[1], 1, 3)).toBe('2/3 · 《two》 · 当前')
+    expect(progressSegmentHoverLabel(summary.segments[2], 2, 3)).toBe('3/3 · 《three》 · 待练')
+  })
+
+  it('keeps retry occurrence copy on that tick', () => {
+    expect(
+      progressSegmentHoverLabel(
+        {
+          cardId: 'retry:1',
+          tone: 'retry',
+          palaceId: 1,
+          palaceDone: false,
+          kind: 'retry',
+          retryAttempt: 2,
+          sourceLabel: '锚点',
+        },
+        1,
+        4,
+      ),
+    ).toBe('2/4 · 重练《锚点》第 2 次')
   })
 })
 

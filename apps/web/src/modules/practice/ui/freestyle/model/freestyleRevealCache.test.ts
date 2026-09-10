@@ -13,4 +13,10 @@ describe('freestyleRevealCache', () => {
     writeFreestyleRevealMap('card-1', { root: 'revealed', child: 'revealed' })
     expect(readFreestyleRevealMap('card-1')).toEqual({ root: 'revealed', child: 'revealed' })
   })
+
+  it('keeps progress under the card id when an encounter id changes', () => {
+    writeFreestyleRevealMap('card-1', { root: 'revealed', child: 'revealed' })
+    expect(readFreestyleRevealMap('card-1:encounter-9')).toBeNull()
+    expect(readFreestyleRevealMap('card-1')).toEqual({ root: 'revealed', child: 'revealed' })
+  })
 })

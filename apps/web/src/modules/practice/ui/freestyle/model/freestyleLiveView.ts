@@ -7,6 +7,22 @@ export interface FreestyleAnkiFlipLiveState {
   focusUid: string | null
 }
 
+export interface FreestyleLiveRatingSettle {
+  cardId: string
+  rating: number
+  passed: boolean
+  restudy: boolean
+  retryAfterCards: number
+}
+
+export interface FreestyleLiveRating {
+  planVersion: number
+  currentCardId: string | null
+  selectedRating: number
+  passed: boolean
+  settled: FreestyleLiveRatingSettle[]
+}
+
 export interface FreestyleLiveView {
   palaceId: number | null
   currentCardId: string | null
@@ -16,6 +32,7 @@ export interface FreestyleLiveView {
   questionState: { questionId: number; state: QuizRuntimeState } | null
   revealMap: Record<string, string> | null
   roundComplete: boolean
+  rating: FreestyleLiveRating | null
 }
 
 export function encodeFreestyleLiveView(view: FreestyleLiveView): FreestyleLiveView {
@@ -68,7 +85,59 @@ export function decodeFreestyleLiveView(raw: unknown): FreestyleLiveView | null 
         )
       : null,
     roundComplete: record.roundComplete === true,
+    rating: decodeFreestyleLiveRating(record.rating),
   }
+}
+
+function decodeFreestyleLiveRatingSettle(raw: unknown): FreestyleLiveRatingSettle | null {
+  if (!raw || typeof raw !== 'object') return null
+  const record = raw as Record<string, unknown>
+  const cardId = typeof record.cardId === 'string' ? record.cardId : ''
+  const rating = typeof record.rating === 'number' && Number.isInteger(record.rating) ? record.rating : 0
+  if (!cardId || rating < 1 || rating > 4) return null
+  return {
+    cardId,
+    rating,
+    passed: record.passed === true,
+    restudy: record.restudy === true,
+    retryAfterCards: typeof record.retryAfterCards === 'number' && Number.isFinite(record.retryAfterCards)
+      ? Math.max(0, record.retryAfterCards)
+      : 0,
+  }
+}
+
+export function decodeFreestyleLiveRating(raw: unknown): FreestyleLiveRating | null {
+  if (!raw || typeof raw !== 'object') return null
+  const record = raw as Record<string, unknown>
+  const selectedRating = typeof record.selectedRating === 'number' && Number.isInteger(record.selectedRating)
+    ? record.selectedRating
+    : 0
+  if (selectedRating < 1 || selectedRating > 4) return null
+  const settled = Array.isArray(record.settled)
+    ? record.settled.flatMap((item) => {
+        const decoded = decodeFreestyleLiveRatingSettle(item)
+        return decoded ? [decoded] : []
+      })
+    : []
+  return {
+    planVersion: typeof record.planVersion === 'number' && Number.isFinite(record.planVersion)
+      ? record.planVersion
+      : 0,
+    currentCardId: typeof record.currentCardId === 'string' ? record.currentCardId : null,
+    selectedRating,
+    passed: record.passed === true,
+    settled,
+  }
+}
+
+export function isWeakerLiveRating(
+  local: FreestyleLiveRating | null | undefined,
+  remote: FreestyleLiveRating | null | undefined,
+) {
+  if (!remote?.selectedRating) return false
+  if (!local?.selectedRating) return true
+  if (remote.settled.length > 0 && local.settled.length === 0) return true
+  return false
 }
 
 export function serializeFreestyleLiveView(view: FreestyleLiveView) {

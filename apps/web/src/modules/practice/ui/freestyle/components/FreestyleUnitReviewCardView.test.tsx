@@ -13,6 +13,8 @@ import {
   ratingEffectLabel,
   retryPositionLabel,
 } from './FreestyleUnitReviewCardView'
+import { writeFlipCardRevealSettings } from '@/modules/settings/public'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 const apiMocks = vi.hoisted(() => ({
   closeUnitReviewEncounterApi: vi.fn(),
@@ -307,6 +309,7 @@ function renderCard(
     onUnitsReconciled: vi.fn(),
     onRatingSettled: options.onRatingSettled ?? vi.fn(),
     onRatingScopeChange: vi.fn(),
+    onRoundSync: vi.fn(),
   }
   const props = {
     card,
@@ -421,6 +424,8 @@ describe('FreestyleUnitReviewCardView', () => {
       state,
       unitReconcile: null,
     }))
+    window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
   })
 
   afterEach(() => {
@@ -524,6 +529,8 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     expect(capturedPanelProps?.displayMode).toBe('review')
+    expect(capturedPanelProps?.scopeBranchUid).toBeNull()
+    expect(capturedPanelProps?.forceExpanded).toBe(false)
     const moreActions = capturedPanelProps?.toolbarExtensions as {
       moreActions?: Array<{ label: string; onClick: () => void }>
     }
@@ -538,6 +545,16 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => {
       expect(capturedPanelProps?.displayMode).toBe('edit')
     })
+    expect(capturedPanelProps?.scopeBranchUid).toBe('unit-node')
+    expect(capturedPanelProps?.forceExpanded).toBe(true)
+    expect(capturedPanelProps?.initialViewPolicy).toBe('preserve')
+    expect(capturedPanelProps?.sceneTransitionFallbackNodeId).toBe('unit-node')
+    expect(capturedPanelProps?.activeUnitNodeUids).toEqual(['unit-node', 'unit-child'])
+    expect(
+      (capturedPanelProps?.editableEditorState as {
+        editor_doc: { root: { children: Array<{ data: { uid: string } }> } }
+      }).editor_doc.root.children.map((child) => child.data.uid),
+    ).toEqual(['unit-node', 'other-unit'])
     const editMore = capturedPanelProps?.toolbarExtensions as {
       moreActions?: Array<{ label: string; onClick: () => void }>
     }
@@ -554,6 +571,150 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => {
       expect(capturedPanelProps?.displayMode).toBe('review')
     })
+  })
+
+  it('palace editScope shows the full palace instead of the current unit spine', async () => {
+    writeFlipCardRevealSettings({
+      granularity: 'level',
+      stage: 'two-step',
+      editScope: 'palace',
+    })
+    const card = buildCard('unit-palace-edit')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    const enter = moreActions?.moreActions?.find((item) => item.label === '进入编辑')
+    act(() => enter!.onClick())
+
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('edit')
+    })
+    expect(capturedPanelProps?.scopeBranchUid).toBeNull()
+    expect(capturedPanelProps?.forceExpanded).toBe(false)
+  })
+
+  it('toggles edit mode from pane double-click both ways without stealing node click', async () => {
+    const card = buildCard('unit-pane-gestures')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(typeof capturedPanelProps?.onPaneDoubleClick).toBe('function')
+    expect(capturedPanelProps?.onPaneLongPress).toBeUndefined()
+    expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
+    expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
+    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).toContain('pb-[6.75rem]')
+    expect(screen.getByTestId('freestyle-rating-bar')).toBeTruthy()
+
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('edit')
+    })
+    expect(typeof capturedPanelProps?.onPaneDoubleClick).toBe('function')
+    expect(capturedPanelProps?.onPaneLongPress).toBeUndefined()
+    expect(screen.queryByTestId('freestyle-rating-bar')).toBeNull()
+    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).not.toContain('pb-[6.75rem]')
+
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('review')
+    })
+    expect(typeof capturedPanelProps?.onPaneDoubleClick).toBe('function')
+    expect(capturedPanelProps?.onPaneLongPress).toBeUndefined()
+    expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
+    expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
+    expect(screen.getByTestId('freestyle-rating-bar')).toBeTruthy()
+    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).toContain('pb-[6.75rem]')
+  })
+
+  it('keeps flip progress and preserve camera policy across edit/review toggles', async () => {
+    const card = buildCard('unit-mode-flip-progress')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const badge = await screen.findByTestId('flip-progress-badge')
+    expect(badge.textContent).toBe('0/2')
+    expect(capturedPanelProps?.initialViewPolicy).toBe('preserve')
+    expect(capturedPanelProps?.sceneTransitionFallbackNodeId).toBe('unit-node')
+
+    const revealTarget = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealTarget))
+    flushRevealFrame()
+    expect(badge.textContent).toBe('1/2')
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: { root: { children: Array<{ data: { text: string } }> } }
+      }).editor_doc.root.children[0]?.data.text,
+    ).toBe('当前单元')
+
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('edit')
+    })
+    expect(badge.textContent).toBe('1/2')
+    expect(capturedPanelProps?.initialViewPolicy).toBe('preserve')
+    expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
+    expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
+
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => {
+      expect(capturedPanelProps?.displayMode).toBe('review')
+    })
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalled())
+    expect(badge.textContent).toBe('1/2')
+    expect(capturedPanelProps?.initialViewPolicy).toBe('preserve')
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: { root: { children: Array<{ data: { text: string } }> } }
+      }).editor_doc.root.children[0]?.data.text,
+    ).toBe('当前单元')
+    expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
+    expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
+  })
+
+  it('keeps flip progress after persist returns a new fingerprint and encounter id', async () => {
+    const card = buildCard('unit-mode-flip-progress-persist')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    persistMocks.persistPalaceEditor.mockImplementation(async (_palaceId, state) => ({
+      state: {
+        ...state,
+        editor_fingerprint: 'after-return-to-review',
+        editor_doc: {
+          ...(typeof state.editor_doc === 'object' && state.editor_doc ? state.editor_doc : {}),
+          layout: 'logicalStructure',
+          theme: { template: 'avocado', config: {} },
+        },
+      },
+      unitReconcile: null,
+    }))
+    const view = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const badge = await screen.findByTestId('flip-progress-badge')
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    flushRevealFrame()
+    expect(badge.textContent).toBe('1/2')
+
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+    act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalled())
+    expect(badge.textContent).toBe('1/2')
+
+    view.rerenderCard({
+      encounter: queueEncounter({ encounterId: 'encounter-after-reconcile' }),
+    })
+    expect(screen.getByTestId('flip-progress-badge').textContent).toBe('1/2')
   })
 
   it('opens 复习进度 panel from moreActions', async () => {
@@ -695,7 +856,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(screen.queryByTestId('freestyle-return-saving')).toBeNull())
     // The card adopted the saved doc so review reflects the edited content.
     // The panel adopted the saved doc (editable state) after the flush settled.
-    expect(capturedPanelProps?.editableEditorState).toBe(capturedSavedState)
+    expect(capturedPanelProps?.editableEditorState).toEqual(capturedSavedState)
   })
 
   it('returns to edit mode with local changes intact when the return save fails', async () => {
@@ -815,6 +976,98 @@ describe('FreestyleUnitReviewCardView', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('does not restore a deleted card when a slower pre-delete save settles', async () => {
+    const card = buildCard('unit-stale-save-restore')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }
+    act(() => moreActions?.moreActions?.find((item) => item.label === '进入编辑')!.onClick())
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+
+    const withCard = {
+      editor_doc: palaceEditorDoc,
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+    const withoutCard = {
+      editor_doc: {
+        root: {
+          data: { uid: 'root', text: '完整宫殿' },
+          children: [
+            {
+              data: { uid: 'unit-node', text: '当前单元' },
+              children: [],
+            },
+            {
+              data: { uid: 'other-unit', text: '其他单元' },
+              children: [{ data: { uid: 'other-child', text: '其他单元子节点' }, children: [] }],
+            },
+          ],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    }
+    const unitChildUids = (state: unknown) => {
+      const doc = (state as {
+        editor_doc?: {
+          root?: {
+            children?: Array<{ data?: { uid?: string }; children?: Array<{ data?: { uid?: string } }> }>
+          }
+        }
+      } | null)?.editor_doc
+      const unit = doc?.root?.children?.find((node) => node.data?.uid === 'unit-node')
+      return (unit?.children ?? []).map((node) => node.data?.uid)
+    }
+
+    let resolveFirst!: (result: { state: unknown; unitReconcile: null }) => void
+    const firstGate = new Promise<{ state: unknown; unitReconcile: null }>((res) => {
+      resolveFirst = res
+    })
+    persistMocks.persistPalaceEditor.mockImplementationOnce((_palaceId, state) => {
+      capturedSavedState = state
+      return firstGate
+    })
+
+    const onEditorStateChange = capturedPanelProps?.onEditorStateChange as (
+      state: typeof withCard,
+    ) => void
+    vi.useFakeTimers()
+    try {
+      act(() => onEditorStateChange(withCard))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100)
+      })
+      expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(1)
+      act(() => onEditorStateChange(withoutCard))
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(unitChildUids(capturedPanelProps?.editableEditorState)).toEqual([])
+
+    await act(async () => {
+      resolveFirst({
+        state: { ...withCard, editor_fingerprint: 'fp-stale' },
+        unitReconcile: null,
+      })
+    })
+
+    expect(unitChildUids(capturedPanelProps?.editableEditorState)).toEqual([])
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(2))
+    expect(persistMocks.persistPalaceEditor).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ editor_doc: withoutCard.editor_doc }),
+      undefined,
+    )
   })
 
   it('keeps reveal and hide interactions scoped to presentation only', async () => {
@@ -1311,6 +1564,7 @@ describe('FreestyleUnitReviewCardView', () => {
     fireEvent.click(screen.getByRole('button', { name: /困难：3张后重练/ }))
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.closeUnitReviewEncounterApi).not.toHaveBeenCalled()
+    expect(view.onRoundSync).toHaveBeenCalledWith(expect.objectContaining({ plan_version: 1 }))
 
     // A new queue round may be selected while the old encounter is still open.
     // Closing must retain the encounter's server-owned round identity.
@@ -1426,5 +1680,70 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(await screen.findByRole('button', { name: '重试加载' })).toBeTruthy()
     expect(onStaleDrop).not.toHaveBeenCalled()
     expect(onSaveFailed).toHaveBeenCalled()
+  })
+
+  it('does not post when the mirrored rating is already selected', async () => {
+    const card = buildCard('unit-mirrored-rating')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    const { onSaveFailed } = renderCard(card, {
+      ratingScope: 'palace',
+      encounter: queueEncounter({
+        status: 'open',
+        sessionId: session.id,
+        selectedRating: 3,
+        passed: true,
+      }),
+      palaceTarget: {
+        palaceId: card.palace_id,
+        dueCount: 1,
+        excludeUnitIds: [],
+        includeUnitIds: [card.unit_id],
+        settleCards: [{ cardId: card.id, unitId: card.unit_id }],
+      },
+    })
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
+    expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('retries a stale palace rating once instead of throwing', async () => {
+    const card = buildCard('unit-stale-palace')
+    const session = buildSession(card.unit_id!)
+    const unitResult = ratingResult(session, 2, 'batch-overwrite')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateFreestyleRoundUnitApi
+      .mockResolvedValueOnce({ item: null, round: { conflict: true, version: 4, plan_version: 4 } })
+      .mockResolvedValueOnce({
+        item: {
+          batch_id: 'batch-overwrite',
+          palace_id: card.palace_id,
+          rating: 2,
+          items: [unitResult],
+          rated_unit_ids: [card.unit_id],
+          remaining_due_count: 1,
+          current: unitResult,
+        },
+        round: { conflict: false, version: 5, plan_version: 5 },
+      })
+    const { onSaveFailed, onRoundSync, onBatchCardsSettled } = renderCard(card, {
+      ratingScope: 'palace',
+      palaceTarget: {
+        palaceId: card.palace_id,
+        dueCount: 1,
+        excludeUnitIds: [],
+        includeUnitIds: [card.unit_id],
+        settleCards: [{ cardId: card.id, unitId: card.unit_id }],
+      },
+    })
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(2))
+    expect(onRoundSync).toHaveBeenCalled()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(screen.queryByText(/宫殿评分没有返回当前单元结果/)).toBeNull()
+    expect(onBatchCardsSettled).toHaveBeenCalled()
   })
 })

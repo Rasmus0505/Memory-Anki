@@ -1,5 +1,5 @@
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
-import { cardPalaceId } from './queueState'
+import { bookedRetryAfterCards, cardPalaceId } from './queueState'
 
 export type FreestyleRoundPlanCardStatus =
   | 'pending'
@@ -141,20 +141,27 @@ export function createRoundPlan(
     const id = String(card.id || '').trim()
     if (!id) return
     const existing = previous?.cardsById[id]
-    nextById[id] = existing && existing.status !== 'stale' ? existing : {
-      cardId: id,
-      sourceCardId: String(card.source_card_id || id),
-      occurrenceKind: card.occurrence_kind === 'retry' ? 'retry' : 'source',
-      retryAttempt: Math.max(0, Math.round(Number(card.retry_attempt) || 0)),
-      palaceId: cardPalaceId(card),
-      palaceTitle: cardPalaceTitle(card),
-      label: cardLabel(card),
-      kind: card.type,
-      status: 'pending',
-      lastRating: null,
-      retryAfterCards: 0,
-      attemptCount: 0,
-      updatedAt: now,
+    if (existing && existing.status !== 'stale') {
+      const retryGap = bookedRetryAfterCards(card)
+      nextById[id] = existing.occurrenceKind === 'retry' && existing.retryAfterCards === 0 && retryGap > 0
+        ? { ...existing, retryAfterCards: retryGap }
+        : existing
+    } else {
+      nextById[id] = {
+        cardId: id,
+        sourceCardId: String(card.source_card_id || id),
+        occurrenceKind: card.occurrence_kind === 'retry' ? 'retry' : 'source',
+        retryAttempt: Math.max(0, Math.round(Number(card.retry_attempt) || 0)),
+        palaceId: cardPalaceId(card),
+        palaceTitle: cardPalaceTitle(card),
+        label: cardLabel(card),
+        kind: card.type,
+        status: 'pending',
+        lastRating: null,
+        retryAfterCards: bookedRetryAfterCards(card),
+        attemptCount: 0,
+        updatedAt: now,
+      }
     }
   })
 
@@ -164,7 +171,9 @@ export function createRoundPlan(
   // old stale entry overwrite a fresh card with the same stable id.
   Object.entries(previous?.cardsById ?? {}).forEach(([id, item]) => {
     if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry') {
-      nextById[id] = item
+      nextById[id] = item.occurrenceKind === 'retry' && item.retryAfterCards === 0
+        ? { ...item, retryAfterCards: bookedRetryAfterCards({ occurrence_kind: 'retry', retry_after_cards: 0 }) }
+        : item
     }
   })
 

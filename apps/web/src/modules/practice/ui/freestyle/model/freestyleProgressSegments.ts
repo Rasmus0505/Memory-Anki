@@ -188,6 +188,29 @@ export function retryNodeLabel(segment: FreestyleProgressSegment): string {
   return label ? `重练《${label}》第 ${attempt} 次` : `重练第 ${attempt} 次`
 }
 
+function segmentStatusLabel(segment: FreestyleProgressSegment): string {
+  if (segment.kind === 'retry') return retryNodeLabel(segment)
+  if (segment.tone === 'current') return '当前'
+  if (segment.tone === 'done') return '已过'
+  if (segment.waitingRetry || segment.tone === 'retry') return '稍后重练'
+  return '待练'
+}
+
+/** Hover copy for one rail tick: that card, not the card currently on screen. */
+export function progressSegmentHoverLabel(
+  segment: FreestyleProgressSegment,
+  index: number,
+  total: number,
+): string {
+  const place = total > 0 ? `${index + 1}/${total}` : ''
+  if (segment.kind === 'retry') {
+    return [place, retryNodeLabel(segment)].filter(Boolean).join(' · ')
+  }
+  const name = String(segment.sourceLabel || '').trim()
+  const titled = name ? `《${name}》` : ''
+  return [place, titled, segmentStatusLabel(segment)].filter(Boolean).join(' · ')
+}
+
 export function buildFreestyleProgressSummary(
   cards: FreestyleCard[],
   roundPlan: FreestyleRoundPlanState | null,
@@ -216,11 +239,11 @@ export function buildFreestyleProgressSummary(
       palaceId: cardPalaceId(card),
       palaceDone: false,
       kind: retryKind ? 'retry' : 'source',
+      sourceLabel: progressCardLabel(card, cards, roundPlan),
       ...(retryKind
         ? {
             retryAttempt: Math.max(1, Math.round(Number(card.retry_attempt) || 1)),
             sourceCardId: sourceId,
-            sourceLabel: progressCardLabel(card, cards, roundPlan),
           }
         : {
             waitingRetry,

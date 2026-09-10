@@ -62,12 +62,43 @@ function readUnitReconcile(response: unknown): PalaceUnitReconcileResult | null 
   return value ?? null
 }
 
+function readSaveFingerprint(response: unknown): string {
+  if (!response || typeof response !== 'object') return ''
+  const record = response as {
+    editor_fingerprint?: unknown
+    snapshot?: { revision?: unknown } | null
+  }
+  if (typeof record.editor_fingerprint === 'string' && record.editor_fingerprint.trim()) {
+    return record.editor_fingerprint.trim()
+  }
+  const revision = record.snapshot?.revision
+  return typeof revision === 'string' ? revision.trim() : ''
+}
+
+function expectedFingerprintFromState(state: MindMapEditorState): string | null {
+  const value = state.editor_fingerprint
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** Keep the local tree; ack/full responses may only refresh the revision token. */
+export function editorStateFromLocalSave(
+  sent: MindMapEditorState,
+  response: unknown,
+): MindMapEditorState {
+  const fingerprint = readSaveFingerprint(response)
+  return {
+    ...sent,
+    editor_fingerprint: fingerprint || sent.editor_fingerprint,
+  }
+}
+
 /**
  * Persist freestyle inline palace edits.
- * - No options → plain autosave (`savePalaceEditorApi`, no force reconcile),
+ * - No options → plain autosave (`savePalaceEditorApi` ack, no force reconcile),
  *   including mid-pass permanent-mark toggles.
  * - With options → `savePalaceEditorWithOptionsApi` so finished mark pass /
  *   leave / return-to-review can set `sync_reason` / `reconcile_units`.
+ * Never rebuilds `editor_doc` from the save response.
  */
 export async function persistPalaceEditor(
   palaceId: number,
@@ -82,22 +113,33 @@ export async function persistPalaceEditor(
       || (options.editorSource != null && options.editorSource !== '')
     ),
   )
+  const expectedFingerprint = expectedFingerprintFromState(state)
   const buildOptionsPayload = (extra?: Record<string, unknown>) => ({
     ...state,
     editor_source: (options?.editorSource as PalaceEditorSource | undefined) ?? 'palace_edit_autosave',
+    expected_editor_fingerprint: expectedFingerprint,
+    response_mode: 'ack' as const,
     ...(options?.syncReason ? { sync_reason: options.syncReason } : {}),
     ...(options?.reconcileUnits ? { reconcile_units: true } : {}),
     ...extra,
+  })
+  const adopt = (response: unknown): PersistPalaceEditorResult => ({
+    state: editorStateFromLocalSave(state, response),
+    unitReconcile: readUnitReconcile(response),
   })
 
   try {
     const response = hasOptions
       ? await savePalaceEditorWithOptionsApi(palaceId, buildOptionsPayload())
-      : await savePalaceEditorApi(palaceId, state)
-    return {
-      state: readMindMapEditorState(response),
-      unitReconcile: readUnitReconcile(response),
-    }
+      : await savePalaceEditorApi(
+        palaceId,
+        {
+          ...state,
+          expected_editor_fingerprint: expectedFingerprint,
+        },
+        'ack',
+      )
+    return adopt(response)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || '')
     if (!message.includes('危险结构变更')) throw error
@@ -110,10 +152,7 @@ export async function persistPalaceEditor(
       confirm_dangerous_change: true,
       editor_source: 'palace_edit',
     }))
-    return {
-      state: readMindMapEditorState(response),
-      unitReconcile: readUnitReconcile(response),
-    }
+    return adopt(response)
   }
 }
 

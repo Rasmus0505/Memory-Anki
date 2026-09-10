@@ -754,6 +754,27 @@ def _apply_rating_from_snapshot(
     return result
 
 
+def _first_rated_round_encounter(
+    session: Session,
+    *,
+    unit_id: str,
+    round_id: str,
+) -> ReviewUnitEncounter | None:
+    requested_round_id = str(round_id or "").strip()
+    if not requested_round_id:
+        return None
+    return (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.unit_id == unit_id,
+            ReviewUnitEncounter.round_id == requested_round_id,
+            ReviewUnitEncounter.selected_rating.isnot(None),
+        )
+        .order_by(ReviewUnitEncounter.created_at.asc())
+        .first()
+    )
+
+
 def _rate_open_encounter(
     session: Session,
     *,
@@ -764,16 +785,19 @@ def _rate_open_encounter(
     operation_id: str,
     rating: int,
     batch_id: str | None = None,
+    baseline_from: ReviewUnitEncounter | None = None,
 ) -> dict[str, Any]:
-    """Apply a rating to an open encounter without committing."""
-    previous = (
-        session.get(ReviewUnitRatingOperation, encounter.effective_operation_id)
-        if encounter.effective_operation_id
-        else None
-    )
+    """Apply a rating without committing.
+
+    If this unit already has a rated encounter in the same round, reuse that
+    encounter's baseline so a later rating overwrites instead of stacking SRS.
+    """
+    source = baseline_from or encounter
+    previous_id = source.effective_operation_id or encounter.effective_operation_id
+    previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
     if previous is not None and previous.rating == rating and not batch_id:
         return json.loads(previous.after_state_json)
-    before = json.loads(encounter.baseline_state_json)
+    before = json.loads(source.baseline_state_json)
     result = _apply_rating_from_snapshot(state, item, before, rating)
     now = utc_now_naive()
     if previous is not None:
@@ -1000,6 +1024,12 @@ def rate_review_unit(
     if encounter.unit_revision != state.revision:
         raise ValueError("review unit changed; rebuild the queue")
 
+    requested_round_id = str(round_id or encounter.round_id or "").strip()
+    original = _first_rated_round_encounter(
+        session,
+        unit_id=state.id,
+        round_id=requested_round_id,
+    )
     after = _rate_open_encounter(
         session,
         study=study,
@@ -1008,6 +1038,7 @@ def rate_review_unit(
         encounter=encounter,
         operation_id=op_id,
         rating=normalize_rating(rating),
+        baseline_from=original,
     )
     session.commit()
     return after
@@ -1026,8 +1057,8 @@ def rate_palace_due_units(
 ) -> dict[str, Any]:
     """Rate every still-due unit of a palace, plus the open current card.
 
-    Already-rated units in this round stay put unless they are the current
-    open encounter (which may amend). Sibling units get a 0-second encounter
+    A later palace rating overwrites this round's include/exclude batch,
+    including units already rated. Sibling units get a 0-second encounter
     so only the card under the viewport bills time.
     """
     batch_id = str(operation_id or "").strip()
@@ -1084,17 +1115,16 @@ def rate_palace_due_units(
     if current_encounter.unit_revision != current_state.revision:
         raise ValueError("review unit changed; rebuild the queue")
 
-    already_rated = _round_rated_unit_ids(session, int(palace_id), requested_round_id)
     targets: dict[str, ReviewUnitState] = {}
     for state in _due_states_for_palace(session, int(palace_id)):
         if state.id == current_state.id:
             targets[state.id] = state
             continue
-        if state.id in excluded or state.id in already_rated:
+        if state.id in excluded:
             continue
         targets[state.id] = state
     for unit_id in included:
-        if unit_id in excluded or unit_id in already_rated or unit_id in targets:
+        if unit_id in excluded or unit_id in targets:
             continue
         extra = session.get(ReviewUnitState, unit_id)
         if extra is None or not extra.active or extra.palace_id != int(palace_id):
@@ -1104,6 +1134,11 @@ def rate_palace_due_units(
 
     operations: list[ReviewUnitRatingOperation] = []
     current_item = _session_item(session, current_study.id, current_state.id)
+    current_original = _first_rated_round_encounter(
+        session,
+        unit_id=current_state.id,
+        round_id=requested_round_id,
+    )
     _rate_open_encounter(
         session,
         study=current_study,
@@ -1113,6 +1148,7 @@ def rate_palace_due_units(
         operation_id=batch_id,
         rating=normalized,
         batch_id=batch_id,
+        baseline_from=current_original,
     )
     current_op = session.get(ReviewUnitRatingOperation, batch_id)
     if current_op is not None:
@@ -1122,6 +1158,31 @@ def rate_palace_due_units(
         if unit_id == current_state.id:
             continue
         sibling_op_id = f"{batch_id}:{state.id}"
+        original = _first_rated_round_encounter(
+            session,
+            unit_id=state.id,
+            round_id=requested_round_id,
+        )
+        if original is not None:
+            study = session.get(StudySession, original.study_session_id)
+            if study is None:
+                raise ValueError("review encounter not found")
+            item = _session_item(session, study.id, state.id)
+            _rate_open_encounter(
+                session,
+                study=study,
+                state=state,
+                item=item,
+                encounter=original,
+                operation_id=sibling_op_id,
+                rating=normalized,
+                batch_id=batch_id,
+                baseline_from=original,
+            )
+            sibling_op = session.get(ReviewUnitRatingOperation, sibling_op_id)
+            if sibling_op is not None:
+                operations.append(sibling_op)
+            continue
         sibling_encounter_id = f"{batch_id}:enc:{state.id}"
         study, item = _create_one_unit_freestyle_session(
             session,

@@ -10,6 +10,9 @@ import {
   findNextPalaceIndex,
   filterMutedPalaces,
   insertRetryOccurrenceAfterGap,
+  nextRetryAttempt,
+  resolveLeaveConfirmViewportId,
+  restudyInterveningGap,
   moveRemainingPalaceToTail,
   mergeQueuePreservingHistory,
   needsRestudyAfterRatings,
@@ -644,6 +647,31 @@ describe('restudy placement counts every presented card', () => {
     expect(cardPalaceId(next[4])).toBe(1)
   })
 
+
+  it('never inserts a retry as the next card when other cards remain', () => {
+    const cards = [branch('a', 1), branch('b', 1), branch('c', 1), branch('d', 1)]
+    const occurrence = createRetryOccurrence(cards[0], 'round-1', 1, 0)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 0, 0)
+    expect(next[1].id).toBe('b')
+    expect(next.map((card) => card.id)).toEqual(['a', 'b', 'c', 'd', occurrence.id])
+  })
+
+  it('allows immediate retry only when nothing else remains', () => {
+    const cards = [branch('a', 1)]
+    const occurrence = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, occurrence, 0, 3)
+    expect(next.map((card) => card.id)).toEqual(['a', occurrence.id])
+  })
+
+  it('places a retry after the remaining 1-2 cards instead of waiting for a full 3', () => {
+    const cards = [branch('a', 1), branch('b', 1)]
+    const occurrence = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    expect(insertRetryOccurrenceAfterGap(cards, occurrence, 0, 3).map((card) => card.id)).toEqual([
+      'a',
+      'b',
+      occurrence.id,
+    ])
+  })
   it('keeps a restudied unit inside its palace via placeRestudyCardWithMaxGap', () => {
     const cards = [
       branch('a1', 1),
@@ -661,5 +689,28 @@ describe('restudy placement counts every presented card', () => {
       'b2',
       'b3',
     ])
+  })
+})
+
+describe('restudy gap helpers', () => {
+  it('clamps requested 0 to the max gap when other cards remain', () => {
+    expect(restudyInterveningGap(5, 0)).toBe(3)
+    expect(restudyInterveningGap(2, 0)).toBe(2)
+    expect(restudyInterveningGap(1, 3)).toBe(1)
+    expect(restudyInterveningGap(0, 3)).toBe(0)
+  })
+
+  it('pins the live viewport after leave, not the source card', () => {
+    expect(resolveLeaveConfirmViewportId({ leavingCardId: 'a', liveCardId: 'b' })).toBe('b')
+    expect(resolveLeaveConfirmViewportId({ leavingCardId: 'a', liveCardId: 'a' })).toBe('a')
+    expect(resolveLeaveConfirmViewportId({ leavingCardId: 'a', liveCardId: null })).toBeNull()
+  })
+
+  it('increments retry attempt past an existing occurrence', () => {
+    const source = { id: 'a', type: 'mindmap_branch', palace_id: 1 } as FreestyleCard
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    expect(nextRetryAttempt([source], 'a')).toBe(1)
+    expect(nextRetryAttempt([source, retry], retry.id)).toBe(2)
+    expect(nextRetryAttempt([source, retry], 'a', { a: { attemptCount: 1 } })).toBe(2)
   })
 })

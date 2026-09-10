@@ -11,10 +11,10 @@ import { FreestyleProgressRail } from './FreestyleProgressRail'
 function summary(overrides: Partial<FreestyleProgressSummary> = {}): FreestyleProgressSummary {
   return {
     segments: [
-      { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false },
-      { cardId: 'two', tone: 'retry', palaceId: 1, palaceDone: false },
-      { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false },
-      { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false },
+      { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', sourceLabel: 'one' },
+      { cardId: 'two', tone: 'retry', palaceId: 1, palaceDone: false, kind: 'source', sourceLabel: 'two', waitingRetry: true },
+      { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false, kind: 'source', sourceLabel: 'three' },
+      { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false, kind: 'source', sourceLabel: 'four' },
     ],
     position: 3,
     total: 4,
@@ -90,9 +90,21 @@ describe('FreestyleProgressRail', () => {
   it('speaks the counts the decorative rail cannot', () => {
     renderRail()
 
-    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
-      .toBe('本轮进度 3/4，已通过 1。点击查看本轮安排')
+    const label = '本轮进度 3/4，已通过 1。点击查看本轮安排'
+    const rail = screen.getByTestId('freestyle-progress-rail')
+    expect(rail.getAttribute('aria-label')).toBe(label)
+    expect(rail.getAttribute('title')).toBeNull()
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4 · 过 1')
+    expect(screen.getByTestId('freestyle-progress-hud').getAttribute('title')).toBeNull()
+  })
+
+  it('names the hovered tick as that card, not the card currently on screen', () => {
+    renderRail()
+
+    expect(screen.getByLabelText('1/4 · 《one》 · 已过')).toBeTruthy()
+    expect(screen.getByLabelText('2/4 · 《two》 · 稍后重练')).toBeTruthy()
+    expect(screen.getByLabelText('3/4 · 《three》 · 当前')).toBeTruthy()
+    expect(screen.getByLabelText('4/4 · 《four》 · 待练')).toBeTruthy()
   })
 
   it('keeps the planned denominator when restudy insertions lengthen the feed', () => {
@@ -105,9 +117,11 @@ describe('FreestyleProgressRail', () => {
       }),
     })
 
+    const label = '本轮进度 3/4，重练 1 张，已通过 1。点击查看本轮安排'
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4 · 重练 +1 · 过 1')
-    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
-      .toBe('本轮进度 3/4，重练 1 张，已通过 1。点击查看本轮安排')
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label')).toBe(label)
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('title')).toBeNull()
+    expect(screen.getByTestId('freestyle-progress-hud').getAttribute('title')).toBeNull()
   })
 
   it('renders retry occurrences as numbered amber circles', () => {
@@ -136,8 +150,8 @@ describe('FreestyleProgressRail', () => {
 
     const node = screen.getByTestId('freestyle-progress-retry-node')
     expect(node.textContent).toBe('2')
-    expect(node.getAttribute('aria-label')).toBe('重练《one》第 2 次')
-    expect(node.getAttribute('title')).toBe('重练《one》第 2 次')
+    expect(node.getAttribute('aria-label')).toBe('2/3 · 重练《one》第 2 次')
+    expect(node.getAttribute('title')).toBeNull()
     expect(node.className).toContain('rounded-full')
     expect(node.className).toContain(retryNodeClass)
     expect(screen.getAllByTestId('freestyle-progress-segment')).toHaveLength(2)
@@ -169,6 +183,7 @@ describe('FreestyleProgressRail', () => {
     expect(screen.queryAllByTestId('freestyle-progress-segment')).toHaveLength(0)
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
       .toBe('本轮暂无安排。点击查看本轮安排')
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('title')).toBeNull()
   })
 
   describe('timer', () => {

@@ -106,7 +106,7 @@ export function nextUnfinishedCardId(
   return cards.find((card) => !isFinishedCard(card.id, card, completed, excluded, completedUnits))?.id ?? null
 }
 
-export function serverPlanVersion(round: FreestyleRoundStatePayload | null | undefined) {
+export function serverPlanVersion(round: Partial<Pick<FreestyleRoundStatePayload, 'plan_version' | 'version'>> | null | undefined) {
   if (!round) return 0
   const version = Number(round.plan_version ?? round.version)
   return Number.isInteger(version) && version > 0 ? version : 0
