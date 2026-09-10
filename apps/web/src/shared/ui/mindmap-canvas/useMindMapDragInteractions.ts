@@ -9,6 +9,7 @@ import {
   type PreviewState,
 } from './layout'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
 
 interface UseMindMapDragInteractionsInput {
   readonly: boolean
@@ -334,6 +335,9 @@ export function useMindMapDragInteractions({
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
       if (readonly) return
+      const data = node.data && typeof node.data === 'object' ? (node.data as { text?: string; label?: string }) : null
+      const title = String(data?.text ?? data?.label ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      recordSessionRecorderUiAction('mindmap', '拖拽结束', title ? `「${title.slice(0, 40)}」` : '')
       writeLiveDragPositions(node)
 
       // Flush the last pointer sample so a quick drop still sees the hovered target.

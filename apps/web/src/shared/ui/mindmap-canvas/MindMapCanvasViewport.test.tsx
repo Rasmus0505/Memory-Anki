@@ -142,4 +142,16 @@ describe('MindMapCanvasViewport', () => {
     expect(flow.dataset.minZoom).toBe('0.12')
     expect(flow.dataset.onlyRenderVisible).toBe('true')
   })
+
+  it('keeps review double-click zoom when pane double-click is unset', () => {
+    renderViewport({ readonly: true })
+
+    expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('true')
+  })
+
+  it('disables double-click zoom when a pane double-click host is present', () => {
+    renderViewport({ readonly: true, onPaneDoubleClick: vi.fn() })
+
+    expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('false')
+  })
 })

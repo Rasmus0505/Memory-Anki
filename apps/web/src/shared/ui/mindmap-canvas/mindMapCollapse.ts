@@ -95,6 +95,8 @@ export function reconcileCollapsedNodeIds(
   nodes: readonly MindMapNode[],
   options?: {
     practiceModeActive?: boolean
+    /** Expand every branch without locking editing (unlike practiceModeActive). */
+    forceExpanded?: boolean
     minNodes?: number
     maxExpandedDepth?: number
     forceDefault?: boolean
@@ -102,7 +104,7 @@ export function reconcileCollapsedNodeIds(
     knownNodeIds?: ReadonlySet<string>
   },
 ): Set<string> {
-  if (options?.practiceModeActive) return new Set()
+  if (options?.practiceModeActive || options?.forceExpanded) return new Set()
 
   const minNodes = options?.minNodes ?? AUTO_COLLAPSE_MIN_NODES
   const maxExpandedDepth = options?.maxExpandedDepth ?? AUTO_COLLAPSE_MAX_EXPANDED_DEPTH

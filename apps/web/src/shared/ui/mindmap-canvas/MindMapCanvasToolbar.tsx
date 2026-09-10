@@ -107,7 +107,7 @@ export function MindMapCanvasToolbar({
   const handleWebpageToggle = onToggleWebpageFullscreen ?? onToggleFocusMode
 
   return (
-    <div className="flex h-12 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-background px-2 py-1.5 sm:h-[62px] sm:gap-2 sm:px-3 sm:py-2">
+    <div className="flex h-10 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-background px-2 py-1.5 sm:gap-2 sm:px-3">
       {leadingContent}
       {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
       <button

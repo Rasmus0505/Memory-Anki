@@ -194,6 +194,11 @@ export function useMindMapCanvasState(
     onNodeHover,
     buildNodeActions: buildCustomNodeActions,
     practiceModeActive = false,
+    forceExpanded = false,
+    lockedStructureNodeIds,
+    allowAddChildNodeIds,
+    sceneTransitionFit = false,
+    sceneTransitionFallbackNodeId = null,
     englishInteractionActive = false,
     textSelectionModeActive = false,
     onEnglishWordClick,
@@ -213,9 +218,26 @@ export function useMindMapCanvasState(
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const [markColorFlyout, setMarkColorFlyout] = useState<MarkColorFlyoutState | null>(null)
+  const lockedStructureUidSet = useMemo(
+    () => new Set((lockedStructureNodeIds ?? []).filter(Boolean)),
+    [lockedStructureNodeIds],
+  )
+  const allowAddChildUidSet = useMemo(
+    () => new Set((allowAddChildNodeIds ?? []).filter(Boolean)),
+    [allowAddChildNodeIds],
+  )
+  const isLockedStructureNode = useCallback((nodeId: string) => {
+    if (graphData.nodes.find((node) => node.id === nodeId)?.parentId == null) return true
+    return lockedStructureUidSet.has(nodeId)
+  }, [graphData.nodes, lockedStructureUidSet])
+  const canAddChildToNode = useCallback((nodeId: string) => {
+    if (!lockedStructureUidSet.has(nodeId)) return true
+    return allowAddChildUidSet.has(nodeId)
+  }, [allowAddChildUidSet, lockedStructureUidSet])
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() =>
     reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
       practiceModeActive,
+      forceExpanded,
       forceDefault: true,
     }),
   )
@@ -306,6 +328,8 @@ export function useMindMapCanvasState(
     preferredZoom,
     onUserZoomChange,
     sceneTransitionKey,
+    sceneTransitionFit,
+    sceneTransitionFallbackNodeId,
     viewCommand,
     hostRefreshEpoch,
     setNodeSizeVersion,
@@ -320,7 +344,7 @@ export function useMindMapCanvasState(
   // Editing keeps user folds for surviving parents; only brand-new deep parents
   // auto-fold on large maps. Mode switches re-seed defaults.
   useEffect(() => {
-    const modeKey = practiceModeActive ? 'p' : 'e'
+    const modeKey = practiceModeActive ? 'p' : forceExpanded ? 'x' : 'e'
     const currentIds = graphData.nodes.map((node) => node.id)
     const idSignature = currentIds.join(',')
     const signature = `${modeKey}:${idSignature}`
@@ -331,6 +355,7 @@ export function useMindMapCanvasState(
       setCollapsedNodeIds(
         reconcileCollapsedNodeIds(new Set(), graphData.nodes, {
           practiceModeActive,
+          forceExpanded,
           forceDefault: true,
         }),
       )
@@ -342,12 +367,13 @@ export function useMindMapCanvasState(
     setCollapsedNodeIds((previous) =>
       reconcileCollapsedNodeIds(previous, graphData.nodes, {
         practiceModeActive,
+        forceExpanded,
         forceDefault: modeChanged,
         knownNodeIds,
       }),
     )
     knownCollapseNodeIdsRef.current = new Set(currentIds)
-  }, [graphData.nodes, practiceModeActive])
+  }, [forceExpanded, graphData.nodes, practiceModeActive])
 
   // Expand ancestors when host selects a node that would otherwise be hidden.
   useEffect(() => {
@@ -679,7 +705,8 @@ export function useMindMapCanvasState(
         return node?.metadata?.memoryAnkiQuestionCard === true
       },
       onStartEdit: handleStartEdit,
-      isRootNode: (nodeId) => graphData.nodes.find((node) => node.id === nodeId)?.parentId == null,
+      isRootNode: isLockedStructureNode,
+      canAddChild: canAddChildToNode,
       getSubtreeSize: (nodeId) => {
         const childrenByParent = new Map<string, string[]>()
         for (const node of graphData.nodes) {
@@ -723,6 +750,8 @@ export function useMindMapCanvasState(
       onMoveDown,
       onMoveUp,
       readonly,
+      isLockedStructureNode,
+      canAddChildToNode,
     ],
   )
   const edgeActions = useMemo(

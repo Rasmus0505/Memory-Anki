@@ -250,6 +250,37 @@ describe('MindMapCanvas recovery', () => {
     })
   })
 
+  it('lets host min-h-0 override the canvas min-height fallback', () => {
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        className="min-h-0"
+      />,
+    )
+    const frame = screen.getByTestId('mindmap-canvas-frame')
+    expect(frame.className).toContain('min-h-0')
+    expect(frame.className).not.toContain('min-h-[520px]')
+  })
+
+  it('keeps the min-height fallback when the host does not override it', () => {
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('mindmap-canvas-frame').className).toContain('min-h-[520px]')
+  })
+
   it('rebuilds the ReactFlow provider when refreshing the mind map host', () => {
     render(
       <MindMapCanvas
@@ -482,7 +513,7 @@ describe('MindMapCanvas recovery', () => {
     expect(screen.queryByRole('button', { name: '隐藏这个分支' })).toBeNull()
   })
 
-  it('preserves guided mobile node clicks unless centering is explicitly requested', () => {
+  it('preserves guided mobile node clicks unless centering is explicitly requested', async () => {
     const { rerender } = render(
       <MindMapCanvas
         graphData={graphData}
@@ -494,6 +525,10 @@ describe('MindMapCanvas recovery', () => {
         mobileViewPolicy="guided"
       />,
     )
+
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    reactFlowMockState.fitView.mockClear()
+    reactFlowMockState.setCenter.mockClear()
 
     fireEvent.click(screen.getByTestId('node-root'))
 
@@ -533,7 +568,8 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    reactFlowMockState.fitView.mockClear()
 
     rerender(
       <MindMapCanvas
@@ -726,6 +762,10 @@ describe('MindMapCanvas recovery', () => {
     )
 
     await waitFor(() => expect(reactFlowMockState.getViewport).toHaveBeenCalled())
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
     reactFlowMockState.setViewport.mockClear()
     reactFlowMockState.viewport = { x: 128, y: -72, zoom: 0.84 }
 
@@ -777,6 +817,8 @@ describe('MindMapCanvas recovery', () => {
 
     const userViewport = { x: 146, y: -83, zoom: 0.78 }
     await waitFor(() => expect(reactFlowMockState.reactFlowProps?.viewport).toBeTruthy())
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    reactFlowMockState.fitView.mockClear()
     const moveStart = reactFlowMockState.reactFlowProps?.onMoveStart as
       | ((event: MouseEvent, viewport: typeof userViewport) => void)
       | undefined
@@ -858,7 +900,8 @@ describe('MindMapCanvas recovery', () => {
       />,
     )
 
-    expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
+    await waitFor(() => expect(reactFlowMockState.fitView).toHaveBeenCalled())
+    reactFlowMockState.fitView.mockClear()
 
     rerender(
       <MindMapCanvas

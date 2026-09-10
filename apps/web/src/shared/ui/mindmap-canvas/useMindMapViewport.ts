@@ -18,6 +18,8 @@ import {
   findNearestNodeIdToViewportCenter,
   getEventFeedbackPoint,
   hasMeaningfulSizeChange,
+  resolveSceneRecenterAnchorId,
+  SCENE_FIT_SENTINEL,
 } from './mindMapCanvasGeometry'
 import {
   DROP_HIT_PADDING_X,
@@ -37,8 +39,14 @@ import type {
   MindMapMobileViewPolicy,
 } from './MindMapCanvas'
 import {
+  MINDMAP_BRANCH_FIT_PADDING,
   MINDMAP_FIT_MAX_ZOOM,
   MINDMAP_FIT_MIN_ZOOM,
+  MINDMAP_FIT_PADDING,
+  MINDMAP_FOCUS_FIT_PADDING,
+  MINDMAP_MOBILE_GUIDED_BRANCH_FIT_PADDING,
+  MINDMAP_MOBILE_GUIDED_FIT_PADDING,
+  isPristineMindMapViewport,
   normalizeMindMapManualZoom,
   MINDMAP_MOBILE_FIT_MAX_ZOOM,
   MINDMAP_MOBILE_FIT_MIN_ZOOM,
@@ -59,6 +67,10 @@ interface UseMindMapViewportInput {
   contentChangeViewportPolicy: MindMapContentChangeViewportPolicy
   /** When this identity changes (edit/review/practice/rating), re-center the previous center card. */
   sceneTransitionKey?: string | null
+  /** Fit the whole graph on scene switch instead of re-centering the previous card. */
+  sceneTransitionFit?: boolean
+  /** Host fallback when the previous center card is absent from the next graph. */
+  sceneTransitionFallbackNodeId?: string | null
   viewCommand: MindMapCanvasViewCommand | null
   /** Host 刷新脑图 epoch — fit once after remount so blank off-screen maps recover. */
   hostRefreshEpoch?: number
@@ -82,6 +94,8 @@ export function useMindMapViewport({
   mobileViewPolicy,
   contentChangeViewportPolicy,
   sceneTransitionKey = null,
+  sceneTransitionFit = false,
+  sceneTransitionFallbackNodeId = null,
   viewCommand,
   hostRefreshEpoch = 0,
   preferredZoom: preferredZoomInput,
@@ -111,7 +125,10 @@ export function useMindMapViewport({
   const sceneRecenterLockRef = useRef(false)
   const sceneRecenterLockTimeoutRef = useRef<number | null>(null)
   const previousSceneTransitionKeyRef = useRef<string | null>(null)
+  const parentByIdRef = useRef<Map<string, string | null>>(new Map())
+  const previousParentByIdRef = useRef<Map<string, string | null>>(new Map())
   const handledHostRefreshEpochRef = useRef(0)
+  const hasHandledFirstCanvasSizeRef = useRef(false)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -125,6 +142,14 @@ export function useMindMapViewport({
   const yieldOneFingerPan = mobileViewPolicy === 'guided'
   const preserveViewport = contentChangeViewportPolicy === 'preserve'
   const graphContentSignature = useMemo(() => JSON.stringify(graphNodes), [graphNodes])
+  const parentById = useMemo(
+    () => new Map(graphNodes.map((node) => [node.id, node.parentId ?? null])),
+    [graphNodes],
+  )
+  if (parentByIdRef.current !== parentById) {
+    previousParentByIdRef.current = parentByIdRef.current
+    parentByIdRef.current = parentById
+  }
   const normalizedPreferredZoom = normalizeMindMapManualZoom(preferredZoomInput)
 
   const commitControlledViewport = useCallback(
@@ -221,6 +246,11 @@ export function useMindMapViewport({
     // RF passes a DOM event for pointer/wheel pans; programmatic moves use null/undefined.
     // Also accept WheelEvent-like objects so panOnScroll does not get yanked by restore.
     if (event) {
+      if (explicitViewportTimeoutRef.current !== null) {
+        window.clearTimeout(explicitViewportTimeoutRef.current)
+        explicitViewportTimeoutRef.current = null
+      }
+      explicitViewportChangeRef.current = false
       manualViewportGestureRef.current = true
       userGestureStartZoomRef.current = viewport.zoom
     }
@@ -335,7 +365,7 @@ export function useMindMapViewport({
       requestAnimationFrame(() => {
         runExplicitViewportChange(() => void fitView({
           duration,
-          padding: mobileGuidedActive ? 0.18 : focusMode ? 0.03 : 0.08,
+          padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_FIT_PADDING : focusMode ? MINDMAP_FOCUS_FIT_PADDING : MINDMAP_FIT_PADDING,
           includeHiddenNodes: false,
           minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
@@ -388,7 +418,7 @@ export function useMindMapViewport({
         runExplicitViewportChange(() => void fitView({
           nodes: targets,
           duration,
-          padding: mobileGuidedActive ? 0.16 : 0.12,
+          padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_BRANCH_FIT_PADDING : MINDMAP_BRANCH_FIT_PADDING,
           includeHiddenNodes: false,
           minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
@@ -418,7 +448,7 @@ export function useMindMapViewport({
         {
           duration,
           // Keep the user's zoom across scene switches; only mobile guided overrides it.
-          zoom: mobileGuidedActive ? 1.02 : undefined,
+          zoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : undefined,
         },
       ), duration)
     },
@@ -460,10 +490,11 @@ export function useMindMapViewport({
     // Prefer the last tracked center card; fall back to a live read of the old camera.
     // Always mark a pending re-anchor so preserve-camera cannot freeze a blank viewport
     // when the previous center card is absent from the next document (unit ↔ palace).
-    pendingSceneRecenterNodeIdRef.current =
-      lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId() ?? '__scene_root__'
+    pendingSceneRecenterNodeIdRef.current = sceneTransitionFit
+      ? SCENE_FIT_SENTINEL
+      : (lastStableCenterNodeIdRef.current ?? resolveViewportCenterNodeId() ?? '__scene_root__')
     sceneRecenterLockRef.current = true
-  }, [resolveViewportCenterNodeId, sceneTransitionKey])
+  }, [resolveViewportCenterNodeId, sceneTransitionFit, sceneTransitionKey])
 
   // Track which card sits at the viewport center while the scene is stable.
   // Used only as the next *scene* switch anchor — never pan the camera here.
@@ -510,21 +541,26 @@ export function useMindMapViewport({
     const requestedAnchorId = pendingSceneRecenterNodeIdRef.current
     if (!requestedAnchorId || !isCanvasReady) return
     if (isDraggingNodeRef.current) return
-    const requestedExists = nodes.some((node) => node.id === requestedAnchorId)
-    // Freestyle unit ↔ full palace (and other document-identity switches) drop the
-    // previous center card. Falling back to "keep camera" leaves an empty white map
-    // because node positions re-layout while the old camera stays far away.
-    let anchorId = requestedAnchorId
-    if (!requestedExists) {
-      const rootGraphId = resolveFallbackRootId()
-      if (!rootGraphId || !nodes.some((node) => node.id === rootGraphId)) {
-        pendingSceneRecenterNodeIdRef.current = null
-        sceneRecenterLockRef.current = false
-        // Last resort: fit the whole new tree so the map is never blank after mode switch.
-        runFitView(180)
-        return
-      }
-      anchorId = rootGraphId
+    if (requestedAnchorId === SCENE_FIT_SENTINEL) {
+      pendingSceneRecenterNodeIdRef.current = null
+      sceneRecenterLockRef.current = false
+      runFitView(180)
+      return
+    }
+    const requestedId = requestedAnchorId === '__scene_root__' ? null : requestedAnchorId
+    const anchorId = resolveSceneRecenterAnchorId({
+      requestedId,
+      presentIds: nodes.map((node) => node.id),
+      parentById: previousParentByIdRef.current,
+      fallbackId: sceneTransitionFallbackNodeId,
+      rootId: resolveFallbackRootId(),
+    })
+    if (anchorId === SCENE_FIT_SENTINEL) {
+      pendingSceneRecenterNodeIdRef.current = null
+      sceneRecenterLockRef.current = false
+      if (nodes.length === 0) return
+      runFitView(180)
+      return
     }
     pendingSceneRecenterNodeIdRef.current = null
     holdSceneRecenterLock(anchorId, 180)
@@ -536,15 +572,36 @@ export function useMindMapViewport({
     nodes,
     resolveFallbackRootId,
     runFitView,
+    sceneTransitionFallbackNodeId,
   ])
 
-  // Flip / reveal / measure may reflow node positions. Policy: freeze the
-  // controlled camera. Users pan/zoom or use toolbar 适应/刷新 when they want a
-  // new view — no automatic focus-delta pan or off-screen re-center on content change.
+  // First positive canvas size: fit a still-default camera so the tree is not a
+  // tiny origin square. Keep a user/restored camera after remount or pan/zoom.
   useLayoutEffect(() => {
-    if (!preserveViewport || !isCanvasReady) return
-    restorePreservedViewport()
-  }, [isCanvasReady, preserveViewport, restorePreservedViewport])
+    if (!isCanvasReady || nodes.length === 0) return
+    if (hasHandledFirstCanvasSizeRef.current) return
+    hasHandledFirstCanvasSizeRef.current = true
+    if (manualViewportGestureRef.current) return
+    if (!isPristineMindMapViewport(controlledViewportRef.current, preferredZoomInput)) {
+      restorePreservedViewport()
+      return
+    }
+    explicitViewportChangeRef.current = true
+    runFitView(
+      0,
+      normalizedPreferredZoom === undefined
+        ? undefined
+        : () => syncPreferredZoom(normalizedPreferredZoom),
+    )
+  }, [
+    isCanvasReady,
+    nodes.length,
+    normalizedPreferredZoom,
+    preferredZoomInput,
+    restorePreservedViewport,
+    runFitView,
+    syncPreferredZoom,
+  ])
 
   useLayoutEffect(() => {
     // Structure / graph payload changes re-layout nodes; keep the locked camera.

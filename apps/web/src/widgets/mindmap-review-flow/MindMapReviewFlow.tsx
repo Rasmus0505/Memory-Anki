@@ -198,7 +198,7 @@ export function MindMapReviewFlow({
               : "rounded-xl border border-border/50 bg-card/90",
             review.cardFlashClassName,
             review.flow.fullscreen &&
-              "fixed inset-x-2 bottom-2 top-2 z-[90] rounded-xl border border-border/50 bg-card/96 shadow-2xl sm:inset-x-5 sm:bottom-5 sm:top-5",
+              "fixed inset-0 z-[90] rounded-none border-0 bg-card/96 shadow-2xl",
           )}
         >
           {review.flow.feedback.completionCeremonyActive ? (
@@ -285,7 +285,7 @@ export function MindMapReviewFlow({
               "relative min-h-[74vh] overflow-hidden border-border/70 bg-card/92",
               review.cardFlashClassName,
               review.flow.fullscreen &&
-                "fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl",
+                "fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl",
             )}
           >
             {review.flow.feedback.completionCeremonyActive ? (

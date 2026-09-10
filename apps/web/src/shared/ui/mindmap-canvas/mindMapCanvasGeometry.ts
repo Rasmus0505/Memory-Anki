@@ -93,6 +93,44 @@ export function nodeIntersectsViewport(
   )
 }
 
+export const SCENE_FIT_SENTINEL = '__scene_fit__'
+
+/**
+ * Pick the card to re-center after an edit/review scene switch.
+ * Prefer the previous center card, then a still-present ancestor, then a host
+ * fallback (unit anchor), then the graph root. Fit only when the new graph is empty.
+ */
+export function resolveSceneRecenterAnchorId(options: {
+  requestedId?: string | null
+  presentIds: Iterable<string>
+  parentById?: ReadonlyMap<string, string | null>
+  fallbackId?: string | null
+  rootId?: string | null
+}): string | typeof SCENE_FIT_SENTINEL {
+  const present = options.presentIds instanceof Set
+    ? options.presentIds
+    : new Set(options.presentIds)
+  if (present.size === 0) return SCENE_FIT_SENTINEL
+
+  const requested = String(options.requestedId || '').trim()
+  if (requested && present.has(requested)) return requested
+  if (requested && options.parentById) {
+    const seen = new Set<string>()
+    let current = options.parentById.get(requested) ?? null
+    while (current && !seen.has(current)) {
+      if (present.has(current)) return current
+      seen.add(current)
+      current = options.parentById.get(current) ?? null
+    }
+  }
+
+  const fallback = String(options.fallbackId || '').trim()
+  if (fallback && present.has(fallback)) return fallback
+  const root = String(options.rootId || '').trim()
+  if (root && present.has(root)) return root
+  return SCENE_FIT_SENTINEL
+}
+
 /** True when at least one laid-out card intersects the current camera. */
 export function anyNodeIntersectsViewport(
   nodes: readonly Node[],

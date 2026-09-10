@@ -21,6 +21,8 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
           data-node-click-viewport-policy={String(props.nodeClickViewportPolicy ?? '')}
           data-content-change-viewport-policy={String(props.contentChangeViewportPolicy ?? '')}
           data-scene-transition-key={String(props.sceneTransitionKey ?? '')}
+          data-scene-transition-fit={String(Boolean(props.sceneTransitionFit))}
+          data-scene-transition-fallback={String(props.sceneTransitionFallbackNodeId ?? '')}
         />
       )
     },
@@ -206,5 +208,24 @@ describe('MindMapEditorSurface viewport preservation', () => {
     expect(screen.getByTestId('mock-mind-map-canvas').getAttribute('data-recovery-key')).not.toBe(
       initialRecoveryKey,
     )
+  })
+
+  it('fits on scene switch only when initialViewPolicy is reset', () => {
+    const { rerender } = renderFrame({
+      initialViewPolicy: 'preserve',
+      sceneTransitionFallbackNodeId: 'unit-node',
+    })
+    expect(screen.getByTestId('mock-mind-map-canvas').getAttribute('data-scene-transition-fit')).toBe('false')
+    expect(screen.getByTestId('mock-mind-map-canvas').getAttribute('data-scene-transition-fallback')).toBe('unit-node')
+
+    rerender(
+      <MindMapEditorSurface
+        editorState={editorState}
+        onEditorStateChange={vi.fn()}
+        initialViewPolicy="reset"
+        sceneTransitionFallbackNodeId="unit-node"
+      />,
+    )
+    expect(screen.getByTestId('mock-mind-map-canvas').getAttribute('data-scene-transition-fit')).toBe('true')
   })
 })

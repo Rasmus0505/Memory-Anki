@@ -21,11 +21,14 @@ import type { GraphData } from './adapter'
 import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
 import {
+  MINDMAP_DEFAULT_VIEWPORT_X,
+  MINDMAP_DEFAULT_VIEWPORT_Y,
   MINDMAP_DEFAULT_ZOOM,
   normalizeMindMapManualZoom,
 } from './mindMapViewportConfig'
 import { useMindMapCanvasState } from './useMindMapCanvasState'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { cn } from '@/shared/lib/utils'
 import { logAppError } from '@/shared/logs/model/appLogs'
 
 export type MindMapMobileViewPolicy = 'auto' | 'map' | 'guided'
@@ -108,6 +111,8 @@ export interface MindMapCanvasProps {
   /** Product host chrome after canvas tools (e.g. ladder progress). */
   toolbarCenterContent?: ReactNode
   onNodeActivate?: (nodeId: string) => void
+  onPaneDoubleClick?: () => void
+  onPaneLongPress?: () => void
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   onCountBadgeClick?: (nodeId: string) => void
@@ -115,6 +120,16 @@ export interface MindMapCanvasProps {
   buildSelectionToolbarActions?: (nodeId: string) => import('./selectionToolbar').SelectionToolbarAction[]
   selectionToolbarPreferPosition?: import('./selectionToolbar').SelectionToolbarPreferPosition
   practiceModeActive?: boolean
+  /** Expand all branches without locking editing. */
+  forceExpanded?: boolean
+  /** Spine / unit-root ids that cannot be deleted, given siblings, or dragged out. */
+  lockedStructureNodeIds?: readonly string[]
+  /** Locked ids that may still receive a child (the scoped unit root). */
+  allowAddChildNodeIds?: readonly string[]
+  /** Scene switches fit the current graph instead of re-centering the previous card. */
+  sceneTransitionFit?: boolean
+  /** Host fallback card when the previous center node is missing after a scene switch. */
+  sceneTransitionFallbackNodeId?: string | null
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
@@ -338,7 +353,11 @@ function MindMapCanvasInner({
       tabIndex={-1}
       onKeyDownCapture={props.onKeyDownCapture}
       data-interaction-mode={props.editingNodeId ? 'editing' : props.selectedNodeId ? 'selected' : 'idle'}
-      className={`relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)] ${className ?? ''}`}
+      data-testid="mindmap-canvas-frame"
+      className={cn(
+        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)]',
+        className,
+      )}
     >
       {showToolbar ? (
         <MindMapCanvasToolbar
@@ -389,6 +408,8 @@ function MindMapCanvasInner({
               onEdgeClick={state.handleEdgeClick}
               onEdgeDoubleClick={state.handleEdgeDoubleClick}
               onPaneClick={state.handlePaneClick}
+              onPaneDoubleClick={props.onPaneDoubleClick}
+              onPaneLongPress={props.onPaneLongPress}
               onMoveStart={state.handleMoveStart}
               onMove={state.handleMove}
               onMoveEnd={state.handleMoveEnd}
@@ -453,7 +474,11 @@ function MindMapCanvasInner({
   )
 }
 
-const DEFAULT_MINDMAP_VIEWPORT: Viewport = { x: 4, y: 18, zoom: MINDMAP_DEFAULT_ZOOM }
+const DEFAULT_MINDMAP_VIEWPORT: Viewport = {
+  x: MINDMAP_DEFAULT_VIEWPORT_X,
+  y: MINDMAP_DEFAULT_VIEWPORT_Y,
+  zoom: MINDMAP_DEFAULT_ZOOM,
+}
 
 export function MindMapCanvas(props: MindMapCanvasProps) {
   const [hostEpoch, setHostEpoch] = useState(0)

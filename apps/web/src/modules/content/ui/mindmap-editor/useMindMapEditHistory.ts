@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { recordMindMapDocumentChange } from '@/shared/debug/session-recorder'
 
 type EditorDoc = MindMapEditorState['editor_doc']
 
@@ -111,6 +112,7 @@ export function useMindMapEditHistory(
       if (fingerprint(current) === fingerprint(editorDoc)) return false
       replaceHistory(pushMindMapHistory(historyRef.current, current))
       publish(editorDoc)
+      recordMindMapDocumentChange('commit', current, editorDoc)
       return true
     },
     [publish, replaceHistory],
@@ -120,6 +122,7 @@ export function useMindMapEditHistory(
     const current = currentEditorDocRef.current
     if (fingerprint(current) === fingerprint(editorDoc)) return false
     publish(editorDoc)
+    recordMindMapDocumentChange('stage', current, editorDoc)
     return true
   }, [publish])
 
@@ -131,24 +134,29 @@ export function useMindMapEditHistory(
       }
       replaceHistory(pushMindMapHistory(historyRef.current, baseEditorDoc))
       publish(editorDoc)
+      recordMindMapDocumentChange('commitFrom', baseEditorDoc, editorDoc)
       return true
     },
     [publish, replaceHistory],
   )
 
   const undo = useCallback(() => {
-    const result = undoMindMapHistory(historyRef.current, currentEditorDocRef.current)
+    const current = currentEditorDocRef.current
+    const result = undoMindMapHistory(historyRef.current, current)
     if (!result) return false
     replaceHistory(result.history)
     publish(result.editorDoc)
+    recordMindMapDocumentChange('undo', current, result.editorDoc)
     return true
   }, [publish, replaceHistory])
 
   const redo = useCallback(() => {
-    const result = redoMindMapHistory(historyRef.current, currentEditorDocRef.current)
+    const current = currentEditorDocRef.current
+    const result = redoMindMapHistory(historyRef.current, current)
     if (!result) return false
     replaceHistory(result.history)
     publish(result.editorDoc)
+    recordMindMapDocumentChange('redo', current, result.editorDoc)
     return true
   }, [publish, replaceHistory])
 
@@ -179,6 +187,8 @@ export function useMindMapEditHistory(
     currentEditorDocRef.current = incomingEditorDoc
     pendingLocalFingerprintsRef.current.clear()
     replaceHistory(pushMindMapHistory(historyRef.current, previous))
+    // Review visible-tree updates and host mode switches arrive as external
+    // writes. Recording them as 文档变更 dumps every flip as 新增 uuid.
   }, [incomingEditorDoc, incomingFingerprint, replaceHistory])
 
   return {

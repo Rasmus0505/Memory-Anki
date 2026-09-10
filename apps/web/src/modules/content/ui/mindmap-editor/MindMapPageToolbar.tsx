@@ -1,4 +1,4 @@
-﻿import {
+import {
   Brain,
   Eye,
   FolderTree,
@@ -21,6 +21,12 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 import type { MindMapTask } from '@/shared/api/contracts'
+import {
+  openSessionRecorderDialog,
+  recordSessionRecorderUiAction,
+  stopSessionRecording,
+  useSessionRecorderState,
+} from '@/shared/debug/session-recorder'
 
 interface MindMapToolbarSegmentOption { id: number; name: string }
 interface MindMapToolbarSegmentControl {
@@ -35,6 +41,7 @@ interface MindMapToolbarAction {
 }
 interface MindMapToolbarModeControl { value: 'edit' | 'preview' | 'recall'; onChange: (value: 'edit' | 'preview' | 'recall') => void; disabled?: boolean }
 interface MindMapToolbarToggleAction extends MindMapToolbarAction { active?: boolean }
+type OverflowAction = MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }
 
 export interface MindMapPageToolbarProps {
   compact?: boolean
@@ -89,7 +96,12 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   // englishAction is a first-class toolbar toggle (right of 编辑); keep it out of overflow.
   // quizAction stays visible as a primary button; do not also bury it in ⋯ (avoids duplicate "做题").
   const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
-  const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
+  const overflowBase = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
+  const recording = useSessionRecorderState().recording
+  const recorderAction: OverflowAction = recording
+    ? { label: '停止录制', onClick: () => { stopSessionRecording() }, opensOverlay: true, separatorBefore: overflowBase.length > 0 }
+    : { label: '录制', onClick: () => { openSessionRecorderDialog() }, opensOverlay: true, separatorBefore: overflowBase.length > 0 }
+  const overflowActions = [...overflowBase, recorderAction]
   // moreActions alone must open the ⋯ menu (freestyle: 进入编辑 / 永久标记 live only there).
   const modern = Boolean(
     taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length > 0,
@@ -187,14 +199,12 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {!modern && immersiveAction ? <Button type="button" variant="outline" onClick={immersiveAction.onClick}>{immersiveAction.label}</Button> : null}
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}
         {!modern && clearUiAction ? <Button type="button" variant="outline" onClick={clearUiAction.onClick}>{clearUiAction.label}</Button> : null}
-        {overflowActions.length ? (
-          <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
+        <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
             <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作" className="max-sm:size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
-              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={(event) => { if (action.opensOverlay) event.preventDefault(); overflowMenu.runAction(action.onClick, action.opensOverlay) }}>{action.label}</DropdownMenuItem></div>)}
+              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={(event) => { if (action.opensOverlay) event.preventDefault(); overflowMenu.runAction(() => { if (action.label !== '录制' && action.label !== '停止录制') recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`); action.onClick() }, action.opensOverlay) }}>{action.label}</DropdownMenuItem></div>)}
             </DropdownMenuContent>
           </DropdownMenu>
-        ) : null}
       </div>
     </div>
   )

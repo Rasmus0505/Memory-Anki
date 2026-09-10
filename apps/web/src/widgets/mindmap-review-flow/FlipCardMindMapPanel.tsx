@@ -8,7 +8,7 @@ import {
   type MindMapSelection,
 } from '@/modules/content/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import type { FlipCardRevealConfig } from '@/shared/preferences/flipCardRevealConfig'
+import { DEFAULT_FLIP_CARD_REVEAL_CONFIG, type FlipCardRevealConfig } from '@/shared/preferences/flipCardRevealConfig'
 import type { MindMapReviewFxPayload } from '@/modules/content/public'
 import { FlipCardRevealSettingsDialog } from '@/modules/settings/public'
 import { cn } from '@/shared/lib/utils'
@@ -119,6 +119,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   hostExternalSyncKey?: string | number | null
   preserveViewOnSync?: boolean
   initialViewPolicy?: 'preserve' | 'reset'
+  /** Re-center this card if the previous viewport-center node is gone after a mode switch. */
+  sceneTransitionFallbackNodeId?: string | null
   forceSyncIntent?: 'soft' | 'replace'
   /** Full palace state used to resolve hidden review-card ancestors. */
   unitScopeEditorState?: MindMapEditorState | null
@@ -130,6 +132,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   onEditNodeContextMenu?: (nodes: MindMapSelection[]) => void
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
+  onPaneDoubleClick?: () => void
+  onPaneLongPress?: () => void
   onNativeFullscreenChange?: (active: boolean) => void
   onUiClearedChange?: (active: boolean) => void
   /**
@@ -137,6 +141,10 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
    * while ancestors remain visible as path context.
    */
   activeUnitNodeUids?: string[] | null
+  /** Freestyle inline edit: keep palace-root → unit spine + subtree. */
+  scopeBranchUid?: string | null
+  /** Freestyle inline edit: do not auto-collapse the scoped branch. */
+  forceExpanded?: boolean
 }
 
 export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
@@ -165,6 +173,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   hostExternalSyncKey = null,
   preserveViewOnSync,
   initialViewPolicy,
+  sceneTransitionFallbackNodeId = null,
   forceSyncIntent,
   unitScopeEditorState = null,
   reviewFxSignal = null,
@@ -175,6 +184,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onEditNodeContextMenu,
   onNodeActive,
   onNodeHover,
+  onPaneDoubleClick,
+  onPaneLongPress,
   onNativeFullscreenChange,
   onUiClearedChange,
   masteryByNodeUid,
@@ -205,6 +216,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   statusChipsByNodeUid: hostStatusChipsByNodeUid,
   ankiEditMode = false,
   mutedNodeUids: mutedNodeUidsProp,
+  scopeBranchUid = null,
+  forceExpanded = false,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
@@ -520,6 +533,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         presentationStrategy={resolvedPresentationStrategy}
         readonly={!isEditMode}
         practiceModeActive={!isEditMode}
+        forceExpanded={isEditMode && forceExpanded}
+        scopeBranchUid={isEditMode ? scopeBranchUid : null}
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
         textSelectionModeActive={!isEditMode && textModeActive}
@@ -554,6 +569,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         forceSyncKey={frameForceSyncKey}
         forceSyncIntent={frameForceSyncIntent}
         initialViewPolicy={frameInitialViewPolicy}
+        sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
         mobileViewPolicy={isEditMode ? 'map' : (mobileViewPolicy ?? 'auto')}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
         preferredZoom={preferredZoom}
@@ -586,6 +602,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
             : onNodeContextMenu
         }
         onNodeHover={isEditMode ? undefined : onNodeHover}
+        onPaneDoubleClick={englishModeActive || (!isEditMode && textModeActive) ? undefined : onPaneDoubleClick}
+        onPaneLongPress={englishModeActive || (!isEditMode && textModeActive) ? undefined : onPaneLongPress}
         onSegmentSelect={onSegmentSelect}
         onCreateSegmentFromSelection={onCreateSegmentFromSelection}
         onSegmentRangeDraftChange={onSegmentRangeDraftChange}
@@ -611,10 +629,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         <FlipCardRevealSettingsDialog
           open={revealSettingsOpen}
           onOpenChange={setRevealSettingsOpen}
-          value={revealSettingsControl?.settings ?? {
-            granularity: 'level',
-            stage: 'two-step',
-          }}
+          value={revealSettingsControl?.settings ?? DEFAULT_FLIP_CARD_REVEAL_CONFIG}
           onChange={revealSettingsControl?.updateSettings ?? (() => undefined)}
           freestyleFlipMode={freestyleFlipMode}
           freestyleAutoAdvance={freestyleAutoAdvance}

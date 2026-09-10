@@ -2,6 +2,7 @@ import { useCallback, useState, type MouseEvent } from 'react'
 import { type EdgeMouseHandler, type Node } from '@xyflow/react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { MindMapNodeClickViewportPolicy } from './MindMapCanvas'
+import { recordSessionRecorderUiAction, truncateRecorderText } from '@/shared/debug/session-recorder'
 
 export interface MindMapNodeMenuState {
   x: number
@@ -33,6 +34,13 @@ interface UseMindMapMenusAndEdgesInput {
   readonly?: boolean
   /** Current multi-select set; used to preserve selection on right-click. */
   selectedNodeIds?: readonly string[]
+}
+
+
+function recorderNodeLabel(node: Node) {
+  const data = node.data && typeof node.data === 'object' ? (node.data as { text?: string; label?: string }) : null
+  const title = truncateRecorderText(String(data?.text ?? data?.label ?? ''))
+  return title ? `「${title}」` : '未命名'
 }
 
 export function useMindMapMenusAndEdges({
@@ -103,6 +111,7 @@ export function useMindMapMenusAndEdges({
     (event: MouseEvent, node: Node) => {
       event.preventDefault()
       openNodeContext(node.id, { x: event.clientX, y: event.clientY })
+      recordSessionRecorderUiAction('mindmap', '右键节点', recorderNodeLabel(node))
     },
     [openNodeContext],
   )
@@ -112,6 +121,7 @@ export function useMindMapMenusAndEdges({
     onNodeHover?.(null)
     setSelectedEdgeId(null)
     setEdgeMenu(null)
+    recordSessionRecorderUiAction('mindmap', '点击画布空白', '')
   }, [onNodeHover, onNodeSelect])
 
   const handleNodeClick = useCallback(
@@ -135,6 +145,7 @@ export function useMindMapMenusAndEdges({
         point: { x: event.clientX, y: event.clientY },
         origin: 'node',
       })
+      recordSessionRecorderUiAction('mindmap', '单击节点', recorderNodeLabel(node))
     },
     [
       centerNodeInCanvas,

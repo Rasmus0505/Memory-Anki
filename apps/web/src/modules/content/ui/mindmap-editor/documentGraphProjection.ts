@@ -11,6 +11,7 @@ import {
   addMindMapSibling,
   addMindMapSiblingWithResult,
   canMoveMindMapNode,
+  collectMindMapBranchScope,
   collectMindMapSubtreeUids,
   countMindMapSubtree,
   deleteMindMapNode,
@@ -74,6 +75,11 @@ export interface EditorDocGraphOptions {
     string,
     { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
   >
+  /**
+   * Freestyle inline-edit scope: keep the palace-root → branch spine and the
+   * branch subtree. Missing uid falls back to the full document.
+   */
+  scopeBranchUid?: string | null
 }
 
 export interface EditorDocCreateResult {
@@ -127,6 +133,9 @@ export function editorDocToGraph(
   const mutedSet = new Set(options.mutedNodeUids ?? [])
   const ankiTree = options.ankiEditMode ? buildAnkiRoleTree(doc.root as MindMapDocNode) : null
   const ankiMemo = new Map<string, 'front' | 'back' | 'none'>()
+  const keepUids = options.scopeBranchUid
+    ? collectMindMapBranchScope(doc, options.scopeBranchUid)?.keepUids ?? null
+    : null
 
   const walk = (node: MindMapDocNode, parentId: string | null, depth: number, indexPath: number[]) => {
     const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
@@ -211,9 +220,13 @@ export function editorDocToGraph(
       }
       edges.push({ id: `${parentId}->${uid}`, source: parentId, target: uid, type: 'parent-child', renderStyle })
     }
-    ;(Array.isArray(node.children) ? node.children : []).forEach((child, childIndex) =>
-      walk(child, uid, depth + 1, [...indexPath, childIndex]),
-    )
+    ;(Array.isArray(node.children) ? node.children : []).forEach((child, childIndex) => {
+      if (keepUids) {
+        const childUid = getMindMapNodeUid(child, [...indexPath, childIndex].join('-') || 'root')
+        if (!keepUids.has(childUid)) return
+      }
+      walk(child, uid, depth + 1, [...indexPath, childIndex])
+    })
   }
 
   walk(doc.root, null, 0, [])

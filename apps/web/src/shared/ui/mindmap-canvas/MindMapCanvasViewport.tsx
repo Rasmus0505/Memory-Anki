@@ -16,6 +16,7 @@ import {
   MINDMAP_MANUAL_MAX_ZOOM,
   MINDMAP_MANUAL_MIN_ZOOM,
 } from './mindMapViewportConfig'
+import { usePaneModeGestures } from './usePaneModeGestures'
 
 interface MindMapCanvasViewportProps {
   width: number
@@ -36,6 +37,8 @@ interface MindMapCanvasViewportProps {
   onEdgeClick: EdgeMouseHandler
   onEdgeDoubleClick: EdgeMouseHandler
   onPaneClick: () => void
+  onPaneDoubleClick?: () => void
+  onPaneLongPress?: () => void
   onMoveStart?: OnMove
   onMove?: OnMove
   onMoveEnd?: OnMove
@@ -67,6 +70,8 @@ export function MindMapCanvasViewport({
   onEdgeClick,
   onEdgeDoubleClick,
   onPaneClick,
+  onPaneDoubleClick,
+  onPaneLongPress,
   onMoveStart,
   onMove,
   onMoveEnd,
@@ -76,6 +81,10 @@ export function MindMapCanvasViewport({
   mobileGuided = false,
   yieldOneFingerPan = false,
 }: MindMapCanvasViewportProps) {
+  const paneGestures = usePaneModeGestures({
+    onDoubleClick: onPaneDoubleClick,
+    onLongPress: onPaneLongPress,
+  })
   // Large-graph mode: skip dots earlier once collapse still leaves a wide map.
   const largeGraph = nodes.length >= 120
   const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
@@ -83,7 +92,14 @@ export function MindMapCanvasViewport({
   const onlyRenderVisible = nodes.length >= 48 || largeGraph
 
   return (
-    <div className="relative" style={{ width, height }}>
+    <div
+      className="relative"
+      style={{ width, height }}
+      onPointerDownCapture={paneGestures.onPointerDownCapture}
+      onPointerMoveCapture={paneGestures.onPointerMoveCapture}
+      onPointerUpCapture={paneGestures.onPointerUpCapture}
+      onPointerCancelCapture={paneGestures.onPointerCancelCapture}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -128,7 +144,7 @@ export function MindMapCanvasViewport({
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         zoomOnPinch
-        zoomOnDoubleClick={readonly && !mobileGuided}
+        zoomOnDoubleClick={Boolean(readonly && !mobileGuided && !onPaneDoubleClick)}
         zoomActivationKeyCode="Control"
       >
         {/* Zoom/interactive are off, so this panel is a single fitView button — the same
@@ -142,9 +158,9 @@ export function MindMapCanvasViewport({
         {!simplifiedDecorations ? (
           <Background
             variant={BackgroundVariant.Dots}
-            gap={20}
+            gap={32}
             size={1}
-            color="#e4e4e7"
+            color="var(--memory-anki-mindmap-dot)"
           />
         ) : null}
       </ReactFlow>

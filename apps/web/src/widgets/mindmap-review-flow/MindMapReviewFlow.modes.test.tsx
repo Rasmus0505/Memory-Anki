@@ -74,7 +74,9 @@ describe("MindMapReviewFlow modes", () => {
 
     expect(screen.getByTestId("flip-card-reveal-settings-dialog")).toBeTruthy();
     expect(screen.getByText("同层批量")).toBeTruthy();
-    expect(screen.getByText("直接显示内容")).toBeTruthy();
+    expect(screen.getByText("直接显示")).toBeTruthy();
+    expect(screen.getByText("当前专线")).toBeTruthy();
+    expect(screen.getByText("整座宫殿")).toBeTruthy();
   });
 
   it("shows a mobile guided review rail without moving the viewport during card navigation", async () => {

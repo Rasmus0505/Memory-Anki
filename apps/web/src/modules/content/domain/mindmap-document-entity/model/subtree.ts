@@ -43,6 +43,70 @@ export function collectMindMapSubtreeUids(
   return collected
 }
 
+function pathUidsTo(root: MindMapNode | undefined, targetUid: string): string[] | null {
+  if (!root) return null
+  const own = getMindMapNodeUid(root, 'root')
+  if (own === targetUid) return [own]
+  const children = Array.isArray(root.children) ? root.children : []
+  for (let index = 0; index < children.length; index += 1) {
+    const sub = pathUidsTo(children[index], targetUid)
+    if (sub) return [own, ...sub]
+  }
+  return null
+}
+
+/** Visible edit scope: palace-root → branch spine plus the branch subtree. */
+export type MindMapBranchScope = {
+  branchUid: string
+  pathUids: string[]
+  keepUids: Set<string>
+  subtreeUids: Set<string>
+}
+
+export function collectMindMapBranchScope(
+  document: MindMapDocumentInput,
+  branchUid: string,
+): MindMapBranchScope | null {
+  const target = String(branchUid || '').trim()
+  if (!target) return null
+  const doc = normalizeMindMapDocument(document)
+  const pathUids = pathUidsTo(doc.root, target)
+  if (!pathUids) return null
+  const subtreeUids = new Set(collectMindMapSubtreeUids(doc, target))
+  return {
+    branchUid: target,
+    pathUids,
+    keepUids: new Set([...pathUids, ...subtreeUids]),
+    subtreeUids,
+  }
+}
+
+export function canAddMindMapBranchChild(scope: MindMapBranchScope | null | undefined, uid: string) {
+  if (!scope) return true
+  return scope.subtreeUids.has(uid)
+}
+
+export function canMutateMindMapBranchStructure(
+  scope: MindMapBranchScope | null | undefined,
+  uid: string,
+) {
+  if (!scope) return true
+  return scope.subtreeUids.has(uid) && uid !== scope.branchUid
+}
+
+export function canRelocateMindMapBranchNodes(
+  scope: MindMapBranchScope | null | undefined,
+  sourceIds: readonly string[],
+  targetId: string,
+  mode: 'before' | 'inside' | 'after',
+) {
+  if (!scope) return true
+  if (sourceIds.some((uid) => !canMutateMindMapBranchStructure(scope, uid))) return false
+  if (!scope.subtreeUids.has(targetId)) return false
+  if (targetId === scope.branchUid && mode !== 'inside') return false
+  return true
+}
+
 /** Remove selected non-root nodes and promote their children in place. */
 export function deleteMindMapNodesOnly(
   document: MindMapDocumentInput,

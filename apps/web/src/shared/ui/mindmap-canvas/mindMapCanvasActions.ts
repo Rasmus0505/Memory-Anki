@@ -54,6 +54,7 @@ interface BuildNodeActionsInput {
   isQuestionCard?: (nodeId: string) => boolean
   onStartEdit: (nodeId: string) => void
   isRootNode: (nodeId: string) => boolean
+  canAddChild?: (nodeId: string) => boolean
   getSubtreeSize: (nodeId: string) => number
   onMoveUp?: (nodeId: string) => void
   onMoveDown?: (nodeId: string) => void
@@ -92,6 +93,7 @@ export function buildNodeActions({
   isQuestionCard,
   onStartEdit,
   isRootNode,
+  canAddChild,
   getSubtreeSize,
   onMoveUp,
   onMoveDown,
@@ -112,10 +114,10 @@ export function buildNodeActions({
     questionCardTargets.length > 0 &&
     questionCardTargets.every((id) => Boolean(isQuestionCard?.(id)))
   const enableQuestionCards = !allQuestionCards
+  const allowAddChild = canAddChild?.(nodeId) ?? true
   const structuralActions: ContextMenuAction[] = [
-    ...(multiTarget
-      ? []
-      : [{
+    ...(!multiTarget && allowAddChild
+      ? [{
           label: '添加子知识点 (Tab)',
           icon: Plus,
           onClick: () => {
@@ -126,7 +128,8 @@ export function buildNodeActions({
             })
             onAddChild(nodeId)
           },
-        } satisfies ContextMenuAction]),
+        } satisfies ContextMenuAction]
+      : []),
     ...(!multiTarget && !isRoot ? [{
       label: '添加同级知识点 (Shift+Enter)',
       icon: Plus,

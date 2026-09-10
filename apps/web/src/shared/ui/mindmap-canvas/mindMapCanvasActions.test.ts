@@ -51,6 +51,18 @@ describe('mind map node context actions', () => {
     ])
   })
 
+  it('hides add-child when canAddChild is false on a locked spine node', () => {
+    const actions = buildActions({
+      isRootNode: () => true,
+      canAddChild: () => false,
+    })
+
+    expect(actions.map((action) => action.label)).toEqual([
+      '编辑文字 (Enter / F2)',
+      '标记重点',
+    ])
+  })
+
   it('toggles question-card labels for multi-select targets', () => {
     const onToggleQuestionCards = vi.fn()
     const setActions = buildActions({

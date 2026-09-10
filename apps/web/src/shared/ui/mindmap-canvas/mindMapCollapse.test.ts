@@ -82,6 +82,14 @@ describe('mindMapCollapse', () => {
     expect(next.size).toBe(0)
   })
 
+  it('forceExpanded keeps the tree open without using practice mode', () => {
+    const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 5)
+    const previous = computeDefaultCollapsedNodeIds(nodes)
+    expect(previous.size).toBeGreaterThan(0)
+    const next = reconcileCollapsedNodeIds(previous, nodes, { forceExpanded: true, forceDefault: true })
+    expect(next.size).toBe(0)
+  })
+
   it('expand-all empty previous keeps surviving parents expanded on reconcile', () => {
     const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 10)
     const defaults = computeDefaultCollapsedNodeIds(nodes)

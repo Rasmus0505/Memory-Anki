@@ -37,6 +37,10 @@ export interface MindMapEditorSurfaceProps {
   capabilities?: readonly MindMapCapability[]
   readonly?: boolean
   practiceModeActive?: boolean
+  /** Expand all branches without locking editing. */
+  forceExpanded?: boolean
+  /** Keep palace-root → branch spine + subtree in the canvas; persist still uses the full doc. */
+  scopeBranchUid?: string | null
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
@@ -54,6 +58,8 @@ export interface MindMapEditorSurfaceProps {
   forceSyncIntent?: 'soft' | 'replace'
   preserveViewOnSync?: boolean
   initialViewPolicy?: 'preserve' | 'reset'
+  /** Re-center this card when the previous viewport-center node is gone. */
+  sceneTransitionFallbackNodeId?: string | null
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
@@ -118,6 +124,8 @@ export interface MindMapEditorSurfaceProps {
   onNodeActive?: (nodes: MindMapSelection[]) => void
   onNodeClick?: (nodes: MindMapSelection[]) => void
   onNodeContextMenu?: (nodes: MindMapSelection[]) => void
+  onPaneDoubleClick?: () => void
+  onPaneLongPress?: () => void
   onNodeHover?: (nodes: MindMapSelection[]) => void
   onSegmentSelect?: (segmentId: number | null) => void
   onCreateSegmentFromSelection?: () => void

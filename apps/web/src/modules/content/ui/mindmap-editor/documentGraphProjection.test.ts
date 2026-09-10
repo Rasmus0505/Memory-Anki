@@ -137,3 +137,53 @@ describe('editor document structural edits', () => {
     expect(editorDocToGraph(next).nodes).toHaveLength(5)
   })
 })
+
+describe('editorDocToGraph scopeBranchUid', () => {
+  const doc: MindMapDoc = {
+    root: {
+      data: { text: 'Palace', uid: 'root' },
+      children: [
+        {
+          data: { text: 'Parent', uid: 'parent' },
+          children: [
+            {
+              data: { text: 'Branch', uid: 'branch' },
+              children: [
+                { data: { text: 'Leaf A', uid: 'leaf-a' }, children: [] },
+                { data: { text: 'Leaf B', uid: 'leaf-b' }, children: [] },
+              ],
+            },
+            { data: { text: 'Sibling', uid: 'sibling' }, children: [] },
+          ],
+        },
+        { data: { text: 'Other', uid: 'other' }, children: [] },
+      ],
+    },
+  }
+
+  it('projects the spine plus the unit subtree and drops sibling branches', () => {
+    const graph = editorDocToGraph(doc, { scopeBranchUid: 'branch' })
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      'root',
+      'parent',
+      'branch',
+      'leaf-a',
+      'leaf-b',
+    ])
+    expect(graph.nodes.find((node) => node.id === 'parent')?.parentId).toBe('root')
+    expect(graph.nodes.find((node) => node.id === 'branch')?.parentId).toBe('parent')
+  })
+
+  it('falls back to the full document when the branch uid is missing', () => {
+    const graph = editorDocToGraph(doc, { scopeBranchUid: 'missing' })
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      'root',
+      'parent',
+      'branch',
+      'leaf-a',
+      'leaf-b',
+      'sibling',
+      'other',
+    ])
+  })
+})

@@ -758,13 +758,13 @@ export function PalaceSubjectMindMapCard({
     <Card
       className={cn(
         'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
-        fullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+        fullscreen && 'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
         className,
       )}
     >
       <CardContent
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-3 p-4',
+          'flex min-h-0 flex-1 flex-col gap-2 p-0',
           fullscreen && 'h-full',
         )}
       >

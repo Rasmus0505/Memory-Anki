@@ -433,7 +433,7 @@ export default function PalaceEdit() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {mindMapFileTransfer.input}
       <PalaceMemoryLookupDialog
         open={memoryLookupOpen}
@@ -511,11 +511,9 @@ export default function PalaceEdit() {
         >
           <div
             className={cn(
-              'grid min-h-0 gap-3',
-              // Fill remaining viewport under PageIntro/status so the mind-map is large without stacking vh heights.
-              'min-h-[calc(100vh-11rem)] xl:h-[calc(100vh-11rem)]',
+              'grid min-h-0 flex-1 gap-2',
               'xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:items-stretch',
-              page.mindMapFullscreen && 'grid-cols-1 xl:h-auto min-h-0',
+              page.mindMapFullscreen && 'grid-cols-1',
             )}
           >
             {!page.mindMapFullscreen ? (
@@ -538,23 +536,23 @@ export default function PalaceEdit() {
               </aside>
             ) : null}
 
-            <section className={cn('flex min-h-[420px] flex-col xl:min-h-0', page.mindMapFullscreen && 'min-h-0')}>
+            <section className="flex min-h-0 flex-1 flex-col">
               {activeMindMapKey === 'palace' ? (
                 <Card
                   className={cn(
                     'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
                     page.mindMapFullscreen &&
-                      'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+                      'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
                   )}
                 >
                   <CardContent
                     className={cn(
-                      'flex min-h-0 flex-1 flex-col p-4',
+                      'flex min-h-0 flex-1 flex-col p-0',
                       page.mindMapFullscreen && 'h-full',
                     )}
                   >
                     {activeFrameEditorState ? (
-                      <div className="flex h-full min-h-0 flex-col gap-3">
+                      <div className="flex h-full min-h-0 flex-col gap-2">
                         {mindMapExperience.task === 'learn' ? (
                           <div className="grid shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
@@ -617,10 +615,7 @@ export default function PalaceEdit() {
                           onToggleFullscreen={page.toggleMindMapFullscreen}
                           onUiClearedChange={setMindMapUiCleared}
                           className="flex min-h-0 flex-1 flex-col"
-                          surfaceClassName={cn(
-                            'h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-background',
-                            !page.mindMapFullscreen && 'min-h-[420px]',
-                          )}
+                          surfaceClassName="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-background"
                         />
                       </div>
                     ) : (

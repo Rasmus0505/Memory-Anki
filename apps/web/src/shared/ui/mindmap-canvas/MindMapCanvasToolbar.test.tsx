@@ -22,6 +22,7 @@ describe('MindMapCanvasToolbar', () => {
     const toolbar = screen.getByRole('button', { name: '学习组' }).parentElement
     expect(toolbar?.className).toContain('flex-nowrap')
     expect(toolbar?.className).toContain('overflow-x-auto')
+    expect(toolbar?.className).toContain('h-10')
     expect(screen.getByTitle('刷新脑图')).toBeTruthy()
     expect(screen.getByTitle('进入全屏')).toBeTruthy()
     expect(screen.queryByTitle('进入系统全屏')).toBeNull()

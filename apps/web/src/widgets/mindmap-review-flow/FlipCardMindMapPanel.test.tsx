@@ -133,6 +133,50 @@ describe('FlipCardMindMapPanel', () => {
     })
   })
 
+  it('forwards scoped branch edit without collapsing the unit tree', () => {
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        displayMode="edit"
+        editableEditorState={editorState}
+        scopeBranchUid="unit-card"
+        forceExpanded
+        initialViewPolicy="preserve"
+        sceneTransitionFallbackNodeId="unit-card"
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()).toMatchObject({
+      readonly: false,
+      practiceModeActive: false,
+      forceExpanded: true,
+      scopeBranchUid: 'unit-card',
+      initialViewPolicy: 'preserve',
+      sceneTransitionFallbackNodeId: 'unit-card',
+    })
+  })
+
+  it('forwards pane mode gestures and suppresses them in text mode', () => {
+    const onPaneDoubleClick = vi.fn()
+    const onPaneLongPress = vi.fn()
+    renderInRouter(
+      <FlipCardMindMapPanel
+        {...baseProps}
+        onPaneDoubleClick={onPaneDoubleClick}
+        onPaneLongPress={onPaneLongPress}
+      />,
+    )
+
+    expect(getLatestMindMapEditorSurfaceProps()).toMatchObject({
+      onPaneDoubleClick,
+      onPaneLongPress,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '文字模式' }))
+    expect(getLatestMindMapEditorSurfaceProps()?.onPaneDoubleClick).toBeUndefined()
+    expect(getLatestMindMapEditorSurfaceProps()?.onPaneLongPress).toBeUndefined()
+  })
+
   it('maps formal unit display onto review scene chrome', () => {
     renderInRouter(<FlipCardMindMapPanel {...baseProps} sessionKind="review" />)
 

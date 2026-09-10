@@ -5,6 +5,8 @@ import {
   findNearestNodeIdToViewportCenter,
   getViewportCenterFlowPoint,
   nodeIntersectsViewport,
+  resolveSceneRecenterAnchorId,
+  SCENE_FIT_SENTINEL,
 } from './mindMapCanvasGeometry'
 
 function node(id: string, x: number, y: number, width = 100, height = 40): Node {
@@ -78,5 +80,51 @@ describe('mindMapCanvasGeometry viewport intersection', () => {
     // Far card stays off-screen even with pan.
     const far = node('far', 5000, 5000)
     expect(nodeIntersectsViewport(far, viewport, canvas)).toBe(false)
+  })
+})
+
+describe('mindMapCanvasGeometry scene recenter', () => {
+  it('keeps the requested card when it is still present', () => {
+    expect(resolveSceneRecenterAnchorId({
+      requestedId: 'child',
+      presentIds: ['root', 'child'],
+      rootId: 'root',
+    })).toBe('child')
+  })
+
+  it('walks to the nearest still-present ancestor before the host fallback', () => {
+    expect(resolveSceneRecenterAnchorId({
+      requestedId: 'leaf',
+      presentIds: ['root', 'unit'],
+      parentById: new Map([
+        ['leaf', 'unit'],
+        ['unit', 'root'],
+        ['root', null],
+      ]),
+      fallbackId: 'root',
+      rootId: 'root',
+    })).toBe('unit')
+  })
+
+  it('uses the host fallback when the requested card and its ancestors are gone', () => {
+    expect(resolveSceneRecenterAnchorId({
+      requestedId: 'other-unit',
+      presentIds: ['root', 'unit'],
+      parentById: new Map([
+        ['other-unit', 'gone-parent'],
+        ['gone-parent', null],
+      ]),
+      fallbackId: 'unit',
+      rootId: 'root',
+    })).toBe('unit')
+  })
+
+  it('fits only when the next graph is empty', () => {
+    expect(resolveSceneRecenterAnchorId({
+      requestedId: 'child',
+      presentIds: [],
+      fallbackId: 'unit',
+      rootId: 'root',
+    })).toBe(SCENE_FIT_SENTINEL)
   })
 })

@@ -17,6 +17,7 @@ import {
 import type { MindMapCanvasViewCommand } from '@/shared/ui/mindmap-canvas'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
+import { collectMindMapBranchScope } from '@/modules/content/domain/mindmap-document-entity'
 import {
   buildSelectionFromDoc,
   editEditorDocNode,
@@ -58,6 +59,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   capabilities: providedCapabilities,
   readonly = false,
   practiceModeActive = false,
+  forceExpanded = false,
+  scopeBranchUid = null,
   immersiveModeActive = false,
   englishInteractionActive = false,
   onEnglishWordClick,
@@ -67,6 +70,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   externalSyncKey = null,
   forceSyncKey = null,
   preserveViewOnSync = false,
+  initialViewPolicy = 'preserve',
+  sceneTransitionFallbackNodeId = null,
   mobileViewPolicy = 'auto',
   nodeClickViewportPolicy,
   contentChangeViewportPolicy,
@@ -100,6 +105,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onNodeActive,
   onNodeClick,
   onNodeContextMenu,
+  onPaneDoubleClick,
+  onPaneLongPress,
   onNodeHover,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
@@ -207,16 +214,23 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   // Content signature absorbs shallow-new decoration objects with identical payload
   // (e.g. empty mastery maps recreated each render in review).
   const graphOptionsSignature = useMemo(() => JSON.stringify(graphOptions), [graphOptions])
+  const branchScope = useMemo(
+    () => scopeBranchUid
+      ? collectMindMapBranchScope(normalizedEditorState.editor_doc, scopeBranchUid)
+      : null,
+    [normalizedEditorState.editor_doc, scopeBranchUid],
+  )
   const graphData = useMemo(
     () =>
       editorDocToGraph(normalizedEditorState.editor_doc, {
         ...graphOptions,
         ankiEditMode,
         readonly,
+        scopeBranchUid,
       }),
     // graphOptions is read from the latest closure when signature changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- signature tracks decoration content
-    [ankiEditMode, graphOptionsSignature, normalizedEditorState.editor_doc, readonly],
+    [ankiEditMode, graphOptionsSignature, normalizedEditorState.editor_doc, readonly, scopeBranchUid],
   )
   // Host remounts only on intentional document-identity changes.
   // Mode switches (build/learn, flip syncReason, preserveView flag) must not rebuild ReactFlow.
@@ -584,6 +598,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     onNodeActive,
     undoEditorDoc,
     confirmDeleteNodes,
+    branchScope,
   })
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
@@ -666,67 +681,48 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     <WidgetErrorBoundary label="思维导图">
       <MindMapCanvas
         graphData={graphData}
-        selectedNodeId={selectedNodeId}
-        selectedNodeIds={selectedNodeIds}
-        editingNodeId={editingNodeId}
-        editingDraft={editingDraft}
+        selectedNodeId={selectedNodeId} selectedNodeIds={selectedNodeIds}
+        editingNodeId={editingNodeId} editingDraft={editingDraft}
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
-        readonly={!canEdit}
-        practiceModeActive={practiceModeActive}
-        englishInteractionActive={englishInteractionActive}
-        onEnglishWordClick={onEnglishWordClick}
+        readonly={!canEdit} practiceModeActive={practiceModeActive} forceExpanded={forceExpanded}
+        lockedStructureNodeIds={branchScope?.pathUids}
+        allowAddChildNodeIds={branchScope ? [branchScope.branchUid] : undefined}
+        sceneTransitionFit={initialViewPolicy === 'reset'}
+        sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
+        englishInteractionActive={englishInteractionActive} onEnglishWordClick={onEnglishWordClick}
         textSelectionModeActive={textSelectionModeActive}
         focusMode={nativeFullscreenActive}
         presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
-        showToolbar={!uiCleared}
-        toolbarContent={toolbarContent}
-        toolbarCenterContent={toolbarCenterContent}
+        showToolbar={!uiCleared} toolbarContent={toolbarContent} toolbarCenterContent={toolbarCenterContent}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
         preferredZoom={preferredZoom} onUserZoomChange={onUserZoomChange}
-        sceneTransitionKey={resolvedSceneTransitionKey}
-        viewCommand={viewCommand}
-        recoveryKey={canvasRecoveryKey}
-        onNodeSelect={selectNode}
-        onEditingNodeChange={handleEditingNodeChange}
-        onEditingDraftChange={updateEditingDraft}
-        onKeyDownCapture={handleCanvasKeyDown}
-        onNodeActivate={activateNode}
-        onNodeContextAction={contextNode}
-        onNodeHover={hoverNode}
-        onCountBadgeClick={onCountBadgeClick}
-        buildNodeActions={buildNodeActions}
-        buildSelectionToolbarActions={buildSelectionToolbarActions}
+        sceneTransitionKey={resolvedSceneTransitionKey} viewCommand={viewCommand} recoveryKey={canvasRecoveryKey}
+        onNodeSelect={selectNode} onEditingNodeChange={handleEditingNodeChange}
+        onEditingDraftChange={updateEditingDraft} onKeyDownCapture={handleCanvasKeyDown}
+        onNodeActivate={activateNode} onPaneDoubleClick={onPaneDoubleClick} onPaneLongPress={onPaneLongPress}
+        onNodeContextAction={contextNode} onNodeHover={hoverNode} onCountBadgeClick={onCountBadgeClick}
+        buildNodeActions={buildNodeActions} buildSelectionToolbarActions={buildSelectionToolbarActions}
         selectionToolbarPreferPosition={selectionToolbarPreferPosition}
-        onAddChild={handleAddChild}
-        onAddSibling={handleAddSibling}
-        onDelete={handleDeleteNode}
-        onDeleteNodes={handleDeleteNodes}
-        onDeleteNodeOnly={handleDeleteNodeOnly}
-        onDeleteNodesOnly={handleDeleteNodesOnly}
-        onHighlightNodes={handleHighlightNodes}
-        onMarkColorNodes={handleMarkColorNodes}
-        onToggleQuestionCards={handleToggleQuestionCards}
-        onEdit={handleEditNode}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={undoEditorDoc}
-        onRedo={redoEditorDoc}
-        onRelocate={handleRelocateNodes}
-        onExtractSelection={handleExtractSelection}
+        onAddChild={handleAddChild} onAddSibling={handleAddSibling}
+        onDelete={handleDeleteNode} onDeleteNodes={handleDeleteNodes}
+        onDeleteNodeOnly={handleDeleteNodeOnly} onDeleteNodesOnly={handleDeleteNodesOnly}
+        onHighlightNodes={handleHighlightNodes} onMarkColorNodes={handleMarkColorNodes}
+        onToggleQuestionCards={handleToggleQuestionCards} onEdit={handleEditNode}
+        canUndo={canUndo} canRedo={canRedo} onUndo={undoEditorDoc} onRedo={redoEditorDoc}
+        onRelocate={handleRelocateNodes} onExtractSelection={handleExtractSelection}
         onReorderSibling={handleReorderSibling}
-        onMoveUp={handleMoveUp}
-        onMoveDown={handleMoveDown}
-        canMoveUp={canMoveNodeUp}
-        canMoveDown={canMoveNodeDown}
+        onMoveUp={handleMoveUp} onMoveDown={handleMoveDown}
+        canMoveUp={canMoveNodeUp} canMoveDown={canMoveNodeDown}
         onToggleSystemFullscreen={handleSystemFullscreenToggle}
         onToggleWebpageFullscreen={handleWebpageFullscreenToggle}
         className="h-full min-h-0 w-full border-0 bg-transparent shadow-none"
       />
     </WidgetErrorBoundary>
   )
+
   return (
     <div
       ref={frameRef}
