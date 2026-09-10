@@ -135,6 +135,44 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('placeholder')
   })
 
+  it('hydrates flip progress from a synced reveal map on mount', () => {
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState,
+        syncedRevealMap: { root: 'revealed', a: 'revealed', b: 'hidden' },
+      }),
+    )
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('hidden')
+  })
+
+  it('keeps flip progress when the editor state object identity changes', () => {
+    const { result, rerender } = renderHook(
+      ({ state }: { state: MindMapEditorState }) =>
+        useRevealSession({ title: '宫殿', editorState: state }),
+      { initialProps: { state: editorState } },
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+
+    rerender({
+      state: {
+        ...editorState,
+        editor_doc: JSON.parse(JSON.stringify(editorState.editor_doc)) as MindMapEditorState['editor_doc'],
+        editor_fingerprint: 'after-return-to-review',
+      },
+    })
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
+
   it('lets the root continue through nested cards without selecting each child', () => {
     const nested: MindMapEditorState = {
       ...editorState,
@@ -613,5 +651,109 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b1).toBe('placeholder')
     expect(result.current.revealMap.a1).not.toBe('placeholder')
     expect(result.current.revealMap.a1).not.toBe('revealed')
+  })
+
+  it('does not let a weaker synced map wipe local flip progress', () => {
+    const { result, rerender } = renderHook(
+      ({ synced }: { synced: Record<string, 'revealed' | 'hidden'> | null }) =>
+        useRevealSession({ title: '宫殿', editorState, syncedRevealMap: synced }),
+      { initialProps: { synced: null } },
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+
+    rerender({ synced: { root: 'revealed', a: 'hidden', b: 'hidden' } })
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
+
+  it('keeps flip progress when only layout/fingerprint fields change', () => {
+    const { result, rerender } = renderHook(
+      ({ state }: { state: MindMapEditorState }) =>
+        useRevealSession({ title: '宫殿', editorState: state }),
+      { initialProps: { state: editorState } },
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+    expect(result.current.revealMap.a).toBe('revealed')
+
+    rerender({
+      state: {
+        ...editorState,
+        editor_fingerprint: 'after-save',
+        editor_doc: {
+          ...(editorState.editor_doc as object),
+          layout: 'logicalStructure',
+          theme: { template: 'avocado', config: {} },
+          root: (editorState.editor_doc as { root: unknown }).root,
+        } as MindMapEditorState['editor_doc'],
+      },
+    })
+    expect(result.current.revealMap.a).toBe('revealed')
+    expect(result.current.revealMap.b).toBe('revealed')
+  })
+
+  it('keeps promoted children revealed after a parent is deleted', () => {
+    const withParent: MindMapEditorState = {
+      ...editorState,
+      editor_doc: {
+        root: {
+          data: { text: '四阶段', uid: 'root' },
+          children: [
+            {
+              data: { text: '婴幼青', uid: 'group' },
+              children: [
+                { data: { text: '婴儿期', uid: 'baby' }, children: [] },
+                { data: { text: '幼儿期', uid: 'child' }, children: [] },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    const { result, rerender } = renderHook(
+      ({ state }: { state: MindMapEditorState }) =>
+        useRevealSession({ title: '宫殿', editorState: state }),
+      { initialProps: { state: withParent } },
+    )
+
+    act(() => {
+      result.current.setRevealMap({
+        root: 'revealed',
+        group: 'revealed',
+        baby: 'revealed',
+        child: 'revealed',
+      })
+    })
+    expect(result.current.revealMap.baby).toBe('revealed')
+    expect(result.current.revealMap.child).toBe('revealed')
+
+    rerender({
+      state: {
+        ...withParent,
+        editor_doc: {
+          root: {
+            data: { text: '四阶段', uid: 'root' },
+            children: [
+              { data: { text: '婴儿期', uid: 'baby' }, children: [] },
+              { data: { text: '幼儿期', uid: 'child' }, children: [] },
+            ],
+          },
+        },
+      },
+    })
+    expect(result.current.revealMap.group).toBeUndefined()
+    expect(result.current.revealMap.baby).toBe('revealed')
+    expect(result.current.revealMap.child).toBe('revealed')
   })
 })

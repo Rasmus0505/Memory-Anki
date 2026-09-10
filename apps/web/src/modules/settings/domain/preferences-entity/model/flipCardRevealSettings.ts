@@ -3,10 +3,11 @@ import { createPersistentPreferenceStore } from '@/shared/preferences/persistent
 import {
   DEFAULT_FLIP_CARD_REVEAL_CONFIG,
   sanitizeFlipCardRevealConfig,
+  type FlipCardEditScope,
   type FlipCardRevealConfig,
 } from '@/shared/preferences/flipCardRevealConfig'
 
-export type { FlipCardRevealConfig }
+export type { FlipCardEditScope, FlipCardRevealConfig }
 export { DEFAULT_FLIP_CARD_REVEAL_CONFIG, sanitizeFlipCardRevealConfig }
 
 export const FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY = 'memory-anki-flip-card-reveal-config'

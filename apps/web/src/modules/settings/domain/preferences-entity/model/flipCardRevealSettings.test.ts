@@ -25,15 +25,30 @@ describe('flipCardRevealSettings', () => {
     expect(sanitizeFlipCardRevealConfig({ granularity: 'single', stage: 'direct' })).toEqual({
       granularity: 'single',
       stage: 'direct',
+      editScope: 'unit',
+    })
+    expect(sanitizeFlipCardRevealConfig({ editScope: 'palace' })).toEqual({
+      granularity: 'level',
+      stage: 'two-step',
+      editScope: 'palace',
     })
   })
 
   it('writes sanitized settings and resets to the grouped default', () => {
-    expect(writeFlipCardRevealSettings({ granularity: 'single', stage: 'direct' })).toEqual({
+    expect(writeFlipCardRevealSettings({
       granularity: 'single',
       stage: 'direct',
+      editScope: 'palace',
+    })).toEqual({
+      granularity: 'single',
+      stage: 'direct',
+      editScope: 'palace',
     })
-    expect(readFlipCardRevealSettings()).toEqual({ granularity: 'single', stage: 'direct' })
+    expect(readFlipCardRevealSettings()).toEqual({
+      granularity: 'single',
+      stage: 'direct',
+      editScope: 'palace',
+    })
     expect(window.localStorage.getItem(FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY)).toBeNull()
     expect(resetFlipCardRevealSettings()).toEqual(DEFAULT_FLIP_CARD_REVEAL_CONFIG)
   })
@@ -42,10 +57,17 @@ describe('flipCardRevealSettings', () => {
     const { result } = renderHook(() => useFlipCardRevealSettings())
 
     act(() => {
-      result.current.updateSettings({ granularity: 'single', stage: 'direct' })
+      result.current.updateSettings({
+        granularity: 'single',
+        stage: 'direct',
+        editScope: 'unit',
+      })
     })
 
-    expect(result.current.settings).toEqual({ granularity: 'single', stage: 'direct' })
+    expect(result.current.settings).toEqual({
+      granularity: 'single',
+      stage: 'direct',
+      editScope: 'unit',
+    })
   })
 })
-

@@ -12,7 +12,9 @@ import {
   buildReviewTree,
   collectNodeIds,
   countNodes,
+  countRevealedInMap,
   flattenNodes,
+  revealTopologyKey,
   hasPendingBulkReveal,
   hideRevealStateBranch,
   parseEditorDoc,
@@ -137,7 +139,11 @@ export function useRevealSession({
     ],
   )
   const [revealMap, setRevealMap] = React.useState<Record<string, RevealState>>(
-    () => buildInitialRevealState(root, initialSnapshot?.revealMap ?? null, revealOptions),
+    () => buildInitialRevealState(
+      root,
+      syncedRevealMap ?? initialSnapshot?.revealMap ?? null,
+      revealOptions,
+    ),
   )
   const [redNodeIds, setRedNodeIds] = React.useState<Set<string>>(
     () => new Set((initialSnapshot?.redNodeIds ?? []).filter(Boolean)),
@@ -175,6 +181,10 @@ export function useRevealSession({
   React.useEffect(() => {
     if (syncedRevealMap == null) return
     if (JSON.stringify(revealMapRef.current) === syncedRevealKey) return
+    const currentRevealed = countRevealedInMap(revealMapRef.current)
+    const incomingRevealed = countRevealedInMap(syncedRevealMap)
+    if (currentRevealed > 0 && incomingRevealed < currentRevealed) return
+    revealMapRef.current = syncedRevealMap
     setRevealMap(syncedRevealMap)
   }, [syncedRevealKey, syncedRevealMap])
 
@@ -192,14 +202,19 @@ export function useRevealSession({
     }
   }, [])
 
+  const topologyKey = React.useMemo(() => revealTopologyKey(root), [root])
+  const lastTopologyKeyRef = React.useRef(topologyKey)
   React.useEffect(() => {
+    if (lastTopologyKeyRef.current === topologyKey) return
+    lastTopologyKeyRef.current = topologyKey
     const nextRevealMap = buildInitialRevealState(root, revealMapRef.current, revealOptions)
+    revealMapRef.current = nextRevealMap
     setRevealMap(nextRevealMap)
     setRedNodeIds((current) => sanitizeRedNodeIds(root, current))
     if (resetCompletedOnDocChange) {
       setCompleted(false)
     }
-  }, [docFingerprint, resetCompletedOnDocChange, revealOptions, root])
+  }, [resetCompletedOnDocChange, revealOptions, root, topologyKey])
 
   React.useEffect(() => {
     setDocVersion((current) => current + 1)

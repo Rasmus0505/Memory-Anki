@@ -1,8 +1,10 @@
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
-import { RadioGroup, RadioGroupItem } from '@/shared/components/ui/radio-group'
+import type { ReactNode } from 'react'
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group'
 import { Button } from '@/shared/components/ui/button'
 import { Switch } from '@/shared/components/ui/switch'
-import type { FlipCardRevealConfig } from '@/shared/preferences/flipCardRevealConfig'
+import { cn } from '@/shared/lib/utils'
+import type { FlipCardEditScope, FlipCardRevealConfig, RevealGranularity, RevealStage } from '@/shared/preferences/flipCardRevealConfig'
 import type { FreestyleFlipMode } from '@/modules/practice/public'
 
 export interface FlipCardRevealSettingsDialogProps {
@@ -21,6 +23,59 @@ export interface FlipCardRevealSettingsDialogProps {
   }
 }
 
+function SettingRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 pt-0.5">
+        <div className="text-[13px] font-medium leading-5">{label}</div>
+        {hint ? <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{hint}</p> : null}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+function BinaryToggle<T extends string>({
+  value,
+  onChange,
+  ariaLabel,
+  options,
+  className,
+}: {
+  value: T
+  onChange: (value: T) => void
+  ariaLabel: string
+  options: Array<{ value: T; label: string }>
+  className?: string
+}) {
+  return (
+    <ToggleGroup
+      type="single"
+      value={value}
+      onValueChange={(next) => {
+        if (next !== options[0].value && next !== options[1].value) return
+        onChange(next as T)
+      }}
+      className={cn('grid w-[13.75rem] grid-cols-2', className)}
+      aria-label={ariaLabel}
+    >
+      {options.map((option) => (
+        <ToggleGroupItem key={option.value} value={option.value} className="h-7 px-2 text-[13px]">
+          {option.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  )
+}
+
 export function FlipCardRevealSettingsDialog({
   open,
   onOpenChange,
@@ -31,95 +86,76 @@ export function FlipCardRevealSettingsDialog({
 }: FlipCardRevealSettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" data-testid="flip-card-reveal-settings-dialog">
+      <DialogContent
+        className="max-w-md"
+        floatingId="flip-card-reveal-settings"
+        data-testid="flip-card-reveal-settings-dialog"
+      >
         <DialogHeader>
           <DialogTitle>翻卡设置</DialogTitle>
-          <DialogDescription>设置普通点击的揭示节奏。</DialogDescription>
+          <DialogDescription>点击揭示、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">翻卡颗粒度</legend>
-            <RadioGroup
-              value={value.granularity}
-              onValueChange={(granularity) => {
-                if (granularity !== 'single' && granularity !== 'level') return
-                onChange({ ...value, granularity })
-              }}
-              className="grid gap-2"
-              aria-label="翻卡颗粒度"
-            >
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                <RadioGroupItem value="single" />
-                <span className="text-sm">逐张</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                <RadioGroupItem value="level" />
-                <span className="text-sm">同层批量</span>
-              </label>
-            </RadioGroup>
-          </fieldset>
+        <DialogBody className="space-y-4">
+          <section className="space-y-3">
+            <SettingRow label="翻卡颗粒度">
+              <BinaryToggle<RevealGranularity>
+                value={value.granularity}
+                onChange={(granularity) => onChange({ ...value, granularity })}
+                ariaLabel="翻卡颗粒度"
+                options={[
+                  { value: 'single', label: '逐张' },
+                  { value: 'level', label: '同层批量' },
+                ]}
+              />
+            </SettingRow>
+            <SettingRow label="揭示方式" hint="两阶段会先出待回忆占位符">
+              <BinaryToggle<RevealStage>
+                value={value.stage}
+                onChange={(stage) => onChange({ ...value, stage })}
+                ariaLabel="揭示方式"
+                options={[
+                  { value: 'two-step', label: '两阶段' },
+                  { value: 'direct', label: '直接显示' },
+                ]}
+              />
+            </SettingRow>
+          </section>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">揭示方式</legend>
-            <RadioGroup
-              value={value.stage}
-              onValueChange={(stage) => {
-                if (stage !== 'two-step' && stage !== 'direct') return
-                onChange({ ...value, stage })
-              }}
-              className="grid gap-2"
-              aria-label="揭示方式"
-            >
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                <RadioGroupItem value="two-step" />
-                <span className="text-sm">两阶段（待回忆 → 内容）</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                <RadioGroupItem value="direct" />
-                <span className="text-sm">直接显示内容</span>
-              </label>
-            </RadioGroup>
-          </fieldset>
-
-          {freestyleFlipMode ? (
-            <fieldset className="space-y-2 border-t pt-4">
-              <legend className="text-sm font-medium">随心翻卡模式</legend>
-              <RadioGroup
-                value={freestyleFlipMode.value}
-                onValueChange={(mode) => {
-                  if (mode !== 'free' && mode !== 'focused') return
-                  freestyleFlipMode.onChange(mode)
-                }}
-                className="grid gap-2"
-                aria-label="随心翻卡模式"
-              >
-                <label className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                  <RadioGroupItem value="free" className="mt-0.5" />
-                  <span className="grid gap-0.5 text-sm">
-                    <span>随心模式</span>
-                    <span className="text-xs text-muted-foreground">整座宫殿的卡片都可以翻</span>
-                  </span>
-                </label>
-                <label className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 hover:bg-accent">
-                  <RadioGroupItem value="focused" className="mt-0.5" />
-                  <span className="grid gap-0.5 text-sm">
-                    <span>专线模式</span>
-                    <span className="text-xs text-muted-foreground">只允许当前复习单元及祖先路径</span>
-                  </span>
-                </label>
-              </RadioGroup>
-            </fieldset>
-          ) : null}
+          <section className="space-y-3 border-t border-border/60 pt-3">
+            {freestyleFlipMode ? (
+              <SettingRow label="可翻范围" hint="随心模式可翻整座宫殿">
+                <BinaryToggle<FreestyleFlipMode>
+                  value={freestyleFlipMode.value}
+                  onChange={freestyleFlipMode.onChange}
+                  ariaLabel="随心翻卡模式"
+                  options={[
+                    { value: 'free', label: '随心模式' },
+                    { value: 'focused', label: '专线模式' },
+                  ]}
+                />
+              </SettingRow>
+            ) : null}
+            <SettingRow label="进入编辑" hint="双击空白画布时的编辑范围">
+              <BinaryToggle<FlipCardEditScope>
+                value={value.editScope === 'palace' ? 'palace' : 'unit'}
+                onChange={(editScope) => onChange({ ...value, editScope })}
+                ariaLabel="进入编辑范围"
+                options={[
+                  { value: 'unit', label: '当前专线' },
+                  { value: 'palace', label: '整座宫殿' },
+                ]}
+              />
+            </SettingRow>
+          </section>
 
           {freestyleAutoAdvance ? (
-            <fieldset className="space-y-2 border-t pt-4">
-              <legend className="text-sm font-medium">评分后自动进下一张</legend>
-              <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border px-3 py-2.5 hover:bg-accent">
-                <span className="grid gap-0.5 text-sm">
-                  <span>记得 / 轻松后自动前进</span>
-                  <span className="text-xs text-muted-foreground">
-                    留出撤销时间后翻页；忘记 / 困难始终停在原卡
+            <section className="border-t border-border/60 pt-3">
+              <label className="flex cursor-pointer items-start justify-between gap-4">
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium leading-5">记得 / 轻松后自动前进</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
+                    留出撤销时间后翻页；忘记 / 困难停在原卡
                   </span>
                 </span>
                 <Switch
@@ -128,12 +164,12 @@ export function FlipCardRevealSettingsDialog({
                   aria-label="评分后自动进下一张"
                 />
               </label>
-            </fieldset>
+            </section>
           ) : null}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
             完成
           </Button>
         </DialogFooter>

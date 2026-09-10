@@ -16,6 +16,7 @@ export {
   sanitizeFlipCardRevealConfig,
   useFlipCardRevealSettings,
   writeFlipCardRevealSettings,
+  type FlipCardEditScope,
   type FlipCardRevealConfig,
 } from './domain/preferences-entity/model/flipCardRevealSettings'
 export * from './domain/runtime-entity/api'

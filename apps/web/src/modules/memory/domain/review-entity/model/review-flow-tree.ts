@@ -233,6 +233,21 @@ export function collectNodeIds(root: ReviewMindMapNode) {
   return ids
 }
 
+export function revealTopologyKey(root: ReviewMindMapNode) {
+  const parts: string[] = []
+  const walk = (node: ReviewMindMapNode) => {
+    parts.push(`${node.id}>${node.parentId ?? ''}`)
+    node.children.forEach(walk)
+  }
+  walk(root)
+  return parts.join('|')
+}
+
+export function countRevealedInMap(map: Record<string, string> | null | undefined) {
+  if (!map) return 0
+  return Object.values(map).filter((state) => state === 'revealed').length
+}
+
 /** Normalize a host-provided reveal scope without excluding the root node. */
 export function sanitizeAllowedNodeIds(
   root: ReviewMindMapNode,

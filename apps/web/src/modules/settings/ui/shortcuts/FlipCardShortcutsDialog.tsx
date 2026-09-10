@@ -19,6 +19,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -132,7 +133,7 @@ export function FlipCardShortcutsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" accessibleTitle="翻卡快捷键">
+      <DialogContent className="max-w-lg" floatingId="flip-card-shortcuts" accessibleTitle="翻卡快捷键">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Keyboard className="size-4" />
@@ -143,7 +144,7 @@ export function FlipCardShortcutsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 px-1">
+        <DialogBody className="space-y-2">
           <Alert variant="info">
             <AlertDescription>
               支持单独字母键（如 A / S）。录制时按下目标键即可；输入框中不会触发业务快捷键。
@@ -153,7 +154,7 @@ export function FlipCardShortcutsDialog({
           {flipActions.map((action, index) => (
             <div
               key={action.id}
-              className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-lg border border-border/70 px-3 py-3 ${
+              className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-lg border border-border/70 px-3 py-2 ${
                 index > 0 ? '' : ''
               }`}
             >
@@ -201,7 +202,7 @@ export function FlipCardShortcutsDialog({
               </div>
             </div>
           ))}
-        </div>
+        </DialogBody>
 
         <DialogFooter className="gap-2 sm:justify-between">
           <Button type="button" variant="ghost" onClick={handleResetFlipDefaults}>
