@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -186,7 +187,7 @@ export function NativeDialogProvider() {
           </div>
         </DialogHeader>
         {request.type === 'prompt' ? (
-          <div className="px-6 py-4">
+          <DialogBody>
             <Input
               autoFocus
               value={promptValue}
@@ -195,7 +196,7 @@ export function NativeDialogProvider() {
                 if (event.key === 'Enter') confirm()
               }}
             />
-          </div>
+          </DialogBody>
         ) : null}
         <DialogFooter>
           {request.type === 'alert' ? null : (

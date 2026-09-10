@@ -276,6 +276,37 @@ describe('Dialog', () => {
     expect(document.getElementById(descriptionId ?? '')?.textContent).toBe('Search operations and pages.')
   })
 
+  it('centers compact max-w-md dialogs using the inferred width', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1400,
+    })
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 900,
+    })
+
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent className="max-w-md" floatingId="compact-center-test">
+          <DialogHeader>
+            <div>
+              <DialogTitle>compact dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.style.width).toBe('448px')
+    expect(dialog.style.left).toBe('476px')
+  })
+
   it('disables floating controls on small coarse pointer viewports', () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,

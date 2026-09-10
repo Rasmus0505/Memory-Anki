@@ -18,23 +18,21 @@ import {
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Maximize2, Minimize2, Pin, PinOff, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
+import {
+  clampLayout,
+  createCenteredFloatingLayout,
+  FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH,
+  FLOATING_DIALOG_MIN_WIDTH,
+  FLOATING_DIALOG_STORAGE_PREFIX,
+  FLOATING_DIALOG_VIEWPORT_PADDING,
+  inferWidthFromClassName,
+  readStoredFloatingLayout,
+  writeStoredFloatingLayout,
+  type FloatingDialogLayout,
+} from './dialogFloatingLayout'
 
 type DialogLayout = 'centered' | 'unstyled'
 type ResizeDirection = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'se' | 'sw'
-
-interface FloatingDialogLayout {
-  x: number
-  y: number
-  width: number
-  height: number | null
-  collapsed: boolean
-  pinned: boolean
-}
-
-const FLOATING_DIALOG_STORAGE_PREFIX = 'memory-anki-floating-dialog:'
-const FLOATING_DIALOG_MIN_WIDTH = 320
-const FLOATING_DIALOG_MIN_HEIGHT = 180
-const FLOATING_DIALOG_VIEWPORT_PADDING = 16
 
 function isCoarsePointerViewport() {
   if (typeof window === 'undefined') return false
@@ -51,91 +49,6 @@ const resizeHandleStyles: Record<ResizeDirection, { className: string; label: st
   ne: { className: 'right-[-6px] top-[-6px] h-6 w-6 cursor-nesw-resize', label: '从右上角调整弹窗大小' },
   se: { className: 'bottom-[-6px] right-[-6px] h-6 w-6 cursor-nwse-resize', label: '从右下角调整弹窗大小' },
   sw: { className: 'bottom-[-6px] left-[-6px] h-6 w-6 cursor-nesw-resize', label: '从左下角调整弹窗大小' },
-}
-
-function getViewportSize() {
-  if (typeof window === 'undefined') {
-    return { width: 1024, height: 768 }
-  }
-  return { width: window.innerWidth, height: window.innerHeight }
-}
-
-function clampLayout(layout: FloatingDialogLayout): FloatingDialogLayout {
-  const viewport = getViewportSize()
-  const maxWidth = Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
-  const maxHeight = Math.max(FLOATING_DIALOG_MIN_HEIGHT, viewport.height - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
-  const width = Math.min(Math.max(layout.width, FLOATING_DIALOG_MIN_WIDTH), maxWidth)
-  const height = layout.height == null ? null : Math.min(Math.max(layout.height, FLOATING_DIALOG_MIN_HEIGHT), maxHeight)
-  const effectiveHeight = height ?? Math.min(560, maxHeight)
-
-  return {
-    ...layout,
-    width,
-    height,
-    x: Math.min(Math.max(layout.x, FLOATING_DIALOG_VIEWPORT_PADDING), viewport.width - width - FLOATING_DIALOG_VIEWPORT_PADDING),
-    y: Math.min(Math.max(layout.y, FLOATING_DIALOG_VIEWPORT_PADDING), viewport.height - effectiveHeight - FLOATING_DIALOG_VIEWPORT_PADDING),
-  }
-}
-
-function createCenteredFloatingLayout(
-  partial?: Partial<Pick<FloatingDialogLayout, 'width' | 'height' | 'collapsed' | 'pinned'>>,
-): FloatingDialogLayout {
-  const viewport = getViewportSize()
-  const width = Math.min(
-    partial?.width ?? 820,
-    Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - FLOATING_DIALOG_VIEWPORT_PADDING * 2),
-  )
-  const height = partial?.height ?? null
-  const effectiveHeight = height ?? Math.min(560, viewport.height - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
-  return clampLayout({
-    x: Math.max(FLOATING_DIALOG_VIEWPORT_PADDING, Math.round((viewport.width - width) / 2)),
-    // True vertical center (was ~8% top-biased, which looked "off-center").
-    y: Math.max(
-      FLOATING_DIALOG_VIEWPORT_PADDING,
-      Math.round((viewport.height - effectiveHeight) / 2),
-    ),
-    width,
-    height,
-    collapsed: Boolean(partial?.collapsed),
-    pinned: Boolean(partial?.pinned),
-  })
-}
-
-function createDefaultFloatingLayout(): FloatingDialogLayout {
-  return createCenteredFloatingLayout()
-}
-
-/**
- * Restore size/pin/collapsed from storage, but always re-center x/y on open
- * so dialogs do not reappear skewed from a previous drag.
- */
-function readStoredFloatingLayout(storageKey: string): FloatingDialogLayout {
-  if (typeof window === 'undefined') return createDefaultFloatingLayout()
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return createDefaultFloatingLayout()
-    const parsed = JSON.parse(raw) as Partial<FloatingDialogLayout>
-    if (typeof parsed.width !== 'number') {
-      return createDefaultFloatingLayout()
-    }
-    return createCenteredFloatingLayout({
-      width: parsed.width,
-      height: typeof parsed.height === 'number' ? parsed.height : null,
-      collapsed: Boolean(parsed.collapsed),
-      pinned: Boolean(parsed.pinned),
-    })
-  } catch {
-    return createDefaultFloatingLayout()
-  }
-}
-
-function writeStoredFloatingLayout(storageKey: string, layout: FloatingDialogLayout) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(layout))
-  } catch {
-    // 本地偏好写入失败不应影响弹窗使用。
-  }
 }
 
 const DialogModalContext = createContext<{ modal: boolean; open: boolean }>({ modal: true, open: false })
@@ -197,6 +110,7 @@ const DialogContent = forwardRef<
     showCloseButton?: boolean
     floating?: boolean
     floatingId?: string
+    defaultWidth?: number
     expandOnOpen?: boolean
     dismissOnInteractOutside?: boolean
     capsuleLabel?: string
@@ -211,6 +125,7 @@ const DialogContent = forwardRef<
     showCloseButton = false,
     floating,
     floatingId,
+    defaultWidth,
     expandOnOpen = false,
     dismissOnInteractOutside = true,
     capsuleLabel,
@@ -238,9 +153,12 @@ const DialogContent = forwardRef<
       ? { ...props, 'aria-describedby': undefined }
       : props
   const fallbackTitle = accessibleTitle ?? capsuleLabel ?? String(props['aria-label'] ?? '弹窗')
+  const inferredDefaultWidth = defaultWidth
+    ?? inferWidthFromClassName(className)
+    ?? FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH
   const storageKey = `${FLOATING_DIALOG_STORAGE_PREFIX}${stableFloatingId}`
   const [floatingLayout, setFloatingLayout] = useState<FloatingDialogLayout>(() =>
-    readStoredFloatingLayout(storageKey),
+    readStoredFloatingLayout(storageKey, inferredDefaultWidth),
   )
   const [derivedCapsuleLabel, setDerivedCapsuleLabel] = useState(capsuleLabel ?? '弹窗')
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -278,16 +196,22 @@ const DialogContent = forwardRef<
 
   useEffect(() => {
     if (!floatingEnabled) return
-    setFloatingLayout(readStoredFloatingLayout(storageKey))
-  }, [floatingEnabled, storageKey])
+    setFloatingLayout(readStoredFloatingLayout(storageKey, inferredDefaultWidth))
+  }, [floatingEnabled, inferredDefaultWidth, storageKey])
 
-  // Each open: re-center on screen while keeping remembered width/height/pin.
-  useEffect(() => {
+  // Each open: re-center using the real box so max-w-* dialogs are not left-biased.
+  useLayoutEffect(() => {
     if (!open || !floatingEnabled) return
+    const node = contentRef.current
+    const rect = node?.getBoundingClientRect()
+    const measuredWidth = rect ? Math.round(rect.width) : 0
+    const measuredHeight = rect ? Math.round(rect.height) : 0
     setFloatingLayout((current) => {
+      const width = measuredWidth >= FLOATING_DIALOG_MIN_WIDTH ? measuredWidth : current.width
       const next = createCenteredFloatingLayout({
-        width: current.width,
+        width,
         height: current.height,
+        measuredHeight,
         collapsed: expandOnOpen ? false : current.collapsed,
         pinned: current.pinned,
       })
@@ -424,11 +348,11 @@ const DialogContent = forwardRef<
     resolvedLayout === 'unstyled' && !floatingEnabled && 'z-[241]',
     resolvedLayout === 'centered' &&
       'max-h-[92vh] w-full max-w-3xl rounded-lg border bg-background shadow-floating',
-    floatingEnabled && 'fixed max-w-none touch-none',
     floatingLayout.pinned && 'ring-2 ring-primary/30',
     'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
     'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
     className,
+    floatingEnabled && 'fixed max-w-none touch-none',
   )
 
   if (floatingEnabled && floatingLayout.collapsed && !(open && expandOnOpen)) {
@@ -607,12 +531,23 @@ const DialogContent = forwardRef<
   )
 })
 
+function DialogBody({
+  children,
+  className,
+}: PropsWithChildren<{ className?: string }>) {
+  return (
+    <div className={cn('min-h-0 flex-1 overflow-auto px-5 py-3', className)}>
+      {children}
+    </div>
+  )
+}
+
 function DialogHeader({ children }: PropsWithChildren) {
   const beginDrag = useContext(DialogDragHandleContext)
   return (
     <div
       className={cn(
-        'flex items-start justify-between gap-4 border-b px-6 py-4 pr-28',
+        'flex items-start justify-between gap-3 border-b px-5 py-3 pr-24',
         beginDrag ? 'cursor-move' : '',
       )}
       onPointerDown={beginDrag ?? undefined}
@@ -633,7 +568,7 @@ function DialogTitle({ children, className }: PropsWithChildren<{ className?: st
 
   return (
     <DialogPrimitive.Title asChild>
-      <h2 ref={titleRef} data-dialog-title="true" className={cn('text-lg font-semibold', className)}>{children}</h2>
+      <h2 ref={titleRef} data-dialog-title="true" className={cn('text-base font-semibold tracking-tight', className)}>{children}</h2>
     </DialogPrimitive.Title>
   )
 }
@@ -654,7 +589,7 @@ function DialogFooter({
   className,
 }: PropsWithChildren<{ className?: string }>) {
   return (
-    <div className={cn('flex items-center justify-end gap-3 border-t px-6 py-4', className)}>
+    <div className={cn('flex items-center justify-end gap-2 border-t px-5 py-3', className)}>
       {children}
     </div>
   )
@@ -685,6 +620,7 @@ function DialogClose({
 export {
   Dialog,
   DialogContent,
+  DialogBody,
   DialogHeader,
   DialogTitle,
   DialogDescription,
