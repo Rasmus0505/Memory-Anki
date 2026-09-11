@@ -221,6 +221,145 @@ def test_freestyle_canvas_pan_allows_auto_camera_and_pager(
     assert errors == []
 
 
+def test_freestyle_inline_edit_scope_requires_config_and_settings(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "shared" / "preferences" / "flipCardRevealConfig.ts",
+        "export interface FlipCardRevealConfig { granularity: 'level' }\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "scopeBranchUid={isEditMode ? unit.anchor_uid : null}\n",
+    )
+    write_file(
+        web_src / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx",
+        "export function FlipCardRevealSettingsDialog() { return null }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Freestyle inline edit stays on the current unit.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_inline_edit_scope(errors)
+
+    assert any("editScope" in error for error in errors)
+    assert any("honor `editScope`" in error for error in errors)
+    assert any("expose edit scope" in error for error in errors)
+    assert any("configurable `editScope`" in error for error in errors)
+
+
+def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "shared" / "preferences" / "flipCardRevealConfig.ts",
+        "export type FlipCardEditScope = 'unit' | 'palace'\neditScope: 'unit'\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "scopeBranchUid={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace' ? unit.anchor_uid : null}\n",
+    )
+    write_file(
+        web_src / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx",
+        "进入编辑 当前专线 整座宫殿\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "configured in 翻卡设置 (`editScope`).\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_inline_edit_scope(errors)
+
+    assert errors == []
+
+
+def test_freestyle_knowledge_entry_scope_rejects_saved_selection_override(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyle-entry-scope.ts",
+        "export function applyFreestyleEntryScope(config, palaceId) {\n"
+        "  if (config.subject_scope !== 'all' || config.specific_palace_ids.length > 0) return config\n"
+        "  return { ...config, specific_palace_ids: [palaceId] }\n"
+        "}\n",
+    )
+    write_file(
+        web_src / "modules" / "content" / "ui" / "palace-catalog" / "components" / "palace-list" / "usePalaceListCardActions.tsx",
+        "navigate('/review')\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "export function useImmersiveQueue() {}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "transient single-palace scope\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_knowledge_entry_scope(errors)
+
+    assert any("memory-palace stream" in error for error in errors)
+    assert any("must not ignore knowledge-page review" in error for error in errors)
+    assert any("shelf review must enter /freestyle?palaceId=" in error for error in errors)
+    assert any("locks every stream to one palace" in error for error in errors)
+
+
+def test_freestyle_knowledge_entry_scope_accepts_stream_lock(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyle-entry-scope.ts",
+        "lockStreamScope(config.streams.memory_palace, palaceId, 'all')\n"
+        "lockStreamScope(config.streams.quiz, palaceId, 'all')\n"
+        "export function persistFreestyleConfigWithoutEntryLock() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "content" / "ui" / "palace-catalog" / "components" / "palace-list" / "usePalaceListCardActions.tsx",
+        "navigate(`/freestyle?palaceId=${palace.id}`)\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "persistFreestyleConfigWithoutEntryLock(requested, stored)\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "locking every training stream. A saved selection does not keep showing the full feed.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_knowledge_entry_scope(errors)
+
+    assert errors == []
+
+
 def test_frontend_generated_api_boundary_blocks_direct_production_imports(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -1861,4 +2000,11 @@ def test_live_study_presence_rejects_sqlite_and_missing_sw_bypass(
     assert any("sqlite" in error for error in errors)
     assert any("live study SSE" in error for error in errors)
     assert any("LiveStudyPresencePort" in error for error in errors)
+    assert any("永久功能" in error for error in errors)
+    assert any("useFreestyleLiveMirror" in error for error in errors)
+    assert any("LiveStudyPresenceProvider" in error for error in errors)
+    assert any("跟随重试" in error for error in errors)
+    assert any("hello hydration" in error for error in errors)
+    assert any("follow retry" in error for error in errors)
+    assert any("BaseHTTPMiddleware" in error for error in errors)
 

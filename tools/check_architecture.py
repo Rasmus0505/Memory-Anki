@@ -899,7 +899,17 @@ def check_live_study_presence(errors: list[str]) -> None:
         errors.append("docs/architecture/live-study-presence.md: live study presence document is missing.")
     else:
         document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("controller_client_id", "SSE", "不写数据库"):
+        for marker in (
+            "controller_client_id",
+            "SSE",
+            "不写数据库",
+            "永久功能",
+            "翻卡进度",
+            "hello",
+            "跟随重试",
+            "BaseHTTPMiddleware",
+            "评分镜像",
+        ):
             if marker not in document:
                 errors.append(
                     f"{architecture_doc.relative_to(REPO_ROOT)}: live study presence must document `{marker}`."
@@ -936,11 +946,79 @@ def check_live_study_presence(errors: list[str]) -> None:
         "controlLease",
         "takeoverHydrate",
         "disconnectGracePause",
+        "helloHydrate",
+        "followRetry",
+        "ratingMirror",
     ):
         if capability not in capabilities:
             errors.append(
                 f"docs/architecture/context-map.yaml: LiveStudyPresencePort must declare `{capability}`."
             )
+
+    web_src = REPO_ROOT / "apps" / "web" / "src"
+    providers = web_src / "app" / "providers" / "AppProviders.tsx"
+    providers_source = providers.read_text(encoding="utf-8", errors="ignore") if providers.exists() else ""
+    if "LiveStudyPresenceProvider" not in providers_source:
+        errors.append("apps/web/src/app/providers/AppProviders.tsx: LiveStudyPresenceProvider must wrap the app.")
+
+    freestyle_page = web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    freestyle_source = freestyle_page.read_text(encoding="utf-8", errors="ignore") if freestyle_page.exists() else ""
+    if "useFreestyleLiveMirror" not in freestyle_source:
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx: useFreestyleLiveMirror is a permanent wiring."
+        )
+
+    provider = web_src / "modules" / "session" / "ui" / "live-presence" / "LiveStudyPresenceProvider.tsx"
+    provider_source = provider.read_text(encoding="utf-8", errors="ignore") if provider.exists() else ""
+    if "hello" not in provider_source:
+        errors.append(
+            "apps/web/src/modules/session/ui/live-presence/LiveStudyPresenceProvider.tsx: hello hydration is required so PWA/desktop can publish without SSE."
+        )
+
+    mirror = web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleLiveMirror.ts"
+    mirror_source = mirror.read_text(encoding="utf-8", errors="ignore") if mirror.exists() else ""
+    if "resolveFreestyleLiveFollowAction" not in mirror_source:
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror.ts: follow retry is required when the queue hydrates after the remote card id."
+        )
+    if "applyRating" not in mirror_source:
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror.ts: rating mirror apply is required so PWA/desktop do not double-rate."
+        )
+
+    live_view = web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleLiveView.ts"
+    live_view_source = live_view.read_text(encoding="utf-8", errors="ignore") if live_view.exists() else ""
+    if "selectedRating" not in live_view_source or "settled" not in live_view_source:
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/model/freestyleLiveView.ts: live view must encode rating selectedRating and settled."
+        )
+
+    for relative, label in (
+        ("core/api_token_auth.py", "ApiTokenAuthMiddleware"),
+        ("core/request_logging.py", "RequestLoggingMiddleware"),
+    ):
+        middleware_path = API_SRC / relative
+        middleware_source = (
+            middleware_path.read_text(encoding="utf-8", errors="ignore")
+            if middleware_path.exists()
+            else ""
+        )
+        if "from starlette.middleware.base import BaseHTTPMiddleware" in middleware_source:
+            display = relative.replace("\\", "/")
+            try:
+                display = str(middleware_path.relative_to(REPO_ROOT)).replace("\\", "/")
+            except ValueError:
+                pass
+            errors.append(
+                f"{display}: {label} must not use BaseHTTPMiddleware; it buffers live SSE."
+            )
+
+    main_path = API_SRC / "app" / "main.py"
+    main_source = main_path.read_text(encoding="utf-8", errors="ignore") if main_path.exists() else ""
+    if '@app.middleware("http")' in main_source or "from starlette.middleware.base import BaseHTTPMiddleware" in main_source:
+        errors.append(
+            "apps/api/src/memory_anki/app/main.py: HTTP middleware must be streaming-safe ASGI; BaseHTTPMiddleware buffers /session/live/stream."
+        )
 
     if architecture_doc.exists():
         document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
@@ -1587,6 +1665,92 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 )
 
 
+
+def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
+    """Knowledge-page review must lock this round to the chosen palace."""
+    entry_scope = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "freestyle-entry-scope.ts"
+    )
+    if not entry_scope.exists():
+        errors.append(
+            f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
+            "knowledge-page review must lock the freestyle round to one palace."
+        )
+        return
+    source = entry_scope.read_text(encoding="utf-8", errors="ignore")
+    if "lockStreamScope(config.streams.memory_palace, palaceId, 'all')" not in source:
+        errors.append(
+            f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
+            "entry palace must lock the memory-palace stream, not only legacy specific_palace_ids."
+        )
+    if "lockStreamScope(config.streams.quiz, palaceId, 'all')" not in source:
+        errors.append(
+            f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
+            "entry palace must lock the quiz stream to the same palace."
+        )
+    compact = source.replace(" ", "")
+    if "specific_palace_ids.length>0)returnconfig" in compact:
+        errors.append(
+            f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
+            "a saved 随心 palace selection must not ignore knowledge-page review."
+        )
+    if "export function persistFreestyleConfigWithoutEntryLock" not in source:
+        errors.append(
+            f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
+            "must persist mix/content without writing the knowledge-page palace lock."
+        )
+
+    shelf_actions = (
+        WEB_SRC
+        / "modules"
+        / "content"
+        / "ui"
+        / "palace-catalog"
+        / "components"
+        / "palace-list"
+        / "usePalaceListCardActions.tsx"
+    )
+    if shelf_actions.exists():
+        shelf_source = shelf_actions.read_text(encoding="utf-8", errors="ignore")
+        if "/freestyle?palaceId=" not in shelf_source:
+            errors.append(
+                f"{shelf_actions.relative_to(REPO_ROOT).as_posix()}: "
+                "shelf review must enter /freestyle?palaceId=<id>."
+            )
+
+    queue_hook = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "hooks"
+        / "useImmersiveQueue.ts"
+    )
+    if queue_hook.exists():
+        hook_source = queue_hook.read_text(encoding="utf-8", errors="ignore")
+        if "persistFreestyleConfigWithoutEntryLock" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "must persist without the transient knowledge-page palace lock."
+            )
+
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "locking every" not in feed_source or "does not keep showing the full" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that knowledge-page review locks every stream to one palace."
+            )
+
+
 def check_freestyle_return_save_ux(errors: list[str]) -> None:
     """Return-to-review must not block on in-flight saves; autosave debounce is 2s."""
     panel = (
@@ -1621,6 +1785,58 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
             f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must switch "
             "optimistically instead of waiting for the save."
         )
+
+
+def check_freestyle_inline_edit_scope(errors: list[str]) -> None:
+    """Double-click edit can be the current unit spine or the whole palace."""
+    config = WEB_SRC / "shared" / "preferences" / "flipCardRevealConfig.ts"
+    if not config.exists():
+        errors.append(f"{config.relative_to(REPO_ROOT).as_posix()}: flip-card config is required.")
+        return
+    config_source = config.read_text(encoding="utf-8", errors="ignore")
+    if "editScope" not in config_source or "palace" not in config_source:
+        errors.append(
+            f"{config.relative_to(REPO_ROOT).as_posix()}: must keep `editScope` unit|palace."
+        )
+
+    panel = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    if panel.exists():
+        source = panel.read_text(encoding="utf-8", errors="ignore")
+        if "editScope !== 'palace'" not in source:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: inline edit must honor `editScope`."
+            )
+
+    dialog = (
+        WEB_SRC
+        / "modules"
+        / "settings"
+        / "ui"
+        / "flip-card"
+        / "FlipCardRevealSettingsDialog.tsx"
+    )
+    if dialog.exists():
+        source = dialog.read_text(encoding="utf-8", errors="ignore")
+        if "进入编辑" not in source or "当前专线" not in source or "整座宫殿" not in source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: flip-card settings must expose edit scope."
+            )
+
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "editScope" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must document configurable `editScope`."
+            )
 
 
 def check_freestyle_canvas_pan(errors: list[str]) -> None:
@@ -2536,6 +2752,13 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             "document.visibilityState !== 'visible'",
             "MAX_CONTIGUOUS_TICK_SECONDS",
         ),
+        WEB_SRC / "modules/content/ui/palace-edit/hooks/usePalaceEditorDocument.ts": (
+            "flushSave({ force: true })",
+        ),
+        WEB_SRC / "modules/content/ui/palace-edit/hooks/usePalaceEditPage.ts": (
+            "[isActive, palaceId]",
+            "flushSaveWithReconcile('editor_leave'",
+        ),
     }
     for path, markers in required.items():
         if not path.exists():
@@ -2628,7 +2851,9 @@ def main() -> int:
     check_palace_quiz_palace_boundary(errors)
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
+    check_freestyle_knowledge_entry_scope(errors)
     check_freestyle_return_save_ux(errors)
+    check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)

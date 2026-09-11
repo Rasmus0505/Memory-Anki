@@ -7,9 +7,10 @@ older `FreestyleConfig` settings path is compatibility-only and must not drive q
 ## Review Entry
 
 The palace shelf and all review-oriented frontend actions enter the same immersive workspace.
-`/freestyle?palaceId=<id>` applies a transient single-palace scope for that round, keeps the stored
-content/mix/queue settings, and does not create a separate formal page session before the queue loads.
-Refreshing that URL keeps the same palace scope. There is no standalone `/review` frontend route or
+`/freestyle?palaceId=<id>` applies a transient single-palace scope for that round by locking every
+training stream to that palace. A saved 随心 palace/subject selection does not keep showing the full
+feed. Content/mix/queue settings stay, the lock is not written back to stored prefs, and there is no
+separate formal page session before the queue loads. Refreshing that URL keeps the same palace scope. There is no standalone `/review` frontend route or
 completion screen; unknown retired `/review...` paths fall back to `/freestyle`.
 
 ## Round Plan State
@@ -42,9 +43,11 @@ never the underlying review schedule. “Finish palace then next” is a gate ov
 review-unit cards in the current palace: a failed/hard card remains retry work and cannot permit
 the next palace to become active. The gate is **forward-only** — looking back at a previous
 palace is never blocked. Retry placement inserts a copy after the learner leaves the source
-card, at least three already-presented cards later (palace cards, quiz cards, and other retry
-occurrences all count); if fewer than three remain, the occurrence is appended to the end of
-the round. The source card stays in place so swipe-back is geometric. Looking back at history
+card, after at most three other already-presented cards (palace cards, quiz cards, and other retry
+occurrences all count). If fewer than three remain, the occurrence is appended to the end of
+the round. It is never inserted as the immediate next card while any other unfinished card
+remains. `leave_card` confirmation pins the card now under the viewport and must not yank
+back to the source. The source card stays in place so swipe-back is geometric. Looking back at history
 cards does not move the committed cursor and does not insert retries. Finger/wheel paging
 commits `active` only after scroll settle so a mid-gesture index change cannot close one
 encounter and open another. The review map stays pannable (`mobileViewPolicy` defaults to
@@ -113,13 +116,16 @@ only unstarted entries are rebuilt against the new streams.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
 - The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units`: every still-due unit of the current palace today, plus every still-unrated review-unit card of that palace already in this round (fill cards are `schedule_locked`). Units already rated in this round are not overwritten. Each unit keeps its own ladder; leftover due units that were not in the round are rated without inserting feed copies. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
 - `忘记` and every `困难` create a retry occurrence. Insertion happens only after the learner
-  leaves the source card and the backend confirms the plan. The gap is at least three already-
-  presented cards (palace, quiz, and other occurrences); leftover cards append to the round
-  tail. There is no per-round cap. Each new failed encounter increments this-round
+  leaves the source card: the frontend inserts an optimistic copy first, then the backend
+  confirms the plan. The gap is at most three already-presented cards (palace, quiz, and other
+  occurrences) and at least one whenever another unfinished card remains; leftover cards append
+  to the round tail. Confirmation pins the live viewport card, never the source just left.
+  There is no per-round cap. Each new failed encounter increments this-round
   `retry_attempt`. A later `记得` / `轻松` settles the source card and every unfinished
   occurrence together. The just-rated source card does not move. Only `记得` / `轻松` finish
   the current encounter; a mature-unit `困难` remains retry work just like first-learning `困难`.
-  Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version`. Silent
+  Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version` and adopt the
+  returned `plan_version` so the next rate is not a stale conflict. Silent
   rebuilds keep the current DOM card by id, never by the old index. `auto_advance` may turn
   the page only after a passing `记得` / `轻松`, and only after re-checking card id, encounter
   id, plan version, and overlay state; `忘记` / `困难` never auto-advance. Queue rebuilds freeze
@@ -137,9 +143,11 @@ only unstarted entries are rebuilt against the new streams.
 
 ## Permanent Marks
 
+Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering unit-scoped edit expands the scoped tree and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map.
+
 Permanent marks are edited in the palace document. While the user is still in permanent-mark mode, toggles only update `editor_doc` (plain autosave) so many marks can be changed continuously without rebuilding freestyle. Schedule reconcile runs when the mark pass finishes (exit permanent-mark mode / `mark_change`), when returning to review, or on editor leave/idle. Content-only autosaves never reconcile schedule. When reconcile runs, freestyle queue rebuild is deferred until the card leaves inline edit (`return_to_review` / leave) so continuous mark editing is not interrupted mid-pass.
 
-Typing autosaves are quiet and debounced (2s idle) so a return-to-review flush after a same-doc autosave is the only save the user waits on — and even that is optimistic: clicking 返回学习 switches to review immediately, saves in the background, and adopts the saved doc when it settles. A failed save returns to edit mode with local content intact. If the user re-enters edit before the return save settles, the freestyle queue rebuild is deferred again until the next leave.
+Typing autosaves are quiet and debounced (2s idle) so a return-to-review flush after a same-doc autosave is the only save the user waits on — and even that is optimistic: clicking 返回学习 switches to review immediately, saves in the background, and adopts the local tree plus the new fingerprint when it settles. A slow or stale save response must not rebuild editor_doc or restore deleted cards. A failed save returns to edit mode with local content intact. If the user re-enters edit before the return save settles, the freestyle queue rebuild is deferred again until the next leave.
 
 Temporary marks do not exist. Practice must not persist, merge, clear, or schedule any alternative mark lifecycle.
 

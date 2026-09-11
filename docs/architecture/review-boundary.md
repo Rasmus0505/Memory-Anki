@@ -14,8 +14,8 @@ practice         -> consumes reviews.api unit projections and the shared rating 
 
 The review scheduling and encounter API remains owned by `memory` and is consumed by
 freestyle cards. The frontend has one review workspace only: `apps/web/src/modules/practice/ui/freestyle`.
-The palace shelf enters it with `/freestyle?palaceId=<id>`, which scopes the current round to that
-palace while preserving the user's content and mix settings. The retired standalone `/review` page,
+The palace shelf enters it with `/freestyle?palaceId=<id>`, which locks the current round to that
+palace even if 随心 still has a broader saved selection. Content and mix settings stay. The retired standalone `/review` page,
 session page, completion page, and feedback-preview route must not return.
 
 Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.
@@ -27,13 +27,13 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Nodes outside marked regions form one residual root-flow unit.
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
 - Every non-root node belongs to exactly one active unit.
-- Permanent mark / membership changes reconcile when the mark pass finishes (exit permanent-mark mode), on editor leave/idle, or on return-to-review — not on every mid-pass toggle autosave. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
+- Permanent mark / membership changes reconcile when the mark pass finishes (exit permanent-mark mode), on editor leave/idle (including keep-alive hide), or on return-to-review — not on every mid-pass toggle autosave. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
 - Deleting the final mark deactivates every unit. A later first mark starts a new schedule.
 
 ## Content Save vs Schedule Reconcile
 
 - Content autosave may persist `editor_doc` without reconciling schedule — including mid-pass permanent-mark toggles. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/level updates between continuous mark clicks.
-- Permanent mark / membership reconcile runs on finished mark pass (`mark_change`), leave, idle, return-to-review, or explicit `reconcile_units` — one batch for the whole pass.
+- Permanent mark / membership reconcile runs on finished mark pass (`mark_change`), leave, idle, return-to-review, or explicit `reconcile_units` — one batch for the whole pass. A finished pass or leave must still send that reconcile save when the document was already autosaved (same-doc short-circuit). Keep-alive navigation is leave.
 - Content-only edits that demote affected units may batch demotion to leave / idle / explicit reconcile. At most one content demotion is applied per edit session for a unit, even across many interim autosaves. Due/projection paths still heal lagging unit hashes if a session dies mid-edit.
 - Return-to-review is optimistic on the client: the card switches to review immediately while the reconcile save runs in the background; a failed save falls back to edit mode with local content intact.
 - Reconcile returns unit-level before/after changes (identity, membership, revision, due, ladder level). Content demotions create an undoable schedule batch while keeping document content as saved.

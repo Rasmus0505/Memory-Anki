@@ -28,3 +28,21 @@
 `surface !== idle` 且本机已在 `/freestyle`（或 `/`）时，跟随 `route`。设置/编辑页不强制跳转。
 
 第一期表面是 `freestyle`。宫殿测验、导图复习、英语为后续表面。
+
+## 永久功能
+
+PWA / 电脑端学习画面镜像是永久功能。后续功能改动不得删除 live room、SSE、跟随/发布钩子，也不得把投影写入 SQLite。架构门禁 `check_live_study_presence` 锁住接线。
+
+随心模式双击切换编辑/学习必须保留翻卡进度。空的或更弱的初始 reveal map 不得覆盖已有缓存或 live 投影。
+
+## 水合与跟随重试
+
+启动时 `POST /session/live/commands` 的 `hello` 立刻拉取投影并标已连接。SSE 只做后续推送，不作为唯一水合路径。超过约 2 秒没有 snapshot/update 则每秒再 hello。
+
+`GET /session/live/stream` 必须走纯 ASGI 中间件，不得经 `BaseHTTPMiddleware` 把事件流缓冲到结束。
+
+跟随端在本地队列还没有远端 `currentCardId` 时不得把 revision 标成已应用；`queueCardIds` 出现该卡后重试 seek。默认或更弱的 revealMap 不得覆盖远端。无控制器但远端已是 `freestyle` 时，本地未操作前仍按跟随处理。
+
+## 评分镜像
+
+任意一端评分后，`FreestyleLiveView.rating`（`selectedRating` + 宫殿批 `settled`）必须镜像到另一端。跟随端只套用本地 encounter / 队列，不发第二个评分 POST。空 rating 不得覆盖远端已有评分。之后改评以最新 `operation_id` 覆盖日程。

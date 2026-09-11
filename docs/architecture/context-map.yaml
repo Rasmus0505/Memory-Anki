@@ -284,7 +284,10 @@
           "opaqueViewEnvelope",
           "controlLease",
           "takeoverHydrate",
-          "disconnectGracePause"
+          "disconnectGracePause",
+          "helloHydrate",
+          "followRetry",
+          "ratingMirror"
         ]
       },
       "PersistencePort": {
@@ -433,7 +436,9 @@
         ],
         "tests": [
           "test_live_study_presence.py",
-          "liveStudyModel.test.ts"
+          "liveStudyModel.test.ts",
+          "useFreestyleLiveMirror.test.tsx",
+          "LiveStudyPresenceProvider.test.tsx"
         ]
       },
       "session.persistTimedRecord": {
