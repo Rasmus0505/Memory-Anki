@@ -1,0 +1,15 @@
+
+> memory-anki-web@0.1.0 test
+> vitest run src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx src/shared/ui/mindmap-canvas/paneModeGestures.test.ts
+
+
+ RUN  v3.2.6 D:/BaiduSyncdisk/Memory Anki/apps/web
+
+ ✓ src/shared/ui/mindmap-canvas/paneModeGestures.test.ts (10 tests) 24ms
+ ✓ src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx (40 tests) 1516ms
+
+ Test Files  2 passed (2)
+      Tests  50 passed (50)
+   Start at  15:05:17
+   Duration  10.06s (transform 2.48s, setup 53ms, collect 5.61s, tests 1.54s, environment 1.29s, prepare 286ms)
+

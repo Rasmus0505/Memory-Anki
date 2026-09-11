@@ -1,0 +1,14 @@
+
+> memory-anki-web@0.1.0 test
+> vitest run src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx -t keeps flip progress
+
+
+ RUN  v3.2.6 D:/BaiduSyncdisk/Memory Anki/apps/web
+
+ ✓ src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx (40 tests | 39 skipped) 120ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 39 skipped (40)
+   Start at  15:03:47
+   Duration  8.52s (transform 2.45s, setup 22ms, collect 5.37s, tests 120ms, environment 575ms, prepare 136ms)
+
