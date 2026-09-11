@@ -196,7 +196,7 @@ export function PalaceVersionDialog({
                         }}
                         readonly
                         onEditorStateChange={() => {}}
-                        className="h-[56vh] w-full rounded-lg border border-border/70 bg-background"
+                        className="h-[56vh] w-full rounded-lg border border-border/70 bg-zinc-50"
                       />
                     </CardContent>
                   </Card>

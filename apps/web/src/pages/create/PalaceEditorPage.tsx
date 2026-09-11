@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, FileStack, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   MindMapEditorSurface,
   type MindMapEditorSurfaceHandle,
@@ -110,6 +111,7 @@ export default function PalaceEdit() {
   /** When true in Anki mode, click cycles front/back/none instead of normal select. */
   const [ankiRolePen, setAnkiRolePen] = useState(false)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
 
   // Re-read on every residency activation: keep-alive can remount search without
   // remounting this component, so a bare [] would miss later ?mode=permanent-mark.
@@ -225,8 +227,8 @@ export default function PalaceEdit() {
         toast.success(
           next
             ? permanentMarkHighlights.length
-              ? `永久标记中：已显示 ${permanentMarkHighlights.length} 个 L 级标记，点击卡片可标记/取消；改完再退出才整理进度`
-              : '永久标记：点击卡片标记/取消；改完再退出才整理复习进度'
+              ? `永久标记中：已显示 ${permanentMarkHighlights.length} 个 L 级标记，点击即保存；退出标记或离开后进入复习`
+              : '永久标记：点击即保存；退出标记或离开页面后进入复习列表'
             : '已退出永久标记',
         )
       }
@@ -443,6 +445,7 @@ export default function PalaceEdit() {
       {!page.mindMapFullscreen ? (
         <PageIntro
           compact
+          collapsible
           title={page.palace?.title || '宫殿编辑器'}
           actions={
             <>
@@ -509,15 +512,14 @@ export default function PalaceEdit() {
           onActiveKeyChange={setActiveMindMapKey}
           onReload={page.reload}
         >
-          <div
-            className={cn(
-              'grid min-h-0 flex-1 gap-2',
-              'xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:items-stretch',
-              page.mindMapFullscreen && 'grid-cols-1',
-            )}
-          >
-            {!page.mindMapFullscreen ? (
-              <aside className="min-h-0 space-y-3 xl:overflow-y-auto">
+          <MindMapSplitLayout
+            collapsed={sidePanelCollapsed}
+            onCollapsedChange={setSidePanelCollapsed}
+            hidden={page.mindMapFullscreen}
+            collapseLabel="收起学科与绑定"
+            expandLabel="展开学科与绑定"
+            sidePanel={(
+              <div className="space-y-3 p-0.5">
                 <PalaceKnowledgeBindingCard />
                 <PalaceMetaPanel
                   palace={page.palace}
@@ -533,9 +535,9 @@ export default function PalaceEdit() {
                   onUpload={page.handleAttachmentUpload}
                   onDelete={page.handleAttachmentDelete}
                 />
-              </aside>
-            ) : null}
-
+              </div>
+            )}
+          >
             <section className="flex min-h-0 flex-1 flex-col">
               {activeMindMapKey === 'palace' ? (
                 <Card
@@ -615,7 +617,7 @@ export default function PalaceEdit() {
                           onToggleFullscreen={page.toggleMindMapFullscreen}
                           onUiClearedChange={setMindMapUiCleared}
                           className="flex min-h-0 flex-1 flex-col"
-                          surfaceClassName="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-background"
+                          surfaceClassName="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
                         />
                       </div>
                     ) : (
@@ -627,7 +629,7 @@ export default function PalaceEdit() {
                 <PalaceSubjectMindMapCard />
               )}
             </section>
-          </div>
+          </MindMapSplitLayout>
         </PalaceKnowledgeWorkspaceProvider>
       ) : null}
 
@@ -659,7 +661,7 @@ export default function PalaceEdit() {
             forceSyncKey={`preview:${version}`}
             preserveViewOnSync={false}
             onEditorStateChange={() => {}}
-            className="h-full w-full rounded-[inherit] bg-background"
+            className="h-full w-full rounded-[inherit] bg-zinc-50"
           />
         )}
         extractedText={mindMapImport.importExtractedText}

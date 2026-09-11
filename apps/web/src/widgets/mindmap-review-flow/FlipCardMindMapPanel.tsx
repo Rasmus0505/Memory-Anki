@@ -617,7 +617,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onReady={handleSurfaceReady}
         onReadyTimeout={handleSurfaceReadyTimeout}
         className={cn(
-          'w-full rounded-lg border border-border/70 bg-background',
+          'w-full rounded-lg border border-border/70 bg-zinc-50',
           fullscreen || compactChrome ? 'min-h-0 flex-1' : 'h-[64vh]',
           surfaceClassName,
         )}

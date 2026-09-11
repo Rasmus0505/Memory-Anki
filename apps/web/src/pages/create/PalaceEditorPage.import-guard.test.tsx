@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
+import { resetMindMapEditorDraftStoreForTest } from '@/shared/persistence/mindmapEditorDraftStore'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -246,7 +247,8 @@ function deferred<T>() {
 }
 
 describe('PalaceEditPage import apply guard', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await resetMindMapEditorDraftStoreForTest()
     vi.restoreAllMocks()
     timedSessionMock.registerActivity.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -269,8 +271,9 @@ describe('PalaceEditPage import apply guard', () => {
     } as never)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers()
+    await resetMindMapEditorDraftStoreForTest()
   })
 
   it('ignores blank native sync while import apply is saving and during the first post-reload sync window', async () => {
@@ -402,9 +405,29 @@ describe('PalaceEditPage import apply guard', () => {
       lang: 'zh',
     }
 
-    let loadCount = 0
-    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockImplementation(async () => {
-      loadCount += 1
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      ...initialEditorState,
+    } as never)
+
+    const savePalaceEditorApi = vi.spyOn(palaceApi, 'savePalaceEditorApi').mockImplementation(async (_id, data) => {
+      const firstChild = String(
+        (
+          data.editor_doc as {
+            root?: { children?: Array<{ data?: { text?: string } }> }
+          }
+        )?.root?.children?.[0]?.data?.text ?? '',
+      )
+      if (firstChild === '新增知识点') {
+        throw new Error('检测到危险结构变更：新导图知识点数骤减，已拒绝保存。请在正式编辑中确认后再执行。')
+      }
       return {
         palace: {
           id: 101,
@@ -414,15 +437,16 @@ describe('PalaceEditPage import apply guard', () => {
           attachments: [],
           chapters: [],
         },
-        ...(loadCount === 1 ? initialEditorState : normalizedSavedState),
+        editor_fingerprint: 'fp-leave',
+        snapshot: {
+          schemaVersion: 1 as const,
+          editorPreferences: {},
+          localPreferences: {},
+          language: 'zh',
+          revision: 'fp-leave',
+        },
       } as never
     })
-
-    const savePalaceEditorApi = vi
-      .spyOn(palaceApi, 'savePalaceEditorApi')
-      .mockRejectedValue(
-        new Error('检测到危险结构变更：新导图知识点数骤减，已拒绝保存。请在正式编辑中确认后再执行。'),
-      )
     const savePalaceEditorWithOptionsApi = vi
       .spyOn(palaceApi, 'savePalaceEditorWithOptionsApi')
       .mockResolvedValue({
@@ -447,8 +471,8 @@ describe('PalaceEditPage import apply guard', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '测试宫殿' })).toBeTruthy()
+      expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('旧知识点')
     })
-    expect(screen.getByTestId('mindmap-first-child-text').textContent).toBe('旧知识点')
 
     fireEvent.click(screen.getByRole('button', { name: '覆盖当前脑图' }))
 

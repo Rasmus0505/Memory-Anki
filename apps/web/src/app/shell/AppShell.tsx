@@ -28,12 +28,13 @@ import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenc
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
+import { SessionRecorderHost } from '@/shared/debug/session-recorder'
 import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
-import { GlobalBackButton, isImmersiveFeedPath } from '@/app/shell/GlobalBackButton'
+import { GlobalBackButton, isImmersiveFeedPath, isMindMapHostPath } from '@/app/shell/GlobalBackButton'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 import {
   readPageHistorySectionUrl,
@@ -363,6 +364,7 @@ function MobileBottomNav() {
 function ShellFrame({ children }: PropsWithChildren) {
   const { pathname } = useLocation()
   const immersiveFeed = isImmersiveFeedPath(pathname)
+  const mindMapHost = isMindMapHostPath(pathname)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
@@ -389,10 +391,13 @@ function ShellFrame({ children }: PropsWithChildren) {
 
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
-      <div className="min-h-screen bg-background">
+      <div className={cn(mindMapHost ? 'flex h-dvh flex-col bg-background' : 'min-h-screen bg-background')}>
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed inset-y-3 left-3 z-20 hidden flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-soft transition-all duration-300 lg:flex',
+            'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border/80 bg-card transition-all duration-300 lg:flex',
+            mindMapHost
+              ? 'inset-y-0 left-0 rounded-none border-y-0 border-l-0 border-r shadow-none'
+              : 'inset-y-3 left-3 rounded-2xl border shadow-soft',
             sidebarCollapsed ? 'w-[76px]' : 'w-[236px]',
           )}
         >
@@ -438,18 +443,22 @@ function ShellFrame({ children }: PropsWithChildren) {
         <main
           className={cn(
             'min-w-0 transition-[padding] duration-300 lg:pb-0',
+            mindMapHost && 'flex min-h-0 flex-1 flex-col',
             immersiveFeed
               ? 'pb-0'
               : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
-            sidebarCollapsed ? 'lg:pl-[104px]' : 'lg:pl-[264px]',
+            mindMapHost && (sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[236px]'),
+            !mindMapHost && (sidebarCollapsed ? 'lg:pl-[104px]' : 'lg:pl-[264px]'),
           )}
         >
           <div
             className={cn(
-              'mx-auto w-full max-w-[1600px]',
-              immersiveFeed
+              mindMapHost
+                ? 'flex min-h-0 w-full max-w-none flex-1 flex-col p-0'
+                : 'mx-auto w-full max-w-[1600px]',
+              !mindMapHost && (immersiveFeed
                 ? 'px-0 py-0 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9'
-                : 'px-2 py-2 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9',
+                : 'px-2 py-2 sm:px-5 sm:py-5 lg:px-7 lg:py-6 xl:px-9'),
             )}
           >
             <BackgroundTaskBar />
@@ -460,6 +469,7 @@ function ShellFrame({ children }: PropsWithChildren) {
         <GlobalBackButton placement="mobile" />
         <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
+        <SessionRecorderHost />
         <GlobalCommandPalette />
       </div>
     </ShellProvider>

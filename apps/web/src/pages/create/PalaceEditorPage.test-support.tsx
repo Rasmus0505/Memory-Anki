@@ -641,6 +641,28 @@ export function setupPalaceEditPageTestDefaults() {
     },
   } as never)
   vi.spyOn(palaceApi, 'updatePalaceApi').mockResolvedValue({ ok: true } as never)
+  vi.spyOn(palaceApi, 'savePalaceEditorApi').mockImplementation(async (_id, data) => ({
+    palace: {
+      id: 101,
+      title: '测试宫殿',
+      description: '',
+      created_at: null,
+      attachments: [],
+      chapters: [],
+    },
+    editor_fingerprint: 'fp-test',
+    snapshot: {
+      schemaVersion: 1,
+      editorPreferences: {},
+      localPreferences: {},
+      language: 'zh',
+      revision: 'fp-test',
+    },
+    editor_doc: data.editor_doc,
+    editor_config: data.editor_config ?? {},
+    editor_local_config: data.editor_local_config ?? {},
+    lang: data.lang || 'zh',
+  } as never))
   vi.spyOn(palaceApi, 'getPalaceVersionsApi').mockResolvedValue({
     versions: [{ id: 1, created_at: '2026-05-29T10:00:00', snapshot_count: 1 }],
     removed_duplicates: 0,

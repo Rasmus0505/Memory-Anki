@@ -112,7 +112,7 @@ export function QuizKnowledgeDigressionDialog({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden bg-background">
+        <div className="min-h-0 flex-1 overflow-hidden bg-zinc-50">
           {loading ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />

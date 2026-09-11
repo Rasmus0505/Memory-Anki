@@ -120,7 +120,8 @@ export function AppRouter() {
             data-page-history-route={pathname}
             aria-hidden={!isActive}
             inert={!isActive}
-            style={{ display: isActive ? 'block' : 'none' }}
+            className="flex h-full min-h-0 flex-1 flex-col"
+            style={{ display: isActive ? 'flex' : 'none' }}
           >
             <RouteResidencyProvider
               value={{

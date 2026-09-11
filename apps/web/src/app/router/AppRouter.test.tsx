@@ -90,6 +90,9 @@ describe('AppRouter residency', () => {
       </MemoryRouter>,
     )
 
+    expect(document.querySelector('[data-page-history-route="/alpha"]')?.className).toContain('flex-1')
+    expect(document.querySelector('[data-page-history-route="/alpha"]')?.className).toContain('min-h-0')
+
     fireEvent.change(screen.getByLabelText('input:/alpha'), {
       target: { value: 'persisted alpha' },
     })

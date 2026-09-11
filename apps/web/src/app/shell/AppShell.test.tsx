@@ -3,6 +3,10 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
 import {
+  resetSessionRecorderForTest,
+  startSessionRecording,
+} from '@/shared/debug/session-recorder'
+import {
   __resetBackgroundTaskStoreForTest,
   completeTask,
   getBackgroundTasks,
@@ -83,11 +87,13 @@ describe('AppShell', () => {
     backgroundTaskRegistryMock.useRunningTaskCountBySection.mockClear()
     backgroundTaskRegistryMock.useRunningTaskCountBySection.mockReturnValue(0)
     resetNavSectionHistoryForTest()
+    resetSessionRecorderForTest()
   })
 
   afterEach(async () => {
     __resetBackgroundTaskStoreForTest()
     resetNavSectionHistoryForTest()
+    resetSessionRecorderForTest()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -496,5 +502,114 @@ describe('AppShell', () => {
     await waitFor(() => {
       expect(screen.getByText('/palaces/1/quiz?tab=practice')).toBeTruthy()
     })
+  })
+
+  it('shows the global recorder stop control only while recording', async () => {
+    getRuntimeInfoApi.mockResolvedValue({
+      channel: 'stable',
+      commit: 'abcdef1234567890',
+      short_commit: 'abcdef12',
+      min_supported_generation: 1,
+      max_supported_generation: 1,
+      last_started_at: '2026-06-01T12:00:00+08:00',
+    })
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
+    act(() => startSessionRecording())
+    expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
+  })
+
+  it('flushes mind-map host pages to the window edge', async () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/freestyle']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    const aside = document.querySelector('aside')
+    const main = document.querySelector('main')
+    const inner = main?.firstElementChild
+    expect(aside?.className).toContain('inset-y-0')
+    expect(aside?.className).toContain('left-0')
+    expect(aside?.className).toContain('rounded-none')
+    expect(main?.parentElement?.className).toContain('h-dvh')
+    expect(main?.parentElement?.className).toContain('flex')
+    expect(main?.parentElement?.className).not.toContain('overflow-hidden')
+    expect(main?.className).toContain('flex-1')
+    expect(main?.className).toContain('min-h-0')
+    expect(main?.className).not.toContain('overflow-hidden')
+    expect(main?.className).toContain('lg:pl-[236px]')
+    expect(inner?.className).toContain('flex-1')
+    expect(inner?.className).toContain('min-h-0')
+    expect(inner?.className).toContain('p-0')
+    expect(inner?.className).not.toContain('max-w-[1600px]')
+    unmount()
+
+    render(
+      <MemoryRouter initialEntries={['/knowledge']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    expect(document.querySelector('aside')?.className).toContain('rounded-none')
+    expect(document.querySelector('main')?.className).toContain('lg:pl-[236px]')
+    expect(document.querySelector('main')?.firstElementChild?.className).toContain('p-0')
+  })
+
+  it('keeps floating chrome on non-mind-map pages', async () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+
+    const aside = document.querySelector('aside')
+    const main = document.querySelector('main')
+    const inner = main?.firstElementChild
+    expect(aside?.className).toContain('inset-y-3')
+    expect(aside?.className).toContain('rounded-2xl')
+    expect(main?.className).toContain('lg:pl-[264px]')
+    expect(inner?.className).toContain('max-w-[1600px]')
+    expect(inner?.className).toContain('lg:px-7')
+  })
+
+  it('flushes palace editor hosts without treating catalog routes as canvas pages', async () => {
+    getRuntimeInfoApi.mockResolvedValue(null)
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/palaces/1/edit']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    expect(document.querySelector('aside')?.className).toContain('left-0')
+    expect(document.querySelector('main')?.firstElementChild?.className).toContain('p-0')
+    unmount()
+
+    render(
+      <MemoryRouter initialEntries={['/palaces']}>
+        <AppShell>
+          <div>content</div>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    expect(document.querySelector('aside')?.className).toContain('inset-y-3')
+    expect(document.querySelector('main')?.firstElementChild?.className).toContain('max-w-[1600px]')
   })
 })

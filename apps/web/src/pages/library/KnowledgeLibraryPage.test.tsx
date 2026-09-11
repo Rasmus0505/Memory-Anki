@@ -228,6 +228,13 @@ describe('KnowledgePage mind map host refresh behavior', () => {
     vi.spyOn(knowledgeApi, 'deleteChapterApi').mockResolvedValue({ ok: true })
   })
 
+  it('collapses the subject column so the mind map can fill the remaining row', async () => {
+    renderKnowledgePage()
+    expect(await screen.findByText('学科')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '收起学科栏' }))
+    expect(screen.getByRole('button', { name: '展开学科栏' })).toBeTruthy()
+  })
+
   it('uses one viewport fullscreen action in an installed PWA', async () => {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,

@@ -105,6 +105,15 @@ describe('Palace knowledge workspace', () => {
     expect(screen.getByRole('button', { name: '移除学科 外国教育史' })).toBeTruthy()
   })
 
+  it('collapses the binding column so the mind map can fill the remaining row', async () => {
+    renderPalaceEditPage()
+    await screen.findByText('学科与思维导图')
+    fireEvent.click(screen.getByRole('button', { name: '收起学科与绑定' }))
+    expect(screen.getByRole('button', { name: '展开学科与绑定' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '收起标题' }))
+    expect(screen.getByRole('button', { name: '展开标题' })).toBeTruthy()
+  })
+
   it('binds a chapter from the subject chapter tree without opening link mode', async () => {
     vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({
       subject: { id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 },

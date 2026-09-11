@@ -47,7 +47,15 @@
   --shadow-floating: 0 24px 72px rgba(15, 23, 42, 0.14);
 }
 
+:root {
+  --memory-anki-mindmap-canvas: #fafafa;
+  --memory-anki-mindmap-dot: rgba(24, 24, 27, 0.10);
+}
+
 .dark {
+  /* Canvas stays paper-white like PWA review; chrome can remain dark. */
+  --memory-anki-mindmap-canvas: #fafafa;
+  --memory-anki-mindmap-dot: rgba(24, 24, 27, 0.10);
   --color-background: hsl(24 12% 9%);
   --color-foreground: hsl(36 20% 92%);
   --color-card: hsl(24 10% 12%);
@@ -93,17 +101,11 @@
 }
 
 .dark .memory-anki-mindmap-frame {
-  border-color: hsl(24 8% 24%);
-  background:
-    radial-gradient(circle at 18% 12%, rgba(96, 165, 250, 0.06), transparent 30%),
-    radial-gradient(circle at 82% 20%, rgba(167, 139, 250, 0.06), transparent 28%),
-    linear-gradient(rgba(250, 250, 250, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(250, 250, 250, 0.045) 1px, transparent 1px),
-    hsl(24 10% 11%);
-  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+  border-color: #e4e4e7;
+  background: var(--memory-anki-mindmap-canvas);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 44px rgba(0, 0, 0, 0.5);
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 18px 44px rgba(24, 24, 27, 0.08);
 }
 
 * { border-color: var(--color-border); }
@@ -139,13 +141,7 @@ body.memory-anki-timer-overlay-page #root {
 .memory-anki-mindmap-frame {
   border: 1px solid #e4e4e7;
   border-radius: 0.875rem;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(37, 99, 235, 0.08), transparent 30%),
-    radial-gradient(circle at 82% 20%, rgba(124, 58, 237, 0.07), transparent 28%),
-    linear-gradient(rgba(24, 24, 27, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(24, 24, 27, 0.035) 1px, transparent 1px),
-    #fafafa;
-  background-size: auto, auto, 32px 32px, 32px 32px, auto;
+  background: var(--memory-anki-mindmap-canvas);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     0 18px 44px rgba(24, 24, 27, 0.08);

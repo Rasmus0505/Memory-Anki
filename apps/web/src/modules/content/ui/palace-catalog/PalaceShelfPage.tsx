@@ -1,6 +1,7 @@
 import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { PalaceListCard } from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListCard'
 import {
@@ -121,6 +122,8 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
 
 export default function PalaceShelfPage() {
   const navigate = useNavigate()
+  const { isActive, becameActiveAt } = useRouteResidency()
+  const seenActiveAtRef = useRef<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
   const [items, setItems] = useState<PalaceSubjectShelfItem[]>([])
@@ -185,6 +188,15 @@ export default function PalaceShelfPage() {
       void fetchData().catch(() => undefined)
     })
   }, [fetchData])
+
+  useEffect(() => {
+    if (!isActive) return
+    if (seenActiveAtRef.current === becameActiveAt) return
+    const isFirstActivation = seenActiveAtRef.current == null
+    seenActiveAtRef.current = becameActiveAt
+    if (isFirstActivation) return
+    void fetchData().catch(() => undefined)
+  }, [becameActiveAt, fetchData, isActive])
 
   const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])
   const allPalaces = useMemo(

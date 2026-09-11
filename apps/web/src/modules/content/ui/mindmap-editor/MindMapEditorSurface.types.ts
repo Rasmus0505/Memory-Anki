@@ -17,7 +17,7 @@ import type { MindMapCapability } from './capabilities'
 import type { MindMapPresentationStrategy } from './useMindMapFullscreen'
 
 export const HOST_FRAME_RUNTIME_VERSION = '2026-07-10-editor-interactions-v2'
-const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame relative'
+const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame relative !bg-zinc-50'
 
 export function buildMindMapEditorSurfaceClassName(className?: string) {
   return `${MIND_MAP_FRAME_BASE_CLASS} ${className ?? 'h-full w-full border-0'}`

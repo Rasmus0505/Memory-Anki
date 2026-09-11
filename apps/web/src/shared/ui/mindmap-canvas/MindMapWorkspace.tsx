@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 
 interface MindMapWorkspaceProps {
   leftSidebar?: ReactNode
@@ -13,23 +14,39 @@ export function MindMapWorkspace({
   rightSidebar,
   focusMode = false,
 }: MindMapWorkspaceProps) {
-  const hasLeft = !focusMode && Boolean(leftSidebar)
-  const hasRight = !focusMode && Boolean(rightSidebar)
-  const gridClass = focusMode
-    ? 'grid-cols-1'
-    : hasLeft && hasRight
-      ? 'grid-cols-1 xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(260px,320px)]'
-      : hasLeft
-        ? 'grid-cols-1 xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]'
-        : hasRight
-          ? 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]'
-          : 'grid-cols-1'
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
 
-  return (
-    <div className={`grid min-h-0 flex-1 auto-rows-fr ${focusMode ? 'gap-2 xl:gap-2' : 'gap-4 xl:gap-5'} ${gridClass}`}>
-      {hasLeft ? <aside className="min-h-0 h-full xl:overflow-y-auto">{leftSidebar}</aside> : null}
-      <section className="min-h-0 h-full">{main}</section>
-      {hasRight ? <aside className="min-h-0 h-full xl:overflow-y-auto">{rightSidebar}</aside> : null}
-    </div>
-  )
+  if (focusMode || (!leftSidebar && !rightSidebar)) {
+    return <div className="flex min-h-0 flex-1 flex-col">{main}</div>
+  }
+
+  let body: ReactNode = main
+  if (rightSidebar) {
+    body = (
+      <MindMapSplitLayout
+        side="end"
+        collapsed={rightCollapsed}
+        onCollapsedChange={setRightCollapsed}
+        sidePanel={rightSidebar}
+        sideClassName="w-[min(300px,85vw)]"
+      >
+        {body}
+      </MindMapSplitLayout>
+    )
+  }
+  if (leftSidebar) {
+    body = (
+      <MindMapSplitLayout
+        side="start"
+        collapsed={leftCollapsed}
+        onCollapsedChange={setLeftCollapsed}
+        sidePanel={leftSidebar}
+        sideClassName="w-[min(260px,85vw)]"
+      >
+        {body}
+      </MindMapSplitLayout>
+    )
+  }
+  return body
 }

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { GlobalBackButton } from './GlobalBackButton'
+import { GlobalBackButton, isImmersiveFeedPath, isMindMapHostPath } from './GlobalBackButton'
 
 const goBack = vi.fn()
 const goForward = vi.fn()
@@ -75,6 +75,22 @@ describe('GlobalBackButton', () => {
     const { container } = renderBack(<GlobalBackButton placement="mobile" />, '/freestyle')
     expect(container.firstChild).toBeNull()
     expect(screen.queryByRole('button', { name: '后退' })).toBeNull()
+  })
+})
+
+describe('mind-map host paths', () => {
+  it('recognizes full-page mind-map hosts and excludes catalog/quiz routes', () => {
+    expect(isImmersiveFeedPath('/freestyle')).toBe(true)
+    expect(isMindMapHostPath('/freestyle')).toBe(true)
+    expect(isMindMapHostPath('/freestyle/legacy')).toBe(true)
+    expect(isMindMapHostPath('/knowledge')).toBe(true)
+    expect(isMindMapHostPath('/palaces/1')).toBe(true)
+    expect(isMindMapHostPath('/palaces/42/edit')).toBe(true)
+    expect(isMindMapHostPath('/palaces')).toBe(false)
+    expect(isMindMapHostPath('/palaces/list')).toBe(false)
+    expect(isMindMapHostPath('/palaces/new')).toBe(false)
+    expect(isMindMapHostPath('/palaces/1/quiz')).toBe(false)
+    expect(isMindMapHostPath('/dashboard')).toBe(false)
   })
 })
 

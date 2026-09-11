@@ -1,7 +1,8 @@
 import { ChevronLeft, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import {
   PalaceListCard,
 } from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListCard'
@@ -45,6 +46,8 @@ import {
 export default function PalaceList() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { isActive, becameActiveAt } = useRouteResidency()
+  const seenActiveAtRef = useRef<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
   const selectedSubjectId = searchParams.get('subjectId')
@@ -107,6 +110,15 @@ export default function PalaceList() {
       void queryClient.invalidateQueries({ queryKey: PALACE_CATALOG_GROUPED_QUERY_KEY })
     })
   }, [queryClient])
+
+  useEffect(() => {
+    if (!isActive) return
+    if (seenActiveAtRef.current === becameActiveAt) return
+    const isFirstActivation = seenActiveAtRef.current == null
+    seenActiveAtRef.current = becameActiveAt
+    if (isFirstActivation) return
+    void queryClient.invalidateQueries({ queryKey: PALACE_CATALOG_GROUPED_QUERY_KEY })
+  }, [becameActiveAt, isActive, queryClient])
 
   const cardActions = usePalaceListCardActions({
     fetchData,

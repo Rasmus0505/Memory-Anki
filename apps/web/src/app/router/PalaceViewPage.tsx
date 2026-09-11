@@ -4,6 +4,7 @@ import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/modules/content/public'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   MindMapEditorSurface,
@@ -48,6 +49,7 @@ export default function PalaceView() {
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 
@@ -171,9 +173,11 @@ export default function PalaceView() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {!mindMapFullscreen ? (
         <PageIntro
+          compact
+          collapsible
           eyebrow="宫殿详情"
           title={palace.title}
           description="这是只读脑图视图。难度与旧的 review mode 已从产品界面移除。"
@@ -181,18 +185,83 @@ export default function PalaceView() {
         />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <MindMapSplitLayout
+        side="end"
+        collapsed={sidePanelCollapsed}
+        onCollapsedChange={setSidePanelCollapsed}
+        hidden={mindMapFullscreen}
+        collapseLabel="收起宫殿信息"
+        expandLabel="展开宫殿信息"
+        sidePanel={(
+          <div className="space-y-3 p-0.5">
+            <Card className="border-border/70 bg-card/92">
+              <CardHeader>
+                <CardTitle className="text-base">概要</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
+                  {palace.description || '当前宫殿没有补充描述。'}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-card/92">
+              <CardHeader>
+                <CardTitle className="text-base">关联章节</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {palace.chapters.length > 0 ? (
+                  palace.chapters.map((chapter) => (
+                    <div key={chapter.id} className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
+                      <div className="font-medium">{chapter.name}</div>
+                      <div className="text-muted-foreground">{chapter.subject?.name || '未分类学科'}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
+                    该宫殿还没有关联章节。
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/70 bg-card/92">
+              <CardHeader>
+                <CardTitle className="text-base">附件</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {palace.attachments.length > 0 ? (
+                  palace.attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={buildAttachmentUrl(attachment.id)}
+                      target="_blank"
+                      className="block rounded-lg border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <FileText className="size-4" />
+                        {attachment.original_name}
+                      </span>
+                    </a>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
+                    没有附件。
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      >
         <Card
           className={cn(
-            'min-h-[72vh] border-border/70 bg-card/92',
-            mindMapFullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+            'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
+            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
           )}
         >
-          <CardHeader>
-            <CardTitle className="text-base">宫殿脑图</CardTitle>
-          </CardHeader>
-          <CardContent className={cn('min-h-[62vh]', mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0')}>
-            <div className="flex h-full min-h-0 flex-col gap-3">
+          <CardContent className={cn('flex min-h-0 flex-1 flex-col p-0', mindMapFullscreen && 'h-full')}>
+            <div className="flex h-full min-h-0 flex-col gap-2">
               <MindMapPageToolbar
                 quizAction={{
                   label: '做题',
@@ -248,84 +317,18 @@ export default function PalaceView() {
                   onUiClearedChange={setMindMapUiCleared}
                   onReady={() => setHostReadyTimedOut(false)}
                   onReadyTimeout={() => setHostReadyTimedOut(true)}
-                  className={cn(
-                    'w-full flex-1 rounded-lg border border-border/70 bg-background',
-                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
-                  )}
+                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
                 />
               ) : (
                 <LoadingState
                   text="正在准备脑图视图…"
-                  className={cn(
-                    'w-full flex-1 rounded-lg border border-border/70 bg-background px-4',
-                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
-                  )}
+                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50 px-4"
                 />
               )}
             </div>
           </CardContent>
         </Card>
-
-        <div className={cn('space-y-4', mindMapFullscreen && 'hidden')}>
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">概要</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
-                {palace.description || '当前宫殿没有补充描述。'}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">关联章节</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {palace.chapters.length > 0 ? (
-                palace.chapters.map((chapter) => (
-                  <div key={chapter.id} className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
-                    <div className="font-medium">{chapter.name}</div>
-                    <div className="text-muted-foreground">{chapter.subject?.name || '未分类学科'}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                  该宫殿还没有关联章节。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-card/92">
-            <CardHeader>
-              <CardTitle className="text-base">附件</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {palace.attachments.length > 0 ? (
-                palace.attachments.map((attachment) => (
-                  <a
-                    key={attachment.id}
-                    href={buildAttachmentUrl(attachment.id)}
-                    target="_blank"
-                    className="block rounded-lg border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <FileText className="size-4" />
-                      {attachment.original_name}
-                    </span>
-                  </a>
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                  没有附件。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      </MindMapSplitLayout>
     </div>
   )
 }

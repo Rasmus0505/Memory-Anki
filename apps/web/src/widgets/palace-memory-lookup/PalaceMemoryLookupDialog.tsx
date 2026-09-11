@@ -47,6 +47,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
+import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   buildEditorState,
   createEmptyGroupedData,
@@ -83,6 +84,7 @@ export function PalaceMemoryLookupDialog({
   const [pinned, setPinned] = useState(false)
   const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
+  const [listCollapsed, setListCollapsed] = useState(false)
   const dragStateRef = useRef<{
     startX: number
     startY: number
@@ -492,7 +494,7 @@ export function PalaceMemoryLookupDialog({
     </div>
   )
   const renderMindMapContent = () => (
-    <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background">
+    <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-zinc-50">
       {previewLoading ? (
         <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -713,16 +715,23 @@ export function PalaceMemoryLookupDialog({
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[260px_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col border-b border-border/70 lg:border-b-0 lg:border-r">
-              <div className="border-b border-border/70 p-3">
-                {renderSearchInput()}
+          <MindMapSplitLayout
+            collapsed={listCollapsed}
+            onCollapsedChange={setListCollapsed}
+            collapseLabel="收起宫殿列表"
+            expandLabel="展开宫殿列表"
+            sideClassName="w-[min(260px,85vw)]"
+            sidePanel={(
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="border-b border-border/70 p-3">
+                  {renderSearchInput()}
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                  {renderPalaceList()}
+                </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {renderPalaceList()}
-              </div>
-            </div>
-
+            )}
+          >
             <div className="flex min-h-0 flex-col p-3 sm:p-4">
               <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -740,7 +749,7 @@ export function PalaceMemoryLookupDialog({
 
               {renderMindMapContent()}
             </div>
-          </div>
+          </MindMapSplitLayout>
         </div>
         {(
           [

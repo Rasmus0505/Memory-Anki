@@ -39,7 +39,7 @@ export function KnowledgeMindMapImportDrawer({
           forceSyncKey={`preview:${version}`}
           preserveViewOnSync={false}
           onEditorStateChange={() => {}}
-          className="h-full w-full rounded-[inherit] bg-background"
+          className="h-full w-full rounded-[inherit] bg-zinc-50"
         />
       )}
       extractedText={mindMapImport.importExtractedText}

@@ -22,6 +22,12 @@ export function isImmersiveFeedPath(pathname: string) {
   )
 }
 
+/** Full-page mind-map hosts that should flush the shell chrome to the window edge. */
+export function isMindMapHostPath(pathname: string) {
+  if (isImmersiveFeedPath(pathname) || pathname === '/knowledge') return true
+  return /^\/palaces\/\d+(?:\/edit)?$/.test(pathname)
+}
+
 export function GlobalBackButton({
   placement = 'sidebar',
   compact = false,

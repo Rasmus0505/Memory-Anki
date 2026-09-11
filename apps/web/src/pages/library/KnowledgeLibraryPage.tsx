@@ -5,6 +5,7 @@ import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import {
   MindMapEditorSurface,
@@ -79,6 +80,7 @@ export default function Knowledge() {
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
   const [chapterQuizDialogOpen, setChapterQuizDialogOpen] = useState(false)
   const [chapterQuizQuestionTypes, setChapterQuizQuestionTypes] = useState<PalaceQuizQuestionType[]>([
     'multiple_choice',
@@ -423,9 +425,11 @@ export default function Knowledge() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {!mindMapFullscreen ? (
         <PageIntro
+          compact
+          collapsible
           title="知识树编辑器"
           actions={
             <div className="flex flex-wrap items-center gap-2">
@@ -438,8 +442,14 @@ export default function Knowledge() {
         />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <Card className="border-border/70 bg-card/92">
+      <MindMapSplitLayout
+        collapsed={sidePanelCollapsed}
+        onCollapsedChange={setSidePanelCollapsed}
+        hidden={mindMapFullscreen}
+        collapseLabel="收起学科栏"
+        expandLabel="展开学科栏"
+        sidePanel={(
+        <Card className="min-h-0 h-full border-border/70 bg-card/92">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <FolderTree className="size-4" />
@@ -605,22 +615,23 @@ export default function Knowledge() {
             </div>
           </CardContent>
         </Card>
-
+        )}
+      >
         <Card
           className={cn(
-            'min-h-[72vh] border-border/70 bg-card/92',
-            mindMapFullscreen && 'fixed inset-x-5 bottom-5 top-5 z-[90] min-h-0 bg-card/96 shadow-2xl',
+            'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
+            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
           )}
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 p-2">
             <div>
               <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
             </div>
             {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
           </CardHeader>
-          <CardContent className={cn('min-h-[62vh]', mindMapFullscreen && 'h-[calc(100vh-108px)] min-h-0')}>
+          <CardContent className={cn('flex min-h-0 flex-1 flex-col p-1 pt-0', mindMapFullscreen && 'h-full')}>
             {isSubjectEditorReady && editorState ? (
-              <div className="flex h-full min-h-0 flex-col gap-3">
+              <div className="flex h-full min-h-0 flex-col gap-2">
                 <MindMapPageToolbar
                   taskControl={{ value: mindMapExperience.task, onChange: mindMapExperience.setTask }}
                   searchControl={{
@@ -658,7 +669,8 @@ export default function Knowledge() {
                       </button>
                     ))}
                   </div>
-                ) : null}                <MindMapEditorSurface
+                ) : null}
+                <MindMapEditorSurface
                   ref={mindMapFrameRef}
                   key={`subject-frame:${selectedSubjectId}:${mindMapImport.importAppliedSyncVersion}`}
                   editorState={editorState}
@@ -685,20 +697,17 @@ export default function Knowledge() {
                   onFullscreenToggle={setMindMapFullscreen}
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
-                  className={cn(
-                    'w-full flex-1 rounded-lg border border-border/70 bg-background',
-                    mindMapFullscreen ? 'h-full' : 'h-[62vh]',
-                  )}
+                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
                 />
               </div>
             ) : (
-              <div className="flex h-[62vh] items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
+              <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-border/80 bg-background/60 text-sm text-muted-foreground">
                 {selectedSubjectId ? '正在加载当前学科的脑图…' : '先创建或选择一个学科，宿主编辑器才会加载。'}
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
+      </MindMapSplitLayout>
 
       <KnowledgeMindMapImportDrawer mindMapImport={mindMapImport} targetNodeLabel={selectedNodeLabel} />
 

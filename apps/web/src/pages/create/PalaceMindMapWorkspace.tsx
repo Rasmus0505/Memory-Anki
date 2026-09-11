@@ -811,7 +811,7 @@ export function PalaceSubjectMindMapCard({
             onFullscreenChange={setFullscreen}
             onUiClearedChange={setUiCleared}
             className={cn(
-              'min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-background',
+              'min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50',
               surfaceClassName,
             )}
           />
