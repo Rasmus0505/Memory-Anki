@@ -58,7 +58,7 @@ describe('palaceAccent', () => {
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(1, 'current'))
     expect(palaceAccentToneClass(1, 'done')).not.toContain('bg-emerald-400')
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
-    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/14')
+    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/40')
   })
 })
 

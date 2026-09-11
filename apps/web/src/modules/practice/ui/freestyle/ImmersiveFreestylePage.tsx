@@ -1624,9 +1624,9 @@ export default function ImmersiveFreestylePage() {
                   key={card.id}
                   className={cn(
                     'relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always',
-                    // Only the 2px rail needs clearance now that the card header is gone;
-                    // the title/flip chip floats inside the map surface.
-                    'p-0 pt-[env(safe-area-inset-top,0px)]',
+                    // Keep the 6px progress rail on the dark shell so it stays readable
+                    // on PWA; the title/flip chip floats inside the map surface.
+                    'p-0 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]',
                   )}
                 >
                   {isMindMapBranchCard(card) ? (
@@ -1735,7 +1735,7 @@ export default function ImmersiveFreestylePage() {
           )}
           {/* Closing slot, appended rather than replacing the feed so 回看 still works. */}
           {!loading && !error && roundComplete ? (
-            <div className="relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0 pt-[env(safe-area-inset-top,0px)]">
+            <div className="relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]">
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
                 durationSeconds={timer.effectiveSeconds}

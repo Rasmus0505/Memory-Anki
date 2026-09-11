@@ -51,6 +51,8 @@ describe('FreestyleProgressRail', () => {
     expect(segments).toHaveLength(4)
     expect(segments.map((node) => node.getAttribute('data-tone')))
       .toEqual(['done', 'retry', 'current', 'pending'])
+    expect(segments[0].className).toContain('h-1.5')
+    expect(screen.getByTestId('freestyle-progress-rail').className).toContain('h-5')
   })
 
   it('colors segments by palace identity, not a whole-palace emerald override', () => {

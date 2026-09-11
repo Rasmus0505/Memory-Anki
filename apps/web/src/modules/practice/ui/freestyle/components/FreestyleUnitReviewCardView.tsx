@@ -42,7 +42,7 @@ import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
-const SESSION_LOAD_TIMEOUT_MS = 15_000
+const SESSION_LOAD_TIMEOUT_MS = 30_000
 /** Undo stays reachable just after a rate, then collapses so the map keeps the room. */
 const UNDO_VISIBLE_MS = 5_000
 
@@ -905,8 +905,8 @@ export function FreestyleUnitReviewCardView({
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
-      {/* Warm off-white: pure #fff against the near-black shell was a flashbang at night. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#f7f5f2] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+      {/* Paper white: same canvas as PWA review; dark chrome stays on the shell. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#fafafa] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
         {/* Rate confirmation, at the edge of the card being read rather than at screen
             center. Keyed by nonce so two rates inside one breath window restart it. */}
         {breath ? (

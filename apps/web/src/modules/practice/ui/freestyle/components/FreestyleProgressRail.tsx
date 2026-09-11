@@ -82,7 +82,7 @@ function ProgressRailItem({
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
             className={cn(
-              'h-0.5 w-full transition-colors',
+              'h-1.5 w-full rounded-[1px] transition-colors',
               palaceAccentToneClass(segment.palaceId, segment.tone),
             )}
           />
@@ -140,16 +140,16 @@ export function FreestyleProgressRail({
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <TooltipProvider delayDuration={200} skipDelayDuration={80}>
-      {/* Peripheral progress: one segment per card, so restudy re-insertion is visible. */}
+      {/* Round progress: one segment per card, so restudy re-insertion is visible. */}
       <div
         data-testid="freestyle-progress-rail"
         role="img"
         aria-label={railLabel}
-        className="pointer-events-auto flex h-4 w-full cursor-pointer items-center gap-px px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
+        className="pointer-events-auto flex h-5 w-full cursor-pointer items-center gap-px bg-zinc-950/55 px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
         onClick={onOpenPlan}
       >
         {summary.segments.length === 0 ? (
-          <span className="h-0.5 w-full bg-white/10" aria-hidden />
+          <span className="h-1.5 w-full rounded-[1px] bg-white/25" aria-hidden />
         ) : (
           summary.segments.map((segment, index) => (
             <ProgressRailItem
