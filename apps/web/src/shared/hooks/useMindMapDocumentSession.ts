@@ -8,6 +8,7 @@ import {
   stableMindMapEditorContentFingerprint,
   writeMindMapEditorDraft,
 } from '@/shared/persistence/mindmapEditorDraftStore'
+import { createSavePromiseTracker, type MindMapFlushSaveOptions } from '@/shared/hooks/mindMapDocumentSaveQueue'
 
 export interface MindMapPersistenceAdapter<TResponse, TMeta> {
   load: (id: number) => Promise<TResponse>
@@ -151,8 +152,10 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   }
 
   const activeSaveOperationRef = useRef<SaveOperation | null>(null)
+  const saveTrackerRef = useRef(createSavePromiseTracker())
   const retryPersistRef = useRef<(operation: SaveOperation) => void>(() => {})
   const flushCurrentSaveRef = useRef<() => void>(() => {})
+  const enqueuePersistRef = useRef<(operation: SaveOperation) => Promise<void>>(() => Promise.resolve())
   /** When beforeAutoSave blocks a version, keep local UI but skip network for that version. */
   const networkSaveBlockedVersionRef = useRef<number | null>(null)
 
@@ -438,7 +441,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
               dirtyOwnerIdRef.current = latest.ownerId
               const followUp = createSaveOperation(latest.ownerId, latest.snapshot, latest.saveVersion)
               activeSaveOperationRef.current = followUp
-              void persistOperation(followUp)
+              void enqueuePersistRef.current(followUp)
             }, 0)
           } else if (
             completedSuccessfully
@@ -463,8 +466,10 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     ],
   )
 
+  enqueuePersistRef.current = (operation) =>
+    saveTrackerRef.current.track(() => persistOperation(operation))
   retryPersistRef.current = (operation) => {
-    void persistOperation(operation)
+    void enqueuePersistRef.current(operation)
   }
 
   const load = useCallback(async (options?: { force?: boolean }) => {
@@ -560,8 +565,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         operationId: requestId,
         error: err instanceof Error ? err.message : 'Failed to load editor',
       })
-    } finally {
-      // Load success/failure actions settle the explicit session state.
     }
   }, [clearLocalDraft, draftKeyFor, entityId, isCurrentLoadRequest, loadCacheKey, shouldIgnoreIncomingState])
 
@@ -576,14 +579,15 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     if (networkSaveBlockedVersionRef.current === saveVersion) return false
     const operation = createSaveOperation(targetEntityId, snapshot, saveVersion)
     activeSaveOperationRef.current = operation
-    void persistOperation(operation)
+    void enqueuePersistRef.current(operation)
     return true
-  }, [createSaveOperation, persistOperation])
+  }, [createSaveOperation])
 
-  const flushSave = useCallback(async () => {
+  const flushSave = useCallback(async (options?: MindMapFlushSaveOptions) => {
     const saveEntityId = entityIdRef.current
-    if (!saveEntityId || !dirtyRef.current) return
-    if (dirtyOwnerIdRef.current !== saveEntityId) return
+    if (!saveEntityId) return
+    await saveTrackerRef.current.wait()
+    if (!options?.force && (!dirtyRef.current || dirtyOwnerIdRef.current !== saveEntityId)) return
     if (activeSaveOperationRef.current?.ownerId === saveEntityId) return
     const pendingSnapshot = pendingSnapshotRef.current
     const snapshot = pendingSnapshot?.ownerId === saveEntityId
@@ -593,13 +597,12 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     const saveVersion = pendingSnapshot?.ownerId === saveEntityId
       ? pendingSnapshot.saveVersion
       : changeVersionRef.current
-    if (networkSaveBlockedVersionRef.current === saveVersion) return
-    // Ensure the latest snapshot is durable before the network round-trip.
+    if (!options?.force && networkSaveBlockedVersionRef.current === saveVersion) return
     persistLocalDraft(saveEntityId, snapshot, saveVersion)
     const operation = createSaveOperation(saveEntityId, snapshot, saveVersion)
     activeSaveOperationRef.current = operation
-    await persistOperation(operation)
-  }, [createSaveOperation, persistLocalDraft, persistOperation])
+    await enqueuePersistRef.current(operation)
+  }, [createSaveOperation, persistLocalDraft])
 
   flushCurrentSaveRef.current = () => {
     void flushSave()

@@ -25,6 +25,7 @@ import {
 import type { PalaceMeta } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { readMindMapEditorState } from '@/modules/content/domain/mindmap-document-entity'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
 type ImportApplyGuardPhase = 'saving' | 'reloading' | 'awaiting_sync'
 
@@ -71,6 +72,9 @@ export function usePalaceEditorDocument({
       const override = nextSaveOverrideRef.current
       nextSaveOverrideRef.current = null
       const response = await savePalaceEditorApi(id, applyPalaceSaveOverride(data, override), 'ack')
+      if (response.unit_reconcile) {
+        emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+      }
       // Autosave only acknowledges the server revision. Keep the local canonical
       // document in the session so a slow response cannot rebuild the canvas.
       return {
@@ -127,17 +131,20 @@ export function usePalaceEditorDocument({
    * Flush pending palace editor changes with optional unit reconcile.
    * Normal autosave never sets these flags — including mid-pass permanent-mark toggles.
    * Mark/membership reconcile runs on finished mark pass (`mark_change`), leave, or idle.
+   * Content is flushed first; schedule reconcile is a separate same-doc save so a
+   * finished mark pass still arranges units after mid-pass autosave cleared dirty.
    * Override is consumed by the next adapter save only (including session visibility flush if armed first).
    * Keep the arm across in-flight → follow-up saves; clear on consume / tab visible / palaceId change.
    */
   const flushSaveWithReconcile = useCallback(
     async (reason: PalaceEditorReconcileSyncReason, options?: { reconcileUnits?: boolean }) => {
       const reconcileUnits = options?.reconcileUnits ?? reason === 'editor_leave'
+      await flushSave()
       nextSaveOverrideRef.current = {
         sync_reason: reason,
         ...(reconcileUnits ? { reconcile_units: true } : {}),
       }
-      await flushSave()
+      await flushSave({ force: true })
     },
     [flushSave],
   )

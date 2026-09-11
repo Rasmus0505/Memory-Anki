@@ -265,6 +265,14 @@ export function usePalaceEditPage() {
   }, [palaceId])
 
   useEffect(() => {
+    if (isActive) return
+    if (!palaceId) return
+    // Keep-alive hide does not unmount the editor, so palaceId cleanup never runs.
+    // Treat residency inactive as leave so marked units still enter the review list.
+    void documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+  }, [isActive, palaceId])
+
+  useEffect(() => {
     if (!mindMapFullscreen) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
