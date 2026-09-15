@@ -1,5 +1,6 @@
 import {
   Brain,
+  Check,
   Eye,
   FolderTree,
   Languages,
@@ -41,7 +42,11 @@ interface MindMapToolbarAction {
 }
 interface MindMapToolbarModeControl { value: 'edit' | 'preview' | 'recall'; onChange: (value: 'edit' | 'preview' | 'recall') => void; disabled?: boolean }
 interface MindMapToolbarToggleAction extends MindMapToolbarAction { active?: boolean }
-type OverflowAction = MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }
+type OverflowAction = MindMapToolbarAction & {
+  destructive?: boolean
+  separatorBefore?: boolean
+  active?: boolean
+}
 
 export interface MindMapPageToolbarProps {
   compact?: boolean
@@ -61,7 +66,7 @@ export interface MindMapPageToolbarProps {
   focusAction?: MindMapToolbarAction | null
   fitAction?: MindMapToolbarAction | null
   ratingAction?: MindMapToolbarToggleAction | null
-  moreActions?: Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean }>
+  moreActions?: Array<MindMapToolbarAction & { destructive?: boolean; separatorBefore?: boolean; active?: boolean }>
   segmentControl?: MindMapToolbarSegmentControl | null
   modeControl?: MindMapToolbarModeControl | null
   modeToggle?: MindMapToolbarAction | null
@@ -93,8 +98,8 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     importTextAction = null, englishAction = null, textAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
-  // englishAction is a first-class toolbar toggle (right of 编辑); keep it out of overflow.
-  // quizAction stays visible as a primary button; do not also bury it in ⋯ (avoids duplicate "做题").
+  // englishAction stays a dedicated toggle unless a host puts it in moreActions (freestyle).
+  // quizAction is the first primary button; do not also bury it in ⋯ (avoids duplicate "做题").
   const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowBase = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
   const recording = useSessionRecorderState().recording
@@ -111,6 +116,18 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   return (
     <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
       <div className="flex flex-nowrap items-center gap-2">
+        {quizAction ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={quizAction.disabled}
+            aria-label={quizAction.label}
+            title={quizAction.label}
+            onClick={quizAction.onClick}
+          >
+            {quizAction.label}
+          </Button>
+        ) : null}
         {ratingAction ? <Button type="button" variant={ratingAction.active ? 'default' : 'outline'} onClick={ratingAction.onClick} disabled={ratingAction.disabled}><Brain className="size-4" />{ratingAction.label}</Button> : null}
         {taskControl ? (
           <div className="inline-flex rounded-lg border border-border/70 bg-background p-1">
@@ -190,11 +207,6 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             <span className="max-sm:hidden">{textAction.label}</span>
           </Button>
         ) : null}
-        {quizAction ? (
-          <Button type="button" variant="outline" disabled={quizAction.disabled} onClick={quizAction.onClick}>
-            {quizAction.label}
-          </Button>
-        ) : null}
         {!modern ? legacyActions.map((action) => <Button key={action.label} type="button" variant="outline" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>) : null}
         {!modern && immersiveAction ? <Button type="button" variant="outline" onClick={immersiveAction.onClick}>{immersiveAction.label}</Button> : null}
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}
@@ -202,7 +214,30 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
             <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作" className="max-sm:size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
-              {overflowActions.map((action, index) => <div key={`${action.label}-${index}`}>{action.separatorBefore ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={action.disabled} variant={action.destructive ? 'destructive' : 'default'} onSelect={(event) => { if (action.opensOverlay) event.preventDefault(); overflowMenu.runAction(() => { if (action.label !== '录制' && action.label !== '停止录制') recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`); action.onClick() }, action.opensOverlay) }}>{action.label}</DropdownMenuItem></div>)}
+              {overflowActions.map((action, index) => (
+                <div key={`${action.label}-${index}`}>
+                  {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuItem
+                    disabled={action.disabled}
+                    variant={action.destructive ? 'destructive' : 'default'}
+                    aria-checked={action.active ? true : undefined}
+                    onSelect={(event) => {
+                      if (action.opensOverlay) event.preventDefault()
+                      overflowMenu.runAction(() => {
+                        if (action.label !== '录制' && action.label !== '停止录制') {
+                          recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`)
+                        }
+                        action.onClick()
+                      }, action.opensOverlay)
+                    }}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      {action.label}
+                      {action.active ? <Check className="size-3.5 shrink-0" aria-hidden /> : null}
+                    </span>
+                  </DropdownMenuItem>
+                </div>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
       </div>

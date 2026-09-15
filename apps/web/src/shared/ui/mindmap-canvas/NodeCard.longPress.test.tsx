@@ -4,6 +4,31 @@ import { LONG_PRESS_DELAY_MS } from '@/shared/ui/mindmap-canvas/nodeCardModel'
 import { renderNodeCard } from '@/shared/ui/mindmap-canvas/nodeCardTestUtils'
 
 describe('NodeCard long press', () => {
+  it('does not start a card long-press in text-selection mode', async () => {
+    vi.useFakeTimers()
+    const onTouchLongPress = vi.fn()
+    renderNodeCard({
+      label: '可复制知识点',
+      readonly: true,
+      textSelectionModeActive: true,
+      onTouchLongPress,
+    })
+
+    const face = document.querySelector('.mindmap-node-text') as HTMLElement
+    fireEvent.pointerDown(face, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 48,
+      clientY: 72,
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LONG_PRESS_DELAY_MS + 50)
+    })
+    expect(onTouchLongPress).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
   it('fires a touch long press context action after the delay', async () => {
     vi.useFakeTimers()
     const onTouchLongPress = vi.fn()

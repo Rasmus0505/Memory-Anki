@@ -276,6 +276,36 @@ describe('mindMapCanvasDisplay', () => {
     expect(second[1].style?.strokeWidth).toBe(3)
   })
 
+  it('disables card selection in text-selection mode so native copy is not stolen', () => {
+    const nodes = [makeNode('a'), makeNode('b')]
+    const displayNodes = buildDisplayNodes({
+      nodes,
+      previewNodes: [],
+      previewState: null,
+      sourceId: null,
+      isDraggingNode: false,
+      selectedNodeId: 'a',
+      selectedNodeIds: ['a'],
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: true,
+      textSelectionModeActive: true,
+      buildSelectionToolbarActions: () => [{ id: 'rate-3', label: '记得', onClick: vi.fn() }],
+    })
+
+    expect(displayNodes.every((node) => node.selectable === false)).toBe(true)
+    expect(displayNodes.every((node) => node.data.selected === false)).toBe(true)
+    expect(displayNodes.every((node) => node.data.textSelectionModeActive === true)).toBe(true)
+    expect(displayNodes[0]?.data.selectionToolbarActions).toBeUndefined()
+  })
+
   it('keeps thick semantic edges thick when selected', () => {
     const edge = makeEdge('a->b')
     edge.style = { ...edge.style, strokeWidth: 6 }

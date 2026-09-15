@@ -48,6 +48,7 @@ interface BuildDisplayNodesInput {
   extractDropMode?: 'before' | 'inside' | 'after' | null
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
+  textSelectionModeActive?: boolean
 }
 
 export function buildDisplayNodes({
@@ -86,6 +87,7 @@ export function buildDisplayNodes({
   extractDropMode = null,
   englishInteractionActive = false,
   onEnglishWordClick,
+  textSelectionModeActive = false,
 }: BuildDisplayNodesInput): Node[] {
   const previewNodesById = new Map(previewNodes.map((node) => [node.id, node]))
   const previousNodesById = new Map((previousDisplayNodes ?? []).map((node) => [node.id, node]))
@@ -127,13 +129,15 @@ export function buildDisplayNodes({
     const position =
       livePosition ?? (isSource || !previewNode ? node.position : previewNode.position)
     const zIndex = isSource ? 100 : activeDrop ? 50 : 1
-    const isSelected = selectedIds.has(node.id)
+    const isSelected = !textSelectionModeActive && selectedIds.has(node.id)
     const isEditing = node.id === editingNodeId
     // Idle cards are structure-draggable; only edit mode (and readonly) blocks drag.
     const canDrag = !readonly && !isEditing
     // Selection toolbar only on primary (last selected) node.
     const selectionToolbarActions =
-      node.id === selectedNodeId ? buildSelectionToolbarActions?.(node.id) ?? [] : []
+      !textSelectionModeActive && node.id === selectedNodeId
+        ? buildSelectionToolbarActions?.(node.id) ?? []
+        : []
     const nextData = {
       ...(node.data as Record<string, unknown>),
       selected: isSelected,
@@ -159,15 +163,20 @@ export function buildDisplayNodes({
       onExtractSelection,
       onExtractDropPreview,
       readonly,
-      onTouchLongPress: touchLongPressEnabled && !englishInteractionActive ? onTouchLongPress : undefined,
+      onTouchLongPress:
+        touchLongPressEnabled && !englishInteractionActive && !textSelectionModeActive
+          ? onTouchLongPress
+          : undefined,
       selectionToolbarActions: selectionToolbarActions.length > 0 ? selectionToolbarActions : undefined,
       selectionToolbarPreferPosition:
         selectionToolbarActions.length > 0 ? selectionToolbarPreferPosition : undefined,
       englishInteractionActive,
       onEnglishWordClick: englishInteractionActive ? onEnglishWordClick : undefined,
+      textSelectionModeActive,
     }
     const previous = previousNodesById.get(node.id)
     const dragHandle = canDrag ? '.mindmap-node-drag-surface' : undefined
+    const selectable = textSelectionModeActive ? false : node.selectable
 
     if (
       previous &&
@@ -176,6 +185,7 @@ export function buildDisplayNodes({
       previous.targetPosition === node.targetPosition &&
       previous.draggable === canDrag &&
       previous.dragHandle === dragHandle &&
+      previous.selectable === selectable &&
       previous.position.x === position.x &&
       previous.position.y === position.y &&
       previous.zIndex === zIndex &&
@@ -190,6 +200,7 @@ export function buildDisplayNodes({
       zIndex,
       draggable: canDrag,
       dragHandle,
+      selectable,
       data: nextData,
     }
   })

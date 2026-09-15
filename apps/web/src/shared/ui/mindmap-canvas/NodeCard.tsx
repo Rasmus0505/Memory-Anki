@@ -93,11 +93,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     onExtractDropPreview: nodeData.onExtractDropPreview,
   })
   const englishInteractionActive = Boolean(nodeData.englishInteractionActive)
+  const textSelectionModeActive = Boolean(nodeData.textSelectionModeActive)
+  const textInteractionActive = englishInteractionActive || textSelectionModeActive
   const longPress = useNodeCardLongPress({
     nodeId: id,
     // While contentEditable is open, keep native text selection; long-press is for idle cards.
-    // English mode reuses long-press for multi-word selection + AI translation.
-    enabled: !isEditing && !englishInteractionActive,
+    // English / text-select modes keep native selection; do not steal the press for hide/menu.
+    enabled: !isEditing && !textInteractionActive,
     onTouchLongPress: nodeData.onTouchLongPress,
   })
 
@@ -318,6 +320,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const handleDoubleClick = useCallback(
     (event: MouseEvent) => {
+      if (textInteractionActive) return
       event.preventDefault()
       event.stopPropagation()
       if (readonly) {
@@ -326,8 +329,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       }
       startEdit(event)
     },
-    [id, nodeData, readonly, startEdit],
+    [id, nodeData, readonly, startEdit, textInteractionActive],
   )
+
+  const stopTextModeCardClick = useCallback((event: MouseEvent) => {
+    // Text-select: swallow RF node click so PWA can keep the system Copy bar.
+    event.stopPropagation()
+  }, [])
 
   const commitEdit = useCallback(() => {
     if (editSessionClosedRef.current) return
@@ -561,7 +569,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   })
   const nodeMode = isEditing ? 'editing' : nodeData.selected ? 'selected' : 'idle'
   const canStructureDrag = Boolean(!isEditing && !readonly)
-  const textOpts = { isRoot, depth, readonly, concealed, englishInteractionActive } as const
+  const textOpts = { isRoot, depth, readonly, concealed, englishInteractionActive, textSelectionModeActive } as const
   const textCls = buildNodeCardTextClassNames({ ...textOpts, mode: 'display' })
   const paddingCls = isRoot ? 'px-4 py-2.5' : depth === 1 ? 'px-3 py-2' : 'px-2.5 py-1.5'
   const editorTextCls = buildNodeCardTextClassNames({ ...textOpts, mode: 'edit' })
@@ -576,7 +584,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   return (
     <div
       ref={shellRef}
-      onDoubleClick={handleDoubleClick}
+      onClick={textSelectionModeActive ? stopTextModeCardClick : undefined}
+      onDoubleClick={textInteractionActive ? undefined : handleDoubleClick}
       onPointerDown={longPress.handlePointerDown}
       onPointerMove={longPress.handlePointerMove}
       onPointerUp={longPress.finishPointerInteraction}
@@ -593,8 +602,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       ].filter(Boolean).join(' ')}
       style={{
         width: shellWidth,
-        // Structure long-press: no iOS callout; English mode needs native selection.
-        WebkitTouchCallout: englishInteractionActive ? 'default' : 'none',
+        // Structure long-press: no iOS callout; English / text-select need native Copy.
+        WebkitTouchCallout: textInteractionActive ? 'default' : 'none',
       }}
     >
       {longPress.longPressPending ? (
@@ -786,6 +795,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             onContextMenu={longPress.handleContextMenu}
             englishInteractionActive={englishInteractionActive}
             onEnglishWordClick={nodeData.onEnglishWordClick}
+            textSelectionModeActive={textSelectionModeActive}
             readonly={readonly}
           />
         </div>

@@ -102,17 +102,20 @@ describe('MindMapPageToolbar', () => {
     expect(onText).toHaveBeenCalledTimes(1)
   })
 
-  it('opens ⋯ from moreActions alone and keeps 做题 as a primary button', async () => {
+  it('opens ⋯ from moreActions alone and keeps 做题 as the first primary button', async () => {
     const onEdit = vi.fn()
     const onQuiz = vi.fn()
     render(
       <MindMapPageToolbar
         englishAction={{ label: '英语', onClick: vi.fn() }}
         quizAction={{ label: '做题', onClick: onQuiz }}
+        textAction={{ label: '文字', onClick: vi.fn() }}
         moreActions={[{ label: '进入编辑', onClick: onEdit }]}
       />,
     )
 
+    const buttons = screen.getAllByRole('button')
+    expect(buttons[0]?.textContent).toContain('做题')
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '更多脑图操作' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '进入编辑' })).toBeNull()
@@ -123,6 +126,22 @@ describe('MindMapPageToolbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '做题' }))
     expect(onQuiz).toHaveBeenCalledTimes(1)
+  })
+
+  it('can keep 英语 in ⋯ as a checked toggle', async () => {
+    const onEnglish = vi.fn()
+    render(
+      <MindMapPageToolbar
+        quizAction={{ label: '做题', onClick: vi.fn() }}
+        textAction={{ label: '文字', onClick: vi.fn() }}
+        moreActions={[{ label: '进入编辑', onClick: vi.fn() }, { label: '英语', active: true, onClick: onEnglish }]}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: '英语' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '英语' }))
+    expect(onEnglish).toHaveBeenCalledTimes(1)
   })
 
   it('keeps dedicated scene actions accessible in the modern overflow menu', async () => {
@@ -254,7 +273,6 @@ describe('MindMapPageToolbar', () => {
     expect(onToggleNativeFullscreen).toHaveBeenCalledTimes(1)
     expect(onToggleUiCleared).toHaveBeenCalledTimes(1)
   })
-})
 
   it('puts 录制 in the overflow menu and opens the recorder dialog', async () => {
     render(<MindMapPageToolbar modeToggle={{ label: '编辑', onClick: vi.fn() }} />)
@@ -270,3 +288,4 @@ describe('MindMapPageToolbar', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
     expect(await screen.findByRole('menuitem', { name: '停止录制' })).toBeTruthy()
   })
+})

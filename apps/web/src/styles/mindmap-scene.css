@@ -1,17 +1,24 @@
 /* Mind-map frame scene chrome: border + soft glow + top accent by product mode. */
 
 /*
- * English interaction mode (PWA + desktop):
- * - Allow native text selection for long-press multi-word AI translation
+ * English / text-selection modes (PWA + desktop):
+ * - Allow native text selection (double-tap word, drag range, system Copy)
  * - Prefer whole-word wrapping (layout also widens cards for long English tokens)
  * - Keep touch from being stolen by map pan when interacting with node text
+ * - Restore iOS/Android callout; role=button + :active transform otherwise eats it
  */
-[data-english-mode='true'] .mindmap-node-text {
+[data-english-mode='true'] .mindmap-node-text,
+[data-text-mode='true'] .mindmap-node-text {
   -webkit-user-select: text;
   user-select: text;
   touch-action: auto;
+  -webkit-touch-callout: default;
   overflow-wrap: break-word;
   word-break: normal;
+}
+
+[data-text-mode='true'] .mindmap-node-text:active {
+  transform: none;
 }
 
 [data-english-mode='true'] .mindmap-node-text [data-reading-word='true'] {

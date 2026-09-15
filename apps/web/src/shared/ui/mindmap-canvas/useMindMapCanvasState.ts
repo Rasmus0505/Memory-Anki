@@ -526,7 +526,7 @@ export function useMindMapCanvasState(
   )
   const handleNodeDoubleClick = useCallback(
     (event: MouseEvent, node: Node) => {
-      if (readonly) return
+      if (textSelectionModeActive || readonly) return
       const target = event.target instanceof HTMLElement ? event.target : null
       // Yellow emphasis spans live under .mindmap-node-text; also treat data-emphasis
       // as text so RF fallback still enters edit if DOM nesting is unusual (browser
@@ -545,7 +545,14 @@ export function useMindMapCanvasState(
       event.preventDefault()
       onEditingNodeChange?.(node.id)
     },
-    [onEditingNodeChange, readonly],
+    [onEditingNodeChange, readonly, textSelectionModeActive],
+  )
+  const handleNodeClick = useCallback(
+    (event: MouseEvent, node: Node) => {
+      if (textSelectionModeActive) return
+      menus.handleNodeClick(event, node)
+    },
+    [menus.handleNodeClick, textSelectionModeActive],
   )
   const handleCancelEdit = useCallback(
     (nodeId: string) => {
@@ -623,14 +630,15 @@ export function useMindMapCanvasState(
       selectionToolbarPreferPosition: props.selectionToolbarPreferPosition,
       extractDropTargetId: extractDrop?.targetId ?? null,
       extractDropMode: extractDrop?.mode ?? null,
-      englishInteractionActive: textInteractionActive,
+      englishInteractionActive,
       onEnglishWordClick: englishInteractionActive ? onEnglishWordClick : undefined,
+      textSelectionModeActive,
     })
     displayNodesRef.current = nextDisplayNodes
     return nextDisplayNodes
   // liveDragVersion is a bump counter so ref-backed live drag positions re-render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveDragVersion forces recompute when only refs change
-  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, expandSubtree, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, textInteractionActive, touchLongPressEnabled, viewport.handleNodeMeasure])
+  }, [dragSourceIdsRef, draggingNodeIdRef, editingDraft, editingNodeId, englishInteractionActive, extractDrop, handleCancelEdit, handleExtractDropPreview, handleExtractSelection, handleFinishEditAndClose, handleStartEdit, expandSubtree, handleToggleCollapse, handleTouchLongPress, isDraggingNode, liveDragPositionsRef, liveDragVersion, nodes, onAddChild, onAddSibling, onDelete, onEditingDraftChange, onEnglishWordClick, onExtractSelection, practiceModeActive, previewState, props.buildSelectionToolbarActions, props.selectionToolbarPreferPosition, props.onCountBadgeClick, readonly, selectEditingText, selectedNodeId, selectedNodeIds, textInteractionActive, textSelectionModeActive, touchLongPressEnabled, viewport.handleNodeMeasure])
 
   const displayEdges = useMemo(() => {
     const nextDisplayEdges = buildDisplayEdges(edges, menus.selectedEdgeId, displayEdgesRef.current)
@@ -823,7 +831,7 @@ export function useMindMapCanvasState(
     clearMarkColor,
     onNodesChange,
     onEdgesChange,
-    handleNodeClick: menus.handleNodeClick,
+    handleNodeClick,
     handleNodeDoubleClick,
     handleNodeContextMenu: menus.handleNodeContextMenu,
     handleNodeMouseEnter: menus.handleNodeMouseEnter,

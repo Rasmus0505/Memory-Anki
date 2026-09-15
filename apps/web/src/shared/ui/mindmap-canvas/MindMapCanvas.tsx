@@ -133,7 +133,7 @@ export interface MindMapCanvasProps {
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
-  /** Host text-selection mode: keep node text selectable and disable touch actions. */
+  /** Host text-selection mode: native copy; no card click, select, or double-tap zoom. */
   textSelectionModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
@@ -399,6 +399,7 @@ function MindMapCanvasInner({
               onEdgesChange={state.onEdgesChange}
               onNodeClick={state.handleNodeClick}
               onNodeDoubleClick={state.handleNodeDoubleClick}
+              textSelectionModeActive={Boolean(props.textSelectionModeActive)}
               onNodeContextMenu={state.handleNodeContextMenu}
               onNodeDragStart={state.handleNodeDragStart}
               onNodeDrag={state.handleNodeDrag}

@@ -96,6 +96,32 @@ describe('NodeCard', () => {
     expect(screen.getByRole('button', { name: 'memory palace' }).className).toContain('nopan')
   })
 
+  it('renders text-selection mode as a native copy surface without a card button', () => {
+    const wrapperOnClick = vi.fn()
+    const onReadonlyDoubleClick = vi.fn()
+    renderNodeCard(
+      {
+        label: '可复制知识点',
+        readonly: true,
+        textSelectionModeActive: true,
+        onReadonlyDoubleClick,
+        metadata: { depth: 1, layoutRole: 'branch' },
+      },
+      wrapperOnClick,
+    )
+
+    expect(screen.queryByRole('button', { name: '可复制知识点' })).toBeNull()
+    const face = document.querySelector('.mindmap-node-text') as HTMLElement
+    expect(face.getAttribute('role')).toBeNull()
+    expect(face.className).toContain('select-text')
+    expect(face.className).toContain('nopan')
+
+    fireEvent.click(face)
+    fireEvent.doubleClick(face)
+    expect(wrapperOnClick).not.toHaveBeenCalled()
+    expect(onReadonlyDoubleClick).not.toHaveBeenCalled()
+  })
+
   it('widens the edit shell so thicker edit borders do not wrap earlier than display', () => {
     const label = '一二三四五六'
     const displaySize = getNodeSize('branch', label)

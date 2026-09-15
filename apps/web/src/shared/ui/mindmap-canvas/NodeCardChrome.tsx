@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import type { MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
 import { NodeCountBadge } from './NodeCountBadge'
@@ -107,6 +107,7 @@ export function NodeCardTextFace({
   onContextMenu,
   englishInteractionActive = false,
   onEnglishWordClick,
+  textSelectionModeActive = false,
   readonly = false,
 }: {
   textCls: string
@@ -119,13 +120,20 @@ export function NodeCardTextFace({
   onContextMenu: (event: MouseEvent<HTMLElement>) => void
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
+  textSelectionModeActive?: boolean
   readonly?: boolean
 }) {
   const showEnglishInteraction =
     englishInteractionActive && !concealed && typeof onEnglishWordClick === 'function'
+  const nativeCopySurface = textSelectionModeActive && !showEnglishInteraction
   const plainLabel = label || (isRoot ? '未命名主题' : '未命名知识点')
   // Readonly cards (except english / text-select) let pane pan start on the label.
-  const blockPanePan = !readonly || englishInteractionActive
+  const blockPanePan = !readonly || englishInteractionActive || textSelectionModeActive
+
+  const stopCardClick = (event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLElement>) => {
+    // Keep default so the browser can select / show Copy; only block RF node click.
+    event.stopPropagation()
+  }
 
   return (
     // Use role=button div (not <button>) so highlight markup can legally contain
@@ -133,13 +141,21 @@ export function NodeCardTextFace({
     // and prevent double-click from entering edit mode on yellow-emphasis cards.
     // Always nodrag on the text face: structure drag uses shell padding/chrome so
     // double-click on yellow spans is never stolen by React Flow drag.
+    // Text-selection mode is a native copy surface: no role=button, no click/dblclick.
     <div
-      role="button"
-      tabIndex={-1}
-      onClick={onClick}
-      onDoubleClick={showEnglishInteraction ? undefined : onDoubleClick}
-      onContextMenu={showEnglishInteraction ? (event) => event.preventDefault() : onContextMenu}
-      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+      role={nativeCopySurface ? undefined : 'button'}
+      tabIndex={nativeCopySurface ? undefined : -1}
+      onPointerDown={nativeCopySurface ? stopCardClick : undefined}
+      onClick={nativeCopySurface ? undefined : onClick}
+      onDoubleClick={nativeCopySurface || showEnglishInteraction ? undefined : onDoubleClick}
+      onContextMenu={
+        nativeCopySurface
+          ? undefined
+          : showEnglishInteraction
+            ? (event) => event.preventDefault()
+            : onContextMenu
+      }
+      onKeyDown={nativeCopySurface ? undefined : (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter' || event.key === ' ') event.preventDefault()
       }}
       className={[

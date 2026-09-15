@@ -28,6 +28,8 @@ interface MindMapCanvasViewportProps {
   onEdgesChange: OnEdgesChange<Edge>
   onNodeClick: (event: React.MouseEvent, node: Node) => void
   onNodeDoubleClick: (event: React.MouseEvent, node: Node) => void
+  /** Text-copy mode: do not select/activate cards so the system Copy bar can stay. */
+  textSelectionModeActive?: boolean
   onNodeContextMenu: (event: React.MouseEvent, node: Node) => void
   onNodeDragStart: (event: unknown, node: Node) => void
   onNodeDrag: (event: unknown, node: Node) => void
@@ -61,6 +63,7 @@ export function MindMapCanvasViewport({
   onEdgesChange,
   onNodeClick,
   onNodeDoubleClick,
+  textSelectionModeActive = false,
   onNodeContextMenu,
   onNodeDragStart,
   onNodeDrag,
@@ -105,8 +108,8 @@ export function MindMapCanvasViewport({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
+        onNodeClick={textSelectionModeActive ? undefined : onNodeClick}
+        onNodeDoubleClick={textSelectionModeActive ? undefined : onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
@@ -126,7 +129,7 @@ export function MindMapCanvasViewport({
         nodesFocusable={false}
         edgesFocusable={false}
         deleteKeyCode={null}
-        elementsSelectable
+        elementsSelectable={!textSelectionModeActive}
         // Default is 1px — micro-movement on double-click (esp. yellow text) starts
         // a structure drag and can swallow enter-edit. Shell padding remains draggable.
         nodeDragThreshold={5}
@@ -144,7 +147,7 @@ export function MindMapCanvasViewport({
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         zoomOnPinch
-        zoomOnDoubleClick={Boolean(readonly && !mobileGuided && !onPaneDoubleClick)}
+        zoomOnDoubleClick={Boolean(readonly && !mobileGuided && !onPaneDoubleClick && !textSelectionModeActive)}
         zoomActivationKeyCode="Control"
       >
         {/* Zoom/interactive are off, so this panel is a single fitView button — the same

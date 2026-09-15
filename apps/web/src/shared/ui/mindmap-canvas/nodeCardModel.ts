@@ -50,6 +50,8 @@ export type NodeCardData = MindMapNode & {
    */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
+  /** Host text-selection / copy mode: native select, no card click. */
+  textSelectionModeActive?: boolean
 }
 
 export const MEASURE_DELTA_PX = 1
@@ -110,9 +112,11 @@ export function buildNodeCardTextClassNames(options: {
   readonly: boolean
   concealed: boolean
   englishInteractionActive: boolean
+  textSelectionModeActive?: boolean
   mode: 'display' | 'edit'
 }): string {
   const wrap = 'break-words whitespace-pre-wrap'
+  const nativeTextSelect = options.englishInteractionActive || Boolean(options.textSelectionModeActive)
   const size = options.isRoot
     ? 'text-[14px] font-semibold leading-5'
     : options.depth === 1
@@ -124,9 +128,9 @@ export function buildNodeCardTextClassNames(options: {
   return [
     'w-full appearance-none border-0 bg-transparent p-0',
     wrap,
-    options.englishInteractionActive ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
+    nativeTextSelect ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
     options.concealed ? 'blur-[3px]' : '',
-    !options.englishInteractionActive && (options.concealed || !options.readonly) ? 'select-none' : '',
+    !nativeTextSelect && (options.concealed || !options.readonly) ? 'select-none' : '',
     options.isRoot ? `${size} text-zinc-900 text-center` : `text-left ${size}`,
     !options.isRoot && options.depth === 1 ? 'text-zinc-800' : '',
     !options.isRoot && options.depth !== 1 ? 'text-zinc-700' : '',

@@ -38,6 +38,7 @@ type FlipCardToolbarExtensions = Pick<
   | 'importTextAction'
   | 'englishAction'
   | 'textAction'
+  | 'quizAction'
 >
 
 type FlipCardSurfaceExtensions = Pick<
@@ -111,6 +112,9 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
     enterEdit?: string
     leaveEdit?: string
   }
+  /** Freestyle only: put 英语 in ⋯ and label the text toggle 文字. */
+  englishInOverflow?: boolean
+  textActionLabel?: string
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
   visibleEditorSyncKey?: string | number | null
@@ -166,6 +170,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onToggleFullscreen,
   onToggleMode,
   modeToggleLabels,
+  englishInOverflow = false,
+  textActionLabel,
   visibleEditorState,
   editableEditorState = null,
   visibleEditorSyncKey = null,
@@ -559,6 +565,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           onToggleEnglishMode: handleToggleEnglishModeFromToolbar,
           onToggleTextMode: handleToggleTextMode,
           onToggleFullscreen,
+          englishInOverflow,
+          textActionLabel,
         })}
         toolbarCenterContent={toolbarCenterContent}
         syncOnPropChange

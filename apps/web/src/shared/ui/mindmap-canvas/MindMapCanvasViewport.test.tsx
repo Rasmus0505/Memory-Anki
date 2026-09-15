@@ -10,7 +10,7 @@ vi.mock('@xyflow/react', () => ({
     Dots: 'dots',
   },
   Controls: () => <div data-testid="controls" />,
-  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, panOnDrag, preventScrolling, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport, minZoom, onlyRenderVisibleElements }: {
+  ReactFlow: ({ children, nodesDraggable, nodesFocusable, edgesFocusable, deleteKeyCode, panOnScroll, panOnDrag, preventScrolling, zoomOnDoubleClick, autoPanOnNodeDrag, autoPanOnConnect, viewport, minZoom, onlyRenderVisibleElements, elementsSelectable, onNodeClick }: {
     children: React.ReactNode
     nodesDraggable: boolean
     nodesFocusable: boolean
@@ -25,6 +25,8 @@ vi.mock('@xyflow/react', () => ({
     viewport: { x: number; y: number; zoom: number }
     minZoom?: number
     onlyRenderVisibleElements?: boolean
+    elementsSelectable?: boolean
+    onNodeClick?: unknown
   }) => (
     <div
       data-testid="react-flow"
@@ -40,6 +42,8 @@ vi.mock('@xyflow/react', () => ({
       data-auto-pan-on-connect={String(autoPanOnConnect)}
       data-min-zoom={String(minZoom)}
       data-only-render-visible={String(Boolean(onlyRenderVisibleElements))}
+      data-elements-selectable={String(elementsSelectable !== false)}
+      data-has-node-click={String(typeof onNodeClick === 'function')}
       data-viewport={`${viewport.x},${viewport.y},${viewport.zoom}`}
     >
       {children}
@@ -153,5 +157,14 @@ describe('MindMapCanvasViewport', () => {
     renderViewport({ readonly: true, onPaneDoubleClick: vi.fn() })
 
     expect(screen.getByTestId('react-flow').dataset.zoomOnDoubleClick).toBe('false')
+  })
+
+  it('does not select or click cards in text-selection mode so native copy can stay', () => {
+    renderViewport({ readonly: true, textSelectionModeActive: true })
+
+    const flow = screen.getByTestId('react-flow')
+    expect(flow.dataset.elementsSelectable).toBe('false')
+    expect(flow.dataset.hasNodeClick).toBe('false')
+    expect(flow.dataset.zoomOnDoubleClick).toBe('false')
   })
 })
