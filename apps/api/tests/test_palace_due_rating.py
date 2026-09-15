@@ -11,6 +11,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_review_service import (
+    cancel_unrated_unit_review_encounter,
     rate_palace_due_units,
     rate_review_unit,
     reconcile_palace_units,
@@ -88,9 +89,10 @@ def _current(review_session: dict, state: ReviewUnitState, encounter_id: str) ->
     }
 
 
-def test_palace_due_rating_scores_every_due_unit(db_session):
+def test_palace_due_rating_does_not_batch_first_learning_siblings(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
+    siblings = units[1:]
     opened = _open(db_session, current, "enc-current")
 
     result = rate_palace_due_units(
@@ -103,17 +105,87 @@ def test_palace_due_rating_scores_every_due_unit(db_session):
     )
 
     assert result["batch_id"] == "batch-pass"
-    assert set(result["rated_unit_ids"]) == {unit.id for unit in units}
-    assert result["remaining_due_count"] == 0
+    assert result["rated_unit_ids"] == [current.id]
     assert result["current"]["passed"] is True
-    assert result["current"]["encounter"]["id"] == "enc-current"
-    for unit in units:
+    db_session.refresh(current)
+    assert current.has_passed is True
+    assert current.due_date > date.today()
+    for unit in siblings:
         db_session.refresh(unit)
-        assert unit.has_passed is True
-        assert unit.due_date > date.today()
+        assert unit.has_passed is False
+        assert unit.due_date == date.today()
+    assert result["remaining_due_count"] == len(siblings)
     current_study = db_session.get(StudySession, opened["id"])
     assert current_study.status == "active"
     assert db_session.get(ReviewUnitEncounter, "enc-current").status == "open"
+
+
+def test_palace_due_rating_reopens_abandoned_current_and_applies_latest_rating(db_session):
+    palace, units = _seed_palace(db_session)
+    current = units[0]
+    opened = _open(db_session, current, "enc-abandoned")
+    cancelled = cancel_unrated_unit_review_encounter(
+        db_session,
+        study_session_id=opened["id"],
+        unit_id=current.id,
+        encounter_id="enc-abandoned",
+    )
+    assert cancelled["abandoned"] is True
+
+    result = rate_palace_due_units(
+        db_session,
+        palace_id=palace.id,
+        operation_id="batch-after-leave",
+        rating=3,
+        round_id="round-palace",
+        current=_current(opened, current, "enc-abandoned"),
+    )
+
+    assert result["current"]["rating"] == 3
+    assert result["current"]["passed"] is True
+    assert result["current"]["study_session_id"] != opened["id"]
+    db_session.refresh(current)
+    assert current.has_passed is True
+
+
+def test_palace_due_rating_batches_mature_due_siblings(db_session):
+    palace, units = _seed_palace(db_session)
+    current = units[0]
+    mature = units[1]
+    opened_mature = _open(db_session, mature, "enc-mature")
+    rate_review_unit(
+        db_session,
+        study_session_id=opened_mature["id"],
+        unit_id=mature.id,
+        unit_revision=mature.revision,
+        encounter_id="enc-mature",
+        operation_id="rate-mature",
+        rating=3,
+        round_id="round-palace",
+    )
+    db_session.refresh(mature)
+    mature.due_date = date.today()
+    db_session.commit()
+    opened = _open(db_session, current, "enc-current")
+
+    result = rate_palace_due_units(
+        db_session,
+        palace_id=palace.id,
+        operation_id="batch-mature",
+        rating=3,
+        round_id="round-palace",
+        current=_current(opened, current, "enc-current"),
+    )
+
+    assert set(result["rated_unit_ids"]) == {current.id, mature.id}
+    db_session.refresh(current)
+    db_session.refresh(mature)
+    assert current.has_passed is True
+    assert mature.has_passed is True
+    assert mature.due_date > date.today()
+    for unit in units[2:]:
+        db_session.refresh(unit)
+        assert unit.has_passed is False
 
 
 def test_palace_due_rating_overwrites_already_rated_but_skips_excluded_units(db_session):
@@ -176,8 +248,8 @@ def test_palace_due_rating_includes_current_fill_without_moving_it(db_session):
     assert current.due_date == date.today() + timedelta(days=5)
     for unit in siblings:
         db_session.refresh(unit)
-        assert unit.has_passed is True
-        assert unit.due_date > date.today()
+        assert unit.has_passed is False
+        assert unit.due_date == date.today()
 
 
 def test_palace_due_rating_again_keeps_units_due(db_session):
@@ -194,13 +266,15 @@ def test_palace_due_rating_again_keeps_units_due(db_session):
         current=_current(opened, current, "enc-again"),
     )
 
+    assert result["rated_unit_ids"] == [current.id]
     assert result["remaining_due_count"] == len(units)
     assert result["current"]["passed"] is False
     assert result["current"]["retry_after_cards"] == 3
-    for item in result["items"]:
-        assert item["passed"] is False
-        db_session.refresh(db_session.get(ReviewUnitState, item["unit"]["id"]))
-        assert db_session.get(ReviewUnitState, item["unit"]["id"]).due_date == date.today()
+    for unit in units:
+        db_session.refresh(unit)
+        assert unit.due_date == date.today()
+        if unit.id != current.id:
+            assert unit.has_passed is False
 
 
 def test_palace_due_rating_undo_restores_the_batch(db_session):
@@ -222,7 +296,7 @@ def test_palace_due_rating_undo_restores_the_batch(db_session):
     undone = undo_unit_rating(db_session, "batch-undo", "round-palace")
 
     assert undone["batch_id"] == "batch-undo"
-    assert set(undone["undone_unit_ids"]) == {unit.id for unit in units}
+    assert undone["undone_unit_ids"] == [current.id]
     assert undone["encounter"]["selected_rating"] is None
     for unit in units:
         db_session.refresh(unit)
@@ -252,7 +326,7 @@ def test_palace_due_rating_is_idempotent(db_session):
 
     assert second["batch_id"] == first["batch_id"]
     assert second["rated_unit_ids"] == first["rated_unit_ids"]
-    assert db_session.query(ReviewUnitRatingOperation).filter_by(batch_id="batch-idem").count() == len(units)
+    assert db_session.query(ReviewUnitRatingOperation).filter_by(batch_id="batch-idem").count() == 1
 
 
 def test_palace_due_rating_rejects_stale_current_revision(db_session):
@@ -279,7 +353,7 @@ def test_palace_due_rating_rejects_stale_current_revision(db_session):
         assert unit.due_date <= date.today()
 
 
-def test_palace_due_rating_includes_explicit_not_due_siblings(db_session):
+def test_palace_due_rating_skips_explicit_first_learning_includes(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
     fill = units[1]
@@ -297,10 +371,9 @@ def test_palace_due_rating_includes_explicit_not_due_siblings(db_session):
         include_unit_ids=[fill.id],
     )
 
-    assert fill.id in result["rated_unit_ids"]
-    fill_item = next(item for item in result["items"] if item["unit"]["id"] == fill.id)
-    assert fill_item["schedule_changed"] is False
+    assert fill.id not in result["rated_unit_ids"]
     db_session.refresh(fill)
+    assert fill.has_passed is False
     assert fill.due_date == date.today() + timedelta(days=9)
 
 

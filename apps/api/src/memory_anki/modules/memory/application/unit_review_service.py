@@ -572,6 +572,15 @@ def start_freestyle_unit_review_session(
     # Content edits bump revision and may invalidate the previous session.
     # Freestyle adopts the live revision in place instead of failing the feed.
     live_revision = int(state.revision)
+    requested_round_id = str(round_id or "").strip()
+    if not requested_round_id:
+        raise ValueError("round_id is required")
+    previous_rated = _first_rated_round_encounter(
+        session,
+        unit_id=state.id,
+        round_id=requested_round_id,
+    )
+    not_due_ok = bool(allow_not_due or previous_rated is not None)
 
     # Drop competing freestyle sessions from other units / clients before opening
     # this card. Prevents multi-palace wall-clock rows that all share one start.
@@ -588,21 +597,7 @@ def start_freestyle_unit_review_session(
         .order_by(StudySession.started_at.desc())
         .first()
     )
-    if study is None:
-        if state.due_date > date.today() and not allow_not_due:
-            raise ValueError("review unit is not due")
-        created = start_unit_review_session(
-            session,
-            state.palace_id,
-            scene=FREESTYLE_UNIT_REVIEW_SCENE,
-            unit_ids=[state.id],
-            client_source=client_source,
-            allow_not_due=allow_not_due,
-        )
-        study = session.get(StudySession, str(created["id"]))
-        if study is None:
-            raise ValueError("failed to create unit review session")
-    else:
+    if study is not None:
         # Resume path: stamp source if the active session still lacks one.
         normalized_source = _normalize_unit_review_client_source(client_source)
         if normalized_source is not None:
@@ -620,10 +615,43 @@ def start_freestyle_unit_review_session(
             )
             .one_or_none()
         )
-        if drifted is not None and int(drifted.unit_revision) != live_revision:
-            drifted.status = ENCOUNTER_CLOSED
-            drifted.closed_at = utc_now_naive()
-            session.commit()
+        if drifted is not None:
+            revision_mismatch = int(drifted.unit_revision) != live_revision
+            round_mismatch = str(drifted.round_id or "") != requested_round_id
+            if revision_mismatch or round_mismatch:
+                if drifted.selected_rating is None:
+                    session.delete(drifted)
+                else:
+                    drifted.status = ENCOUNTER_CLOSED
+                    drifted.closed_at = utc_now_naive()
+                    if drifted.passed:
+                        _complete_unit_review_session(session, study)
+                if round_mismatch:
+                    if study.status == SESSION_ACTIVE:
+                        _abandon_freestyle_study_session(
+                            session,
+                            study,
+                            reason="round_id_mismatch",
+                        )
+                    study = None
+                session.commit()
+        if study is not None and study.status != SESSION_ACTIVE:
+            study = None
+
+    if study is None:
+        if state.due_date > date.today() and not not_due_ok:
+            raise ValueError("review unit is not due")
+        created = start_unit_review_session(
+            session,
+            state.palace_id,
+            scene=FREESTYLE_UNIT_REVIEW_SCENE,
+            unit_ids=[state.id],
+            client_source=client_source,
+            allow_not_due=not_due_ok,
+        )
+        study = session.get(StudySession, str(created["id"]))
+        if study is None:
+            raise ValueError("failed to create unit review session")
 
     requested_encounter_id = str(encounter_id or "").strip()
     requested = (
@@ -983,6 +1011,96 @@ def _batch_result_from_operations(
     }
 
 
+def _payload_encounter_id(payload: dict[str, Any], unit_id: str) -> str:
+    for item in payload.get("units") or []:
+        if str(item.get("id") or "") != unit_id:
+            continue
+        encounter = item.get("encounter")
+        if isinstance(encounter, dict):
+            return str(encounter.get("id") or "")
+    return ""
+
+
+def _ensure_open_freestyle_rating_target(
+    session: Session,
+    *,
+    study_session_id: str,
+    unit_id: str,
+    unit_revision: int,
+    encounter_id: str,
+    round_id: str | None,
+) -> tuple[StudySession, ReviewUnitState, ReviewSessionUnit, ReviewUnitEncounter]:
+    """Return a live open glance, reopening the same round if the old session died.
+
+    Freestyle ratings are last-write-wins. An abandoned, completed, or cancelled
+    glance must not 400; the latest rating reopens the unit and overwrites SRS
+    from that round's original baseline.
+    """
+    state = session.get(ReviewUnitState, unit_id)
+    if state is None or not state.active:
+        raise ValueError("review unit not found")
+    if int(unit_revision) != int(state.revision):
+        raise ValueError("review unit changed; rebuild the queue")
+
+    requested_session_id = str(study_session_id or "").strip()
+    requested_encounter_id = str(encounter_id or "").strip()
+    study = session.get(StudySession, requested_session_id) if requested_session_id else None
+    encounter = (
+        session.get(ReviewUnitEncounter, requested_encounter_id)
+        if requested_encounter_id
+        else None
+    )
+    requested_round_id = str(round_id or "").strip()
+    if not requested_round_id and encounter is not None:
+        requested_round_id = str(encounter.round_id or "").strip()
+
+    live = (
+        study is not None
+        and study.status == SESSION_ACTIVE
+        and state.palace_id == study.palace_id
+        and encounter is not None
+        and encounter.study_session_id == study.id
+        and encounter.unit_id == state.id
+        and encounter.status == ENCOUNTER_OPEN
+        and (not requested_round_id or str(encounter.round_id or "") == requested_round_id)
+        and encounter.unit_revision == state.revision
+    )
+    if live:
+        return study, state, _session_item(session, study.id, state.id), encounter
+
+    can_reopen = bool(requested_round_id) and (
+        study is None or study.scene == FREESTYLE_UNIT_REVIEW_SCENE
+    )
+    if not can_reopen:
+        if study is None or study.status != SESSION_ACTIVE:
+            raise ValueError("active unit review session required")
+        raise ValueError("open review encounter required")
+
+    started = start_freestyle_unit_review_session(
+        session,
+        unit_id=state.id,
+        unit_revision=int(state.revision),
+        encounter_id=requested_encounter_id or str(uuid.uuid4()),
+        round_id=requested_round_id,
+        allow_not_due=True,
+    )
+    session.refresh(state)
+    study = session.get(StudySession, str(started.get("id") or ""))
+    live_encounter_id = _payload_encounter_id(started, state.id)
+    encounter = session.get(ReviewUnitEncounter, live_encounter_id) if live_encounter_id else None
+    if (
+        study is None
+        or study.status != SESSION_ACTIVE
+        or state.palace_id != study.palace_id
+        or encounter is None
+        or encounter.study_session_id != study.id
+        or encounter.unit_id != state.id
+        or encounter.status != ENCOUNTER_OPEN
+    ):
+        raise ValueError("open review encounter required")
+    return study, state, _session_item(session, study.id, state.id), encounter
+
+
 def rate_review_unit(
     session: Session,
     *,
@@ -999,31 +1117,17 @@ def rate_review_unit(
         raise ValueError("operation_id is required")
     existing = session.get(ReviewUnitRatingOperation, op_id)
     if existing is not None:
-        if existing.encounter_id != encounter_id:
+        if existing.unit_id != unit_id:
             raise ValueError("operation_id belongs to another encounter")
         return json.loads(existing.after_state_json)
-    study = session.get(StudySession, study_session_id)
-    if study is None or study.status != SESSION_ACTIVE:
-        raise ValueError("active unit review session required")
-    state = session.get(ReviewUnitState, unit_id)
-    if state is None or not state.active or state.palace_id != study.palace_id:
-        raise ValueError("review unit not found")
-    if int(unit_revision) != int(state.revision):
-        raise ValueError("review unit changed; rebuild the queue")
-    item = _session_item(session, study.id, state.id)
-    encounter = session.get(ReviewUnitEncounter, encounter_id)
-    if (
-        encounter is None
-        or encounter.study_session_id != study.id
-        or encounter.unit_id != state.id
-        or encounter.status != ENCOUNTER_OPEN
-    ):
-        raise ValueError("open review encounter required")
-    if round_id and encounter.round_id != str(round_id).strip():
-        raise ValueError("round_id does not match the active encounter")
-    if encounter.unit_revision != state.revision:
-        raise ValueError("review unit changed; rebuild the queue")
-
+    study, state, item, encounter = _ensure_open_freestyle_rating_target(
+        session,
+        study_session_id=study_session_id,
+        unit_id=unit_id,
+        unit_revision=unit_revision,
+        encounter_id=encounter_id,
+        round_id=round_id,
+    )
     requested_round_id = str(round_id or encounter.round_id or "").strip()
     original = _first_rated_round_encounter(
         session,
@@ -1055,11 +1159,12 @@ def rate_palace_due_units(
     exclude_unit_ids: list[str] | None = None,
     include_unit_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Rate every still-due unit of a palace, plus the open current card.
+    """Rate the open current card, plus mature still-due siblings.
 
-    A later palace rating overwrites this round's include/exclude batch,
-    including units already rated. Sibling units get a 0-second encounter
-    so only the card under the viewport bills time.
+    First-learning siblings are not batch-rated: they have never passed and
+    must stay one-by-one. A later palace rating overwrites this round's
+    include/exclude batch for units already in the target set. Sibling units
+    get a 0-second encounter so only the card under the viewport bills time.
     """
     batch_id = str(operation_id or "").strip()
     requested_round_id = str(round_id or "").strip()
@@ -1096,31 +1201,23 @@ def rate_palace_due_units(
     if current_state is None or not current_state.active or current_state.palace_id != int(palace_id):
         raise ValueError("review unit not found")
     current_revision = int(current_payload.get("unit_revision") or 0)
-    if current_revision != int(current_state.revision):
-        raise ValueError("review unit changed; rebuild the queue")
-    current_study = session.get(StudySession, current_session_id)
-    current_encounter = session.get(ReviewUnitEncounter, current_encounter_id)
-    if (
-        current_study is None
-        or current_study.status != SESSION_ACTIVE
-        or current_study.palace_id != int(palace_id)
-        or current_encounter is None
-        or current_encounter.study_session_id != current_study.id
-        or current_encounter.unit_id != current_state.id
-        or current_encounter.status != ENCOUNTER_OPEN
-    ):
+    current_study, current_state, current_item, current_encounter = _ensure_open_freestyle_rating_target(
+        session,
+        study_session_id=current_session_id,
+        unit_id=current_unit_id,
+        unit_revision=current_revision,
+        encounter_id=current_encounter_id,
+        round_id=requested_round_id,
+    )
+    if current_study.palace_id != int(palace_id):
         raise ValueError("open review encounter required")
-    if current_encounter.round_id != requested_round_id:
-        raise ValueError("round_id does not match the active encounter")
-    if current_encounter.unit_revision != current_state.revision:
-        raise ValueError("review unit changed; rebuild the queue")
 
     targets: dict[str, ReviewUnitState] = {}
     for state in _due_states_for_palace(session, int(palace_id)):
         if state.id == current_state.id:
             targets[state.id] = state
             continue
-        if state.id in excluded:
+        if state.id in excluded or not state.has_passed:
             continue
         targets[state.id] = state
     for unit_id in included:
@@ -1129,11 +1226,12 @@ def rate_palace_due_units(
         extra = session.get(ReviewUnitState, unit_id)
         if extra is None or not extra.active or extra.palace_id != int(palace_id):
             continue
+        if extra.id != current_state.id and not extra.has_passed:
+            continue
         targets[extra.id] = extra
     targets[current_state.id] = current_state
 
     operations: list[ReviewUnitRatingOperation] = []
-    current_item = _session_item(session, current_study.id, current_state.id)
     current_original = _first_rated_round_encounter(
         session,
         unit_id=current_state.id,

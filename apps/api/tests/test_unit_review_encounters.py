@@ -14,6 +14,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 )
 from memory_anki.modules.memory.application.unit_review_service import (
     adjust_unit_schedule,
+    cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     rate_review_unit,
     reconcile_palace_units,
@@ -73,6 +74,7 @@ def _rate(
     encounter_id: str,
     operation_id: str,
     rating: int,
+    round_id: str | None = None,
 ):
     return rate_review_unit(
         session,
@@ -82,6 +84,7 @@ def _rate(
         encounter_id=encounter_id,
         operation_id=operation_id,
         rating=rating,
+        round_id=round_id,
     )
 
 
@@ -248,12 +251,141 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
     assert closed["session_status"] == "completed"
     assert state.stage_index == 1
     assert state.due_date == date.today() + timedelta(days=1)
-    with pytest.raises(ValueError, match="active unit review session required"):
-        _rate(db_session, review_session, state, "encounter-pass", "rating-too-late", 4)
     with pytest.raises(ValueError, match="current open encounter"):
         undo_unit_rating(db_session, "rating-pass")
     with pytest.raises(ValueError, match="not due"):
-        _start(db_session, state, "encounter-future")
+        start_freestyle_unit_review_session(
+            db_session,
+            unit_id=state.id,
+            unit_revision=state.revision,
+            encounter_id="encounter-other-round",
+            round_id="round-other",
+        )
+
+    resumed = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-amend",
+        round_id="round-2026-07-27",
+    )
+    assert resumed["id"] != review_session["id"]
+    assert resumed["units"][0]["encounter"]["id"] == "encounter-amend"
+    assert resumed["units"][0]["encounter"]["status"] == "open"
+    amended = rate_review_unit(
+        db_session,
+        study_session_id=resumed["id"],
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-amend",
+        operation_id="rating-amend",
+        rating=4,
+        round_id="round-2026-07-27",
+    )
+    assert amended["amended"] is True
+    assert amended["rating"] == 4
+
+
+def test_start_does_not_reuse_open_encounter_from_another_round(db_session):
+    state = _seed_review_unit(db_session)
+    first = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-old-round",
+        round_id="round-old",
+    )
+    resumed = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-new-round",
+        round_id="round-new",
+    )
+    encounter = resumed["units"][0]["encounter"]
+    assert resumed["id"] != first["id"]
+    assert encounter["id"] == "encounter-new-round"
+    assert encounter["round_id"] == "round-new"
+    rated = rate_review_unit(
+        db_session,
+        study_session_id=resumed["id"],
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-new-round",
+        operation_id="rating-new-round",
+        rating=3,
+        round_id="round-new",
+    )
+    assert rated["encounter"]["round_id"] == "round-new"
+
+
+def test_rate_after_closed_session_overwrites_with_latest_rating(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-pass")
+    _rate(db_session, review_session, state, "encounter-pass", "rating-pass", 3)
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-pass",
+        operation_id="close-pass",
+    )
+    assert closed["session_status"] == "completed"
+
+    amended = _rate(
+        db_session,
+        review_session,
+        state,
+        "encounter-pass",
+        "rating-overwrite",
+        4,
+        round_id="round-2026-07-27",
+    )
+
+    assert amended["amended"] is True
+    assert amended["rating"] == 4
+    assert amended["study_session_id"] != review_session["id"]
+    assert state.stage_index == 2
+    replayed = _rate(
+        db_session,
+        review_session,
+        state,
+        "encounter-pass",
+        "rating-overwrite",
+        4,
+        round_id="round-2026-07-27",
+    )
+    assert replayed["operation_id"] == "rating-overwrite"
+    assert replayed["rating"] == 4
+
+
+def test_rate_after_unrated_abandon_applies_latest_rating(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-glance")
+    cancelled = cancel_unrated_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-glance",
+    )
+    assert cancelled["abandoned"] is True
+    study = db_session.get(StudySession, review_session["id"])
+    assert study.status == "abandoned"
+
+    rated = _rate(
+        db_session,
+        review_session,
+        state,
+        "encounter-glance",
+        "rating-after-leave",
+        3,
+        round_id="round-2026-07-27",
+    )
+
+    assert rated["rating"] == 3
+    assert rated["passed"] is True
+    assert rated["study_session_id"] != review_session["id"]
+    assert db_session.get(StudySession, rated["study_session_id"]).status == "active"
 
 
 def test_freestyle_complete_preserves_client_source_in_summary(db_session):
