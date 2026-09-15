@@ -1562,7 +1562,12 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
     else:
         round_plan_source = round_plan_path.read_text(encoding="utf-8", errors="ignore")
-        for symbol in ("createRoundPlan", "reorderRoundPlan", "planCardStatus"):
+        for symbol in (
+            "createRoundPlan",
+            "reorderRoundPlan",
+            "planCardStatus",
+            "shouldReorderUnstartedFreestylePlan",
+        ):
             if symbol not in round_plan_source:
                 errors.append(
                     f"{round_plan_path.relative_to(REPO_ROOT).as_posix()}: round-plan domain must define `{symbol}`."
@@ -1604,6 +1609,10 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "backend-authoritative",
             "occurrence_kind",
             "scheduledBase",
+            "faint palace-color fill",
+            "queue-construction fields",
+            "does not move `current_card_id`",
+            "orphan block",
         ):
             if marker not in feed_source and marker != "scheduledBase":
                 errors.append(
@@ -1620,7 +1629,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
     else:
         service_source = round_service.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("expected_version", "operation_id", "plan_json"):
+        for marker in ("expected_version", "operation_id", "plan_json", "queue_construction_signature"):
             if marker not in service_source:
                 errors.append(
                     f"{round_service.relative_to(REPO_ROOT).as_posix()}: must keep `{marker}`."
@@ -1632,7 +1641,14 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
     else:
         domain_source = round_domain.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("leave_card", "retry_attempt", "insert_retry"):
+        for marker in (
+            "leave_card",
+            "retry_attempt",
+            "insert_retry",
+            "reorder_unstarted",
+            "_is_viewable_current",
+            "live_retry_sources",
+        ):
             if marker not in domain_source:
                 errors.append(
                     f"{round_domain.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
@@ -1655,6 +1671,16 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 errors.append(
                     f"{progress_path.relative_to(REPO_ROOT).as_posix()}: HUD must keep `{marker}`."
                 )
+        if "bg-sky-400/25" not in progress_source:
+            errors.append(
+                f"{progress_path.relative_to(REPO_ROOT).as_posix()}: "
+                "pending rail ticks must stay a faint palace fill."
+            )
+        if "bg-sky-400/70" in progress_source or "bg-sky-400/90" in progress_source:
+            errors.append(
+                f"{progress_path.relative_to(REPO_ROOT).as_posix()}: "
+                "pending vs done rail ticks must not use near-identical opacities."
+            )
     page_path = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
     if page_path.exists():
         page_source = page_path.read_text(encoding="utf-8", errors="ignore")
@@ -1663,6 +1689,104 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 errors.append(
                     f"{page_path.relative_to(REPO_ROOT).as_posix()}: auto-advance must re-check plan version."
                 )
+        if "isSequentialPalaceBlocked(" in page_source:
+            errors.append(
+                f"{page_path.relative_to(REPO_ROOT).as_posix()}: "
+                "上一张/下一张 must page without the finish-palace navigation gate."
+            )
+        if "options?.historical || next < currentIndex" in page_source:
+            errors.append(
+                f"{page_path.relative_to(REPO_ROOT).as_posix()}: "
+                "in-round 上一张 / swipe-back must not mark completed units read-only."
+            )
+    queue_hook = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts"
+    )
+    if queue_hook.exists():
+        hook_source = queue_hook.read_text(encoding="utf-8", errors="ignore")
+        if "startNewRound(queueStateRef.current, nextConfig.seed)" in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "queue rebuild must not mint a new round just because the stored "
+                "palace-scope signature is empty or drifted."
+            )
+        if "applyCompletedIdsToRoundPlan" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "server hydrate must restore completed ticks onto the local plan."
+            )
+    renew_path = WEB_SRC / "modules" / "practice" / "domain" / "queueState.ts"
+    if renew_path.exists():
+        renew_source = renew_path.read_text(encoding="utf-8", errors="ignore")
+        if "existing.passed !== true" in renew_source:
+            errors.append(
+                f"{renew_path.relative_to(REPO_ROOT).as_posix()}: "
+                "closed passed units must be reopenable so the learner can re-score."
+            )
+    server_plan = WEB_SRC / "modules" / "practice" / "domain" / "serverRoundPlan.ts"
+    if server_plan.exists():
+        server_source = server_plan.read_text(encoding="utf-8", errors="ignore")
+        if "cardFromOriginalSnapshot" not in server_source:
+            errors.append(
+                f"{server_plan.relative_to(REPO_ROOT).as_posix()}: "
+                "refresh hydrate must reconstruct completed review units from original_cards."
+            )
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "must not mint a new `round_id`" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that refresh does not mint a new round_id."
+            )
+
+
+def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
+    """Toolbar 做题 is a round-scoped overlay, not a training_mode switch."""
+    dialog = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
+    if not dialog.exists():
+        return
+    dialog_source = dialog.read_text(encoding="utf-8", errors="ignore")
+    if "training_mode" in dialog_source:
+        errors.append(
+            f"{dialog.relative_to(REPO_ROOT).as_posix()}: overlay quiz must not write training_mode."
+        )
+    if "QuizLauncher" in dialog_source:
+        errors.append(
+            f"{dialog.relative_to(REPO_ROOT).as_posix()}: overlay quiz must not open QuizLauncher."
+        )
+    contract = WEB_SRC / "shared" / "api" / "contracts" / "freestyle.ts"
+    if contract.exists():
+        contract_source = contract.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("overlay_quiz_setup_done", "FreestyleOverlayQuizState"):
+            if marker not in contract_source:
+                errors.append(
+                    f"{contract.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
+                )
+    router_path = API_SRC / "modules" / "practice" / "presentation" / "router.py"
+    if router_path.exists():
+        router_source = router_path.read_text(encoding="utf-8", errors="ignore")
+        if "/overlay-quiz/ensure" not in router_source:
+            errors.append(
+                f"{router_path.relative_to(REPO_ROOT).as_posix()}: "
+                "must expose overlay-quiz ensure for round-scoped 做题 progress."
+            )
+    overlay_domain = API_SRC / "modules" / "practice" / "domain" / "overlay_quiz.py"
+    if overlay_domain.exists():
+        overlay_source = overlay_domain.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("parked", "drop_overlay_for_palaces"):
+            if marker not in overlay_source:
+                errors.append(
+                    f"{overlay_domain.relative_to(REPO_ROOT).as_posix()}: "
+                    "overlay quiz must park out-of-scope progress and drop it only after palace scoring."
+                )
+    round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
+    if round_service.exists():
+        service_source = round_service.read_text(encoding="utf-8", errors="ignore")
+        if "_carry_overlay_quiz" not in service_source:
+            errors.append(
+                f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
+                "new rounds must copy overlay quiz progress instead of clearing it."
+            )
 
 
 
@@ -1883,6 +2007,88 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_rating_retap_clears(errors: list[str]) -> None:
+    """Clicking the selected rating again must undo until the card is unrated."""
+    bar = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRatingBar.tsx"
+    )
+    card = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx"
+    )
+    if not bar.exists():
+        errors.append(f"{bar.relative_to(REPO_ROOT).as_posix()}: rating bar is required.")
+        return
+    if not card.exists():
+        errors.append(f"{card.relative_to(REPO_ROOT).as_posix()}: unit review card is required.")
+        return
+    bar_source = bar.read_text(encoding="utf-8", errors="ignore")
+    card_source = card.read_text(encoding="utf-8", errors="ignore")
+    if "disabled={busy || locked || selected || !hasEncounter}" in bar_source:
+        errors.append(
+            f"{bar.relative_to(REPO_ROOT).as_posix()}: "
+            "the selected rating must stay clickable so a second tap can clear it."
+        )
+    if "rating === selectedRating" in bar_source:
+        errors.append(
+            f"{bar.relative_to(REPO_ROOT).as_posix()}: "
+            "shortcuts for the selected rating must still fire so a second press can clear it."
+        )
+    if "undoRating({ clearAll: true })" not in card_source:
+        errors.append(
+            f"{card.relative_to(REPO_ROOT).as_posix()}: "
+            "re-tapping the selected rating must undo until the card is unrated."
+        )
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "currently selected rating again" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that tapping the selected rating again clears it."
+            )
+
+
+def check_freestyle_rating_last_write_wins(errors: list[str]) -> None:
+    """A dead glance session must reopen and take the latest rating, not 400."""
+    service = API_SRC / "modules" / "memory" / "application" / "unit_review_service.py"
+    if not service.exists():
+        errors.append(
+            f"{service.relative_to(REPO_ROOT).as_posix()}: unit review service is required."
+        )
+        return
+    source = service.read_text(encoding="utf-8", errors="ignore")
+    if "def _ensure_open_freestyle_rating_target" not in source:
+        errors.append(
+            f"{service.relative_to(REPO_ROOT).as_posix()}: "
+            "must reopen a dead freestyle glance before applying the latest rating."
+        )
+    elif "start_freestyle_unit_review_session" not in source:
+        errors.append(
+            f"{service.relative_to(REPO_ROOT).as_posix()}: "
+            "rating reopen must reuse start_freestyle_unit_review_session."
+        )
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "latest rating" not in feed_source or "active unit review session required" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that the latest rating reopens a dead glance."
+            )
+
+
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
         "english": {"session"},
@@ -2080,6 +2286,239 @@ def check_palace_quiz_application_facades(errors: list[str]) -> None:
             errors.append(
                 f"{relative}: quiz application modules must import question leaf modules directly instead of the service facade."
             )
+
+
+def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
+    """Quiz palace lookup must keep the full palace and visually center the bound node."""
+    support = (
+        WEB_SRC / "widgets" / "palace-memory-lookup" / "model" / "memoryLookupDialogSupport.ts"
+    )
+    dialog = WEB_SRC / "widgets" / "palace-memory-lookup" / "PalaceMemoryLookupDialog.tsx"
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    if not support.exists():
+        errors.append(
+            f"{support.relative_to(REPO_ROOT).as_posix()}: "
+            "palace memory lookup support is required."
+        )
+        return
+    support_source = support.read_text(encoding="utf-8", errors="ignore")
+    if "resolveMemoryLookupFocusNodeUid" not in support_source:
+        errors.append(
+            f"{support.relative_to(REPO_ROOT).as_posix()}: "
+            "must define `resolveMemoryLookupFocusNodeUid` so bound nodes can be focused in the full palace."
+        )
+    if "centerMemoryLookupEditorDocAtNode" in support_source:
+        errors.append(
+            f"{support.relative_to(REPO_ROOT).as_posix()}: "
+            "must not re-root or clip editor_doc; keep the full palace tree."
+        )
+    if not dialog.exists():
+        errors.append(
+            f"{dialog.relative_to(REPO_ROOT).as_posix()}: palace memory lookup dialog is required."
+        )
+    else:
+        dialog_source = dialog.read_text(encoding="utf-8", errors="ignore")
+        if "focusRequestNodeUid" not in dialog_source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "must visually center the bound node with `focusRequestNodeUid`."
+            )
+        if "resolveMemoryLookupFocusNodeUid" not in dialog_source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "must resolve the bound node with `resolveMemoryLookupFocusNodeUid`."
+            )
+        if "centerMemoryLookupEditorDocAtNode" in dialog_source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "must not clip the preview with `centerMemoryLookupEditorDocAtNode`."
+            )
+    if boundary.exists():
+        boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
+        if "focusRequestNodeUid" not in boundary_source:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document bound-node mind-map centering."
+            )
+        if "centerMemoryLookupEditorDocAtNode" in boundary_source:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must not document re-rooting or clipping the palace preview."
+            )
+
+
+def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
+    """Choice/subjective recall rewriting belongs to the quiz entity."""
+    model = (
+        WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts"
+    )
+    ui_dir = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui"
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    if not model.exists():
+        errors.append(
+            f"{model.relative_to(REPO_ROOT).as_posix()}: quiz answer-mode primitive is required."
+        )
+        return
+    model_source = model.read_text(encoding="utf-8", errors="ignore")
+    for required in (
+        "canSwitchQuizAnswerMode",
+        "mcqReferenceAnswer",
+        "mcqRevealOptions",
+        "quizInteractionRestoreKey",
+        "isQuizChoiceShortcutActive",
+        "quizDisplayStem",
+        "mcqSubjectiveReferenceAnswer",
+        "formatMcqSubjectiveAnalysis",
+    ):
+        if required not in model_source:
+            errors.append(
+                f"{model.relative_to(REPO_ROOT).as_posix()}: must define `{required}`."
+            )
+    rewrite = (
+        WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "mcqSubjectiveRewrite.ts"
+    )
+    if not rewrite.exists():
+        errors.append(
+            f"{rewrite.relative_to(REPO_ROOT).as_posix()}: "
+            "multiple-choice subjective stem rewrite is required."
+        )
+    elif "rewriteMcqForSubjective" not in rewrite.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{rewrite.relative_to(REPO_ROOT).as_posix()}: must define `rewriteMcqForSubjective`."
+        )
+    ui_source = ""
+    if ui_dir.exists():
+        for path in sorted(ui_dir.glob("*.tsx")):
+            ui_source += path.read_text(encoding="utf-8", errors="ignore")
+    if "答题方式" not in ui_source:
+        errors.append(
+            f"{ui_dir.relative_to(REPO_ROOT).as_posix()}: "
+            "shared quiz interaction must own the 选择/主观 toggle."
+        )
+    if "data-quiz-shortcut-surface" not in ui_source:
+        errors.append(
+            f"{ui_dir.relative_to(REPO_ROOT).as_posix()}: "
+            "shared quiz interaction must restore shortcut focus after question or mode changes."
+        )
+    if "Enter 提交" not in ui_source:
+        errors.append(
+            f"{ui_dir.relative_to(REPO_ROOT).as_posix()}: "
+            "shared short-answer interaction must submit with Enter."
+        )
+    short_answer_ui = ui_dir / "QuizShortAnswerBlock.tsx"
+    if short_answer_ui.exists():
+        short_answer_source = short_answer_ui.read_text(encoding="utf-8", errors="ignore")
+        if "（正确答案）" in short_answer_source:
+            errors.append(
+                f"{short_answer_ui.relative_to(REPO_ROOT).as_posix()}: "
+                "converted multiple-choice reveal must not mark options as the correct choice."
+            )
+        if "formatMcqSubjectiveAnalysis" not in short_answer_source:
+            errors.append(
+                f"{short_answer_ui.relative_to(REPO_ROOT).as_posix()}: "
+                "converted multiple-choice reveal must put the answer on the first line of analysis."
+            )
+    if "QuizQuestionStem" not in ui_source:
+        errors.append(
+            f"{ui_dir.relative_to(REPO_ROOT).as_posix()}: "
+            "shared quiz interaction must own subjective stem display."
+        )
+    if "QuizQuestionIndexPager" not in ui_source:
+        errors.append(
+            f"{ui_dir.relative_to(REPO_ROOT).as_posix()}: "
+            "shared quiz interaction must own the paginated question-index rail."
+        )
+    if boundary.exists():
+        boundary_text = boundary.read_text(encoding="utf-8", errors="ignore")
+        if "quiz_answer_mode" not in boundary_text:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document quiz answer-mode ownership."
+            )
+        if "QuizQuestionIndexPager" not in boundary_text:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document paginated question-index ownership."
+            )
+        if "stem" not in boundary_text.lower() and "题干" not in boundary_text:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document multiple-choice subjective stem rewriting."
+            )
+        if (
+            "first line of the analysis" not in boundary_text
+            and "解析第一行" not in boundary_text
+        ):
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document converted multiple-choice analysis answer line."
+            )
+    for rel in (
+        Path("widgets") / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        Path("widgets") / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+    ):
+        host = WEB_SRC / rel
+        if not host.exists():
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: quiz overlay host is required."
+            )
+            continue
+        host_source = host.read_text(encoding="utf-8", errors="ignore")
+        if "QuizQuestionIndexPager" not in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "must paginate question numbers with QuizQuestionIndexPager."
+            )
+        if "flex size-7 items-center justify-center rounded-full" in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "must not inline the full question-number grid."
+            )
+        if "QuizQuestionStem" not in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "must render stems through QuizQuestionStem."
+            )
+
+
+def check_quiz_create_requires_node_binding(errors: list[str]) -> None:
+    """Palace-owned question create must ensure ≥1 mindmap node binding (root default)."""
+    node_binding = PALACE_QUIZ_APPLICATION / "node_binding.py"
+    commands = PALACE_QUIZ_APPLICATION / "questions" / "commands.py"
+    boundary = REPO_ROOT / "docs" / "architecture" / "palace-quiz-boundary.md"
+    if not node_binding.exists():
+        errors.append(
+            f"{node_binding.relative_to(REPO_ROOT).as_posix()}: node binding module is required."
+        )
+        return
+    node_source = node_binding.read_text(encoding="utf-8", errors="ignore")
+    for required in (
+        "DEFAULT_ROOT_BINDING_REASON",
+        "ensure_create_question_node_bindings",
+        "resolve_palace_root_node_uid",
+        "default-root-binding",
+    ):
+        if required not in node_source:
+            errors.append(
+                f"{node_binding.relative_to(REPO_ROOT).as_posix()}: must define `{required}`."
+            )
+    if not commands.exists():
+        errors.append(
+            f"{commands.relative_to(REPO_ROOT).as_posix()}: question commands module is required."
+        )
+    else:
+        commands_source = commands.read_text(encoding="utf-8", errors="ignore")
+        if "ensure_create_question_node_bindings" not in commands_source:
+            errors.append(
+                f"{commands.relative_to(REPO_ROOT).as_posix()}: palace create paths must "
+                "call ensure_create_question_node_bindings."
+            )
+    if boundary.exists() and "at least one" not in boundary.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document mandatory "
+            "node binding (at least one / root default) for palace-owned creates."
+        )
 
 
 def check_quiz_bank_display_order(errors: list[str]) -> None:
@@ -2429,8 +2868,8 @@ def check_prompt_catalog_boundaries(errors: list[str]) -> None:
 
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
-    nav_content = nav_path.read_text(encoding="utf-8", errors="ignore")
-    expected_labels = ("随心", "知识", "英语", "创建", "洞察")
+    nav_content = nav_path.read_text(encoding="utf-8", errors="ignore") if nav_path.exists() else ""
+    expected_labels = ("随心", "随心 2", "知识", "英语", "创建", "洞察")
     labels = re.findall(r"label: '([^']+)'", nav_content)
     if labels != list(expected_labels):
         errors.append(
@@ -2439,6 +2878,32 @@ def check_unified_training_evidence(errors: list[str]) -> None:
     if "key: 'profile'" in nav_content:
         errors.append(
             f"{nav_path.relative_to(REPO_ROOT)}: settings/profile must not return as a primary learning destination."
+        )
+    for relative in (
+        "app/router/appRoutes.tsx",
+        "shared/routing/routeManifest.ts",
+    ):
+        path = WEB_SRC / relative
+        source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+        if "/freestyle-2" not in source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: must register `/freestyle-2` as a second immersive workspace."
+            )
+    peer_progress = API_SRC / "modules" / "practice" / "domain" / "peer_progress.py"
+    peer_progress_source = (
+        peer_progress.read_text(encoding="utf-8", errors="ignore") if peer_progress.exists() else ""
+    )
+    if "apply_peer_progress" not in peer_progress_source:
+        errors.append(
+            f"{peer_progress.relative_to(REPO_ROOT).as_posix()}: must define `apply_peer_progress` so workspaces inherit overlapping progress."
+        )
+    round_state = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
+    round_state_source = (
+        round_state.read_text(encoding="utf-8", errors="ignore") if round_state.exists() else ""
+    )
+    if "workspace" not in round_state_source:
+        errors.append(
+            f"{round_state.relative_to(REPO_ROOT).as_posix()}: must persist independent `workspace` round state."
         )
 
 def check_removed_focus_practice(errors: list[str]) -> None:
@@ -2835,6 +3300,9 @@ def main() -> int:
     check_mypy_typed_boundary_modules(errors)
     check_forward_compatible_migrations(errors)
     check_palace_quiz_application_facades(errors)
+    check_palace_memory_lookup_binding_center(errors)
+    check_quiz_answer_mode_primitive(errors)
+    check_quiz_create_requires_node_binding(errors)
     check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
@@ -2851,10 +3319,13 @@ def main() -> int:
     check_palace_quiz_palace_boundary(errors)
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
+    check_freestyle_scope_quiz_overlay(errors)
     check_freestyle_knowledge_entry_scope(errors)
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
+    check_freestyle_rating_retap_clears(errors)
+    check_freestyle_rating_last_write_wins(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)

@@ -29,7 +29,7 @@ The rank lives in `quiz.application.question_contracts` so listing, generation d
 
 ## Quiz–Mindmap Node Binding（题库结合 / 双向关联）
 
-`quiz.application.node_binding` binds questions to mind-map node UIDs. A question keeps a **single owner palace**; each edge points at a **target** mind-map palace + `node_uid` (cross-palace allowed).
+`quiz.application.node_binding` binds questions to mind-map node UIDs. A question keeps a **single owner palace**; each edge points at a **target** mind-map palace + `node_uid` (cross-palace allowed). Every new palace-owned question must have **at least one** binding (explicit `node_uids` when provided and valid, otherwise the palace root UID via `default-root-binding`); chapter-scoped creates with `palace_id=None` skip until a palace owner is assigned.
 
 - Storage: `palace_quiz_question_node_bindings`
   - `palace_id` on the edge = **target** mindmap palace (node lives there)

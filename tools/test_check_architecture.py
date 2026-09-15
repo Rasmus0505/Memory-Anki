@@ -22,6 +22,62 @@ def write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+SIX_NAV_LABELS = ("随心", "随心 2", "知识", "英语", "创建", "洞察")
+FIVE_NAV_LABELS = ("随心", "知识", "英语", "创建", "洞察")
+
+
+def write_unified_training_fixture(root: Path, *, labels: tuple[str, ...]) -> tuple[Path, Path]:
+    api_src = root / "apps" / "api" / "src" / "memory_anki"
+    web_src = root / "apps" / "web" / "src"
+    write_file(
+        web_src / "app" / "shell" / "navSections.ts",
+        "\n".join(f"label: '{label}'" for label in labels) + "\n",
+    )
+    write_file(web_src / "app" / "router" / "appRoutes.tsx", 'path="/freestyle-2"\n')
+    write_file(
+        web_src / "shared" / "routing" / "routeManifest.ts",
+        "path: '/freestyle-2'\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "peer_progress.py",
+        "def apply_peer_progress():\n    return None\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "workspace = 'primary'\n",
+    )
+    return api_src, web_src
+
+
+def test_unified_training_evidence_accepts_six_nav_labels(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src, web_src = write_unified_training_fixture(tmp_path, labels=SIX_NAV_LABELS)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_unified_training_evidence(errors)
+
+    assert errors == []
+
+
+def test_unified_training_evidence_rejects_five_nav_labels(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src, web_src = write_unified_training_fixture(tmp_path, labels=FIVE_NAV_LABELS)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_unified_training_evidence(errors)
+
+    assert any("primary navigation must remain exactly" in error for error in errors)
+    assert any("随心 2" in error for error in errors)
+
+
 def test_freestyle_facade_requires_round_plan_public_surface(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -58,7 +114,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
-        "createRoundPlan reorderRoundPlan planCardStatus\n"
+        "createRoundPlan reorderRoundPlan planCardStatus shouldReorderUnstartedFreestylePlan\n"
         "if (targetIndex < currentIndex) return false\n",
     )
     write_file(
@@ -72,15 +128,15 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted\n",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
-        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\n",
+        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\n",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\nreorder_unstarted = True\n_is_viewable_current = True\nlive_retry_sources = set()\n",
     )
     write_file(
         api_src / "modules" / "practice" / "presentation" / "router.py",
@@ -88,7 +144,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
-        "scheduledBase retryInserted progressHudText\n",
+        "scheduledBase retryInserted progressHudText bg-sky-400/25\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
@@ -98,10 +154,124 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "applyCompletedIdsToRoundPlan\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
+        "export function cardFromOriginalSnapshot() { return null }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_queue_facade_surface(errors)
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+
+    assert errors == []
+
+
+def test_freestyle_facade_rejects_refresh_wiping_round_progress(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "queue_service.py",
+        "placeholder\n",
+    )
+    write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "startNewRound(queueStateRef.current, nextConfig.seed)\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "queueState.ts",
+        "return existing.passed !== true\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
+        "export function cardsForServerPlan() { return [] }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "backend-authoritative occurrence_kind scheduledBase faint palace-color fill\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
-    assert errors == []
+    assert any("must not mint a new round" in error for error in errors)
+    assert any("re-score" in error for error in errors)
+    assert any("reconstruct completed review units" in error for error in errors)
+    assert any("does not mint a new round_id" in error for error in errors)
+
+
+def test_freestyle_facade_rejects_missing_unstarted_reorder(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "queue_service.py",
+        "placeholder\n",
+    )
+    write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
+        "createRoundPlan reorderRoundPlan planCardStatus\n"
+        "if (targetIndex < currentIndex) return false\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "backend-authoritative occurrence_kind scheduledBase faint palace-color fill\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_queue_facade_surface(errors)
+
+    assert any("reorder_unstarted" in error for error in errors)
+    assert any("queue_construction_signature" in error for error in errors)
+    assert any("shouldReorderUnstartedFreestylePlan" in error for error in errors)
+    assert any("queue-construction fields" in error for error in errors)
+
+
+def test_freestyle_progress_rail_rejects_near_identical_pending_done(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "queue_service.py",
+        "placeholder\n",
+    )
+    write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
+        "scheduledBase retryInserted progressHudText\n"
+        "pending: 'bg-sky-400/70'\ndone: 'bg-sky-400/90'\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_queue_facade_surface(errors)
+
+    assert any("near-identical opacities" in error for error in errors)
+    assert any("faint palace fill" in error for error in errors)
 
 
 def test_freestyle_facade_rejects_client_local_round_authority(
@@ -165,6 +335,116 @@ def test_freestyle_facade_rejects_client_local_round_authority(
 
     assert any("client-local" in error for error in errors)
     assert any("round-plan service is required" in error for error in errors)
+
+
+def test_freestyle_rating_retap_clears_requires_clickable_selected(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRatingBar.tsx",
+        "disabled={busy || locked || selected || !hasEncounter}\n"
+        "if (rating == null || rating === selectedRating) return\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx",
+        "async function undo() {}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Freestyle uses the same rating and undo commands as formal review.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_rating_retap_clears(errors)
+
+    assert any("selected rating must stay clickable" in error for error in errors)
+    assert any("shortcuts for the selected rating must still fire" in error for error in errors)
+    assert any("undo until the card is unrated" in error for error in errors)
+    assert any("tapping the selected rating again clears it" in error for error in errors)
+
+
+def test_freestyle_rating_retap_clears_accepts_clear_all(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRatingBar.tsx",
+        "disabled={busy || locked || !hasEncounter}\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx",
+        "await undoRating({ clearAll: true })\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Tapping the currently selected rating again undoes until the card is unrated.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_rating_retap_clears(errors)
+
+    assert errors == []
+
+
+def test_freestyle_rating_last_write_wins_requires_reopen_helper(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "def rate_review_unit():\n    raise ValueError('active unit review session required')\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Re-scoring a completed unit amends from that round's original baseline.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_rating_last_write_wins(errors)
+
+    assert any("reopen a dead freestyle glance" in error for error in errors)
+    assert any("latest rating reopens a dead glance" in error for error in errors)
+
+
+def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "def _ensure_open_freestyle_rating_target():\n"
+        "    return start_freestyle_unit_review_session()\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "applies the latest rating; it must not return `active unit review session required`.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_rating_last_write_wins(errors)
+
+    assert errors == []
 
 
 def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(
@@ -1276,6 +1556,209 @@ def test_quiz_bank_display_order_requires_choice_before_short_answer(
     assert any("multiple choice first" in item for item in errors)
 
 
+def test_quiz_create_requires_node_binding_anchor(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(
+        check_architecture,
+        "PALACE_QUIZ_APPLICATION",
+        api_src / "modules" / "quiz" / "application",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "node_binding.py",
+        "def list_palace_node_bindings():\n    return []\n",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "questions" / "commands.py",
+        "def create_question():\n    return {}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "palace-quiz-boundary.md",
+        "# Palace Quiz Boundary\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_create_requires_node_binding(errors)
+
+    assert any("ensure_create_question_node_bindings" in item for item in errors)
+    assert any("DEFAULT_ROOT_BINDING_REASON" in item for item in errors)
+    assert any("at least one" in item for item in errors)
+
+
+def test_palace_memory_lookup_must_keep_full_palace_and_center_bound_node(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "widgets" / "palace-memory-lookup" / "model" / "memoryLookupDialogSupport.ts",
+        "export function centerMemoryLookupEditorDocAtNode() {}\n",
+    )
+    write_file(
+        web_src / "widgets" / "palace-memory-lookup" / "PalaceMemoryLookupDialog.tsx",
+        "export function PalaceMemoryLookupDialog() { return centerMemoryLookupEditorDocAtNode() }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "# Quiz Frontend Boundary\ncenterMemoryLookupEditorDocAtNode\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_palace_memory_lookup_binding_center(errors)
+
+    assert any("resolveMemoryLookupFocusNodeUid" in item for item in errors)
+    assert any("focusRequestNodeUid" in item for item in errors)
+    assert any("must not re-root or clip editor_doc" in item for item in errors)
+    assert any("must not clip the preview with `centerMemoryLookupEditorDocAtNode`" in item for item in errors)
+    assert any("bound-node mind-map centering" in item for item in errors)
+    assert any("must not document re-rooting or clipping" in item for item in errors)
+
+
+def test_quiz_answer_mode_primitive_must_live_in_quiz_entity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "# Quiz Frontend Boundary\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+
+    assert any("quiz answer-mode primitive is required" in item for item in errors)
+
+
+def test_quiz_answer_mode_primitive_requires_reveal_and_enter_submit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts",
+        "export function canSwitchQuizAnswerMode() {}\n"
+        "export function mcqReferenceAnswer() {}\n"
+        "export function isQuizChoiceShortcutActive() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionInteraction.tsx",
+        "export function QuizQuestionInteraction() { return '答题方式' }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "quiz_answer_mode\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+
+    assert any("mcqRevealOptions" in item for item in errors)
+    assert any("quizInteractionRestoreKey" in item for item in errors)
+    assert any("restore shortcut focus" in item for item in errors)
+    assert any("submit with Enter" in item for item in errors)
+
+
+def test_quiz_answer_mode_primitive_requires_stem_rewrite_and_index_pager(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts",
+        "export function canSwitchQuizAnswerMode() {}\n"
+        "export function mcqReferenceAnswer() {}\n"
+        "export function mcqRevealOptions() {}\n"
+        "export function quizInteractionRestoreKey() {}\n"
+        "export function isQuizChoiceShortcutActive() {}\n"
+        "export function quizDisplayStem() {}\n"
+        "export function mcqSubjectiveReferenceAnswer() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionInteraction.tsx",
+        "export function QuizQuestionInteraction() { return '答题方式 data-quiz-shortcut-surface Enter 提交' }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "quiz_answer_mode QuizQuestionIndexPager 题干\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return 'flex size-7 items-center justify-center rounded-full' }\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "export function NodeBoundQuizDialog() { return 'flex size-7 items-center justify-center rounded-full' }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+
+    assert any("mcqSubjectiveRewrite.ts" in item for item in errors)
+    assert any("formatMcqSubjectiveAnalysis" in item for item in errors)
+    assert any("converted multiple-choice analysis answer line" in item for item in errors)
+    assert any("subjective stem display" in item for item in errors)
+    assert any("paginated question-index rail" in item for item in errors)
+    assert any("FreestyleScopeQuizDialog.tsx" in item and "QuizQuestionIndexPager" in item for item in errors)
+    assert any("must not inline the full question-number grid" in item for item in errors)
+
+
+def test_quiz_answer_mode_primitive_forbids_marked_options_on_converted_mcq(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts",
+        "export function canSwitchQuizAnswerMode() {}\n"
+        "export function mcqReferenceAnswer() {}\n"
+        "export function mcqRevealOptions() {}\n"
+        "export function quizInteractionRestoreKey() {}\n"
+        "export function isQuizChoiceShortcutActive() {}\n"
+        "export function quizDisplayStem() {}\n"
+        "export function mcqSubjectiveReferenceAnswer() {}\n"
+        "export function formatMcqSubjectiveAnalysis() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "mcqSubjectiveRewrite.ts",
+        "export function rewriteMcqForSubjective() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionInteraction.tsx",
+        "export function QuizQuestionInteraction() { return '答题方式 data-quiz-shortcut-surface Enter 提交 QuizQuestionStem QuizQuestionIndexPager' }\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizShortAnswerBlock.tsx",
+        "export function ShortAnswerBlock() { return '（正确答案）' }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "quiz_answer_mode QuizQuestionIndexPager 题干 first line of the analysis\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return 'QuizQuestionIndexPager QuizQuestionStem' }\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "export function NodeBoundQuizDialog() { return 'QuizQuestionIndexPager QuizQuestionStem' }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+
+    assert any("must not mark options as the correct choice" in item for item in errors)
+    assert any("first line of analysis" in item for item in errors)
+
+
 def test_palace_quiz_must_use_palace_public_facade(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -2007,4 +2490,66 @@ def test_live_study_presence_rejects_sqlite_and_missing_sw_bypass(
     assert any("hello hydration" in error for error in errors)
     assert any("follow retry" in error for error in errors)
     assert any("BaseHTTPMiddleware" in error for error in errors)
+
+
+def test_freestyle_scope_quiz_overlay_rejects_training_mode_switch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "training_mode = 'quiz'\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "export type X = never\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "presentation" / "router.py",
+        "@router.post('/freestyle/rounds/active')\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("training_mode" in error for error in errors)
+    assert any("overlay_quiz_setup_done" in error for error in errors)
+    assert any("overlay-quiz ensure" in error for error in errors)
+
+
+def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return null }\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "export type FreestyleOverlayQuizState = { overlay_quiz_setup_done: boolean }\n"
+        "export const overlay_quiz_setup_done = true\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "presentation" / "router.py",
+        "@router.post('/overlay-quiz/ensure')\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "overlay_quiz.py",
+        "def normalize_overlay_quiz():\n    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "def start_new_round():\n    return {}\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("park out-of-scope progress" in error for error in errors)
+    assert any("copy overlay quiz progress" in error for error in errors)
 

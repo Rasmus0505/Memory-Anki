@@ -13,6 +13,14 @@ feed. Content/mix/queue settings stay, the lock is not written back to stored pr
 separate formal page session before the queue loads. Refreshing that URL keeps the same palace scope. There is no standalone `/review` frontend route or
 completion screen; unknown retired `/review...` paths fall back to `/freestyle`.
 
+## Two immersive workspaces
+
+Freestyle has two independent immersive routes: `/freestyle` (随心) and `/freestyle-2` (随心 2).
+Each workspace keeps its own feed config, round cursor, and round plan. Overlap identity is
+`unit:{unit_id}` / `quiz:{question_id}`. Complete, exclude, and retry progress is inherited
+across workspaces for the same identity. Cursors stay independent. 再来一轮 is per-workspace
+and still seeds from the other workspace's active plan.
+
 ## Round Plan State
 
 Practice owns the backend-authoritative round plan in SQLite (`freestyle_round_states`).
@@ -26,8 +34,18 @@ card, completion/exclusion, and retry `occurrence` rows (`occurrence_kind`, sour
 The server plan is the only authority for retry order, current card, completion, and retry
 counts. PWA, desktop, and a restart of the same device restore that plan. Browser `localStorage`
 keeps display preferences and an offline draft only — it must not decide restudy order.
-An unfinished round survives local midnight and device switches until the learner explicitly
-starts a new round or the palace scope signature changes.
+An unfinished round survives local midnight, a page refresh, and device switches until the
+learner explicitly starts a new round or the palace/subject scope signature changes. Refresh
+must not mint a new `round_id` or drop completed cards from the HUD/feed. Completed source
+cards stay in presented order so swipe-back / 上一张 can reopen them. Re-scoring a completed
+unit in the same round amends from that round's original baseline; it does not stack SRS.
+A rating write that arrives after the glance session was abandoned, completed, or cancelled
+reopens that unit in the same round and applies the latest rating; it must not return
+`active unit review session required`.
+A later due-list rebuild keeps original cards that still have pending or inserted retries even
+when those units drop off the new day's due set, so retry copies cannot clump into an orphan block
+of attempt-1 nodes. A weak `忘记` / `困难` rating does not move `current_card_id`; the source stays
+current until `leave_card`.
 
 Optimistic concurrency: writes carry `expected_version` and `operation_id`. A stale device that
 submits a lower version receives the latest plan with `conflict: true` and must not overwrite
@@ -39,10 +57,11 @@ completed, excluded, retry, and stale entries visible in the plan; a card that r
 stale rebuild is rebound by stable `unit_id` to the latest `unit_revision` while ratings and
 retry counts stay. If the current card is missing or already completed, the next unfinished
 server-plan card becomes current. Exclude/restore and drag operations affect only this round,
-never the underlying review schedule. “Finish palace then next” is a gate over all planned
-review-unit cards in the current palace: a failed/hard card remains retry work and cannot permit
-the next palace to become active. The gate is **forward-only** — looking back at a previous
-palace is never blocked. Retry placement inserts a copy after the learner leaves the source
+never the underlying review schedule. `palace_order` only controls **queue construction**
+(finish one palace’s cards before listing the next, or interleave). 上一张 / 下一张 / finger
+paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished
+so the learner can skip ahead and come back. Retry work still cannot mark a palace “cleared”.
+The leftover `isSequentialPalaceBlocked` helper is not a navigation latch. Retry placement inserts a copy after the learner leaves the source
 card, after at most three other already-presented cards (palace cards, quiz cards, and other retry
 occurrences all count). If fewer than three remain, the occurrence is appended to the end of
 the round. It is never inserted as the immediate next card while any other unfinished card
@@ -66,7 +85,9 @@ separate dialog. Saving a config preserves finished/excluded records and only re
 work. The HUD line is `位置/原安排 · 重练 +N · 过 N`: the denominator is the original scheduled
 source cards (`scheduledBase`), never retry insertions. Retry occurrences render as independent
 amber circular nodes whose number is this-round `retry_attempt`. `retryInserted` lengthens the
-rail without changing that denominator.
+rail without changing that denominator. Pending ticks use a faint palace-color fill and
+completed ticks use a solid fill of the same palace color so unfinished vs finished stays
+readable at a glance; the current tick is taller.
 
 ## Training Directions and Subject Chips
 
@@ -106,15 +127,19 @@ migration. `quiz_only` becomes `quiz`, a palace-only configuration becomes `memo
 palace-plus-question content becomes `mixed`. Legacy Anki front/back fields remain in source
 data and compatibility projections but are excluded from the new freestyle streams and queue.
 When a configuration is saved, the round plan preserves completed, excluded, and retry entries;
-only unstarted entries are rebuilt against the new streams.
+only unstarted entries are rebuilt against the new streams. The queue-construction fields
+(`palace_order`, `unit_order`, due policy, mix, seed, queue length, quiz draw order) are
+compared on save: a change reorders unstarted work in the current round so 「多个宫殿轮流穿插」
+and 「随机单元顺序」 take effect without 「再来一轮」. A silent content rebuild with the same
+construction settings must not reshuffle.
 
 ## Palace Review Cards
 
 - Palace cards are built only from active due review units returned by Reviews.
 - Card identity carries stable `unit_id` plus `unit_revision`. A permanent-mark membership change may drop a vanished unit. A content-only demotion rebinds the same parent unit in the current round; it does not mint a new unfinished card.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
-- Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review.
-- The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units`: every still-due unit of the current palace today, plus every still-unrated review-unit card of that palace already in this round (fill cards are `schedule_locked`). Units already rated in this round are not overwritten. Each unit keeps its own ladder; leftover due units that were not in the round are rated without inserting feed copies. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
+- Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review. Tapping the currently selected rating again undoes until the card is unrated; it must not post the same score. The transient 撤销 chip still undoes one step.
+- The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units` for the current card plus still-due units that have already passed first review. First-learning siblings stay one-by-one and are not batch-scored, so 「记得」 cannot mark unseen sections as passed. Fill cards are `schedule_locked`. Units already rated in this round are not overwritten except the current card. Each mature unit keeps its own ladder. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
 - `忘记` and every `困难` create a retry occurrence. Insertion happens only after the learner
   leaves the source card: the frontend inserts an optimistic copy first, then the backend
   confirms the plan. The gap is at most three already-presented cards (palace, quiz, and other
@@ -208,3 +233,23 @@ Immersive queue config (`FreestyleFeedConfig` / `sanitize_feed_config`) owns qui
 | `weak_quiz_priority` | Sort within the already-scoped quiz pool; does not decide membership. |
 
 Settings UI groups quiz controls under a dedicated「题目刷题」section in the round-plan dialog.
+
+## Toolbar 做题 overlay
+
+The immersive mind-map toolbar (freestyle only) leads with **做题**, keeps **文字** inline, and
+puts **英语** in ⋯. 做题 opens `widgets/freestyle-scope-quiz` over the current card. It does
+**not** change `training_mode` or rebuild the feed into quiz cards.
+
+Question membership follows the **saved** feed palace range (`streams.quiz.specific_palace_ids`,
+else `streams.memory_palace.specific_palace_ids`, else the subject union) plus the quiz stream’s
+type / mastery / weak-priority filters. Draw order is `streams.quiz.quiz_scope`. The first open
+asks for that order and sets `overlay_quiz_setup_done`; later opens skip setup. Config stays
+reachable from the dialog’s top-left.
+
+Progress lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
+runtime states, per-question palace ids, and `parked` out-of-scope progress). PWA and desktop
+restore it from SQLite. Starting a new round copies that overlay from the latest round; changing
+subject or palace scope parks answered questions that left the filter instead of deleting them.
+They return when the palace is in scope again. Overlay progress for a palace is dropped only
+when that palace's review units in the current round are all scored (palace-scope 记得/轻松
+counts as scoring that palace).

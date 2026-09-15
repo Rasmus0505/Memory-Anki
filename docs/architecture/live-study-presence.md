@@ -25,7 +25,7 @@
 
 ## 跟随
 
-`surface !== idle` 且本机已在 `/freestyle`（或 `/`）时，跟随 `route`。设置/编辑页不强制跳转。
+`surface !== idle` 且本机已在 `/freestyle` 或 `/freestyle-2`（或 `/`）时，跟随同槽 `route`。不跨 `/freestyle` 与 `/freestyle-2` 槽位。设置/编辑页不强制跳转。
 
 第一期表面是 `freestyle`。宫殿测验、导图复习、英语为后续表面。
 
