@@ -26,3 +26,36 @@ export function preferredAudioUrl(audio: {
   if (!audio) return null
   return audio.us || audio.uk || null
 }
+
+export function lookupVoiceUrl(query: string, accent: 'us' | 'uk' = 'us'): string {
+  return `/api/v1/english-lookup/voice?q=${encodeURIComponent(query)}&accent=${accent}`
+}
+
+export function lookupVoicePair(query: string): { us: string; uk: string } {
+  return { us: lookupVoiceUrl(query, 'us'), uk: lookupVoiceUrl(query, 'uk') }
+}
+
+export function proxiedLookupAudioUrl(src: string | null | undefined): string | null {
+  if (!src) return null
+  const trimmed = src.trim()
+  if (!trimmed) return null
+  if (
+    trimmed.startsWith('/api/v1/english-lookup/audio') ||
+    trimmed.startsWith('/api/v1/english-lookup/voice') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:')
+  ) {
+    return trimmed
+  }
+  return `/api/v1/english-lookup/audio?url=${encodeURIComponent(trimmed)}`
+}
+
+export function mergeLookupAudio(
+  current: { us: string | null; uk: string | null } | null | undefined,
+  next?: { us: string | null; uk: string | null } | null,
+): { us: string | null; uk: string | null } {
+  return {
+    us: current?.us || next?.us || null,
+    uk: current?.uk || next?.uk || null,
+  }
+}

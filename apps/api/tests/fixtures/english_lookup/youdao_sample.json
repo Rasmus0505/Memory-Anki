@@ -1,0 +1,24 @@
+{
+  "ec": {
+    "word": [
+      {
+        "return-phrase": {"l": {"i": "adapt"}},
+        "usphone": "əˈdæpt",
+        "ukphone": "əˈdæpt",
+        "usspeech": "adapt&type=2",
+        "ukspeech": "adapt&type=1",
+        "trs": [
+          {
+            "tr": [
+              {
+                "l": {
+                  "i": ["v. 适应；调整，使适合；改编；改造，改装"]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

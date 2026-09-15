@@ -1,16 +1,16 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  lookupCambridgeApi,
-  lookupVocabularyApi,
-  translateEnglishLookupApi,
+  lookupBingApi,
+  lookupCollinsApi,
+  lookupOxfordApi,
 } from './api'
 import { useEnglishLookup } from './useEnglishLookup'
 
 vi.mock('./api', () => ({
-  lookupCambridgeApi: vi.fn(),
-  lookupVocabularyApi: vi.fn(),
-  translateEnglishLookupApi: vi.fn(),
+  lookupBingApi: vi.fn(),
+  lookupCollinsApi: vi.fn(),
+  lookupOxfordApi: vi.fn(),
 }))
 vi.mock('./audioManager', () => ({
   getLookupAudioManager: () => ({ stop: vi.fn(), play: vi.fn() }),
@@ -19,29 +19,29 @@ vi.mock('./audioManager', () => ({
 const lookupResult = {
   query: 'memory',
   wordCount: 1,
-  vocabulary: {
-    status: 'ok' as const,
-    short: 'the ability to remember',
-    long: null,
-    error: null,
-    sourceUrl: null,
-  },
-  cambridge: {
+  oxford: {
     status: 'ok' as const,
     entries: [],
     audio: { us: null, uk: null },
     error: null,
     sourceUrl: null,
   },
-  google: {
+  bing: {
     status: 'ok' as const,
-    translation: '记忆',
-    detectedLanguage: 'en',
+    entries: [],
+    audio: { us: null, uk: null },
+    error: null,
+    sourceUrl: null,
+  },
+  collins: {
+    status: 'ok' as const,
+    entries: [],
+    audio: { us: null, uk: null },
     error: null,
     sourceUrl: null,
   },
   audio: { us: null, uk: null },
-  sourceUrls: { vocabulary: null, cambridge: null, google: null },
+  sourceUrls: { oxford: null, bing: null, collins: null },
 }
 
 function pointerEvent(type: string, pointerId: number, clientX: number, clientY: number) {
@@ -57,9 +57,9 @@ function pointerEvent(type: string, pointerId: number, clientX: number, clientY:
 describe('useEnglishLookup panel interactions', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    vi.mocked(lookupVocabularyApi).mockResolvedValue(lookupResult.vocabulary)
-    vi.mocked(lookupCambridgeApi).mockResolvedValue(lookupResult.cambridge)
-    vi.mocked(translateEnglishLookupApi).mockResolvedValue(lookupResult.google)
+    vi.mocked(lookupOxfordApi).mockResolvedValue(lookupResult.oxford)
+    vi.mocked(lookupBingApi).mockResolvedValue(lookupResult.bing)
+    vi.mocked(lookupCollinsApi).mockResolvedValue(lookupResult.collins)
   })
 
   it('keeps dimensions stable while dragging and supports corner resize', async () => {
@@ -101,5 +101,23 @@ describe('useEnglishLookup panel interactions', () => {
 
     expect(result.current.panel.width).toBe(440)
     expect(result.current.panel.maxHeight).toBe(450)
+  })
+
+  it('keeps an unpinned lookup panel open when the viewport resizes', async () => {
+    const { result } = renderHook(() => useEnglishLookup({ isActive: true }))
+
+    act(() => {
+      void result.current.runSearch('memory', { left: 100, top: 100, maxHeight: 400 })
+    })
+    await waitFor(() => expect(result.current.panel.loading).toBe(false))
+
+    act(() => {
+      window.dispatchEvent(new Event('resize'))
+    })
+
+    expect(result.current.panel.open).toBe(true)
+    expect(result.current.panel.query).toBe('memory')
+    expect(result.current.panel.searchInput).toBe('memory')
+    expect(result.current.panel.result?.oxford.status).toBe('ok')
   })
 })

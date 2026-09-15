@@ -1,9 +1,9 @@
 {
   "name": "english-lookup",
   "owns": [
-    "Saladict-style dual dictionary panel",
+    "Saladict-style dictionary panel (Oxford, Bing, Collins)",
     "token click and selection anchor lookup",
-    "pronunciation audio manager"
+    "Youdao pronunciation via same-origin voice proxy"
   ],
   "forbids": [
     "private cross-module imports",

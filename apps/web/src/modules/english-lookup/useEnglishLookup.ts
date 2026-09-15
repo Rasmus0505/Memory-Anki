@@ -7,14 +7,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
-  lookupCambridgeApi,
-  lookupVocabularyApi,
-  translateEnglishLookupApi,
+  lookupBingApi,
+  lookupCollinsApi,
+  lookupOxfordApi,
 } from './api'
 import { getLookupAudioManager } from './audioManager'
 import {
   countLookupWords,
   isValidLookupQuery,
+  lookupVoicePair,
+  lookupVoiceUrl,
   normalizeLookupQuery,
   preferredAudioUrl,
 } from './normalize'
@@ -25,6 +27,7 @@ import {
 import {
   clampPanelLeft,
   clampPanelTop,
+  fittedPanelWidth,
   positionAnchorNearSelection,
   positionNearPoint,
   positionNearRect,
@@ -33,11 +36,10 @@ import type {
   DictCardHeight,
   EnglishLookupPanelState,
   EnglishLookupSearchResponse,
-  CambridgeResult,
-  GoogleTranslateResult,
+  HtmlDictResult,
   LookupAnchorState,
+  LookupDictId,
   LookupHistoryItem,
-  VocabularyResult,
 } from './types'
 import {
   LOOKUP_PANEL_MIN_HEIGHT,
@@ -61,9 +63,9 @@ const EMPTY_PANEL: EnglishLookupPanelState = {
   loading: false,
   result: null,
   error: null,
-  vocabularyHeight: 'COLLAPSE',
-  cambridgeHeight: 'COLLAPSE',
-  googleHeight: 'COLLAPSE',
+  oxfordHeight: 'COLLAPSE',
+  bingHeight: 'COLLAPSE',
+  collinsHeight: 'COLLAPSE',
   autoPlayedQueryId: null,
 }
 
@@ -154,15 +156,18 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
     const onResize = () => {
       setPanel((current) => {
         if (!current.open) return current
-        if (!current.pinned) return EMPTY_PANEL
-        const top = clampPanelTop(current.top)
         const width = Math.min(current.width, Math.max(LOOKUP_PANEL_MIN_WIDTH, window.innerWidth - 16))
-        const maxHeight = Math.min(current.maxHeight, Math.max(LOOKUP_PANEL_MIN_HEIGHT, window.innerHeight - 16))
+        const fittedWidth = Math.min(width, Math.max(240, window.innerWidth - 16))
+        const top = clampPanelTop(current.top)
+        const maxHeight = Math.min(
+          Math.max(current.maxHeight, LOOKUP_PANEL_MIN_HEIGHT),
+          Math.max(LOOKUP_PANEL_MIN_HEIGHT, window.innerHeight - 16),
+        )
         return {
           ...current,
-          left: clampPanelLeft(current.left, width),
+          left: clampPanelLeft(current.left, fittedWidth),
           top,
-          width,
+          width: fittedWidth,
           maxHeight,
         }
       })
@@ -193,7 +198,7 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
       setPanel((current) => {
         if (!current.open || current.queryId !== queryId) return current
         if (current.autoPlayedQueryId === queryId) return current
-        void getLookupAudioManager().play(url)
+        void getLookupAudioManager().play(url, result?.query ?? current.query)
         return { ...current, autoPlayedQueryId: queryId }
       })
     },
@@ -243,7 +248,7 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
         pinned,
         dragging: false,
         ...resolvedPosition,
-        width: current.width || LOOKUP_PANEL_WIDTH,
+        width: Math.min(current.width || LOOKUP_PANEL_WIDTH, fittedPanelWidth()),
         query,
         queryId,
         searchInput: query,
@@ -251,24 +256,29 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
         result: cached ?? pendingResult,
         error: null,
         ...cardPreferencesRef.current,
-        autoPlayedQueryId: null,
+        autoPlayedQueryId: queryId,
       })
+      void getLookupAudioManager().play(
+        preferredAudioUrl((cached ?? pendingResult).audio),
+        query,
+      )
 
       if (cached) {
         pushHistory({ queryId, query, result: cached, error: null })
-        maybeAutoPlay(queryId, cached)
         return
       }
 
-      const googlePromise = translateEnglishLookupApi(query).catch(() => googleErrorResult())
-      const vocabularyPromise = dictionaryLookupAllowed
-        ? lookupVocabularyApi(query).catch(() => vocabularyErrorResult())
-        : Promise.resolve(skippedVocabularyResult())
-      const cambridgePromise = dictionaryLookupAllowed
-        ? lookupCambridgeApi(query).catch(() => cambridgeErrorResult())
-        : Promise.resolve(skippedCambridgeResult())
+      const oxfordPromise = dictionaryLookupAllowed
+        ? lookupOxfordApi(query).catch(() => htmlDictErrorResult('牛津高阶词典'))
+        : Promise.resolve(skippedHtmlDictResult('牛津高阶词典'))
+      const bingPromise = dictionaryLookupAllowed
+        ? lookupBingApi(query).catch(() => htmlDictErrorResult('必应词典'))
+        : Promise.resolve(skippedHtmlDictResult('必应词典'))
+      const collinsPromise = dictionaryLookupAllowed
+        ? lookupCollinsApi(query).catch(() => htmlDictErrorResult('柯林斯高阶'))
+        : Promise.resolve(skippedHtmlDictResult('柯林斯高阶'))
 
-      const applyPartial = <K extends 'vocabulary' | 'cambridge' | 'google'>(
+      const applyPartial = <K extends LookupDictId>(
         key: K,
         value: EnglishLookupSearchResponse[K],
       ) => {
@@ -279,31 +289,32 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
             result: {
               ...prev.result,
               [key]: value,
+              audio: prev.result.audio,
               sourceUrls: { ...prev.result.sourceUrls, [key]: value.sourceUrl },
             },
           }
         })
       }
-      void googlePromise.then((result) => applyPartial('google', result))
-      void vocabularyPromise.then((result) => applyPartial('vocabulary', result))
-      void cambridgePromise.then((result) => applyPartial('cambridge', result))
+      void oxfordPromise.then((result) => applyPartial('oxford', result))
+      void bingPromise.then((result) => applyPartial('bing', result))
+      void collinsPromise.then((result) => applyPartial('collins', result))
 
       try {
-        const [google, vocabulary, cambridge] = await Promise.all([
-          googlePromise,
-          vocabularyPromise,
-          cambridgePromise,
+        const [oxford, bing, collins] = await Promise.all([
+          oxfordPromise,
+          bingPromise,
+          collinsPromise,
         ])
         const result: EnglishLookupSearchResponse = {
           ...pendingResult,
-          vocabulary,
-          cambridge,
-          google,
-          audio: cambridge.audio,
+          oxford,
+          bing,
+          collins,
+          audio: lookupVoicePair(query),
           sourceUrls: {
-            vocabulary: vocabulary.sourceUrl,
-            cambridge: cambridge.sourceUrl,
-            google: google.sourceUrl,
+            oxford: oxford.sourceUrl,
+            bing: bing.sourceUrl,
+            collins: collins.sourceUrl,
           },
         }
         resultCacheRef.current.set(query, result)
@@ -319,7 +330,6 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
             ...cardPreferencesRef.current,
           }
         })
-        maybeAutoPlay(queryId, result)
       } catch (error) {
         if (queryIdRef.current !== queryId) return
         const message =
@@ -337,7 +347,7 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
         })
       }
     },
-    [closePanel, maybeAutoPlay, pushHistory],
+    [closePanel, pushHistory],
   )
 
   /** Click a single token → open/toggle panel directly (no anchor). */
@@ -418,13 +428,15 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
   }, [])
 
   const replayAudio = useCallback(() => {
-    const url = preferredAudioUrl(panelSnapshotRef.current.result?.audio)
+    const current = panelSnapshotRef.current
+    const url = preferredAudioUrl(current.result?.audio) || lookupVoiceUrl(current.query)
     if (!url) return
-    void getLookupAudioManager().play(url)
+    void getLookupAudioManager().play(url, current.query)
   }, [])
 
   const playSrc = useCallback((src: string) => {
-    void getLookupAudioManager().play(src)
+    const query = panelSnapshotRef.current.query
+    void getLookupAudioManager().play(src, query)
   }, [])
 
   const goHistory = useCallback(
@@ -454,20 +466,12 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
   )
 
   const setCardHeight = useCallback(
-    (which: 'vocabulary' | 'cambridge' | 'google', height: DictCardHeight) => {
+    (which: LookupDictId, height: DictCardHeight) => {
       setPanel((current) => {
         if (!current.open) return current
-        const next =
-          which === 'vocabulary'
-            ? { ...current, vocabularyHeight: height }
-            : which === 'cambridge'
-              ? { ...current, cambridgeHeight: height }
-              : { ...current, googleHeight: height }
-        cardPreferencesRef.current = {
-          vocabularyHeight: next.vocabularyHeight,
-          cambridgeHeight: next.cambridgeHeight,
-          googleHeight: next.googleHeight,
-        }
+        const key = heightKey(which)
+        const next = { ...current, [key]: height }
+        cardPreferencesRef.current = cardHeightsFrom(next)
         writeLookupCardPreferences(cardPreferencesRef.current)
         return next
       })
@@ -475,24 +479,15 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
     [],
   )
 
-  const cycleCardHeight = useCallback((which: 'vocabulary' | 'cambridge' | 'google') => {
+  const cycleCardHeight = useCallback((which: LookupDictId) => {
     setPanel((current) => {
       if (!current.open) return current
-      const key =
-        which === 'vocabulary'
-          ? 'vocabularyHeight'
-          : which === 'cambridge'
-            ? 'cambridgeHeight'
-            : 'googleHeight'
+      const key = heightKey(which)
       const now = current[key]
-      const next: DictCardHeight =
+      const nextHeight: DictCardHeight =
         now === 'COLLAPSE' ? 'HALF' : now === 'HALF' ? 'FULL' : 'COLLAPSE'
-      const updated = { ...current, [key]: next }
-      cardPreferencesRef.current = {
-        vocabularyHeight: updated.vocabularyHeight,
-        cambridgeHeight: updated.cambridgeHeight,
-        googleHeight: updated.googleHeight,
-      }
+      const updated = { ...current, [key]: nextHeight }
+      cardPreferencesRef.current = cardHeightsFrom(updated)
       writeLookupCardPreferences(cardPreferencesRef.current)
       return updated
     })
@@ -662,42 +657,34 @@ function createPendingLookupResult(
   return {
     query,
     wordCount: countLookupWords(query),
-    vocabulary: dictionaryLookupAllowed ? pendingVocabularyResult() : skippedVocabularyResult(),
-    cambridge: dictionaryLookupAllowed ? pendingCambridgeResult() : skippedCambridgeResult(),
-    google: pendingGoogleResult(),
-    audio: { us: null, uk: null },
-    sourceUrls: { vocabulary: null, cambridge: null, google: null },
+    oxford: dictionaryLookupAllowed ? pendingHtmlDictResult() : skippedHtmlDictResult('牛津高阶词典'),
+    bing: dictionaryLookupAllowed ? pendingHtmlDictResult() : skippedHtmlDictResult('必应词典'),
+    collins: dictionaryLookupAllowed ? pendingHtmlDictResult() : skippedHtmlDictResult('柯林斯高阶'),
+    audio: lookupVoicePair(query),
+    sourceUrls: { oxford: null, bing: null, collins: null },
   }
 }
 
-function pendingVocabularyResult(): VocabularyResult {
-  return { status: 'searching', short: null, long: null, error: null, sourceUrl: null }
+function heightKey(which: LookupDictId): `${LookupDictId}Height` {
+  return `${which}Height`
 }
 
-function pendingCambridgeResult(): CambridgeResult {
+function cardHeightsFrom(panel: EnglishLookupPanelState) {
+  return {
+    oxfordHeight: panel.oxfordHeight,
+    bingHeight: panel.bingHeight,
+    collinsHeight: panel.collinsHeight,
+  }
+}
+
+function pendingHtmlDictResult(): HtmlDictResult {
   return { status: 'searching', entries: [], audio: { us: null, uk: null }, error: null, sourceUrl: null }
 }
 
-function pendingGoogleResult(): GoogleTranslateResult {
-  return { status: 'searching', translation: '', detectedLanguage: null, error: null, sourceUrl: null }
+function htmlDictErrorResult(label: string): HtmlDictResult {
+  return { status: 'error', entries: [], audio: { us: null, uk: null }, error: `${label} 查询失败，请稍后重试。`, sourceUrl: null }
 }
 
-function vocabularyErrorResult(): VocabularyResult {
-  return { status: 'error', short: null, long: null, error: 'Vocabulary.com 查询失败，请稍后重试。', sourceUrl: null }
-}
-
-function cambridgeErrorResult(): CambridgeResult {
-  return { status: 'error', entries: [], audio: { us: null, uk: null }, error: 'Cambridge 查询失败，请稍后重试。', sourceUrl: null }
-}
-
-function googleErrorResult(): GoogleTranslateResult {
-  return { status: 'error', translation: '', detectedLanguage: null, error: '谷歌翻译查询失败，请稍后重试。', sourceUrl: null }
-}
-
-function skippedVocabularyResult(): VocabularyResult {
-  return { status: 'empty', short: null, long: null, error: 'Vocabulary.com 仅在查询 1–5 个英文词时启用。', sourceUrl: null }
-}
-
-function skippedCambridgeResult(): CambridgeResult {
-  return { status: 'empty', entries: [], audio: { us: null, uk: null }, error: 'Cambridge 仅在查询 1–5 个英文词时启用。', sourceUrl: null }
+function skippedHtmlDictResult(label: string): HtmlDictResult {
+  return { status: 'empty', entries: [], audio: { us: null, uk: null }, error: `${label} 仅在查询 1–5 个英文词时启用。`, sourceUrl: null }
 }

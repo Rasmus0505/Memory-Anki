@@ -23,7 +23,7 @@ export function LookupAnchor({
         event.stopPropagation()
         onClick()
       }}
-      className="fixed z-[60] flex h-9 min-w-9 items-center justify-center rounded-md border border-border bg-background px-2 text-sm font-medium shadow-md hover:bg-muted"
+      className="fixed z-[60] flex h-9 min-w-9 items-center justify-center rounded-md border border-border bg-background px-2 text-sm font-medium text-foreground shadow-md hover:bg-muted"
       style={{ left: anchor.left, top: anchor.top }}
       title={`查词：${anchor.query}`}
       aria-label={`查词 ${anchor.query}`}

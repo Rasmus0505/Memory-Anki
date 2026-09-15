@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from memory_anki.modules.english_lookup.application import youdao_engine
 from memory_anki.modules.english_lookup.application.dom_util import (
     class_contains,
     inner_html,
@@ -30,9 +31,19 @@ def source_page(query: str) -> str:
 
 def search(query: str) -> dict[str, Any]:
     """Return {status, entries, audio, error, sourceUrl}."""
+    cambridge = _search_cambridge(query)
+    if cambridge.get("status") == "ok":
+        return cambridge
+    youdao = youdao_engine.search(query)
+    if youdao.get("status") == "ok":
+        return youdao
+    return cambridge if cambridge.get("status") == "error" else youdao
+
+
+def _search_cambridge(query: str) -> dict[str, Any]:
     url = source_page(query)
     try:
-        document = fetch_html(url)
+        document = fetch_html(url, timeout=6.0)
     except FetchError as exc:
         code = exc.status_code
         error = "MANUAL_VERIFICATION" if code == 403 else str(exc)

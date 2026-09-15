@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import Any
 
+from memory_anki.modules.english_lookup.application.http_fetch import FetchError, fetch_raw
+
 _ENDPOINT = "https://translate.google.com/_/TranslateWebserverUi/data/batchexecute"
-_TIMEOUT_SECONDS = 12.0
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-)
+_TIMEOUT_SECONDS = 6.0
 
 
 def source_url(text: str) -> str:
@@ -24,9 +20,9 @@ def source_url(text: str) -> str:
 def _fetch_translation(text: str) -> Any:
     rpc_arguments = [[text, "auto", "zh-CN", True], [None]]
     batch = [[["MkEWBc", json.dumps(rpc_arguments, separators=(",", ":")), None, "generic"]]]
-    body = urllib.parse.urlencode(
-        {"f.req": json.dumps(batch, separators=(",", ":"))}
-    ).encode("utf-8")
+    body = urllib.parse.urlencode({"f.req": json.dumps(batch, separators=(",", ":"))}).encode(
+        "utf-8"
+    )
     query = urllib.parse.urlencode(
         {
             "rpcids": "MkEWBc",
@@ -38,17 +34,16 @@ def _fetch_translation(text: str) -> Any:
             "rt": "c",
         }
     )
-    request = urllib.request.Request(
+    raw_bytes, charset = fetch_raw(
         f"{_ENDPOINT}?{query}",
         data=body,
         headers={
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-            "User-Agent": _USER_AGENT,
         },
+        timeout=_TIMEOUT_SECONDS,
     )
-    with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
-        raw = response.read().decode("utf-8", errors="replace")
+    raw = raw_bytes.decode(charset or "utf-8", errors="replace")
     return _parse_batchexecute(raw)
 
 
@@ -96,7 +91,7 @@ def search(text: str) -> dict[str, Any]:
             "error": None,
             "sourceUrl": url,
         }
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, TypeError, ValueError):
+    except (FetchError, json.JSONDecodeError, TypeError, ValueError):
         return {
             "status": "error",
             "translation": "",

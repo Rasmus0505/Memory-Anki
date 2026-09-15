@@ -1,7 +1,10 @@
+import { lookupVoiceUrl, proxiedLookupAudioUrl } from './normalize'
+
 /**
  * Singleton audio player — Saladict AudioManager port.
  * Only one clip plays at a time; a new play interrupts the previous.
  */
+
 export class LookupAudioManager {
   private static instance: LookupAudioManager | null = null
 
@@ -21,6 +24,7 @@ export class LookupAudioManager {
       this.audio.currentTime = 0
       this.audio.src = ''
       this.audio.onended = null
+      this.audio.onerror = null
     }
     this.currentSrc = ''
   }
@@ -29,25 +33,44 @@ export class LookupAudioManager {
     this.reset()
     this.currentSrc = src
     this.audio = new Audio(src)
+    this.audio.preload = 'auto'
     return this.audio
   }
 
-  async play(src?: string | null): Promise<void> {
+  async play(src?: string | null, fallbackQuery?: string | null): Promise<void> {
     if (!src) {
       this.reset()
       return
     }
+    const playable = proxiedLookupAudioUrl(src) ?? src
     // Same src while playing: treat as stop (Saladict toggle).
-    if (src === this.currentSrc && this.audio && !this.audio.paused) {
+    if (playable === this.currentSrc && this.audio && !this.audio.paused) {
       this.reset()
       return
     }
-    const audio = this.load(src)
     try {
-      await audio.play()
+      await this.playOnce(playable)
     } catch {
-      if (this.audio === audio) this.reset()
+      const fallback = fallbackQuery ? lookupVoiceUrl(fallbackQuery, 'us') : null
+      if (fallback && fallback !== playable) {
+        try {
+          await this.playOnce(fallback)
+          return
+        } catch {
+          // Fall through to reset.
+        }
+      }
+      this.reset()
     }
+  }
+
+  private playOnce(src: string): Promise<void> {
+    const audio = this.load(src)
+    return new Promise((resolve, reject) => {
+      const fail = () => reject(new Error('audio failed'))
+      audio.onerror = fail
+      void audio.play().then(() => resolve()).catch(fail)
+    })
   }
 
   stop() {

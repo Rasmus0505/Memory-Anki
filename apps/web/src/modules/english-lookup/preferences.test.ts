@@ -11,15 +11,15 @@ describe('english lookup card preferences', () => {
 
   it('restores the last selected height for both dictionaries', () => {
     writeLookupCardPreferences({
-      vocabularyHeight: 'COLLAPSE',
-      cambridgeHeight: 'FULL',
-      googleHeight: 'COLLAPSE',
+      oxfordHeight: 'FULL',
+      bingHeight: 'COLLAPSE',
+      collinsHeight: 'FULL',
     })
 
     expect(readLookupCardPreferences()).toEqual({
-      vocabularyHeight: 'COLLAPSE',
-      cambridgeHeight: 'FULL',
-      googleHeight: 'COLLAPSE',
+      oxfordHeight: 'FULL',
+      bingHeight: 'COLLAPSE',
+      collinsHeight: 'FULL',
     })
   })
 

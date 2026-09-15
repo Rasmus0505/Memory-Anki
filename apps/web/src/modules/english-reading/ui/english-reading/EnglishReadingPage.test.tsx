@@ -10,9 +10,9 @@ const api = vi.hoisted(() => ({
   createTarget: vi.fn(),
   updateProfile: vi.fn(),
   explainTarget: vi.fn(),
-  lookupVocabulary: vi.fn(),
-  lookupCambridge: vi.fn(),
-  translateLookup: vi.fn(),
+  lookupOxford: vi.fn(),
+  lookupBing: vi.fn(),
+  lookupCollins: vi.fn(),
 }))
 
 vi.mock('@/modules/english-reading/ui/english-reading/api', () => ({
@@ -32,9 +32,13 @@ vi.mock('@/modules/english-reading/ui/english-reading/api', () => ({
 }))
 
 vi.mock('@/modules/english-lookup/api', () => ({
-  lookupVocabularyApi: (...args: unknown[]) => api.lookupVocabulary(...args),
-  lookupCambridgeApi: (...args: unknown[]) => api.lookupCambridge(...args),
-  translateEnglishLookupApi: (...args: unknown[]) => api.translateLookup(...args),
+  lookupOxfordApi: (...args: unknown[]) => api.lookupOxford(...args),
+  lookupBingApi: (...args: unknown[]) => api.lookupBing(...args),
+  lookupCollinsApi: (...args: unknown[]) => api.lookupCollins(...args),
+}))
+
+vi.mock('@/modules/english-lookup/audioManager', () => ({
+  getLookupAudioManager: () => ({ stop: vi.fn(), play: vi.fn() }),
 }))
 
 vi.mock('@/modules/english/ui/english-shell', () => ({
@@ -81,27 +85,16 @@ describe('EnglishReadingPage lookup cleanup', () => {
     api.listArticles.mockResolvedValue({ items: [], tree: [] })
     api.getArticle.mockResolvedValue(article)
     api.updateProfile.mockResolvedValue({ declaredCefr: 'B2' })
-    api.lookupVocabulary.mockResolvedValue({
+    const htmlDict = {
       status: 'ok',
-      short: 'short def',
-      long: 'long def',
-      error: null,
-      sourceUrl: 'https://www.vocabulary.com/dictionary/Learning',
-    })
-    api.lookupCambridge.mockResolvedValue({
-      status: 'ok',
-      entries: [{ id: 'e0', html: '<div>cam</div>' }],
-      audio: { us: 'https://a/us.mp3', uk: null },
+      entries: [{ id: 'e0', html: '<div>entry</div>' }],
+      audio: { us: null, uk: null },
       error: null,
       sourceUrl: null,
-    })
-    api.translateLookup.mockResolvedValue({
-      status: 'ok',
-      translation: '示例',
-      detectedLanguage: 'en',
-      error: null,
-      sourceUrl: null,
-    })
+    }
+    api.lookupOxford.mockResolvedValue(htmlDict)
+    api.lookupBing.mockResolvedValue(htmlDict)
+    api.lookupCollins.mockResolvedValue(htmlDict)
     api.createTarget.mockImplementation(async (_articleId, payload) => ({
       id: 9,
       articleId: 1,
@@ -130,9 +123,9 @@ describe('EnglishReadingPage lookup cleanup', () => {
     expect(screen.queryByText('加入文章')).toBeNull()
     expect(screen.queryByTestId('dictionary-popup-panel')).toBeNull()
     await waitFor(() => {
-      expect(api.lookupVocabulary).toHaveBeenCalledWith('Learning')
-      expect(api.lookupCambridge).toHaveBeenCalledWith('Learning')
-      expect(api.translateLookup).toHaveBeenCalledWith('Learning')
+      expect(api.lookupOxford).toHaveBeenCalledWith('Learning')
+      expect(api.lookupBing).toHaveBeenCalledWith('Learning')
+      expect(api.lookupCollins).toHaveBeenCalledWith('Learning')
     })
     expect(await screen.findByTestId('english-lookup-panel')).not.toBeNull()
     expect(api.createTarget).not.toHaveBeenCalled()

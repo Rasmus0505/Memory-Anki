@@ -14,11 +14,15 @@ import {
 } from 'lucide-react'
 import type { EnglishLookupController, LookupResizeDirection } from './useEnglishLookup'
 import {
-  CAMBRIDGE_HALF_PX,
-  VOCAB_HALF_PX,
+  BING_HALF_PX,
+  COLLINS_HALF_PX,
+  OXFORD_HALF_PX,
   type DictCardHeight,
+  type HtmlDictResult,
+  type LookupDictId,
 } from './types'
-import { preferredAudioUrl } from './normalize'
+import './lookup-dict.css'
+import { lookupVoiceUrl, preferredAudioUrl } from './normalize'
 
 function heightPx(height: DictCardHeight, halfPx: number): number | 'none' {
   if (height === 'COLLAPSE') return 0
@@ -45,19 +49,16 @@ export function EnglishLookupPanel({
   const { panel, panelRef } = lookup
   if (!panel.open) return null
 
-  const audioUrl = preferredAudioUrl(panel.result?.audio)
+  const audioUrl = preferredAudioUrl(panel.result?.audio) || (panel.query ? lookupVoiceUrl(panel.query) : null)
   const summary =
-    panel.result?.vocabulary.short ||
-    (panel.result?.cambridge.entries[0]
-      ? stripTags(panel.result.cambridge.entries[0].html).slice(0, 120)
-      : '') ||
+    firstHtmlSummary(panel.result?.oxford, panel.result?.bing, panel.result?.collins) ||
     '暂无释义'
 
   return (
     <div
       ref={panelRef as RefObject<HTMLDivElement>}
       data-testid="english-lookup-panel"
-      className="fixed z-[55] flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
+      className="fixed z-[55] flex flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-xl"
       style={{
         left: panel.left,
         top: panel.top,
@@ -67,11 +68,11 @@ export function EnglishLookupPanel({
     >
       <div
         data-testid="english-lookup-header"
-        className="flex cursor-grab items-center gap-1 border-b border-border px-2 py-1.5 active:cursor-grabbing"
+        className="cursor-grab border-b border-border px-2 py-1.5 active:cursor-grabbing"
         onPointerDown={lookup.handleHeaderPointerDown}
       >
         <form
-          className="flex min-w-0 flex-1 items-center gap-1"
+          className="flex min-w-0 items-center gap-1"
           onSubmit={(event) => {
             event.preventDefault()
             lookup.handleSearchSubmit()
@@ -80,50 +81,55 @@ export function EnglishLookupPanel({
           <input
             value={panel.searchInput}
             onChange={(event) => lookup.setSearchInput(event.target.value)}
-            className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 text-base text-foreground outline-none focus:ring-1 focus:ring-ring"
             aria-label="查词"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <button
             type="submit"
-            className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded hover:bg-muted"
             title="搜索"
           >
             <Search className="h-4 w-4" />
           </button>
+          <IconBtn title={panel.pinned ? '取消钉住' : '钉住'} onClick={lookup.togglePin}>
+            {panel.pinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+          </IconBtn>
+          <IconBtn title="关闭" onClick={lookup.closePanel}>
+            <X className="h-4 w-4" />
+          </IconBtn>
         </form>
-        <IconBtn
-          title="发音"
-          disabled={!audioUrl}
-          onClick={() => lookup.replayAudio()}
-        >
-          <Volume2 className="h-4 w-4" />
-        </IconBtn>
-        <IconBtn
-          title="收藏"
-          onClick={() => onFavorite?.(panel.query, summary)}
-        >
-          <Star className="h-4 w-4" />
-        </IconBtn>
-        <IconBtn
-          title="上一个"
-          disabled={!lookup.canHistoryBack}
-          onClick={() => lookup.goHistory(-1)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </IconBtn>
-        <IconBtn
-          title="下一个"
-          disabled={!lookup.canHistoryForward}
-          onClick={() => lookup.goHistory(1)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </IconBtn>
-        <IconBtn title={panel.pinned ? '取消钉住' : '钉住'} onClick={lookup.togglePin}>
-          {panel.pinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
-        </IconBtn>
-        <IconBtn title="关闭" onClick={lookup.closePanel}>
-          <X className="h-4 w-4" />
-        </IconBtn>
+        <div className="mt-1 flex items-center justify-end gap-0.5">
+          <IconBtn
+            title="发音"
+            disabled={!audioUrl}
+            onClick={() => lookup.replayAudio()}
+          >
+            <Volume2 className="h-4 w-4" />
+          </IconBtn>
+          <IconBtn
+            title="收藏"
+            onClick={() => onFavorite?.(panel.query, summary)}
+          >
+            <Star className="h-4 w-4" />
+          </IconBtn>
+          <IconBtn
+            title="上一个"
+            disabled={!lookup.canHistoryBack}
+            onClick={() => lookup.goHistory(-1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </IconBtn>
+          <IconBtn
+            title="下一个"
+            disabled={!lookup.canHistoryForward}
+            onClick={() => lookup.goHistory(1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </IconBtn>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -134,110 +140,36 @@ export function EnglishLookupPanel({
           <div className="p-3 text-sm text-destructive">{panel.error}</div>
         ) : null}
 
-        <DictCard
-          title="Vocabulary.com"
-          sourceUrl={panel.result?.vocabulary.sourceUrl ?? panel.result?.sourceUrls.vocabulary}
-          height={panel.vocabularyHeight}
-          halfPx={VOCAB_HALF_PX}
-          statusLabel={statusLabel(panel.loading, panel.result?.vocabulary.status)}
-          onToggleTitle={() => lookup.cycleCardHeight('vocabulary')}
-          onExpandFull={() => lookup.setCardHeight('vocabulary', 'FULL')}
-        >
-          {panel.result?.vocabulary.status === 'ok' ? (
-            <div className="space-y-2 p-3 text-sm leading-relaxed">
-              <p className="font-medium">
-                <ClickableLookupText text={panel.result.vocabulary.short ?? ''} onLookup={(word) => searchFromPanel(lookup, word)} />
-              </p>
-              <p className="text-muted-foreground">
-                <ClickableLookupText text={panel.result.vocabulary.long ?? ''} onLookup={(word) => searchFromPanel(lookup, word)} />
-              </p>
-            </div>
-          ) : panel.result?.vocabulary.error ? (
-            <div className="p-3 text-sm text-muted-foreground">
-              {panel.result.vocabulary.error}
-            </div>
-          ) : null}
-        </DictCard>
-
-        <DictCard
-          title="Cambridge 英汉简"
-          sourceUrl={panel.result?.cambridge.sourceUrl ?? panel.result?.sourceUrls.cambridge}
-          height={panel.cambridgeHeight}
-          halfPx={CAMBRIDGE_HALF_PX}
-          statusLabel={statusLabel(panel.loading, panel.result?.cambridge.status)}
-          onToggleTitle={() => lookup.cycleCardHeight('cambridge')}
-          onExpandFull={() => lookup.setCardHeight('cambridge', 'FULL')}
-        >
-          {panel.result?.cambridge.status === 'ok' ? (
-            <div
-              className="cambridge-lookup-html space-y-3 p-3 text-sm"
-              onClick={(event) => {
-                const target = event.target
-                if (!(target instanceof HTMLElement)) return
-                const speaker = target.closest('.dict-speaker')
-                if (speaker instanceof HTMLElement) {
-                  const src = speaker.getAttribute('data-src-mp3')
-                  if (src) {
-                    event.preventDefault()
-                    lookup.playSrc(src)
-                  }
-                  return
-                }
-                const link = target.closest('a')
-                if (link instanceof HTMLAnchorElement) {
-                  if (link.dataset.external === '1') return
-                  if (link.dataset.internal === '1' || link.href.includes('dictionary.cambridge.org')) {
-                    event.preventDefault()
-                    const text = (link.textContent || '').trim()
-                    if (text) searchFromPanel(lookup, text)
-                  }
-                  return
-                }
-                const clickedWord = englishWordAtPoint(event.clientX, event.clientY)
-                if (clickedWord) {
-                  event.preventDefault()
-                  searchFromPanel(lookup, clickedWord)
-                }
-              }}
-              // Cambridge HTML is sanitized server-side (no script/style/on*).
-              dangerouslySetInnerHTML={{
-                __html: panel.result.cambridge.entries.map((e) => e.html).join(''),
-              }}
-            />
-          ) : panel.result?.cambridge.error ? (
-            <div className="p-3 text-sm text-muted-foreground">
-              {panel.result.cambridge.error}
-            </div>
-          ) : null}
-        </DictCard>
-
-        <DictCard
-          title="谷歌翻译"
-          sourceUrl={panel.result?.google.sourceUrl ?? panel.result?.sourceUrls.google}
-          height={panel.googleHeight}
-          halfPx={180}
-          statusLabel={statusLabel(panel.loading, panel.result?.google.status)}
-          onToggleTitle={() => lookup.cycleCardHeight('google')}
-          onExpandFull={() => lookup.setCardHeight('google', 'FULL')}
-        >
-          {panel.result?.google.status === 'ok' ? (
-            <div className="space-y-2 p-3 text-sm leading-relaxed">
-              <p className="text-xs text-muted-foreground">
-                {panel.result.google.detectedLanguage
-                  ? `${panel.result.google.detectedLanguage} → 简体中文`
-                  : '自动检测 → 简体中文'}
-              </p>
-              <p>
-                <ClickableLookupText
-                  text={panel.result.google.translation}
-                  onLookup={(word) => searchFromPanel(lookup, word)}
-                />
-              </p>
-            </div>
-          ) : panel.result?.google.error ? (
-            <div className="p-3 text-sm text-muted-foreground">{panel.result.google.error}</div>
-          ) : null}
-        </DictCard>
+        <HtmlDictCard
+          title="牛津高阶词典"
+          dict="oxford"
+          result={panel.result?.oxford}
+          sourceUrl={panel.result?.oxford.sourceUrl ?? panel.result?.sourceUrls.oxford}
+          height={panel.oxfordHeight}
+          halfPx={OXFORD_HALF_PX}
+          loading={panel.loading}
+          lookup={lookup}
+        />
+        <HtmlDictCard
+          title="必应词典"
+          dict="bing"
+          result={panel.result?.bing}
+          sourceUrl={panel.result?.bing.sourceUrl ?? panel.result?.sourceUrls.bing}
+          height={panel.bingHeight}
+          halfPx={BING_HALF_PX}
+          loading={panel.loading}
+          lookup={lookup}
+        />
+        <HtmlDictCard
+          title="柯林斯高阶"
+          dict="collins"
+          result={panel.result?.collins}
+          sourceUrl={panel.result?.collins.sourceUrl ?? panel.result?.sourceUrls.collins}
+          height={panel.collinsHeight}
+          halfPx={COLLINS_HALF_PX}
+          loading={panel.loading}
+          lookup={lookup}
+        />
       </div>
       {RESIZE_HANDLES.map(({ direction, className, label }) => (
         <button
@@ -250,23 +182,6 @@ export function EnglishLookupPanel({
         />
       ))}
     </div>
-  )
-}
-
-function ClickableLookupText({ text, onLookup }: { text: string; onLookup: (word: string) => void }) {
-  return text.split(/([A-Za-z]+(?:[-'][A-Za-z]+)*)/g).map((part, index) =>
-    /^[A-Za-z]+(?:[-'][A-Za-z]+)*$/.test(part) ? (
-      <button
-        key={`${part}-${index}`}
-        type="button"
-        className="inline rounded-sm px-0.5 text-left hover:bg-primary/15 hover:text-primary"
-        onClick={() => onLookup(part)}
-      >
-        {part}
-      </button>
-    ) : (
-      part
-    ),
   )
 }
 
@@ -300,6 +215,79 @@ const RESIZE_HANDLES: Array<{
   { direction: 'se', className: 'bottom-0 right-0 h-4 w-4 cursor-nwse-resize', label: '从右下角调整大小' },
   { direction: 'sw', className: 'bottom-0 left-0 h-4 w-4 cursor-nesw-resize', label: '从左下角调整大小' },
 ]
+
+function HtmlDictCard({
+  title,
+  dict,
+  result,
+  sourceUrl,
+  height,
+  halfPx,
+  loading,
+  lookup,
+}: {
+  title: string
+  dict: LookupDictId
+  result?: HtmlDictResult
+  sourceUrl?: string | null
+  height: DictCardHeight
+  halfPx: number
+  loading: boolean
+  lookup: EnglishLookupController
+}) {
+  return (
+    <DictCard
+      title={title}
+      sourceUrl={sourceUrl}
+      height={height}
+      halfPx={halfPx}
+      statusLabel={statusLabel(loading, result?.status)}
+      onToggleTitle={() => lookup.cycleCardHeight(dict)}
+      onExpandFull={() => lookup.setCardHeight(dict, 'FULL')}
+    >
+      {result?.status === 'ok' ? (
+        <div
+          className="lookup-html space-y-3 p-3 text-sm"
+          onClick={(event) => {
+            const target = event.target
+            if (!(target instanceof HTMLElement)) return
+            const speaker = target.closest('.dict-speaker, .saladict-Speaker')
+            if (speaker instanceof HTMLElement) {
+              const src =
+                speaker.getAttribute('data-src-mp3') ||
+                (speaker instanceof HTMLAnchorElement ? speaker.getAttribute('href') : null)
+              if (src) {
+                event.preventDefault()
+                lookup.playSrc(src)
+              }
+              return
+            }
+            const link = target.closest('a')
+            if (link instanceof HTMLAnchorElement) {
+              if (link.dataset.external === '1') return
+              if (link.dataset.internal === '1') {
+                event.preventDefault()
+                const text = (link.textContent || '').trim()
+                if (text) searchFromPanel(lookup, text)
+              }
+              return
+            }
+            const clickedWord = englishWordAtPoint(event.clientX, event.clientY)
+            if (clickedWord) {
+              event.preventDefault()
+              searchFromPanel(lookup, clickedWord)
+            }
+          }}
+          dangerouslySetInnerHTML={{
+            __html: (result.entries ?? []).map((entry) => entry.html).join(''),
+          }}
+        />
+      ) : result?.error ? (
+        <div className="p-3 text-sm text-muted-foreground">{result.error}</div>
+      ) : null}
+    </DictCard>
+  )
+}
 
 function DictCard({
   title,
@@ -403,6 +391,16 @@ function statusLabel(loading: boolean, status?: string) {
   if (status === 'ok') return ''
   if (status === 'empty') return '无结果'
   if (status === 'error') return '失败'
+  return ''
+}
+
+function firstHtmlSummary(...results: Array<HtmlDictResult | undefined>) {
+  for (const result of results) {
+    const html = result?.entries[0]?.html
+    if (!html) continue
+    const text = stripTags(html).slice(0, 120)
+    if (text) return text
+  }
   return ''
 }
 

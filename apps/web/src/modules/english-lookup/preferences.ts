@@ -3,15 +3,15 @@ import type { DictCardHeight } from './types'
 export const ENGLISH_LOOKUP_CARD_STATE_KEY = 'memory-anki.english-lookup.card-state'
 
 export interface EnglishLookupCardPreferences {
-  vocabularyHeight: DictCardHeight
-  cambridgeHeight: DictCardHeight
-  googleHeight: DictCardHeight
+  oxfordHeight: DictCardHeight
+  bingHeight: DictCardHeight
+  collinsHeight: DictCardHeight
 }
 
 export const DEFAULT_LOOKUP_CARD_PREFERENCES: EnglishLookupCardPreferences = {
-  vocabularyHeight: 'HALF',
-  cambridgeHeight: 'HALF',
-  googleHeight: 'HALF',
+  oxfordHeight: 'HALF',
+  bingHeight: 'HALF',
+  collinsHeight: 'HALF',
 }
 
 function isCardHeight(value: unknown): value is DictCardHeight {
@@ -25,15 +25,15 @@ export function readLookupCardPreferences(): EnglishLookupCardPreferences {
       window.localStorage.getItem(ENGLISH_LOOKUP_CARD_STATE_KEY) ?? '{}',
     ) as Partial<EnglishLookupCardPreferences>
     return {
-      vocabularyHeight: isCardHeight(parsed.vocabularyHeight)
-        ? parsed.vocabularyHeight
-        : DEFAULT_LOOKUP_CARD_PREFERENCES.vocabularyHeight,
-      cambridgeHeight: isCardHeight(parsed.cambridgeHeight)
-        ? parsed.cambridgeHeight
-        : DEFAULT_LOOKUP_CARD_PREFERENCES.cambridgeHeight,
-      googleHeight: isCardHeight(parsed.googleHeight)
-        ? parsed.googleHeight
-        : DEFAULT_LOOKUP_CARD_PREFERENCES.googleHeight,
+      oxfordHeight: isCardHeight(parsed.oxfordHeight)
+        ? parsed.oxfordHeight
+        : DEFAULT_LOOKUP_CARD_PREFERENCES.oxfordHeight,
+      bingHeight: isCardHeight(parsed.bingHeight)
+        ? parsed.bingHeight
+        : DEFAULT_LOOKUP_CARD_PREFERENCES.bingHeight,
+      collinsHeight: isCardHeight(parsed.collinsHeight)
+        ? parsed.collinsHeight
+        : DEFAULT_LOOKUP_CARD_PREFERENCES.collinsHeight,
     }
   } catch {
     return DEFAULT_LOOKUP_CARD_PREFERENCES

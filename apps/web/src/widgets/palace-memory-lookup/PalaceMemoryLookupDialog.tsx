@@ -55,6 +55,7 @@ import {
   getPalaceContext,
   getPalaceTitle,
   getRootNodeUid,
+  resolveMemoryLookupFocusNodeUid,
   shouldBlockMemoryLookupClose,
   useMemoryLookupNarrowViewport,
   type MemoryLookupPreviewMode,
@@ -65,11 +66,14 @@ export function PalaceMemoryLookupDialog({
   onOpenChange,
   currentPalaceId = null,
   followCurrentPalace = false,
+  focusNodeUid = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentPalaceId?: number | null
   followCurrentPalace?: boolean
+  /** Keep the full palace and visually center this bound node. */
+  focusNodeUid?: string | null
 }) {
   const [search, setSearch] = useState('')
   const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>(createEmptyGroupedData)
@@ -122,7 +126,21 @@ export function PalaceMemoryLookupDialog({
 
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
-  const rootNodeUid = getRootNodeUid(previewState)
+  const focusTargetUid = useMemo(
+    () => resolveMemoryLookupFocusNodeUid(previewState, focusNodeUid),
+    [focusNodeUid, previewState],
+  )
+  const palaceRootUid = getRootNodeUid(previewState)
+  const centeredOnBinding = Boolean(
+    focusNodeUid
+    && focusTargetUid
+    && focusTargetUid === focusNodeUid
+    && focusTargetUid !== palaceRootUid,
+  )
+  const highlightedNodeUids = useMemo(
+    () => (focusNodeUid && focusTargetUid === focusNodeUid ? [focusNodeUid] : []),
+    [focusNodeUid, focusTargetUid],
+  )
   const revealSession = useRevealSession({
     title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
     editorState: previewState,
@@ -251,9 +269,6 @@ export function PalaceMemoryLookupDialog({
         setPreviewTitle(response.palace?.title || '记忆宫殿')
         const nextState = buildEditorState(response)
         setPreviewState(nextState)
-        if (getRootNodeUid(nextState)) {
-          setRootFocusNonce((current) => current + 1)
-        }
       } catch (error) {
         if (cancelled) return
         setPreviewTitle('记忆宫殿')
@@ -268,6 +283,11 @@ export function PalaceMemoryLookupDialog({
       cancelled = true
     }
   }, [open, selectedPalaceId])
+
+  useEffect(() => {
+    if (!open || !previewState || !focusTargetUid) return
+    setRootFocusNonce((current) => current + 1)
+  }, [focusTargetUid, open, previewState])
 
   const beginDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -509,10 +529,11 @@ export function PalaceMemoryLookupDialog({
       ) : previewState ? (
         previewMode === 'flip' && flipEditorState ? (
           <MindMapEditorSurface
-            key={`quiz-memory-lookup-${selectedPalaceId}-flip`}
+            key={`quiz-memory-lookup-${selectedPalaceId}-flip-${palaceRootUid || 'root'}`}
             editorState={flipEditorState}
             readonly
             practiceModeActive
+            forceExpanded
             presentationStrategy={'viewport-only'}
             mobileViewPolicy="map"
             onFullscreenChange={handleMindMapFullscreenChange}
@@ -527,21 +548,23 @@ export function PalaceMemoryLookupDialog({
             onNodeContextMenu={revealSession.handleNodeContextMenu}
             onNodeHover={revealSession.handleNodeHover}
             reviewFxSignal={feedback.reviewFxSignal}
-            className="h-full min-h-[180px] w-full border-0"
+            className="h-full min-h-0 w-full border-0"
           />
         ) : (
           <MindMapEditorSurface
-            key={`quiz-memory-lookup-${selectedPalaceId}-view`}
+            key={`quiz-memory-lookup-${selectedPalaceId}-view-${palaceRootUid || 'root'}`}
             editorState={previewState}
             readonly
+            forceExpanded
             presentationStrategy={'viewport-only'}
             mobileViewPolicy="map"
             onFullscreenChange={handleMindMapFullscreenChange}
-            focusRequestNodeUid={rootNodeUid}
+            focusRequestNodeUid={focusTargetUid}
             focusRequestNonce={rootFocusNonce}
+            highlightedNodeUids={highlightedNodeUids}
             initialViewPolicy="reset"
             onEditorStateChange={() => {}}
-            className="h-full min-h-[180px] w-full border-0"
+            className="h-full min-h-0 w-full border-0"
           />
         )
       ) : (
@@ -586,12 +609,14 @@ export function PalaceMemoryLookupDialog({
           <div className="max-h-40 shrink-0 overflow-y-auto border-b border-border/70 p-2">
             {renderPalaceList()}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-            <div className="mb-3 flex min-h-10 items-center justify-between gap-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+            <div className="mb-3 flex min-h-10 shrink-0 items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">{previewHeading}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {previewMode === 'view' ? '只读脑图预览' : '翻卡模式'}
+                  {previewMode === 'view'
+                    ? (centeredOnBinding ? '只读脑图预览 · 绑定节点已置于中央' : '只读脑图预览')
+                    : '翻卡模式'}
                 </div>
               </div>
               {renderPreviewControls(true)}
@@ -732,15 +757,15 @@ export function PalaceMemoryLookupDialog({
               </div>
             )}
           >
-            <div className="flex min-h-0 flex-col p-3 sm:p-4">
-              <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
+              <div className="mb-3 flex min-h-9 shrink-0 items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">
                     {previewHeading}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {previewMode === 'view'
-                      ? '只读脑图预览'
+                      ? (centeredOnBinding ? '只读脑图预览 · 绑定节点已置于中央' : '只读脑图预览')
                       : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'}
                   </div>
                 </div>

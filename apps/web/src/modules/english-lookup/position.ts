@@ -2,6 +2,11 @@ import { LOOKUP_PANEL_WIDTH } from './types'
 
 const MARGIN = 8
 
+export function fittedPanelWidth(): number {
+  if (typeof window === 'undefined') return LOOKUP_PANEL_WIDTH
+  return Math.min(LOOKUP_PANEL_WIDTH, Math.max(240, window.innerWidth - MARGIN * 2))
+}
+
 export function clampPanelLeft(left: number, width = LOOKUP_PANEL_WIDTH): number {
   const max = Math.max(MARGIN, window.innerWidth - width - MARGIN)
   return Math.min(max, Math.max(MARGIN, left))
@@ -22,7 +27,7 @@ export function positionNearRect(rect: DOMRect): {
   top: number
   maxHeight: number
 } {
-  const width = LOOKUP_PANEL_WIDTH
+  const width = fittedPanelWidth()
   let left = rect.right + 4
   let top = rect.bottom + 4
   if (left + width > window.innerWidth - MARGIN) {

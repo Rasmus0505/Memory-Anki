@@ -1,31 +1,29 @@
-/** Saladict-style dual-dictionary lookup contracts (backend english-lookup). */
+/** Saladict-style lookup contracts (backend english-lookup). */
 
 export type DictCardHeight = 'COLLAPSE' | 'HALF' | 'FULL'
 
 export type EngineStatus = 'idle' | 'searching' | 'ok' | 'empty' | 'error'
 
-export interface VocabularyResult {
-  status: EngineStatus
-  short: string | null
-  long: string | null
-  error: string | null
-  sourceUrl: string | null
-}
+export type LookupDictId = 'oxford' | 'bing' | 'collins'
 
-export interface CambridgeEntry {
+export interface HtmlDictEntry {
   id: string
   html: string
 }
 
-export interface CambridgeResult {
+export interface HtmlDictResult {
   status: EngineStatus
-  entries: CambridgeEntry[]
+  entries: HtmlDictEntry[]
   audio: { us: string | null; uk: string | null }
   error: string | null
   sourceUrl: string | null
 }
 
-export interface GoogleTranslateResult {
+/** @deprecated Use HtmlDictResult */
+export type CambridgeResult = HtmlDictResult
+export type CambridgeEntry = HtmlDictEntry
+
+export interface MachineTranslateResult {
   status: EngineStatus
   translation: string
   detectedLanguage: string | null
@@ -33,17 +31,20 @@ export interface GoogleTranslateResult {
   sourceUrl: string | null
 }
 
+/** @deprecated Use MachineTranslateResult */
+export type GoogleTranslateResult = MachineTranslateResult
+
 export interface EnglishLookupSearchResponse {
   query: string
   wordCount: number
-  vocabulary: VocabularyResult
-  cambridge: CambridgeResult
-  google: GoogleTranslateResult
+  oxford: HtmlDictResult
+  bing: HtmlDictResult
+  collins: HtmlDictResult
   audio: { us: string | null; uk: string | null }
   sourceUrls: {
-    vocabulary: string | null
-    cambridge: string | null
-    google: string | null
+    oxford: string | null
+    bing: string | null
+    collins: string | null
   }
 }
 
@@ -68,9 +69,9 @@ export interface EnglishLookupPanelState {
   loading: boolean
   result: EnglishLookupSearchResponse | null
   error: string | null
-  vocabularyHeight: DictCardHeight
-  cambridgeHeight: DictCardHeight
-  googleHeight: DictCardHeight
+  oxfordHeight: DictCardHeight
+  bingHeight: DictCardHeight
+  collinsHeight: DictCardHeight
   /** Auto-play once per queryId when audio first becomes available. */
   autoPlayedQueryId: number | null
 }
@@ -85,6 +86,8 @@ export interface LookupAnchorState {
 export const LOOKUP_PANEL_WIDTH = 380
 export const LOOKUP_PANEL_MIN_WIDTH = 320
 export const LOOKUP_PANEL_MIN_HEIGHT = 220
-export const VOCAB_HALF_PX = 180
-export const CAMBRIDGE_HALF_PX = 265
+export const OXFORD_HALF_PX = 265
+export const BING_HALF_PX = 240
+export const COLLINS_HALF_PX = 265
+export const CAMBRIDGE_HALF_PX = OXFORD_HALF_PX
 export const MAX_LOOKUP_WORDS = 5
