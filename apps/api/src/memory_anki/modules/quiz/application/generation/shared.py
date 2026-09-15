@@ -25,6 +25,7 @@ from memory_anki.platform.application import (
 
 from ..ai_dependencies import PalaceQuizAiDependencies
 from ..question_contracts import (
+    QUESTION_TYPE_MULTIPLE_CHOICE,
     QUESTION_TYPE_SHORT_ANSWER,
     PalaceQuizValidationError,
     sort_questions_for_bank_display,
@@ -483,18 +484,46 @@ def load_short_answer_feedback_request_context(
     from ..questions.queries import get_question_or_raise
 
     question = get_question_or_raise(session, question_id)
-    if question.question_type != QUESTION_TYPE_SHORT_ANSWER:
-        raise PalaceQuizValidationError("只有简答题可以生成 AI 点评。")
+    if question.question_type not in {
+        QUESTION_TYPE_SHORT_ANSWER,
+        QUESTION_TYPE_MULTIPLE_CHOICE,
+    }:
+        raise PalaceQuizValidationError("只有简答题和主观作答的选择题可以生成 AI 点评。")
     normalized_user_answer = str(user_answer or "").strip()
     if not normalized_user_answer:
         raise PalaceQuizValidationError("请先填写你的答案。")
     answer_payload = json_load(question.answer_payload_json, {})
-    reference_answer = str(answer_payload.get("reference_answer") or "").strip()
+    if question.question_type == QUESTION_TYPE_MULTIPLE_CHOICE:
+        reference_answer = format_mcq_reference_answer(question, answer_payload)
+    else:
+        reference_answer = str(answer_payload.get("reference_answer") or "").strip()
     return ShortAnswerFeedbackRequestContext(
         question=question,
         normalized_user_answer=normalized_user_answer,
         reference_answer=reference_answer,
     )
+
+
+def format_mcq_reference_answer(
+    question: PalaceQuizQuestion,
+    answer_payload: dict[str, Any],
+) -> str:
+    from ..question_schema import json_load
+
+    correct_id = str(answer_payload.get("correct_option_id") or "").strip()
+    options = json_load(question.options_json, [])
+    if not isinstance(options, list):
+        options = []
+    for option in options:
+        if not isinstance(option, dict):
+            continue
+        if str(option.get("id") or "").strip() != correct_id:
+            continue
+        text = str(option.get("text") or "").strip()
+        if correct_id and text:
+            return f"{correct_id}. {text}"
+        return text or correct_id
+    return correct_id
 
 # === quiz_generation_feedback_request_payload.py ===
 def build_short_answer_feedback_model_input(

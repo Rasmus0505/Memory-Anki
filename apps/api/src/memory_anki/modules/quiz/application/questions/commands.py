@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion, PalaceSegment
 from memory_anki.modules.quiz.application.learning_loop import record_attempt_event
+from memory_anki.modules.quiz.application.node_binding import (
+    ensure_create_question_node_bindings,
+    extract_payload_node_uids,
+)
 
 from .dedup import find_duplicate_question
 from .dedup_keys import build_question_dedup_key, question_to_dedup_payload
@@ -36,6 +40,8 @@ from .writes import (
     commit_updated_question,
     replace_question_with_duplicate,
 )
+
+_CREATE_NODE_UIDS_KEY = "_create_node_uids"
 
 
 def _assign_question_segments(
@@ -95,7 +101,17 @@ def create_question(
         source_chapter_id=None,
         sort_order=next_palace_sort_order(session, palace_id) + 1,
     )
-    return commit_new_question(session, row, commit=commit)
+    commit_new_question(session, row, commit=False)
+    ensure_create_question_node_bindings(
+        session,
+        palace_id=palace_id,
+        question_id=int(row.id),
+        node_uids=extract_payload_node_uids(payload),
+    )
+    if commit:
+        session.commit()
+        session.refresh(row)
+    return serialize_question(row)
 
 
 def batch_create_questions(
@@ -114,25 +130,56 @@ def batch_create_questions(
         )
         .all()
     )
-    return batch_create_questions_for_scope(
-        session,
-        payloads=payloads,
-        existing_questions=existing_questions,
-        next_sort_order=next_palace_sort_order(session, palace_id),
-        normalize_payload=lambda payload: normalize_question_payload(
+    pending_bindings: list[tuple[PalaceQuizQuestion, list[str] | None]] = []
+
+    def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = normalize_question_payload(
             payload,
             session=session,
             palace_id=palace_id,
-        ),
-        create_row=lambda normalized, sort_order: _build_question_row_with_segments(
+        )
+        normalized[_CREATE_NODE_UIDS_KEY] = extract_payload_node_uids(payload)
+        return normalized
+
+    def _create_row(normalized: dict[str, Any], sort_order: int) -> PalaceQuizQuestion:
+        node_uids = normalized.pop(_CREATE_NODE_UIDS_KEY, None)
+        if not isinstance(node_uids, list):
+            node_uids = None
+        row = _build_question_row_with_segments(
             session,
             normalized=normalized,
             palace_id=palace_id,
             source_chapter_id=None,
             sort_order=sort_order,
-        ),
-        commit=commit,
+        )
+        pending_bindings.append((row, node_uids))
+        return row
+
+    items = batch_create_questions_for_scope(
+        session,
+        payloads=payloads,
+        existing_questions=existing_questions,
+        next_sort_order=next_palace_sort_order(session, palace_id),
+        normalize_payload=_normalize_payload,
+        create_row=_create_row,
+        commit=False,
     )
+    for row, node_uids in pending_bindings:
+        if row.id is None:
+            continue
+        ensure_create_question_node_bindings(
+            session,
+            palace_id=palace_id,
+            question_id=int(row.id),
+            node_uids=node_uids,
+        )
+    if commit:
+        session.commit()
+        for row, _node_uids in pending_bindings:
+            if row.id is not None:
+                session.refresh(row)
+        return [serialize_question(row) for row, _ in pending_bindings if row.id is not None]
+    return items
 
 
 def batch_create_chapter_questions(

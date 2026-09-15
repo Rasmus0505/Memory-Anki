@@ -13,6 +13,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.quiz.application._question_utils import PalaceQuizAiError
 from memory_anki.modules.quiz.application.node_binding import (
+    DEFAULT_ROOT_BINDING_REASON,
     _merge_preview_bindings,
     _parse_binding_response,
     auto_bind_palace_questions_by_text,
@@ -22,6 +23,8 @@ from memory_anki.modules.quiz.application.node_binding import (
     mutate_quiz_node_bindings,
     search_mindmap_nodes,
 )
+from memory_anki.modules.quiz.application.questions.commands import create_question
+from memory_anki.modules.quiz.application.question_contracts import PalaceQuizValidationError
 
 
 def _mindmap_doc(*pairs: tuple[str, str]) -> dict:
@@ -252,3 +255,76 @@ def test_search_mindmap_nodes_finds_text(db_session) -> None:
     db_session.commit()
     hits = search_mindmap_nodes(db_session, query="突触后", limit=10)
     assert any(hit["node_uid"] == "n1" and hit["palace_id"] == int(palace.id) for hit in hits)
+
+
+def test_create_question_defaults_root_node_binding(db_session) -> None:
+    palace = _add_palace(db_session, title="默认根绑定", nodes=[("leaf-a", "叶节点")])
+    db_session.commit()
+
+    created = create_question(
+        db_session,
+        int(palace.id),
+        {
+            "question_type": "multiple_choice",
+            "stem": "无显式节点绑定时应落到根？",
+            "options": [
+                {"id": "A", "text": "是"},
+                {"id": "B", "text": "否"},
+            ],
+            "answer_payload": {"correct_option_id": "A"},
+            "analysis": "默认根",
+        },
+        commit=True,
+    )
+    bindings = list_question_node_bindings(db_session, int(created["id"]))
+    assert len(bindings) >= 1
+    assert any(item["node_uid"] == "root" for item in bindings)
+    root_edge = next(item for item in bindings if item["node_uid"] == "root")
+    assert root_edge["reason"] == DEFAULT_ROOT_BINDING_REASON
+    assert root_edge["source"] == "manual"
+    assert root_edge["target_palace_id"] == int(palace.id)
+
+
+def test_create_question_uses_explicit_node_uids(db_session) -> None:
+    palace = _add_palace(
+        db_session,
+        title="显式绑定",
+        nodes=[("leaf-a", "A"), ("leaf-b", "B")],
+    )
+    db_session.commit()
+
+    created = create_question(
+        db_session,
+        int(palace.id),
+        {
+            "question_type": "short_answer",
+            "stem": "显式绑定叶节点",
+            "answer_payload": {"reference_answer": "A"},
+            "analysis": "显式",
+            "node_uids": ["leaf-b", "leaf-a"],
+        },
+        commit=True,
+    )
+    bindings = list_question_node_bindings(db_session, int(created["id"]))
+    assert {item["node_uid"] for item in bindings} == {"leaf-a", "leaf-b"}
+    assert all(item["source"] == "manual" for item in bindings)
+    assert not any(item["node_uid"] == "root" for item in bindings)
+
+
+def test_create_question_rejects_unknown_node_uids(db_session) -> None:
+    palace = _add_palace(db_session, title="校验UID", nodes=[("leaf-a", "A")])
+    db_session.commit()
+
+    with pytest.raises(PalaceQuizValidationError):
+        create_question(
+            db_session,
+            int(palace.id),
+            {
+                "question_type": "short_answer",
+                "stem": "未知节点应失败",
+                "answer_payload": {"reference_answer": "x"},
+                "analysis": "fail",
+                "node_uids": ["missing-uid"],
+            },
+            commit=True,
+        )

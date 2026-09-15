@@ -5,7 +5,11 @@ import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getPalaceEditorApi } from '@/modules/content/public'
 import { QuizGenerationWorkspace } from '@/modules/quiz/ui/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
-import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
+import {
+  PalaceMemoryLookupDialog,
+  pickMemoryLookupBinding,
+  resolveMemoryLookupPalaceId,
+} from '@/widgets/palace-memory-lookup'
 import {
   QuizKnowledgeDigressionDialog,
   QuizKnowledgeEdgePicker,
@@ -52,6 +56,8 @@ export default function PalaceQuizPage() {
       : null
   const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
+  const [lookupFocusNodeUid, setLookupFocusNodeUid] = useState<string | null>(null)
+  const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
   const [mindMapPromptContext, setMindMapPromptContext] = useState('')
@@ -211,6 +217,36 @@ export default function PalaceQuizPage() {
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
   }, [isActive, palace, palaceId, timer])
+
+  useEffect(() => {
+    const currentQuestion = browser.currentQuestion
+    if (!memoryLookupOpen || !currentQuestion) {
+      if (!memoryLookupOpen) {
+        setLookupFocusNodeUid(null)
+        setLookupPalaceIdOverride(null)
+      }
+      return
+    }
+    const fallbackPalaceId = currentQuestion.palace_id ?? palaceId
+    let cancelled = false
+    void listQuestionNodeBindingsApi(currentQuestion.id)
+      .then((response) => {
+        if (cancelled) return
+        const binding = pickMemoryLookupBinding(response.items || [], fallbackPalaceId)
+        setLookupFocusNodeUid(binding?.node_uid?.trim() || null)
+        setLookupPalaceIdOverride(resolveMemoryLookupPalaceId(binding, fallbackPalaceId))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLookupFocusNodeUid(null)
+        setLookupPalaceIdOverride(fallbackPalaceId)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [browser.currentQuestion, memoryLookupOpen, palaceId])
+
+  const lookupPalaceId = lookupPalaceIdOverride ?? palaceId
 
   const quizLiveView = useMemo<PalaceQuizLiveView>(() => ({
     palaceId,
@@ -373,7 +409,9 @@ export default function PalaceQuizPage() {
         <PalaceMemoryLookupDialog
           open={memoryLookupOpen}
           onOpenChange={setMemoryLookupOpen}
-          currentPalaceId={palaceId}
+          currentPalaceId={lookupPalaceId}
+          followCurrentPalace
+          focusNodeUid={lookupFocusNodeUid}
         />
       ) : null}
       <QuizKnowledgeEdgePicker

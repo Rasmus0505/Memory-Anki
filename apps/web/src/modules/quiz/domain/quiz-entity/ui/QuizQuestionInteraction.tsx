@@ -1,12 +1,23 @@
-import { LoaderCircle, Sparkles } from 'lucide-react'
-import type { PalaceQuizQuestion, PalaceQuizQuestionDraft, PalaceShortAnswerFeedback } from '@/shared/api/contracts'
+import { useLayoutEffect, useRef } from 'react'
+import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 
+import {
+  canSwitchQuizAnswerMode,
+  isQuizSubjectivePresentation,
+  mcqReferenceAnswer,
+  mcqSubjectiveReferenceAnswer,
+  quizInteractionRestoreKey,
+} from '@/modules/quiz/domain/quiz-entity/model/quizAnswerMode'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
+import {
+  QuizAnswerModeToggle,
+  ShortAnswerBlock,
+} from '@/modules/quiz/domain/quiz-entity/ui/QuizShortAnswerBlock'
+import { useQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/ui/useQuizAnswerMode'
 
 
 function normalizeText(value: string) {
@@ -51,80 +62,11 @@ function renderResolvedFeedback(correct: boolean | undefined, analysis: string, 
   )
 }
 
-function renderShortAnswerFeedback(feedback: PalaceShortAnswerFeedback, compact: boolean) {
-  const verdictLabel =
-    feedback.verdict === 'correct'
-      ? '基本正确'
-      : feedback.verdict === 'partial'
-        ? '部分正确'
-        : '需要重学'
-  const verdictVariant =
-    feedback.verdict === 'correct'
-      ? 'success'
-      : feedback.verdict === 'partial'
-        ? 'secondary'
-        : 'destructive'
-  const hitPoints = feedback.hit_points || []
-  const missedPoints = feedback.missed_points || []
-
-  return (
-    <div
-      className={cn(
-        'rounded-xl border border-primary/20 bg-primary/5 px-3 py-3',
-        compact ? 'mt-3' : 'mt-4',
-      )}
-    >
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-        AI点评
-        {feedback.verdict ? <Badge variant={verdictVariant}>{verdictLabel}</Badge> : null}
-      </div>
-      {feedback.resolved_ai?.model_label ? (
-        <div className="mb-2 text-xs text-muted-foreground">
-          实际模型：{feedback.resolved_ai.model_label}
-        </div>
-      ) : null}
-      {feedback.verdict ? (
-        <div className="space-y-2 text-sm">
-          {hitPoints.length > 0 ? (
-            <div>
-              <div className="font-medium text-success">答到的要点</div>
-              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                {hitPoints.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {missedPoints.length > 0 ? (
-            <div>
-              <div className="font-medium text-destructive">遗漏或有偏差</div>
-              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                {missedPoints.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {feedback.suggestion ? (
-            <div>
-              <div className="font-medium">建议</div>
-              <p className="mt-1 text-muted-foreground">{feedback.suggestion}</p>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="whitespace-pre-wrap text-sm text-muted-foreground">
-          {feedback.feedback_text}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export function QuizQuestionInteraction({
   question,
   state,
   compact = false,
+  captureShortcuts = true,
   onStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
@@ -133,17 +75,49 @@ export function QuizQuestionInteraction({
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
   compact?: boolean
+  /** Window-level Enter/Space submit. Off in list views that mount many questions. */
+  captureShortcuts?: boolean
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onChoiceResolve?: (optionId: string, isCorrect: boolean) => void
   onShortAnswerSubmit?: () => void
   onRequestShortAnswerFeedback?: () => void
 }) {
   const currentState = state || {}
+  const { mode, updateMode } = useQuizAnswerMode()
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
+  const restoreKey = quizInteractionRestoreKey(question, mode)
+  const resolved = Boolean(currentState.resolved || currentState.shortAnswerSubmitted)
+  const modeToggle = canSwitchQuizAnswerMode(question.question_type) ? (
+    <QuizAnswerModeToggle mode={mode} disabled={resolved} onChange={updateMode} />
+  ) : null
+
+  useLayoutEffect(() => {
+    if (!captureShortcuts) return
+    surfaceRef.current?.focus({ preventScroll: true })
+  }, [captureShortcuts, restoreKey])
+
+  function renderBody() {
+    if (isQuizSubjectivePresentation(question.question_type, mode) && question.question_type === 'multiple_choice') {
+      return (
+        <ShortAnswerBlock
+          question={question}
+          state={state}
+          compact={compact}
+          referenceAnswer={mcqSubjectiveReferenceAnswer(question) || mcqReferenceAnswer(question)}
+          captureShortcuts={captureShortcuts}
+          modeToggle={modeToggle}
+          onStateChange={onStateChange}
+          onShortAnswerSubmit={onShortAnswerSubmit}
+          onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
+        />
+      )
+    }
 
   if (question.question_type === 'multiple_choice') {
     const correctOptionId = question.answer_payload.correct_option_id || ''
     return (
-      <div className={cn('grid', compact ? 'gap-2' : 'gap-3')}>
+      <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="choice">
+        {modeToggle}
         {(question.options || []).map((option, index) => {
           const selected = currentState.selectedOptionId === option.id
           const resolved = Boolean(currentState.resolved)
@@ -589,67 +563,28 @@ export function QuizQuestionInteraction({
   }
 
   return (
-    <div className="space-y-3">
-      <Textarea
-        value={currentState.shortAnswerText || ''}
-        onChange={(event) =>
-          onStateChange((current) => ({
-            ...current,
-            shortAnswerText: event.target.value,
-          }))
-        }
-        rows={compact ? 4 : 5}
-        placeholder="先写下你的答案，再点击提交"
-      />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          onClick={() => {
-            onStateChange((current) => ({
-              ...current,
-              resolved: true,
-              shortAnswerSubmitted: true,
-              shortAnswerFeedback: null,
-            }))
-            onShortAnswerSubmit?.()
-          }}
-        >
-          提交答案
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!currentState.shortAnswerSubmitted || currentState.shortAnswerFeedbackLoading}
-          onClick={() => onRequestShortAnswerFeedback?.()}
-        >
-          {currentState.shortAnswerFeedbackLoading ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
-          AI点评
-        </Button>
-      </div>
-      {currentState.shortAnswerSubmitted ? (
-        <div
-          className={cn(
-            'border border-border/70 bg-background/70 text-sm',
-            compact ? 'rounded-xl px-3 py-3' : 'rounded-lg px-4 py-4',
-          )}
-        >
-          <div className="font-medium">参考答案</div>
-          <div className={cn('whitespace-pre-wrap text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-            {question.answer_payload.reference_answer || '暂无参考答案'}
-          </div>
-          <div className={cn('font-medium', compact ? 'mt-3' : 'mt-4')}>解析</div>
-          <div className={cn('whitespace-pre-wrap text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-            {question.analysis || '暂无解析'}
-          </div>
-          {currentState.shortAnswerFeedback
-            ? renderShortAnswerFeedback(currentState.shortAnswerFeedback, compact)
-            : null}
-        </div>
-      ) : null}
+    <ShortAnswerBlock
+      question={question}
+      state={state}
+      compact={compact}
+      referenceAnswer={question.answer_payload.reference_answer || ''}
+      captureShortcuts={captureShortcuts}
+      modeToggle={null}
+      onStateChange={onStateChange}
+      onShortAnswerSubmit={onShortAnswerSubmit}
+      onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
+    />
+    )
+  }
+
+  return (
+    <div
+      ref={surfaceRef}
+      tabIndex={-1}
+      className="outline-none"
+      data-quiz-shortcut-surface=""
+    >
+      {renderBody()}
     </div>
   )
 }

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { saveQuizAnswerMode } from '@/modules/quiz/public'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
 
 const getPalaceQuizQuestionsByIdsApiMock = vi.fn()
@@ -34,13 +36,19 @@ vi.mock('@/widgets/palace-memory-lookup', () => ({
     open,
     onOpenChange,
     currentPalaceId,
+    focusNodeUid,
   }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     currentPalaceId: number | null
+    focusNodeUid?: string | null
   }) =>
     open ? (
-      <div data-testid="palace-memory-lookup" data-palace-id={String(currentPalaceId)}>
+      <div
+        data-testid="palace-memory-lookup"
+        data-palace-id={String(currentPalaceId)}
+        data-focus-node={String(focusNodeUid ?? '')}
+      >
         <button type="button" onClick={() => onOpenChange(false)}>
           关闭宫殿查看
         </button>
@@ -52,9 +60,9 @@ const sampleQuestion = {
   id: 42,
   palace_id: 1,
   sort_order: 0,
-  correct_count: 0,
-  incorrect_count: 0,
-  attempt_count: 0,
+  correct_count: 16,
+  incorrect_count: 13,
+  attempt_count: 29,
   last_attempt_at: null,
   segment_ids: [],
   question_type: 'multiple_choice' as const,
@@ -96,6 +104,9 @@ const shortAnswerQuestion = {
 
 describe('NodeBoundQuizDialog', () => {
   beforeEach(() => {
+    window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    saveQuizAnswerMode('choice')
     vi.clearAllMocks()
     getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
       items: [sampleQuestion, secondQuestion],
@@ -116,6 +127,10 @@ describe('NodeBoundQuizDialog', () => {
       ],
       item_count: 1,
     })
+  })
+
+  afterEach(() => {
+    saveQuizAnswerMode('choice')
   })
 
   it('opens multiple-choice questions before short-answer questions', async () => {
@@ -165,6 +180,47 @@ describe('NodeBoundQuizDialog', () => {
     expect(screen.getByRole('button', { name: /纤维素/ })).toBeTruthy()
   })
 
+  it('shows historical attempt stats left of the question type badge', async () => {
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    const stats = screen.getByTestId('quiz-attempt-stats')
+    const typeBadge = screen.getByText('选择题')
+    expect(stats.textContent).toBe('16/29')
+    expect(
+      stats.compareDocumentPosition(typeBadge) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('optimistically bumps attempt stats after answering', async () => {
+    recordPalaceQuizChoiceAttemptApiMock.mockImplementation(
+      () => new Promise(() => {}),
+    )
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    fireEvent.keyDown(window, { key: '1' })
+    expect(screen.getByTestId('quiz-attempt-stats').textContent).toBe('17/30')
+  })
+
   it('opens the current palace lookup without closing the answer window', async () => {
     render(
       <NodeBoundQuizDialog
@@ -184,6 +240,7 @@ describe('NodeBoundQuizDialog', () => {
 
     const lookup = screen.getByTestId('palace-memory-lookup')
     expect(lookup.getAttribute('data-palace-id')).toBe('1')
+    expect(lookup.getAttribute('data-focus-node')).toBe('node-1')
     expect(stem).toBeTruthy()
 
     fireEvent.click(within(lookup).getByRole('button', { name: '关闭宫殿查看', hidden: true }))
@@ -263,6 +320,29 @@ describe('NodeBoundQuizDialog', () => {
 
     expect(screen.getByText('回答错误')).toBeTruthy()
     expect(onQuestionCompleted).toHaveBeenCalledWith(42)
+  })
+
+  it('does not answer with number keys after switching to subjective recall', async () => {
+    const onQuestionCompleted = vi.fn()
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42]}
+        onQuestionCompleted={onQuestionCompleted}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    fireEvent.keyDown(window, { key: '1' })
+
+    expect(onQuestionCompleted).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('先写下你的答案，再点击提交')).toBeTruthy()
+    expect(screen.getByText('细胞膜的主要成分是什么')).toBeTruthy()
+    expect(screen.queryByText('下列哪一项是细胞膜的主要成分？')).toBeNull()
   })
 
   it('switches linked questions with horizontal arrows without submitting an option', async () => {
@@ -389,6 +469,30 @@ describe('NodeBoundQuizDialog', () => {
       fireEvent.click(screen.getByRole('button', { name: '完成' }))
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })
+  })
+
+  it('keeps Enter submit after moving to the next question', async () => {
+    const onQuestionCompleted = vi.fn()
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42, 43]}
+        onQuestionCompleted={onQuestionCompleted}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    await screen.findByText('第二道关联题目')
+
+    expect(document.activeElement?.hasAttribute('data-quiz-shortcut-surface')).toBe(true)
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+
+    expect(screen.getByText('回答正确')).toBeTruthy()
+    expect(onQuestionCompleted).toHaveBeenCalledWith(43)
   })
 
   it('does not submit the current option when Enter is pressed on navigation', async () => {

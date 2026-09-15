@@ -1195,6 +1195,37 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(payload["missed_points"], [])
         self.assertEqual(payload["suggestion"], "")
 
+    def test_short_answer_feedback_accepts_multiple_choice_with_option_reference(self):
+        captured: dict[str, object] = {}
+
+        def fake_call_logged_chat_completion(**kwargs):
+            captured.update(kwargs)
+            return ("选项判断正确。", "log-mcq-subjective")
+
+        with (
+            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
+            patch.object(
+                palace_quiz_ai_service,
+                "_call_logged_chat_completion",
+                side_effect=fake_call_logged_chat_completion,
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/palace-quiz-questions/1/short-answer-feedback",
+                json={"user_answer": "细胞核负责调控。"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            captured["request_payload"]["model_input"],
+            {
+                "stem": "细胞的控制中心是？",
+                "user_answer": "细胞核负责调控。",
+                "reference_answer": "B. 细胞核",
+                "analysis": "细胞核控制细胞活动。",
+            },
+        )
+
     def test_question_explain_builds_expected_model_input(self):
         captured: dict[str, object] = {}
 

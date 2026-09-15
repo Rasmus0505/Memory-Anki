@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/modules/quiz/domain/quiz-entity/api'
+import { withOptimisticQuizAttempt } from '@/modules/quiz/domain/quiz-entity/model/quizAttemptStats'
 import { emitQuizResultFeedback } from '@/modules/quiz/domain/quiz-entity/model/quizResultFeedback'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
 import type { AiRuntimeOptions, PalaceQuizQuestion } from '@/shared/api/contracts'
@@ -51,6 +52,7 @@ export function useQuizAttemptOrchestration({
       if (currentState.resolved && correctOverride === undefined) return
       const correct = correctOverride ?? question.answer_payload.correct_option_id === optionId
       onChoiceStart?.({ question, optionId, correct })
+      adapter.applyUpdatedQuestion(withOptimisticQuizAttempt(question, correct))
       void recordPalaceQuizChoiceAttemptApi(question.id, optionId)
         .then((response) => {
           adapter.applyUpdatedQuestion(response.question)

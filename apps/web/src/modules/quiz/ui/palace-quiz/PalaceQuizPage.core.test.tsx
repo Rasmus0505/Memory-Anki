@@ -8,6 +8,7 @@ import {
   getPalaceEditorApiMock,
   getPalacesGroupedApiMock,
   getPalaceQuizQuestionsApiMock,
+  listQuestionNodeBindingsApiMock,
   mindMapFramePropsMock,
   promptForAiOptionsMock,
   recordPalaceQuizChoiceAttemptApiMock,
@@ -72,10 +73,14 @@ describe('PalaceQuizPage core flows', () => {
       expect.objectContaining({
         focusRequestNodeUid: 'root-1',
         focusRequestNonce: expect.any(Number),
+        forceExpanded: true,
         mobileViewPolicy: 'map',
       }),
     )
     expect(screen.getByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeTruthy()
+    expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
+      'root-1',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '翻卡模式' }))
     expect(screen.getByText(/翻卡模式：点击已显示知识点展开下一层知识点/)).toBeTruthy()
@@ -148,6 +153,40 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
   })
 
+  it('opens the memory palace lookup with the bound node as the mind-map center', async () => {
+    listQuestionNodeBindingsApiMock.mockResolvedValue({
+      question_id: 11,
+      items: [{ question_id: 11, node_uid: 'child-1', palace_id: 1, target_palace_id: 1 }],
+      item_count: 1,
+    })
+
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
+
+    expect(await screen.findByText('做题时快速查看宫殿内容，关闭后继续当前题目。')).toBeTruthy()
+    await waitFor(() => {
+      expect(listQuestionNodeBindingsApiMock).toHaveBeenCalledWith(11)
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
+        'root-1',
+      )
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
+        'child-1',
+      )
+    })
+    expect(mindMapFramePropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focusRequestNodeUid: 'child-1',
+        forceExpanded: true,
+      }),
+    )
+    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-child-1')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-grandchild-1')).toBeTruthy()
+  })
+
   it('opens the memory palace lookup as a mobile full-screen dialog on narrow viewports', async () => {
     window.matchMedia = ((query: string) => ({
       matches: query.includes('max-width: 1023px'),
@@ -159,6 +198,11 @@ describe('PalaceQuizPage core flows', () => {
       removeListener: () => undefined,
       dispatchEvent: () => false,
     })) as typeof window.matchMedia
+    listQuestionNodeBindingsApiMock.mockResolvedValue({
+      question_id: 11,
+      items: [{ question_id: 11, node_uid: 'child-1', palace_id: 1, target_palace_id: 1 }],
+      item_count: 1,
+    })
 
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
@@ -172,7 +216,16 @@ describe('PalaceQuizPage core flows', () => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
         'true',
       )
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
+        'root-1',
+      )
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
+        'child-1',
+      )
     })
+    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-child-1')).toBeTruthy()
   })
 
   it('judges multiple-choice questions immediately, refreshes stats, and supports retry', async () => {

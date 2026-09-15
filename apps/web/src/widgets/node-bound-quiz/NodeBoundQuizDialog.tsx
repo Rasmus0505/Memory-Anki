@@ -7,7 +7,12 @@ import {
   listPalaceQuizNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
+  isQuizChoiceShortcutActive,
+  QuizAttemptStatsBadge,
+  QuizQuestionIndexPager,
   QuizQuestionInteraction,
+  QuizQuestionStem,
+  useQuizAnswerMode,
   useQuizAttemptOrchestration,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
@@ -27,7 +32,6 @@ import {
 } from '@/shared/components/ui/dialog'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
-import { cn } from '@/shared/lib/utils'
 import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 
 export function NodeBoundQuizDialog({
@@ -54,6 +58,7 @@ export function NodeBoundQuizDialog({
   onQuestionCompleted: (questionId: number) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const { mode: answerMode } = useQuizAnswerMode()
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
@@ -199,10 +204,9 @@ export function NodeBoundQuizDialog({
     },
   })
 
-  const ownerLabel =
-    current && bindingByQuestion.get(current.id)
-      ? ownerPalaceLabel(bindingByQuestion.get(current.id)!, palaceId)
-      : null
+  const currentBinding = current ? bindingByQuestion.get(current.id) : undefined
+  const ownerLabel = currentBinding ? ownerPalaceLabel(currentBinding, palaceId) : null
+  const lookupFocusNodeUid = currentBinding?.node_uid ?? nodeUid
 
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
@@ -238,7 +242,7 @@ export function NodeBoundQuizDialog({
         return
       }
 
-      if (current.question_type !== 'multiple_choice' || currentState.resolved) return
+      if (!isQuizChoiceShortcutActive(current.question_type, answerMode) || currentState.resolved) return
       const optionCount = current.options.length
       if (optionCount === 0) return
 
@@ -289,6 +293,7 @@ export function NodeBoundQuizDialog({
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [
+    answerMode,
     current,
     currentState.resolved,
     handleChoiceResolve,
@@ -364,42 +369,21 @@ export function NodeBoundQuizDialog({
               <div className="py-12 text-center text-sm text-muted-foreground">暂无题目</div>
             ) : (
               <>
-                {/* Sticky: the pills are the only way back to an earlier question,
-                    and a long stem used to scroll them out of reach. */}
-                {questions.length > 1 ? (
-                  <div className="sticky -top-3 z-10 -mx-4 -mt-3 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur">
-                    {questions.map((item, itemIndex) => {
-                      const itemState = questionStates[item.id]
-                      const done = Boolean(itemState?.resolved)
-                      const active = itemIndex === index
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          aria-current={active ? 'true' : undefined}
-                          title={`第 ${itemIndex + 1} 题${
-                            done ? (itemState?.correct === false ? '（已答·错）' : '（已答）') : ''
-                          }`}
-                          className={cn(
-                            'flex size-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
-                            active
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : done
-                                ? itemState?.correct === false
-                                  ? 'border-destructive/45 bg-destructive/10 text-destructive'
-                                  : 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                                : 'border-border bg-background text-foreground hover:bg-muted',
-                          )}
-                          onClick={() => setIndex(itemIndex)}
-                        >
-                          {itemIndex + 1}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : null}
+                <QuizQuestionIndexPager
+                  count={questions.length}
+                  currentIndex={index}
+                  getItemState={(itemIndex) => {
+                    const itemState = questionStates[questions[itemIndex]?.id]
+                    return { done: Boolean(itemState?.resolved), correct: itemState?.correct }
+                  }}
+                  onSelect={setIndex}
+                />
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <QuizAttemptStatsBadge
+                      correctCount={current.correct_count}
+                      attemptCount={current.attempt_count}
+                    />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
                     {currentState.resolved ? (
                       <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
@@ -407,8 +391,8 @@ export function NodeBoundQuizDialog({
                       </Badge>
                     ) : null}
                   </div>
-                  <div className="whitespace-pre-wrap text-base font-semibold leading-7 text-foreground">
-                    {current.stem || '（题干为空）'}
+                  <div className="text-base font-semibold leading-7 text-foreground">
+                    <QuizQuestionStem question={current} />
                   </div>
                 </div>
                 <div ref={questionInteractionRef}>
@@ -494,6 +478,7 @@ export function NodeBoundQuizDialog({
         onOpenChange={setPalaceLookupOpen}
         currentPalaceId={palaceId}
         followCurrentPalace
+        focusNodeUid={lookupFocusNodeUid}
       />
       {aiRunConfigDialog}
     </>

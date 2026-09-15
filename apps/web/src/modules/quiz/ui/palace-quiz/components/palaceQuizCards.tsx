@@ -1,6 +1,7 @@
 import { RotateCcw } from 'lucide-react'
 import {
   QuizQuestionInteraction,
+  QuizQuestionStem,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
 import type {
@@ -236,7 +237,7 @@ export function QuizQuestionCard({
             ) : null}
           </div>
           <CardTitle className={cn(compact ? 'text-sm leading-6' : 'text-base leading-7')}>
-            {question.stem}
+            <QuizQuestionStem question={question} />
           </CardTitle>
         </div>
         <Button
@@ -254,6 +255,7 @@ export function QuizQuestionCard({
           question={question}
           state={state}
           compact={compact}
+          captureShortcuts={!compact}
           onStateChange={(updater) => onStateChange(question.id, updater)}
           onChoiceResolve={(optionId) => onChoiceSelect(question, optionId)}
           onShortAnswerSubmit={() => onShortAnswerSubmit(question.id)}

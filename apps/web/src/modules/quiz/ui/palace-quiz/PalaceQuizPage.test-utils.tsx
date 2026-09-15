@@ -15,6 +15,7 @@ export const previewPalaceQuizGenerationFromTextFilesApiMock = vi.fn()
 export const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
+export const listQuestionNodeBindingsApiMock = vi.fn()
 export const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
 export const deletePalaceQuizQuestionApiMock = vi.fn()
 export const dispatchGlobalFeedbackMock = vi.fn()
@@ -77,10 +78,12 @@ vi.mock('@/modules/content/ui/mindmap-editor', () => ({
   }) => {
     mindMapFramePropsMock(props)
     const nodes = collectMindMapNodes(props.editorState?.editor_doc?.root)
+    const docRootUid = String(props.editorState?.editor_doc?.root?.data?.uid ?? '')
     return (
       <div
         data-testid="memory-lookup-mindmap"
         data-readonly={props.readonly ? 'true' : 'false'}
+        data-doc-root-uid={docRootUid}
         data-root-uid={props.focusRequestNodeUid || ''}
         data-focus-nonce={String(props.focusRequestNonce ?? 0)}
         data-practice-mode={props.practiceModeActive ? 'true' : 'false'}
@@ -134,6 +137,8 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
     recordPalaceQuizChoiceAttemptApiMock(...args),
   resetPalaceQuizQuestionAttemptsApi: (...args: unknown[]) =>
     resetPalaceQuizQuestionAttemptsApiMock(...args),
+  listQuestionNodeBindingsApi: (...args: unknown[]) =>
+    listQuestionNodeBindingsApiMock(...args),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))
@@ -490,6 +495,7 @@ export function setupPalaceQuizPageTest() {
     buildPalaceEditorResponse(palaceId),
   )
   getPalaceQuizQuestionsApiMock.mockResolvedValue({ items: baseQuestions })
+  listQuestionNodeBindingsApiMock.mockResolvedValue({ items: [], item_count: 0, question_id: 0 })
   batchCreateChapterQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchDeletePalaceQuizQuestionsApiMock.mockResolvedValue({ ok: true, deleted_count: 0 })

@@ -1,10 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestionDraft } from '@/shared/api/contracts'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { saveQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerModeSettings'
 
 function renderInteraction(question: PalaceQuizQuestionDraft, initialState: QuizRuntimeState = {}) {
   let latestState: QuizRuntimeState = initialState
@@ -37,7 +39,27 @@ function renderInteraction(question: PalaceQuizQuestionDraft, initialState: Quiz
   }
 }
 
+const MANUAL_SOURCE = {
+  source_kind: 'manual' as const,
+  page_numbers: null,
+  image_names: null,
+  extra_prompt: '',
+  ai_call_log_id: null,
+  generated_at: '2026-06-15T00:00:00',
+  generation_mode: 'manual' as const,
+}
+
 describe('QuizQuestionInteraction', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    saveQuizAnswerMode('choice')
+  })
+
+  afterEach(() => {
+    saveQuizAnswerMode('choice')
+  })
+
   it('supports true_false questions with corrective feedback', () => {
     const { rerenderWithLatestState } = renderInteraction({
       question_type: 'true_false',
@@ -248,5 +270,204 @@ describe('QuizQuestionInteraction', () => {
     expect(screen.getByText('遗漏或有偏差')).toBeTruthy()
     expect(screen.getByText('要点B')).toBeTruthy()
     expect(screen.getByText('建议')).toBeTruthy()
+  })
+
+  it('does not show the choice/subjective toggle on non-choice questions', () => {
+    renderInteraction({
+      question_type: 'true_false',
+      stem: 'DNA 复制只发生在分裂后期。',
+      options: [],
+      answer_payload: { correct_answer: false },
+      analysis: '',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    expect(screen.queryByRole('button', { name: '主观' })).toBeNull()
+  })
+
+  it('rewrites a multiple-choice question as a short-answer prompt', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'multiple_choice',
+      stem: '细胞的供能结构是？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '线粒体' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '线粒体是主要供能结构。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    expect(screen.getByPlaceholderText('先写下你的答案，再点击提交')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /线粒体/ })).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('先写下你的答案，再点击提交'), {
+      target: { value: '线粒体负责供能' },
+    })
+    rerenderWithLatestState()
+    fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
+    rerenderWithLatestState()
+
+    expect(screen.queryByText('参考答案')).toBeNull()
+    expect(screen.getByText('选项')).toBeTruthy()
+    expect(screen.getByText('A. 细胞膜')).toBeTruthy()
+    expect(screen.getByText('B. 线粒体')).toBeTruthy()
+    expect(screen.queryByText('B. 线粒体（正确答案）')).toBeNull()
+    expect(screen.getByText((_, node) => node?.textContent === '答案：线粒体\n线粒体是主要供能结构。')).toBeTruthy()
+  })
+
+  it('reveals except-item options without treating them as the recall answer', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'multiple_choice',
+      stem: '以下哪项不符合乌申斯基的教育观点',
+      options: [
+        { id: 'A', text: '教育应培养全面和谐发展的个人' },
+        { id: 'B', text: '教育的最终目的在于满足社会的要求' },
+        { id: 'C', text: '教学要适应儿童的年龄特征' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '其余选项符合其观点。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
+    rerenderWithLatestState()
+
+    expect(screen.getByText('B. 教育的最终目的在于满足社会的要求')).toBeTruthy()
+    expect(screen.queryByText('B. 教育的最终目的在于满足社会的要求（原题例外项）')).toBeNull()
+    expect(screen.queryByText('B. 教育的最终目的在于满足社会的要求（正确答案）')).toBeNull()
+    expect(
+      screen.getByText(
+        (_, node) =>
+          node?.textContent ===
+          '答案：教育应培养全面和谐发展的个人；教学要适应儿童的年龄特征\n其余选项符合其观点。',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('submits a converted multiple-choice recall with Enter', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'multiple_choice',
+      stem: '细胞的供能结构是？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '线粒体' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '线粒体是主要供能结构。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    expect(document.activeElement).toBe(document.querySelector('[data-quiz-shortcut-surface]'))
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    rerenderWithLatestState()
+
+    expect(screen.queryByText('参考答案')).toBeNull()
+    expect(screen.getByText('A. 细胞膜')).toBeTruthy()
+    expect(screen.getByText('B. 线粒体')).toBeTruthy()
+    expect(screen.queryByText('B. 线粒体（正确答案）')).toBeNull()
+    expect(screen.getByText((_, node) => node?.textContent === '答案：线粒体\n线粒体是主要供能结构。')).toBeTruthy()
+  })
+
+  it('submits a short answer with Enter while typing', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '核心在于遗传物质平均分配。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    const textarea = screen.getByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.change(textarea, { target: { value: '保证传递' } })
+    rerenderWithLatestState()
+    fireEvent.keyDown(screen.getByPlaceholderText('先写下你的答案，再点击提交'), {
+      key: 'Enter',
+    })
+    rerenderWithLatestState()
+    expect(screen.getByText('保证遗传信息稳定传递。')).toBeTruthy()
+  })
+
+  it('keeps Shift+Enter as a newline while typing', () => {
+    renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    const textarea = screen.getByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.change(textarea, { target: { value: '保证传递' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    expect(screen.queryByText('保证遗传信息稳定传递。')).toBeNull()
+  })
+
+  it('submits an empty short answer with Space in the textarea', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '核心在于遗传物质平均分配。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    const textarea = screen.getByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.keyDown(textarea, { key: ' ', code: 'Space' })
+    rerenderWithLatestState()
+    expect(screen.getByText('保证遗传信息稳定传递。')).toBeTruthy()
+  })
+
+  it('submits with Enter when the prompt is not focused in a text field', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '核心在于遗传物质平均分配。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    expect(document.activeElement).toBe(document.querySelector('[data-quiz-shortcut-surface]'))
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    rerenderWithLatestState()
+    expect(screen.getByText('保证遗传信息稳定传递。')).toBeTruthy()
+  })
+
+  it('submits with Space when the prompt is not focused in a text field', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '核心在于遗传物质平均分配。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.keyDown(document.body, { key: ' ', code: 'Space' })
+    rerenderWithLatestState()
+    expect(screen.getByText('保证遗传信息稳定传递。')).toBeTruthy()
+  })
+
+  it('keeps Space as a character while typing a non-empty answer', () => {
+    renderInteraction({
+      question_type: 'short_answer',
+      stem: '简述有丝分裂的意义。',
+      options: [],
+      answer_payload: { reference_answer: '保证遗传信息稳定传递。' },
+      analysis: '',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    const textarea = screen.getByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.change(textarea, { target: { value: '遗传' } })
+    fireEvent.keyDown(textarea, { key: ' ', code: 'Space' })
+    expect(screen.queryByText('保证遗传信息稳定传递。')).toBeNull()
   })
 })

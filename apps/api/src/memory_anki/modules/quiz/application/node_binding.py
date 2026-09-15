@@ -14,9 +14,13 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestionNodeBinding,
 )
 from memory_anki.modules.content.public.queries import resolve_palace_title
-from memory_anki.modules.mindmap_document.api import collect_node_descendants
+from memory_anki.modules.mindmap_document.api import (
+    build_document_tree,
+    collect_node_descendants,
+)
 
 from .generation.shared import node_children, node_text
+from .question_contracts import PalaceQuizValidationError
 from .questions.queries import get_palace_or_raise, get_question_or_raise
 
 DEFAULT_BATCH_SIZE = 30
@@ -27,6 +31,8 @@ MergeMode = Literal["replace_all", "fill_unbound"]
 
 PROMPT_KEY = "ai_prompt_palace_quiz_node_binding"
 SCENARIO_KEY = "quiz_node_binding"
+DEFAULT_ROOT_BINDING_REASON = "default-root-binding"
+DEFAULT_ROOT_BINDING_SOURCE = "manual"
 
 
 def _coerce_int(value: object) -> int | None:
@@ -43,6 +49,118 @@ def _coerce_int(value: object) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def extract_payload_node_uids(payload: dict[str, Any] | None) -> list[str] | None:
+    """Return explicit create-time node UIDs, or None when the caller omitted bindings."""
+    if not isinstance(payload, dict):
+        return None
+    raw: object
+    if "node_uids" in payload:
+        raw = payload.get("node_uids")
+    elif "node_bindings" in payload:
+        raw = payload.get("node_bindings")
+    else:
+        return None
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise PalaceQuizValidationError("node_uids 必须是节点 UID 列表。")
+    uids: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        uid = ""
+        if isinstance(item, str):
+            uid = item.strip()
+        elif isinstance(item, dict):
+            uid = str(item.get("node_uid") or item.get("uid") or "").strip()
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        uids.append(uid)
+        if len(uids) >= MAX_BINDINGS_PER_QUESTION:
+            break
+    return uids
+
+
+def resolve_palace_root_node_uid(editor_doc: Any) -> str | None:
+    """Return the mind-map root UID from editor_doc, or None if missing."""
+    root_uid, nodes = build_document_tree(editor_doc)
+    if not root_uid:
+        return None
+    uid = str(root_uid).strip()
+    if not uid:
+        return None
+    if nodes and uid not in nodes:
+        return None
+    return uid
+
+
+def ensure_create_question_node_bindings(
+    session: Session,
+    *,
+    palace_id: int,
+    question_id: int,
+    node_uids: list[str] | None = None,
+) -> int:
+    """Ensure a palace-owned question has ≥1 node binding (default: palace root).
+
+    Does not commit — callers own the UnitOfWork / transaction boundary.
+    """
+    palace = get_palace_or_raise(session, palace_id)
+    editor_doc = getattr(palace, "editor_doc", None)
+    descendants, _labels = collect_node_descendants(editor_doc)
+    known_uids = {str(uid) for uid in descendants.keys() if str(uid).strip()}
+    root_uid = resolve_palace_root_node_uid(editor_doc)
+
+    selected: list[str] = []
+    reason = "手动绑定"
+    if node_uids:
+        unknown = [uid for uid in node_uids if known_uids and uid not in known_uids]
+        if unknown:
+            raise PalaceQuizValidationError(
+                f"节点不存在或不属于当前宫殿：{', '.join(unknown[:5])}"
+            )
+        selected = list(node_uids)
+        reason = "手动绑定"
+    if not selected:
+        if not root_uid:
+            raise PalaceQuizValidationError("宫殿思维导图缺少根节点，无法绑定题目。")
+        if known_uids and root_uid not in known_uids:
+            raise PalaceQuizValidationError("宫殿思维导图缺少根节点，无法绑定题目。")
+        selected = [root_uid]
+        reason = DEFAULT_ROOT_BINDING_REASON
+
+    now = utc_now_naive()
+    created = 0
+    for node_uid in selected:
+        exists = (
+            session.query(PalaceQuizQuestionNodeBinding)
+            .filter(
+                PalaceQuizQuestionNodeBinding.palace_id == palace_id,
+                PalaceQuizQuestionNodeBinding.question_id == question_id,
+                PalaceQuizQuestionNodeBinding.node_uid == node_uid,
+            )
+            .first()
+        )
+        if exists:
+            continue
+        session.add(
+            PalaceQuizQuestionNodeBinding(
+                palace_id=palace_id,
+                question_id=question_id,
+                node_uid=node_uid,
+                reason=reason[:500],
+                confidence=None,
+                source=DEFAULT_ROOT_BINDING_SOURCE,
+                run_id=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        created += 1
+    session.flush()
+    return created
 
 
 def compact_mindmap_with_uids(editor_doc: Any, *, max_nodes: int = MAX_NODES_FOR_PROMPT) -> list[dict[str, Any]]:
@@ -495,15 +613,20 @@ from .node_binding_ops import (  # noqa: E402
 )
 
 __all__ = [
+    "DEFAULT_ROOT_BINDING_REASON",
+    "DEFAULT_ROOT_BINDING_SOURCE",
     "PROMPT_KEY",
     "SCENARIO_KEY",
     "apply_quiz_node_binding_preview",
     "auto_bind_palace_questions_by_text",
     "compact_mindmap_with_uids",
+    "ensure_create_question_node_bindings",
+    "extract_payload_node_uids",
     "list_palace_node_bindings",
     "list_question_node_bindings",
     "mutate_quiz_node_bindings",
     "preview_quiz_node_binding",
+    "resolve_palace_root_node_uid",
     "search_mindmap_nodes",
     "_merge_preview_bindings",
     "_parse_binding_response",
