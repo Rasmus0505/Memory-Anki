@@ -49,6 +49,7 @@ class FreestyleRoundActiveRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     cards: list[dict[str, Any]] = Field(default_factory=list)
     round_id: str = ""
+    workspace: str = "primary"
 
 
 class FreestyleRoundStartRequest(FreestyleRoundActiveRequest):
@@ -65,6 +66,24 @@ class FreestyleRoundActionRequest(BaseModel):
     occurrence_id: str = ""
     encounter_id: str = ""
     cards: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FreestyleOverlayQuizEnsureRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    config: dict[str, Any] | None = None
+
+
+class FreestyleOverlayQuizProgressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    current_index: int = 0
+    completed_ids: list[int] = Field(default_factory=list)
+    states: dict[str, Any] = Field(default_factory=dict)
 
 
 class FreestyleRoundRatingRequest(BaseModel):

@@ -467,6 +467,110 @@ def test_single_palace_quiz_scope_keeps_palace_blocks():
     assert set(second_block) == {"quiz_question:21", "quiz_question:22"}
 
 
+def _palace_units(palace_id: int, anchors: tuple[str, ...]) -> list[ReviewUnitCandidate]:
+    return [
+        _unit(anchor, (anchor,), palace_id=palace_id, unit_id=f"u-{palace_id}-{anchor}")
+        for anchor in anchors
+    ]
+
+
+def test_interleave_round_robins_palaces_instead_of_finishing_one():
+    sequential = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "training_mode": "memory_palace",
+                "streams": {
+                    "memory_palace": {
+                        "palace_order": "finish_palace_then_next",
+                        "unit_order": "structured",
+                        "due_policy": "due_only",
+                    }
+                },
+                "queue_length": 20,
+            }
+        ),
+        palace_meta={1: {"title": "A"}, 2: {"title": "B"}},
+        units_by_palace={
+            1: _palace_units(1, ("a", "b")),
+            2: _palace_units(2, ("d", "e")),
+        },
+        due_by_palace={1: {"a", "b"}, 2: {"d", "e"}},
+        mastery_by_palace={1: 0.0, 2: 0.0},
+        recent_practice_rank={},
+        quizzes=[],
+        nodes_by_palace={1: {}, 2: {}},
+    )
+    interleaved = assemble_queue(
+        config=sanitize_feed_config(
+            {
+                "training_mode": "memory_palace",
+                "streams": {
+                    "memory_palace": {
+                        "palace_order": "interleave_palaces",
+                        "unit_order": "structured",
+                        "due_policy": "due_only",
+                    }
+                },
+                "queue_length": 20,
+            }
+        ),
+        palace_meta={1: {"title": "A"}, 2: {"title": "B"}},
+        units_by_palace={
+            1: _palace_units(1, ("a", "b")),
+            2: _palace_units(2, ("d", "e")),
+        },
+        due_by_palace={1: {"a", "b"}, 2: {"d", "e"}},
+        mastery_by_palace={1: 0.0, 2: 0.0},
+        recent_practice_rank={},
+        quizzes=[],
+        nodes_by_palace={1: {}, 2: {}},
+    )
+    sequential_palaces = [card["palace_id"] for card in sequential.cards]
+    interleaved_palaces = [card["palace_id"] for card in interleaved.cards]
+    assert sequential_palaces == [1, 1, 2, 2]
+    assert interleaved_palaces in ([1, 2, 1, 2], [2, 1, 2, 1])
+
+
+def test_random_unit_order_is_stable_for_a_seed_and_differs_from_structured():
+    kwargs = {
+        "palace_meta": {1: {"title": "A"}},
+        "units_by_palace": {1: _palace_units(1, ("a", "b", "c", "d", "e", "f"))},
+        "due_by_palace": {1: {"a", "b", "c", "d", "e", "f"}},
+        "mastery_by_palace": {1: 0.0},
+        "recent_practice_rank": {},
+        "quizzes": [],
+        "nodes_by_palace": {1: {}},
+    }
+
+    def _ids(unit_order: str, seed: int) -> list[str]:
+        result = assemble_queue(
+            config=sanitize_feed_config(
+                {
+                    "training_mode": "memory_palace",
+                    "streams": {
+                        "memory_palace": {
+                            "palace_order": "finish_palace_then_next",
+                            "unit_order": unit_order,
+                            "due_policy": "due_only",
+                        }
+                    },
+                    "queue_length": 20,
+                    "seed": seed,
+                }
+            ),
+            **kwargs,
+        )
+        return [card["id"] for card in result.cards]
+
+    structured = _ids("structured", 17)
+    random_a = _ids("random", 17)
+    random_b = _ids("random", 17)
+    random_other = _ids("random", 23)
+    assert random_a == random_b
+    assert set(random_a) == set(structured)
+    assert random_a != random_other
+
+
 def test_sanitize_defaults_bound_quiz_into_mix_and_mastery_buckets():
     config = sanitize_feed_config({})
     assert config["bound_quiz_placement"] == "into_mix"

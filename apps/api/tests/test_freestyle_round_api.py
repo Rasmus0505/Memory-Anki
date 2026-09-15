@@ -24,19 +24,74 @@ def _client(make_client):
     return make_client(freestyle_router)
 
 
-def _create(client, *, operation_id: str, cards: list[dict], round_id: str = "", scope_key: str = "scope-a"):
+def _create(
+    client,
+    *,
+    operation_id: str,
+    cards: list[dict],
+    round_id: str = "",
+    scope_key: str = "scope-a",
+    config: dict | None = None,
+):
     response = client.post(
         "/api/v1/freestyle/rounds/active",
         json={
             "operation_id": operation_id,
             "scope_key": scope_key,
-            "config": {"queue_length": 20},
+            "config": config or {"queue_length": 20},
             "cards": cards,
             "round_id": round_id,
         },
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_active_round_reorders_unstarted_when_palace_order_changes(make_client):
+    client = _client(make_client)
+    sequential = {
+        "training_mode": "memory_palace",
+        "streams": {
+            "memory_palace": {
+                "palace_order": "finish_palace_then_next",
+                "unit_order": "structured",
+                "due_policy": "due_only",
+            }
+        },
+    }
+    interleaved = {
+        "training_mode": "memory_palace",
+        "streams": {
+            "memory_palace": {
+                "palace_order": "interleave_palaces",
+                "unit_order": "random",
+                "due_policy": "due_only",
+            }
+        },
+    }
+    created = _create(
+        client,
+        operation_id="op-seq",
+        cards=_cards("a1", "a2", "b1", "b2"),
+        config=sequential,
+    )
+    assert created["plan"]["presented_ids"] == ["a1", "a2", "b1", "b2"]
+
+    same_settings = _create(
+        client,
+        operation_id="op-same",
+        cards=_cards("b2", "b1", "a2", "a1"),
+        config=sequential,
+    )
+    assert same_settings["plan"]["presented_ids"] == ["a1", "a2", "b1", "b2"]
+
+    changed = _create(
+        client,
+        operation_id="op-interleave",
+        cards=_cards("a1", "b1", "a2", "b2"),
+        config=interleaved,
+    )
+    assert changed["plan"]["presented_ids"] == ["a1", "b1", "a2", "b2"]
 
 
 def test_create_and_get_active_round(make_client):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 DEFAULT_MINDMAP_WEIGHT = 2
@@ -509,6 +510,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
     )
     map_due = memory["due_policy"] if has_memory else english["due_policy"]
     map_order = memory["palace_order"] if has_memory else english["palace_order"]
+    map_unit_order = memory["unit_order"] if has_memory else english["unit_order"]
     mindmap_weight = max(1, map_ratio or 2) if has_memory or has_english else 0
     quiz_weight = max(1, quiz_ratio or 1) if has_quiz else 0
 
@@ -533,6 +535,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "mix_ratio": {"mindmap": mindmap_weight or 2, "quiz": quiz_weight or 1},
         "bound_quiz_placement": _as_bound_placement(data.get("bound_quiz_placement")),
         "palace_order": map_order,
+        "unit_order": map_unit_order,
         "due_policy": map_due,
         "quiz_mastery_buckets": quiz["mastery_buckets"],
         "quiz_scope": quiz["quiz_scope"],
@@ -545,7 +548,39 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         ),
         "question_type": quiz["question_type"],
         "weak_quiz_priority": quiz["weak_priority"],
+        "overlay_quiz_setup_done": _as_bool(data.get("overlay_quiz_setup_done"), False),
     }
+
+
+def queue_construction_signature(raw: Any) -> str:
+    """Fields that rebuild unstarted round-plan order when they change.
+
+    Palace scope changes start a new round elsewhere. This signature is only
+    the queue-construction knobs: palace/unit order, due policy, mix, seed,
+    length, and quiz draw order.
+    """
+    config = sanitize_feed_config(raw)
+    memory = config["streams"]["memory_palace"]
+    quiz = config["streams"]["quiz"]
+    return json.dumps(
+        {
+            "training_mode": config["training_mode"],
+            "mixed_modes": config["mixed_modes"],
+            "mix": config["mix"],
+            "seed": config["seed"],
+            "queue_length": config["queue_length"],
+            "palace_order": memory["palace_order"],
+            "unit_order": memory["unit_order"],
+            "due_policy": memory["due_policy"],
+            "quiz_scope": quiz["quiz_scope"],
+            "mastery_buckets": quiz["mastery_buckets"],
+            "weak_priority": quiz["weak_priority"],
+            "question_type": quiz["question_type"],
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
 
 
 __all__ = [
@@ -576,6 +611,7 @@ __all__ = [
     "PALACE_ORDER_SEQUENTIAL",
     "PALACE_ORDERS",
     "QUESTION_TYPES",
+    "queue_construction_signature",
     "QUIZ_MASTERY_REINFORCE",
     "QUIZ_MASTERY_BUCKETS",
     "QUIZ_MASTERY_STABLE",

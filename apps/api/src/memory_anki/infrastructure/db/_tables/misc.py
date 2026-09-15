@@ -87,10 +87,18 @@ class FreestyleRoundState(Base):
     __tablename__ = "freestyle_round_states"
     __table_args__ = (
         Index("ix_freestyle_round_states_scope_status", "scope_key", "status", "updated_at"),
+        Index(
+            "ix_freestyle_round_states_workspace_scope_status",
+            "workspace",
+            "scope_key",
+            "status",
+            "updated_at",
+        ),
         Index("ix_freestyle_round_states_updated", "updated_at"),
     )
 
     round_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    workspace: Mapped[str] = mapped_column(String(20), nullable=False, default="primary")
     scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

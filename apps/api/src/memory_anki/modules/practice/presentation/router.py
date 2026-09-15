@@ -18,12 +18,16 @@ from memory_anki.modules.practice.application.history_service import (
 from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
+    ensure_overlay_quiz,
     get_or_create_active_round,
     get_round,
+    progress_overlay_quiz,
     rate_freestyle_round_unit,
     start_new_round,
 )
 from memory_anki.modules.practice.domain.schemas import (
+    FreestyleOverlayQuizEnsureRequest,
+    FreestyleOverlayQuizProgressRequest,
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
     FreestyleQueueBuildRequest,
@@ -85,6 +89,7 @@ def api_freestyle_round_active(
             cards=list(data.cards or []),
             operation_id=data.operation_id,
             round_id=data.round_id,
+            workspace=data.workspace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -103,6 +108,7 @@ def api_freestyle_round_start(
             cards=list(data.cards or []),
             operation_id=data.operation_id,
             round_id=data.round_id,
+            workspace=data.workspace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -117,6 +123,44 @@ def api_get_freestyle_round(
     if payload is None:
         raise HTTPException(status_code=400, detail="freestyle round not found")
     return payload
+
+
+@router.post("/freestyle/rounds/{round_id}/overlay-quiz/ensure")
+def api_freestyle_overlay_quiz_ensure(
+    round_id: str,
+    data: FreestyleOverlayQuizEnsureRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return ensure_overlay_quiz(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            config=data.config,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/overlay-quiz/progress")
+def api_freestyle_overlay_quiz_progress(
+    round_id: str,
+    data: FreestyleOverlayQuizProgressRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return progress_overlay_quiz(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            current_index=data.current_index,
+            completed_ids=list(data.completed_ids or []),
+            states=data.states,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/freestyle/rounds/{round_id}/actions")

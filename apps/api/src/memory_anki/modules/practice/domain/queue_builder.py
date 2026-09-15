@@ -421,9 +421,17 @@ def assemble_queue(
     completed = {str(item) for item in completed_ids if item}
     hidden = {str(item) for item in hidden_ids if item}
     seed = int(config.get("seed") or 17)
-    due_policy = str(config.get("due_policy") or DUE_POLICY_DUE_FIRST)
-    palace_order = str(config.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
-    unit_order = str(config.get("unit_order") or "structured")
+    raw_streams = config.get("streams")
+    streams = raw_streams if isinstance(raw_streams, Mapping) else {}
+    raw_memory = streams.get("memory_palace")
+    memory_stream = raw_memory if isinstance(raw_memory, Mapping) else {}
+    due_policy = str(
+        config.get("due_policy") or memory_stream.get("due_policy") or DUE_POLICY_DUE_FIRST
+    )
+    palace_order = str(
+        config.get("palace_order") or memory_stream.get("palace_order") or PALACE_ORDER_SEQUENTIAL
+    )
+    unit_order = str(config.get("unit_order") or memory_stream.get("unit_order") or "structured")
     queue_length = int(config.get("queue_length") or 20)
     mindmap_enabled = bool((config.get("content") or {}).get("mindmap_branch", True))
     anki_enabled = bool((config.get("content") or {}).get("anki_card", True))

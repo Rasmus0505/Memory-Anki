@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .overlay_quiz import normalize_overlay_quiz
+
 RETRY_GAP = 3
 FAIL_RATINGS = {1, 2}
 PASS_RATINGS = {3, 4}
@@ -14,7 +16,6 @@ OCCURRENCE_COMPLETED = "completed"
 OCCURRENCE_CANCELLED = "cancelled"
 
 Plan = dict[str, Any]
-
 
 def empty_plan() -> Plan:
     return {
@@ -34,7 +35,7 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None) -> list[dict[str, 
     seen: set[str] = set()
     for card in cards or ():
         card_id = _text(card.get("card_id") or card.get("id"))
-        if not card_id or card_id in seen:
+        if not card_id or card_id in seen or card_id.startswith("retry:") or _text(card.get("occurrence_kind")) == "retry":
             continue
         seen.add(card_id)
         path = card.get("context_path")
@@ -140,6 +141,9 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "excluded_ids": _unique(raw.get("excluded_ids") or []),
         "occurrences": occurrences,
         "encounters": encounters,
+        "overlay_quiz": normalize_overlay_quiz(
+            raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None
+        ),
     }
     _sync_index(normalized)
     return normalized
@@ -194,6 +198,7 @@ def apply_rating(
         _settle_source(next_plan, source_id)
         return next_plan
 
+    _unsettle_source(next_plan, source_id)
     _fail_source(
         next_plan,
         source_id=source_id,
@@ -314,6 +319,15 @@ def restore_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     return next_plan
 
 
+def live_retry_sources(plan: Mapping[str, Any] | None) -> set[str]:
+    normalized = normalize_plan(plan)
+    return {
+        item["source_card_id"]
+        for item in normalized["occurrences"]
+        if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED} and item["source_card_id"]
+    }
+
+
 def set_encounter(
     plan: Mapping[str, Any],
     card_id: str,
@@ -361,7 +375,44 @@ def next_unfinished_id(plan: Mapping[str, Any], after_id: str | None = None) -> 
     return None
 
 
-def rebind_plan_cards(plan: Mapping[str, Any], cards: Sequence[Mapping[str, Any]]) -> Plan:
+def cleared_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
+    """Palace ids whose review-unit cards in this round are all scored."""
+    normalized = normalize_plan(plan)
+    completed = set(normalized["completed_ids"])
+    excluded = set(normalized["excluded_ids"])
+    pending_sources = {
+        item["source_card_id"]
+        for item in normalized["occurrences"]
+        if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}
+    }
+    by_palace: dict[int, list[str]] = {}
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        palace_id = card.get("palace_id")
+        if not palace_id:
+            continue
+        by_palace.setdefault(int(palace_id), []).append(card["card_id"])
+    cleared: set[int] = set()
+    for palace_id, card_ids in by_palace.items():
+        if not card_ids:
+            continue
+        if any(card_id in pending_sources for card_id in card_ids):
+            continue
+        if any(card_id in excluded and card_id not in completed for card_id in card_ids):
+            continue
+        if any(card_id not in completed for card_id in card_ids):
+            continue
+        cleared.add(palace_id)
+    return cleared
+
+
+def rebind_plan_cards(
+    plan: Mapping[str, Any],
+    cards: Sequence[Mapping[str, Any]],
+    *,
+    reorder_unstarted: bool = False,
+) -> Plan:
     next_plan = normalize_plan(plan)
     incoming = snapshot_cards(cards)
     if not incoming:
@@ -403,12 +454,12 @@ def rebind_plan_cards(plan: Mapping[str, Any], cards: Sequence[Mapping[str, Any]
         else:
             rebound.append(card)
 
-    for item in next_plan["original_cards"]:
-        if item["card_id"] in used_old:
-            continue
-        if item["card_id"] in next_plan["completed_ids"] or item["card_id"] in next_plan["excluded_ids"]:
-            rebound.append(item)
-
+    keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
+    if reorder_unstarted:
+        keep_old.update(_text(item.get("source_card_id")) for item in next_plan["occurrences"] if item.get("status") in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED})
+    else:
+        keep_old.update(item["card_id"] for item in next_plan["original_cards"])
+    rebound.extend(item for item in next_plan["original_cards"] if item["card_id"] not in used_old and item["card_id"] in keep_old)
     next_plan["original_cards"] = rebound
     next_plan["presented_ids"] = _rewrite_ids(next_plan["presented_ids"], mapping)
     incoming_ids = [item["card_id"] for item in incoming]
@@ -420,20 +471,94 @@ def rebind_plan_cards(plan: Mapping[str, Any], cards: Sequence[Mapping[str, Any]
     current = _text(next_plan.get("current_card_id"))
     if current and current in mapping:
         next_plan["current_card_id"] = mapping[current]
+    source_ids = {item["card_id"] for item in next_plan["original_cards"] if not item["card_id"].startswith("retry:")}
+    rebound_by_unit = {_text(item.get("unit_id")): item["card_id"] for item in next_plan["original_cards"] if _text(item.get("unit_id")) and item["card_id"] in source_ids}
     for occ in next_plan["occurrences"]:
-        source = occ["source_card_id"]
-        if source in mapping:
-            occ["source_card_id"] = mapping[source]
+        mapped = mapping.get(occ["source_card_id"])
+        if not mapped and occ["source_card_id"] not in source_ids:
+            mapped = rebound_by_unit.get(_text(occ.get("source_unit_id")))
+        if mapped:
+            occ["source_card_id"] = mapped
     next_plan["encounters"] = {
         mapping.get(key, key): dict(value) for key, value in next_plan["encounters"].items()
     }
+    if reorder_unstarted:
+        next_plan["presented_ids"] = _reorder_unstarted_presented(next_plan, [item["card_id"] for item in incoming])
+    known = _known_presented_ids(next_plan)
+    next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
     _repair_current(next_plan)
     return next_plan
 
 
+def _reorder_unstarted_presented(plan: Plan, incoming_ids: Sequence[str]) -> list[str]:
+    locked = _locked_presented_ids(plan)
+    incoming_unstarted = [item for item in _unique(incoming_ids) if item not in locked]
+    used: set[str] = set()
+    result: list[str] = []
+    cursor = 0
+    for card_id in plan["presented_ids"]:
+        if card_id in locked:
+            if card_id not in used:
+                result.append(card_id)
+                used.add(card_id)
+            continue
+        while cursor < len(incoming_unstarted) and incoming_unstarted[cursor] in used:
+            cursor += 1
+        if cursor >= len(incoming_unstarted):
+            continue
+        nxt = incoming_unstarted[cursor]
+        result.append(nxt)
+        used.add(nxt)
+        cursor += 1
+    for card_id in incoming_unstarted:
+        if card_id not in used:
+            result.append(card_id)
+            used.add(card_id)
+    return result
+
+
+def _locked_presented_ids(plan: Plan) -> set[str]:
+    locked = set(plan["completed_ids"]) | set(plan["excluded_ids"])
+    for item in plan["occurrences"]:
+        status = item.get("status")
+        if status in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
+            source = _text(item.get("source_card_id"))
+            if source:
+                locked.add(source)
+        if status == OCCURRENCE_INSERTED:
+            occ_id = _text(item.get("occurrence_id"))
+            if occ_id:
+                locked.add(occ_id)
+    return locked
+
+
+def _known_presented_ids(plan: Plan) -> set[str]:
+    known = {item["card_id"] for item in plan["original_cards"]}
+    known.update(plan["completed_ids"])
+    known.update(plan["excluded_ids"])
+    for item in plan["occurrences"]:
+        status = item.get("status")
+        source = _text(item.get("source_card_id"))
+        if source and status in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
+            known.add(source)
+        occ_id = _text(item.get("occurrence_id"))
+        if occ_id and status == OCCURRENCE_INSERTED:
+            known.add(occ_id)
+    return known
+
+
+def _is_viewable_current(plan: Plan, card_id: str) -> bool:
+    if not card_id or card_id not in plan["presented_ids"] or card_id in plan["excluded_ids"]:
+        return False
+    occ = _find_occurrence(plan, card_id)
+    if occ is not None:
+        return occ["status"] == OCCURRENCE_INSERTED
+    return card_id not in plan["completed_ids"]
+
+
 def _repair_current(plan: Plan) -> None:
     current = _text(plan.get("current_card_id"))
-    if current and _is_unfinished(plan, current) and current in plan["presented_ids"]:
+    if current and _is_viewable_current(plan, current):
         _sync_index(plan)
         return
     nxt = next_unfinished_id(plan, after_id=current if current else None)
@@ -511,6 +636,13 @@ def _settle_source(plan: Plan, source_id: str) -> None:
         elif item["status"] == OCCURRENCE_INSERTED:
             item["status"] = OCCURRENCE_COMPLETED
             _append_unique(plan["completed_ids"], item["occurrence_id"])
+
+
+def _unsettle_source(plan: Plan, source_id: str) -> None:
+    target = _text(source_id)
+    if not target:
+        return
+    plan["completed_ids"] = [item for item in plan["completed_ids"] if item != target]
 
 
 def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> None:
@@ -663,6 +795,6 @@ def _int(value: Any) -> int:
 def _palace_id(value: Any) -> int | None:
     try:
         number = int(value)
+        return number if number > 0 else None
     except (TypeError, ValueError):
         return None
-    return number if number > 0 else None
