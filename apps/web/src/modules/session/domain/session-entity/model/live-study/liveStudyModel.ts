@@ -48,13 +48,27 @@ export interface LiveStudyCommandResponse {
   projection: LiveStudyProjection
 }
 
-const STUDY_FOLLOW_PREFIXES = ['/freestyle']
+const STUDY_FOLLOW_PREFIXES = ['/freestyle-2', '/freestyle']
 const STUDY_FOLLOW_PATTERNS = [
   /^\/palaces\/\d+$/,
   /^\/palaces\/\d+\/quiz$/,
   /^\/english\/listening\/courses\/\d+$/,
   /^\/english\/reading\/materials\/\d+$/,
 ]
+
+function pathnameOf(path: string) {
+  return path.split('?')[0] || '/'
+}
+
+function isPrimaryFreestylePath(pathname: string) {
+  const path = pathnameOf(pathname)
+  return path === '/freestyle' || path.startsWith('/freestyle/')
+}
+
+function isSecondaryFreestylePath(pathname: string) {
+  const path = pathnameOf(pathname)
+  return path === '/freestyle-2' || path.startsWith('/freestyle-2/')
+}
 
 export function preferNewerLiveStudyProjection(
   current: LiveStudyProjection,
@@ -85,8 +99,8 @@ export function isLiveStudySurface(value: unknown): value is LiveStudySurface {
 }
 
 export function liveStudySurfaceFromPath(pathname: string): LiveStudySurface | null {
-  const path = pathname.split('?')[0] || '/'
-  if (path === '/freestyle' || path.startsWith('/freestyle/')) return 'freestyle'
+  const path = pathnameOf(pathname)
+  if (isPrimaryFreestylePath(path) || isSecondaryFreestylePath(path)) return 'freestyle'
   if (/^\/palaces\/\d+\/quiz$/.test(path)) return 'palace_quiz'
   if (/^\/palaces\/\d+$/.test(path)) return 'mindmap_review'
   if (/^\/english\/listening\/courses\/\d+$/.test(path)) return 'english_course'
@@ -110,9 +124,15 @@ export function shouldFollowLiveRoute(input: {
 }) {
   if (input.isController) return false
   if (input.surface === 'idle' || !input.route) return false
-  const localPathname = input.localPath.split('?')[0] || '/'
-  const remotePathname = input.route.split('?')[0] || '/'
+  const localPathname = pathnameOf(input.localPath)
+  const remotePathname = pathnameOf(input.route)
   if (!isFollowableStudyPath(localPathname) || !isFollowableStudyPath(remotePathname)) return false
+  if (
+    (isPrimaryFreestylePath(localPathname) && isSecondaryFreestylePath(remotePathname)) ||
+    (isSecondaryFreestylePath(localPathname) && isPrimaryFreestylePath(remotePathname))
+  ) {
+    return false
+  }
   return input.localPath !== input.route
 }
 

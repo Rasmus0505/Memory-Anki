@@ -5,6 +5,7 @@ import {
   encodeLiveStudyCommand,
   interpolateTimerSeconds,
   isFollowableStudyPath,
+  liveStudySurfaceFromPath,
   preferNewerLiveStudyProjection,
   shouldFollowLiveRoute,
 } from './liveStudyModel'
@@ -60,6 +61,9 @@ describe('liveStudyModel', () => {
   it('follows study routes from settings-idle pages only when already on a study path', () => {
     expect(isFollowableStudyPath('/settings')).toBe(false)
     expect(isFollowableStudyPath('/freestyle')).toBe(true)
+    expect(isFollowableStudyPath('/freestyle-2')).toBe(true)
+    expect(liveStudySurfaceFromPath('/freestyle-2')).toBe('freestyle')
+    expect(liveStudySurfaceFromPath('/freestyle-2/')).toBe('freestyle')
     expect(
       shouldFollowLiveRoute({
         localPath: '/settings',
@@ -74,6 +78,33 @@ describe('liveStudyModel', () => {
         isController: false,
         surface: 'freestyle',
         route: '/freestyle?palaceId=3',
+      }),
+    ).toBe(true)
+  })
+
+  it('does not yank the user across freestyle workspace slots', () => {
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/freestyle-2',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/freestyle',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle-2',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/freestyle-2',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle-2?palaceId=1',
       }),
     ).toBe(true)
   })
