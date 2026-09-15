@@ -8,6 +8,7 @@ import {
   sanitizeBreakGuardConfig,
 } from '@/shared/components/session/break-guard-config'
 import { FREESTYLE_FEED_CONFIG_STORAGE_KEY } from '@/modules/practice/domain/feedConfig'
+import { FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY } from '@/modules/practice/application/feedPersistence'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { bootstrapClientPreferences } from './useClientPreferenceBootstrap'
 import * as clientPreferencesApi from '@/modules/settings/domain/preferences-entity/api/clientPreferencesApi'
@@ -34,6 +35,7 @@ function emptyPreferences(): ClientPreferences {
     palace_shelf_view_settings: null,
     time_record_tags: null,
     freestyle_feed_config: null,
+    freestyle_feed_config_secondary: null,
   }
 }
 
@@ -119,5 +121,34 @@ describe('bootstrapClientPreferences', () => {
       .find(Boolean)
     expect(saved).not.toHaveProperty('node_limit')
     expect(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)).toBeNull()
+  })
+
+  it('migrates secondary freestyle feed config without treating it as legacy local state', async () => {
+    const legacyConfig = {
+      content: { mindmap_branch: true, quiz_question: true },
+      weights: { mindmap_branch: 2, quiz_question: 1 },
+      palace_order: 'finish_palace_then_next',
+      due_policy: 'due_first_then_expand',
+      queue_length: 21,
+      specific_palace_ids: [8],
+      question_type: 'all',
+      weak_quiz_priority: true,
+      seed: 9,
+    }
+    window.localStorage.setItem(FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY, JSON.stringify(legacyConfig))
+
+    await bootstrapClientPreferences()
+
+    expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        freestyle_feed_config_secondary: expect.objectContaining({
+          queue_length: 21,
+          seed: 9,
+          specific_palace_ids: [8],
+        }),
+      }),
+    )
+    expect(window.localStorage.getItem(FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY)).toBeNull()
+    expect(mockToast.success).not.toHaveBeenCalled()
   })
 })

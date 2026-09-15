@@ -12,6 +12,8 @@ import {
   DEFAULT_FREESTYLE_FEED_CONFIG,
   FREESTYLE_FEED_CONFIG_STORAGE_KEY,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+  FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
+  FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
   sanitizeFreestyleFeedConfig,
 } from '@/modules/practice/public'
 import {
@@ -138,6 +140,13 @@ export async function bootstrapClientPreferences() {
       DEFAULT_FREESTYLE_FEED_CONFIG,
       sanitizeFreestyleFeedConfig,
       FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+    ),
+    migrateAndNotify(
+      'freestyle_feed_config_secondary',
+      FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
+      DEFAULT_FREESTYLE_FEED_CONFIG,
+      sanitizeFreestyleFeedConfig,
+      FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
     ),
     migrateLocalPreferenceToBackend(
       'mark_color_labels',

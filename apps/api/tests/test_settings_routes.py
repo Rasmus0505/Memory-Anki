@@ -119,6 +119,18 @@ class TestClientPreferences:
             "freestyle_display_settings"
         ] == {"rating_mode": False}
 
+    def test_quiz_answer_mode_roundtrip(self, client):
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={"quiz_answer_mode": {"mcqMode": "subjective"}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["items"]["quiz_answer_mode"] == {"mcqMode": "subjective"}
+        assert client.get("/api/v1/profile/client-preferences").json()["items"][
+            "quiz_answer_mode"
+        ] == {"mcqMode": "subjective"}
+
     def test_study_goals_roundtrip(self, client):
         response = client.put(
             "/api/v1/profile/client-preferences",
