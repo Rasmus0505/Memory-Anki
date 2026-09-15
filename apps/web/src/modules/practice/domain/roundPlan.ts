@@ -1,4 +1,5 @@
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
+import { queueConstructionSignature } from './feedConfig'
 import { bookedRetryAfterCards, cardPalaceId } from './queueState'
 
 export type FreestyleRoundPlanCardStatus =
@@ -128,6 +129,70 @@ export function roundPlanConfigSignature(config: FreestyleFeedConfig) {
   }
 }
 
+export function shouldReorderUnstartedFreestylePlan(
+  previousSignature: string | undefined,
+  nextConfig: FreestyleFeedConfig,
+) {
+  if (!previousSignature) return false
+  try {
+    return queueConstructionSignature(JSON.parse(previousSignature)) !== queueConstructionSignature(nextConfig)
+  } catch {
+    return true
+  }
+}
+
+function lockedPlanIds(cardsById: Record<string, FreestyleRoundPlanCard>) {
+  const locked = new Set<string>()
+  Object.values(cardsById).forEach((item) => {
+    if (item.status === 'completed' || item.status === 'excluded' || item.status === 'retry') {
+      locked.add(item.cardId)
+    }
+    if (item.occurrenceKind === 'retry' || item.status === 'retry') {
+      locked.add(item.cardId)
+      if (item.sourceCardId) locked.add(item.sourceCardId)
+    }
+  })
+  return locked
+}
+
+export function reorderUnstartedPlanIds(
+  previousOrder: string[],
+  incomingIds: string[],
+  cardsById: Record<string, FreestyleRoundPlanCard>,
+) {
+  const locked = lockedPlanIds(cardsById)
+  const incomingUnstarted = incomingIds.filter((id) => id && !locked.has(id))
+  const used = new Set<string>()
+  const result: string[] = []
+  let cursor = 0
+  previousOrder.forEach((id) => {
+    if (!cardsById[id] || used.has(id)) return
+    if (locked.has(id)) {
+      result.push(id)
+      used.add(id)
+      return
+    }
+    while (
+      cursor < incomingUnstarted.length
+      && (used.has(incomingUnstarted[cursor]) || !cardsById[incomingUnstarted[cursor]])
+    ) {
+      cursor += 1
+    }
+    const next = incomingUnstarted[cursor]
+    if (!next) return
+    result.push(next)
+    used.add(next)
+    cursor += 1
+  })
+  incomingUnstarted.forEach((id) => {
+    if (!used.has(id) && cardsById[id]) {
+      result.push(id)
+      used.add(id)
+    }
+  })
+  return result
+}
+
 export function createRoundPlan(
   roundId: string,
   cards: FreestyleCard[],
@@ -187,7 +252,7 @@ export function createRoundPlan(
       .map((card) => String(card.id || '').trim())
       .filter(Boolean),
   )
-  const orderIds = (previous?.orderIds ?? []).filter(
+  let orderIds = (previous?.orderIds ?? []).filter(
     (id) => currentIds.has(id) && !retryIdsInCards.has(id),
   )
   cards.forEach((card, cardIndex) => {
@@ -209,6 +274,13 @@ export function createRoundPlan(
     if (previousIds.has(id)) return
     orderIds.push(id)
   })
+  if (shouldReorderUnstartedFreestylePlan(previous?.configSignature, config)) {
+    orderIds = reorderUnstartedPlanIds(
+      orderIds,
+      cards.map((card) => String(card.id || '').trim()).filter(Boolean),
+      nextById,
+    )
+  }
 
   return {
     roundId,
@@ -341,6 +413,21 @@ export function planCardStatus(
 ): FreestyleRoundPlanCardStatus {
   if (hiddenIds && Array.from(hiddenIds, String).includes(card.id)) return 'excluded'
   if (completedIds && Array.from(completedIds, String).includes(card.id)) return 'completed'
+  if (plan?.cardsById[card.id]?.status === 'completed') return 'completed'
   if (currentCardId === card.id) return 'active'
   return plan?.cardsById[card.id]?.status === 'stale' ? 'stale' : plan?.cardsById[card.id]?.status === 'retry' ? 'retry' : 'pending'
+}
+
+export function applyCompletedIdsToRoundPlan(
+  plan: FreestyleRoundPlanState,
+  completedIds: Iterable<string>,
+) {
+  const completed = new Set(Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean))
+  if (!completed.size) return plan
+  let next = plan
+  for (const id of Object.keys(plan.cardsById)) {
+    if (!completed.has(id) || next.cardsById[id]?.status === 'completed') continue
+    next = updateRoundPlanCard(next, id, { status: 'completed' })
+  }
+  return next
 }

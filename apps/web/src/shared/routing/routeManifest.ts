@@ -11,14 +11,15 @@
  * appRoutes.manifest.test 与本文件对账。
  *
  * 两套分区键空间刻意不同：
- * - NavSectionKey：侧栏/底栏 5 个导航分区（'knowledge' 是“创建”分区的
+ * - NavSectionKey：侧栏/底栏 7 个导航分区（'knowledge' 是“创建”分区的
  *   历史遗留键名，与 /knowledge 路由无关；重命名列为后续任务）。
- * - PageHistorySectionKey：页面历史的 9 键空间（见 page-history 模块）。
+ * - PageHistorySectionKey：页面历史的 10 键空间（见 page-history 模块）。
  */
 import type { PageHistorySectionKey } from '@/shared/page-history/pageHistoryTypes'
 
 export type NavSectionKey =
   | 'freestyle'
+  | 'freestyleSecondary'
   | 'palaces'
   | 'english'
   | 'knowledge'
@@ -56,6 +57,7 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
   { path: '/today', nav: 'review', history: 'dashboard', historyKey: 'today:workspace', commandLabel: '今日工作台' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
+  { path: '/freestyle-2', nav: 'freestyleSecondary', history: 'freestyleSecondary', historyKey: 'freestyle-secondary', commandLabel: '随心 2' },
   { path: '/palaces', nav: 'palaces', history: 'palaces', historyKey: 'palace:shelf' },
   { path: '/palaces/list', nav: 'palaces', history: 'palaces', historyKey: 'palace:list', commandLabel: '宫殿列表' },
   { path: '/palaces/new', nav: 'knowledge', history: 'palaces', historyKey: 'palace:new' },
@@ -144,6 +146,7 @@ export const PREFIX_RULES: PrefixRule[] = [
 /** 导航分区根路径（侧栏第二次点击的目标），与 navSections[].to 对齐。 */
 export const NAV_SECTION_ROOTS: Record<NavSectionKey, string> = {
   freestyle: '/freestyle',
+  freestyleSecondary: '/freestyle-2',
   palaces: '/palaces',
   english: '/english',
   knowledge: '/palaces/new',
@@ -183,7 +186,7 @@ export function createNavSectionMatcher(section: NavSectionKey) {
   return (pathname: string) => resolveNavSection(pathname) === section
 }
 
-/** 页面历史分区（9 键空间）。 */
+/** 页面历史分区（10 键空间）。 */
 export function resolveHistorySection(pathname: string): PageHistorySectionKey {
   const exact = exactByPath.get(pathname)
   if (exact) return exact.history

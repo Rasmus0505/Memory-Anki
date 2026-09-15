@@ -13,6 +13,8 @@ export const preloadPalaceListPage = () => import('@/pages/library/PalaceListPag
 export const preloadPalaceShelfPage = () => import('@/pages/library/PalaceLibraryPage')
 /** Immersive freestyle card feed — default /freestyle entry. */
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
+/** Second immersive freestyle workspace — route /freestyle-2. */
+export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
 /** Today learning workspace (overview) — route /today. */
 export const preloadTodayLearningPage = () => import('@/pages/today/TodayLearningPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
@@ -38,6 +40,7 @@ const DashboardPage = lazyWithRetry(preloadDashboardPage)
 const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
 const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
+const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const TodayLearningPage = lazyWithRetry(preloadTodayLearningPage)
 const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
@@ -93,6 +96,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
+          <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
           <Route path="/today" element={<TodayLearningPage />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<EnglishHubPage />} />

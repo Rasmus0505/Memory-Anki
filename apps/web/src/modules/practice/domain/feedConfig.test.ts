@@ -311,7 +311,7 @@ describe('freestyle queue skip rules', () => {
       }),
     ).toBe(0)
 
-    // No user card known �?fall back to prefer, then clamp.
+    // No user card known — fall back to prefer, then clamp.
     expect(
       resolveRebuildIndex({
         nextCards,
@@ -320,6 +320,23 @@ describe('freestyle queue skip rules', () => {
         fallbackIndex: 99,
       }),
     ).toBe(2)
+  })
+
+  it('resolveRebuildIndex does not land on a retry copy of the same unit', () => {
+    const nextCards = [
+      { id: 'retry:round-1:u1:1', unit_id: 'u1', occurrence_kind: 'retry' as const, source_card_id: 'review_unit:u1:r1' },
+      { id: 'review_unit:u1:r1', unit_id: 'u1' },
+      { id: 'review_unit:u2:r1', unit_id: 'u2' },
+    ]
+    expect(
+      resolveRebuildIndex({
+        nextCards,
+        preferCardId: 'review_unit:u1:r2',
+        userCardId: 'review_unit:u1:r2',
+        fallbackIndex: 0,
+        previousCards: [{ id: 'review_unit:u1:r2', unit_id: 'u1' }],
+      }),
+    ).toBe(1)
   })
 
   it('filters muted palaces and mounts nearby cards only', () => {

@@ -65,6 +65,7 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/dashboard', 'review', 'dashboard', 'dashboard'],
     ['/today', 'review', 'dashboard', 'today:workspace'],
     ['/freestyle', 'freestyle', 'freestyle', 'freestyle'],
+    ['/freestyle-2', 'freestyleSecondary', 'freestyleSecondary', 'freestyle-secondary'],
     ['/palaces', 'palaces', 'palaces', 'palace:shelf'],
     ['/palaces/list', 'palaces', 'palaces', 'palace:list'],
     ['/palaces/new', 'knowledge', 'palaces', 'palace:new'],

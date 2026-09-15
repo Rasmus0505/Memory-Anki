@@ -23,8 +23,9 @@ export function shouldRenewFreestyleEncounter(
   if (!existing) return true
   if (existing.unitRevision !== unitRevision) return true
   if (!allowRenew || existing.status !== 'closed') return false
-  // Failed cards restudy. Unrated leave (swipe away) must also reopen.
-  return existing.passed !== true
+  // Closed cards reopen so the learner can score again — including a passed
+  // unit they swiped back to. Unrated leave (swipe away) must also reopen.
+  return true
 }
 
 export type FreestyleSkipState = {
@@ -261,6 +262,7 @@ export function rebindCompletedIdsByUnit(
 ): string[] {
   const nextByUnit = new Map<string, string>()
   next.forEach((card) => {
+    if (isRetryOccurrence(card)) return
     const unitId = stableUnitId(card)
     if (unitId && !nextByUnit.has(unitId)) nextByUnit.set(unitId, card.id)
   })
@@ -286,8 +288,9 @@ export function rebindUnitEncountersByUnitId(
 ): Record<string, FreestyleUnitEncounterState> {
   const nextByUnit = new Map<string, string>()
   next.forEach((card) => {
+    if (isRetryOccurrence(card)) return
     const unitId = stableUnitId(card)
-    if (unitId) nextByUnit.set(unitId, card.id)
+    if (unitId && !nextByUnit.has(unitId)) nextByUnit.set(unitId, card.id)
   })
   const result = { ...encounters }
   previous.forEach((card) => {
@@ -436,17 +439,24 @@ export function isRetryOccurrence(card: FreestyleCard | null | undefined): boole
   return card?.occurrence_kind === 'retry' || Boolean(card?.source_card_id && card.source_card_id !== card.id)
 }
 
+export function retrySourceKey(card: FreestyleCard | null | undefined): string {
+  return cardUnitId(card) || sourceCardId(card)
+}
+
 export function createRetryOccurrence(
   card: FreestyleCard,
   roundId: string,
   attempt: number,
   retryAfterCards = 3,
+  occurrenceId?: string,
 ): FreestyleCard {
   const sourceId = sourceCardId(card)
   const retryAttempt = Math.max(1, Math.round(attempt || 1))
+  const id = String(occurrenceId || '').trim()
+    || `retry:${roundId}:${retrySourceKey(card) || sourceId}:${retryAttempt}`
   return {
     ...card,
-    id: `retry:${roundId}:${sourceId}:${retryAttempt}`,
+    id,
     source_card_id: sourceId,
     occurrence_kind: 'retry',
     retry_attempt: retryAttempt,
@@ -1100,11 +1110,11 @@ export function visibleMountIndices(currentIndex: number, total: number) {
  * card. If they already swiped away before the rebuild resolved, keep their card.
  */
 export function resolveRebuildIndex(args: {
-  nextCards: ReadonlyArray<{ id: string; unit_id?: string }>
+  nextCards: ReadonlyArray<{ id: string; unit_id?: string; occurrence_kind?: string; source_card_id?: string }>
   preferCardId?: string | null
   userCardId?: string | null
   fallbackIndex: number
-  previousCards?: ReadonlyArray<{ id: string; unit_id?: string }>
+  previousCards?: ReadonlyArray<{ id: string; unit_id?: string; occurrence_kind?: string; source_card_id?: string }>
 }): number {
   const { nextCards, preferCardId, userCardId, fallbackIndex, previousCards } = args
   if (!nextCards.length) return 0
@@ -1124,6 +1134,7 @@ export function resolveRebuildIndex(args: {
     const unitId = unitIdFor(id)
     if (!unitId) return -1
     return nextCards.findIndex((card) => {
+      if (isRetryCard(card)) return false
       const cardUnit = 'unit_id' in card ? String(card.unit_id || '') : ''
       return cardUnit === unitId || reviewUnitIdFromCardId(card.id) === unitId
     })
@@ -1146,4 +1157,8 @@ export function resolveRebuildIndex(args: {
   }
 
   return Math.min(Math.max(0, fallbackIndex), nextCards.length - 1)
+}
+
+function isRetryCard(card: { id?: string; occurrence_kind?: string; source_card_id?: string }) {
+  return card.occurrence_kind === 'retry' || String(card.id || '').startsWith('retry:')
 }

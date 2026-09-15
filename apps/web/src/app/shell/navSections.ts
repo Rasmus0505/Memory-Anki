@@ -3,6 +3,7 @@ import {
   Brain,
   FolderTree,
   Languages,
+  Layers2,
   LayoutDashboard,
   Shuffle,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ import {
   preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
+  preloadFreestyleSecondaryPage,
   preloadTodayLearningPage,
   preloadKnowledgePage,
   preloadDashboardPage,
@@ -54,6 +56,18 @@ export const navSections: NavSectionDefinition[] = [
     warmup: () => {
       void preloadFreestylePage()
       void preloadTodayLearningPage()
+      preloadPracticeRoutes()
+    },
+  },
+  {
+    key: 'freestyleSecondary',
+    to: '/freestyle-2',
+    label: '随心 2',
+    icon: Layers2,
+    rememberLastVisited: true,
+    matches: createNavSectionMatcher('freestyleSecondary'),
+    warmup: () => {
+      void preloadFreestyleSecondaryPage()
       preloadPracticeRoutes()
     },
   },

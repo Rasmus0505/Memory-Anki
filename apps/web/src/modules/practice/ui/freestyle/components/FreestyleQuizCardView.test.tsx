@@ -1,6 +1,8 @@
-import { fireEvent, render } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
+import { saveQuizAnswerMode } from '@/modules/quiz/public'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { FreestyleQuizCardView } from './FreestyleQuizCardView'
 
 const card = {
@@ -32,9 +34,9 @@ const card = {
       generation_mode: 'manual',
     },
     sort_order: 1,
-    correct_count: 0,
-    incorrect_count: 0,
-    attempt_count: 0,
+    correct_count: 16,
+    incorrect_count: 13,
+    attempt_count: 29,
     created_at: null,
     updated_at: null,
   },
@@ -58,7 +60,24 @@ function renderCard(state: Record<string, unknown> = {}, active = true) {
   return { onStateChange, onChoiceResolve }
 }
 
-describe('FreestyleQuizCardView keyboard shortcuts', () => {
+describe('FreestyleQuizCardView', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    saveQuizAnswerMode('choice')
+  })
+
+  afterEach(() => {
+    saveQuizAnswerMode('choice')
+  })
+
+  it('shows historical attempt stats left of the question type badge', () => {
+    renderCard()
+    const stats = screen.getByTestId('quiz-attempt-stats')
+    expect(stats.textContent).toBe('16/29')
+    expect(stats.nextElementSibling?.textContent).toBe('选择题')
+  })
+
   it('answers the active question with number and letter keys', () => {
     const { onStateChange, onChoiceResolve } = renderCard()
 
@@ -105,5 +124,60 @@ describe('FreestyleQuizCardView keyboard shortcuts', () => {
     fireEvent.keyDown(input, { key: '1' })
     input.remove()
     expect(active.onChoiceResolve).not.toHaveBeenCalled()
+  })
+
+  it('does not use number keys after switching to subjective recall', () => {
+    const { onChoiceResolve } = renderCard()
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    fireEvent.keyDown(window, { key: '1' })
+    fireEvent.keyDown(window, { key: 'A' })
+    expect(onChoiceResolve).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('先写下你的答案，再点击提交')).toBeTruthy()
+  })
+
+  it('submits subjective recall with Enter after the mode toggle', () => {
+    const onShortAnswerSubmit = vi.fn()
+    render(
+      <FreestyleQuizCardView
+        card={card}
+        state={{}}
+        answeredBefore={false}
+        active
+        onStateChange={vi.fn()}
+        onChoiceResolve={vi.fn()}
+        onShortAnswerSubmit={onShortAnswerSubmit}
+        onRequestShortAnswerFeedback={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    expect(document.activeElement?.hasAttribute('data-quiz-shortcut-surface')).toBe(true)
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    expect(onShortAnswerSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores shortcut focus when the card becomes the active feed item', () => {
+    const onChoiceResolve = vi.fn()
+    const props = {
+      card,
+      state: {},
+      answeredBefore: false,
+      onStateChange: vi.fn(),
+      onChoiceResolve,
+      onShortAnswerSubmit: vi.fn(),
+      onRequestShortAnswerFeedback: vi.fn(),
+    }
+    const view = render(<FreestyleQuizCardView {...props} active={false} />)
+    const leftover = document.createElement('button')
+    leftover.textContent = '下一题'
+    document.body.appendChild(leftover)
+    leftover.focus()
+    expect(document.activeElement).toBe(leftover)
+
+    view.rerender(<FreestyleQuizCardView {...props} active />)
+    expect(document.activeElement?.hasAttribute('data-quiz-shortcut-surface')).toBe(true)
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    expect(onChoiceResolve).toHaveBeenCalledWith('A', false)
+    leftover.remove()
   })
 })

@@ -87,4 +87,70 @@ describe('server round plan hydrate', () => {
       'review_unit:u2:r1',
     ])
   })
+
+  it('reconstructs completed review units omitted from the live queue', () => {
+    const remaining = branch('review_unit:u2:r1')
+    remaining.unit_id = 'u2'
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'review_unit:u1:r1', unit_id: 'u1', unit_revision: 1, kind: 'mindmap_branch', palace_id: 4, palace_title: 'Palace 4', label: '已过单元' },
+        { card_id: 'review_unit:u2:r1', unit_id: 'u2', unit_revision: 1, kind: 'mindmap_branch', palace_id: 4, palace_title: 'Palace 4', label: 'u2' },
+      ],
+      presented_ids: ['review_unit:u1:r1', 'review_unit:u2:r1'],
+      current_card_id: 'review_unit:u2:r1',
+      current_index: 1,
+      completed_ids: ['review_unit:u1:r1'],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {},
+    }
+    const hydrated = cardsForServerPlan([remaining], plan, 'round-1')
+    expect(hydrated.map((card) => card.id)).toEqual(['review_unit:u1:r1', 'review_unit:u2:r1'])
+    expect(hydrated[0]).toMatchObject({
+      type: 'mindmap_branch',
+      unit_id: 'u1',
+      palace_id: 4,
+      palace_title: 'Palace 4',
+    })
+  })
+
+  it('uses the server occurrence id and does not append extra local retries', () => {
+    const source = branch('review_unit:u1:r1')
+    source.unit_id = 'u1'
+    const localRetry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const serverOccId = 'retry:round-1:u1:1'
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'review_unit:u1:r1', unit_id: 'u1', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'u1' },
+        { card_id: 'review_unit:u2:r1', unit_id: 'u2', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'u2' },
+      ],
+      presented_ids: ['review_unit:u1:r1', 'review_unit:u2:r1', serverOccId],
+      current_card_id: 'review_unit:u2:r1',
+      current_index: 1,
+      completed_ids: [],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: serverOccId,
+        source_card_id: 'review_unit:u1:r1',
+        source_unit_id: 'u1',
+        retry_attempt: 1,
+        rating: 2,
+        insert_target_index: 2,
+        status: 'inserted',
+        encounter_id: '',
+      }],
+      encounters: {},
+    }
+    const hydrated = cardsForServerPlan(
+      [source, branch('review_unit:u2:r1'), localRetry],
+      plan,
+      'round-1',
+    )
+    expect(hydrated.map((card) => card.id)).toEqual([
+      'review_unit:u1:r1',
+      'review_unit:u2:r1',
+      serverOccId,
+    ])
+    expect(hydrated.filter((card) => card.occurrence_kind === 'retry')).toHaveLength(1)
+  })
 })

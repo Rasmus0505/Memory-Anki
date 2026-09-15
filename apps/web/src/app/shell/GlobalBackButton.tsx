@@ -18,7 +18,9 @@ type GlobalBackButtonProps = {
 export function isImmersiveFeedPath(pathname: string) {
   return (
     pathname === '/freestyle' ||
-    pathname.startsWith('/freestyle/')
+    pathname.startsWith('/freestyle/') ||
+    pathname === '/freestyle-2' ||
+    pathname.startsWith('/freestyle-2/')
   )
 }
 

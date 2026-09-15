@@ -161,6 +161,11 @@ export interface FreestyleFeedConfig {
   question_type: FreestyleQuestionTypeFilter
   /** Pool-internal sort only; does not decide membership (see quiz_mastery_buckets). */
   weak_quiz_priority: boolean
+  /**
+   * Freestyle toolbar 做题 overlay: after the learner confirms palace order once,
+   * later clicks skip the setup panel. Quiz draw order still lives on streams.quiz.quiz_scope.
+   */
+  overlay_quiz_setup_done: boolean
 }
 
 export interface FreestyleContextPathItem {
@@ -328,6 +333,25 @@ export interface FreestyleRoundPlanPayload {
     status: string
     unit_revision: number
   }>
+  overlay_quiz?: FreestyleOverlayQuizState
+}
+
+export interface FreestyleOverlayQuizState {
+  scope_signature: string
+  quiz_scope: FreestyleQuizScope
+  seed: number
+  question_ids: number[]
+  current_index: number
+  completed_ids: number[]
+  states: Record<string, Record<string, unknown>>
+  limit_reached: boolean
+  candidate_count: number
+  question_palace_ids?: Record<string, number>
+  parked?: {
+    question_ids: number[]
+    completed_ids: number[]
+    states: Record<string, Record<string, unknown>>
+  }
 }
 
 export interface FreestyleRoundStatePayload {
@@ -343,6 +367,7 @@ export interface FreestyleRoundStatePayload {
   updated_at: string | null
   conflict: boolean
   duplicate: boolean
+  workspace?: 'primary' | 'secondary'
 }
 
 export interface FreestyleRoundActiveRequest {
@@ -351,6 +376,7 @@ export interface FreestyleRoundActiveRequest {
   config: FreestyleFeedConfig
   cards?: FreestyleCard[]
   round_id?: string
+  workspace?: 'primary' | 'secondary'
 }
 
 export interface FreestyleRoundActionRequest {
@@ -369,6 +395,20 @@ export interface FreestyleRoundActionRequest {
   occurrence_id?: string
   encounter_id?: string
   cards?: FreestyleCard[]
+}
+
+export interface FreestyleOverlayQuizEnsureRequest {
+  operation_id: string
+  expected_version: number
+  config?: FreestyleFeedConfig
+}
+
+export interface FreestyleOverlayQuizProgressRequest {
+  operation_id: string
+  expected_version: number
+  current_index: number
+  completed_ids: number[]
+  states: Record<string, Record<string, unknown>>
 }
 
 export interface FreestyleRoundRatingRequest {

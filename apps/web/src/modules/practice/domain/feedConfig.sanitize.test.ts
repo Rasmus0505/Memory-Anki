@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_FREESTYLE_FEED_CONFIG,
+  queueConstructionSignature,
   sanitizeFreestyleFeedConfig,
 } from './feedConfig'
 
@@ -28,6 +29,34 @@ describe('freestyle feed config', () => {
 
   it('keeps defaults for empty input', () => {
     expect(sanitizeFreestyleFeedConfig(null)).toEqual(DEFAULT_FREESTYLE_FEED_CONFIG)
+  })
+
+  it('changes queue construction signature when palace or unit order changes', () => {
+    const sequential = sanitizeFreestyleFeedConfig({
+      training_mode: 'memory_palace',
+      streams: { memory_palace: { palace_order: 'finish_palace_then_next', unit_order: 'structured' } },
+    })
+    const interleaved = sanitizeFreestyleFeedConfig({
+      ...sequential,
+      streams: {
+        ...sequential.streams,
+        memory_palace: {
+          ...sequential.streams.memory_palace,
+          palace_order: 'interleave_palaces',
+          unit_order: 'random',
+        },
+      },
+    })
+    expect(queueConstructionSignature(sequential)).not.toBe(queueConstructionSignature(interleaved))
+    expect(queueConstructionSignature(sequential)).toBe(queueConstructionSignature({
+      ...sequential,
+      overlay_quiz_setup_done: true,
+    }))
+  })
+
+  it('preserves overlay quiz setup as a permanent preference', () => {
+    expect(sanitizeFreestyleFeedConfig(null).overlay_quiz_setup_done).toBe(false)
+    expect(sanitizeFreestyleFeedConfig({ overlay_quiz_setup_done: true }).overlay_quiz_setup_done).toBe(true)
   })
 
   it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {

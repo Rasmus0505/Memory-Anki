@@ -98,13 +98,13 @@ export function FreestyleRatingBar({
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
       const rating = getFreestyleRatingShortcut(event.key)
-      if (rating == null || rating === selectedRating) return
+      if (rating == null) return
       event.preventDefault()
       onRate(rating)
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [busy, locked, onRate, selectedRating, shortcutsActive])
+  }, [busy, locked, onRate, shortcutsActive])
 
   return (
     <footer
@@ -155,6 +155,8 @@ export function FreestyleRatingBar({
             </span>
             {locked && pendingRating == null ? (
               <span className="shrink-0 text-zinc-500">已锁定</span>
+            ) : pendingRating == null && shownRating != null ? (
+              <span className="shrink-0 text-zinc-500">再点取消</span>
             ) : null}
           </div>
         ) : null}
@@ -229,11 +231,11 @@ export function FreestyleRatingBar({
                 data-testid={`freestyle-rating-button-${item.value}`}
                 key={item.value}
                 type="button"
-                disabled={busy || locked || selected || !hasEncounter}
+                disabled={busy || locked || !hasEncounter}
                 aria-pressed={selected}
                 aria-busy={pending || undefined}
                 data-pending={pending ? 'true' : undefined}
-                aria-label={`${item.label}：${hint}`}
+                aria-label={selected && !locked ? `${item.label}：${hint}。再点取消评分` : `${item.label}：${hint}`}
                 title={actionError || hint}
                 className={cn(
                   // transition-[colors,transform] + scale-95: the old transition-colors

@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import {
-  PalaceReviewUnitsPanel,
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession } from '@/modules/memory/public'
 import { isWeakerRevealMap, type RevealState } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
-import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
+import { FreestyleUnitReviewFlipDialogs, FreestyleUnitReviewStatusBanner } from './FreestyleUnitReviewFlipCanvas'
+import { useFreestyleUnitReviewMoreActions, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
 import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
   PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
-import { copyMindMapToClipboard, exportMindMapToFile } from '@/modules/content/public'
 import type {
   FreestyleFlipMode,
   ReviewUnitDto,
@@ -39,7 +37,6 @@ import {
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import {
   FlipCardMindMapPanel,
-  NodeBoundQuizDialog,
   persistPalaceEditor,
   type PersistPalaceEditorOptions,
   type PersistPalaceEditorResult,
@@ -66,33 +63,29 @@ export function FreestyleUnitReviewFlipPanel({
   onRevealProgressChange,
   syncedRevealMap = null,
   onRevealMapChange,
+  onOpenScopeQuiz,
 }: {
   card: FreestyleReviewUnitCard
   session: UnitReviewSessionDto
   unit: ReviewUnitDto
   editorState: MindMapEditorState
-  /** When false (card left / inactive), flush edit with leave reconcile. */
   active?: boolean
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
-  /** Advance after a passing rate; surfaced in 翻卡设置. */
   autoAdvance?: boolean
   onAutoAdvanceChange?: (value: boolean) => void
   preferredZoom?: number
   onUserZoomChange?: (zoom: number) => void
-  /** Parent hides rating overlay while inline editing. */
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
-  /** Optional silent freestyle queue rebuild after unit reconcile changes. */
   onUnitsReconciled?: () => void
-  /** Live flip progress for the card header chip (revealed / flippable total). */
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
-  /** Adopt the saved doc so review shows the edited content after returning. */
   onEditorStateSaved?: (state: MindMapEditorState) => void
   syncedRevealMap?: Record<string, string> | null
   onRevealMapChange?: (revealMap: Record<string, string>) => void
+  onOpenScopeQuiz?: () => void
 }) {
   const flipCardRevealSettings = useFlipCardRevealSettings()
   const allowedRevealNodeIds = useMemo(() => {
@@ -179,10 +172,6 @@ export function FreestyleUnitReviewFlipPanel({
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
   const [returnSaveState, setReturnSaveState] = useState<'idle' | 'saving' | 'failed'>('idle')
-  /**
-   * Quiet status replaces the old toast stack. Save / mark / reconcile notices
-   * belong on the card that changed, not flying into a screen corner mid-recall.
-   */
   const [quietStatus, setQuietStatus] = useState<string | null>(null)
   const quietStatusTimerRef = useRef<number | null>(null)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
@@ -453,7 +442,6 @@ export function FreestyleUnitReviewFlipPanel({
     }
   }, [])
 
-  /** Typing autosave: plain path, no force reconcile, quiet toast. */
   const schedulePersist = useCallback(() => {
     if (activePersistRef.current) {
       clearPersistTimer()
@@ -632,125 +620,34 @@ export function FreestyleUnitReviewFlipPanel({
     [permanentMarkChips],
   )
 
-  // Badge counts must use the full palace doc (not the flip-reveal visible subtree),
-  // matching formal review — otherwise parent badges grow as children are revealed.
-  const quizNodeBindings = usePalaceQuizNodeBindings({
+  const {
+    quizNodeBindings,
+    nodeQuizOpen,
+    setNodeQuizOpen,
+    nodeQuizNodeUid,
+    nodeQuizQuestionIds,
+    nodeQuizInitialIndex,
+    handleOpenNodeQuiz,
+  } = useFreestyleUnitReviewNodeQuiz({
     palaceId: session.palace_id,
     editorDoc: (isEditMode ? editEditorState : editorState).editor_doc,
-    enabled: Boolean(session.palace_id),
   })
-  const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds
-  const getInitialQuestionIndex = quizNodeBindings.getInitialQuestionIndex
-  const [nodeQuizOpen, setNodeQuizOpen] = useState(false)
-  const [nodeQuizNodeUid, setNodeQuizNodeUid] = useState<string | null>(null)
-  const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = useState<number[]>([])
-  const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
-
-  const handleOpenNodeQuiz = useCallback(
-    (nodeUid: string) => {
-      const ids = getOpenQuestionIds(nodeUid)
-      if (!ids.length) {
-        toast.message('该卡片没有关联题目。')
-        return
-      }
-      setNodeQuizNodeUid(nodeUid)
-      setNodeQuizQuestionIds(ids)
-      setNodeQuizInitialIndex(getInitialQuestionIndex(ids))
-      setNodeQuizOpen(true)
-    },
-    [getInitialQuestionIndex, getOpenQuestionIds],
-  )
-
-  const moreActions = useMemo(() => {
-    const actions: Array<{
-      label: string
-      onClick: () => void
-      disabled?: boolean
-      separatorBefore?: boolean
-    }> = [
-      {
-        label: isEditMode ? '返回学习' : '进入编辑',
-        onClick: handleToggleMode,
-      },
-      {
-        label: '复习进度',
-        onClick: () => setReviewUnitsPanelOpen(true),
-        separatorBefore: true,
-      },
-    ]
-    const palaceTitle = card.palace_title || session.title || `宫殿 ${card.palace_id}`
-    actions.push({
-      label: '复制导图',
-      onClick: () => {
-        void copyMindMapToClipboard(editorState, palaceTitle)
-          .then(() => toast.success('脑图已复制到剪切板'))
-          .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
-      },
-      separatorBefore: true,
-    })
-    actions.push({
-      label: '导出脑图',
-      onClick: () => {
-        try {
-          exportMindMapToFile(editorState, palaceTitle)
-          toast.success('脑图已导出')
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : '导出脑图失败。')
-        }
-      },
-      disabled: !editorState?.editor_doc,
-    })
-    if (isEditMode) {
-      actions.push({
-        label: permanentMarkMode
-          ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
-          : permanentMarkHighlights.length
-            ? `永久标记（已标 ${permanentMarkHighlights.length}）`
-            : '永久标记',
-        onClick: handleTogglePermanentMarkMode,
-        // Keep mark mode usable while a plain autosave is in flight.
-        disabled: permanentMarkMode ? false : savingEdit,
-        separatorBefore: true,
-      })
-    }
-    return actions
-  }, [
-    card.palace_id,
-    card.palace_title,
+  const moreActions = useFreestyleUnitReviewMoreActions({
+    card,
+    sessionTitle: session.title || '',
     editorState,
-    handleToggleMode,
-    handleTogglePermanentMarkMode,
     isEditMode,
-    permanentMarkHighlights.length,
+    handleToggleMode,
+    setReviewUnitsPanelOpen,
     permanentMarkMode,
+    permanentMarkHighlightsLength: permanentMarkHighlights.length,
+    handleTogglePermanentMarkMode,
     savingEdit,
-    session.title,
-  ])
+  })
 
   return (
     <>
-      {returnSaveState === 'saving' ? (
-        <div
-          data-testid="freestyle-return-saving"
-          role="status"
-          className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center sm:bottom-6"
-        >
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300/80 bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur-sm dark:border-white/20 dark:bg-zinc-900/92 dark:text-zinc-100">
-            <LoaderCircle className="size-3.5 animate-spin" />
-            正在保存宫殿…
-          </span>
-        </div>
-      ) : quietStatus ? (
-        <div
-          data-testid="freestyle-quiet-status"
-          role="status"
-          className="pointer-events-none absolute inset-x-0 bottom-20 z-30 flex justify-center sm:bottom-16"
-        >
-          <span className="max-w-[min(20rem,90%)] truncate rounded-full border border-black/8 bg-white/92 px-3 py-1 text-[11px] font-medium text-zinc-700 shadow-sm backdrop-blur-sm">
-            {quietStatus}
-          </span>
-        </div>
-      ) : null}
+      <FreestyleUnitReviewStatusBanner returnSaveState={returnSaveState} quietStatus={quietStatus ?? ''} />
 
       <FlipCardMindMapPanel
         fullscreen={fullscreen}
@@ -799,7 +696,14 @@ export function FreestyleUnitReviewFlipPanel({
             ? permanentMarkHighlights
             : undefined
         }
-        toolbarExtensions={{ moreActions }}
+        toolbarExtensions={{
+          moreActions,
+          quizAction: onOpenScopeQuiz
+            ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true }
+            : null,
+        }}
+        englishInOverflow
+        textActionLabel="文字"
         revealSettings={flipCardRevealSettings}
         freestyleFlipMode={onFreestyleFlipModeChange
           ? { value: freestyleFlipMode, onChange: onFreestyleFlipModeChange }
@@ -822,30 +726,24 @@ export function FreestyleUnitReviewFlipPanel({
         preserveViewOnSync
         initialViewPolicy="preserve"
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}
-        /* flex-1 rather than h-full: the card surface is now a flex column whose first
-           row is the unit identity chip, so h-full would overflow it by that row.
-           Rating-bar inset lives on the map shell so fitView stays above the overlay. */
         className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />
-      <NodeBoundQuizDialog
-        open={nodeQuizOpen}
-        onOpenChange={setNodeQuizOpen}
+      <FreestyleUnitReviewFlipDialogs
+        nodeQuizOpen={nodeQuizOpen}
+        setNodeQuizOpen={setNodeQuizOpen}
         palaceId={session.palace_id}
-        nodeUid={nodeQuizNodeUid}
-        questionIds={nodeQuizQuestionIds}
-        initialIndex={nodeQuizInitialIndex}
-        initialQuestionStates={quizNodeBindings.questionStates}
-        onQuestionStateChange={quizNodeBindings.updateQuestionState}
-        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
-      />
-      <PalaceReviewUnitsPanel
-        open={reviewUnitsPanelOpen}
-        palaceId={session.palace_id}
-        onClose={() => setReviewUnitsPanelOpen(false)}
-        undoToken={lastUndoToken}
-        recentChanges={recentUnitChanges}
-        onScheduleChanged={() => onUnitsReconciled?.()}
+        nodeQuizNodeUid={nodeQuizNodeUid}
+        nodeQuizQuestionIds={nodeQuizQuestionIds}
+        nodeQuizInitialIndex={nodeQuizInitialIndex}
+        questionStates={quizNodeBindings.questionStates}
+        updateQuestionState={quizNodeBindings.updateQuestionState}
+        markQuestionCompleted={quizNodeBindings.markQuestionCompleted}
+        reviewUnitsPanelOpen={reviewUnitsPanelOpen}
+        setReviewUnitsPanelOpen={setReviewUnitsPanelOpen}
+        lastUndoToken={lastUndoToken}
+        recentUnitChanges={recentUnitChanges}
+        onUnitsReconciled={onUnitsReconciled}
       />
     </>
   )

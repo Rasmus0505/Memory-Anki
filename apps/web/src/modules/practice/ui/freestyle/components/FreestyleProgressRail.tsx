@@ -5,6 +5,7 @@ import {
   progressHudText,
   progressRailLabel,
   progressSegmentHoverLabel,
+  progressSegmentShapeClass,
   retryNodeClass,
   type FreestyleProgressSegment,
   type FreestyleProgressSummary,
@@ -82,7 +83,8 @@ function ProgressRailItem({
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
             className={cn(
-              'h-1.5 w-full rounded-[1px] transition-colors',
+              'w-full rounded-[1px] transition-[colors,height,box-shadow]',
+              progressSegmentShapeClass(segment.tone),
               palaceAccentToneClass(segment.palaceId, segment.tone),
             )}
           />
@@ -100,6 +102,7 @@ export function FreestyleProgressRail({
   onOpenPlan,
   onTimerToggle,
   overflow,
+  workspaceSwitcher,
 }: {
   summary: FreestyleProgressSummary
   timerStatus: SessionStatus
@@ -108,6 +111,7 @@ export function FreestyleProgressRail({
   onTimerToggle: () => void
   /** Overflow menu trigger + content, owned by the page. */
   overflow?: ReactNode
+  workspaceSwitcher?: ReactNode
 }) {
   const [timerExpanded, setTimerExpanded] = useState(false)
   const peekTimerRef = useRef<number | null>(null)
@@ -165,19 +169,20 @@ export function FreestyleProgressRail({
       </div>
 
       <div className="flex items-start justify-between gap-1 px-2 pt-1 sm:px-3">
-        {hudText ? (
-          <button
-            type="button"
-            data-testid="freestyle-progress-hud"
-            className="pointer-events-auto mt-0.5 max-w-[60%] truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-zinc-200/88 hover:text-white"
-            aria-hidden
-            onClick={onOpenPlan}
-          >
-            {hudText}
-          </button>
-        ) : (
-          <span />
-        )}
+        <div className="mt-0.5 flex min-w-0 max-w-[72%] items-center gap-1">
+          {workspaceSwitcher}
+          {hudText ? (
+            <button
+              type="button"
+              data-testid="freestyle-progress-hud"
+              className="pointer-events-auto truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-zinc-200/88 hover:text-white"
+              aria-hidden
+              onClick={onOpenPlan}
+            >
+              {hudText}
+            </button>
+          ) : null}
+        </div>
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/82 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <button
             type="button"

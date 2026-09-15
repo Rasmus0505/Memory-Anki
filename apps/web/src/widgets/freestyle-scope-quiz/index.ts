@@ -1,0 +1,1 @@
+export { FreestyleScopeQuizDialog } from './FreestyleScopeQuizDialog'

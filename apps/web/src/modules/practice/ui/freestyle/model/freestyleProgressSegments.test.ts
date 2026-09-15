@@ -9,6 +9,7 @@ import {
   progressHudText,
   progressRailLabel,
   progressSegmentHoverLabel,
+  progressSegmentShapeClass,
   retryNodeClass,
   retryNodeLabel,
   segmentTone,
@@ -58,7 +59,17 @@ describe('palaceAccent', () => {
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(1, 'current'))
     expect(palaceAccentToneClass(1, 'done')).not.toContain('bg-emerald-400')
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
-    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/40')
+    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/20')
+  })
+
+  it('keeps pending faint and done solid so unfinished vs finished is readable', () => {
+    expect(palaceAccentToneClass(1, 'pending')).toContain('/25')
+    expect(palaceAccentToneClass(1, 'done')).not.toMatch(/\/\d+/)
+    expect(palaceAccentToneClass(null, 'done')).not.toMatch(/\/\d+/)
+    expect(progressSegmentShapeClass('pending')).toBe('h-1.5')
+    expect(progressSegmentShapeClass('done')).toBe('h-1.5')
+    expect(progressSegmentShapeClass('current')).toContain('h-2.5')
+    expect(progressSegmentShapeClass('current')).toContain('ring-1')
   })
 })
 

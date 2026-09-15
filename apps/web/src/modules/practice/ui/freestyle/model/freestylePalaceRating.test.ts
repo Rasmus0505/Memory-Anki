@@ -98,6 +98,6 @@ describe('palace rating copy', () => {
     expect(palaceRatingPreviewLabel(5, 'pass')).toBe('5小节')
     expect(palaceRatingPreviewLabel(5, 'fail')).toBe('5小节重练')
     expect(palaceRatingPreviewLabel(5, 'locked')).toBe('5小节不改期')
-    expect(palaceRatingEffectLine('记得', 5)).toBe('已选记得 · 今日 5 个到期小节，各自按阶梯改期')
+    expect(palaceRatingEffectLine('记得', 5)).toBe('已选记得 · 今日 5 个到期 · 未首学只改当前卡')
   })
 })

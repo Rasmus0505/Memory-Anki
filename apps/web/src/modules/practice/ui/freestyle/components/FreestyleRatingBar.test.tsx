@@ -107,7 +107,7 @@ describe('FreestyleRatingBar', () => {
     expect(onRate).not.toHaveBeenCalled()
   })
 
-  it('ignores shortcuts while locked, busy, or already on that rating', () => {
+  it('ignores shortcuts while locked or busy', () => {
     const locked = renderBar({ locked: true })
     fireEvent.keyDown(window, { key: '3' })
     expect(locked.onRate).not.toHaveBeenCalled()
@@ -115,10 +115,24 @@ describe('FreestyleRatingBar', () => {
     const busy = renderBar({ busy: true })
     fireEvent.keyDown(window, { key: '3' })
     expect(busy.onRate).not.toHaveBeenCalled()
+  })
 
-    const same = renderBar({ selectedRating: 3 })
+  it('keeps the selected rating clickable so a second tap can clear it', () => {
+    const { onRate } = renderBar({ selectedRating: 3 })
+    const remembered = screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement
+
+    expect(remembered.disabled).toBe(false)
+    expect(remembered.getAttribute('aria-label')).toContain('再点取消评分')
+    expect(screen.getByText('再点取消')).toBeTruthy()
+    fireEvent.click(remembered)
+    expect(onRate).toHaveBeenCalledWith(3)
+  })
+
+  it('repeats the selected rating shortcut so the parent can clear it', () => {
+    const { onRate } = renderBar({ selectedRating: 3 })
+
     fireEvent.keyDown(window, { key: '3' })
-    expect(same.onRate).not.toHaveBeenCalled()
+    expect(onRate).toHaveBeenCalledWith(3)
   })
 
   it('does not steal digits typed into a field', () => {

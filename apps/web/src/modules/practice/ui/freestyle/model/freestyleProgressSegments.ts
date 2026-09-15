@@ -49,10 +49,10 @@ export interface FreestyleProgressSummary {
 }
 
 /**
- * Palace identity is the primary rail hue; tone only modulates opacity / overlay.
- * Plan statuses still collapse: `excluded` leaves the rail (not part of the round),
- * and `stale` is too transient for its own treatment. `current` stays distinct
- * because restudy re-insertion reorders the feed mid-round.
+ * Palace identity is the primary rail hue. Tone is fill strength, not a second hue:
+ * pending is a faint unfilled tick, done is a solid fill of the same palace color,
+ * current is the playhead. Plan statuses still collapse: `excluded` leaves the rail
+ * (not part of the round), and `stale` is too transient for its own treatment.
  */
 export function segmentTone(
   status: FreestyleRoundPlanCardStatus,
@@ -87,62 +87,65 @@ export type PalaceAccentKey = (typeof PALACE_ACCENT_KEYS)[number] | 'neutral'
 
 type AccentToneClass = Record<FreestyleSegmentTone, string>
 
-/** pending: readable on dark chrome · current: bright · done: strong fill · retry: palace + amber mix */
+/**
+ * pending: faint unfilled (~25%) · current: bright playhead · done: solid filled
+ * retry: palace + amber mix. /70 vs /90 is not readable on a 6px tick.
+ */
 const PALACE_ACCENT_TONE_CLASS: Record<(typeof PALACE_ACCENT_KEYS)[number], AccentToneClass> = {
   sky: {
-    pending: 'bg-sky-400/70',
+    pending: 'bg-sky-400/25',
     current: 'bg-sky-300',
-    done: 'bg-sky-400/90',
+    done: 'bg-sky-400',
     retry: 'bg-[color-mix(in_srgb,#38bdf8_55%,#fcd34d_45%)]',
   },
   violet: {
-    pending: 'bg-violet-400/70',
+    pending: 'bg-violet-400/25',
     current: 'bg-violet-300',
-    done: 'bg-violet-400/90',
+    done: 'bg-violet-400',
     retry: 'bg-[color-mix(in_srgb,#a78bfa_55%,#fcd34d_45%)]',
   },
   rose: {
-    pending: 'bg-rose-400/70',
+    pending: 'bg-rose-400/25',
     current: 'bg-rose-300',
-    done: 'bg-rose-400/90',
+    done: 'bg-rose-400',
     retry: 'bg-[color-mix(in_srgb,#fb7185_55%,#fcd34d_45%)]',
   },
   teal: {
-    pending: 'bg-teal-400/70',
+    pending: 'bg-teal-400/25',
     current: 'bg-teal-300',
-    done: 'bg-teal-400/90',
+    done: 'bg-teal-400',
     retry: 'bg-[color-mix(in_srgb,#2dd4bf_55%,#fcd34d_45%)]',
   },
   indigo: {
-    pending: 'bg-indigo-400/70',
+    pending: 'bg-indigo-400/25',
     current: 'bg-indigo-300',
-    done: 'bg-indigo-400/90',
+    done: 'bg-indigo-400',
     retry: 'bg-[color-mix(in_srgb,#818cf8_55%,#fcd34d_45%)]',
   },
   green: {
-    pending: 'bg-green-400/70',
+    pending: 'bg-green-400/25',
     current: 'bg-green-300',
-    done: 'bg-green-400/90',
+    done: 'bg-green-400',
     retry: 'bg-[color-mix(in_srgb,#4ade80_55%,#fcd34d_45%)]',
   },
   fuchsia: {
-    pending: 'bg-fuchsia-400/70',
+    pending: 'bg-fuchsia-400/25',
     current: 'bg-fuchsia-300',
-    done: 'bg-fuchsia-400/90',
+    done: 'bg-fuchsia-400',
     retry: 'bg-[color-mix(in_srgb,#e879f9_55%,#fcd34d_45%)]',
   },
   pink: {
-    pending: 'bg-pink-400/70',
+    pending: 'bg-pink-400/25',
     current: 'bg-pink-300',
-    done: 'bg-pink-400/90',
+    done: 'bg-pink-400',
     retry: 'bg-[color-mix(in_srgb,#f472b6_55%,#fcd34d_45%)]',
   },
 }
 
 const NEUTRAL_ACCENT_TONE_CLASS: AccentToneClass = {
-  pending: 'bg-white/40',
+  pending: 'bg-white/20',
   current: 'bg-zinc-100',
-  done: 'bg-zinc-400/85',
+  done: 'bg-zinc-200',
   retry: 'bg-amber-300/90',
 }
 
@@ -164,6 +167,12 @@ export function palaceAccentToneClass(
   const accent = palaceAccent(palaceId)
   if (accent === 'neutral') return NEUTRAL_ACCENT_TONE_CLASS[tone]
   return PALACE_ACCENT_TONE_CLASS[accent][tone]
+}
+
+/** Playhead is taller; pending and done stay a 6px bar so palace bands stay even. */
+export function progressSegmentShapeClass(tone: FreestyleSegmentTone): string {
+  if (tone === 'current') return 'h-2.5 ring-1 ring-white/85'
+  return 'h-1.5'
 }
 
 function progressCardLabel(

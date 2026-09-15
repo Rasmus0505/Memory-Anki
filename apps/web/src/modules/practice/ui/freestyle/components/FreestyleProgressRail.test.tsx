@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   palaceAccent,
   palaceAccentToneClass,
+  progressSegmentShapeClass,
   retryNodeClass,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
@@ -51,7 +52,9 @@ describe('FreestyleProgressRail', () => {
     expect(segments).toHaveLength(4)
     expect(segments.map((node) => node.getAttribute('data-tone')))
       .toEqual(['done', 'retry', 'current', 'pending'])
-    expect(segments[0].className).toContain('h-1.5')
+    expect(segments[0].className).toContain(progressSegmentShapeClass('done'))
+    expect(segments[2].className).toContain(progressSegmentShapeClass('current'))
+    expect(segments[3].className).toContain(progressSegmentShapeClass('pending'))
     expect(screen.getByTestId('freestyle-progress-rail').className).toContain('h-5')
   })
 
@@ -87,6 +90,12 @@ describe('FreestyleProgressRail', () => {
     // Done no longer forces emerald via palaceDone.
     expect(segments[0].className).not.toContain('bg-emerald-400')
     expect(segments[4].className).toContain(palaceAccentToneClass(null, 'pending'))
+
+    // Faint pending vs solid done must stay a glanceable contrast on 6px ticks.
+    expect(palaceAccentToneClass(2, 'pending')).toContain('/25')
+    expect(palaceAccentToneClass(1, 'done')).not.toMatch(/\/\d+/)
+    expect(segments[3].className).toContain('/25')
+    expect(segments[0].className).not.toMatch(/bg-\S+\/\d+/)
   })
 
   it('speaks the counts the decorative rail cannot', () => {

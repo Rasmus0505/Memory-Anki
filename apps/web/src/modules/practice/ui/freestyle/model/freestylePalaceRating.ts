@@ -99,5 +99,6 @@ export function palaceRatingPreviewLabel(dueCount: number, kind: 'pass' | 'fail'
 
 export function palaceRatingEffectLine(label: string, dueCount: number) {
   const count = Math.max(1, Math.round(dueCount) || 1)
-  return `已选${label} · 今日 ${count} 个到期小节，各自按阶梯改期`
+  return `已选${label} · 今日 ${count} 个到期 · 未首学只改当前卡`
 }
+

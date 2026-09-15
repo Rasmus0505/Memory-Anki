@@ -32,11 +32,19 @@ describe('shouldRenewFreestyleEncounter', () => {
     )).toBe(true)
   })
 
-  it('does not reopen a passed closed card', () => {
+  it('reopens a passed closed card so the learner can score it again', () => {
     expect(shouldRenewFreestyleEncounter(
       encounter({ status: 'closed', selectedRating: 3, passed: true }),
       3,
       true,
+    )).toBe(true)
+  })
+
+  it('does not reopen a passed card while read-only history is showing', () => {
+    expect(shouldRenewFreestyleEncounter(
+      encounter({ status: 'closed', selectedRating: 3, passed: true }),
+      3,
+      false,
     )).toBe(false)
   })
 })

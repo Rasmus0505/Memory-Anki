@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   applyFreestyleRoundActionApi,
   buildFreestyleQueueApi,
+  getFreestyleRoundApi,
   getOrCreateFreestyleRoundApi,
   startFreestyleRoundApi,
 } from '@/modules/practice/ui/freestyle/api'
@@ -11,6 +13,7 @@ import {
   serverPlanVersion,
 } from '@/modules/practice/domain/serverRoundPlan'
 import {
+  applyCompletedIdsToRoundPlan,
   applyDeferredPalaceOrder,
   applyRoundPlanOrder,
   clearMutedPalaces,
@@ -25,7 +28,6 @@ import {
   restoreCards,
   mergeQueuePreservingHistory,
   mergeRefreshQueue,
-  cardUnitId,
   rebindCompletedIdsByUnit,
   rebindUnitEncountersByUnitId,
   moveCardToTail,
@@ -41,11 +43,19 @@ import {
   removeRetryOccurrencesForSource,
   restoreExplicitlySelectedCards,
   sourceCardId,
+  emitFreestylePeerRound,
+  FREESTYLE_PEER_ROUND_EVENT,
+  FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
+  FREESTYLE_WORKSPACE_PRIMARY,
+  freestyleWorkspacePath,
+  normalizeFreestyleWorkspaceId,
   readFreestyleFeedConfig,
   readQueueState,
   resolveRebuildIndex,
   saveFreestyleFeedConfig,
   saveQueueState,
+  type FreestylePeerRoundDetail,
+  type FreestyleWorkspaceId,
   updateRoundPlanCard,
   reorderRoundPlan,
   type FreestyleRoundPlanState,
@@ -222,16 +232,21 @@ export type StaleDropResult = StaleDropDecision & {
   dropped: boolean
 }
 
-export function useImmersiveQueue(entryPalaceId: number | null = null) {
+export function useImmersiveQueue(
+  entryPalaceId: number | null = null,
+  workspace: FreestyleWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
+) {
+  const slot = normalizeFreestyleWorkspaceId(workspace)
+  const location = useLocation()
   const unlockedEntryPalaceIdRef = useRef<number | null>(null)
   const scopeEntryConfig = useCallback(
     (next: FreestyleFeedConfig) => applyFreestyleEntryScopeUnlessSaved(next, entryPalaceId),
     [entryPalaceId],
   )
   const [config, setConfig] = useState<FreestyleFeedConfig>(() =>
-    scopeEntryConfig(readFreestyleFeedConfig()),
+    scopeEntryConfig(readFreestyleFeedConfig(slot)),
   )
-  const [queueState, setQueueState] = useState<FreestyleSkipState>(() => readQueueState())
+  const [queueState, setQueueState] = useState<FreestyleSkipState>(() => readQueueState(slot))
   const [cards, setCards] = useState<FreestyleCard[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -300,11 +315,15 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
   }, [syncStaleCircuit])
 
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
-    const sanitized = saveQueueState(next)
+    const sanitized = saveQueueState(next, slot)
     queueStateRef.current = sanitized
     setQueueState(sanitized)
     return sanitized
-  }, [])
+  }, [slot])
+
+  const notifyPeerRound = useCallback(() => {
+    emitFreestylePeerRound(slot)
+  }, [slot])
 
   /** Remember the card under the viewport across route leave / remount. */
   const persistCurrentCardId = useCallback(
@@ -332,9 +351,9 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         unitRevision,
         status: 'pending',
         sessionId: null,
-        selectedRating: null,
-        passed: null,
-        retryAfterCards: 0,
+        selectedRating: existing?.selectedRating ?? null,
+        passed: existing?.passed ?? null,
+        retryAfterCards: existing?.retryAfterCards ?? 0,
       }
       persistQueueState(setUnitEncounterState(queueStateRef.current, cardId, next))
       return next
@@ -421,15 +440,11 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       }
       try {
         const scopeSignature = freestylePalaceScopeSignature(nextConfig)
-        const storedScopeChanged =
-          queueStateRef.current.palaceScopeSignature !== scopeSignature
-        if (storedScopeChanged) {
-          pendingRestudyByIdRef.current.clear()
-          syncPendingRestudyIds()
-          staleCardKeysRef.current.clear()
-          syncStaleCircuit(resetStaleDropCircuit())
-          const freshRound = persistQueueState(startNewRound(queueStateRef.current, nextConfig.seed))
-          persistQueueState({ ...freshRound, palaceScopeSignature: scopeSignature })
+        if (queueStateRef.current.palaceScopeSignature !== scopeSignature) {
+          // Remember the current scope. Do not mint a new round here — refresh
+          // and silent rebuilds must restore server progress unless the caller
+          // already started a new round (palace-scope / 再来一轮).
+          persistQueueState({ ...queueStateRef.current, palaceScopeSignature: scopeSignature })
         }
         // Explicit picker selections override stale local mute state. Without
         // this, a valid backend candidate list can become an empty feed.
@@ -440,12 +455,12 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         if (reenabled !== queueStateRef.current) persistQueueState(reenabled)
         const completedIds =
           options?.completedIds ??
-          (options?.preserveCompleted === false || storedScopeChanged
+          (options?.preserveCompleted === false
             ? []
             : queueStateRef.current.completedIds)
         const hiddenIds =
           options?.hiddenIds ??
-          (options?.preserveCompleted === false || storedScopeChanged
+          (options?.preserveCompleted === false
             ? []
             : queueStateRef.current.hiddenIds)
         const response = await buildQueueWithTimeout(
@@ -569,14 +584,15 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
         }
+        const builtCards = nextCards
         const nextPlan = createRoundPlan(
           queueStateRef.current.roundId,
-          nextCards,
+          builtCards,
           nextConfig,
           incomingMeta,
           queueStateRef.current.roundPlan,
         )
-        nextCards = applyRoundPlanOrder(nextCards, nextPlan)
+        nextCards = applyRoundPlanOrder(builtCards, nextPlan)
         const plannedState = {
           ...queueStateRef.current,
           palaceScopeSignature: scopeSignature,
@@ -592,33 +608,54 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
               operation_id: createOperationId(),
               scope_key: scopeSignature,
               config: nextConfig,
-              cards: nextCards,
+              cards: builtCards,
               round_id: queueStateRef.current.roundId,
+              workspace: slot,
             })
             : await getOrCreateFreestyleRoundApi({
               operation_id: createOperationId(),
               scope_key: scopeSignature,
               config: nextConfig,
-              cards: nextCards,
+              cards: builtCards,
               round_id: queueStateRef.current.roundId,
+              workspace: slot,
             }, { signal: queueBuildController.signal })
           if (operationIdRef.current !== operationId) return
           const version = serverPlanVersion(round)
           serverPlanVersionRef.current = version
           setPlanVersion(version)
-          if (round.round_id && round.round_id !== queueStateRef.current.roundId) {
-            persistQueueState({ ...queueStateRef.current, roundId: round.round_id })
+          const adoptedRoundId = round.round_id || queueStateRef.current.roundId
+          if (adoptedRoundId && adoptedRoundId !== queueStateRef.current.roundId) {
+            persistQueueState({ ...queueStateRef.current, roundId: adoptedRoundId })
           }
-          nextCards = cardsForServerPlan(nextCards, round.plan, round.round_id || queueStateRef.current.roundId)
+          nextCards = cardsForServerPlan(builtCards, round.plan, adoptedRoundId)
+          incomingMeta.scheduled_count = nextCards.length
+          const serverCompleted = Array.isArray(round.plan?.completed_ids)
+            ? round.plan.completed_ids.map(String)
+            : queueStateRef.current.completedIds
+          const serverHidden = Array.isArray(round.plan?.excluded_ids)
+            ? round.plan.excluded_ids.map(String)
+            : queueStateRef.current.hiddenIds
           serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
-          if (Array.isArray(round.plan?.completed_ids)) {
-            persistQueueState({
-              ...queueStateRef.current,
-              completedIds: round.plan.completed_ids.map(String),
-              hiddenIds: round.plan.excluded_ids?.map(String) ?? queueStateRef.current.hiddenIds,
-              currentCardId: serverCurrentId,
-            })
-          }
+          const hydratedPlan = applyCompletedIdsToRoundPlan(
+            createRoundPlan(
+              adoptedRoundId,
+              nextCards,
+              nextConfig,
+              incomingMeta,
+              queueStateRef.current.roundPlan,
+            ),
+            serverCompleted,
+          )
+          persistQueueState({
+            ...queueStateRef.current,
+            roundId: adoptedRoundId,
+            completedIds: serverCompleted,
+            hiddenIds: serverHidden,
+            currentCardId: serverCurrentId ?? queueStateRef.current.currentCardId,
+            roundPlan: hydratedPlan,
+          })
+          notifyPeerRound()
         } catch {
           // Offline draft keeps the local plan until the server is reachable.
         }
@@ -631,6 +668,9 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
           ?? serverCurrentId
           ?? userCardId
           ?? queueStateRef.current.currentCardId
+        const liveUserCardId =
+          cardsRef.current[currentIndexRef.current]?.id
+          ?? userCardId
         cardsRef.current = nextCards
         setCards(nextCards)
         setPhaseStats(response.phase_stats || {})
@@ -638,7 +678,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         const resolved = resolveRebuildIndex({
           nextCards,
           preferCardId,
-          userCardId: silent ? userCardId : (serverCurrentId ?? userCardId),
+          userCardId: silent ? liveUserCardId : (serverCurrentId ?? liveUserCardId),
           fallbackIndex: currentIndexRef.current,
           previousCards,
         })
@@ -676,7 +716,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         if (operationIdRef.current === operationId) setQueueFrozen(false)
       }
     },
-    [applyCurrentIndex, persistQueueState, syncPendingRestudyIds, syncStaleCircuit],
+    [applyCurrentIndex, notifyPeerRound, persistQueueState, slot, syncPendingRestudyIds, syncStaleCircuit],
   )
 
   const scheduleStaleRebuild = useCallback((preferCardId: string | null) => {
@@ -702,7 +742,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
   }, [])
 
   useEffect(() => {
-    const next = scopeEntryConfig(readFreestyleFeedConfig())
+    const next = scopeEntryConfig(readFreestyleFeedConfig(slot))
     if (sameFeedConfig(next, configRef.current)) return
     pendingRestudyByIdRef.current.clear()
     syncPendingRestudyIds()
@@ -723,21 +763,45 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       hiddenIds: freshRound.hiddenIds,
       reason: 'entry_scope_changed',
     })
-  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, syncPendingRestudyIds])
+  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   // Backend preference bootstrap / cross-client updates can arrive after mount.
   useEffect(() => {
-    return onAppEvent(FREESTYLE_FEED_CONFIG_UPDATED_EVENT, (detail) => {
+    const configEvent = slot === 'secondary'
+      ? FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT
+      : FREESTYLE_FEED_CONFIG_UPDATED_EVENT
+    return onAppEvent(configEvent, (detail) => {
       const saved = sanitizeFreestyleFeedConfig(detail)
       const next = entryPalaceId != null && unlockedEntryPalaceIdRef.current === entryPalaceId
         ? saved
         : scopeEntryConfig(saved)
       if (sameFeedConfig(next, configRef.current)) return
+      const scopeChanged =
+        freestylePalaceScopeSignature(configRef.current) !== freestylePalaceScopeSignature(next)
       configRef.current = next
       setConfig(next)
+      if (scopeChanged) {
+        pendingRestudyByIdRef.current.clear()
+        syncPendingRestudyIds()
+        staleCardKeysRef.current.clear()
+        const freshRound = persistQueueState({
+          ...startNewRound(queueStateRef.current, next.seed),
+          palaceScopeSignature: freestylePalaceScopeSignature(next),
+        })
+        cardsRef.current = []
+        applyCurrentIndex(0, [])
+        setCards([])
+        void buildQueue(next, {
+          preserveCompleted: false,
+          completedIds: freshRound.completedIds,
+          hiddenIds: freshRound.hiddenIds,
+          reason: 'palace_scope_changed',
+        })
+        return
+      }
       void buildQueue(next, { preserveCompleted: true, reason: 'config_event' })
     })
-  }, [buildQueue, entryPalaceId, scopeEntryConfig])
+  }, [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   const setConfigAndPersist = useCallback(
     (
@@ -769,11 +833,11 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         unlockedEntryPalaceIdRef.current = entryPalaceId
       }
       const requested = useSelectionScope ? rawRequested : scopeEntryConfig(rawRequested)
-      const stored = readFreestyleFeedConfig()
+      const stored = readFreestyleFeedConfig(slot)
       const nextToPersist = entryPalaceId == null || useSelectionScope
         ? requested
         : persistFreestyleConfigWithoutEntryLock(requested, stored)
-      const saved = saveFreestyleFeedConfig(nextToPersist)
+      const saved = saveFreestyleFeedConfig(nextToPersist, slot)
       const next = useSelectionScope ? saved : scopeEntryConfig(saved)
       const scopeChanged =
         freestylePalaceScopeSignature(current) !== freestylePalaceScopeSignature(next)
@@ -806,7 +870,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         preferCardId: options?.preferCardId ?? null,
       })
     },
-    [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, syncPendingRestudyIds],
+    [applyCurrentIndex, buildQueue, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
   )
 
   const refreshQueue = useCallback(() => {
@@ -820,7 +884,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     staleCardKeysRef.current.clear()
     resetStaleRecovery()
     const nextSeed = config.seed + 1
-    const saved = saveFreestyleFeedConfig({ ...readFreestyleFeedConfig(), seed: nextSeed })
+    const saved = saveFreestyleFeedConfig({ ...readFreestyleFeedConfig(slot), seed: nextSeed }, slot)
     const nextConfig = entryPalaceId != null && unlockedEntryPalaceIdRef.current === entryPalaceId
       ? saved
       : scopeEntryConfig(saved)
@@ -834,7 +898,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       hiddenIds: nextState.hiddenIds,
       reason: 'manual_new_round',
     })
-  }, [applyCurrentIndex, buildQueue, config, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig])
+  }, [applyCurrentIndex, buildQueue, config, entryPalaceId, persistQueueState, resetStaleRecovery, scopeEntryConfig, slot])
 
   /**
    * Mark a card done for this round without removing it from the local feed.
@@ -857,11 +921,12 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
         if (queueStateRef.current.roundId !== roundId) return
         serverPlanVersionRef.current = serverPlanVersion(round)
         setPlanVersion(serverPlanVersion(round))
+        notifyPeerRound()
       }).catch(() => {
         // Local completion remains the offline draft.
       })
     },
-    [persistQueueState],
+    [notifyPeerRound, persistQueueState],
   )
 
   /**
@@ -1090,23 +1155,14 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     syncPendingRestudyIds()
     const roundId = queueStateRef.current.roundId
 
-    const pinLiveViewport = (cards: FreestyleCard[]) => {
-      const liveId = resolveLeaveConfirmViewportId({
-        leavingCardId: leftId,
-        liveCardId: cardsRef.current[currentIndexRef.current]?.id ?? null,
-      })
-      if (cards !== cardsRef.current) {
-        cardsRef.current = cards
-        setCards(cards)
-      }
-      if (!liveId) return
-      const resolved = cards.findIndex((card) => card.id === liveId)
-      if (resolved >= 0) applyCurrentIndex(resolved, cards)
-    }
-
     // Insert before the caller changes index so 下一张 can target the other card by id.
+    // Do not pin here: goToIndex still owns the destination, and pinning the
+    // leaving card is what yanked 下一张 back after 困难/忘记.
     const optimistic = insertPendingRetryCopy(cardsRef.current, leftId, pending, roundId)
-    pinLiveViewport(optimistic)
+    if (optimistic !== cardsRef.current) {
+      cardsRef.current = optimistic
+      setCards(optimistic)
+    }
 
     void applyFreestyleRoundActionApi(roundId, {
       operation_id: createOperationId(),
@@ -1115,18 +1171,34 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       card_id: leftId,
     }).then((round) => {
       if (queueStateRef.current.roundId !== roundId) return
+      if (round.conflict) return
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
+      notifyPeerRound()
       const confirmed = cardsForServerPlan(
         cardsRef.current,
         round.plan,
         round.round_id || roundId,
       )
-      pinLiveViewport(confirmed)
+      const liveId = resolveLeaveConfirmViewportId({
+        leavingCardId: leftId,
+        liveCardId: cardsRef.current[currentIndexRef.current]?.id ?? null,
+      })
+      if (confirmed !== cardsRef.current) {
+        cardsRef.current = confirmed
+        setCards(confirmed)
+      }
+      if (!liveId || liveId === leftId) return
+      const resolved = confirmed.findIndex((card) => card.id === liveId)
+      if (resolved >= 0) applyCurrentIndex(resolved, confirmed)
     }).catch(() => {
-      pinLiveViewport(insertPendingRetryCopy(cardsRef.current, leftId, pending, roundId))
+      const fallback = insertPendingRetryCopy(cardsRef.current, leftId, pending, roundId)
+      if (fallback !== cardsRef.current) {
+        cardsRef.current = fallback
+        setCards(fallback)
+      }
     })
-  }, [applyCurrentIndex, syncPendingRestudyIds])
+  }, [applyCurrentIndex, notifyPeerRound, syncPendingRestudyIds])
 
   /**
    * Drop a card whose formal due vanished between queue build and open.
@@ -1299,6 +1371,23 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     cardsRef.current = filtered
     setCards(filtered)
     applyCurrentIndex(Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)), filtered)
+    const roundId = nextState.roundId
+    void (async () => {
+      for (const cardId of ids) {
+        const round = await applyFreestyleRoundActionApi(roundId, {
+          operation_id: createOperationId(),
+          expected_version: serverPlanVersionRef.current,
+          action: 'exclude',
+          card_id: cardId,
+        })
+        if (queueStateRef.current.roundId !== roundId) return
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+      }
+      notifyPeerRound()
+    })().catch(() => {
+      // Local exclude remains the offline draft.
+    })
     void buildQueue(configRef.current, {
       preserveCompleted: true,
       hiddenIds: nextState.hiddenIds,
@@ -1307,7 +1396,7 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
       preferCardId: filtered[currentIndexRef.current]?.id ?? null,
       reason: 'plan_exclude',
     })
-  }, [applyCurrentIndex, buildQueue, persistQueueState])
+  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState])
 
   const restorePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
@@ -1318,13 +1407,30 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     })
     const nextState = restoreCards({ ...queueStateRef.current, roundPlan: nextPlan }, ids)
     persistQueueState(nextState)
+    const roundId = nextState.roundId
+    void (async () => {
+      for (const cardId of ids) {
+        const round = await applyFreestyleRoundActionApi(roundId, {
+          operation_id: createOperationId(),
+          expected_version: serverPlanVersionRef.current,
+          action: 'restore',
+          card_id: cardId,
+        })
+        if (queueStateRef.current.roundId !== roundId) return
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+      }
+      notifyPeerRound()
+    })().catch(() => {
+      // Local restore remains the offline draft.
+    })
     void buildQueue(configRef.current, {
       preserveCompleted: true,
       hiddenIds: nextState.hiddenIds,
       completedIds: nextState.completedIds,
       reason: 'plan_restore',
     })
-  }, [buildQueue, persistQueueState])
+  }, [buildQueue, notifyPeerRound, persistQueueState])
 
   /**
    * Jump past the rest of the current palace: move remaining cards to the tail
@@ -1420,6 +1526,73 @@ export function useImmersiveQueue(entryPalaceId: number | null = null) {
     syncPendingRestudyIds()
     reshuffleQueue()
   }, [reshuffleQueue, syncPendingRestudyIds])
+
+  const hydrateFromServerRound = useCallback(async (advanceIfCompleted: boolean) => {
+    const roundId = queueStateRef.current.roundId
+    if (!roundId) return
+    try {
+      const round = await getFreestyleRoundApi(roundId)
+      if (!round?.plan) return
+      const adoptedRoundId = round.round_id || roundId
+      serverPlanVersionRef.current = serverPlanVersion(round)
+      setPlanVersion(serverPlanVersion(round))
+      const nextCards = cardsForServerPlan(cardsRef.current, round.plan, adoptedRoundId)
+      const serverCompleted = Array.isArray(round.plan.completed_ids)
+        ? round.plan.completed_ids.map(String)
+        : queueStateRef.current.completedIds
+      const serverHidden = Array.isArray(round.plan.excluded_ids)
+        ? round.plan.excluded_ids.map(String)
+        : queueStateRef.current.hiddenIds
+      persistQueueState({
+        ...queueStateRef.current,
+        roundId: adoptedRoundId,
+        completedIds: serverCompleted,
+        hiddenIds: serverHidden,
+        roundPlan: applyCompletedIdsToRoundPlan(
+          createRoundPlan(
+            adoptedRoundId,
+            nextCards,
+            configRef.current,
+            {
+              candidate_count: nextCards.length,
+              scheduled_count: nextCards.length,
+              queue_limit: configRef.current.queue_length,
+              limit_reached: false,
+              palace_leftover_due: {},
+            },
+            queueStateRef.current.roundPlan,
+          ),
+          serverCompleted,
+        ),
+      })
+      cardsRef.current = nextCards
+      setCards(nextCards)
+      const currentId = nextCards[currentIndexRef.current]?.id
+      const handled = new Set([...serverCompleted, ...serverHidden])
+      if (advanceIfCompleted && currentId && handled.has(currentId)) {
+        const nextId = nextUnfinishedCardId(round.plan, nextCards)
+        const idx = nextId ? nextCards.findIndex((card) => card.id === nextId) : -1
+        if (idx >= 0) applyCurrentIndex(idx, nextCards)
+      }
+    } catch {
+      // Offline: keep the local draft.
+    }
+  }, [applyCurrentIndex, persistQueueState])
+
+  useEffect(() => {
+    return onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail) => {
+      if (!detail || detail.workspace === slot) return
+      void hydrateFromServerRound(false)
+    })
+  }, [hydrateFromServerRound, slot])
+
+  const workspacePath = freestyleWorkspacePath(slot)
+  const isActiveRoute =
+    location.pathname === workspacePath || location.pathname.startsWith(`${workspacePath}/`)
+  useEffect(() => {
+    if (!isActiveRoute) return
+    void hydrateFromServerRound(true)
+  }, [hydrateFromServerRound, isActiveRoute])
 
   return {
     config,

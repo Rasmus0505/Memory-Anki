@@ -255,6 +255,31 @@ function queueEncounter(overrides: Partial<FreestyleUnitEncounterState> = {}): F
   }
 }
 
+function undoResult(
+  session: UnitReviewSessionDto,
+  options: { rating?: UnitRating | null; operationId?: string | null } = {},
+) {
+  const rating = options.rating ?? null
+  const effect = rating == null ? null : effects.find((item) => item.rating === rating)
+  const encounter = buildEncounter({
+    selected_rating: rating,
+    passed: effect?.passed ?? null,
+    retry_after_cards: effect?.retry_after_cards ?? 0,
+    effective_operation_id: options.operationId ?? null,
+  })
+  return {
+    operation_id: 'undone',
+    unit: {
+      ...session.units[0],
+      session_status: rating == null ? 'pending' as const : session.units[0].session_status,
+      final_rating: rating,
+      encounter,
+    },
+    session_status: rating == null ? 'pending' as const : session.units[0].session_status,
+    encounter,
+  }
+}
+
 function ratingResult(session: UnitReviewSessionDto, rating: UnitRating, operationId: string) {
   const effect = effects.find((item) => item.rating === rating)!
   const encounter = buildEncounter({
@@ -296,6 +321,7 @@ function renderCard(
       settleCards: Array<{ cardId: string; unitId: string }>
     }
     onRatingSettled?: (cardId: string, passed: boolean, rating: number) => void
+    onOpenScopeQuiz?: () => void
   } = {},
 ) {
   const callbacks = {
@@ -310,6 +336,7 @@ function renderCard(
     onRatingSettled: options.onRatingSettled ?? vi.fn(),
     onRatingScopeChange: vi.fn(),
     onRoundSync: vi.fn(),
+    onOpenScopeQuiz: options.onOpenScopeQuiz,
   }
   const props = {
     card,
@@ -539,6 +566,8 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(moreActions?.moreActions?.some((item) => item.label === '复习进度')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '复制导图')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '导出脑图')).toBe(true)
+    expect(capturedPanelProps?.englishInOverflow).toBe(true)
+    expect(capturedPanelProps?.textActionLabel).toBe('文字')
 
     act(() => enter!.onClick())
 
@@ -571,6 +600,21 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => {
       expect(capturedPanelProps?.displayMode).toBe('review')
     })
+  })
+
+  it('exposes 做题 as a toolbar action without putting 英语 on the canvas chrome', async () => {
+    const onOpenScopeQuiz = vi.fn()
+    const card = buildCard('unit-quiz-toolbar')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card, { onOpenScopeQuiz })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const quizAction = (capturedPanelProps?.toolbarExtensions as { quizAction?: { label: string; onClick: () => void } | null })?.quizAction
+    expect(quizAction?.label).toBe('做题')
+    expect(capturedPanelProps?.englishInOverflow).toBe(true)
+    expect(capturedPanelProps?.textActionLabel).toBe('文字')
+    act(() => quizAction!.onClick())
+    expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
   })
 
   it('palace editScope shows the full palace instead of the current unit spine', async () => {
@@ -1281,7 +1325,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(ratingEffectLabel(heldAtLearning, 3)).toBe('3张后重练 · 保持首学阶段')
   })
 
-  it('stays on the card, ignores the same rating, and atomically amends another rating', async () => {
+  it('stays on the card and atomically amends another rating', async () => {
     const card = buildCard('unit-amend')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -1292,21 +1336,89 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    const remembered = screen.getByRole('button', { name: /记得：1天后复习/ })
-    fireEvent.click(remembered)
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
     await screen.findByText('已选记得 · 1天后复习 · 7月28日')
-    fireEvent.click(remembered)
-    expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
     await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
+    expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, {
       restudy: false,
       rating: 4,
       retryAfterCards: 0,
     })
     expect(screen.getByTestId('flip-card-mind-map-panel')).not.toBeNull()
+  })
+
+  it('clears the selected rating when it is clicked again', async () => {
+    const card = buildCard('unit-clear-rating')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+    apiMocks.undoReviewUnitRatingApi.mockResolvedValue(undoResult(session))
+    const { onBranchComplete } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const remembered = screen.getByRole('button', { name: /记得：1天后复习/ })
+    fireEvent.click(remembered)
+    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    fireEvent.click(screen.getByRole('button', { name: /记得：.*再点取消评分/ }))
+    await waitFor(() => expect(apiMocks.undoReviewUnitRatingApi).toHaveBeenCalledTimes(1))
+    expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
+    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { cleared: true })
+    expect(screen.queryByText(/已选记得/)).toBeNull()
+  })
+
+  it('undoes every prior rating when the selected rating is clicked again after an amend', async () => {
+    const card = buildCard('unit-clear-all-ratings')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+    apiMocks.undoReviewUnitRatingApi
+      .mockResolvedValueOnce(undoResult(session, { rating: 3, operationId: 'rating-remember' }))
+      .mockResolvedValueOnce(undoResult(session))
+    const { onBranchComplete } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
+    await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
+    fireEvent.click(screen.getByRole('button', { name: /轻松：.*再点取消评分/ }))
+
+    await waitFor(() => expect(apiMocks.undoReviewUnitRatingApi).toHaveBeenCalledTimes(2))
+    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { cleared: true })
+    expect(screen.queryByText(/已选/)).toBeNull()
+  })
+
+  it('adopts the session id returned when a rating reopens a dead glance', async () => {
+    const card = buildCard('unit-healed-session')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve({
+          ...ratingResult(session, rating, operationId),
+          study_session_id: 'healed-session',
+        }),
+    )
+    const { onEncounterChange, onSaveFailed } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(onEncounterChange).toHaveBeenCalledWith(
+      card.id,
+      expect.objectContaining({ sessionId: 'healed-session', selectedRating: 3 }),
+    )
   })
 
   it('rates the palace due set through the batch command', async () => {
@@ -1342,7 +1454,7 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
-    await screen.findByText('已选记得 · 今日 2 个到期小节，各自按阶梯改期')
+    await screen.findByText('已选记得 · 今日 2 个到期 · 未首学只改当前卡')
     expect(apiMocks.ratePalaceDueUnitsApi).toHaveBeenCalledTimes(1)
     expect(apiMocks.ratePalaceDueUnitsApi.mock.calls[0][1].includeUnitIds).toEqual([
       card.unit_id,
@@ -1604,6 +1716,30 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe(true)
   })
 
+  it('starts a new session when returning to a passed unit to re-score', async () => {
+    const card = buildCard('unit-rerate')
+    const renewed = queueEncounter({
+      encounterId: 'encounter-amend',
+      status: 'pending',
+      selectedRating: 3,
+      passed: true,
+    })
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card, { readOnly: false, encounter: renewed })
+
+    await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledWith(
+      { id: card.unit_id, revision: card.unit_revision },
+      'round-1',
+      'encounter-amend',
+      { allowNotDue: true },
+    ))
+    expect(apiMocks.getUnitReviewSessionApi).not.toHaveBeenCalled()
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(
+      (screen.getByRole('button', { name: /轻松：3天后复习/ }) as HTMLButtonElement).disabled,
+    ).toBe(false)
+  })
+
   it('adopts a live unit revision instead of dropping when the session succeeds', async () => {
     const card = buildCard('unit-stale', 3)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!, 4))
@@ -1706,7 +1842,40 @@ describe('FreestyleUnitReviewCardView', () => {
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
     expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
     expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
+    expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
     expect(onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('clears a mirrored selected rating through undo instead of posting again', async () => {
+    const card = buildCard('unit-mirrored-clear')
+    const session = buildSession(
+      card.unit_id!,
+      3,
+      buildEncounter({
+        selected_rating: 3,
+        passed: true,
+        effective_operation_id: 'mirrored-rate',
+      }),
+    )
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.undoReviewUnitRatingApi.mockResolvedValue(undoResult(session))
+    const { onBranchComplete, onSaveFailed } = renderCard(card, {
+      encounter: queueEncounter({
+        status: 'open',
+        sessionId: session.id,
+        selectedRating: 3,
+        passed: true,
+      }),
+    })
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    await waitFor(() => expect(apiMocks.undoReviewUnitRatingApi).toHaveBeenCalledWith(
+      'mirrored-rate',
+      'round-1',
+    ))
+    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, { cleared: true })
   })
 
   it('retries a stale palace rating once instead of throwing', async () => {

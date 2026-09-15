@@ -81,7 +81,10 @@ describe('GlobalBackButton', () => {
 describe('mind-map host paths', () => {
   it('recognizes full-page mind-map hosts and excludes catalog/quiz routes', () => {
     expect(isImmersiveFeedPath('/freestyle')).toBe(true)
+    expect(isImmersiveFeedPath('/freestyle-2')).toBe(true)
+    expect(isImmersiveFeedPath('/freestyle-2/legacy')).toBe(true)
     expect(isMindMapHostPath('/freestyle')).toBe(true)
+    expect(isMindMapHostPath('/freestyle-2')).toBe(true)
     expect(isMindMapHostPath('/freestyle/legacy')).toBe(true)
     expect(isMindMapHostPath('/knowledge')).toBe(true)
     expect(isMindMapHostPath('/palaces/1')).toBe(true)

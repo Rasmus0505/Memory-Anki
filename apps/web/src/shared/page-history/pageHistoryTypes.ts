@@ -5,6 +5,7 @@ export const PAGE_HISTORY_MAX_DEVICE_SNAPSHOTS = 20
 export type PageHistorySectionKey =
   | 'dashboard'
   | 'freestyle'
+  | 'freestyleSecondary'
   | 'palaces'
   | 'english'
   | 'englishReading'

@@ -7,6 +7,9 @@ export function buildAttemptAnswerPayload(
   state: QuizRuntimeState,
 ) {
   if (question.question_type === 'multiple_choice') {
+    if (state.shortAnswerSubmitted || (state.shortAnswerText && !state.selectedOptionId)) {
+      return { user_answer: state.shortAnswerText || '' }
+    }
     return { selected_option_id: state.selectedOptionId || '' }
   }
   if (question.question_type === 'true_false') {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
+import { sanitizeFreestyleFeedConfig } from './feedConfig'
 import {
+  applyCompletedIdsToRoundPlan,
   countIncompletePalaceUnits,
   createRoundPlan,
   isSequentialPalaceBlocked,
@@ -114,6 +116,45 @@ describe('round plan reducer', () => {
     expect(cardPalaceId(next[4])).toBe(1)
   })
 
+  it('reorders unstarted cards when palace_order or unit_order changes', () => {
+    const sequential = sanitizeFreestyleFeedConfig({
+      training_mode: 'memory_palace',
+      streams: {
+        memory_palace: {
+          due_policy: 'due_only',
+          palace_order: 'finish_palace_then_next',
+          unit_order: 'structured',
+        },
+      },
+    })
+    const interleaved = sanitizeFreestyleFeedConfig({
+      ...sequential,
+      streams: {
+        ...sequential.streams,
+        memory_palace: {
+          ...sequential.streams.memory_palace,
+          palace_order: 'interleave_palaces',
+          unit_order: 'random',
+        },
+      },
+    })
+    const first = createRoundPlan(
+      'round-1',
+      [card('a1', 1), card('a2', 1), card('b1', 2), card('b2', 2)],
+      sequential,
+    )
+    const completed = updateRoundPlanCard(first, 'a1', { status: 'completed' })
+    const rebuilt = createRoundPlan(
+      'round-1',
+      [card('a1', 1), card('b1', 2), card('a2', 1), card('b2', 2)],
+      interleaved,
+      undefined,
+      completed,
+    )
+    expect(rebuilt.orderIds).toEqual(['a1', 'b1', 'a2', 'b2'])
+    expect(rebuilt.cardsById.a1.status).toBe('completed')
+  })
+
   it('keeps stable order and metadata across queue rebuilds', () => {
     const first = createRoundPlan(
       'round-1',
@@ -205,5 +246,12 @@ describe('round plan reducer', () => {
     expect(planCardStatus(card('a', 1), retry, [], [], 'a')).toBe('active')
     expect(planCardStatus(card('a', 1), retry, [], [], null)).toBe('retry')
     expect(planCardStatus(card('a', 1), retry, [], ['a'], null)).toBe('excluded')
+  })
+
+  it('keeps completed ticks from the plan when completedIds were not yet restored', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const done = applyCompletedIdsToRoundPlan(first, ['a'])
+    expect(planCardStatus(card('a', 1), done, [], [], 'b')).toBe('completed')
+    expect(planCardStatus(card('b', 1), done, [], [], 'b')).toBe('active')
   })
 })

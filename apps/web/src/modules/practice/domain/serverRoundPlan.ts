@@ -1,9 +1,43 @@
-import type { FreestyleCard, FreestyleRoundPlanPayload, FreestyleRoundStatePayload } from '@/shared/api/contracts'
+import type {
+  FreestyleCard,
+  FreestyleRoundOriginalCard,
+  FreestyleRoundPlanPayload,
+  FreestyleRoundStatePayload,
+} from '@/shared/api/contracts'
 
 import { cardUnitId, createRetryOccurrence, isRetryOccurrence, reviewUnitIdFromCardId, sourceCardId } from './queueState'
 
 export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
   return `retry:${roundId}:${sourceId}:${attempt}`
+}
+
+/** Rebuild a review-unit card the live queue omitted because it is already done. */
+export function cardFromOriginalSnapshot(
+  item: FreestyleRoundOriginalCard | null | undefined,
+): FreestyleCard | null {
+  if (!item) return null
+  const cardId = String(item.card_id || '').trim()
+  const unitId = String(item.unit_id || '').trim()
+  const palaceId = Number(item.palace_id)
+  const kind = String(item.kind || '').trim()
+  if (!cardId || !unitId) return null
+  if (!Number.isInteger(palaceId) || palaceId <= 0) return null
+  if (kind === 'quiz_question' || cardId.startsWith('quiz')) return null
+  const label = String(item.label || '').trim()
+  const revision = Math.max(1, Math.round(Number(item.unit_revision) || 1))
+  return {
+    id: cardId,
+    type: 'mindmap_branch',
+    content_type: 'mindmap_branch',
+    palace_id: palaceId,
+    palace_title: item.palace_title || '',
+    anchor_uid: unitId,
+    context_path: label ? [{ uid: unitId, text: label }] : [],
+    node_uids: [],
+    node_count: 0,
+    unit_id: unitId,
+    unit_revision: revision,
+  }
 }
 
 export function cardsForServerPlan(
@@ -21,6 +55,9 @@ export function cardsForServerPlan(
       return unitId ? [[unitId, card] as const] : []
     }),
   )
+  const originalById = new Map(
+    (plan.original_cards || []).map((item) => [item.card_id, item] as const),
+  )
   const ordered: FreestyleCard[] = []
   const seen = new Set<string>()
 
@@ -36,22 +73,33 @@ export function cardsForServerPlan(
       push(existing)
       continue
     }
-    const original = (plan.original_cards || []).find((item) => item.card_id === id)
+    const original = originalById.get(id)
     const unitMatch = original?.unit_id ? byUnit.get(original.unit_id) : undefined
     if (unitMatch) {
       push(unitMatch)
+      continue
+    }
+    const reconstructed = cardFromOriginalSnapshot(original)
+    if (reconstructed) {
+      push(reconstructed)
       continue
     }
     const occurrence = (plan.occurrences || []).find((item) => item.occurrence_id === id)
     const sourceId = occurrence?.source_card_id || parseRetrySourceId(id)
     const source = (sourceId ? byId.get(sourceId) || bySource.get(sourceId) : undefined)
       || (occurrence?.source_unit_id ? byUnit.get(occurrence.source_unit_id) : undefined)
+      || cardFromOriginalSnapshot(sourceId ? originalById.get(sourceId) : undefined)
     if (!source) continue
     const attempt = occurrence?.retry_attempt || parseRetryAttempt(id)
-    push(createRetryOccurrence(source, roundId, attempt, 3))
+    push(createRetryOccurrence(source, roundId, attempt, 3, occurrence?.occurrence_id || id))
   }
 
-  for (const card of cards) push(card)
+  // Server presented_ids own retry copies. Local optimistic retries with a
+  // different id must not append as a second clump after a cross-day rebind.
+  for (const card of cards) {
+    if (isRetryOccurrence(card)) continue
+    push(card)
+  }
   return ordered
 }
 
@@ -92,14 +140,22 @@ export function nextUnfinishedCardId(
   const completedUnits = finishedUnitIds(completed, cards)
   const current = String(plan.current_card_id || '').trim()
   const currentCard = cards.find((card) => card.id === current)
-    || cards.find((card) => cardUnitId(card) && cardUnitId(card) === reviewUnitIdFromCardId(current))
+    || cards.find((card) => (
+      !isRetryOccurrence(card)
+      && Boolean(cardUnitId(card))
+      && cardUnitId(card) === reviewUnitIdFromCardId(current)
+    ))
   if (current && !isFinishedCard(current, currentCard, completed, excluded, completedUnits)) {
     if (currentCard) return currentCard.id
   }
   for (const id of plan.presented_ids || []) {
     if (!id) continue
     const card = cards.find((item) => item.id === id)
-      || cards.find((item) => cardUnitId(item) && cardUnitId(item) === reviewUnitIdFromCardId(id))
+      || cards.find((item) => (
+        !isRetryOccurrence(item)
+        && Boolean(cardUnitId(item))
+        && cardUnitId(item) === reviewUnitIdFromCardId(id)
+      ))
     if (!card || isFinishedCard(id, card, completed, excluded, completedUnits)) continue
     return card.id
   }

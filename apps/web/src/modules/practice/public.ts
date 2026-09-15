@@ -12,13 +12,29 @@ export {
   type FreestyleQuickPresetId,
 } from './domain/feedConfig'
 export {
+  FREESTYLE_WORKSPACE_PRIMARY,
+  FREESTYLE_WORKSPACE_SECONDARY,
+  freestyleWorkspaceLabel,
+  freestyleWorkspacePath,
+  normalizeFreestyleWorkspaceId,
+  peerFreestyleWorkspace,
+  type FreestyleWorkspaceId,
+} from './domain/freestyleWorkspace'
+export {
   createOperationId,
+  emitFreestylePeerRound,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
+  FREESTYLE_PEER_ROUND_EVENT,
+  FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
+  FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
+  FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY,
   isQueueStateFromPreviousDay,
   readFreestyleFeedConfig,
   readQueueState,
+  resetFreestyleFeedConfig,
   saveFreestyleFeedConfig,
   saveQueueState,
+  type FreestylePeerRoundDetail,
 } from './application/feedPersistence'
 export {
   FREESTYLE_DISPLAY_SETTINGS_UPDATED_EVENT,
@@ -87,6 +103,7 @@ export {
   type FreestyleUnitEncounterState,
 } from './domain/queueState'
 export {
+  applyCompletedIdsToRoundPlan,
   applyRoundPlanOrder,
   countIncompletePalaceUnits,
   createRoundPlan,

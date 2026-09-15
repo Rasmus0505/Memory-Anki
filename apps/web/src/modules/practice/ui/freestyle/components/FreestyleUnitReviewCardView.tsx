@@ -68,7 +68,13 @@ function loadSession(
         { id: card.unit_id!, revision: card.unit_revision! },
         roundId,
         encounter.encounterId,
-        ...(card.phase === 'fill' ? [{ allowNotDue: true }] : []),
+        ...(
+          card.phase === 'fill'
+          || encounter.selectedRating != null
+          || encounter.passed === true
+            ? [{ allowNotDue: true }]
+            : []
+        ),
       )
   inFlightSessionLoads.set(key, promise)
   const clear = () => {
@@ -210,6 +216,7 @@ export function FreestyleUnitReviewCardView({
   onLiveRevealMapChange,
   planVersion = 0,
   onRoundSync,
+  onOpenScopeQuiz,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -217,6 +224,7 @@ export function FreestyleUnitReviewCardView({
   roundId: string
   planVersion?: number
   onRoundSync?: (round: { plan_version?: number; version?: number; conflict?: boolean } | null | undefined) => void
+  onOpenScopeQuiz?: () => void
   encounter?: FreestyleUnitEncounterState
   retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
@@ -601,6 +609,11 @@ export function FreestyleUnitReviewCardView({
 
   async function rate(rating: UnitRating) {
     const currentEncounter = unit?.encounter
+    const currentSelected = encounter?.selectedRating ?? currentEncounter?.selected_rating
+    if (currentSelected === rating) {
+      await undoRating({ clearAll: true })
+      return
+    }
     const blockedReason = !session || !unit || !currentEncounter
       ? '评分按钮暂不可用：复习会话仍在加载。'
       : busy
@@ -608,10 +621,12 @@ export function FreestyleUnitReviewCardView({
         : readOnly
           ? '历史记录为只读，不能评分。'
           : currentEncounter.status !== 'open'
-            ? '本次复习会话已关闭，请重建队列后重试。'
-            : (encounter?.selectedRating ?? currentEncounter.selected_rating) === rating
-              ? '这张卡已经选择了相同评分。'
-              : null
+            ? (
+              encounter?.status === 'pending'
+                ? '评分按钮暂不可用：复习会话仍在加载。'
+                : '本次复习会话已关闭，请重建队列后重试。'
+            )
+            : null
     if (blockedReason) {
       setActionError(blockedReason)
       return
@@ -736,14 +751,18 @@ export function FreestyleUnitReviewCardView({
         final_rating: unitResult.rating,
         encounter: unitResult.encounter,
       }
-      const nextSession = updateSessionUnit(session, nextUnit)
+      const nextSessionId = unitResult.study_session_id || session.id
+      const nextSession = updateSessionUnit(
+        session.id === nextSessionId ? session : { ...session, id: nextSessionId },
+        nextUnit,
+      )
       sessionRef.current = nextSession
       unitRef.current = nextUnit
       setSession(nextSession)
       setLastOperationId(result?.batch_id ?? unitResult.operation_id)
       onEncounterChange(
         card.id,
-        encounterState(session.id, nextUnit.revision, unitResult.encounter),
+        encounterState(nextSessionId, nextUnit.revision, unitResult.encounter),
       )
       if (result && onBatchCardsSettled && palaceTarget) {
         const itemsByUnit = new Map(result.items.map((item) => [item.unit.id, item]))
@@ -835,33 +854,56 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  async function undo() {
-    if (!lastOperationId || !session || !unit || readOnly || busy) {
+  async function undoRating(options?: { clearAll?: boolean }) {
+    const currentSession = session
+    const currentUnit = unit
+    const operationId = lastOperationId ?? currentUnit?.encounter?.effective_operation_id
+    if (!operationId || !currentSession || !currentUnit || readOnly || busy) {
       setActionError(readOnly ? '历史记录为只读，不能撤销评分。' : busy ? '操作正在提交，请稍候。' : '暂无可撤销的评分。')
       return
     }
+    setActionError(null)
     setBusy(true)
+    busyRef.current = true
     try {
-      const result = await undoReviewUnitRatingApi(lastOperationId, roundId)
-      const nextUnit: ReviewUnitDto = {
-        ...unit,
-        ...result.unit,
-        title: result.unit.title || unit.title,
-        session_status: result.session_status,
-        final_rating: result.encounter.selected_rating,
-        encounter: result.encounter,
+      let workingSession = currentSession
+      let workingUnit = currentUnit
+      let workingOperationId: string | null = operationId
+      let lastResult: Awaited<ReturnType<typeof undoReviewUnitRatingApi>> | null = null
+      const seen = new Set<string>()
+      while (workingOperationId && !seen.has(workingOperationId)) {
+        seen.add(workingOperationId)
+        const result = await undoReviewUnitRatingApi(workingOperationId, roundId)
+        lastResult = result
+        workingUnit = {
+          ...workingUnit,
+          ...result.unit,
+          title: result.unit.title || workingUnit.title,
+          session_status: result.session_status,
+          final_rating: result.encounter.selected_rating,
+          encounter: result.encounter,
+        }
+        workingSession = updateSessionUnit(workingSession, workingUnit)
+        workingOperationId = result.encounter.effective_operation_id
+        if (!options?.clearAll || result.encounter.selected_rating == null) break
       }
-      const nextSession = updateSessionUnit(session, nextUnit)
-      sessionRef.current = nextSession
-      unitRef.current = nextUnit
-      setSession(nextSession)
-      setLastOperationId(result.encounter.effective_operation_id)
+      if (!lastResult) return
+      sessionRef.current = workingSession
+      unitRef.current = workingUnit
+      setSession(workingSession)
+      setLastOperationId(lastResult.encounter.effective_operation_id)
       onEncounterChange(
         card.id,
-        encounterState(session.id, nextUnit.revision, result.encounter),
+        encounterState(workingSession.id, workingUnit.revision, lastResult.encounter),
       )
       const settledIds = lastSettledCardIdsRef.current.length ? lastSettledCardIdsRef.current : [card.id]
-      if (result.encounter.selected_rating == null) {
+      if (lastResult.encounter.selected_rating == null) {
+        if (undoTimerRef.current != null) {
+          window.clearTimeout(undoTimerRef.current)
+          undoTimerRef.current = null
+        }
+        setUndoVisible(false)
+        lastSettledCardIdsRef.current = []
         if (onBatchCardsSettled && settledIds.length > 1) {
           onBatchCardsSettled(settledIds.map((cardId) => ({ cardId, cleared: true })))
         } else {
@@ -869,16 +911,23 @@ export function FreestyleUnitReviewCardView({
         }
       } else {
         onBranchComplete(card.id, {
-          restudy: !result.encounter.passed,
-          rating: result.encounter.selected_rating ?? undefined,
-          retryAfterCards: result.encounter.retry_after_cards,
+          restudy: !lastResult.encounter.passed,
+          rating: lastResult.encounter.selected_rating ?? undefined,
+          retryAfterCards: lastResult.encounter.retry_after_cards,
         })
       }
     } catch (error) {
-      const diagnostic = formatUnitDiagnostic({ error, card, roundId, operationId: lastOperationId, stage: '撤销评分' })
+      const diagnostic = formatUnitDiagnostic({
+        error,
+        card,
+        roundId,
+        operationId,
+        stage: options?.clearAll ? '取消评分' : '撤销评分',
+      })
       setActionError(diagnostic)
       onSaveFailed(diagnostic)
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
@@ -889,7 +938,9 @@ export function FreestyleUnitReviewCardView({
   const selectedRating = mirroredRating === 1 || mirroredRating === 2 || mirroredRating === 3 || mirroredRating === 4
     ? mirroredRating
     : null
-  const locked = readOnly || !reviewReady || currentEncounter?.status === 'closed'
+  const locked = readOnly || !reviewReady || (
+    currentEncounter?.status === 'closed' && encounter?.status !== 'pending' && encounter?.status !== 'open'
+  )
   const titleText = stripMindMapHtml(
     unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )
@@ -965,7 +1016,7 @@ export function FreestyleUnitReviewCardView({
               disabled={busy}
               data-testid="freestyle-transient-undo"
               className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-black/8 bg-white/92 px-2.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:opacity-40"
-              onClick={() => void undo()}
+              onClick={() => void undoRating()}
             >
               <RotateCcw className="size-3.5" />
               撤销
@@ -1005,6 +1056,7 @@ export function FreestyleUnitReviewCardView({
             onRevealProgressChange={handleRevealProgressChange}
             syncedRevealMap={liveRevealMap}
             onRevealMapChange={onLiveRevealMapChange}
+            onOpenScopeQuiz={onOpenScopeQuiz}
           />
           </div>
         ) : (

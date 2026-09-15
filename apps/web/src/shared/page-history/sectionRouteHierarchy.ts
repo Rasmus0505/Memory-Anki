@@ -1,5 +1,5 @@
 /**
- * Explicit in-section page hierarchy for the five primary nav sections.
+ * Explicit in-section page hierarchy for the six primary nav sections.
  *
  * Left-top 后退/前进 is section-scoped (not global browser history). When the
  * visit stack is thin (refresh / deep link), we still walk these parents so
@@ -10,6 +10,10 @@
  *  随心 freestyle
  *    /freestyle
  *      └─ immersive feed (/freestyle)
+ *
+ *  随心 2 freestyleSecondary
+ *    /freestyle-2
+ *      └─ immersive feed (/freestyle-2)
  *
  *  知识 palaces
  *    /palaces                          ← 学科书架（封面）
@@ -45,6 +49,7 @@ import {
 
 const SECTION_LABELS: Record<NavigationSectionKey, string> = {
   freestyle: '随心',
+  freestyleSecondary: '随心 2',
   palaces: '知识',
   english: '英语',
   knowledge: '创建',
@@ -96,8 +101,8 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
     return null
   }
 
-  // ── 随心 ──────────────────────────────────────────────
-  if (section === 'freestyle') {
+  // ── 随心 / 随心 2 ─────────────────────────────────────
+  if (section === 'freestyle' || section === 'freestyleSecondary') {
     return root
   }
 
@@ -206,6 +211,7 @@ export function describeNavigationPath(fullPath: string): string {
   if (pathname === '/english/patterns') return '句模'
   if (pathname === '/english/vocab') return '生词本'
   if (pathname === '/freestyle') return '随心首页'
+  if (pathname === '/freestyle-2') return '随心 2'
   if (pathname === '/palaces/new') return '创建入口'
   if (/^\/palaces\/\d+\/edit$/.test(pathname)) return '宫殿编辑'
   if (/^\/palaces\/\d+\/quiz$/.test(pathname)) return '宫殿测验'

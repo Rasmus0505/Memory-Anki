@@ -11,6 +11,8 @@ import type {
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
+  FreestyleOverlayQuizEnsureRequest,
+  FreestyleOverlayQuizProgressRequest,
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
   FreestyleRoundRatingRequest,
@@ -164,6 +166,42 @@ export function startFreestyleRoundApi(payload: FreestyleRoundActiveRequest) {
       replayMode: 'manual',
     },
   })
+}
+
+export function ensureFreestyleOverlayQuizApi(
+  roundId: string,
+  payload: FreestyleOverlayQuizEnsureRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/ensure`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-overlay-quiz-ensure:${payload.operation_id}`,
+        description: '同步随心做题会话',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function progressFreestyleOverlayQuizApi(
+  roundId: string,
+  payload: FreestyleOverlayQuizProgressRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/progress`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-overlay-quiz-progress:${payload.operation_id}`,
+        description: '保存随心做题进度',
+        replayMode: 'auto',
+      },
+    },
+  )
 }
 
 export function rateFreestyleRoundUnitApi(roundId: string, payload: FreestyleRoundRatingRequest) {

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  isQuizChoiceShortcutActive,
+  QuizAttemptStatsBadge,
   QuizQuestionInteraction,
+  QuizQuestionStem,
+  useQuizAnswerMode,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import {
@@ -40,6 +44,7 @@ export function FreestyleQuizCardView({
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
+  const { mode: answerMode } = useQuizAnswerMode()
   const palaceTitle = card.palace_context.resolved_title || card.palace_context.title
   const segmentNames = card.segment_contexts?.map((segment) => segment.name).filter(Boolean).join('、')
   const chapterName = card.chapter_context?.name
@@ -53,7 +58,7 @@ export function FreestyleQuizCardView({
   }, [card.question.id])
 
   useEffect(() => {
-    if (!active || card.question.question_type !== 'multiple_choice') return
+    if (!active || !isQuizChoiceShortcutActive(card.question.question_type, answerMode)) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
       if (state?.resolved) return
@@ -103,6 +108,7 @@ export function FreestyleQuizCardView({
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [
     active,
+    answerMode,
     card.question,
     keyboardOptionIndex,
     onChoiceResolve,
@@ -140,6 +146,11 @@ export function FreestyleQuizCardView({
             <Badge className="border-white/10 bg-white/8 text-zinc-200">{palaceTitle}</Badge>
             {segmentNames ? <Badge className="border-white/10 bg-white/5 text-zinc-300">{segmentNames}</Badge> : null}
             {chapterName ? <Badge className="border-white/10 bg-white/5 text-zinc-300">{chapterName}</Badge> : null}
+            <QuizAttemptStatsBadge
+              correctCount={card.question.correct_count}
+              attemptCount={card.question.attempt_count}
+              className="border-white/10 bg-white/5 text-zinc-300"
+            />
             <Badge className="border-white/10 bg-white/5 text-zinc-300">
               {QUESTION_TYPE_DISPLAY[card.question.question_type] ?? card.question.question_type}
             </Badge>
@@ -153,14 +164,15 @@ export function FreestyleQuizCardView({
             {answeredBefore ? '已做过' : '新题'}
           </Badge>
         </div>
-        <div className="mt-5 whitespace-pre-wrap text-xl font-semibold leading-8 sm:text-2xl">
-          {card.question.stem}
+        <div className="mt-5 text-xl font-semibold leading-8 sm:text-2xl">
+          <QuizQuestionStem question={card.question} />
         </div>
         <div className="freestyle-quiz-interaction mt-6 text-zinc-100 [&_button]:border-white/15 [&_button]:bg-white/5 [&_button:hover]:bg-white/10 [&_.text-muted-foreground]:text-zinc-400 [&_.bg-background\/70]:bg-zinc-950/70 [&_.border-border\/70]:border-white/15">
           <QuizQuestionInteraction
             question={card.question}
             state={state}
             compact
+            captureShortcuts={active}
             onStateChange={onStateChange}
             onChoiceResolve={onChoiceResolve}
             onShortAnswerSubmit={onShortAnswerSubmit}

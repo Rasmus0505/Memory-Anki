@@ -157,6 +157,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   subject_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,
+  overlay_quiz_setup_done: false,
 }
 
 function asBoolean(value: unknown, fallback: boolean) {
@@ -418,6 +419,25 @@ function inferMixMode(
   return 'ratio'
 }
 
+/** Queue-construction knobs. Changing these reorders unstarted round-plan cards. */
+export function queueConstructionSignature(value: unknown): string {
+  const config = sanitizeFreestyleFeedConfig(value)
+  return JSON.stringify({
+    training_mode: config.training_mode,
+    mixed_modes: config.mixed_modes,
+    mix: config.mix,
+    seed: config.seed,
+    queue_length: config.queue_length,
+    palace_order: config.streams.memory_palace.palace_order,
+    unit_order: config.streams.memory_palace.unit_order,
+    due_policy: config.streams.memory_palace.due_policy,
+    quiz_scope: config.streams.quiz.quiz_scope,
+    mastery_buckets: config.streams.quiz.mastery_buckets,
+    weak_priority: config.streams.quiz.weak_priority,
+    question_type: config.streams.quiz.question_type,
+  })
+}
+
 export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const contentRaw = raw.content && typeof raw.content === 'object' ? (raw.content as Record<string, unknown>) : {}
@@ -613,6 +633,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     subject_ids: trainingMode === 'quiz' ? quizStream.subject_ids : memoryStream.subject_ids,
     question_type: legacyQuestionType,
     weak_quiz_priority: quizStream.weak_priority,
+    overlay_quiz_setup_done: asBoolean(raw.overlay_quiz_setup_done, false),
   }
 }
 
