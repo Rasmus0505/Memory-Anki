@@ -4,7 +4,7 @@ import { DEFAULT_TIMER_AUTOMATION_CONFIG } from './timer-automation-config'
 import { TimerAutomationDialog } from './TimerAutomationDialog'
 
 describe('TimerAutomationDialog', () => {
-  it('exposes only auto-start and screen-awake controls', () => {
+  it('exposes auto-start, screen-awake and floating-timer controls', () => {
     render(
       <TimerAutomationDialog
         open
@@ -18,6 +18,8 @@ describe('TimerAutomationDialog', () => {
     expect(screen.getByRole('dialog').getAttribute('data-timer-activity')).toBe('ignore')
     expect(screen.getByRole('checkbox', { name: /进入学习页面自动开始/ })).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: /计时中保持屏幕常亮/ })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /显示悬浮计时器/ })).toBeTruthy()
+    expect((screen.getByRole('checkbox', { name: /显示悬浮计时器/ }) as HTMLInputElement).checked).toBe(false)
     expect(screen.queryByText(/休息/)).toBeNull()
     expect(screen.queryByText(/闲置/)).toBeNull()
   })
@@ -35,11 +37,13 @@ describe('TimerAutomationDialog', () => {
     )
 
     fireEvent.click(screen.getByRole('checkbox', { name: /进入学习页面自动开始/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /显示悬浮计时器/ }))
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(onSave).toHaveBeenCalledWith({
       schemaVersion: DEFAULT_TIMER_AUTOMATION_CONFIG.schemaVersion,
       autoStartOnPageEnter: true,
       keepScreenAwake: true,
+      showFloatingTimer: true,
     })
   })
 })

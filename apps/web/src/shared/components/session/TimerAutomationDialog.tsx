@@ -70,6 +70,7 @@ export function TimerAutomationDialog({
             draft={drafts.draft}
             onAutoStartChange={drafts.handleAutoStartChange}
             onKeepScreenAwakeChange={drafts.handleKeepScreenAwakeChange}
+            onShowFloatingTimerChange={drafts.handleShowFloatingTimerChange}
           />
         </div>
 

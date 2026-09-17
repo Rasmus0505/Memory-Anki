@@ -39,6 +39,7 @@ export function toDraft(config: TimerAutomationConfig) {
   return {
     autoStartOnPageEnter: config.autoStartOnPageEnter,
     keepScreenAwake: config.keepScreenAwake,
+    showFloatingTimer: config.showFloatingTimer,
   }
 }
 
@@ -75,6 +76,7 @@ export function parseAutomationDraft(draft: AutomationDraft): TimerAutomationCon
     schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
     autoStartOnPageEnter: draft.autoStartOnPageEnter,
     keepScreenAwake: draft.keepScreenAwake,
+    showFloatingTimer: draft.showFloatingTimer,
   })
 }
 

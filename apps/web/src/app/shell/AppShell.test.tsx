@@ -21,8 +21,6 @@ const preloadPracticeRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
 const preloadEnglishReadingPage = vi.fn()
 const preloadFreestylePage = vi.fn()
-const preloadFreestyleSecondaryPage = vi.fn()
-const preloadTodayLearningPage = vi.fn()
 const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
 const preloadProfilePage = vi.fn()
@@ -51,8 +49,6 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
   preloadEnglishReadingPage: () => preloadEnglishReadingPage(),
   preloadFreestylePage: () => preloadFreestylePage(),
-  preloadFreestyleSecondaryPage: () => preloadFreestyleSecondaryPage(),
-  preloadTodayLearningPage: () => preloadTodayLearningPage(),
   preloadKnowledgePage: () => preloadKnowledgePage(),
   preloadPalaceEditPage: () => preloadPalaceEditPage(),
   preloadProfilePage: () => preloadProfilePage(),
@@ -83,7 +79,6 @@ describe('AppShell', () => {
     preloadEnglishWorkspacePage.mockClear()
     preloadEnglishReadingPage.mockClear()
     preloadFreestylePage.mockClear()
-    preloadFreestyleSecondaryPage.mockClear()
     preloadKnowledgePage.mockClear()
     preloadPalaceEditPage.mockClear()
     preloadProfilePage.mockClear()
@@ -243,10 +238,10 @@ describe('AppShell', () => {
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('lg:hidden')
-    expect(mobileNav.querySelectorAll('a')).toHaveLength(6)
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
-    expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeNull()
     expect(mobileNav.querySelector('a[href="/english"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
   })
@@ -295,13 +290,14 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    const expectedLabels = ['随心', '随心 2', '知识', '英语', '创建', '洞察']
+    const expectedLabels = ['随心', '知识', '英语', '创建', '洞察']
     const navLabels = screen
       .getAllByRole('link')
       .map((link) => link.textContent?.trim() || '')
       .filter((label) => expectedLabels.includes(label))
 
-    expect(navLabels.slice(0, 6)).toEqual(expectedLabels)
+    expect(navLabels.slice(0, 5)).toEqual(expectedLabels)
+    expect(screen.queryByRole('link', { name: '随心 2' })).toBeNull()
     const freestyleLink = screen.getAllByRole('link', { name: '随心' })[0]
     expect(freestyleLink.className).toContain('bg-primary')
 

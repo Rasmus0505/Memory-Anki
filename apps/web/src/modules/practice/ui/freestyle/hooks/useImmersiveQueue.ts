@@ -1008,7 +1008,9 @@ export function useImmersiveQueue(
       pendingRestudyByIdRef.current.delete(cardId)
       syncPendingRestudyIds()
       const graduatedSourceId = sourceCardId(cardsRef.current.find((card) => card.id === cardId)) || cardId
-      const graduatedCards = removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId)
+      // Keep the just-rated retry under the viewport. Dropping it makes the
+      // next card slide into the same index and looks like auto-advance.
+      const graduatedCards = removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)
       if (graduatedCards.length !== cardsRef.current.length) {
         cardsRef.current = graduatedCards
         setCards(graduatedCards)
@@ -1107,7 +1109,7 @@ export function useImmersiveQueue(
           continue
         }
         pendingRestudyByIdRef.current.delete(cardId)
-        nextCards = removeRetryOccurrencesForSource(nextCards, logicalCardId)
+        nextCards = removeRetryOccurrencesForSource(nextCards, logicalCardId, cardId)
         if (plan) {
           plan = updateRoundPlanCard(plan, cardId, {
             status: 'completed',

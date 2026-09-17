@@ -55,7 +55,6 @@ export interface PrefixRule {
 export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/', nav: 'review', history: 'dashboard' },
   { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
-  { path: '/today', nav: 'review', history: 'dashboard', historyKey: 'today:workspace', commandLabel: '今日工作台' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
   { path: '/freestyle-2', nav: 'freestyleSecondary', history: 'freestyleSecondary', historyKey: 'freestyle-secondary', commandLabel: '随心 2' },
   { path: '/palaces', nav: 'palaces', history: 'palaces', historyKey: 'palace:shelf' },

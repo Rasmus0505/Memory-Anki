@@ -14,6 +14,7 @@ let allowMainWindowClose = false
 let desktopReadyWritten = false
 let mainWindowLoaded = false
 let timerWindowLoaded = false
+let overlayDesiredVisible = false
 
 const FLUSH_TIMEOUT_MS = 1800
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -167,6 +168,7 @@ function createTimerWindow() {
     resizable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
+    show: false,
     title: 'Memory Anki Timer',
     backgroundColor: '#00000000',
     transparent: true,
@@ -186,8 +188,10 @@ function createTimerWindow() {
     if (lastTimerSnapshot) {
       timerWindow?.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
     }
-    // 强制桌面版启动时显示计时器窗口
-    timerWindow?.show()
+    if (overlayDesiredVisible) {
+      timerWindow?.show()
+      timerWindow?.moveTop()
+    }
   })
   timerWindow.on('closed', () => {
     timerWindow = null
@@ -203,20 +207,23 @@ function ensureMainWindow() {
 
 function ensureTimerWindow() {
   if (!timerWindow) createTimerWindow()
-  timerWindow?.show()
-  timerWindow?.moveTop()
+}
+
+function setTimerOverlayVisible(visible) {
+  overlayDesiredVisible = Boolean(visible)
+  if (!timerWindow) createTimerWindow()
+  if (!timerWindow || timerWindow.isDestroyed()) return
+  if (overlayDesiredVisible) {
+    timerWindow.show()
+    timerWindow.moveTop()
+    return
+  }
+  timerWindow.hide()
 }
 
 function toggleTimerWindow() {
-  if (!timerWindow) {
-    createTimerWindow()
-    return
-  }
-  if (timerWindow.isVisible()) {
-    timerWindow.hide()
-    return
-  }
-  ensureTimerWindow()
+  const currentlyVisible = Boolean(timerWindow && !timerWindow.isDestroyed() && timerWindow.isVisible())
+  setTimerOverlayVisible(!currentlyVisible)
 }
 
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
@@ -243,10 +250,14 @@ ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
 })
 
 ipcMain.on('memory-anki-timer-command', (_event, command) => {
-  const supportedCommands = new Set(['start', 'pause', 'resume', 'collapse', 'closeOverlay', 'openTimerSettings'])
+  const supportedCommands = new Set(['start', 'pause', 'resume', 'collapse', 'closeOverlay', 'showOverlay', 'openTimerSettings'])
   if (!command || typeof command.type !== 'string' || !supportedCommands.has(command.type)) return
   if (command?.type === 'closeOverlay') {
-    timerWindow?.hide()
+    setTimerOverlayVisible(false)
+    return
+  }
+  if (command?.type === 'showOverlay') {
+    setTimerOverlayVisible(true)
     return
   }
   if (command?.type === 'collapse') {

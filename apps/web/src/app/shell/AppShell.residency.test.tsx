@@ -23,7 +23,6 @@ vi.mock('@/app/router/appRoutes', async () => {
     preloadEnglishReadingPage: vi.fn(),
     preloadFreestylePage: vi.fn(),
     preloadFreestyleSecondaryPage: vi.fn(),
-    preloadTodayLearningPage: vi.fn(),
     preloadKnowledgePage: vi.fn(),
     preloadPalaceEditPage: vi.fn(),
     preloadProfilePage: vi.fn(),

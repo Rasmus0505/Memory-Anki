@@ -1236,6 +1236,45 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(editingEvent.defaultPrevented).toBe(false)
   })
 
+  it('does not restart the glance when a silent rebuild replaces the retry card object', async () => {
+    const source = buildCard('unit-retry-stable-session')
+    const retryCard: FreestyleReviewUnitCard = {
+      ...source,
+      id: `retry:round-1:${source.id}:1`,
+      source_card_id: source.id,
+      occurrence_kind: 'retry',
+      retry_attempt: 1,
+    }
+    const session = buildSession(retryCard.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId)),
+    )
+    const view = renderCard(retryCard)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByRole('button', { name: /困难：3张后重练/ }))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
+    await screen.findByText(/已选困难/)
+
+    view.rerenderCard({
+      card: { ...retryCard },
+      encounter: queueEncounter({
+        encounterId: 'encounter-1',
+        status: 'open',
+        sessionId: session.id,
+        selectedRating: 2,
+        passed: false,
+        retryAfterCards: 3,
+      }),
+    })
+    await waitFor(() => expect(screen.getByTestId('flip-card-mind-map-panel')).toBeTruthy())
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/已选困难/)).toBeTruthy()
+  })
+
   it('starts a retry encounter from the root instead of the prior reveal state', async () => {
     const card = buildCard('unit-retry-fresh-reveal')
     const firstSession = buildSession(card.unit_id!)

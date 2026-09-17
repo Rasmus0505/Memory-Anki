@@ -38,7 +38,6 @@
  *
  *  洞察 review
  *    /dashboard
- *      └─ /today
  */
 import {
   getNavigationSectionRoot,

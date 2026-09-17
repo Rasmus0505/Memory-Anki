@@ -20,7 +20,6 @@ import {
 } from '@/modules/dashboard/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
-import { InsightsSectionNav } from '@/pages/insights/InsightsSectionNav'
 import { InsightsPageLoading } from '@/pages/insights/InsightsPageLoading'
 
 export default function Dashboard() {
@@ -67,7 +66,6 @@ export default function Dashboard() {
   if (!data && loadError) {
     return (
       <div className="flex flex-col gap-4">
-        <InsightsSectionNav />
         <ErrorState
           title="仪表盘加载失败"
           description={loadError}
@@ -89,14 +87,11 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <InsightsSectionNav />
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            时长统计、时间记录与学习概览
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">仪表盘</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          时长统计、时间记录与学习概览
+        </p>
       </div>
 
       <DashboardStatCards

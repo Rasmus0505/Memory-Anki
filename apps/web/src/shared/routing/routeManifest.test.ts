@@ -17,7 +17,7 @@ const appRoutesSource = readFileSync(
 )
 
 /** JSX 路由表中的重定向占位路由，不要求在 manifest 登记。 */
-const REDIRECT_ONLY_JSX_PATHS = new Set(['/palaces/quiz'])
+const REDIRECT_ONLY_JSX_PATHS = new Set(['/palaces/quiz', '/today'])
 /** manifest 中不出现在 <Routes> 里的路径（/timer-overlay 在 App.tsx 硬分支）。 */
 const NON_JSX_MANIFEST_PATHS = new Set(['/timer-overlay'])
 /** dev-only 路由不参与对账。 */
@@ -63,7 +63,6 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
   it.each([
     ['/', 'review', 'dashboard', 'route:/'],
     ['/dashboard', 'review', 'dashboard', 'dashboard'],
-    ['/today', 'review', 'dashboard', 'today:workspace'],
     ['/freestyle', 'freestyle', 'freestyle', 'freestyle'],
     ['/freestyle-2', 'freestyleSecondary', 'freestyleSecondary', 'freestyle-secondary'],
     ['/palaces', 'palaces', 'palaces', 'palace:shelf'],
@@ -102,5 +101,11 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     expect(resolveRouteFallbackTarget('/review/session/9')).toBe('/freestyle')
     expect(resolveRouteFallbackTarget('/review/completed/4')).toBe('/freestyle')
     expect(resolveNavSection('/review')).toBeNull()
+  })
+
+  it('does not register the retired /today workspace', () => {
+    expect(resolveRouteFallbackTarget('/today')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/today/foo')).toBe('/freestyle')
+    expect(resolveNavSection('/today')).toBeNull()
   })
 })

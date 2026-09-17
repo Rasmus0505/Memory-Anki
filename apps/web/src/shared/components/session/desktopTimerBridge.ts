@@ -24,6 +24,7 @@ export type UnifiedTimerAction =
   | 'resume'
   | 'collapse'
   | 'closeOverlay'
+  | 'showOverlay'
   | 'openTimerSettings'
 
 export interface UnifiedTimerSnapshot {
@@ -57,6 +58,7 @@ export type UnifiedTimerCommand =
   | { type: 'resume' }
   | { type: 'collapse'; collapsed: boolean }
   | { type: 'closeOverlay' }
+  | { type: 'showOverlay' }
   | { type: 'openTimerSettings' }
 
 export interface DesktopTimerBridge {

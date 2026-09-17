@@ -149,6 +149,10 @@ construction settings must not reshuffle.
   `retry_attempt`. A later `记得` / `轻松` settles the source card and every unfinished
   occurrence together. The just-rated source card does not move. Only `记得` / `轻松` finish
   the current encounter; a mature-unit `困难` remains retry work just like first-learning `困难`.
+  A retry occurrence has its own encounter. Silent rebuilds must not rebind that glance
+  onto the source by `unit_id`; a passing rate leaves that occurrence in the viewport
+  instead of deleting the card under the learner. Another `忘记` / `困难` on a retry
+  books the next occurrence after leave — there is still no per-round cap.
   Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version` and adopt the
   returned `plan_version` so the next rate is not a stale conflict. Silent
   rebuilds keep the current DOM card by id, never by the old index. `auto_advance` may turn

@@ -59,6 +59,10 @@ export function useTimerConfigDrafts({
     setDraft((current) => ({ ...current, keepScreenAwake: checked }))
   }, [])
 
+  const handleShowFloatingTimerChange = React.useCallback((checked: boolean) => {
+    setDraft((current) => ({ ...current, showFloatingTimer: checked }))
+  }, [])
+
   const parsedConfig = React.useMemo(() => parseAutomationDraft(draft), [draft])
 
   // Compare parsed against saved rather than draft against draft: a draft holds
@@ -75,6 +79,7 @@ export function useTimerConfigDrafts({
     isDirty,
     handleAutoStartChange,
     handleKeepScreenAwakeChange,
+    handleShowFloatingTimerChange,
     parsedConfig,
   }
 }

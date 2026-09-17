@@ -22,7 +22,7 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 思维导图导入 `mindmap_import` | 图片/文本等资料经 AI 识别后应用为宫殿结构 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
 | 英语学习 `english` / `english_reading` | 听力、阅读材料、CEFR 版本、打字练习、词典与翻译 |
-| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle`；今日学习工作台在 `/today` |
+| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle` |
 | 学习会话 `sessions` | practice/focus/segment/mini/review 等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |

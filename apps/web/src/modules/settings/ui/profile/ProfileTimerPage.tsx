@@ -62,6 +62,7 @@ export default function ProfileTimerPage() {
           draft={drafts.draft}
           onAutoStartChange={drafts.handleAutoStartChange}
           onKeepScreenAwakeChange={drafts.handleKeepScreenAwakeChange}
+          onShowFloatingTimerChange={drafts.handleShowFloatingTimerChange}
         />
 
         {saveStatus ? <InlineFeedback tone="success" message={saveStatus} /> : null}

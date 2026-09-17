@@ -15,8 +15,6 @@ export const preloadPalaceShelfPage = () => import('@/pages/library/PalaceLibrar
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
 /** Second immersive freestyle workspace — route /freestyle-2. */
 export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
-/** Today learning workspace (overview) — route /today. */
-export const preloadTodayLearningPage = () => import('@/pages/today/TodayLearningPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadEnglishHubPage = () => import('@/pages/library/EnglishHubPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
@@ -41,7 +39,6 @@ const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
 const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
-const TodayLearningPage = lazyWithRetry(preloadTodayLearningPage)
 const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
@@ -64,7 +61,6 @@ const DevTokensPage = lazyWithRetry(() => import('@/app/dev/DevTokensPage'))
 
 function RouteFallback({ pathname }: { pathname: string }) {
   if (pathname === '/dashboard') return <InsightsPageLoading />
-  if (pathname === '/today') return <LoadingState text="正在整理今日学习工作台…" />
   return <LoadingState text="正在加载页面…" />
 }
 
@@ -97,7 +93,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
-          <Route path="/today" element={<TodayLearningPage />} />
+          <Route path="/today" element={<Navigate to="/dashboard" replace />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<EnglishHubPage />} />
           <Route path="/english/listening" element={<EnglishWorkspacePage />} />

@@ -36,7 +36,7 @@ Frontend ownership:
 
 - Domain/config/skip/refresh: `apps/web/src/modules/practice` via `public.ts`
 - Immersive page/widgets: `modules/practice/ui/freestyle` and its public facade
-- Primary nav first two items are **随心** (`/freestyle`) and **随心 2** (`/freestyle-2`)
+- Primary nav includes **随心** (`/freestyle`). **随心 2** (`/freestyle-2`) remains a second immersive route, reachable from the HUD switcher and command palette, not the sidebar
 - Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to palace unit scheduling
 
 ## Study Sessions

@@ -20,13 +20,17 @@ describe('ProfileTimerPage', () => {
     )
   }
 
-  it('edits and saves the two supported timer settings in place', () => {
+  it('edits and saves the supported timer settings in place', () => {
     renderPage()
 
     fireEvent.click(screen.getByRole('checkbox', { name: /进入学习页面自动开始/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /显示悬浮计时器/ }))
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
-    expect(readTimerAutomationConfig().autoStartOnPageEnter).toBe(true)
+    expect(readTimerAutomationConfig()).toMatchObject({
+      autoStartOnPageEnter: true,
+      showFloatingTimer: true,
+    })
   })
 
   it('owns the settings that decide whether time keeps counting', () => {
@@ -37,6 +41,7 @@ describe('ProfileTimerPage', () => {
 
     const automation = readTimerAutomationConfig()
     expect(automation.keepScreenAwake).toBe(false)
+    expect(automation.showFloatingTimer).toBe(false)
     expect(automation).not.toHaveProperty('backgroundGraceSeconds')
   })
 

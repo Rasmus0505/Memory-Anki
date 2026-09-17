@@ -17,7 +17,7 @@ vi.mock('@/shared/page-history/useNavigationHistory', () => ({
   }),
 }))
 
-function renderBack(ui: Parameters<typeof render>[0], path = '/today') {
+function renderBack(ui: Parameters<typeof render>[0], path = '/dashboard') {
   return render(<MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter>)
 }
 

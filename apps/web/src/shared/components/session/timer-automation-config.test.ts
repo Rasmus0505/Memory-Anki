@@ -4,17 +4,20 @@ import {
   readTimerAutomationConfig,
   sanitizeTimerAutomationConfig,
   shouldAutoStartOnPageEnter,
+  shouldShowFloatingTimer,
 } from './timer-automation-config'
 
 describe('timer automation config', () => {
   beforeEach(() => window.localStorage.clear())
 
-  it('uses only auto-start, screen wake and schema version', () => {
+  it('uses only auto-start, screen wake, floating timer and schema version', () => {
     expect(readTimerAutomationConfig()).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG)
+    expect(DEFAULT_TIMER_AUTOMATION_CONFIG.showFloatingTimer).toBe(false)
     expect(Object.keys(readTimerAutomationConfig()).sort()).toEqual([
       'autoStartOnPageEnter',
       'keepScreenAwake',
       'schemaVersion',
+      'showFloatingTimer',
     ])
   })
 
@@ -32,6 +35,7 @@ describe('timer automation config', () => {
       schemaVersion: DEFAULT_TIMER_AUTOMATION_CONFIG.schemaVersion,
       autoStartOnPageEnter: true,
       keepScreenAwake: false,
+      showFloatingTimer: false,
     })
   })
 
@@ -46,6 +50,7 @@ describe('timer automation config', () => {
       schemaVersion: DEFAULT_TIMER_AUTOMATION_CONFIG.schemaVersion,
       autoStartOnPageEnter: true,
       keepScreenAwake: true,
+      showFloatingTimer: false,
     })
   })
 
@@ -56,5 +61,14 @@ describe('timer automation config', () => {
     })
     expect(config).toEqual(DEFAULT_TIMER_AUTOMATION_CONFIG)
     expect(shouldAutoStartOnPageEnter(config)).toBe(false)
+    expect(shouldShowFloatingTimer(config)).toBe(false)
+  })
+
+  it('keeps an explicit floating-timer opt-in', () => {
+    expect(
+      shouldShowFloatingTimer(
+        sanitizeTimerAutomationConfig({ showFloatingTimer: true }),
+      ),
+    ).toBe(true)
   })
 })

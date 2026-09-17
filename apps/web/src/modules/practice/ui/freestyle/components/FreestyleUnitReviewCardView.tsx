@@ -306,6 +306,8 @@ export function FreestyleUnitReviewCardView({
   // (pending→open, rating amend) do not re-enter start and race an in-flight rate.
   const openedForKeyRef = useRef<string | null>(null)
   const loadOperationRef = useRef<string | null>(null)
+  const cardRef = useRef(card)
+  cardRef.current = card
 
   activeRef.current = active
   busyRef.current = busy
@@ -483,12 +485,13 @@ export function FreestyleUnitReviewCardView({
   closeCurrentEncounterRef.current = closeCurrentEncounter
 
   useEffect(() => {
+    const liveCard = cardRef.current
     if (!active) return
-    if (!card.unit_id || effectiveRevision == null || !cardUnitKey) {
-      onStaleDrop(card.id)
+    if (!liveCard.unit_id || effectiveRevision == null || !cardUnitKey) {
+      onStaleDrop(liveCard.id)
       return
     }
-    const identity = onEnsureEncounter(card.id, effectiveRevision, !readOnly)
+    const identity = onEnsureEncounter(liveCard.id, effectiveRevision, !readOnly)
     if (readOnly && identity.status !== 'closed') return
     const liveEncounter = unitRef.current?.encounter
     // Same live glance already loaded: skip. Do NOT key off parent `encounter` updates
@@ -520,46 +523,46 @@ export function FreestyleUnitReviewCardView({
     setLoadError(null)
     setActionError(null)
     const sessionCard =
-      effectiveRevision !== card.unit_revision
-        ? { ...card, unit_revision: effectiveRevision }
-        : card
+      effectiveRevision !== liveCard.unit_revision
+        ? { ...liveCard, unit_revision: effectiveRevision }
+        : liveCard
     void loadSessionWithTimeout(sessionCard, identity, roundId).then((value) => {
       if (!mounted || loadOperationRef.current !== requestIdentity) return
-      const nextUnit = value.units.find((item) => item.id === card.unit_id)
+      const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
       const decision = decideLoadedUnitSession({
-        cardUnitId: card.unit_id,
+        cardUnitId: liveCard.unit_id,
         cardRevision: effectiveRevision,
         unit: nextUnit,
         identityStatus: identity.status,
       })
       if (decision.action === 'drop' || !nextUnit?.encounter) {
-        onStaleDrop(card.id)
+        onStaleDrop(liveCard.id)
         return
       }
       if (decision.action === 'adopt') {
         setAdoptedRevision(nextUnit.revision)
-        if (card.unit_id) onRevisionAdopted?.(card.id, card.unit_id, nextUnit.revision)
+        if (liveCard.unit_id) onRevisionAdopted?.(liveCard.id, liveCard.unit_id, nextUnit.revision)
       }
-      openedForKeyRef.current = `${card.id}:${card.unit_id}:${nextUnit.revision}:${roundId}`
+      openedForKeyRef.current = `${liveCard.id}:${liveCard.unit_id}:${nextUnit.revision}:${roundId}`
       setSession(value)
       setLoadError(null)
       setStaleRecovery(false)
       setLastOperationId(nextUnit.encounter.effective_operation_id)
       onEncounterChange(
-        card.id,
+        liveCard.id,
         encounterState(value.id, nextUnit.revision, nextUnit.encounter),
       )
     }).catch((error) => {
       if (!mounted || loadOperationRef.current !== requestIdentity) return
       if (isStaleUnitError(error)) {
         setStaleRecovery(true)
-        onStaleDrop(card.id)
+        onStaleDrop(liveCard.id)
         return
       }
       const rawMessage = error instanceof Error ? error.message : '创建单元复习失败'
       const message = formatUnitDiagnostic({
         error,
-        card,
+        card: liveCard,
         roundId,
         operationId: requestIdentity,
         stage: '加载复习会话',
@@ -573,7 +576,12 @@ export function FreestyleUnitReviewCardView({
     }
   }, [
     active,
-    card,
+    // Identity only. A silent rebuild replaces the card object; using it here
+    // remounted the glance, reset the map to the root, and dropped the rating.
+    card.id,
+    card.unit_id,
+    card.unit_revision,
+    card.phase,
     cardUnitKey,
     effectiveRevision,
     // Only the stable identity fields — not selectedRating/passed — so a mid-score

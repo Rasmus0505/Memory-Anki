@@ -271,7 +271,16 @@ export function rebindCompletedIdsByUnit(
   const result: string[] = []
   Array.from(completedIds, (id) => String(id || '').trim()).forEach((id) => {
     if (!id) return
-    const unitId = stableUnitId(previousById.get(id)) || reviewUnitIdFromCardId(id)
+    const previousCard = previousById.get(id)
+    // Retry occurrence ids are first-class plan rows. Mapping them onto the
+    // source by unit_id would drop the just-rated copy from completedIds.
+    if ((previousCard && isRetryOccurrence(previousCard)) || id.startsWith('retry:')) {
+      if (seen.has(id)) return
+      seen.add(id)
+      result.push(id)
+      return
+    }
+    const unitId = stableUnitId(previousCard) || reviewUnitIdFromCardId(id)
     const rebound = unitId ? nextByUnit.get(unitId) : undefined
     const nextId = rebound || id
     if (seen.has(nextId)) return
@@ -292,8 +301,16 @@ export function rebindUnitEncountersByUnitId(
     const unitId = stableUnitId(card)
     if (unitId && !nextByUnit.has(unitId)) nextByUnit.set(unitId, card.id)
   })
+  const nextIds = new Set(next.map((card) => card.id))
   const result = { ...encounters }
   previous.forEach((card) => {
+    // Retry occurrences keep their own encounter. Rebinding them onto the
+    // source card deletes the live glance, remounts the map at the root, and
+    // looks like the rating was cancelled.
+    if (isRetryOccurrence(card)) {
+      if (!nextIds.has(card.id)) delete result[card.id]
+      return
+    }
     const unitId = stableUnitId(card)
     const nextId = unitId ? nextByUnit.get(unitId) : undefined
     if (!nextId || nextId === card.id) return
@@ -494,10 +511,18 @@ export function insertRetryOccurrenceAfterGap(
   return next
 }
 
-export function removeRetryOccurrencesForSource(cards: FreestyleCard[], sourceId: string) {
+export function removeRetryOccurrencesForSource(
+  cards: FreestyleCard[],
+  sourceId: string,
+  keepCardId?: string,
+) {
   const id = String(sourceId || '').trim()
+  const keep = String(keepCardId || '').trim()
   if (!id) return cards
-  return cards.filter((card) => !(isRetryOccurrence(card) && sourceCardId(card) === id))
+  return cards.filter((card) => {
+    if (!(isRetryOccurrence(card) && sourceCardId(card) === id)) return true
+    return Boolean(keep) && card.id === keep
+  })
 }
 
 export function hideCards(state: FreestyleSkipState, cardIds: Iterable<string>): FreestyleSkipState {

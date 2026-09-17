@@ -3,7 +3,6 @@ import {
   Brain,
   FolderTree,
   Languages,
-  Layers2,
   LayoutDashboard,
   Shuffle,
 } from 'lucide-react'
@@ -18,8 +17,6 @@ import {
   preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
   preloadFreestylePage,
-  preloadFreestyleSecondaryPage,
-  preloadTodayLearningPage,
   preloadKnowledgePage,
   preloadDashboardPage,
   preloadPalaceListPage,
@@ -55,19 +52,6 @@ export const navSections: NavSectionDefinition[] = [
     matches: createNavSectionMatcher('freestyle'),
     warmup: () => {
       void preloadFreestylePage()
-      void preloadTodayLearningPage()
-      preloadPracticeRoutes()
-    },
-  },
-  {
-    key: 'freestyleSecondary',
-    to: '/freestyle-2',
-    label: '随心 2',
-    icon: Layers2,
-    rememberLastVisited: true,
-    matches: createNavSectionMatcher('freestyleSecondary'),
-    warmup: () => {
-      void preloadFreestyleSecondaryPage()
       preloadPracticeRoutes()
     },
   },
@@ -122,7 +106,6 @@ export const navSections: NavSectionDefinition[] = [
     // Remember dashboard vs review-queue (and other insight routes) when switching sections.
     // Active review sessions are normalized to the dashboard hub; clicking 洞察 again
     // while already active returns to /dashboard so the hub remains one click away.
-    // /today（今日工作台）也归属洞察分区，与页面历史的 dashboard 归类一致。
     rememberLastVisited: true,
     matches: createNavSectionMatcher('review'),
     warmup: () => {

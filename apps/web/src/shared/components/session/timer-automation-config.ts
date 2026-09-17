@@ -16,6 +16,8 @@ export interface TimerAutomationConfig {
    * suspends the timer, so this is a timing rule, not a way of responding.
    */
   keepScreenAwake: boolean
+  /** In-page / desktop floating timer chrome. Off until the user opts in. */
+  showFloatingTimer: boolean
   /** @deprecated Ignored. Idle automation was removed in schema v6. */
   idleTimeoutSeconds?: number
   /** @deprecated Ignored. Idle automation was removed in schema v6. */
@@ -33,12 +35,13 @@ export type TimerAutomationActivityKind =
 
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
-export const TIMER_AUTOMATION_CONFIG_VERSION = 6
+export const TIMER_AUTOMATION_CONFIG_VERSION = 7
 
 export const DEFAULT_TIMER_AUTOMATION_CONFIG: TimerAutomationConfig = {
   schemaVersion: TIMER_AUTOMATION_CONFIG_VERSION,
   autoStartOnPageEnter: false,
   keepScreenAwake: true,
+  showFloatingTimer: false,
 }
 
 function sanitizeBoolean(value: unknown, fallback: boolean) {
@@ -66,6 +69,10 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
         raw.keepScreenAwake,
         DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
       ),
+      showFloatingTimer: sanitizeBoolean(
+        raw.showFloatingTimer,
+        DEFAULT_TIMER_AUTOMATION_CONFIG.showFloatingTimer,
+      ),
     }
   }
 
@@ -78,6 +85,10 @@ export function sanitizeTimerAutomationConfig(value: unknown): TimerAutomationCo
     keepScreenAwake: sanitizeBoolean(
       raw.keepScreenAwake,
       DEFAULT_TIMER_AUTOMATION_CONFIG.keepScreenAwake,
+    ),
+    showFloatingTimer: sanitizeBoolean(
+      raw.showFloatingTimer,
+      DEFAULT_TIMER_AUTOMATION_CONFIG.showFloatingTimer,
     ),
   }
 }
@@ -133,6 +144,10 @@ export function resetTimerAutomationConfig() {
 
 export function shouldAutoStartOnPageEnter(config: TimerAutomationConfig) {
   return config.autoStartOnPageEnter
+}
+
+export function shouldShowFloatingTimer(config: TimerAutomationConfig) {
+  return config.showFloatingTimer
 }
 
 /** @deprecated Kept for old callers; every activity signal is ignored. */

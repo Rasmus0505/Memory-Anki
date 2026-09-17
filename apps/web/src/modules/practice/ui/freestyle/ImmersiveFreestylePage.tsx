@@ -137,7 +137,6 @@ const FREESTYLE_SECTION_LINKS = [
   { to: '/english', label: '英语' },
   { to: '/palaces/new', label: '创建' },
   { to: '/dashboard', label: '洞察' },
-  { to: '/today', label: '今日工作台' },
 ] as const
 
 function StaleUnitReviewCard({

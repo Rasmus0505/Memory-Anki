@@ -1613,6 +1613,8 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "queue-construction fields",
             "does not move `current_card_id`",
             "orphan block",
+            "retry occurrence has its own encounter",
+            "leaves that occurrence in the viewport",
         ):
             if marker not in feed_source and marker != "scheduledBase":
                 errors.append(
@@ -1715,6 +1717,11 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
                 "server hydrate must restore completed ticks onto the local plan."
             )
+        if "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "a passing rate must leave the current retry occurrence in the viewport."
+            )
     renew_path = WEB_SRC / "modules" / "practice" / "domain" / "queueState.ts"
     if renew_path.exists():
         renew_source = renew_path.read_text(encoding="utf-8", errors="ignore")
@@ -1722,6 +1729,16 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             errors.append(
                 f"{renew_path.relative_to(REPO_ROOT).as_posix()}: "
                 "closed passed units must be reopenable so the learner can re-score."
+            )
+        if "Retry occurrences keep their own encounter" not in renew_source:
+            errors.append(
+                f"{renew_path.relative_to(REPO_ROOT).as_posix()}: "
+                "silent rebuild must keep a retry occurrence's own encounter."
+            )
+        if "keepCardId" not in renew_source:
+            errors.append(
+                f"{renew_path.relative_to(REPO_ROOT).as_posix()}: "
+                "removing retries must be able to keep the card under the viewport."
             )
     server_plan = WEB_SRC / "modules" / "practice" / "domain" / "serverRoundPlan.ts"
     if server_plan.exists():
@@ -2869,7 +2886,7 @@ def check_prompt_catalog_boundaries(errors: list[str]) -> None:
 def check_unified_training_evidence(errors: list[str]) -> None:
     nav_path = WEB_SRC / "app" / "shell" / "navSections.ts"
     nav_content = nav_path.read_text(encoding="utf-8", errors="ignore") if nav_path.exists() else ""
-    expected_labels = ("随心", "随心 2", "知识", "英语", "创建", "洞察")
+    expected_labels = ("随心", "知识", "英语", "创建", "洞察")
     labels = re.findall(r"label: '([^']+)'", nav_content)
     if labels != list(expected_labels):
         errors.append(

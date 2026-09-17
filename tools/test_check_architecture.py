@@ -49,10 +49,10 @@ def write_unified_training_fixture(root: Path, *, labels: tuple[str, ...]) -> tu
     return api_src, web_src
 
 
-def test_unified_training_evidence_accepts_six_nav_labels(
+def test_unified_training_evidence_accepts_five_nav_labels(
     tmp_path: Path, monkeypatch
 ) -> None:
-    api_src, web_src = write_unified_training_fixture(tmp_path, labels=SIX_NAV_LABELS)
+    api_src, web_src = write_unified_training_fixture(tmp_path, labels=FIVE_NAV_LABELS)
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -63,10 +63,10 @@ def test_unified_training_evidence_accepts_six_nav_labels(
     assert errors == []
 
 
-def test_unified_training_evidence_rejects_five_nav_labels(
+def test_unified_training_evidence_rejects_six_nav_labels(
     tmp_path: Path, monkeypatch
 ) -> None:
-    api_src, web_src = write_unified_training_fixture(tmp_path, labels=FIVE_NAV_LABELS)
+    api_src, web_src = write_unified_training_fixture(tmp_path, labels=SIX_NAV_LABELS)
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -128,7 +128,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block\n",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
@@ -156,7 +156,12 @@ def test_freestyle_facade_requires_round_plan_public_surface(
 
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
-        "applyCompletedIdsToRoundPlan\n",
+        "applyCompletedIdsToRoundPlan\n"
+        "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "queueState.ts",
+        "Retry occurrences keep their own encounter\nkeepCardId\n",
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
@@ -204,6 +209,8 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
 
     assert any("must not mint a new round" in error for error in errors)
     assert any("re-score" in error for error in errors)
+    assert any("retry occurrence's own encounter" in error for error in errors)
+    assert any("keep the card under the viewport" in error for error in errors)
     assert any("reconstruct completed review units" in error for error in errors)
     assert any("does not mint a new round_id" in error for error in errors)
 

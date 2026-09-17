@@ -5,6 +5,12 @@ import {
   GlobalTimerProvider,
   useGlobalTimerRegistration,
 } from '@/shared/components/session/GlobalTimerProvider'
+import {
+  DEFAULT_TIMER_AUTOMATION_CONFIG,
+  saveTimerAutomationConfig,
+} from '@/shared/components/session/timer-automation-config'
+import { TIMER_OVERLAY_LAYOUT_STORAGE_KEY } from '@/shared/components/session/timer-overlay-layout'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import type {
   DesktopTimerBridge,
@@ -69,6 +75,7 @@ function renderProvider(timer?: TimedSessionController) {
 describe('GlobalTimerProvider', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     delete window.memoryAnkiDesktopTimer
   })
 
@@ -118,6 +125,57 @@ describe('GlobalTimerProvider', () => {
     act(() => commandHandler?.({ type: 'resume' }))
     expect(resume).toHaveBeenCalledWith({ source: 'global_floating_timer' })
     expect(pause).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the floating timer off until the setting is enabled', () => {
+    renderProvider()
+    expect(document.querySelector('[data-timer-overlay-root]')).toBeNull()
+
+    act(() => {
+      saveTimerAutomationConfig({
+        ...DEFAULT_TIMER_AUTOMATION_CONFIG,
+        showFloatingTimer: true,
+      })
+    })
+    expect(document.querySelector('[data-timer-overlay-root]')).toBeTruthy()
+  })
+
+  it('restores a previously hidden overlay when the setting is turned on', () => {
+    window.localStorage.setItem(
+      TIMER_OVERLAY_LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        x: 24,
+        y: 96,
+        width: 320,
+        height: 208,
+        collapsed: false,
+        hidden: true,
+      }),
+    )
+    renderProvider()
+    act(() => {
+      saveTimerAutomationConfig({
+        ...DEFAULT_TIMER_AUTOMATION_CONFIG,
+        showFloatingTimer: true,
+      })
+    })
+    expect(screen.queryByRole('button', { name: '显示悬浮计时器' })).toBeNull()
+    expect(screen.getByText('计时器 待开始')).toBeTruthy()
+  })
+
+  it('asks the desktop overlay to follow the floating-timer setting', () => {
+    const sendTimerCommand = vi.fn()
+    window.memoryAnkiDesktopTimer = { sendTimerCommand } satisfies DesktopTimerBridge
+    renderProvider()
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'closeOverlay' })
+
+    act(() => {
+      saveTimerAutomationConfig({
+        ...DEFAULT_TIMER_AUTOMATION_CONFIG,
+        showFloatingTimer: true,
+      })
+    })
+    expect(sendTimerCommand).toHaveBeenCalledWith({ type: 'showOverlay' })
   })
 
   it('ignores closeOverlay without pausing or completing the active timer', () => {

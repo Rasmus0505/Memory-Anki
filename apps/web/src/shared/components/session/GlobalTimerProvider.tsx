@@ -4,16 +4,20 @@ import {
   readTimerAutomationConfig,
   resetTimerAutomationConfig,
   saveTimerAutomationConfig,
+  shouldShowFloatingTimer,
   TIMER_AUTOMATION_UPDATED_EVENT,
   type TimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
+import {
+  readTimerOverlayLayout,
+  saveTimerOverlayLayout,
+} from '@/shared/components/session/timer-overlay-layout'
 import { onAppEvent } from '@/shared/events/appEvents'
 import {
   getDesktopTimerBridge,
   hasDesktopTimerBridge,
   type UnifiedTimerCommand,
 } from '@/shared/components/session/desktopTimerBridge'
-import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   adoptLiveTimerSnapshot,
   interpolateTimerSeconds,
@@ -37,12 +41,9 @@ export function GlobalTimerProvider({
   children,
 }: React.PropsWithChildren) {
   const [entries, setEntries] = React.useState<Record<string, GlobalTimerRegistration>>({})
-  // Desktop Electron uses the separate timer overlay window. Browser desktop
-  // keeps the in-page floating chrome; PWA mounts it headlessly.
+  // Desktop Electron uses the separate timer overlay window. Browser/PWA keep
+  // the in-page floating chrome only when the user opts in from settings.
   const [showInPageTimerOverlay] = React.useState(() => !hasDesktopTimerBridge())
-  const [showFloatingTimerChrome] = React.useState(
-    () => !hasDesktopTimerBridge() && detectClientSource() !== 'pwa',
-  )
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(Object.values(entries)), [entries])
   const presence = useLiveStudyPresence()
@@ -52,6 +53,8 @@ export function GlobalTimerProvider({
   const [automationConfig, setAutomationConfig] = React.useState<TimerAutomationConfig>(() =>
     readTimerAutomationConfig(),
   )
+  const previousShowFloatingTimerRef = React.useRef(automationConfig.showFloatingTimer)
+  const showFloatingTimerChrome = shouldShowFloatingTimer(automationConfig) && showInPageTimerOverlay
   const activeEntryRef = React.useRef<GlobalTimerRegistration | null>(null)
   activeEntryRef.current = activeEntry
 
@@ -63,12 +66,28 @@ export function GlobalTimerProvider({
   React.useEffect(() => {
     const unsubscribeAutomation = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
       const nextConfig = detail || readTimerAutomationConfig()
+      // Un-hide before the overlay mounts so it does not restore as a corner clock.
+      if (!previousShowFloatingTimerRef.current && nextConfig.showFloatingTimer) {
+        const layout = readTimerOverlayLayout()
+        if (layout.hidden) {
+          saveTimerOverlayLayout({ ...layout, hidden: false })
+        }
+      }
+      previousShowFloatingTimerRef.current = nextConfig.showFloatingTimer
       setAutomationConfig(nextConfig)
     })
     return () => {
       unsubscribeAutomation()
     }
   }, [])
+
+  React.useEffect(() => {
+    const bridge = getDesktopTimerBridge()
+    if (!bridge?.sendTimerCommand) return
+    bridge.sendTimerCommand({
+      type: automationConfig.showFloatingTimer ? 'showOverlay' : 'closeOverlay',
+    })
+  }, [automationConfig.showFloatingTimer])
 
   const upsertTimer = React.useCallback((entry: GlobalTimerRegistration) => {
     setEntries((current) => {
@@ -173,8 +192,8 @@ export function GlobalTimerProvider({
     }
 
     // In-page floating overlay owns hide via layout.hidden. Desktop Electron
-    // hides the overlay window in main before this command would be forwarded.
-    if (command.type === 'closeOverlay') {
+    // shows/hides the overlay window in main before these commands are forwarded.
+    if (command.type === 'closeOverlay' || command.type === 'showOverlay') {
       return
     }
   }, [
@@ -241,12 +260,12 @@ export function GlobalTimerProvider({
   return (
     <GlobalTimerActionsContext.Provider value={contextValue}>
       {children}
-      {showInPageTimerOverlay ? (
+      {showFloatingTimerChrome ? (
         <GlobalTimerFloatingOverlay
           entries={Object.values(entries)}
           snapshot={timerSnapshot}
           onCommand={handleTimerCommand}
-          showChrome={showFloatingTimerChrome}
+          showChrome
         />
       ) : null}
       <TimerAutomationDialog
