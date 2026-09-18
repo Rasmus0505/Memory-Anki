@@ -431,3 +431,17 @@ export function applyCompletedIdsToRoundPlan(
   }
   return next
 }
+
+/** Hydrate from the server completed set, including undoing a cancelled rating. */
+export function syncCompletedIdsToRoundPlan(
+  plan: FreestyleRoundPlanState,
+  completedIds: Iterable<string>,
+) {
+  const completed = new Set(Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean))
+  let next = applyCompletedIdsToRoundPlan(plan, completed)
+  for (const id of Object.keys(next.cardsById)) {
+    if (completed.has(id) || next.cardsById[id]?.status !== 'completed') continue
+    next = updateRoundPlanCard(next, id, { status: 'pending', lastRating: null })
+  }
+  return next
+}

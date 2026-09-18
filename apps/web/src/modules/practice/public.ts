@@ -58,6 +58,7 @@ export {
   rebindUnitEncountersByUnitId,
   sourceCardId,
   getFreestyleRatedCardIds,
+  findEarliestUnratedIndex,
   getFreestylePassedCardIds,
   isRetryOccurrence,
   createRetryOccurrence,
@@ -104,6 +105,7 @@ export {
 } from './domain/queueState'
 export {
   applyCompletedIdsToRoundPlan,
+  syncCompletedIdsToRoundPlan,
   applyRoundPlanOrder,
   countIncompletePalaceUnits,
   createRoundPlan,

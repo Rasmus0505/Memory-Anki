@@ -422,6 +422,23 @@ export function getFreestyleRatedCardIds(
 }
 
 /**
+ * First unfinished card in round order: no rating yet, including skipped-ahead
+ * units the learner can return to. Weak ratings count as already scored.
+ */
+export function findEarliestUnratedIndex(
+  cards: ReadonlyArray<FreestyleCard>,
+  completedIds: Iterable<string>,
+  encounters: Record<string, FreestyleUnitEncounterState> = {},
+): number | null {
+  const rated = new Set(getFreestyleRatedCardIds(cards, completedIds, encounters))
+  const index = cards.findIndex((card) => {
+    const id = String(card.id || '').trim()
+    return Boolean(id) && !rated.has(id)
+  })
+  return index >= 0 ? index : null
+}
+
+/**
  * Cards that have actually passed in the current freestyle round.
  *
  * This is deliberately separate from {@link getFreestyleRatedCardIds}: a

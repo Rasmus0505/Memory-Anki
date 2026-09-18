@@ -1,7 +1,6 @@
 """Public surface for `content`.
 
-Scaffolding phase (7.22-refactor-optimize): stable import path for AI and new code.
-Implementation still lives in legacy modules until W2 file moves complete.
+Stable import path for other contexts. Implementation lives in this module.
 
 Import rule for other contexts:
     from memory_anki.modules.content.public import ...

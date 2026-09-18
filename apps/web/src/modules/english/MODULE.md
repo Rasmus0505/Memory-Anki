@@ -1,7 +1,7 @@
 # Module: english
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+active — production module after FSD removal.
 
 ## Owns
 English course/patterns

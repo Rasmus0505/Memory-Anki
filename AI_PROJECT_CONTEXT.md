@@ -16,14 +16,14 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 
 | 能力域 | 说明 |
 |---|---|
-| 记忆宫殿 `palaces` | 宫殿、挂钩、分段、迷你宫殿、附件、版本快照、焦点节点、结构编辑 |
+| 记忆宫殿 `palaces` | 宫殿、挂钩、分段、迷你宫殿、附件、版本快照、结构编辑。宫殿焦点练习已退役 |
 | 复习 `reviews` | 艾宾浩斯/自定义间隔、宫殿/分段/迷你宫殿多粒度复习、队列与进度 |
-| 测验 `palace_quiz` | 选择题、简答题、AI 生成、题目归类、答题反馈 |
+| 测验 `quiz` | 选择题、简答题、AI 生成、题目归类、答题反馈 |
 | 思维导图导入 `mindmap_import` | 图片/文本等资料经 AI 识别后应用为宫殿结构 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
 | 英语学习 `english` / `english_reading` | 听力、阅读材料、CEFR 版本、打字练习、词典与翻译 |
 | 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle` |
-| 学习会话 `sessions` | practice/focus/segment/mini/review 等会话进度 |
+| 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |
 | 设置 `settings` | AI 模型注册、场景模型、提示词、复习参数、客户端偏好 |
@@ -177,23 +177,29 @@ modules/<feature>/
 
 不是每个模块都有完整四层，但架构方向按这个模型理解。
 
-常见后端模块：
+常见后端模块（现行目录名；`palaces` / `palace_quiz` / `reviews` / `sessions` / `freestyle` / `persistence` 已退役或更名）：
 
 | 模块 | 主要职责 |
 |---|---|
-| `palaces` | 宫殿、分段、迷你宫殿、导入导出、思维导图导入任务、标题同步 |
-| `palace_quiz` | 题目、AI 出题、题目来源、生成历史、答题反馈 |
-| `reviews` | 复习队列、提交结果、调度策略、进度投影 |
-| `sessions` | 学习会话进度 |
+| `content` | 宫殿、分段、迷你宫殿、导入导出、标题同步、宫殿编辑器 |
+| `quiz` | 题目、AI 出题、题目来源、生成历史、答题反馈 |
+| `memory` | 复习队列、提交结果、调度策略、进度投影 |
+| `session` | 学习会话进度 |
 | `knowledge` | 学科、章节、知识导入 |
-| `mindmap` | 编辑器状态、思维导图文档同步 |
-| `freestyle` | 随心训练 feed 与卡片 |
+| `mindmap_document` | 思维导图文档规则与快照 |
+| `mindmap_learning` | 思维导图学习投影 |
+| `practice` | 随心训练 feed、轮次与卡片队列 |
+| `produce` | 思维导图导入与知识生产 |
 | `settings` | AI 模型注册表、提示词、复习设置 |
 | `dashboard` | 聚合页面数据 |
 | `english` | 英语听力/课程能力 |
 | `english_reading` | 英语阅读、CEFR、词典/句子翻译 |
+| `english_lookup` | 词典查词与翻译引擎 |
 | `backups` | 启停备份、版本快照、恢复 |
-| `persistence` | 幂等请求与持久化辅助 |
+| `pdf_library` | PDF 书库与 OCR 缓存 |
+| `batch_generation` | 整书批量生成工作区 |
+| `ai_learning` | AI 学习工作台运行记录 |
+| `search` | 全局搜索 |
 
 ---
 
@@ -204,7 +210,11 @@ modules/<feature>/
 ```text
 apps/web/src/
 ├── app/                 应用壳、Provider、路由装配
+├── pages/               路由级页面组合
+├── widgets/             跨模块组合的页面级部件
 ├── modules/             按业务能力组织的前端模块
+├── platform/            浏览器副作用端口
+├── pwa/                 Service Worker 注册
 ├── shared/              可复用基础能力
 ├── test/                测试 setup
 ├── main.tsx             前端入口
@@ -223,9 +233,13 @@ apps/web/src/
 
 前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-`backup`、`content`、`dashboard`、`english`、`english-reading`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`english`、`english-lookup`、`english-reading`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
 模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
+
+### 5.3 `pages/` 与 `widgets/`
+
+路由页面放在 `pages/`，跨模块组合的页面级部件放在 `widgets/`。页面通过各模块 `public.ts` 组合能力，不把领域逻辑或直连后端 API 放进 page 文件。
 
 ### 5.4 `shared/`
 
@@ -421,7 +435,7 @@ npm run openapi:types
 当前本文档相关的期望：
 
 - `AI_PROJECT_CONTEXT.md` 是新的主项目说明。
-- `PROJECT_DOCUMENTATION.md` 已被替代，应删除，不再维护。
+- `PROJECT_DOCUMENTATION.md` 已被替代且已从仓库删除；不要再创建或维护旧长文档。
 - 每日自动任务只维护并提交 `AI_PROJECT_CONTEXT.md` 的日常更新；它不负责提交业务代码。
 
 ---

@@ -1,7 +1,7 @@
 # Module: produce
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+active — production module after FSD removal.
 
 ## Owns
 Import drawer, OCR, AI split, batch generation UI

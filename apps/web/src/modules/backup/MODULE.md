@@ -1,7 +1,7 @@
 # Module: backup
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+active — production module after FSD removal.
 
 ## Owns
 Backup UI if any

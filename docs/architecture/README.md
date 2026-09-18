@@ -1,6 +1,6 @@
 ﻿# Memory Anki Architecture
 
-> **Refactor in progress (branch `7.22-refactor-optimize`):** target map in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). New public paths under `modules.content|memory|quiz|practice|produce|session.public`. Legacy names remain until W2 moves.
+> Current ownership map. Historical target notes remain in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). Frontend `features/` and `entities/` have been migrated into `modules/*`; backend public imports go through each context's declared `public` / `api` entry.
 
 
 This directory is the current architectural source of truth. Product and runtime context lives in `AI_PROJECT_CONTEXT.md`; historical plans in `fable/` are not authoritative for current module ownership.
@@ -8,11 +8,11 @@ This directory is the current architectural source of truth. Product and runtime
 ## System Shape
 
 ```text
-apps/web: app -> pages/widgets -> modules (13, domain/application/ui/api + public.ts) -> shared/platform/pwa
+apps/web: app -> pages/widgets -> modules (14, domain/application/ui/api + public.ts) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard english english-reading memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
+Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard english english-lookup english-reading memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
 
 The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
 
@@ -132,7 +132,7 @@ The concentrated architecture replacement has started with the two failure-prone
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
-- The current FSD tree remains the production ownership map outside completed runtime slices; migrated runtime logic must not move back into it. Empty future-facing module scaffolds are forbidden.
+- Runtime modules under `apps/web/src/modules` are the production ownership map; do not move migrated logic back into pages as domain code. Empty future-facing module scaffolds are forbidden.
 
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
 - Whole-book batch generation workspace: `docs/architecture/batch-generation-workspace.md`

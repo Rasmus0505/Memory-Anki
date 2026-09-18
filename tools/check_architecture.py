@@ -858,6 +858,9 @@ def check_timed_session_architecture(errors: list[str]) -> None:
         "operation_id",
         "foreground",
         "duration_edited",
+        "sceneSegments",
+        "15 分钟",
+        "dwell",
     )
     if not architecture_doc.exists():
         errors.append(
@@ -884,7 +887,14 @@ def check_timed_session_architecture(errors: list[str]) -> None:
     ports = runtime.get("ports") if isinstance(runtime.get("ports"), dict) else {}
     session_port = ports.get("SessionPort") if isinstance(ports.get("SessionPort"), dict) else {}
     capabilities = session_port.get("capabilities") if isinstance(session_port.get("capabilities"), list) else []
-    for capability in ("sessionKeyRegistry", "foregroundIntervals", "singleTerminalWrite", "versionedWrite"):
+    for capability in (
+        "sessionKeyRegistry",
+        "foregroundIntervals",
+        "visiblePageDwell",
+        "continuousBlock",
+        "singleTerminalWrite",
+        "versionedWrite",
+    ):
         if capability not in capabilities:
             errors.append(
                 f"docs/architecture/context-map.yaml: SessionPort must declare `{capability}`."
@@ -1631,7 +1641,13 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
         )
     else:
         service_source = round_service.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("expected_version", "operation_id", "plan_json", "queue_construction_signature"):
+        for marker in (
+            "expected_version",
+            "operation_id",
+            "plan_json",
+            "queue_construction_signature",
+            "_latest_active_for_workspace",
+        ):
             if marker not in service_source:
                 errors.append(
                     f"{round_service.relative_to(REPO_ROOT).as_posix()}: must keep `{marker}`."
@@ -1648,6 +1664,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "retry_attempt",
             "insert_retry",
             "reorder_unstarted",
+            "drop_missing_unstarted",
             "_is_viewable_current",
             "live_retry_sources",
         ):
@@ -1712,6 +1729,17 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 "queue rebuild must not mint a new round just because the stored "
                 "palace-scope signature is empty or drifted."
             )
+        if hook_source.count("startNewRound(") != 1:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "only 「再来一轮」 may call startNewRound; refresh and config/scope "
+                "changes must rebind the current round."
+            )
+        if "rebuildKeepingProgress" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "config and palace-scope changes must rebuild without minting a round."
+            )
         if "applyCompletedIdsToRoundPlan" not in hook_source:
             errors.append(
                 f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
@@ -1755,6 +1783,21 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that refresh does not mint a new round_id."
             )
+        if "overlapping identities" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that a scope change keeps overlapping completed/retry marks."
+            )
+    progress_segments = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts"
+    )
+    if progress_segments.exists():
+        progress_seg_source = progress_segments.read_text(encoding="utf-8", errors="ignore")
+        if "orderIds" not in progress_seg_source:
+            errors.append(
+                f"{progress_segments.relative_to(REPO_ROOT).as_posix()}: "
+                "the HUD rail must walk roundPlan.orderIds so omitted completed ticks still render."
+            )
 
 
 def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
@@ -1774,7 +1817,12 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
     contract = WEB_SRC / "shared" / "api" / "contracts" / "freestyle.ts"
     if contract.exists():
         contract_source = contract.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("overlay_quiz_setup_done", "FreestyleOverlayQuizState"):
+        for marker in (
+            "overlay_quiz_setup_done",
+            "FreestyleOverlayQuizState",
+            "FreestyleOverlayQuestionRange",
+            "overlay_question_range",
+        ):
             if marker not in contract_source:
                 errors.append(
                     f"{contract.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
@@ -1799,10 +1847,15 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
     round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
     if round_service.exists():
         service_source = round_service.read_text(encoding="utf-8", errors="ignore")
-        if "_carry_overlay_quiz" not in service_source:
+        if "empty_overlay_quiz" not in service_source:
             errors.append(
                 f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
-                "new rounds must copy overlay quiz progress instead of clearing it."
+                "new rounds must start with empty overlay quiz progress."
+            )
+        if "_carry_overlay_quiz" in service_source:
+            errors.append(
+                f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
+                "new rounds must not copy overlay quiz progress."
             )
 
 
@@ -1997,10 +2050,15 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
         )
         return
     source = panel.read_text(encoding="utf-8", errors="ignore")
-    if 'mobileViewPolicy="guided"' in source:
+    if 'mobileViewPolicy="guided"' in source or "FreestyleFeedMindMapPanel" in source:
         errors.append(
             f"{panel.relative_to(WEB_SRC).as_posix()}: review maps must keep the default "
             "`auto` camera so pan is not yielded to the feed scroller."
+        )
+    if "useFreestylePhoneFeed" in source:
+        errors.append(
+            f"{panel.relative_to(WEB_SRC).as_posix()}: review maps must not yield "
+            "one-finger pan through useFreestylePhoneFeed."
         )
     page = (
         WEB_SRC
@@ -2021,6 +2079,38 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
             errors.append(
                 f"{page.relative_to(WEB_SRC).as_posix()}: card changes must stay on "
                 "FreestyleFeedPager after restoring canvas pan."
+            )
+        if "palaceMode=" in page_source or "? canGoNextPalace" in page_source:
+            errors.append(
+                f"{page.relative_to(WEB_SRC).as_posix()}: dock arrows must page cards "
+                "even when the rating scope is palace."
+            )
+    pager = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleFeedPager.tsx"
+    )
+    if pager.exists():
+        pager_source = pager.read_text(encoding="utf-8", errors="ignore")
+        if "上一宫殿" in pager_source or "下一宫殿" in pager_source:
+            errors.append(
+                f"{pager.relative_to(WEB_SRC).as_posix()}: chevrons must stay 上一张 / 下一张."
+            )
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "stays pannable" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: review maps must stay pannable."
+            )
+        if "mindmap-yield-parent-scroll" in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must not yield one-finger "
+                "map pan to the snap scroller."
             )
 
 
@@ -2103,6 +2193,62 @@ def check_freestyle_rating_last_write_wins(errors: list[str]) -> None:
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that the latest rating reopens a dead glance."
+            )
+
+
+def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
+    """The last handled unit must still page into the closing card."""
+    page = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "ImmersiveFreestylePage.tsx"
+    )
+    completion = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "roundCompletion.ts"
+    )
+    if not page.exists():
+        errors.append(
+            f"{page.relative_to(WEB_SRC).as_posix()}: immersive freestyle page is required."
+        )
+        return
+    if not completion.exists():
+        errors.append(
+            f"{completion.relative_to(WEB_SRC).as_posix()}: round completion model is required."
+        )
+        return
+    page_source = page.read_text(encoding="utf-8", errors="ignore")
+    completion_source = completion.read_text(encoding="utf-8", errors="ignore")
+    if "function freestyleFeedSlotCount" not in completion_source:
+        errors.append(
+            f"{completion.relative_to(WEB_SRC).as_posix()}: "
+            "must expose a closing snap slot after the last unit."
+        )
+    if "clampFreestyleFeedIndex" not in page_source or "viewingCompleteSlot" not in page_source:
+        errors.append(
+            f"{page.relative_to(WEB_SRC).as_posix()}: "
+            "下一张 must be able to open the closing slot instead of clamping to the last unit."
+        )
+    if "currentIndex < cards.length - 1" in page_source:
+        errors.append(
+            f"{page.relative_to(WEB_SRC).as_posix()}: "
+            "canGoNext must include the closing slot, not stop at the last card."
+        )
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "closing slot" not in feed_source or "调整配置" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that the last unit still opens the closing slot for 调整配置."
             )
 
 
@@ -3343,6 +3489,7 @@ def main() -> int:
     check_freestyle_canvas_pan(errors)
     check_freestyle_rating_retap_clears(errors)
     check_freestyle_rating_last_write_wins(errors)
+    check_freestyle_complete_slot_reachable(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)

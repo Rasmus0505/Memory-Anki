@@ -128,15 +128,15 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport\n",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport overlapping identities\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
-        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n",
+        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n_latest_active_for_workspace = True\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\nreorder_unstarted = True\n_is_viewable_current = True\nlive_retry_sources = set()\n",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\nreorder_unstarted = True\ndrop_missing_unstarted = True\n_is_viewable_current = True\nlive_retry_sources = set()\n",
     )
     write_file(
         api_src / "modules" / "practice" / "presentation" / "router.py",
@@ -144,7 +144,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
-        "scheduledBase retryInserted progressHudText bg-sky-400/25\n",
+        "scheduledBase retryInserted progressHudText bg-sky-400/25 orderIds\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
@@ -156,6 +156,8 @@ def test_freestyle_facade_requires_round_plan_public_surface(
 
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "rebuildKeepingProgress\n"
+        "startNewRound(queueStateRef.current, nextSeed)\n"
         "applyCompletedIdsToRoundPlan\n"
         "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n",
     )
@@ -186,7 +188,8 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
-        "startNewRound(queueStateRef.current, nextConfig.seed)\n",
+        "startNewRound(queueStateRef.current, nextConfig.seed)\n"
+        "startNewRound(queueStateRef.current, next.seed)\n",
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "queueState.ts",
@@ -208,6 +211,8 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
     assert any("must not mint a new round" in error for error in errors)
+    assert any("only 「再来一轮」 may call startNewRound" in error for error in errors)
+    assert any("rebuild without minting a round" in error for error in errors)
     assert any("re-score" in error for error in errors)
     assert any("retry occurrence's own encounter" in error for error in errors)
     assert any("keep the card under the viewport" in error for error in errors)
@@ -454,6 +459,62 @@ def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
     assert errors == []
 
 
+def test_freestyle_complete_slot_reachable_rejects_last_card_clamp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "canGoNext={cards.length > 0 && currentIndex < cards.length - 1}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "roundCompletion.ts",
+        "export function isFreestyleRoundComplete() { return false }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "the closing card counts sources once.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_complete_slot_reachable(errors)
+
+    assert any("closing snap slot after the last unit" in error for error in errors)
+    assert any("open the closing slot" in error for error in errors)
+    assert any("canGoNext must include the closing slot" in error for error in errors)
+    assert any("last unit still opens the closing slot" in error for error in errors)
+
+
+def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
+        "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "roundCompletion.ts",
+        "export function freestyleFeedSlotCount(cardCount: number, roundComplete: boolean) {\n"
+        "  return cardCount + (roundComplete ? 1 : 0)\n"
+        "}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_complete_slot_reachable(errors)
+
+    assert errors == []
+
+
 def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -467,19 +528,32 @@ def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(
         / "freestyle"
         / "components"
         / "FreestyleUnitReviewFlipPanel.tsx",
-        'mobileViewPolicy="guided"\n',
+        'mobileViewPolicy="guided"\nuseFreestylePhoneFeed()\n',
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        'className="h-full touch-pan-y"\n',
+        'className="h-full touch-pan-y" palaceMode={ratingScope === \'palace\'}\n',
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleFeedPager.tsx",
+        "aria-label={palaceMode ? '上一宫殿' : '上一张'}\n",
     )
 
     errors: list[str] = []
     check_architecture.check_freestyle_canvas_pan(errors)
 
     assert any("auto" in error and "pan" in error for error in errors)
+    assert any("useFreestylePhoneFeed" in error for error in errors)
     assert any("touch-pan-y" in error for error in errors)
     assert any("FreestyleFeedPager" in error for error in errors)
+    assert any("page cards" in error for error in errors)
+    assert any("上一张" in error for error in errors)
 
 
 def test_freestyle_canvas_pan_allows_auto_camera_and_pager(
@@ -500,6 +574,16 @@ def test_freestyle_canvas_pan_allows_auto_camera_and_pager(
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
         "function Page() { return <FreestyleFeedPager /> }\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleFeedPager.tsx",
+        "aria-label=\"上一张\"\n",
     )
 
     errors: list[str] = []
@@ -2558,5 +2642,51 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     errors: list[str] = []
     check_architecture.check_freestyle_scope_quiz_overlay(errors)
     assert any("park out-of-scope progress" in error for error in errors)
-    assert any("copy overlay quiz progress" in error for error in errors)
+    assert any("empty overlay quiz progress" in error for error in errors)
+
+
+def test_timed_session_architecture_requires_dwell_and_segment_markers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    monkeypatch.setattr(
+        check_architecture,
+        "CONTEXT_MAP_PATH",
+        tmp_path / "docs" / "architecture" / "context-map.yaml",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "timed-session.md",
+        "session_key client_revision operation_id foreground duration_edited\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "context-map.yaml",
+        json.dumps(
+            {
+                "runtime": {
+                    "ports": {
+                        "SessionPort": {
+                            "capabilities": [
+                                "sessionKeyRegistry",
+                                "foregroundIntervals",
+                                "singleTerminalWrite",
+                                "versionedWrite",
+                            ]
+                        }
+                    }
+                }
+            }
+        ),
+    )
+    write_file(
+        tmp_path / "apps" / "web" / "src" / "modules" / "session" / "domain" / "study-session-entity" / "api" / "studySessionApi.ts",
+        "session_key client_revision operation_id\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_timed_session_architecture(errors)
+    assert any("sceneSegments" in error for error in errors)
+    assert any("15 分钟" in error for error in errors)
+    assert any("dwell" in error for error in errors)
+    assert any("visiblePageDwell" in error for error in errors)
+    assert any("continuousBlock" in error for error in errors)
 
