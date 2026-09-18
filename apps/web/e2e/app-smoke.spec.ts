@@ -22,10 +22,12 @@ test('loads the app shell and primary navigation', async ({ page }) => {
   )
 })
 
-test('redirects /today to dashboard and keeps /freestyle-2 reachable', async ({ page }) => {
+test('redirects retired /today bookmarks to dashboard', async ({ page }) => {
   await page.goto('/today')
   await expect(page).toHaveURL(/\/dashboard/)
+})
 
+test('keeps /freestyle-2 reachable from the HUD switcher', async ({ page }) => {
   await page.goto('/freestyle-2')
   await expect(page).toHaveURL(/\/freestyle-2/)
   await expect(page.getByTestId('freestyle-workspace-switcher')).toBeVisible()

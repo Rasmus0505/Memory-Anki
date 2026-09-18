@@ -103,7 +103,9 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     expect(resolveNavSection('/review')).toBeNull()
   })
 
-  it('does not register the retired /today workspace', () => {
+  it('does not register the retired /today workspace in the manifest', () => {
+    // JSX still redirects exact `/today` to `/dashboard` for old bookmarks.
+    // Unregistered paths (including `/today/foo`) use the default fallback.
     expect(resolveRouteFallbackTarget('/today')).toBe('/freestyle')
     expect(resolveRouteFallbackTarget('/today/foo')).toBe('/freestyle')
     expect(resolveNavSection('/today')).toBeNull()

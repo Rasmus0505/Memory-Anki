@@ -103,9 +103,8 @@ export const navSections: NavSectionDefinition[] = [
     to: '/dashboard',
     label: '洞察',
     icon: Brain,
-    // Remember dashboard vs review-queue (and other insight routes) when switching sections.
-    // Active review sessions are normalized to the dashboard hub; clicking 洞察 again
-    // while already active returns to /dashboard so the hub remains one click away.
+    // Insight hub is /dashboard. Remember the last path when leaving this section;
+    // clicking 洞察 again while already active returns to /dashboard.
     rememberLastVisited: true,
     matches: createNavSectionMatcher('review'),
     warmup: () => {

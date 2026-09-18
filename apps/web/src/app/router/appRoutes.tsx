@@ -93,6 +93,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
+          {/* Retired 今日工作台: keep bookmarks on the insight hub, not /freestyle. */}
           <Route path="/today" element={<Navigate to="/dashboard" replace />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<EnglishHubPage />} />
