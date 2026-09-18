@@ -14,6 +14,7 @@ from memory_anki.modules.quiz.application.node_binding import (
     extract_payload_node_uids,
 )
 
+from ..question_scheduler import apply_first_learning_rating
 from .dedup import find_duplicate_question
 from .dedup_keys import build_question_dedup_key, question_to_dedup_payload
 from .queries import (
@@ -412,6 +413,29 @@ def record_choice_attempt(
     )
 
 
+def rate_question_first_learning(
+    session: Session,
+    question_id: int,
+    rating: int | str,
+    *,
+    commit: bool = True,
+) -> dict[str, object]:
+    question = get_question_or_raise(session, question_id)
+    try:
+        result = apply_first_learning_rating(rating)
+    except ValueError as exc:
+        raise PalaceQuizValidationError(str(exc)) from exc
+    question.schedule_stage = result.stage
+    question.schedule_due_on = result.due_on
+    question.schedule_passed = result.passed
+    question.updated_at = utc_now_naive()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
+    return serialize_question(question)
+
+
 def _normalize_attempt_reset_ids(question_ids: list[int]) -> list[int]:
     if not isinstance(question_ids, list) or len(question_ids) == 0:
         raise PalaceQuizValidationError("清空做题进度时至少需要选择一题。")
@@ -457,6 +481,7 @@ __all__ = [
     "batch_delete_questions",
     "create_question",
     "delete_question",
+    "rate_question_first_learning",
     "record_choice_attempt",
     "reset_question_attempts",
     "restore_question",

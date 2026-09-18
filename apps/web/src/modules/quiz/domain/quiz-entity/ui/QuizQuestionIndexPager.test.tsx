@@ -63,4 +63,16 @@ describe('QuizQuestionIndexPager', () => {
     expect(screen.getByRole('button', { name: '21' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '1' })).toBeNull()
   })
+
+  it('marks due questions in the title', () => {
+    render(
+      <QuizQuestionIndexPager
+        count={2}
+        currentIndex={0}
+        getItemState={(index) => ({ done: false, due: index === 1 })}
+        onSelect={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '2' }).getAttribute('title')).toContain('已到期')
+  })
 })

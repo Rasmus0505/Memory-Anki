@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from memory_anki.modules.quiz.api import (
+    OVERLAY_QUESTION_RANGE_DUE,
     list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
+    normalize_overlay_question_range,
+    question_is_due,
     serialize_question,
 )
 
@@ -13,5 +16,8 @@ __all__ = [
     "list_mastery_profiles_for_palaces",
     "list_node_bindings_for_palaces",
     "list_published_questions_for_palaces",
+    "normalize_overlay_question_range",
+    "OVERLAY_QUESTION_RANGE_DUE",
+    "question_is_due",
     "serialize_question",
 ]

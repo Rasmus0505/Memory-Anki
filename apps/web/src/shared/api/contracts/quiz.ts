@@ -120,6 +120,10 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   correct_count: number
   incorrect_count: number
   attempt_count: number
+  schedule_stage?: number
+  schedule_due_on?: string | null
+  schedule_passed?: boolean
+  schedule_due_kind?: 'due' | 'other'
   lifecycle_status?: PalaceQuizLifecycleStatus
   evidence?: PalaceQuizEvidenceRef[]
   knowledge_tags?: string[]

@@ -59,6 +59,7 @@ from memory_anki.modules.quiz.application.service import (
     list_chapter_questions,
     list_palace_ocr_sources,
     list_questions,
+    rate_question_first_learning,
     reset_question_attempts,
     restore_question,
     update_question,
@@ -398,6 +399,22 @@ def api_quiz_mastery_profile(
     s: Session = Depends(session_dep),
 ):
     return {"items": build_mastery_profile(s, palace_id=palace_id, limit=limit)}
+
+
+@router.post("/palace-quiz-questions/{question_id}/schedule-ratings")
+def api_rate_palace_quiz_question_schedule(
+    question_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        raw_rating = data.get("rating") if isinstance(data, dict) else None
+        if not isinstance(raw_rating, int | str) or raw_rating == "":
+            raise PalaceQuizValidationError("rating must be 1-4 or 忘记/困难/记得/轻松")
+        item = rate_question_first_learning(s, question_id, raw_rating)
+        return {"item": item}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
 
 
 @router.post("/palace-quiz-questions/{question_id}/choice-attempts")

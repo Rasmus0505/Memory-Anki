@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listPalaceQuizNodeBindingsApi } from '@/modules/quiz/domain/quiz-entity/api'
+import {
+  markQuizSessionCompleted,
+  readQuizSessionCompletedIds,
+  readQuizSessionStates,
+  subscribeQuizSessionProgress,
+  writeQuizSessionState,
+} from '@/modules/quiz/domain/quiz-entity/model/quizSessionProgress'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
 import type { MindMapDocumentInput } from '@/modules/content/public'
 import type { QuizNodeBindingEdge } from '@/shared/api/contracts'
@@ -11,26 +18,6 @@ import {
   firstIncompleteQuestionIndex,
   getQuestionIdsForNode,
 } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
-
-/**
- * Session-wide (SPA lifetime) so freestyle remounts / multi-unit windows share
- * completed badges and answer drafts. Page reload clears it.
- */
-const sessionCompletedQuestionIds = new Set<number>()
-const sessionQuestionStates: Record<number, QuizRuntimeState> = {}
-const sessionListeners = new Set<() => void>()
-
-function notifySessionQuizBindings() {
-  for (const listener of sessionListeners) listener()
-}
-
-function readSessionCompletedIds() {
-  return new Set(sessionCompletedQuestionIds)
-}
-
-function readSessionQuestionStates() {
-  return { ...sessionQuestionStates }
-}
 
 export function usePalaceQuizNodeBindings({
   palaceId,
@@ -44,23 +31,20 @@ export function usePalaceQuizNodeBindings({
   const [bindings, setBindings] = useState<QuizNodeBindingEdge[]>([])
   const [loading, setLoading] = useState(false)
   const [completedQuestionIds, setCompletedQuestionIds] = useState<Set<number>>(
-    () => readSessionCompletedIds(),
+    () => readQuizSessionCompletedIds(),
   )
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>(
-    () => readSessionQuestionStates(),
+    () => readQuizSessionStates(),
   )
 
   useEffect(() => {
     const listener = () => {
-      setCompletedQuestionIds(readSessionCompletedIds())
-      setQuestionStates(readSessionQuestionStates())
+      setCompletedQuestionIds(readQuizSessionCompletedIds())
+      setQuestionStates(readQuizSessionStates())
     }
-    sessionListeners.add(listener)
-    // Sync in case another instance wrote while this one was mounting.
+    const unsubscribe = subscribeQuizSessionProgress(listener)
     listener()
-    return () => {
-      sessionListeners.delete(listener)
-    }
+    return unsubscribe
   }, [])
 
   const refresh = useCallback(async () => {
@@ -99,15 +83,12 @@ export function usePalaceQuizNodeBindings({
   )
 
   const markQuestionCompleted = useCallback((questionId: number) => {
-    if (sessionCompletedQuestionIds.has(questionId)) return
-    sessionCompletedQuestionIds.add(questionId)
-    notifySessionQuizBindings()
-  }, [])
+    markQuizSessionCompleted(questionId, palaceId)
+  }, [palaceId])
 
   const updateQuestionState = useCallback((questionId: number, next: QuizRuntimeState) => {
-    sessionQuestionStates[questionId] = next
-    notifySessionQuizBindings()
-  }, [])
+    writeQuizSessionState(questionId, next, palaceId)
+  }, [palaceId])
 
   /** All bound ids for the node (including completed) so dialog can review past answers. */
   const getOpenQuestionIds = useCallback(

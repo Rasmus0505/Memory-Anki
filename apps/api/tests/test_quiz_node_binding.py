@@ -23,8 +23,8 @@ from memory_anki.modules.quiz.application.node_binding import (
     mutate_quiz_node_bindings,
     search_mindmap_nodes,
 )
-from memory_anki.modules.quiz.application.questions.commands import create_question
 from memory_anki.modules.quiz.application.question_contracts import PalaceQuizValidationError
+from memory_anki.modules.quiz.application.questions.commands import create_question
 
 
 def _mindmap_doc(*pairs: tuple[str, str]) -> dict:

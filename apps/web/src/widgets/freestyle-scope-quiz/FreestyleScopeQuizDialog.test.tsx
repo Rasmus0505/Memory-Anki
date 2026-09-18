@@ -23,6 +23,9 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsByIdsApi: vi.fn(),
   listQuestionNodeBindingsApi: vi.fn(),
+  ratePalaceQuizQuestionScheduleApi: vi.fn(async (_id: number, rating: number) => ({
+    item: { id: 42, schedule_stage: rating === 3 ? 1 : 0, schedule_passed: rating >= 3 },
+  })),
 }))
 
 vi.mock('@/modules/settings/public', () => ({
@@ -97,7 +100,10 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(screen.getByRole('radio', { name: /跨宫殿乱序/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /一个宫殿刷完再换/ }))
     fireEvent.click(screen.getByRole('button', { name: '开始做题' }))
-    expect(onConfirmSetup).toHaveBeenCalledWith('single_palace_random')
+    expect(onConfirmSetup).toHaveBeenCalledWith({
+      quizScope: 'single_palace_random',
+      overlayQuestionRange: 'all',
+    })
   })
 
   it('opens palace lookup centered on the current question binding', async () => {

@@ -132,6 +132,18 @@ export function resetPalaceQuizQuestionAttemptsApi(questionIds: number[]) {
   })
 }
 
+export function ratePalaceQuizQuestionScheduleApi(questionId: number, rating: number) {
+  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/schedule-ratings`, {
+    method: 'POST',
+    body: JSON.stringify({ rating }),
+    persistence: {
+      resourceKey: `palace-quiz-question:${questionId}:schedule-rating`,
+      description: '题目评分',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function recordPalaceQuizChoiceAttemptApi(
   questionId: number,
   selectedOptionId: string,

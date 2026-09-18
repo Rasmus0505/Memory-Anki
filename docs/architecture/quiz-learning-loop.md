@@ -21,6 +21,8 @@ Published questions require structured evidence with source names and page, para
 
 The first mastery projection combines recent correctness, hint/retry penalties, confidence, and recency. LLM calls may assess open answers or generate follow-ups, but do not own scheduling or persisted mastery scores.
 
+Question-owned first-learning due dates (`schedule_stage`, `schedule_due_on`, `schedule_passed`) are written by 忘记/困难/记得/轻松 after an answer in node-bound, overlay, and Palace Quiz practice. This schedule is independent of palace review units and of attempt counters. Existing questions start unscheduled (`due_on` null = 其他); a passing 记得/轻松 starts the 1-day / 3-day ladder from first learning.
+
 ## Dependency direction
 
 ```text

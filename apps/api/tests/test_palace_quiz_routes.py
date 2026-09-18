@@ -1060,6 +1060,25 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(short_answer_response.status_code, 400)
         self.assertIn("只有选择题可以累计对错统计", short_answer_response.json()["detail"])
 
+    def test_schedule_rating_writes_first_learning_due_date(self):
+        response = self.client.post(
+            "/api/v1/palace-quiz-questions/1/schedule-ratings",
+            json={"rating": 3},
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["schedule_stage"], 1)
+        self.assertTrue(item["schedule_passed"])
+        self.assertIsNotNone(item["schedule_due_on"])
+        amend = self.client.post(
+            "/api/v1/palace-quiz-questions/1/schedule-ratings",
+            json={"rating": 1},
+        )
+        self.assertEqual(amend.status_code, 200)
+        amended = amend.json()["item"]
+        self.assertEqual(amended["schedule_stage"], 0)
+        self.assertFalse(amended["schedule_passed"])
+
     def test_reset_question_attempt_statistics(self):
         self.client.post(
             "/api/v1/palace-quiz-questions/1/choice-attempts",

@@ -5,6 +5,7 @@ from typing import Any
 from memory_anki.infrastructure.db._tables.palaces import PalaceQuizQuestion
 
 from ..question_contracts import json_load
+from ..question_scheduler import schedule_due_kind
 
 
 def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object]:
@@ -34,6 +35,12 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
         "correct_count": question.correct_count,
         "incorrect_count": question.incorrect_count,
         "attempt_count": question.attempt_count,
+        "schedule_stage": int(getattr(question, "schedule_stage", 0) or 0),
+        "schedule_due_on": (
+            question.schedule_due_on.isoformat() if question.schedule_due_on is not None else None
+        ),
+        "schedule_passed": bool(getattr(question, "schedule_passed", False)),
+        "schedule_due_kind": schedule_due_kind(question.schedule_due_on),
         "created_at": question.created_at.isoformat() if question.created_at else None,
         "updated_at": question.updated_at.isoformat() if question.updated_at else None,
     }

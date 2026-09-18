@@ -7,11 +7,14 @@ import {
   listPalaceQuizNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
+  isQuestionDue,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
+  QuizQuestionRatingBar,
   QuizQuestionStem,
+  submitQuizQuestionRating,
   useQuizAnswerMode,
   useQuizAttemptOrchestration,
   type QuizRuntimeState,
@@ -220,6 +223,25 @@ export function NodeBoundQuizDialog({
     [current, markCompleted, orchestration],
   )
 
+  const handleRate = useCallback(async (rating: number) => {
+    if (!current || !currentState.resolved) return
+    try {
+      const { isFirst, question } = await submitQuizQuestionRating({
+        questionId: current.id,
+        rating,
+        palaceId: current.palace_id ?? palaceId,
+      })
+      updateLocalState(current.id, (state) => ({ ...state, rating }))
+      setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
+      markCompleted(current.id)
+      if (isFirst && index < questions.length - 1) {
+        setIndex((value) => Math.min(questions.length - 1, value + 1))
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+    }
+  }, [current, currentState.resolved, index, markCompleted, palaceId, questions.length, updateLocalState])
+
   useEffect(() => {
     if (!open || !current) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -373,8 +395,13 @@ export function NodeBoundQuizDialog({
                   count={questions.length}
                   currentIndex={index}
                   getItemState={(itemIndex) => {
-                    const itemState = questionStates[questions[itemIndex]?.id]
-                    return { done: Boolean(itemState?.resolved), correct: itemState?.correct }
+                    const question = questions[itemIndex]
+                    const itemState = questionStates[question?.id]
+                    return {
+                      done: Boolean(itemState?.resolved),
+                      correct: itemState?.correct,
+                      due: question?.schedule_due_kind === 'due' || isQuestionDue(question?.schedule_due_on),
+                    }
                   }}
                   onSelect={setIndex}
                 />
@@ -385,6 +412,9 @@ export function NodeBoundQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <Badge variant={current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? 'default' : 'secondary'}>
+                      {current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? '已到期' : '其他'}
+                    </Badge>
                     {currentState.resolved ? (
                       <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
                         {currentState.correct ? '已答对' : '已作答'}
@@ -410,6 +440,9 @@ export function NodeBoundQuizDialog({
                     }
                   />
                 </div>
+                {currentState.resolved ? (
+                  <QuizQuestionRatingBar rating={currentState.rating} onRate={(value) => void handleRate(value)} />
+                ) : null}
               </>
             )}
           </div>

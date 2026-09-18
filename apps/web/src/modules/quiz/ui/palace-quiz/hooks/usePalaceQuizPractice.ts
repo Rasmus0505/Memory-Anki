@@ -1,15 +1,16 @@
-import { useState } from 'react'
-import { useQuizAttemptOrchestration } from '@/modules/quiz/domain/quiz-entity'
+import { useQuizAttemptOrchestration, useQuizSessionProgress } from '@/modules/quiz/domain/quiz-entity'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity'
 import type { AiRuntimeOptions, PalaceQuizQuestion } from '@/shared/api/contracts'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
 export function usePalaceQuizPractice({
+  palaceId,
   setQuestions,
   promptForAiOptions,
   registerQuizActivity,
   emitQuizFeedback,
 }: {
+  palaceId?: number | null
   setQuestions: React.Dispatch<React.SetStateAction<PalaceQuizQuestion[]>>
   promptForAiOptions: (options: {
     scenarioKey: string
@@ -22,50 +23,21 @@ export function usePalaceQuizPractice({
     options?: Parameters<typeof dispatchGlobalFeedback>[1],
   ) => void
 }) {
-  const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
+  const session = useQuizSessionProgress()
 
   const updateQuestionState = (
     questionId: number,
     updater: (current: QuizRuntimeState) => QuizRuntimeState,
   ) => {
-    setQuestionStates((current) => ({
-      ...current,
-      [questionId]: updater(current[questionId] || {}),
-    }))
+    session.updateQuestionState(questionId, updater, palaceId)
   }
 
   const resetQuestionState = (questionId: number) => {
-    setQuestionStates((current) => ({
-      ...current,
-      [questionId]: {
-        resolved: false,
-        correct: false,
-        shortAnswerText: '',
-        shortAnswerSubmitted: false,
-        shortAnswerFeedback: null,
-        shortAnswerFeedbackLoading: false,
-        selectedOptionId: '',
-        trueFalseAnswer: undefined,
-        blankInputs: {},
-        submittedBlankIds: [],
-        matchingPairs: {},
-        selectedLeftId: null,
-        orderingIds: undefined,
-        categorizationAssignments: {},
-        selectedCategorizationItemId: null,
-      },
-    }))
+    session.resetQuestionState(questionId)
   }
 
   const removeQuestionStates = (questionIds: number[]) => {
-    const deletedIdSet = new Set(questionIds)
-    setQuestionStates((current) => {
-      const next = { ...current }
-      deletedIdSet.forEach((questionId) => {
-        delete next[questionId]
-      })
-      return next
-    })
+    session.removeQuestionStates(questionIds)
   }
 
   const handleResetQuestionState = (questionId: number) => {
@@ -76,7 +48,7 @@ export function usePalaceQuizPractice({
 
   const orchestration = useQuizAttemptOrchestration({
     adapter: {
-      readQuestionState: (questionId) => questionStates[questionId] || {},
+      readQuestionState: (questionId) => session.questionStates[questionId] || {},
       updateQuestionState,
       applyUpdatedQuestion: (question) => {
         setQuestions((current) =>
@@ -110,8 +82,21 @@ export function usePalaceQuizPractice({
     await orchestration.handleShortAnswerFeedback(question)
   }
 
+  const setQuestionStates = (
+    next:
+      | Record<number, QuizRuntimeState>
+      | ((current: Record<number, QuizRuntimeState>) => Record<number, QuizRuntimeState>),
+  ) => {
+    const resolved = typeof next === 'function' ? next(session.questionStates) : next
+    for (const [rawId, state] of Object.entries(resolved)) {
+      const questionId = Number(rawId)
+      if (!Number.isInteger(questionId) || questionId <= 0) continue
+      session.updateQuestionState(questionId, () => state, palaceId)
+    }
+  }
+
   return {
-    questionStates,
+    questionStates: session.questionStates,
     setQuestionStates,
     updateQuestionState,
     removeQuestionStates,

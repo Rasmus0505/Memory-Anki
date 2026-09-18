@@ -1,6 +1,8 @@
 import { RotateCcw } from 'lucide-react'
 import {
+  isQuestionDue,
   QuizQuestionInteraction,
+  QuizQuestionRatingBar,
   QuizQuestionStem,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
@@ -202,6 +204,7 @@ interface QuizQuestionCardProps {
   onShortAnswerFeedback: (question: PalaceQuizQuestion) => void
   onReset: (questionId: number) => void
   onEdit: (question: PalaceQuizQuestion) => void
+  onRate?: (question: PalaceQuizQuestion, rating: number) => void
 }
 
 export function QuizQuestionCard({
@@ -214,6 +217,7 @@ export function QuizQuestionCard({
   onShortAnswerFeedback,
   onReset,
   onEdit,
+  onRate,
 }: QuizQuestionCardProps) {
   return (
     <Card className="border-border/70 bg-card/92">
@@ -226,6 +230,9 @@ export function QuizQuestionCard({
         <div className={cn(compact ? 'space-y-1.5' : 'space-y-2')}>
           <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5' : 'gap-2')}>
             <Badge variant="outline">{getQuestionTypeLabel(question.question_type)}</Badge>
+            <Badge variant={question.schedule_due_kind === 'due' || isQuestionDue(question.schedule_due_on) ? 'default' : 'secondary'}>
+              {question.schedule_due_kind === 'due' || isQuestionDue(question.schedule_due_on) ? '已到期' : '其他'}
+            </Badge>
             <Badge variant={!(question.segment_ids?.length) ? 'secondary' : 'outline'}>
               {getQuestionOwnershipLabel(question)}
             </Badge>
@@ -261,6 +268,12 @@ export function QuizQuestionCard({
           onShortAnswerSubmit={() => onShortAnswerSubmit(question.id)}
           onRequestShortAnswerFeedback={() => void onShortAnswerFeedback(question)}
         />
+        {state?.resolved && onRate ? (
+          <QuizQuestionRatingBar
+            rating={state.rating}
+            onRate={(rating) => onRate(question, rating)}
+          />
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => onReset(question.id)}>

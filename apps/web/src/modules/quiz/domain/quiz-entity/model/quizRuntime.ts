@@ -17,4 +17,6 @@ export interface QuizRuntimeState {
   shortAnswerFeedback?: PalaceShortAnswerFeedback | null
   shortAnswerFeedbackLoading?: boolean
   skipped?: boolean
+  /** 1 忘记 / 2 困难 / 3 记得 / 4 轻松. Set after the learner rates. */
+  rating?: number
 }

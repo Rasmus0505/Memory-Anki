@@ -8,13 +8,14 @@ cross-domain back-references resolve against the shared ``Base.metadata``.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -370,6 +371,7 @@ class PalaceQuizQuestion(Base):
             "lifecycle_status",
             "sort_order",
         ),
+        Index("ix_palace_quiz_questions_schedule_due_on", "schedule_due_on"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -413,6 +415,9 @@ class PalaceQuizQuestion(Base):
     correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schedule_stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schedule_due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    schedule_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,

@@ -11,19 +11,25 @@ import {
   listQuestionNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
+  isQuestionDue,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
+  QuizQuestionRatingBar,
   QuizQuestionStem,
+  readQuizSessionStates,
+  submitQuizQuestionRating,
   useQuizAnswerMode,
   useQuizAttemptOrchestration,
+  writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
   FreestyleFeedConfig,
+  FreestyleOverlayQuestionRange,
   FreestyleOverlayQuizState,
   FreestyleQuizScope,
   FreestyleRoundStatePayload,
@@ -49,16 +55,6 @@ import {
 
 const PROGRESS_DEBOUNCE_MS = 320
 
-function asRuntimeStates(raw: Record<string, Record<string, unknown>> | undefined) {
-  const next: Record<number, QuizRuntimeState> = {}
-  for (const [key, value] of Object.entries(raw || {})) {
-    const id = Number(key)
-    if (!Number.isInteger(id) || id <= 0 || !value || typeof value !== 'object') continue
-    next[id] = value as QuizRuntimeState
-  }
-  return next
-}
-
 function overlayFromRound(round: FreestyleRoundStatePayload | null | undefined) {
   return round?.plan?.overlay_quiz ?? null
 }
@@ -81,13 +77,19 @@ export function FreestyleScopeQuizDialog({
   storedConfig: FreestyleFeedConfig
   setupDone: boolean
   rangeLabel: string
-  onConfirmSetup: (quizScope: FreestyleQuizScope) => void
+  onConfirmSetup: (next: {
+    quizScope: FreestyleQuizScope
+    overlayQuestionRange: FreestyleOverlayQuestionRange
+  }) => void
   onRoundSync: (round: FreestyleRoundStatePayload) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
   const [configOpen, setConfigOpen] = useState(!setupDone)
   const [draftScope, setDraftScope] = useState<FreestyleQuizScope>(storedConfig.streams.quiz.quiz_scope)
+  const [draftRange, setDraftRange] = useState<FreestyleOverlayQuestionRange>(
+    storedConfig.streams.quiz.overlay_question_range ?? storedConfig.overlay_question_range ?? 'all',
+  )
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [overlay, setOverlay] = useState<FreestyleOverlayQuizState | null>(null)
@@ -115,15 +117,31 @@ export function FreestyleScopeQuizDialog({
     if (!open) return
     setConfigOpen(!setupDone)
     setDraftScope(storedConfig.streams.quiz.quiz_scope)
-  }, [open, setupDone, storedConfig.streams.quiz.quiz_scope])
+    setDraftRange(
+      storedConfig.streams.quiz.overlay_question_range ?? storedConfig.overlay_question_range ?? 'all',
+    )
+  }, [
+    open,
+    setupDone,
+    storedConfig.overlay_question_range,
+    storedConfig.streams.quiz.overlay_question_range,
+    storedConfig.streams.quiz.quiz_scope,
+  ])
 
   const adoptRound = useCallback((round: FreestyleRoundStatePayload) => {
     onRoundSync(round)
     const next = overlayFromRound(round)
     setOverlay(next)
     if (next) {
-      setIndex(Math.max(0, next.current_index))
-      setQuestionStates(asRuntimeStates(next.states))
+      const sessionStates = readQuizSessionStates()
+      const merged: Record<number, QuizRuntimeState> = {}
+      for (const questionId of next.question_ids) {
+        const existing = sessionStates[questionId]
+        if (existing) merged[questionId] = existing
+      }
+      setQuestionStates(merged)
+      const firstOpen = next.question_ids.findIndex((questionId) => !merged[questionId]?.resolved)
+      setIndex(firstOpen >= 0 ? firstOpen : 0)
     }
     return next
   }, [onRoundSync])
@@ -243,6 +261,7 @@ export function FreestyleScopeQuizDialog({
         const prev = currentStates[questionId] ?? {}
         const nextState = updater(prev)
         const next = { ...currentStates, [questionId]: nextState }
+        writeQuizSessionState(questionId, nextState)
         persistProgress(index, next)
         return next
       })
@@ -288,6 +307,24 @@ export function FreestyleScopeQuizDialog({
     },
     [current, orchestration],
   )
+
+  const handleRate = useCallback(async (rating: number) => {
+    if (!current || !currentState.resolved) return
+    try {
+      const { isFirst, question } = await submitQuizQuestionRating({
+        questionId: current.id,
+        rating,
+        palaceId: current.palace_id,
+      })
+      updateLocalState(current.id, (state) => ({ ...state, rating }))
+      setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
+      if (isFirst && index < questions.length - 1) {
+        goToIndex(index + 1)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+    }
+  }, [current, currentState.resolved, goToIndex, index, questions.length, updateLocalState])
 
   useEffect(() => {
     setKeyboardOptionIndex(0)
@@ -463,11 +500,35 @@ export function FreestyleScopeQuizDialog({
                     )
                   })}
                 </div>
+                <div role="radiogroup" aria-label="做题范围" className="grid gap-2">
+                  {([
+                    ['all', '当前配置下宫殿全部题目', '新学和未到期题用默认色，已到期复习题用琥珀色'],
+                    ['due', '当前配置下宫殿已到期题目', '只收入题目自己的到期日已到的题'],
+                  ] as const).map(([value, label, hint]) => {
+                    const selected = draftRange === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={cn(
+                          'rounded-xl border px-3.5 py-3 text-left transition-colors',
+                          selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60',
+                        )}
+                        onClick={() => setDraftRange(value)}
+                      >
+                        <span className="block text-sm font-semibold">{label}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
+                      </button>
+                    )
+                  })}
+                </div>
                 <Button
                   type="button"
                   className="w-full"
                   onClick={() => {
-                    onConfirmSetup(draftScope)
+                    onConfirmSetup({ quizScope: draftScope, overlayQuestionRange: draftRange })
                     setConfigOpen(false)
                   }}
                 >
@@ -496,8 +557,13 @@ export function FreestyleScopeQuizDialog({
                   count={questions.length}
                   currentIndex={index}
                   getItemState={(itemIndex) => {
-                    const itemState = questionStates[questions[itemIndex]?.id]
-                    return { done: Boolean(itemState?.resolved), correct: itemState?.correct }
+                    const question = questions[itemIndex]
+                    const itemState = questionStates[question?.id]
+                    return {
+                      done: Boolean(itemState?.resolved),
+                      correct: itemState?.correct,
+                      due: question?.schedule_due_kind === 'due' || isQuestionDue(question?.schedule_due_on),
+                    }
                   }}
                   onSelect={goToIndex}
                 />
@@ -508,6 +574,9 @@ export function FreestyleScopeQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <Badge variant={current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? 'default' : 'secondary'}>
+                      {current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? '已到期' : '其他'}
+                    </Badge>
                     {currentState.resolved ? (
                       <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
                         {currentState.correct ? '已答对' : '已作答'}
@@ -528,6 +597,9 @@ export function FreestyleScopeQuizDialog({
                     onRequestShortAnswerFeedback={() => void orchestration.handleShortAnswerFeedback(current)}
                   />
                 </div>
+                {currentState.resolved ? (
+                  <QuizQuestionRatingBar rating={currentState.rating} onRate={(value) => void handleRate(value)} />
+                ) : null}
               </>
             )}
           </div>

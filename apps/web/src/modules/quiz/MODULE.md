@@ -1,10 +1,10 @@
 # Module: quiz
 
 ## Status
-scaffolding — target home after FSD removal (branch 7.22-refactor-optimize).
+active — production module after FSD removal.
 
 ## Owns
-Quiz attempt + generation UI/api
+Quiz attempt + generation UI/api, question-owned first-learning schedule, shared SPA 已做 session
 
 ## Public entry
 `public.ts` — only cross-module import path.

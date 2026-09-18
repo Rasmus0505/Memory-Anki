@@ -8,6 +8,7 @@ const getPalaceQuizQuestionsByIdsApiMock = vi.fn()
 const getPalaceQuizQuestionsApiMock = vi.fn()
 const listPalaceQuizNodeBindingsApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
+const ratePalaceQuizQuestionScheduleApiMock = vi.fn()
 
 vi.mock('@/modules/settings/public', () => ({
   useAiRunConfigDialog: () => ({
@@ -21,6 +22,7 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsApi: (...args: unknown[]) => getPalaceQuizQuestionsApiMock(...args),
   listPalaceQuizNodeBindingsApi: (...args: unknown[]) => listPalaceQuizNodeBindingsApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) => recordPalaceQuizChoiceAttemptApiMock(...args),
+  ratePalaceQuizQuestionScheduleApi: (...args: unknown[]) => ratePalaceQuizQuestionScheduleApiMock(...args),
 }))
 
 vi.mock('@/shared/feedback/toast', () => ({

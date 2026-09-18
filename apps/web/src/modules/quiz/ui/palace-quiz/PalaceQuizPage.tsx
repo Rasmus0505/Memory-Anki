@@ -20,6 +20,7 @@ import {
   listQuestionNodeBindingsApi,
   resetPalaceQuizQuestionAttemptsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
+import { submitQuizQuestionRating } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizGeneration } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
@@ -118,6 +119,7 @@ export default function PalaceQuizPage() {
     automationScene: 'quiz',
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey: palaceId ? `palace_quiz:${palaceId}` : null,
+    persistCompletionRecord: false,
   })
   useGlobalTimerRegistration({
     scene: 'quiz',
@@ -146,6 +148,7 @@ export default function PalaceQuizPage() {
     segmentIds: miniPalaces.map((item) => item.id),
   })
   const practice = usePalaceQuizPractice({
+    palaceId,
     setQuestions,
     promptForAiOptions: promptForGenerationAiOptions,
     registerQuizActivity,
@@ -333,6 +336,25 @@ export default function PalaceQuizPage() {
     )
   }
 
+  const handleRateQuestion = async (question: (typeof questions)[number], rating: number) => {
+    try {
+      const { isFirst, question: updated } = await submitQuizQuestionRating({
+        questionId: question.id,
+        rating,
+        palaceId: question.palace_id ?? palaceId,
+      })
+      practice.updateQuestionState(question.id, (state) => ({ ...state, rating }))
+      setQuestions((current) =>
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+      )
+      if (isFirst && browser.viewMode === 'single') {
+        handleQuestionNavigate('next')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+    }
+  }
+
   const handleOpenQuestionEditor = (question: (typeof questions)[number]) => {
     const opened = management.handleEditQuestion(question)
     if (opened) {
@@ -488,6 +510,7 @@ export default function PalaceQuizPage() {
           onStateChange={practice.updateQuestionState}
           onShortAnswerSubmit={practice.handleShortAnswerSubmit}
           onShortAnswerFeedback={practice.handleShortAnswerFeedback}
+          onRate={(question, rating) => void handleRateQuestion(question, rating)}
           onReset={practice.handleResetQuestionState}
           onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
           onEdit={handleOpenQuestionEditor}
