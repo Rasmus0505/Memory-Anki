@@ -238,7 +238,7 @@ def _cards(*ids: str, palace_id: int = 10) -> list[dict]:
     ]
 
 
-def test_start_new_round_keeps_overlay_across_scope_change(db_session, monkeypatch) -> None:
+def test_start_new_round_clears_overlay_progress(db_session, monkeypatch) -> None:
     all_pack = {
         "question_ids": [101, 102, 201],
         "quiz_scope": "cross_palace_random",
@@ -306,7 +306,8 @@ def test_start_new_round_keeps_overlay_across_scope_change(db_session, monkeypat
         config={},
     )
     overlay_en = ensured_en["plan"]["overlay_quiz"]
-    assert overlay_en["parked"]["completed_ids"] == [101, 102]
+    assert overlay_en["completed_ids"] == []
+    assert overlay_en["parked"]["completed_ids"] == []
     assert overlay_en["question_ids"] == [201]
 
     packs["current"] = all_pack
@@ -326,8 +327,8 @@ def test_start_new_round_keeps_overlay_across_scope_change(db_session, monkeypat
         config={},
     )
     overlay_back = ensured_back["plan"]["overlay_quiz"]
-    assert overlay_back["completed_ids"] == [101, 102]
-    assert overlay_back["states"]["101"] == {"resolved": True}
+    assert overlay_back["completed_ids"] == []
+    assert overlay_back["states"].get("101") in (None, {})
 
 
 def test_rating_last_unit_clears_that_palace_overlay(db_session, monkeypatch) -> None:

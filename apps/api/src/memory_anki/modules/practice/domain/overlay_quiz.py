@@ -1,9 +1,9 @@
 """Freestyle toolbar 做题 overlay. Framework-free.
 
-Progress is not wiped when the learner changes subject/palace scope or starts a
-new round. Out-of-scope answered questions stay in `parked` and return when that
-palace is in scope again. A palace's overlay progress is dropped only after its
-review units in the current round are all scored.
+Progress is not wiped when the learner changes subject/palace scope. A new round
+starts overlay 已做 empty. Out-of-scope answered questions stay in `parked` and
+return when that palace is in scope again. A palace's overlay progress is dropped
+only after its review units in the current round are all scored.
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ def overlay_quiz_scope_signature(
     question_type: str,
     mastery_buckets: Sequence[str],
     weak_priority: bool,
+    overlay_question_range: str = "all",
 ) -> str:
     return json.dumps(
         {
@@ -55,6 +56,7 @@ def overlay_quiz_scope_signature(
             "question_type": str(question_type or "all"),
             "mastery_buckets": sorted({str(item) for item in mastery_buckets if str(item).strip()}),
             "weak_priority": bool(weak_priority),
+            "overlay_question_range": str(overlay_question_range or "all"),
         },
         ensure_ascii=False,
         separators=(",", ":"),

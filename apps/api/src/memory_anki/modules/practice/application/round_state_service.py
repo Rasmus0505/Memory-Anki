@@ -37,6 +37,7 @@ from memory_anki.modules.practice.domain.round_plan import (
     complete_card,
     exclude_card,
     leave_card,
+    uncomplete_card,
     normalize_plan,
     plan_from_cards,
     rebind_plan_cards,
@@ -55,6 +56,7 @@ _ACTIONS = {
     "leave_card",
     "skip",
     "complete",
+    "uncomplete",
     "exclude",
     "restore",
     "bind_cards",
@@ -108,6 +110,7 @@ def _fingerprint(row: FreestyleRoundState, plan: dict[str, Any] | None = None) -
             "config": _json_load_object(row.config_json),
             "plan": plan if plan is not None else _plan_of(row),
             "current_card_id": row.current_card_id,
+            "scope_key": row.scope_key,
         }
     )
 
@@ -139,6 +142,7 @@ def _payload(
         "updated_at": to_api_datetime(row.updated_at) if row.updated_at else None,
         "conflict": conflict,
         "duplicate": duplicate,
+        "cleared_review_palace_ids": sorted(cleared_review_palace_ids(resolved_plan)),
     }
 
 
@@ -236,12 +240,14 @@ def _apply_plan(
     operation_id: str,
     config: dict[str, Any] | None = None,
     status: str | None = None,
+    scope_key: str | None = None,
 ) -> bool:
     normalized = normalize_plan(plan)
     current = normalized.get("current_card_id")
     current_text = _text(current) if current not in (None, "") else None
     next_status = status or row.status
     next_config = config if config is not None else _json_load_object(row.config_json)
+    next_scope = _text(scope_key)[:256] if scope_key is not None else row.scope_key
     before = _fingerprint(row)
     after = _json_dump(
         {
@@ -249,6 +255,7 @@ def _apply_plan(
             "config": next_config,
             "plan": normalized,
             "current_card_id": current_text,
+            "scope_key": next_scope,
         }
     )
     row.plan_json = _json_dump(normalized)
@@ -256,6 +263,8 @@ def _apply_plan(
     row.status = next_status
     if config is not None:
         row.config_json = _json_dump(next_config)
+    if scope_key is not None:
+        row.scope_key = next_scope
     if before == after:
         return False
     row.version = int(row.version or 0) + 1
@@ -269,24 +278,6 @@ def _new_round_id(session: Session, requested: str | None) -> str:
     if rid and session.get(FreestyleRoundState, rid) is None:
         return rid[:128]
     return str(uuid.uuid4())
-
-
-def _carry_overlay_quiz(session: Session, workspace: str) -> dict[str, Any]:
-    """Copy 做题 progress from the latest round in this workspace."""
-    slot = normalize_workspace(workspace)
-    row = (
-        session.query(FreestyleRoundState)
-        .filter(FreestyleRoundState.workspace == slot)
-        .order_by(FreestyleRoundState.updated_at.desc(), FreestyleRoundState.round_id.desc())
-        .first()
-    )
-    if row is None:
-        return empty_overlay_quiz()
-    plan = _plan_of(row)
-    overlay = normalize_overlay_quiz(
-        plan.get("overlay_quiz") if isinstance(plan.get("overlay_quiz"), dict) else None
-    )
-    return drop_overlay_for_palaces(overlay, cleared_review_palace_ids(plan))
 
 
 def _clear_scored_palace_overlay(plan: dict[str, Any]) -> dict[str, Any]:
@@ -338,7 +329,6 @@ def _create_row(
 
 def _complete_active(
     session: Session,
-    scope_key: str,
     *,
     workspace: str = "primary",
     except_id: str | None = None,
@@ -348,7 +338,6 @@ def _complete_active(
         session.query(FreestyleRoundState)
         .filter(
             FreestyleRoundState.workspace == normalize_workspace(workspace),
-            FreestyleRoundState.scope_key == _text(scope_key)[:256],
             FreestyleRoundState.status == "active",
         )
         .all()
@@ -392,6 +381,8 @@ def get_or_create_active_round(
         raise ValueError("scope_key is required")
     slot = normalize_workspace(workspace)
     row = _active_row(session, key, slot)
+    if row is None:
+        row = _latest_active_for_workspace(session, slot)
     if row is not None:
         if op_id and row.last_operation_id == op_id:
             return _payload(row, duplicate=True)
@@ -400,11 +391,15 @@ def get_or_create_active_round(
         reorder = queue_construction_signature(previous_config) != queue_construction_signature(
             next_config
         )
+        scope_changed = _text(row.scope_key) != key[:256]
+        persist_config = reorder or scope_changed
+        next_plan = _plan_of(row)
         if cards:
             next_plan = rebind_plan_cards(
-                _plan_of(row),
+                next_plan,
                 cards,
                 reorder_unstarted=reorder,
+                drop_missing_unstarted=scope_changed and not reorder,
             )
             next_plan = _clear_scored_palace_overlay(next_plan)
             next_plan = _seed_from_peer(
@@ -414,25 +409,18 @@ def get_or_create_active_round(
                 round_id=row.round_id,
                 preserve_cursor=True,
             )
+        if cards or persist_config:
             changed = _apply_plan(
                 row,
                 next_plan,
                 operation_id=op_id,
-                config=next_config if reorder else None,
-            )
-            if changed:
-                session.commit()
-        elif reorder:
-            changed = _apply_plan(
-                row,
-                _plan_of(row),
-                operation_id=op_id,
-                config=next_config,
+                config=next_config if persist_config else None,
+                scope_key=key if scope_changed else None,
             )
             if changed:
                 session.commit()
         return _payload(row)
-    overlay = _carry_overlay_quiz(session, slot)
+    overlay = empty_overlay_quiz()
     row = _create_row(
         session,
         round_id=_new_round_id(session, round_id),
@@ -465,8 +453,8 @@ def start_new_round(
     active = _active_row(session, key, slot)
     if active is not None and active.last_operation_id == op_id:
         return _payload(active, duplicate=True)
-    overlay = _carry_overlay_quiz(session, slot)
-    _complete_active(session, key, workspace=slot)
+    overlay = empty_overlay_quiz()
+    _complete_active(session, workspace=slot)
     row = _create_row(
         session,
         round_id=_new_round_id(session, round_id),
@@ -519,6 +507,8 @@ def apply_round_action(
         plan = skip_card(plan, card_id)
     elif name == "complete":
         plan = complete_card(plan, target_id)
+    elif name == "uncomplete":
+        plan = uncomplete_card(plan, target_id)
     elif name == "exclude":
         plan = exclude_card(plan, target_id)
     elif name == "restore":
@@ -536,7 +526,7 @@ def apply_round_action(
     elif name == "set_encounter":
         plan = set_encounter(plan, card_id, encounter_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
-    if name in {"leave_card", "complete", "exclude", "restore", "bind_cards"}:
+    if name in {"leave_card", "complete", "uncomplete", "exclude", "restore", "bind_cards"}:
         _sync_peer_progress(session, row, op_id, restore_identity=restore_identity)
     if changed:
         session.commit()

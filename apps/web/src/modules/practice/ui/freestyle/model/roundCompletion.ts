@@ -122,3 +122,30 @@ export function isFreestyleRoundComplete(
   if (cards.length === 0) return false
   return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards))
 }
+
+/**
+ * Closing snap slot after the last unit. It is not a queue card: queue index
+ * stays on the last unit so refresh / persistence do not invent a card id.
+ */
+export function freestyleFeedSlotCount(cardCount: number, roundComplete: boolean): number {
+  if (cardCount <= 0) return 0
+  return cardCount + (roundComplete ? 1 : 0)
+}
+
+export function isFreestyleCompleteSlot(
+  index: number,
+  cardCount: number,
+  roundComplete: boolean,
+): boolean {
+  return roundComplete && cardCount > 0 && index >= cardCount
+}
+
+/** 下一张 on the last handled unit must land on the closing slot, not clamp away. */
+export function clampFreestyleFeedIndex(
+  index: number,
+  cardCount: number,
+  roundComplete: boolean,
+): number {
+  const max = Math.max(0, freestyleFeedSlotCount(cardCount, roundComplete) - 1)
+  return Math.max(0, Math.min(index, max))
+}

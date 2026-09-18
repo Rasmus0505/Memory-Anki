@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
-import { createRoundPlan, updateRoundPlanCard } from '@/modules/practice/domain/roundPlan'
+import { applyCompletedIdsToRoundPlan, createRoundPlan, updateRoundPlanCard } from '@/modules/practice/domain/roundPlan'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
@@ -178,6 +178,51 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments).toEqual([])
     expect(summary.total).toBe(0)
     expect(summary.position).toBe(0)
+  })
+
+  it('keeps completed ticks from the plan when live cards only have remaining work', () => {
+    const scheduled = [card('one'), card('two'), card('three')]
+    const remaining = [card('two'), card('three')]
+    const roundPlan = applyCompletedIdsToRoundPlan(plan(scheduled), ['one'])
+    const summary = buildFreestyleProgressSummary(remaining, roundPlan, ['one'], [], 'two')
+
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'current', 'pending'])
+    expect(summary.scheduledBase).toBe(3)
+    expect(summary.passedCount).toBe(1)
+    expect(progressHudText(summary)).toContain('过 1')
+  })
+
+  it('keeps a retry occurrence tick when it is missing from live cards', () => {
+    const scheduled = [
+      card('one'),
+      { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
+      card('two'),
+    ]
+    const marked = updateRoundPlanCard(plan(scheduled), 'one', { status: 'retry', retryAfterCards: 3 })
+    const withOccurrence = updateRoundPlanCard(marked, 'retry:round-1:one:1', {
+      status: 'retry',
+      occurrenceKind: 'retry',
+      sourceCardId: 'one',
+    })
+    const summary = buildFreestyleProgressSummary(
+      [card('one'), card('two')],
+      withOccurrence,
+      [],
+      [],
+      'two',
+    )
+
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'retry:round-1:one:1', 'two'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
+    expect(summary.segments[1]).toMatchObject({
+      kind: 'retry',
+      tone: 'retry',
+      retryAttempt: 1,
+      sourceCardId: 'one',
+    })
+    expect(summary.retryInserted).toBe(1)
   })
 })
 

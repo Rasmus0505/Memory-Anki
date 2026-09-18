@@ -48,10 +48,12 @@ describe('FreestyleFeedPager', () => {
     expect(props.onPrevious).toHaveBeenCalledTimes(1)
   })
 
-  it('relabels prev/next as palace jumps in palace rating mode', () => {
-    renderPager({ palaceMode: true })
+  it('keeps card paging labels even when palace skip buttons exist', () => {
+    renderPager()
 
-    expect(screen.getByRole('button', { name: '上一宫殿' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '下一宫殿' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '上一张' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '下一张' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '上一宫殿' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '下一宫殿' })).toBeNull()
   })
 })

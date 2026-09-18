@@ -45,6 +45,9 @@ export type FreestyleQuizMasteryBucket = 'unseen' | 'weak' | 'reinforce' | 'stab
  */
 export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 
+/** Toolbar 做题 overlay membership: due questions vs all questions in the saved palace range. */
+export type FreestyleOverlayQuestionRange = 'due' | 'all'
+
 export type FreestyleSubjectScope = 'all' | 'english' | 'non_english'
 
 /** The first decision in the freestyle configuration flow. */
@@ -76,6 +79,7 @@ export interface FreestyleQuizStreamConfig extends FreestyleStreamScope {
   question_type: FreestyleQuestionTypeFilter
   mastery_buckets: FreestyleQuizMasteryBucket[]
   quiz_scope: FreestyleQuizScope
+  overlay_question_range: FreestyleOverlayQuestionRange
   weak_priority: boolean
 }
 
@@ -166,6 +170,7 @@ export interface FreestyleFeedConfig {
    * later clicks skip the setup panel. Quiz draw order still lives on streams.quiz.quiz_scope.
    */
   overlay_quiz_setup_done: boolean
+  overlay_question_range: FreestyleOverlayQuestionRange
 }
 
 export interface FreestyleContextPathItem {
@@ -368,6 +373,7 @@ export interface FreestyleRoundStatePayload {
   conflict: boolean
   duplicate: boolean
   workspace?: 'primary' | 'secondary'
+  cleared_review_palace_ids?: number[]
 }
 
 export interface FreestyleRoundActiveRequest {
@@ -387,6 +393,7 @@ export interface FreestyleRoundActionRequest {
     | 'leave_card'
     | 'skip'
     | 'complete'
+    | 'uncomplete'
     | 'exclude'
     | 'restore'
     | 'bind_cards'

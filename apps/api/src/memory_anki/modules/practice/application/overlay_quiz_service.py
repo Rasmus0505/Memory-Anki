@@ -11,8 +11,11 @@ from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_scope,
 )
 from memory_anki.modules.quiz.public.queries import (
+    OVERLAY_QUESTION_RANGE_DUE,
     list_mastery_profiles_for_palaces,
     list_published_questions_for_palaces,
+    normalize_overlay_question_range,
+    question_is_due,
 )
 
 from ..domain.feed_config import sanitize_feed_config
@@ -65,6 +68,9 @@ def build_overlay_question_pack(session: Session, config_raw: dict[str, Any] | N
     if not palace_ids:
         palace_ids = _resolve_stream_palace_ids(session, memory_stream)
     question_type = str(quiz_stream.get("question_type") or config.get("question_type") or "all")
+    overlay_range = normalize_overlay_question_range(
+        quiz_stream.get("overlay_question_range", config.get("overlay_question_range")),
+    )
     questions = list_published_questions_for_palaces(
         session,
         palace_ids=palace_ids or None,
@@ -83,6 +89,8 @@ def build_overlay_question_pack(session: Session, config_raw: dict[str, Any] | N
         if qid <= 0 or palace_id <= 0:
             continue
         if palace_ids and palace_id not in set(palace_ids):
+            continue
+        if overlay_range == OVERLAY_QUESTION_RANGE_DUE and not question_is_due(question):
             continue
         mastery = mastery_by_question.get(qid) or {}
         raw_score = mastery.get("score")
@@ -133,6 +141,7 @@ def build_overlay_question_pack(session: Session, config_raw: dict[str, Any] | N
             question_type,
             list(mastery_buckets or []),
             weak_priority,
+            overlay_range,
         ),
         "limit_reached": candidate_count > len(question_ids),
         "candidate_count": candidate_count,

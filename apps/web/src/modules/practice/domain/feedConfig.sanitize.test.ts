@@ -57,6 +57,9 @@ describe('freestyle feed config', () => {
   it('preserves overlay quiz setup as a permanent preference', () => {
     expect(sanitizeFreestyleFeedConfig(null).overlay_quiz_setup_done).toBe(false)
     expect(sanitizeFreestyleFeedConfig({ overlay_quiz_setup_done: true }).overlay_quiz_setup_done).toBe(true)
+    expect(sanitizeFreestyleFeedConfig(null).overlay_question_range).toBe('all')
+    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).overlay_question_range).toBe('due')
+    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).streams.quiz.overlay_question_range).toBe('due')
   })
 
   it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {

@@ -34,6 +34,9 @@ BOUND_QUIZ_STREAM = "quiz_stream"
 QUIZ_SCOPE_CROSS = "cross_palace_random"
 QUIZ_SCOPE_SINGLE = "single_palace_random"
 
+OVERLAY_QUESTION_RANGE_DUE = "due"
+OVERLAY_QUESTION_RANGE_ALL = "all"
+
 QUIZ_MASTERY_UNSEEN = "unseen"
 QUIZ_MASTERY_WEAK = "weak"
 QUIZ_MASTERY_REINFORCE = "reinforce"
@@ -92,6 +95,11 @@ QUIZ_MASTERY_BUCKETS = {
 QUIZ_SCOPES = {
     QUIZ_SCOPE_CROSS,
     QUIZ_SCOPE_SINGLE,
+}
+
+OVERLAY_QUESTION_RANGES = {
+    OVERLAY_QUESTION_RANGE_DUE,
+    OVERLAY_QUESTION_RANGE_ALL,
 }
 
 SUBJECT_SCOPES = {"all", "english", "non_english"}
@@ -204,6 +212,13 @@ def _as_quiz_scope(value: Any) -> str:
     if key in QUIZ_SCOPES:
         return key
     return QUIZ_SCOPE_CROSS
+
+
+def _as_overlay_question_range(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in OVERLAY_QUESTION_RANGES:
+        return key
+    return OVERLAY_QUESTION_RANGE_ALL
 
 
 def _as_subject_scope(value: Any) -> str:
@@ -444,6 +459,9 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             ),
         ),
         "quiz_scope": _as_quiz_scope(raw_quiz.get("quiz_scope", data.get("quiz_scope"))),
+        "overlay_question_range": _as_overlay_question_range(
+            raw_quiz.get("overlay_question_range", data.get("overlay_question_range")),
+        ),
         "weak_priority": _as_bool(raw_quiz.get("weak_priority", data.get("weak_quiz_priority")), True),
     }
     if quiz["question_type"] not in QUESTION_TYPES:
@@ -539,6 +557,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "due_policy": map_due,
         "quiz_mastery_buckets": quiz["mastery_buckets"],
         "quiz_scope": quiz["quiz_scope"],
+        "overlay_question_range": quiz["overlay_question_range"],
         "specific_palace_ids": legacy_specific_ids,
         "subject_scope": legacy_scope,
         "subject_ids": (
@@ -555,8 +574,8 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
 def queue_construction_signature(raw: Any) -> str:
     """Fields that rebuild unstarted round-plan order when they change.
 
-    Palace scope changes start a new round elsewhere. This signature is only
-    the queue-construction knobs: palace/unit order, due policy, mix, seed,
+    Scope-key changes rebind the same round. This signature is only the
+    queue-construction knobs: palace/unit order, due policy, mix, seed,
     length, and quiz draw order.
     """
     config = sanitize_feed_config(raw)
@@ -573,6 +592,7 @@ def queue_construction_signature(raw: Any) -> str:
             "unit_order": memory["unit_order"],
             "due_policy": memory["due_policy"],
             "quiz_scope": quiz["quiz_scope"],
+            "overlay_question_range": quiz["overlay_question_range"],
             "mastery_buckets": quiz["mastery_buckets"],
             "weak_priority": quiz["weak_priority"],
             "question_type": quiz["question_type"],

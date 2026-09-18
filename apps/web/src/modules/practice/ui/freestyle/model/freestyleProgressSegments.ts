@@ -3,6 +3,7 @@ import {
   isRetryOccurrence,
   planCardStatus,
   sourceCardId,
+  type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
 } from '@/modules/practice/public'
@@ -16,6 +17,8 @@ export interface FreestyleProgressSegment {
   palaceId: number | null
   /** True when every rendered segment of this palace is `done`. */
   palaceDone: boolean
+  /** True when this tick is the card currently on screen, even if already rated. */
+  viewing?: boolean
   kind?: 'source' | 'retry'
   retryAttempt?: number
   sourceCardId?: string
@@ -169,9 +172,17 @@ export function palaceAccentToneClass(
   return PALACE_ACCENT_TONE_CLASS[accent][tone]
 }
 
-/** Playhead is taller; pending and done stay a 6px bar so palace bands stay even. */
-export function progressSegmentShapeClass(tone: FreestyleSegmentTone): string {
-  if (tone === 'current') return 'h-2.5 ring-1 ring-white/85'
+/**
+ * Viewing playhead is independent of rating fill: a rated card still grows when
+ * it is on screen, and cancelling a rating only changes fill, not the playhead.
+ */
+export function progressSegmentShapeClass(
+  tone: FreestyleSegmentTone,
+  viewing = false,
+): string {
+  if (viewing || tone === 'current') {
+    return 'h-3.5 min-w-[6px] ring-2 ring-white shadow-[0_0_8px_rgba(255,255,255,0.45)]'
+  }
   return 'h-1.5'
 }
 
@@ -191,6 +202,47 @@ function progressCardLabel(
   return sourceId || card.id
 }
 
+function progressIds(
+  cards: FreestyleCard[],
+  roundPlan: FreestyleRoundPlanState | null,
+): string[] {
+  if (!roundPlan) return cards.map((card) => String(card.id || '')).filter(Boolean)
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const raw of roundPlan.orderIds) {
+    const id = String(raw || '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  for (const card of cards) {
+    const id = String(card.id || '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+function snapshotPlanStatus(
+  id: string,
+  planEntry: FreestyleRoundPlanCard | undefined,
+  completed: Set<string>,
+): FreestyleRoundPlanCardStatus | null {
+  if (completed.has(id) || planEntry?.status === 'completed') return 'completed'
+  if (planEntry?.status === 'retry' || planEntry?.status === 'pending') return planEntry.status
+  return null
+}
+
+function snapshotSourceLabel(
+  id: string,
+  sourceId: string,
+  planEntry: FreestyleRoundPlanCard | undefined,
+  roundPlan: FreestyleRoundPlanState | null,
+): string {
+  return roundPlan?.cardsById[sourceId]?.label || planEntry?.label || sourceId || id
+}
+
 export function retryNodeLabel(segment: FreestyleProgressSegment): string {
   const attempt = Math.max(1, Math.round(segment.retryAttempt || 1))
   const label = String(segment.sourceLabel || '').trim()
@@ -199,7 +251,10 @@ export function retryNodeLabel(segment: FreestyleProgressSegment): string {
 
 function segmentStatusLabel(segment: FreestyleProgressSegment): string {
   if (segment.kind === 'retry') return retryNodeLabel(segment)
-  if (segment.tone === 'current') return '当前'
+  if (segment.viewing || segment.tone === 'current') {
+    if (segment.tone === 'done') return '当前 · 已过'
+    return '当前'
+  }
   if (segment.tone === 'done') return '已过'
   if (segment.waitingRetry || segment.tone === 'retry') return '稍后重练'
   return '待练'
@@ -228,30 +283,80 @@ export function buildFreestyleProgressSummary(
   currentCardId: string | null,
 ): FreestyleProgressSummary {
   const completed = new Set(completedIds.map(String))
+  const hidden = new Set(hiddenIds.map(String))
+  const liveById = new Map(cards.map((card) => [String(card.id), card]))
   const segments: FreestyleProgressSegment[] = []
-  const baseCards: FreestyleCard[] = []
+  const baseItems: Array<{ id: string; sourceId: string }> = []
   let retryInserted = 0
   const passedSources = new Set<string>()
 
-  for (const card of cards) {
-    const tone = segmentTone(
-      planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
-    )
+  // Visual only: keep completed/retry ticks after the live feed drops them.
+  for (const id of progressIds(cards, roundPlan)) {
+    if (hidden.has(id)) continue
+    const planEntry = roundPlan?.cardsById[id]
+    if (planEntry?.status === 'excluded') continue
+
+    const card = liveById.get(id)
+    if (card) {
+      const tone = segmentTone(
+        planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
+      )
+      if (!tone) continue
+      const retryKind = isRetryOccurrence(card)
+      const waitingRetry = !retryKind && planEntry?.status === 'retry'
+      const sourceId = sourceCardId(card)
+      segments.push({
+        cardId: card.id,
+        tone,
+        palaceId: cardPalaceId(card),
+        palaceDone: false,
+        viewing: currentCardId === card.id,
+        kind: retryKind ? 'retry' : 'source',
+        sourceLabel: progressCardLabel(card, cards, roundPlan),
+        ...(retryKind
+          ? {
+              retryAttempt: Math.max(1, Math.round(Number(card.retry_attempt) || 1)),
+              sourceCardId: sourceId,
+            }
+          : {
+              waitingRetry,
+              ...(waitingRetry
+                ? { retryAfterCards: Math.max(0, Math.round(Number(planEntry?.retryAfterCards) || 0)) }
+                : {}),
+            }),
+      })
+      if (retryKind) {
+        retryInserted += 1
+      } else {
+        baseItems.push({ id: card.id, sourceId })
+      }
+      if (
+        tone === 'done'
+        || completed.has(card.id)
+        || completed.has(sourceId)
+      ) {
+        passedSources.add(sourceId || card.id)
+      }
+      continue
+    }
+
+    const status = snapshotPlanStatus(id, planEntry, completed)
+    const tone = status ? segmentTone(status) : null
     if (!tone) continue
-    const retryKind = isRetryOccurrence(card)
-    const planEntry = roundPlan?.cardsById[card.id]
+    const retryKind = planEntry?.occurrenceKind === 'retry'
+    const sourceId = planEntry?.sourceCardId || id
     const waitingRetry = !retryKind && planEntry?.status === 'retry'
-    const sourceId = sourceCardId(card)
     segments.push({
-      cardId: card.id,
+      cardId: id,
       tone,
-      palaceId: cardPalaceId(card),
+      palaceId: planEntry?.palaceId ?? null,
       palaceDone: false,
+      viewing: currentCardId === id,
       kind: retryKind ? 'retry' : 'source',
-      sourceLabel: progressCardLabel(card, cards, roundPlan),
+      sourceLabel: snapshotSourceLabel(id, sourceId, planEntry, roundPlan),
       ...(retryKind
         ? {
-            retryAttempt: Math.max(1, Math.round(Number(card.retry_attempt) || 1)),
+            retryAttempt: Math.max(1, Math.round(Number(planEntry?.retryAttempt) || 1)),
             sourceCardId: sourceId,
           }
         : {
@@ -264,14 +369,14 @@ export function buildFreestyleProgressSummary(
     if (retryKind) {
       retryInserted += 1
     } else {
-      baseCards.push(card)
+      baseItems.push({ id, sourceId })
     }
     if (
       tone === 'done'
-      || completed.has(card.id)
+      || completed.has(id)
       || completed.has(sourceId)
     ) {
-      passedSources.add(sourceId || card.id)
+      passedSources.add(sourceId || id)
     }
   }
 
@@ -284,13 +389,13 @@ export function buildFreestyleProgressSummary(
     segment.palaceDone = segment.palaceId != null && !unfinishedPalaces.has(segment.palaceId)
   }
 
-  const currentIndex = segments.findIndex((segment) => segment.tone === 'current')
-  const current = currentCardId
-    ? cards.find((card) => card.id === currentCardId)
-    : null
+  const currentIndex = segments.findIndex(
+    (segment) => segment.viewing || segment.tone === 'current',
+  )
+  const current = currentCardId ? liveById.get(currentCardId) ?? null : null
   const currentSourceId = current ? sourceCardId(current) : ''
   const baseIndex = currentSourceId
-    ? baseCards.findIndex((card) => sourceCardId(card) === currentSourceId || card.id === currentSourceId)
+    ? baseItems.findIndex((item) => item.sourceId === currentSourceId || item.id === currentSourceId)
     : -1
 
   return {
@@ -299,7 +404,7 @@ export function buildFreestyleProgressSummary(
     total: segments.length,
     doneCount: segments.filter((segment) => segment.tone === 'done').length,
     retryCount: segments.filter((segment) => segment.tone === 'retry').length,
-    scheduledBase: baseCards.length,
+    scheduledBase: baseItems.length,
     positionBase: baseIndex >= 0 ? baseIndex + 1 : 0,
     retryInserted,
     passedCount: passedSources.size,

@@ -113,8 +113,8 @@ describe('channelAdjustment', () => {
   })
 
   /**
-   * The load-bearing one. A scope change makes useImmersiveQueue start a new round and
-   * drop completedIds / encounters / plan, so a "rescue" would wipe the session.
+   * The load-bearing one. An in-feed hint must not swap palace/subject scope
+   * under the card the learner is reading.
    */
   it('never changes palace scope, so the round it rescues survives', () => {
     for (const state of ['anxious', 'bored'] as const) {

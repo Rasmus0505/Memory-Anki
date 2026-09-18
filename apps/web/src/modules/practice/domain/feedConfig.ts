@@ -8,6 +8,7 @@ import type {
   FreestylePalaceStreamConfig,
   FreestyleQuestionTypeFilter,
   FreestyleQuizMasteryBucket,
+  FreestyleOverlayQuestionRange,
   FreestyleQuizScope,
   FreestyleStreamScope,
   FreestyleSubjectScope,
@@ -73,6 +74,11 @@ export const FREESTYLE_QUIZ_SCOPES: FreestyleQuizScope[] = [
   'single_palace_random',
 ]
 
+export const FREESTYLE_OVERLAY_QUESTION_RANGES: FreestyleOverlayQuestionRange[] = [
+  'due',
+  'all',
+]
+
 /** Default: new + weak + reinforce (exclude already-stable). */
 export const DEFAULT_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
   'unseen',
@@ -113,6 +119,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       question_type: 'all',
       mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
       quiz_scope: 'cross_palace_random',
+      overlay_question_range: 'all',
       weak_priority: true,
     },
     english: {
@@ -158,6 +165,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   question_type: 'all',
   weak_quiz_priority: true,
   overlay_quiz_setup_done: false,
+  overlay_question_range: 'all',
 }
 
 function asBoolean(value: unknown, fallback: boolean) {
@@ -226,6 +234,10 @@ function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
 
 function asQuizScope(value: unknown): FreestyleQuizScope {
   return value === 'single_palace_random' ? 'single_palace_random' : 'cross_palace_random'
+}
+
+function asOverlayQuestionRange(value: unknown): FreestyleOverlayQuestionRange {
+  return value === 'due' ? 'due' : 'all'
 }
 
 function asSubjectScope(value: unknown): FreestyleSubjectScope {
@@ -432,6 +444,7 @@ export function queueConstructionSignature(value: unknown): string {
     unit_order: config.streams.memory_palace.unit_order,
     due_policy: config.streams.memory_palace.due_policy,
     quiz_scope: config.streams.quiz.quiz_scope,
+    overlay_question_range: config.streams.quiz.overlay_question_range,
     mastery_buckets: config.streams.quiz.mastery_buckets,
     weak_priority: config.streams.quiz.weak_priority,
     question_type: config.streams.quiz.question_type,
@@ -529,6 +542,9 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
         || Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets'),
     ),
     quiz_scope: asQuizScope(rawQuiz.quiz_scope ?? raw.quiz_scope),
+    overlay_question_range: asOverlayQuestionRange(
+      rawQuiz.overlay_question_range ?? raw.overlay_question_range,
+    ),
     weak_priority: asBoolean(rawQuiz.weak_priority ?? raw.weak_quiz_priority, true),
   }
 
@@ -628,6 +644,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     due_policy: legacyDue,
     quiz_mastery_buckets: quizStream.mastery_buckets,
     quiz_scope: quizStream.quiz_scope,
+    overlay_question_range: quizStream.overlay_question_range,
     specific_palace_ids: legacySpecificIds,
     subject_scope: legacyScope,
     subject_ids: trainingMode === 'quiz' ? quizStream.subject_ids : memoryStream.subject_ids,
@@ -637,7 +654,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
   }
 }
 
-/** A palace-scope change starts a new local freestyle round. */
+/** Palace/subject filter identity. A change rebinds the current round; it does not mint one. */
 export function freestylePalaceScopeSignature(config: FreestyleFeedConfig): string {
   return JSON.stringify({
     memory_palace: {

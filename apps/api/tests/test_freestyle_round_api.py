@@ -209,6 +209,50 @@ def test_start_new_round_completes_previous(make_client):
     assert payload["round_id"] != first["round_id"]
 
 
+def test_active_round_adopts_workspace_round_across_scope_key(make_client):
+    client = _client(make_client)
+    created = _create(
+        client,
+        operation_id="op-create",
+        cards=_cards("a", "b", "c"),
+        round_id="round-keep",
+        scope_key="scope-a",
+    )
+    round_id = created["round_id"]
+    completed = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/actions",
+        json={
+            "operation_id": "op-complete-a",
+            "expected_version": created["version"],
+            "action": "complete",
+            "card_id": "a",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["plan"]["completed_ids"] == ["a"]
+    assert completed.json()["status"] == "active"
+
+    adopted = _create(
+        client,
+        operation_id="op-adopt-scope-b",
+        cards=_cards("b", "c", "d"),
+        scope_key="scope-b",
+        round_id="round-other",
+    )
+    assert adopted["round_id"] == round_id
+    assert adopted["scope_key"] == "scope-b"
+    assert adopted["status"] == "active"
+    assert adopted["plan"]["completed_ids"] == ["a"]
+    assert adopted["plan"]["presented_ids"] == ["a", "b", "c", "d"]
+    fetched = client.get(f"/api/v1/freestyle/rounds/{round_id}")
+    assert fetched.status_code == 200, fetched.text
+    payload = fetched.json()
+    assert payload["round_id"] == "round-keep"
+    assert payload["scope_key"] == "scope-b"
+    assert payload["status"] == "active"
+    assert payload["plan"]["completed_ids"] == ["a"]
+
+
 def test_rating_then_leave_inserts_at_plus_three(make_client):
     client = _client(make_client)
     created = _create(

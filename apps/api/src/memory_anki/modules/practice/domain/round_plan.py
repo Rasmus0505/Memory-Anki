@@ -297,6 +297,41 @@ def complete_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     return next_plan
 
 
+def uncomplete_card(plan: Mapping[str, Any], card_id: str) -> Plan:
+    """Drop a rating so the source card is unfinished again.
+
+    Cancels retry copies that existed only because of that rating. The learner
+    can stay on the card; this does not move the cursor.
+    """
+    next_plan = normalize_plan(plan)
+    target = _text(card_id)
+    if not target:
+        raise ValueError("card_id is required")
+    occ = _find_occurrence(next_plan, target)
+    source_id = _text(occ.get("source_card_id") if occ else target) or target
+    retry_ids = [
+        _text(item.get("occurrence_id"))
+        for item in next_plan["occurrences"]
+        if _text(item.get("source_card_id")) == source_id
+    ]
+    drop = {item for item in (source_id, target, *retry_ids) if item}
+    next_plan["completed_ids"] = [item for item in next_plan["completed_ids"] if item not in drop]
+    for item in next_plan["occurrences"]:
+        if _text(item.get("source_card_id")) != source_id:
+            continue
+        if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
+            item["status"] = OCCURRENCE_CANCELLED
+            item["rating"] = None
+    retry_drop = {item for item in retry_ids if item}
+    next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item not in retry_drop]
+    encounters = next_plan.get("encounters")
+    if isinstance(encounters, dict):
+        for key in (source_id, target):
+            encounters.pop(key, None)
+    _sync_index(next_plan)
+    return next_plan
+
+
 def exclude_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     next_plan = normalize_plan(plan)
     target = _text(card_id)
@@ -411,7 +446,7 @@ def rebind_plan_cards(
     plan: Mapping[str, Any],
     cards: Sequence[Mapping[str, Any]],
     *,
-    reorder_unstarted: bool = False,
+    reorder_unstarted: bool = False, drop_missing_unstarted: bool = False,
 ) -> Plan:
     next_plan = normalize_plan(plan)
     incoming = snapshot_cards(cards)
@@ -455,7 +490,7 @@ def rebind_plan_cards(
             rebound.append(card)
 
     keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
-    if reorder_unstarted:
+    if reorder_unstarted or drop_missing_unstarted:
         keep_old.update(_text(item.get("source_card_id")) for item in next_plan["occurrences"] if item.get("status") in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED})
     else:
         keep_old.update(item["card_id"] for item in next_plan["original_cards"])

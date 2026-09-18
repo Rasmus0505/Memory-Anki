@@ -3,6 +3,9 @@ import type { FreestyleUnitEncounterState } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleRoundCompletion,
+  clampFreestyleFeedIndex,
+  freestyleFeedSlotCount,
+  isFreestyleCompleteSlot,
   isFreestyleRoundComplete,
 } from './roundCompletion'
 
@@ -154,5 +157,25 @@ describe('isFreestyleRoundComplete', () => {
     expect(isFreestyleRoundComplete(cards, {
       one: encounter({ selectedRating: null, passed: null, status: 'open' }),
     })).toBe(false)
+  })
+})
+
+describe('freestyle feed complete slot', () => {
+  it('adds one snap slot after the last unit when the round is complete', () => {
+    expect(freestyleFeedSlotCount(3, true)).toBe(4)
+    expect(freestyleFeedSlotCount(3, false)).toBe(3)
+    expect(freestyleFeedSlotCount(0, true)).toBe(0)
+  })
+
+  it('treats the extra index as the closing slot, not a card', () => {
+    expect(isFreestyleCompleteSlot(3, 3, true)).toBe(true)
+    expect(isFreestyleCompleteSlot(2, 3, true)).toBe(false)
+    expect(isFreestyleCompleteSlot(3, 3, false)).toBe(false)
+  })
+
+  it('lets 下一张 land on the closing slot instead of clamping to the last unit', () => {
+    expect(clampFreestyleFeedIndex(3, 3, true)).toBe(3)
+    expect(clampFreestyleFeedIndex(3, 3, false)).toBe(2)
+    expect(clampFreestyleFeedIndex(-1, 3, true)).toBe(0)
   })
 })

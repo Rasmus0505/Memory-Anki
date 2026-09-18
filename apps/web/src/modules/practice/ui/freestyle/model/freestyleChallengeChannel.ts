@@ -100,11 +100,10 @@ export interface ChannelAdjustment {
 
 /**
  * Adjustments deliberately never touch palace scope (`specific_palace_ids` /
- * `subject_scope` / `subject_ids`). Changing scope makes `useImmersiveQueue` call `startNewRound`,
- * which clears completedIds, encounters and the round plan — it would destroy the
- * round this is trying to rescue. Difficulty is moved through `due_policy`,
- * quiz mastery buckets and weak-priority instead, all of which a rebuild can apply
- * to unstarted work while finished work stays put.
+ * `subject_scope` / `subject_ids`). An in-feed hint must not swap the palace
+ * filter under the card the learner is reading. Difficulty is moved through
+ * `due_policy`, quiz mastery buckets and weak-priority instead, all of which
+ * a rebuild can apply to unstarted work while finished work stays put.
  */
 export function channelAdjustment(
   reading: ChannelReading,

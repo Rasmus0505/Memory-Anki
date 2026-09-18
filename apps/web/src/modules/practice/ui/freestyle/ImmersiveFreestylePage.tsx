@@ -19,6 +19,9 @@ import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/comp
 import { buildFreestyleProgressSummary } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import {
   buildFreestyleRoundCompletion,
+  clampFreestyleFeedIndex,
+  freestyleFeedSlotCount,
+  isFreestyleCompleteSlot,
   isFreestyleRoundComplete,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -109,7 +112,7 @@ import {
   sanitizeFreestyleDisplaySettings,
   saveFreestyleDisplaySettings,
 } from '@/modules/practice/public'
-import type { FreestyleCard, FreestyleFeedConfig, FreestyleQuizCard, FreestyleQuizScope } from '@/shared/api/contracts'
+import type { FreestyleCard, FreestyleFeedConfig, FreestyleQuizCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
@@ -227,6 +230,7 @@ export default function ImmersiveFreestylePage({
   const autoAdvanceTimerRef = useRef<number | null>(null)
   /** Read at auto-advance fire time so a settle-time reorder cannot turn the wrong page. */
   const currentIndexRef = useRef(0)
+  const roundCompleteRef = useRef(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [scopeQuizOpen, setScopeQuizOpen] = useState(false)
@@ -402,6 +406,14 @@ export default function ImmersiveFreestylePage({
   queueStateRef.current = queueState
   visualIndexRef.current = visualIndex
   const currentCard = cards[currentIndex] ?? null
+  const roundComplete = isFreestyleRoundComplete(
+    cards,
+    queueState.unitEncountersByCardId,
+    queueState.completedIds,
+  )
+  roundCompleteRef.current = roundComplete
+  const feedSlotCount = freestyleFeedSlotCount(cards.length, roundComplete)
+  const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)
   const currentCardId = currentCard?.id ?? null
   const revealCacheKey = currentCardId
   if (seededRevealCardIdRef.current !== revealCacheKey) {
@@ -429,14 +441,20 @@ export default function ImmersiveFreestylePage({
   )
 
   useEffect(() => {
-    refreshCanGoPrevious()
-  }, [refreshCanGoPrevious, cards, currentIndex])
+    refreshCanGoPrevious(visualIndex)
+  }, [refreshCanGoPrevious, visualIndex])
 
   useEffect(() => {
     if (userScrollingRef.current) return
+    if (roundComplete && cards.length > 0 && visualIndexRef.current >= cards.length) {
+      const completeIndex = cards.length
+      visualIndexRef.current = completeIndex
+      setVisualIndex(completeIndex)
+      return
+    }
     setVisualIndex(currentIndex)
     visualIndexRef.current = currentIndex
-  }, [currentIndex])
+  }, [cards.length, currentIndex, roundComplete])
 
   useEffect(() => {
     setInlineEditing(false)
@@ -455,6 +473,7 @@ export default function ImmersiveFreestylePage({
     automationScene: 'freestyle',
     sourceKind: null,
     persistKey: slot === FREESTYLE_WORKSPACE_SECONDARY ? 'freestyle-immersive-secondary' : 'freestyle-immersive',
+    persistCompletionRecord: false,
   })
 
   useGlobalTimerRegistration({
@@ -539,11 +558,28 @@ export default function ImmersiveFreestylePage({
         historical?: boolean
       },
     ) => {
-      const max = Math.max(0, cards.length - 1)
-      const next = Math.max(0, Math.min(index, max))
+      const next = clampFreestyleFeedIndex(index, cards.length, roundComplete)
+      const fromScroll = options?.scroll === false
+      if (isFreestyleCompleteSlot(next, cards.length, roundComplete)) {
+        setReadOnlyHistoryCardId(null)
+        if (!options?.skipHistory && next > currentIndex) {
+          const leavingId = cards[currentIndex]?.id
+          if (leavingId) {
+            viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
+          }
+        }
+        if (fromScroll) {
+          indexChangeFromScrollRef.current = true
+        } else {
+          scrollToIndex(next)
+        }
+        visualIndexRef.current = next
+        setVisualIndex(next)
+        refreshCanGoPrevious(next)
+        return
+      }
       const targetCardId = cards[next]?.id ?? null
       setReadOnlyHistoryCardId(options?.historical ? targetCardId : null)
-      const fromScroll = options?.scroll === false
       if (fromScroll) {
         indexChangeFromScrollRef.current = true
         // Finger/wheel leave still needs history so 「上一张」works after restudy
@@ -555,12 +591,18 @@ export default function ImmersiveFreestylePage({
           }
         }
         goToIndex(next, { reorderRestudy: options?.reorderRestudy === true ? true : false })
+        visualIndexRef.current = next
+        setVisualIndex(next)
         refreshCanGoPrevious(next)
         return
       }
       // Same index: React may bail out of setState; still align the viewport.
+      // Leaving the closing slot also lands here because queue index never moved.
       if (next === currentIndex) {
+        visualIndexRef.current = next
+        setVisualIndex(next)
         scrollToIndex(next)
+        refreshCanGoPrevious(next)
         return
       }
       if (!options?.skipHistory && next > currentIndex) {
@@ -581,7 +623,7 @@ export default function ImmersiveFreestylePage({
     },
     // getIncompleteUnitSummary is intentionally absent: the hint moved onto the card
     // (see sequentialBlockedHint), so this callback no longer reads it.
-    [cards, currentIndex, goToIndex, refreshCanGoPrevious, scrollToIndex],
+    [cards, currentIndex, goToIndex, refreshCanGoPrevious, roundComplete, scrollToIndex],
   )
 
   /**
@@ -590,11 +632,8 @@ export default function ImmersiveFreestylePage({
    * unit slid into index 0 and index-based back would stay disabled).
    */
   const navigatePrevious = useCallback(() => {
-    if (ratingScope === 'palace') {
-      const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
-      if (previousPalaceIndex != null) {
-        navigateToIndex(previousPalaceIndex, { skipHistory: true })
-      }
+    if (isFreestyleCompleteSlot(visualIndexRef.current, cards.length, roundComplete)) {
+      navigateToIndex(Math.max(0, cards.length - 1), { skipHistory: true })
       return
     }
     const list = cards
@@ -611,17 +650,12 @@ export default function ImmersiveFreestylePage({
     if (currentIndex > 0) {
       navigateToIndex(currentIndex - 1, { skipHistory: true })
     }
-  }, [cards, currentIndex, navigateToIndex, ratingScope])
+  }, [cards, currentIndex, navigateToIndex, roundComplete])
 
   const navigateNext = useCallback(() => {
-    if (ratingScope === 'palace') {
-      const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
-      if (nextPalaceIndex == null) return
-      navigateToIndex(nextPalaceIndex)
-      return
-    }
-    navigateToIndex(currentIndex + 1)
-  }, [cards, currentIndex, navigateToIndex, ratingScope])
+    if (isFreestyleCompleteSlot(visualIndexRef.current, cards.length, roundComplete)) return
+    navigateToIndex(visualIndexRef.current + 1)
+  }, [navigateToIndex, roundComplete])
 
   useEffect(() => {
     if (requestedScrollIndexRef.current !== currentIndex) return
@@ -653,6 +687,20 @@ export default function ImmersiveFreestylePage({
     userScrollingRef.current = false
     if (programmaticScrollRef.current) return
     const visual = visualIndexRef.current
+    const listLength = queueRef.current.length
+    if (isFreestyleCompleteSlot(visual, listLength, roundCompleteRef.current)) {
+      const pinned = listLength
+      visualIndexRef.current = pinned
+      setVisualIndex(pinned)
+      const completeNode = scrollRef.current
+      const completePageHeight = pageHeightRef.current || completeNode?.clientHeight || 0
+      if (!completeNode || !completePageHeight) return
+      const completeTop = pinned * completePageHeight
+      if (Math.abs(completeNode.scrollTop - completeTop) > 2) {
+        scrollToIndex(pinned, 'auto')
+      }
+      return
+    }
     if (visual !== currentIndexRef.current) {
       navigateToIndex(visual, { scroll: false, reorderRestudy: false })
     }
@@ -726,15 +774,22 @@ export default function ImmersiveFreestylePage({
     }
     const node = scrollRef.current
     if (!node?.clientHeight) return
-    const expectedTop = currentIndex * node.clientHeight
+    const viewingComplete = isFreestyleCompleteSlot(
+      visualIndexRef.current,
+      cards.length,
+      roundComplete,
+    )
+    const targetIndex = viewingComplete ? cards.length : currentIndex
+    const expectedTop = targetIndex * node.clientHeight
     if (Math.abs(node.scrollTop - expectedTop) < 2) return
-    scrollToIndex(currentIndex, 'auto')
+    scrollToIndex(targetIndex, 'auto')
   }, [
     isActive,
     becameActiveAt,
     loading,
     currentIndex,
     queueFrozen,
+    roundComplete,
     scrollToIndex,
     // cards.length only gates the early return; silent rebuilds must not re-scroll.
     cards.length,
@@ -743,7 +798,7 @@ export default function ImmersiveFreestylePage({
   useEffect(() => {
     const handlePageShow = () => {
       if (!isActive || loading || userScrollingRef.current) return
-      scrollToIndex(currentIndexRef.current, 'auto')
+      scrollToIndex(visualIndexRef.current, 'auto')
     }
     window.addEventListener('pageshow', handlePageShow)
     return () => window.removeEventListener('pageshow', handlePageShow)
@@ -854,7 +909,17 @@ export default function ImmersiveFreestylePage({
         const next = ratingScope === 'palace'
           ? findNextPalaceIndex(list, index)
           : list.findIndex((item, itemIndex) => itemIndex > index && !rated.has(item.id))
-        if (next != null && next >= 0) navigateToIndex(next)
+        if (next != null && next >= 0) {
+          navigateToIndex(next)
+          return
+        }
+        if (isFreestyleRoundComplete(
+          list,
+          queueStateRef.current.unitEncountersByCardId,
+          queueStateRef.current.completedIds,
+        )) {
+          navigateToIndex(list.length)
+        }
       }, AUTO_ADVANCE_DELAY_MS)
     },
     [autoAdvance, navigateToIndex, ratingScope, recordChannelSample],
@@ -948,7 +1013,10 @@ export default function ImmersiveFreestylePage({
       userScrollingRef.current = true
       const nextIndex = Math.max(
         0,
-        Math.min(cards.length - 1, Math.round(element.scrollTop / pageHeight)),
+        Math.min(
+          Math.max(0, freestyleFeedSlotCount(cards.length, roundComplete) - 1),
+          Math.round(element.scrollTop / pageHeight),
+        ),
       )
       if (nextIndex !== visualIndexRef.current) {
         // Visual index only — do not flip `active` or close/open encounters mid-gesture.
@@ -964,7 +1032,7 @@ export default function ImmersiveFreestylePage({
         flushScrollSettled()
       }, 120)
     },
-    [cards.length, flushScrollSettled],
+    [cards.length, flushScrollSettled, roundComplete],
   )
 
   /**
@@ -1036,11 +1104,6 @@ export default function ImmersiveFreestylePage({
 
   const sequentialBlockedHint = null
 
-  const roundComplete = isFreestyleRoundComplete(
-    cards,
-    queueState.unitEncountersByCardId,
-    queueState.completedIds,
-  )
   const seekLiveCardId = useCallback((cardId: string) => {
     const index = cards.findIndex((card) => card.id === cardId)
     if (index >= 0) navigateToIndex(index, { reorderRestudy: false })
@@ -1335,14 +1398,19 @@ export default function ImmersiveFreestylePage({
           storedConfig={readFreestyleFeedConfig(slot)}
           setupDone={Boolean(readFreestyleFeedConfig(slot).overlay_quiz_setup_done)}
           rangeLabel={overlayQuizRangeLabel(readFreestyleFeedConfig(slot))}
-          onConfirmSetup={(quizScope: FreestyleQuizScope) => {
+          onConfirmSetup={({ quizScope, overlayQuestionRange }) => {
             setConfigAndPersist((current) => ({
               ...current,
               overlay_quiz_setup_done: true,
               quiz_scope: quizScope,
+              overlay_question_range: overlayQuestionRange,
               streams: {
                 ...current.streams,
-                quiz: { ...current.streams.quiz, quiz_scope: quizScope },
+                quiz: {
+                  ...current.streams.quiz,
+                  quiz_scope: quizScope,
+                  overlay_question_range: overlayQuestionRange,
+                },
               },
             }))
           }}
@@ -1606,7 +1674,7 @@ export default function ImmersiveFreestylePage({
                       card.unit_id && card.unit_revision != null ? (
                         <FreestyleUnitReviewCardView
                           card={card}
-                          active={isActive && index === currentIndex}
+                          active={isActive && index === currentIndex && !viewingCompleteSlot}
                           readOnly={readOnlyHistoryCardId === card.id}
                           roundId={queueState.roundId}
                           planVersion={planVersion}
@@ -1656,7 +1724,7 @@ export default function ImmersiveFreestylePage({
                     ) : (
                       <FreestyleMindMapBranchCardView
                         card={card}
-                        active={isActive && index === currentIndex}
+                        active={isActive && index === currentIndex && !viewingCompleteSlot}
                         onBranchComplete={handleBranchComplete}
                         reducedMotion={reducedMotion}
                         flipState={
@@ -1676,7 +1744,7 @@ export default function ImmersiveFreestylePage({
                   ) : isQuizCard(card) ? (
                     <FreestyleQuizCardView
                       card={card}
-                      active={isActive && index === currentIndex}
+                      active={isActive && index === currentIndex && !viewingCompleteSlot}
                       state={progress.questionStates[card.question.id]}
                       answeredBefore={answeredQuestionIds.has(card.question.id)}
                       onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
@@ -1722,25 +1790,24 @@ export default function ImmersiveFreestylePage({
         </div>
 
         {/*
-          Prev/next stay on PWA: one-finger swipe over the map still misses snap.
-          Palace skip stays desktop-only so the phone dock is two large targets.
+          Card paging stays on this pager so the review map can keep one-finger pan.
+          Palace skip stays desktop-only.
         */}
         {!inlineEditing ? (
         <FreestyleFeedPager
           canGoPrevious={
-            ratingScope === 'palace'
-              ? canGoPreviousPalace
+            viewingCompleteSlot
+              ? cards.length > 0
               : canGoPrevious && cards.length > 0
           }
           canGoNext={
-            ratingScope === 'palace'
-              ? canGoNextPalace
-              : cards.length > 0 && currentIndex < cards.length - 1
+            viewingCompleteSlot
+              ? false
+              : cards.length > 0 && visualIndex < feedSlotCount - 1
           }
           canGoPreviousPalace={canGoPreviousPalace}
           canGoNextPalace={canGoNextPalace}
           sequentialBlockedHint={sequentialBlockedHint}
-          palaceMode={ratingScope === 'palace'}
           onPrevious={navigatePrevious}
           onNext={navigateNext}
           onPreviousPalace={handleGoToPreviousPalace}

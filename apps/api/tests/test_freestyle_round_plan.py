@@ -242,6 +242,29 @@ def test_rebind_reorders_unstarted_and_keeps_completed():
     assert kept["presented_ids"] == ["a1", "a2", "b1", "b2"]
 
 
+def test_rebind_drop_missing_unstarted_keeps_order_and_completed():
+    original = [
+        _card("a"),
+        _card("b"),
+        _card("c"),
+        _card("extra"),
+    ]
+    plan = complete_card(plan_from_cards(original), "a")
+    rebound = rebind_plan_cards(
+        plan,
+        [_card("c"), _card("b"), _card("d")],
+        drop_missing_unstarted=True,
+    )
+    original_ids = [item["card_id"] for item in rebound["original_cards"]]
+    assert rebound["completed_ids"] == ["a"]
+    assert "a" in original_ids
+    assert "b" in original_ids
+    assert "c" in original_ids
+    assert "d" in original_ids
+    assert "extra" not in original_ids
+    assert rebound["presented_ids"] == ["a", "b", "c", "d"]
+
+
 def test_rebind_completed_unit_keeps_parent_rating():
     original = [_card("review_unit:u1:r1", unit_id="u1", revision=1)]
     plan = leave_card(_rate(plan_from_cards(original), "review_unit:u1:r1", 3, "enc-pass"), "review_unit:u1:r1")
