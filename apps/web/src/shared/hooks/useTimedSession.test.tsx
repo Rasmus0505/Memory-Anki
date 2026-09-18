@@ -5,6 +5,11 @@ import * as sessionRecordsStore from '@/modules/session/domain/session-entity/mo
 import { resetAutoSaveCoordinatorForTest } from '@/shared/persistence/autosaveCoordinator'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { buildTimedSessionStorageKey } from '@/shared/hooks/timedSessionStorage'
+import {
+  dwellKindToSessionKind,
+  resolveDwellFragment,
+  resetTimedSessionStoresForTests,
+} from '@/modules/session/public'
 import { useTimedSession } from '@/shared/hooks/useTimedSession'
 
 let testKey = 0
@@ -42,6 +47,7 @@ describe('useTimedSession foreground clock', () => {
     resetAutoSaveCoordinatorForTest()
     persistSpy.mockReset()
     persistSpy.mockImplementation(async (record) => record)
+    resetTimedSessionStoresForTests()
     window.dispatchEvent(new Event('focus'))
   })
 
@@ -93,27 +99,18 @@ describe('useTimedSession foreground clock', () => {
     expect(result.current.effectiveSeconds).toBe(pausedSeconds + 1)
   })
 
-  it('pauses immediately on blur and automatically resumes only that system pause', () => {
+  it('keeps counting while the window is blurred but still visible', () => {
     const { result } = renderHook(() => useTestTimedSession())
 
     act(() => {
       result.current.start()
       vi.advanceTimersByTime(2_100)
       window.dispatchEvent(new Event('blur'))
-    })
-
-    expect(result.current.status).toBe('paused')
-    expect(result.current.pauseReason).toBe('window_blur')
-    const pausedSeconds = result.current.effectiveSeconds
-
-    act(() => {
-      vi.advanceTimersByTime(10_000)
-      window.dispatchEvent(new Event('focus'))
-      vi.advanceTimersByTime(1_100)
+      vi.advanceTimersByTime(1_200)
     })
 
     expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBe(pausedSeconds + 1)
+    expect(result.current.effectiveSeconds).toBe(3)
   })
 
   it('pauses immediately on visibility hidden and resumes when visible', () => {
@@ -159,7 +156,7 @@ describe('useTimedSession foreground clock', () => {
     expect(result.current.pauseReason).toBe('manual')
   })
 
-  it('makes repeated blur/focus events idempotent', () => {
+  it('does not treat repeated blur/focus as pauses', () => {
     const { result } = renderHook(() => useTestTimedSession())
 
     act(() => {
@@ -171,7 +168,7 @@ describe('useTimedSession foreground clock', () => {
       window.dispatchEvent(new Event('focus'))
     })
 
-    expect(result.current.pauseCount).toBe(1)
+    expect(result.current.pauseCount).toBe(0)
     expect(result.current.status).toBe('running')
   })
 
@@ -272,5 +269,106 @@ describe('useTimedSession foreground clock', () => {
       await result.current.complete('manual_complete')
     })
     expect(persistSpy.mock.calls.filter(([record]) => record.sessionKey === sessionKey)).toHaveLength(1)
+  })
+
+  it('splits a dwell session after 15 hidden minutes and keeps it inside the window', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    const { result } = renderHook(() => useTimedSession({
+      sessionKey: 'dwell:live',
+      kind: 'practice',
+      title: '洞察',
+      palaceId: null,
+      persistCompletionRecord: true,
+    }))
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(2_100)
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(result.current.status).toBe('paused')
+    const pausedSeconds = result.current.effectiveSeconds
+
+    act(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000)
+      visibility.mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds)
+
+    await act(async () => {
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(15 * 60 * 1000 + 1)
+      visibility.mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(0)
+    })
+
+    expect(result.current.status).toBe('idle')
+    expect(persistSpy).toHaveBeenCalled()
+    visibility.mockRestore()
+  })
+
+  it('pauses on settings without splitting or writing a settings fragment', async () => {
+    const { result, rerender } = renderHook(
+      ({ path }: { path: string }) => {
+        const fragment = resolveDwellFragment(path)
+        return useTimedSession({
+          sessionKey: 'dwell:live',
+          kind: dwellKindToSessionKind(fragment.kind),
+          title: fragment.title,
+          palaceId: fragment.palaceId,
+          automationScene: fragment.scene,
+          persistCompletionRecord: true,
+          routePath: fragment.routePath,
+        })
+      },
+      { initialProps: { path: '/freestyle' } },
+    )
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(5_100)
+    })
+    const secondsBeforeSettings = result.current.effectiveSeconds
+    expect(secondsBeforeSettings).toBeGreaterThan(0)
+
+    act(() => {
+      rerender({ path: '/profile/timer' })
+    })
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('excluded_route')
+
+    act(() => {
+      vi.advanceTimersByTime(20 * 60 * 1000)
+    })
+    expect(result.current.status).toBe('paused')
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeSettings)
+    expect(persistSpy.mock.calls.some(([record]) => (
+      record.sessionKey?.startsWith('dwell:') && record.completionMethod !== 'saved'
+    ))).toBe(false)
+
+    act(() => {
+      rerender({ path: '/dashboard' })
+    })
+    act(() => {
+      result.current.setSceneActive(true)
+      result.current.resume()
+      vi.advanceTimersByTime(1_200)
+    })
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeSettings + 1)
+
+    let record: Awaited<ReturnType<typeof result.current.complete>> = null
+    await act(async () => {
+      record = await result.current.complete('manual_complete')
+    })
+    expect(record?.sceneSegments?.some((segment) => (
+      segment.title === '设置' || segment.routePath?.startsWith('/profile')
+    ))).toBe(false)
+    expect(record?.sceneSegments?.some((segment) => segment.title === '随心')).toBe(true)
   })
 })

@@ -7,8 +7,16 @@ export * from './domain/session-entity/model'
 export * from './domain/study-session-entity/api'
 export {
   adoptLiveTimerSnapshot,
+  resetTimedSessionStoresForTests,
   useTimedSession,
 } from './domain/session-entity/model/timed-session/timedSessionStateMachine'
+export { AppDwellSession } from './ui/dwell/AppDwellSession'
+export {
+  DWELL_LIVE_SESSION_KEY,
+  DWELL_RESUME_WINDOW_MS,
+  dwellKindToSessionKind,
+  resolveDwellFragment,
+} from './domain/session-entity/model/timed-session/dwellPolicy'
 export {
   interpolateTimerSeconds,
   isFollowableStudyPath,

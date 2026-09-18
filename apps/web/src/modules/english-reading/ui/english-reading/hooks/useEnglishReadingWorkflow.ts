@@ -177,6 +177,7 @@ export function useEnglishReadingWorkflow({
     automationScene: "english_reading",
     sourceKind: "english_reading",
     persistKey: material ? `english-reading:${material.id}` : null,
+    persistCompletionRecord: false,
   });
   useGlobalTimerRegistration({
     scene: "english_reading",

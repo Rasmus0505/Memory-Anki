@@ -17,7 +17,7 @@ export const SNAPSHOT_VERSION = 2
 export type TimedSessionMeta = Record<string, boolean | number | string | null>
 export type TimedSessionSourceKind = 'palace' | 'english' | 'english_reading' | null
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'completed'
-export type TimerAutomationScene = SessionKind | 'freestyle' | 'english' | 'english_reading'
+export type TimerAutomationScene = SessionScene
 export type GlowState = 'idle' | 'running' | 'paused'
 export type TimedSessionPauseReason =
   | null
@@ -26,6 +26,7 @@ export type TimedSessionPauseReason =
   | 'document_hidden'
   | 'restored'
   | 'scene_inactive'
+  | 'excluded_route'
 export type PersistedSessionStatus = Extract<SessionStatus, 'running' | 'paused'>
 
 export interface TimedSessionFocusRoundState {
@@ -71,6 +72,7 @@ export interface TimedSessionOptions {
   englishCourseId?: number | null
   persistKey?: string | null
   persistCompletionRecord?: boolean
+  routePath?: string
 }
 
 export interface TimedSessionController {
@@ -103,13 +105,14 @@ export function buildTimedSessionController(controller: TimedSessionController) 
 
 export interface ActiveSceneSegmentSnapshot {
   scene: SessionScene
-  kind: SessionKind
+  kind: SessionKind | 'english' | 'english_reading'
   palaceId: number | null
   sourceKind: TimedSessionSourceKind
   englishCourseId: number | null
   title: string
   startedAt: string
   startEffectiveSeconds: number
+  routePath?: string
 }
 
 export interface PersistedTimedSessionSnapshotV2 {

@@ -17,6 +17,7 @@ export function useGlobalTimerRegistration(entry: {
   isRouteActive: boolean
   becameActiveAt: number
   routePath?: string
+  isDwellSession?: boolean
 }) {
   const context = React.useContext(GlobalTimerActionsContext)
   const {
@@ -26,6 +27,7 @@ export function useGlobalTimerRegistration(entry: {
     isRouteActive,
     becameActiveAt,
     routePath,
+    isDwellSession,
   } = entry
 
   const registeredTimer = React.useMemo<TimedSessionController>(() => timer, [timer])
@@ -39,6 +41,7 @@ export function useGlobalTimerRegistration(entry: {
       timer,
       isRouteActive,
       becameActiveAt,
+      isDwellSession,
       routePath:
         routePath ??
         (typeof window === 'undefined'
@@ -48,7 +51,7 @@ export function useGlobalTimerRegistration(entry: {
     return () => {
       context.removeTimer(timer.sessionId)
     }
-  }, [becameActiveAt, context, isRouteActive, routePath, scene, timer, title])
+  }, [becameActiveAt, context, isDwellSession, isRouteActive, routePath, scene, timer, title])
 
   return registeredTimer
 }

@@ -24,7 +24,7 @@ describe('TimerAutomationDialog', () => {
     expect(screen.queryByText(/闲置/)).toBeNull()
   })
 
-  it('saves the two supported settings only', () => {
+  it('saves auto-start, screen-awake and floating-timer settings', () => {
     const onSave = vi.fn()
     render(
       <TimerAutomationDialog

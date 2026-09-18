@@ -26,13 +26,6 @@ export interface TimerAutomationConfig {
   backgroundGraceSeconds?: number
 }
 
-/** @deprecated Activity renewal is no longer part of timer automation. */
-export type TimerAutomationActivityKind =
-  | 'window_return'
-  | 'node_switch'
-  | 'edit_operation'
-  | 'practice_interaction'
-
 export const TIMER_AUTOMATION_STORAGE_KEY = 'memory-anki-timer-automation-config'
 export const TIMER_AUTOMATION_UPDATED_EVENT = APP_EVENT_NAMES.timerAutomationUpdated
 export const TIMER_AUTOMATION_CONFIG_VERSION = 7
@@ -148,9 +141,4 @@ export function shouldAutoStartOnPageEnter(config: TimerAutomationConfig) {
 
 export function shouldShowFloatingTimer(config: TimerAutomationConfig) {
   return config.showFloatingTimer
-}
-
-/** @deprecated Kept for old callers; every activity signal is ignored. */
-export function isActivityEnabled(_kind: TimerAutomationActivityKind) {
-  return false
 }

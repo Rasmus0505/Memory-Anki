@@ -46,6 +46,8 @@ export function buildTimedSessionRecord(input: {
   durationEdited?: boolean
   events: SessionEventRecord[]
   sceneSegments: SessionSceneSegment[]
+  activityTag?: string | null
+  activityTagLabel?: string | null
 }): TimeSessionRecord | null {
   if (!input.startedAt) return null
   return {
@@ -68,6 +70,8 @@ export function buildTimedSessionRecord(input: {
     // record is always an observed foreground duration.
     durationEdited: false,
     clientSource: detectClientSource(),
+    activityTag: input.activityTag ?? null,
+    activityTagLabel: input.activityTagLabel ?? null,
     events: [...input.events],
     sceneSegments: [...input.sceneSegments],
   }

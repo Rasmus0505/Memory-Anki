@@ -89,6 +89,7 @@ export default function PalaceView() {
     automationScene: 'practice',
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey: palaceId ? `palace_view:${palaceId}` : null,
+    persistCompletionRecord: false,
   })
   useGlobalTimerRegistration({
     scene: 'practice',

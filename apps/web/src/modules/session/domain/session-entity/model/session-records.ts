@@ -1,7 +1,18 @@
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review' | 'custom'
-export type SessionScene = SessionKind | 'english' | 'english_reading' | 'freestyle'
+export type SessionScene =
+  | SessionKind
+  | 'english'
+  | 'english_reading'
+  | 'freestyle'
+  | 'dashboard'
+  | 'palace_list'
+  | 'knowledge'
+  | 'english_hub'
+  | 'english_patterns'
+  | 'english_vocab'
+  | 'batch_generation'
 export type TimeRecordClientSource = 'desktop' | 'pwa'
 export type TimeRecordSortBy = 'started_at' | 'effective_seconds' | 'title'
 export type TimeRecordSortOrder = 'asc' | 'desc'
@@ -40,7 +51,7 @@ export interface SessionEventRecord {
 
 export interface SessionSceneSegment {
   scene: SessionScene
-  kind: SessionKind
+  kind: SessionKind | 'english' | 'english_reading'
   palaceId: number | null
   palaceSegmentId?: number | null
   sourceKind?: 'palace' | 'english' | 'english_reading' | null
@@ -49,6 +60,7 @@ export interface SessionSceneSegment {
   startedAt: string
   endedAt: string
   effectiveSeconds: number
+  routePath?: string
 }
 
 export interface TimeSessionRecord {

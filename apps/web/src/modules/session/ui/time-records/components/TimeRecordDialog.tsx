@@ -1,7 +1,9 @@
 import type { FormEvent } from 'react'
 import {
   formatCompletionMethod,
+  formatDuration,
   type SessionCompletionMethod,
+  type SessionSceneSegment,
 } from '@/modules/session/domain/session-entity/model'
 import {
   completionMethodOptions,
@@ -27,6 +29,7 @@ interface TimeRecordDialogProps {
   mode: 'create' | 'edit'
   form: TimeRecordFormState
   customTags?: CustomTimeRecordTag[]
+  sceneSegments?: SessionSceneSegment[]
   error: string | null
   isSubmitting: boolean
   onOpenChange: (open: boolean) => void
@@ -39,6 +42,7 @@ export function TimeRecordDialog({
   mode,
   form,
   customTags = [],
+  sceneSegments = [],
   error,
   isSubmitting,
   onOpenChange,
@@ -208,6 +212,30 @@ export function TimeRecordDialog({
             />
             手动调整有效时长
           </label>
+
+          {sceneSegments.length > 0 ? (
+            <div className="space-y-2 rounded-lg border border-border/70 bg-muted/15 p-4">
+              <div className="text-sm font-medium">页面停留组成</div>
+              <p className="text-xs text-muted-foreground">
+                列表只保留这一条连续学习记录，下面是这段时间里在各页面的停留。
+              </p>
+              <ul className="divide-y divide-border/60 text-sm">
+                {sceneSegments.map((segment, index) => (
+                  <li key={`${segment.startedAt}:${segment.routePath ?? segment.scene}:${index}`} className="flex items-start justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{segment.title || segment.scene}</div>
+                      {segment.routePath ? (
+                        <div className="truncate text-xs text-muted-foreground">{segment.routePath}</div>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 font-medium tabular-nums">
+                      {formatDuration(segment.effectiveSeconds)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

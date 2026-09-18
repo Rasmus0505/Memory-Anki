@@ -124,6 +124,7 @@ export default function EnglishCoursePage() {
     sourceKind: 'english',
     englishCourseId: Number.isFinite(courseId) ? courseId : null,
     persistKey: Number.isFinite(courseId) ? `english-course:${courseId}` : null,
+    persistCompletionRecord: false,
   })
 
   useGlobalTimerRegistration({

@@ -143,6 +143,7 @@ describe('PalaceViewPage timer registration', () => {
       automationScene: 'practice',
       sourceKind: 'palace',
       persistKey: 'palace_view:101',
+      persistCompletionRecord: false,
     })
     expect(mocks.useGlobalTimerRegistration).toHaveBeenCalledWith({
       scene: 'practice',

@@ -86,6 +86,7 @@ export const timeRecordsDashboardMock = {
   dialogMode: "create" as const,
   dialogOpen: false,
   formState: {},
+  editingSceneSegments: [],
   formError: null,
   isSubmittingRecord: false,
   deletingRecordId: null,

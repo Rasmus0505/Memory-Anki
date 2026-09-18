@@ -175,6 +175,7 @@ export default function Dashboard() {
         mode={timeRecordsDashboard.dialogMode}
         form={timeRecordsDashboard.formState}
         customTags={timeRecordsDashboard.customTags}
+        sceneSegments={timeRecordsDashboard.editingSceneSegments}
         error={timeRecordsDashboard.formError}
         isSubmitting={timeRecordsDashboard.isSubmittingRecord}
         onOpenChange={timeRecordsDashboard.onDialogOpenChange}

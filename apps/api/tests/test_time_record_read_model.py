@@ -120,6 +120,51 @@ def test_unified_read_model_reconciles_items_devices_kinds_and_trend(db_session)
     assert breakdown["research"] == 1_300
 
 
+def test_kind_breakdown_uses_scene_segments_without_inflating_parent_total(db_session):
+    july_3 = date(2026, 7, 3)
+    summary = {
+        "scene_segments": [
+            {"scene": "quiz", "kind": "quiz", "title": "宫殿做题", "effectiveSeconds": 400},
+            {"scene": "dashboard", "kind": "practice", "title": "洞察", "effectiveSeconds": 200},
+        ]
+    }
+    db_session.add(
+        StudySession(
+            id="dwell-mixed",
+            status="completed",
+            scene="practice",
+            target_type="none",
+            title="09:12 学习时段",
+            started_at=_local_time(july_3, 9),
+            ended_at=_local_time(july_3, 12),
+            effective_seconds=600,
+            progress_json="{}",
+            events_json="[]",
+            summary_json=json.dumps(summary, ensure_ascii=False),
+        )
+    )
+    db_session.commit()
+
+    payload = build_time_record_read_model(
+        db_session,
+        range_mode="all",
+        reference_date=july_3,
+    )
+    breakdown = {item["kind"]: item["seconds"] for item in payload["kind_breakdown"]}
+    assert payload["summary"]["total_effective_seconds"] == 600
+    assert breakdown["quiz"] == 400
+    assert breakdown["practice"] == 200
+
+    quiz = build_time_record_read_model(
+        db_session,
+        range_mode="all",
+        kind="quiz",
+        reference_date=july_3,
+    )
+    assert quiz["summary"]["total_effective_seconds"] == 600
+    assert {item["id"] for item in quiz["items"]} == {"dwell-mixed"}
+
+
 def test_kind_filter_uses_the_same_classification_as_breakdown(db_session):
     _seed_reconciliation_records(db_session)
 

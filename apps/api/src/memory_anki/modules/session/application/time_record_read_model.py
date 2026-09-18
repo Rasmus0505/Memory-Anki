@@ -167,7 +167,13 @@ def valid_time_records_query(
         query = query.filter(attributed_at < end)
     normalized_keyword = str(keyword or "").strip()
     if normalized_keyword:
-        query = query.filter(StudySession.title.ilike(f"%{normalized_keyword}%"))
+        like = f"%{normalized_keyword}%"
+        query = query.filter(
+            or_(
+                StudySession.title.ilike(like),
+                StudySession.summary_json.ilike(like),
+            )
+        )
     return _apply_time_record_kind_filter(query, kind)
 
 
@@ -189,6 +195,7 @@ def _apply_time_record_kind_filter(query: Query, kind: str | None) -> Query:
             or_(
                 custom_activity_tag,
                 and_(scene_fallback_allowed, StudySession.scene == "custom"),
+                StudySession.summary_json.like('%"kind": "custom"%'),
             )
         )
 
@@ -208,10 +215,14 @@ def _apply_time_record_kind_filter(query: Query, kind: str | None) -> Query:
         )
     else:
         scene_matches = StudySession.scene == normalized
+    segment_kind = f'%"kind": "{normalized}"%'
+    segment_scene = f'%"scene": "{normalized}"%'
     return query.filter(
         or_(
             activity_tag == normalized,
             and_(scene_fallback_allowed, scene_matches),
+            StudySession.summary_json.like(segment_kind),
+            StudySession.summary_json.like(segment_scene),
         )
     )
 
@@ -254,6 +265,44 @@ def time_record_kind(scene: str | None, summary_json: str | None = None) -> tupl
     else:
         kind = "practice"
     return kind, TIME_RECORD_KIND_LABELS[kind], True
+
+
+def _scene_segments(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = summary.get("scene_segments")
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _kind_contributions(
+    scene: str | None,
+    summary_json: str | None,
+    effective_seconds: int,
+) -> list[tuple[str, str, bool, int]]:
+    summary = _load_summary(summary_json)
+    contributions: list[tuple[str, str, bool, int]] = []
+    assigned = 0
+    for segment in _scene_segments(summary):
+        try:
+            seconds = max(0, int(segment.get("effectiveSeconds") or segment.get("effective_seconds") or 0))
+        except (TypeError, ValueError):
+            seconds = 0
+        if seconds <= 0:
+            continue
+        segment_kind = str(segment.get("kind") or "").strip()
+        segment_scene = str(segment.get("scene") or scene or "")
+        segment_summary = json.dumps({"activity_tag": segment_kind}, ensure_ascii=False) if segment_kind else None
+        kind, label, is_builtin = time_record_kind(segment_scene, segment_summary)
+        contributions.append((kind, label, is_builtin, seconds))
+        assigned += seconds
+    if contributions:
+        remainder = max(0, int(effective_seconds or 0) - assigned)
+        if remainder:
+            kind, label, is_builtin = time_record_kind(scene, summary_json)
+            contributions.append((kind, label, is_builtin, remainder))
+        return contributions
+    kind, label, is_builtin = time_record_kind(scene, summary_json)
+    return [(kind, label, is_builtin, max(0, int(effective_seconds or 0)))]
 
 
 def _client_source(summary_json: str | None) -> str:
@@ -322,19 +371,26 @@ def build_time_record_read_model(
         seconds = max(0, int(effective_seconds or 0))
         total_seconds += seconds
         source_totals[_client_source(summary_json)] += seconds
-        kind_key, label, is_builtin = time_record_kind(scene, summary_json)
-        item = kind_totals.setdefault(
-            kind_key,
-            {
-                "kind": kind_key,
-                "label": label,
-                "seconds": 0,
-                "sessions": 0,
-                "is_builtin": is_builtin,
-            },
-        )
-        item["seconds"] += seconds
-        item["sessions"] += 1
+        seen_kinds: set[str] = set()
+        for kind_key, label, is_builtin, kind_seconds in _kind_contributions(
+            scene,
+            summary_json,
+            seconds,
+        ):
+            item = kind_totals.setdefault(
+                kind_key,
+                {
+                    "kind": kind_key,
+                    "label": label,
+                    "seconds": 0,
+                    "sessions": 0,
+                    "is_builtin": is_builtin,
+                },
+            )
+            item["seconds"] += kind_seconds
+            if kind_key not in seen_kinds:
+                item["sessions"] += 1
+                seen_kinds.add(kind_key)
     breakdown = sorted(
         kind_totals.values(),
         key=lambda item: (

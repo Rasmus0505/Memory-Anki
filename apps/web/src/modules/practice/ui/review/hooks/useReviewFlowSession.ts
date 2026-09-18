@@ -64,7 +64,7 @@ export function useReviewFlowSession({
     palaceId,
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey,
-    persistCompletionRecord: sessionKind !== 'review',
+    persistCompletionRecord: false,
   })
   useGlobalTimerRegistration({
     scene: persistProgress ? 'practice' : 'review',

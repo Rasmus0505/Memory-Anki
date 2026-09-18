@@ -17,6 +17,7 @@ export interface GlobalTimerRegistration {
   isRouteActive: boolean
   becameActiveAt: number
   routePath: string
+  isDwellSession?: boolean
 }
 
 export const OVERLAY_VIEWPORT_MARGIN = 12
@@ -309,6 +310,9 @@ export function calculateResizedTimerOverlayLayout(
 }
 
 function rankEntry(entry: GlobalTimerRegistration) {
+  if (entry.isDwellSession && (entry.timer.status === 'running' || entry.timer.status === 'paused' || entry.timer.status === 'idle')) {
+    return 5
+  }
   if (entry.isRouteActive) {
     if (entry.timer.status === 'running' || entry.timer.status === 'paused') return 4
   }

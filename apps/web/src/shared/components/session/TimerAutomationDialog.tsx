@@ -12,8 +12,6 @@ import type { TimerAutomationConfig } from '@/shared/components/session/timer-au
 import {
   DEFAULT_TIMER_AUTOMATION_CONFIG,
 } from '@/shared/components/session/timer-automation-config'
-import type { TimerFocusConfig } from '@/shared/components/session/timer-focus-config'
-import type { BreakGuardConfig } from '@/shared/components/session/break-guard-config'
 import { TimerAutomationSection } from '@/shared/components/session/TimerAutomationSection'
 import { toDraft, parseAutomationDraft } from '@/shared/components/session/timerAutomationDialogModel'
 import { useTimerConfigDrafts } from '@/shared/components/session/useTimerConfigDrafts'
@@ -24,11 +22,6 @@ interface TimerAutomationDialogProps {
   onOpenChange: (open: boolean) => void
   onSave: (config: TimerAutomationConfig) => void
   onReset: () => void
-  /** Deprecated compatibility props; live timer no longer edits these settings. */
-  focusConfig?: TimerFocusConfig
-  onFocusConfigSave?: (config: TimerFocusConfig) => void
-  breakConfig?: BreakGuardConfig
-  onBreakConfigSave?: (config: BreakGuardConfig) => void
 }
 
 export function TimerAutomationDialog({
@@ -58,7 +51,7 @@ export function TimerAutomationDialog({
             <div>
               <DialogTitle>计时器设置</DialogTitle>
               <DialogDescription className="mt-1">
-                只统计页面可见且窗口有效的前台时间。后台和失焦立即暂停。
+                页面可见就计时，即使窗口失焦。切走标签、进后台或息屏会暂停；超过 15 分钟再回来会开一条新记录。
               </DialogDescription>
             </div>
           </div>

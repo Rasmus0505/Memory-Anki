@@ -21,7 +21,7 @@ describe('timer automation config', () => {
     ])
   })
 
-  it('keeps the two supported settings and ignores removed idle fields', () => {
+  it('keeps supported settings and ignores removed idle fields', () => {
     expect(
       sanitizeTimerAutomationConfig({
         schemaVersion: 3,

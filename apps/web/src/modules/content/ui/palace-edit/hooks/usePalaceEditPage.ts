@@ -56,6 +56,7 @@ export function usePalaceEditPage() {
     palaceId,
     sourceKind: palaceId != null ? 'palace' : null,
     persistKey: palaceId ? `palace_edit:${palaceId}` : null,
+    persistCompletionRecord: false,
   })
 
   const documentState = usePalaceEditorDocument({

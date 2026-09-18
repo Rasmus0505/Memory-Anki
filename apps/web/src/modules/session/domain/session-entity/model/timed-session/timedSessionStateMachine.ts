@@ -2,10 +2,26 @@ import * as React from 'react'
 import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
 import {
   buildTimedSessionStorageKey,
+  clearDwellLocalSnapshot,
   clearPersistedTimedSessionSnapshot,
+  readDwellLocalSnapshot,
+  writeDwellLocalSnapshot,
 } from '@/shared/hooks/timedSessionStorage'
 import {
+  DWELL_LIVE_SESSION_KEY,
+  DWELL_RESUME_WINDOW_MS,
+  dwellKindToSessionKind,
+  dwellSessionKeyForRecord,
+  formatDwellRecordTitle,
+  isDwellExcludedPath,
+  isDwellSessionKey,
+  pickDominantFragmentKind,
+  segmentKindFromScene,
+  shouldResumeDwell,
+} from './dwellPolicy'
+import {
   buildPersistedTimedSessionSnapshot,
+  buildRecordFromExpiredSuspendedSnapshot,
   writePersistedTimedSessionSnapshot,
 } from '@/shared/hooks/timedSessionSnapshot'
 import {
@@ -14,6 +30,7 @@ import {
   DEFAULT_TIMED_SESSION_FOCUS_ROUND,
   normalizeSnapshot,
   nowIso,
+  type ActiveSceneSegmentSnapshot,
   type GlowState,
   type SessionSceneSegment,
   type SessionStatus,
@@ -54,6 +71,10 @@ interface TimerAttachment {
   kind: TimedSessionOptions['kind']
   title: string
   active: boolean
+  palaceId: number | null
+  sourceKind: TimedSessionOptions['sourceKind']
+  englishCourseId: number | null
+  routePath?: string
 }
 
 interface TimerStore {
@@ -73,16 +94,7 @@ interface TimerStore {
   effectiveMs: number
   events: SessionEventRecord[]
   sceneSegments: SessionSceneSegment[]
-  activeSegment: {
-    scene: SessionSceneSegment['scene']
-    kind: SessionSceneSegment['kind']
-    palaceId: number | null
-    sourceKind: SessionSceneSegment['sourceKind']
-    englishCourseId: number | null
-    title: string
-    startedAt: string
-    startEffectiveSeconds: number
-  } | null
+  activeSegment: ActiveSceneSegmentSnapshot | null
   listeners: Set<() => void>
   attachments: Map<string, TimerAttachment>
   finalizeTimer: number | null
@@ -90,12 +102,12 @@ interface TimerStore {
   finalRecord: TimeSessionRecord | null
   finalPersist: Promise<TimeSessionRecord | null> | null
   unloadFinalized: boolean
+  hiddenAtMs: number | null
+  clientRevision: number
 }
 
 const stores = new Map<string, TimerStore>()
 let browserListenersInstalled = false
-let windowFocused = true
-let windowBlurred = false
 
 function stableSessionKey(options: TimedSessionOptions) {
   const sessionKey = options.sessionKey.trim()
@@ -131,16 +143,23 @@ function updateEffectiveSnapshot(store: TimerStore, currentMs = Date.now()) {
   return true
 }
 
-function persistSnapshot(store: TimerStore) {
+function persistSnapshot(store: TimerStore, options?: { suspended?: boolean }) {
   if (!store.storageKey) return
   if (!store.snapshot.startedAt || store.snapshot.status === 'idle' || store.snapshot.status === 'completed') {
     clearPersistedTimedSessionSnapshot(store.storageKey)
+    if (isDwellSessionKey(store.key)) clearDwellLocalSnapshot()
     return
   }
   updateEffectiveSnapshot(store)
+  const hiddenAtMs = store.hiddenAtMs
+  const resumeDeadlineAt = hiddenAtMs == null
+    ? null
+    : new Date(hiddenAtMs + DWELL_RESUME_WINDOW_MS).toISOString()
   const snapshot = buildPersistedTimedSessionSnapshot({
     recordId: store.recordId,
-    sessionKey: store.key,
+    sessionKey: isDwellSessionKey(store.key) && store.recordId
+      ? dwellSessionKeyForRecord(store.recordId)
+      : store.key,
     kind: store.kind,
     palaceId: store.palaceId,
     sourceKind: store.sourceKind,
@@ -155,17 +174,19 @@ function persistSnapshot(store: TimerStore) {
     sceneSegments: [...store.sceneSegments],
     activeSceneSegment: store.activeSegment,
     focusRound: { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND },
-    lastActivityAtMs: null,
+    lastActivityAtMs: hiddenAtMs,
     autoPauseDeadlineAtMs: null,
   }, {
-    suspended: false,
+    suspended: options?.suspended ?? store.snapshot.pauseReason === 'document_hidden',
+    suspendedAt: hiddenAtMs == null ? null : new Date(hiddenAtMs).toISOString(),
+    resumeDeadlineAt,
   })
   writePersistedTimedSessionSnapshot(store.storageKey, snapshot)
+  if (isDwellSessionKey(store.key) && snapshot.suspended) writeDwellLocalSnapshot(snapshot)
 }
 
 function canRunForegroundClock() {
   if (isLiveForegroundClockSuppressed()) return false
-  if (windowBlurred || !windowFocused) return false
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return false
   return true
 }
@@ -203,10 +224,6 @@ function startTicker(store: TimerStore) {
       pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
       return
     }
-    if (windowBlurred) {
-      pauseStore(store, 'window_blur', { source: 'window_blur' })
-      return
-    }
     if (updateEffectiveSnapshot(store)) {
       // SessionStorage is the crash-safe checkpoint. The ticker only refreshes
       // this local snapshot once per displayed second; it never writes the API.
@@ -235,35 +252,46 @@ function closeActiveSegment(store: TimerStore, endedAt = nowIso()) {
       startedAt: active.startedAt,
       endedAt,
       effectiveSeconds: seconds,
+      routePath: active.routePath,
     })
   }
   store.activeSegment = null
 }
 
 function openSegment(store: TimerStore, attachment?: TimerAttachment) {
+  if (attachment && attachmentIsExcluded(attachment)) return
   const scene = attachment?.scene ?? store.scene
-  if (store.activeSegment?.scene === scene) return
+  if (store.activeSegment?.scene === scene && store.activeSegment.routePath === (attachment?.routePath ?? store.activeSegment.routePath)) {
+    store.activeSegment = {
+      ...store.activeSegment,
+      title: attachment?.title ?? store.activeSegment.title,
+      palaceId: attachment?.palaceId ?? store.activeSegment.palaceId,
+      sourceKind: attachment?.sourceKind ?? store.activeSegment.sourceKind,
+      englishCourseId: attachment?.englishCourseId ?? store.activeSegment.englishCourseId,
+    }
+    return
+  }
   closeActiveSegment(store)
   store.activeSegment = {
     scene: scene as SessionSceneSegment['scene'],
-    kind: (attachment?.kind ?? store.kind) as SessionSceneSegment['kind'],
-    palaceId: store.palaceId,
-    sourceKind: store.sourceKind,
-    englishCourseId: store.englishCourseId,
+    kind: segmentKindFromScene(
+      attachment?.scene ?? store.scene,
+      (attachment?.kind ?? store.kind) as SessionSceneSegment['kind'],
+    ),
+    palaceId: attachment?.palaceId ?? store.palaceId,
+    sourceKind: attachment?.sourceKind ?? store.sourceKind,
+    englishCourseId: attachment?.englishCourseId ?? store.englishCourseId,
     title: attachment?.title ?? store.title,
     startedAt: nowIso(),
     startEffectiveSeconds: store.snapshot.effectiveSeconds,
+    routePath: attachment?.routePath,
   }
 }
 
 /** Settle the current foreground interval before changing scene metadata. */
 function switchSegment(store: TimerStore, attachment?: TimerAttachment) {
-  const scene = attachment?.scene ?? store.scene
-  if (store.activeSegment?.scene === scene) return
-
   const wasRunning = store.snapshot.status === 'running' && store.runningSinceMs != null
   if (wasRunning) settleRunning(store)
-  closeActiveSegment(store)
   openSegment(store, attachment)
 
   // A scene handoff is not a pause/resume transition. Continue the same
@@ -288,9 +316,30 @@ function pauseStore(store: TimerStore, reason: Exclude<TimedSessionPauseReason, 
     pauseCount: store.snapshot.pauseCount + 1,
     glowState: 'paused',
   }
+  if (reason === 'excluded_route') {
+    // Settings/backup freeze the clock but must not become a scene fragment
+    // or start the 15-minute leave gap.
+    closeActiveSegment(store)
+  }
   pushEvent(store, 'pause', { reason, ...(meta ?? {}) })
   persistSnapshot(store)
   notify(store)
+}
+
+function attachmentIsExcluded(attachment: TimerAttachment) {
+  return Boolean(attachment.routePath && isDwellExcludedPath(attachment.routePath))
+}
+
+function holdExcludedRoute(store: TimerStore, meta?: TimedSessionMeta) {
+  if (store.snapshot.status === 'running') {
+    pauseStore(store, 'excluded_route', { source: 'excluded_route', ...(meta ?? {}) })
+    return
+  }
+  if (store.activeSegment) {
+    closeActiveSegment(store)
+    persistSnapshot(store)
+    notify(store)
+  }
 }
 
 function startStore(store: TimerStore, meta?: TimedSessionMeta) {
@@ -301,6 +350,9 @@ function startStore(store: TimerStore, meta?: TimedSessionMeta) {
     store.snapshot = { ...store.snapshot, startedAt: nowIso() }
   }
   if (!store.recordId) store.recordId = createStableRecordId()
+  if (isDwellSessionKey(store.key) && store.startedAtMs != null) {
+    store.title = formatDwellRecordTitle(new Date(store.startedAtMs))
+  }
   store.runningSinceMs = Date.now()
   store.snapshot = {
     ...store.snapshot,
@@ -328,27 +380,96 @@ function resumeStore(store: TimerStore, meta?: TimedSessionMeta) {
   notify(store)
 }
 
+function nextClientRevision(store: TimerStore) {
+  store.clientRevision += 1
+  return store.clientRevision
+}
+
+function collectSegments(store: TimerStore, endedAt: string): SessionSceneSegment[] {
+  const segments = [...store.sceneSegments]
+  const active = store.activeSegment
+  if (!active) return segments
+  const seconds = Math.max(0, store.snapshot.effectiveSeconds - active.startEffectiveSeconds)
+  if (seconds <= 0) return segments
+  segments.push({
+    scene: active.scene,
+    kind: active.kind,
+    palaceId: active.palaceId,
+    sourceKind: active.sourceKind,
+    englishCourseId: active.englishCourseId,
+    title: active.title,
+    startedAt: active.startedAt,
+    endedAt,
+    effectiveSeconds: seconds,
+    routePath: active.routePath,
+  })
+  return segments
+}
+
 function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt = nowIso()) {
   if (!store.snapshot.startedAt || !store.recordId) return null
   settleRunning(store)
   updateEffectiveSnapshot(store)
   closeActiveSegment(store, endedAt)
+  const dominantKind = pickDominantFragmentKind(store.sceneSegments, store.kind)
   return {
     id: store.recordId,
-    sessionKey: store.key,
-    kind: store.kind,
+    sessionKey: isDwellSessionKey(store.key)
+      ? dwellSessionKeyForRecord(store.recordId)
+      : store.key,
+    clientRevision: nextClientRevision(store),
+    operationId: `timer:${store.recordId}:${method}:${store.clientRevision}`,
+    kind: dwellKindToSessionKind(dominantKind),
     palaceId: store.palaceId,
     sourceKind: store.sourceKind,
     englishCourseId: store.englishCourseId,
-    title: store.title,
+    title: isDwellSessionKey(store.key)
+      ? formatDwellRecordTitle(new Date(store.startedAtMs ?? Date.now()))
+      : store.title,
     startedAt: store.snapshot.startedAt,
     endedAt,
     effectiveSeconds: store.snapshot.effectiveSeconds,
     pauseCount: store.snapshot.pauseCount,
     completionMethod: method,
     durationEdited: false,
+    activityTag: dominantKind,
     events: [...store.events],
     sceneSegments: [...store.sceneSegments],
+  } satisfies TimeSessionRecord
+}
+
+function buildCheckpointRecord(store: TimerStore) {
+  if (!store.snapshot.startedAt || !store.recordId) return null
+  settleRunning(store)
+  updateEffectiveSnapshot(store)
+  const endedAt = nowIso()
+  const dominantKind = pickDominantFragmentKind(
+    collectSegments(store, endedAt),
+    store.kind,
+  )
+  return {
+    id: store.recordId,
+    sessionKey: isDwellSessionKey(store.key)
+      ? dwellSessionKeyForRecord(store.recordId)
+      : store.key,
+    clientRevision: nextClientRevision(store),
+    operationId: `timer:${store.recordId}:saved:${store.clientRevision}`,
+    kind: dwellKindToSessionKind(dominantKind),
+    palaceId: store.palaceId,
+    sourceKind: store.sourceKind,
+    englishCourseId: store.englishCourseId,
+    title: isDwellSessionKey(store.key)
+      ? formatDwellRecordTitle(new Date(store.startedAtMs ?? Date.now()))
+      : store.title,
+    startedAt: store.snapshot.startedAt,
+    endedAt,
+    effectiveSeconds: store.snapshot.effectiveSeconds,
+    pauseCount: store.snapshot.pauseCount,
+    completionMethod: 'saved' as const,
+    durationEdited: false,
+    activityTag: dominantKind,
+    events: [...store.events],
+    sceneSegments: collectSegments(store, endedAt),
   } satisfies TimeSessionRecord
 }
 
@@ -375,6 +496,10 @@ async function completeStore(
   if (!store.finalPersist) {
     store.finalPersist = persistTimedSessionRecord(record).then((persisted) => persisted ?? record)
   }
+  if (isDwellSessionKey(store.key) && store.storageKey) {
+    clearPersistedTimedSessionSnapshot(store.storageKey)
+    clearDwellLocalSnapshot()
+  }
   releaseStoreAfterCompletion(store)
   return store.finalPersist
 }
@@ -382,6 +507,10 @@ async function completeStore(
 function releaseStoreAfterCompletion(store: TimerStore) {
   if (typeof window === 'undefined') return
   window.setTimeout(() => {
+    if (store.attachments.size > 0 && isDwellSessionKey(store.key)) {
+      resetStore(store)
+      return
+    }
     if (store.attachments.size === 0 && stores.get(store.key) === store) {
       stores.delete(store.key)
     }
@@ -401,6 +530,8 @@ function resetStore(store: TimerStore) {
   store.finalRecord = null
   store.finalPersist = null
   store.unloadFinalized = false
+  store.hiddenAtMs = null
+  store.clientRevision = 0
   store.snapshot = {
     ...store.snapshot,
     effectiveSeconds: 0,
@@ -415,6 +546,7 @@ function resetStore(store: TimerStore) {
 }
 
 function scheduleFinalizeIfUnused(store: TimerStore) {
+  if (isDwellSessionKey(store.key)) return
   if (store.finalizeTimer != null || typeof window === 'undefined') return
   store.finalizeTimer = window.setTimeout(() => {
     store.finalizeTimer = null
@@ -425,18 +557,49 @@ function scheduleFinalizeIfUnused(store: TimerStore) {
   }, 0)
 }
 
+function syncAttachment(store: TimerStore, id: string, attachment: TimerAttachment) {
+  const next = attachmentIsExcluded(attachment)
+    ? { ...attachment, active: false }
+    : attachment
+  const previous = store.attachments.get(id)
+  store.attachments.set(id, next)
+  if (attachmentIsExcluded(next)) {
+    holdExcludedRoute(store)
+    return
+  }
+  if (!previous) return
+  if (previous.active !== next.active) {
+    setSceneActiveStore(store, id, next.active)
+    return
+  }
+  if (!next.active) return
+  if (store.snapshot.status === 'running') {
+    switchSegment(store, next)
+    persistSnapshot(store)
+    notify(store)
+  }
+}
+
 function attachStore(store: TimerStore, id: string, attachment: TimerAttachment) {
   if (store.finalizeTimer != null && typeof window !== 'undefined') {
     window.clearTimeout(store.finalizeTimer)
     store.finalizeTimer = null
   }
-  store.attachments.set(id, attachment)
+  const next = attachmentIsExcluded(attachment)
+    ? { ...attachment, active: false }
+    : attachment
+  store.attachments.set(id, next)
+  if (attachmentIsExcluded(next)) {
+    holdExcludedRoute(store)
+    notify(store)
+    return
+  }
   if (store.snapshot.status === 'running') {
     if (store.runningSinceMs == null && canRunForegroundClock()) {
       store.runningSinceMs = Date.now()
     }
     if (store.runningSinceMs != null) {
-      switchSegment(store, attachment)
+      switchSegment(store, next)
       if (store.tickTimer == null) startTicker(store)
     }
   }
@@ -505,10 +668,38 @@ function setSceneActiveStore(store: TimerStore, id: string, active: boolean, _me
   }
 }
 
+function resumeDeadlineExpired(snapshot: {
+  resumeDeadlineAt: string | null
+  lastActivityAtMs: number | null
+  suspendedAt: string | null
+  suspended: boolean
+}) {
+  if (snapshot.resumeDeadlineAt) {
+    const deadline = Date.parse(snapshot.resumeDeadlineAt)
+    return Number.isFinite(deadline) && Date.now() > deadline
+  }
+  if (snapshot.lastActivityAtMs != null) return !shouldResumeDwell(snapshot.lastActivityAtMs, Date.now())
+  if (snapshot.suspended && snapshot.suspendedAt) {
+    const hiddenAt = Date.parse(snapshot.suspendedAt)
+    return Number.isFinite(hiddenAt) && !shouldResumeDwell(hiddenAt, Date.now())
+  }
+  return false
+}
+
 function hydrateStore(store: TimerStore) {
   const raw = readSnapshot(store.storageKey)
+    ?? (isDwellSessionKey(store.key) ? readDwellLocalSnapshot() : null)
   const snapshot = normalizeSnapshot(raw)
   if (!snapshot || !snapshot.startedAt) return
+  if (resumeDeadlineExpired(snapshot)) {
+    const expired = buildRecordFromExpiredSuspendedSnapshot(snapshot)
+    if (expired && store.persistCompletionRecord) {
+      void persistTimedSessionRecord(expired)
+    }
+    if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
+    if (isDwellSessionKey(store.key)) clearDwellLocalSnapshot()
+    return
+  }
   const seconds = Math.max(0, Math.round(snapshot.effectiveSeconds))
   // The first page owns the session metadata. On reload the snapshot must win
   // over whichever later scene happened to mount first.
@@ -524,12 +715,13 @@ function hydrateStore(store: TimerStore) {
   store.events = [...snapshot.events]
   store.sceneSegments = [...snapshot.sceneSegments]
   store.activeSegment = snapshot.activeSceneSegment
+  store.hiddenAtMs = snapshot.lastActivityAtMs
   store.snapshot = {
     ...store.snapshot,
     effectiveSeconds: seconds,
     pauseCount: snapshot.pauseCount,
     status: 'paused',
-    pauseReason: 'restored',
+    pauseReason: snapshot.suspended ? 'document_hidden' : 'restored',
     startedAt: snapshot.startedAt,
   }
 }
@@ -572,6 +764,8 @@ function createStore(key: string, options: TimedSessionOptions): TimerStore {
     finalRecord: null,
     finalPersist: null,
     unloadFinalized: false,
+    hiddenAtMs: null,
+    clientRevision: 0,
   }
   hydrateStore(store)
   return store
@@ -625,6 +819,7 @@ export function adoptLiveTimerSnapshot(input: {
   effectiveSeconds: number
 }) {
   const store = stores.get(input.sessionKey)
+    ?? (isDwellSessionKey(input.sessionKey) ? stores.get(DWELL_LIVE_SESSION_KEY) : undefined)
   if (!store) return
   const seconds = Math.max(0, Math.round(input.effectiveSeconds))
   settleRunning(store)
@@ -650,35 +845,42 @@ export function adoptLiveTimerSnapshot(input: {
   notify(store)
 }
 
+function markStoresHidden() {
+  const hiddenAtMs = Date.now()
+  for (const store of stores.values()) {
+    if (store.snapshot.status === 'idle' || store.snapshot.status === 'completed') continue
+    store.hiddenAtMs = hiddenAtMs
+    if (store.snapshot.status === 'running') {
+      pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
+    } else {
+      persistSnapshot(store, { suspended: true })
+    }
+  }
+}
+
+function resolveStoresVisible() {
+  const nowMs = Date.now()
+  for (const store of stores.values()) {
+    const hiddenAtMs = store.hiddenAtMs
+    store.hiddenAtMs = null
+    if (store.snapshot.status === 'idle' || store.snapshot.status === 'completed') continue
+    if (!shouldResumeDwell(hiddenAtMs, nowMs)) {
+      void completeStore(store, 'left_page', { source: 'resume_expired' })
+      continue
+    }
+    systemResume(store, 'document_visible')
+  }
+}
+
 function installBrowserListeners() {
   if (browserListenersInstalled || typeof window === 'undefined') return
   browserListenersInstalled = true
-  // A newly mounted browser window is considered usable until an explicit blur
-  // event says otherwise. `document.hasFocus()` is false in jsdom and briefly
-  // false during real window startup, so it is not a safe initial gate.
-  windowFocused = true
-  windowBlurred = false
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      windowFocused = false
-      for (const store of stores.values()) pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
-    } else {
-      // Visibility returning is enough to recover a document-hidden pause when
-      // no separate focus event is emitted. An actual blur remains gated until
-      // the matching focus event arrives.
-      if (!windowBlurred) windowFocused = true
-      for (const store of stores.values()) systemResume(store, 'document_visible')
+      markStoresHidden()
+      return
     }
-  })
-  window.addEventListener('blur', () => {
-    windowFocused = false
-    windowBlurred = true
-    for (const store of stores.values()) pauseStore(store, 'window_blur', { source: 'window_blur' })
-  })
-  window.addEventListener('focus', () => {
-    windowFocused = true
-    windowBlurred = false
-    for (const store of stores.values()) systemResume(store, 'window_focus')
+    resolveStoresVisible()
   })
   const finalizeOnUnload = () => {
     for (const store of stores.values()) {
@@ -689,11 +891,18 @@ function installBrowserListeners() {
       ) continue
       store.unloadFinalized = true
       stopTicker(store)
-      const record = buildRecord(store, 'left_page')
+      settleRunning(store)
+      store.hiddenAtMs = Date.now()
+      persistSnapshot(store, { suspended: true })
+      const record = isDwellSessionKey(store.key)
+        ? buildCheckpointRecord(store)
+        : buildRecord(store, 'left_page')
       store.finalRecord = record
       if (record && store.persistCompletionRecord) void fireAndQueueTimeRecordOnUnload(record)
-      if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
-      store.snapshot = { ...store.snapshot, status: 'completed', pauseReason: null }
+      if (!isDwellSessionKey(store.key)) {
+        if (store.storageKey) clearPersistedTimedSessionSnapshot(store.storageKey)
+        store.snapshot = { ...store.snapshot, status: 'completed', pauseReason: null }
+      }
     }
   }
   window.addEventListener('pagehide', finalizeOnUnload)
@@ -711,12 +920,20 @@ export function useTimedSession(options: TimedSessionOptions) {
     kind: options.kind,
     title: options.title,
     active: true,
+    palaceId: options.palaceId,
+    sourceKind: options.sourceKind ?? null,
+    englishCourseId: options.englishCourseId ?? null,
+    routePath: options.routePath,
   })
   attachmentRef.current = {
     ...attachmentRef.current,
     scene: options.automationScene ?? options.kind,
     kind: options.kind,
     title: options.title,
+    palaceId: options.palaceId,
+    sourceKind: options.sourceKind ?? null,
+    englishCourseId: options.englishCourseId ?? null,
+    routePath: options.routePath,
   }
 
   React.useEffect(() => {
@@ -734,8 +951,24 @@ export function useTimedSession(options: TimedSessionOptions) {
     }
   }, [store])
 
+  React.useEffect(() => {
+    syncAttachment(store, attachmentIdRef.current, attachmentRef.current)
+  }, [
+    options.automationScene,
+    options.englishCourseId,
+    options.kind,
+    options.palaceId,
+    options.routePath,
+    options.sourceKind,
+    options.title,
+    store,
+  ])
+
   const start = React.useCallback((meta?: TimedSessionMeta) => startStore(store, meta), [store])
-  const pause = React.useCallback((meta?: TimedSessionMeta) => pauseStore(store, 'manual', meta), [store])
+  const pause = React.useCallback((meta?: TimedSessionMeta) => {
+    const reason = meta?.reason === 'excluded_route' ? 'excluded_route' : 'manual'
+    pauseStore(store, reason, meta)
+  }, [store])
   const resume = React.useCallback((meta?: TimedSessionMeta) => resumeStore(store, meta), [store])
   const complete = React.useCallback((method: SessionCompletionMethod, meta?: TimedSessionMeta, options?: { persistRecord?: boolean }) => completeStore(store, method, meta, options), [store])
   const reset = React.useCallback(() => resetStore(store), [store])
@@ -770,4 +1003,14 @@ export function useTimedSession(options: TimedSessionOptions) {
     complete,
     reset,
   }))
+}
+
+export function resetTimedSessionStoresForTests() {
+  for (const store of stores.values()) {
+    stopTicker(store)
+    if (store.finalizeTimer != null && typeof window !== 'undefined') {
+      window.clearTimeout(store.finalizeTimer)
+    }
+  }
+  stores.clear()
 }

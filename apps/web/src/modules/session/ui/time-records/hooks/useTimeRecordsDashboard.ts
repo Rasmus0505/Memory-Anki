@@ -13,6 +13,7 @@ import {
   type SessionKindBreakdownItem,
   type TimeRecordSourceSummary,
   type TimeSessionRecord,
+  type SessionSceneSegment,
 } from '@/modules/session/domain/session-entity/model'
 import type {
   TimeRecordKind,
@@ -85,6 +86,7 @@ export interface UseTimeRecordsDashboardResult {
   dialogMode: 'create' | 'edit'
   dialogOpen: boolean
   formState: TimeRecordFormState
+  editingSceneSegments: SessionSceneSegment[]
   formError: string | null
   isSubmittingRecord: boolean
   deletingRecordId: string | null
@@ -522,6 +524,7 @@ export function useTimeRecordsDashboard(
     dialogMode,
     dialogOpen,
     formState,
+    editingSceneSegments: editingRecord?.sceneSegments ?? [],
     formError,
     isSubmittingRecord,
     deletingRecordId,

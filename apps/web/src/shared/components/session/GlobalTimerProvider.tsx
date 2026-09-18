@@ -36,6 +36,7 @@ import {
   GlobalTimerActionsContext,
   type GlobalTimerActions,
 } from '@/shared/components/session/globalTimerContext'
+import { AppDwellSession } from '@/modules/session/public'
 
 export function GlobalTimerProvider({
   children,
@@ -259,6 +260,7 @@ export function GlobalTimerProvider({
 
   return (
     <GlobalTimerActionsContext.Provider value={contextValue}>
+      <AppDwellSession />
       {children}
       {showFloatingTimerChrome ? (
         <GlobalTimerFloatingOverlay

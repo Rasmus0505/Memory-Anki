@@ -1,6 +1,16 @@
 import * as React from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/modules/session/public', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/session/public')>()
+  return {
+    ...actual,
+    AppDwellSession: () => null,
+  }
+})
+
 import {
   GlobalTimerProvider,
   useGlobalTimerRegistration,
@@ -10,6 +20,7 @@ import {
   saveTimerAutomationConfig,
 } from '@/shared/components/session/timer-automation-config'
 import { TIMER_OVERLAY_LAYOUT_STORAGE_KEY } from '@/shared/components/session/timer-overlay-layout'
+import { resetTimedSessionStoresForTests } from '@/modules/session/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import type {
@@ -66,9 +77,11 @@ function Probe({
 
 function renderProvider(timer?: TimedSessionController) {
   return render(
-    <GlobalTimerProvider>
-      {timer ? <Probe timer={timer} /> : null}
-    </GlobalTimerProvider>,
+    <MemoryRouter>
+      <GlobalTimerProvider>
+        {timer ? <Probe timer={timer} /> : null}
+      </GlobalTimerProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -76,6 +89,7 @@ describe('GlobalTimerProvider', () => {
   beforeEach(() => {
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
+    resetTimedSessionStoresForTests()
     delete window.memoryAnkiDesktopTimer
   })
 
