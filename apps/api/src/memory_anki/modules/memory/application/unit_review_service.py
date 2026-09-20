@@ -524,6 +524,8 @@ def open_unit_review_encounter(
     if existing is not None:
         return get_unit_review_session(session, study.id)
     if item.status == ITEM_PASSED:
+        # Freestyle start must finish this session and open an amend glance
+        # instead of reaching here. Formal review still cannot stack encounters.
         raise ValueError("passed review unit cannot start another encounter")
 
     max_sequence = (
@@ -546,6 +548,43 @@ def open_unit_review_encounter(
     )
     session.commit()
     return get_unit_review_session(session, study.id)
+
+
+def _finish_stale_passed_freestyle_session(
+    session: Session,
+    study: StudySession,
+    unit_id: str,
+) -> StudySession | None:
+    """Complete a passed glance that never closed its study session.
+
+    Swipe-back mints a new encounter_id. If the previous pass left
+    `ReviewSessionUnit.status == passed` with no open encounter, reusing that
+    session would 400 `passed review unit cannot start another encounter`.
+    Finish it so start can open an amend glance in the same round.
+    """
+    if study.status != SESSION_ACTIVE:
+        return study
+    item = (
+        session.query(ReviewSessionUnit)
+        .filter_by(study_session_id=study.id, unit_id=unit_id)
+        .one_or_none()
+    )
+    if item is None or item.status != ITEM_PASSED:
+        return study
+    open_row = (
+        session.query(ReviewUnitEncounter)
+        .filter_by(
+            study_session_id=study.id,
+            unit_id=unit_id,
+            status=ENCOUNTER_OPEN,
+        )
+        .one_or_none()
+    )
+    if open_row is not None:
+        return study
+    _complete_unit_review_session(session, study)
+    session.commit()
+    return None
 
 
 def start_freestyle_unit_review_session(
@@ -637,6 +676,9 @@ def start_freestyle_unit_review_session(
                 session.commit()
         if study is not None and study.status != SESSION_ACTIVE:
             study = None
+
+    if study is not None:
+        study = _finish_stale_passed_freestyle_session(session, study, state.id)
 
     if study is None:
         if state.due_date > date.today() and not not_due_ok:
@@ -819,12 +861,17 @@ def _rate_open_encounter(
 
     If this unit already has a rated encounter in the same round, reuse that
     encounter's baseline so a later rating overwrites instead of stacking SRS.
+    Idempotent replay is per glance: a retry occurrence must not return the source glance's after_state (that remounts the map at the root).
     """
     source = baseline_from or encounter
+    own_previous_id = encounter.effective_operation_id
+    own_previous = (
+        session.get(ReviewUnitRatingOperation, own_previous_id) if own_previous_id else None
+    )
+    if own_previous is not None and own_previous.rating == rating and not batch_id:
+        return json.loads(own_previous.after_state_json)
     previous_id = source.effective_operation_id or encounter.effective_operation_id
     previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
-    if previous is not None and previous.rating == rating and not batch_id:
-        return json.loads(previous.after_state_json)
     before = json.loads(source.baseline_state_json)
     result = _apply_rating_from_snapshot(state, item, before, rating)
     now = utc_now_naive()
@@ -1044,12 +1091,12 @@ def _ensure_open_freestyle_rating_target(
 
     requested_session_id = str(study_session_id or "").strip()
     requested_encounter_id = str(encounter_id or "").strip()
+    if not requested_encounter_id:
+        raise ValueError("rating identity mismatch")
     study = session.get(StudySession, requested_session_id) if requested_session_id else None
-    encounter = (
-        session.get(ReviewUnitEncounter, requested_encounter_id)
-        if requested_encounter_id
-        else None
-    )
+    encounter = session.get(ReviewUnitEncounter, requested_encounter_id)
+    if encounter is not None and str(encounter.unit_id or "") != str(state.id):
+        raise ValueError("rating identity mismatch")
     requested_round_id = str(round_id or "").strip()
     if not requested_round_id and encounter is not None:
         requested_round_id = str(encounter.round_id or "").strip()
@@ -1066,6 +1113,7 @@ def _ensure_open_freestyle_rating_target(
         and encounter.unit_revision == state.revision
     )
     if live:
+        assert study is not None and encounter is not None
         return study, state, _session_item(session, study.id, state.id), encounter
 
     can_reopen = bool(requested_round_id) and (

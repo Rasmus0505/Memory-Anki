@@ -43,11 +43,14 @@ export function FreestyleRoundConfigDialog({
   config,
   onOpenChange,
   onSaveConfig,
+  mode = 'replan',
 }: {
   open: boolean
   config: FreestyleFeedConfig
   onOpenChange: (open: boolean) => void
   onSaveConfig: (config: FreestyleFeedConfig) => void
+  /** Settlement 「再来一轮」 uses nextRound; in-round HUD uses replan. */
+  mode?: 'replan' | 'nextRound'
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
@@ -128,7 +131,9 @@ export function FreestyleRoundConfigDialog({
                 <SlidersHorizontal className="size-5 text-primary" />随心配置
               </DialogTitle>
               <DialogDescription>
-                保存后重排尚未开始的卡片，保留本轮已完成和已排除状态。
+                {mode === 'nextRound'
+                  ? '确认后开始全新一轮：按当前配置重新生成队列。'
+                  : '保存后重排尚未开始的卡片，保留本轮已完成和已排除状态。'}
               </DialogDescription>
             </div>
             <DialogClose onClick={() => onOpenChange(false)} />
@@ -186,7 +191,8 @@ export function FreestyleRoundConfigDialog({
                 onOpenChange(false)
               }}
             >
-              <Save className="size-4" />保存配置并重排
+              <Save className="size-4" />
+              {mode === 'nextRound' ? '开始下一轮' : '保存配置并重排'}
             </Button>
           </DialogFooter>
         </DialogContent>

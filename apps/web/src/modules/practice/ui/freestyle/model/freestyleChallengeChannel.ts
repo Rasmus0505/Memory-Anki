@@ -137,8 +137,8 @@ export function channelAdjustment(
 
   if (reading.state === 'bored') {
     const alreadyWidest =
-      config.streams.memory_palace.due_policy === 'all_content_due_weighted' &&
-      config.streams.quiz.weak_priority
+      config.streams.quiz.mastery_buckets.includes('stable')
+      && config.streams.quiz.weak_priority
     if (alreadyWidest) return null
     return {
       actionLabel: '加点新的',
@@ -146,14 +146,21 @@ export function channelAdjustment(
       apply: (current) =>
         sanitizeFreestyleFeedConfig({
           ...current,
-          due_policy: 'all_content_due_weighted',
+          due_policy: 'due_only',
           streams: {
             ...current.streams,
             memory_palace: {
               ...current.streams.memory_palace,
-              due_policy: 'all_content_due_weighted',
+              due_policy: 'due_only',
             },
-            quiz: { ...current.streams.quiz, weak_priority: true },
+            quiz: {
+              ...current.streams.quiz,
+              weak_priority: true,
+              mastery_buckets: [
+                ...current.streams.quiz.mastery_buckets,
+                'stable',
+              ],
+            },
           },
         }),
     }

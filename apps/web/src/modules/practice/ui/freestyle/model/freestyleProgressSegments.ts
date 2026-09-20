@@ -6,6 +6,7 @@ import {
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
+  type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
@@ -25,10 +26,62 @@ export interface FreestyleProgressSegment {
   sourceLabel?: string
   waitingRetry?: boolean
   retryAfterCards?: number
+  /** True on the first today-source tick so the rail can draw 欠账 | 今天. */
+  cohortBoundary?: boolean
+  enteredOn?: string
 }
 
-/** High-contrast amber fill for retry occurrence circles (not palace-mixed bars). */
-export const retryNodeClass = 'bg-amber-400 text-zinc-950'
+/**
+ * Retry occurrence fill on the rail: unfinished is faint amber, completed is solid.
+ * Viewing size is separate (`progressSegmentShapeClass` / node size).
+ */
+export function retryNodeToneClass(tone: FreestyleSegmentTone): string {
+  if (tone === 'done') return 'bg-amber-400 text-zinc-950'
+  return 'bg-amber-400/25 text-amber-50'
+}
+
+/** Card badge / 本轮安排 row chrome for a retry occurrence. */
+export function retryChromeClass(done: boolean): string {
+  return done
+    ? 'border-emerald-500/40 bg-emerald-500/12 text-emerald-800 dark:border-emerald-400/35 dark:bg-emerald-500/15 dark:text-emerald-200'
+    : 'border-amber-500/50 bg-amber-400/90 text-zinc-950 dark:border-amber-300/50 dark:bg-amber-400 dark:text-zinc-950'
+}
+
+/**
+ * Fill follows this-round recorded rating. A live selectedRating can upgrade
+ * pending → completed/retry immediately; an empty amend glance keeps the plan
+ * status so swipe-back does not look unrated.
+ */
+export function visualPlanStatus(
+  status: FreestyleRoundPlanCardStatus,
+  encounter?: FreestyleUnitEncounterState,
+  entryStatus?: FreestyleRoundPlanCardStatus,
+): FreestyleRoundPlanCardStatus {
+  if (status === 'excluded') return status
+  if (encounter?.selectedRating != null) {
+    if (encounter.passed === true) return 'completed'
+    if (encounter.passed === false) return 'retry'
+  }
+  // `planCardStatus` uses `active` as the playhead. Fill should keep this-round
+  // completed/retry instead of looking unrated just because the card is on screen.
+  if (
+    status === 'active'
+    && entryStatus
+    && entryStatus !== 'active'
+    && entryStatus !== 'excluded'
+  ) {
+    return entryStatus
+  }
+  return status
+}
+
+export function liveEncounterFillDone(
+  encounter: FreestyleUnitEncounterState | undefined,
+  completed: boolean,
+): boolean {
+  if (encounter?.selectedRating != null) return encounter.passed === true
+  return completed
+}
 
 export interface FreestyleProgressSummary {
   segments: FreestyleProgressSegment[]
@@ -64,7 +117,8 @@ export function segmentTone(
     case 'excluded':
       return null
     case 'active':
-      return 'current'
+      // Playhead size is `viewing`, not fill. An unrated card on screen stays faint.
+      return 'pending'
     case 'completed':
       return 'done'
     case 'retry':
@@ -243,6 +297,34 @@ function snapshotSourceLabel(
   return roundPlan?.cardsById[sourceId]?.label || planEntry?.label || sourceId || id
 }
 
+function collapseRetrySegments(segments: FreestyleProgressSegment[]) {
+  const bySource = new Map<string, FreestyleProgressSegment[]>()
+  segments.forEach((segment) => {
+    if (segment.kind !== 'retry') return
+    const source = segment.sourceCardId || segment.cardId
+    const list = bySource.get(source) ?? []
+    list.push(segment)
+    bySource.set(source, list)
+  })
+  const drop = new Set<string>()
+  bySource.forEach((list) => {
+    if (list.length <= 1) return
+    const unfinished = list.filter((segment) => segment.tone !== 'done')
+    const ranked = unfinished.length ? unfinished : list
+    const keep = list.find((segment) => segment.viewing)
+      || ranked.reduce((best, segment) => (
+        Math.max(1, segment.retryAttempt || 1) >= Math.max(1, best.retryAttempt || 1) ? segment : best
+      ))
+    list.forEach((segment) => {
+      if (segment.cardId !== keep.cardId) drop.add(segment.cardId)
+    })
+  })
+  if (!drop.size) return
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (drop.has(segments[index].cardId)) segments.splice(index, 1)
+  }
+}
+
 export function retryNodeLabel(segment: FreestyleProgressSegment): string {
   const attempt = Math.max(1, Math.round(segment.retryAttempt || 1))
   const label = String(segment.sourceLabel || '').trim()
@@ -250,12 +332,12 @@ export function retryNodeLabel(segment: FreestyleProgressSegment): string {
 }
 
 function segmentStatusLabel(segment: FreestyleProgressSegment): string {
-  if (segment.kind === 'retry') return retryNodeLabel(segment)
   if (segment.viewing || segment.tone === 'current') {
     if (segment.tone === 'done') return '当前 · 已过'
     return '当前'
   }
   if (segment.tone === 'done') return '已过'
+  if (segment.kind === 'retry') return '待重练'
   if (segment.waitingRetry || segment.tone === 'retry') return '稍后重练'
   return '待练'
 }
@@ -268,7 +350,7 @@ export function progressSegmentHoverLabel(
 ): string {
   const place = total > 0 ? `${index + 1}/${total}` : ''
   if (segment.kind === 'retry') {
-    return [place, retryNodeLabel(segment)].filter(Boolean).join(' · ')
+    return [place, retryNodeLabel(segment), segmentStatusLabel(segment)].filter(Boolean).join(' · ')
   }
   const name = String(segment.sourceLabel || '').trim()
   const titled = name ? `《${name}》` : ''
@@ -281,6 +363,7 @@ export function buildFreestyleProgressSummary(
   completedIds: string[],
   hiddenIds: string[],
   currentCardId: string | null,
+  encounters: Record<string, FreestyleUnitEncounterState> = {},
 ): FreestyleProgressSummary {
   const completed = new Set(completedIds.map(String))
   const hidden = new Set(hiddenIds.map(String))
@@ -298,13 +381,17 @@ export function buildFreestyleProgressSummary(
 
     const card = liveById.get(id)
     if (card) {
-      const tone = segmentTone(
+      const sourceId = sourceCardId(card)
+      const encounter = encounters[card.id] ?? (sourceId !== card.id ? encounters[sourceId] : undefined)
+      const status = visualPlanStatus(
         planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
+        encounter,
+        planEntry?.status,
       )
+      const tone = segmentTone(status)
       if (!tone) continue
       const retryKind = isRetryOccurrence(card)
       const waitingRetry = !retryKind && planEntry?.status === 'retry'
-      const sourceId = sourceCardId(card)
       segments.push({
         cardId: card.id,
         tone,
@@ -312,6 +399,7 @@ export function buildFreestyleProgressSummary(
         palaceDone: false,
         viewing: currentCardId === card.id,
         kind: retryKind ? 'retry' : 'source',
+        enteredOn: planEntry?.enteredOn,
         sourceLabel: progressCardLabel(card, cards, roundPlan),
         ...(retryKind
           ? {
@@ -353,6 +441,7 @@ export function buildFreestyleProgressSummary(
       palaceDone: false,
       viewing: currentCardId === id,
       kind: retryKind ? 'retry' : 'source',
+      enteredOn: planEntry?.enteredOn,
       sourceLabel: snapshotSourceLabel(id, sourceId, planEntry, roundPlan),
       ...(retryKind
         ? {
@@ -377,6 +466,22 @@ export function buildFreestyleProgressSummary(
       || completed.has(sourceId)
     ) {
       passedSources.add(sourceId || id)
+    }
+  }
+
+  collapseRetrySegments(segments)
+  retryInserted = segments.filter((segment) => segment.kind === 'retry').length
+
+  const today = String(roundPlan?.today || '').trim()
+  if (today) {
+    const firstToday = segments.findIndex(
+      (segment) => segment.kind !== 'retry' && segment.enteredOn === today,
+    )
+    if (firstToday > 0) {
+      const hasCarried = segments.slice(0, firstToday).some(
+        (segment) => segment.enteredOn && segment.enteredOn !== today,
+      )
+      if (hasCarried) segments[firstToday].cohortBoundary = true
     }
   }
 
@@ -412,25 +517,20 @@ export function buildFreestyleProgressSummary(
 }
 
 export function progressHudText(summary: FreestyleProgressSummary): string {
-  if (summary.scheduledBase === 0 && summary.retryInserted === 0) return ''
-  const position = summary.positionBase > 0 ? summary.positionBase : 0
-  const parts = [`${position || '–'}/${summary.scheduledBase}`]
-  if (summary.retryInserted > 0) parts.push(`重练 +${summary.retryInserted}`)
-  if (summary.passedCount > 0) parts.push(`过 ${summary.passedCount}`)
-  return parts.join(' · ')
+  if (summary.total === 0) return ''
+  const position = summary.position > 0 ? summary.position : 0
+  return `${position || '–'}/${summary.total}`
 }
 
 /**
  * The rail is decorative, so every count it draws has to be spoken here instead.
  */
 export function progressRailLabel(summary: FreestyleProgressSummary): string {
-  if (summary.scheduledBase === 0 && summary.total === 0) return '本轮暂无安排。点击查看本轮安排'
+  if (summary.total === 0) return '本轮暂无安排。点击查看本轮安排'
   const parts = [
-    summary.positionBase > 0
-      ? `本轮进度 ${summary.positionBase}/${summary.scheduledBase}`
-      : `本轮共 ${summary.scheduledBase} 张`,
+    summary.position > 0
+      ? `本轮进度 ${summary.position}/${summary.total}`
+      : `本轮共 ${summary.total} 张`,
   ]
-  if (summary.retryInserted > 0) parts.push(`重练 ${summary.retryInserted} 张`)
-  if (summary.passedCount > 0) parts.push(`已通过 ${summary.passedCount}`)
   return `${parts.join('，')}。点击查看本轮安排`
 }

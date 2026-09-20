@@ -280,19 +280,11 @@ export function FreestyleTrainingConfigForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
               label="复习单元范围"
-              hint={
-                value.due_policy === 'due_only'
-                  ? '只动今天到期的单元。'
-                  : value.due_policy === 'all_content_due_weighted'
-                    ? '到期和补充一起安排；补充卡评记得/轻松只记下，不改下次到期日。'
-                    : '先刷完到期，不够再补；补充卡评记得/轻松只记下，不改下次到期日。'
-              }
+              hint="只刷今天到期的单元，到期没有就空着。"
             >
-              <select className={FIELD_CLASS} value={value.due_policy} onChange={(event) => onChange(updateStream(config, 'memory_palace', { due_policy: event.target.value }))}>
-                <option value="due_first_then_expand">到期刷完后补充</option>
-                <option value="due_only">只刷到期单元</option>
-                <option value="all_content_due_weighted">到期与补充一起安排</option>
-              </select>
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+                只刷到期单元
+              </div>
             </Field>
             <Field label="多个宫殿时">
               <select className={FIELD_CLASS} value={value.palace_order} onChange={(event) => onChange(updateStream(config, 'memory_palace', { palace_order: event.target.value }))}>
@@ -419,11 +411,13 @@ export function FreestyleTrainingConfigForm({
       {activeStreams.includes('memory_palace') ? renderPalaceStream() : null}
       {activeStreams.includes('quiz') ? renderQuizStream() : null}
 
-      <Section title="一轮刷多少">
-        <Field label="本轮总数量" hint="候选不足时有多少刷多少，不会重复卡片。">
-          <Input type="number" min={5} max={100} value={config.queue_length} onChange={(event) => set({ queue_length: Number(event.target.value) })} />
-        </Field>
-      </Section>
+      {config.training_mode === 'quiz' ? (
+        <Section title="本次题目数">
+          <Field label="题目数量" hint="纯刷题时抽这么多道。宫殿到期不受这个上限截断。">
+            <Input type="number" min={5} max={100} value={config.queue_length} onChange={(event) => set({ queue_length: Number(event.target.value) })} />
+          </Field>
+        </Section>
+      ) : null}
 
       <details className="rounded-xl border border-border/60 bg-card/40 p-4">
         <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>

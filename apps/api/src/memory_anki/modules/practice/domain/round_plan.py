@@ -27,12 +27,18 @@ def empty_plan() -> Plan:
         "excluded_ids": [],
         "occurrences": [],
         "encounters": {},
+        "today": "",
     }
 
 
-def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None) -> list[dict[str, Any]]:
+def snapshot_cards(
+    cards: Sequence[Mapping[str, Any]] | None,
+    *,
+    today: str = "",
+) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
+    stamp = _day(today)
     for card in cards or ():
         card_id = _text(card.get("card_id") or card.get("id"))
         if not card_id or card_id in seen or card_id.startswith("retry:") or _text(card.get("occurrence_kind")) == "retry":
@@ -53,19 +59,21 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None) -> list[dict[str, 
                 "palace_id": _palace_id(card.get("palace_id")),
                 "palace_title": _text(card.get("palace_title")),
                 "label": label or card_id,
+                "entered_on": _day(card.get("entered_on")) or stamp,
             }
         )
     return result
 
 
-def plan_from_cards(cards: Sequence[Mapping[str, Any]] | None) -> Plan:
+def plan_from_cards(cards: Sequence[Mapping[str, Any]] | None, *, today: str = "") -> Plan:
     plan = empty_plan()
-    original = snapshot_cards(cards)
+    original = snapshot_cards(cards, today=today)
     presented = [item["card_id"] for item in original]
     plan["original_cards"] = original
     plan["presented_ids"] = presented
     plan["current_card_id"] = presented[0] if presented else None
     plan["current_index"] = 0
+    plan["today"] = _day(today)
     return plan
 
 
@@ -87,6 +95,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "palace_id": _palace_id(item.get("palace_id")),
                 "palace_title": _text(item.get("palace_title")),
                 "label": _text(item.get("label")) or card_id,
+                "entered_on": _day(item.get("entered_on")),
             }
         )
     occurrences = []
@@ -115,6 +124,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "insert_target_index": max(0, _int(item.get("insert_target_index"))),
                 "status": status,
                 "encounter_id": _text(item.get("encounter_id")),
+                "entered_on": _day(item.get("entered_on")),
             }
         )
     encounters: dict[str, dict[str, Any]] = {}
@@ -141,16 +151,53 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "excluded_ids": _unique(raw.get("excluded_ids") or []),
         "occurrences": occurrences,
         "encounters": encounters,
+        "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(
             raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None
         ),
     }
+    _collapse_retries(normalized)
     _sync_index(normalized)
     return normalized
 
 
 def occurrence_id_for(round_id: str, source_key: str, attempt: int) -> str:
     return f"retry:{_text(round_id)}:{_text(source_key)}:{max(1, int(attempt))}"
+
+
+def assert_rating_identity(
+    plan: Mapping[str, Any],
+    *,
+    card_id: str,
+    occurrence_id: str,
+    encounter_id: str,
+    unit_id: str = "",
+) -> None:
+    normalized = normalize_plan(plan)
+    rated_id, occ_id = _text(card_id), _text(occurrence_id)
+    requested_unit = _text(unit_id)
+    if not _text(encounter_id):
+        raise ValueError("encounter_id is required")
+    if not rated_id and not occ_id:
+        raise ValueError("card_id is required")
+    if occ_id:
+        occ = _find_occurrence(normalized, occ_id)
+        if occ is None or (rated_id and rated_id != occ_id):
+            raise ValueError("rating identity mismatch")
+        source_id = _text(occ.get("source_card_id")) or occ_id
+        original = _original_card(normalized, source_id)
+        source_unit = _text((original or {}).get("unit_id")) or _text(occ.get("source_unit_id"))
+    else:
+        if _find_occurrence(normalized, rated_id) is not None:
+            raise ValueError("rating identity mismatch")
+        original = _original_card(normalized, rated_id)
+        source_unit = _text((original or {}).get("unit_id"))
+    if requested_unit and source_unit and requested_unit != source_unit:
+        raise ValueError("rating identity mismatch")
+
+
+def plan_is_fully_handled(plan: Mapping[str, Any] | None) -> bool:
+    return next_unfinished_id(plan or {}) is None
 
 
 def apply_rating(
@@ -165,28 +212,24 @@ def apply_rating(
     unit_revision: int | None = None,
 ) -> Plan:
     next_plan = normalize_plan(plan)
-    rated_id = _text(card_id)
-    occ_id = _text(occurrence_id)
-    if not rated_id and not occ_id:
-        raise ValueError("card_id is required")
+    rated_id, occ_id, encounter = _text(card_id), _text(occurrence_id), _text(encounter_id)
     rating_value = _int(rating)
-    if rating_value not in FAIL_RATINGS and rating_value not in PASS_RATINGS:
+    if rating_value not in FAIL_RATINGS | PASS_RATINGS:
         raise ValueError("rating must be 1-4")
-    encounter = _text(encounter_id)
-    if not encounter:
-        raise ValueError("encounter_id is required")
-
+    assert_rating_identity(
+        next_plan,
+        card_id=rated_id,
+        occurrence_id=occ_id,
+        encounter_id=encounter,
+        unit_id=unit_id,
+    )
     occ = _find_occurrence(next_plan, occ_id) or _find_occurrence(next_plan, rated_id)
     source_id = _text(occ.get("source_card_id") if occ else rated_id) or rated_id
     original = _original_card(next_plan, source_id)
     source_unit_id = _text(unit_id) or _text((original or {}).get("unit_id")) or (
         _text(occ.get("source_unit_id")) if occ else ""
     )
-    revision = (
-        _int(unit_revision)
-        if unit_revision is not None
-        else _int((original or {}).get("unit_revision"))
-    )
+    revision = _int(unit_revision) if unit_revision is not None else _int((original or {}).get("unit_revision"))
     _set_encounter(next_plan, rated_id or source_id, encounter, revision, rating_value)
     if rated_id and rated_id != source_id:
         _set_encounter(next_plan, source_id, encounter, revision, rating_value)
@@ -217,13 +260,6 @@ def leave_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     if not left_id:
         return next_plan
     left_occ = _find_occurrence(next_plan, left_id)
-    if (
-        left_occ is not None
-        and left_occ["status"] == OCCURRENCE_INSERTED
-        and left_occ.get("rating") in FAIL_RATINGS
-    ):
-        left_occ["status"] = OCCURRENCE_COMPLETED
-        _append_unique(next_plan["completed_ids"], left_id)
     source_id = _text(left_occ.get("source_card_id") if left_occ else left_id) or left_id
     presented = next_plan["presented_ids"]
     if left_id in presented:
@@ -232,6 +268,15 @@ def leave_card(plan: Mapping[str, Any], card_id: str) -> Plan:
         anchor_index = presented.index(source_id)
     else:
         anchor_index = int(next_plan.get("current_index") or 0)
+    if (
+        left_occ is not None
+        and left_occ["status"] == OCCURRENCE_INSERTED
+        and left_occ.get("rating") in FAIL_RATINGS
+    ):
+        left_occ["retry_attempt"] = int(left_occ["retry_attempt"] or 0) + 1
+        _reposition_retry_inplace(next_plan, left_occ["occurrence_id"], anchor_index)
+        _sync_index(next_plan)
+        return next_plan
     pending = [
         item
         for item in next_plan["occurrences"]
@@ -297,41 +342,6 @@ def complete_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     return next_plan
 
 
-def uncomplete_card(plan: Mapping[str, Any], card_id: str) -> Plan:
-    """Drop a rating so the source card is unfinished again.
-
-    Cancels retry copies that existed only because of that rating. The learner
-    can stay on the card; this does not move the cursor.
-    """
-    next_plan = normalize_plan(plan)
-    target = _text(card_id)
-    if not target:
-        raise ValueError("card_id is required")
-    occ = _find_occurrence(next_plan, target)
-    source_id = _text(occ.get("source_card_id") if occ else target) or target
-    retry_ids = [
-        _text(item.get("occurrence_id"))
-        for item in next_plan["occurrences"]
-        if _text(item.get("source_card_id")) == source_id
-    ]
-    drop = {item for item in (source_id, target, *retry_ids) if item}
-    next_plan["completed_ids"] = [item for item in next_plan["completed_ids"] if item not in drop]
-    for item in next_plan["occurrences"]:
-        if _text(item.get("source_card_id")) != source_id:
-            continue
-        if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
-            item["status"] = OCCURRENCE_CANCELLED
-            item["rating"] = None
-    retry_drop = {item for item in retry_ids if item}
-    next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item not in retry_drop]
-    encounters = next_plan.get("encounters")
-    if isinstance(encounters, dict):
-        for key in (source_id, target):
-            encounters.pop(key, None)
-    _sync_index(next_plan)
-    return next_plan
-
-
 def exclude_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     next_plan = normalize_plan(plan)
     target = _text(card_id)
@@ -390,16 +400,11 @@ def next_unfinished_id(plan: Mapping[str, Any], after_id: str | None = None) -> 
     normalized = normalize_plan(plan)
     presented = list(normalized["presented_ids"])
     after = _text(after_id)
-    ordered: list[str] = []
     if after and after in presented:
-        ordered.extend(presented[presented.index(after) + 1 :])
-        ordered.extend(presented[: presented.index(after)])
+        ordered = presented[presented.index(after) + 1 :] + presented[: presented.index(after)]
     else:
-        ordered.extend(presented)
-    for card in normalized["original_cards"]:
-        card_id = card["card_id"]
-        if card_id not in ordered:
-            ordered.append(card_id)
+        ordered = list(presented)
+    ordered.extend(card["card_id"] for card in normalized["original_cards"] if card["card_id"] not in ordered)
     seen: set[str] = set()
     for card_id in ordered:
         if card_id in seen:
@@ -411,173 +416,39 @@ def next_unfinished_id(plan: Mapping[str, Any], after_id: str | None = None) -> 
 
 
 def cleared_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
-    """Palace ids whose review-unit cards in this round are all scored."""
     normalized = normalize_plan(plan)
-    completed = set(normalized["completed_ids"])
-    excluded = set(normalized["excluded_ids"])
-    pending_sources = {
+    completed, excluded = set(normalized["completed_ids"]), set(normalized["excluded_ids"])
+    pending = {
         item["source_card_id"]
         for item in normalized["occurrences"]
         if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}
     }
     by_palace: dict[int, list[str]] = {}
     for card in normalized["original_cards"]:
-        if card.get("kind") != "mindmap_branch":
-            continue
         palace_id = card.get("palace_id")
-        if not palace_id:
-            continue
-        by_palace.setdefault(int(palace_id), []).append(card["card_id"])
-    cleared: set[int] = set()
-    for palace_id, card_ids in by_palace.items():
-        if not card_ids:
-            continue
-        if any(card_id in pending_sources for card_id in card_ids):
-            continue
-        if any(card_id in excluded and card_id not in completed for card_id in card_ids):
-            continue
-        if any(card_id not in completed for card_id in card_ids):
-            continue
-        cleared.add(palace_id)
-    return cleared
-
-
-def rebind_plan_cards(
-    plan: Mapping[str, Any],
-    cards: Sequence[Mapping[str, Any]],
-    *,
-    reorder_unstarted: bool = False, drop_missing_unstarted: bool = False,
-) -> Plan:
-    next_plan = normalize_plan(plan)
-    incoming = snapshot_cards(cards)
-    if not incoming:
-        _repair_current(next_plan)
-        return next_plan
-
-    old_by_key: dict[str, dict[str, Any]] = {}
-    old_by_id: dict[str, dict[str, Any]] = {}
-    for item in next_plan["original_cards"]:
-        old_by_id[item["card_id"]] = item
-        old_by_key[_match_key(item)] = item
-
-    mapping: dict[str, str] = {}
-    rebound: list[dict[str, Any]] = []
-    used_old: set[str] = set()
-    for card in incoming:
-        key = _match_key(card)
-        previous = old_by_key.get(key) or old_by_id.get(card["card_id"])
-        if previous is not None and previous["card_id"] not in used_old:
-            old_id = previous["card_id"]
-            used_old.add(old_id)
-            if old_id != card["card_id"]:
-                mapping[old_id] = card["card_id"]
-            merged = dict(previous)
-            merged.update(
-                {
-                    "card_id": card["card_id"],
-                    "unit_id": card["unit_id"] or previous.get("unit_id") or "",
-                    "unit_revision": card["unit_revision"],
-                    "kind": card["kind"] or previous.get("kind") or "card",
-                    "palace_id": card["palace_id"]
-                    if card["palace_id"] is not None
-                    else previous.get("palace_id"),
-                    "palace_title": card["palace_title"] or previous.get("palace_title") or "",
-                    "label": card["label"] or previous.get("label") or card["card_id"],
-                }
-            )
-            rebound.append(merged)
-        else:
-            rebound.append(card)
-
-    keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
-    if reorder_unstarted or drop_missing_unstarted:
-        keep_old.update(_text(item.get("source_card_id")) for item in next_plan["occurrences"] if item.get("status") in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED})
-    else:
-        keep_old.update(item["card_id"] for item in next_plan["original_cards"])
-    rebound.extend(item for item in next_plan["original_cards"] if item["card_id"] not in used_old and item["card_id"] in keep_old)
-    next_plan["original_cards"] = rebound
-    next_plan["presented_ids"] = _rewrite_ids(next_plan["presented_ids"], mapping)
-    incoming_ids = [item["card_id"] for item in incoming]
-    for card_id in incoming_ids:
-        if card_id not in next_plan["presented_ids"]:
-            next_plan["presented_ids"].append(card_id)
-    next_plan["completed_ids"] = _rewrite_ids(next_plan["completed_ids"], mapping)
-    next_plan["excluded_ids"] = _rewrite_ids(next_plan["excluded_ids"], mapping)
-    current = _text(next_plan.get("current_card_id"))
-    if current and current in mapping:
-        next_plan["current_card_id"] = mapping[current]
-    source_ids = {item["card_id"] for item in next_plan["original_cards"] if not item["card_id"].startswith("retry:")}
-    rebound_by_unit = {_text(item.get("unit_id")): item["card_id"] for item in next_plan["original_cards"] if _text(item.get("unit_id")) and item["card_id"] in source_ids}
-    for occ in next_plan["occurrences"]:
-        mapped = mapping.get(occ["source_card_id"])
-        if not mapped and occ["source_card_id"] not in source_ids:
-            mapped = rebound_by_unit.get(_text(occ.get("source_unit_id")))
-        if mapped:
-            occ["source_card_id"] = mapped
-    next_plan["encounters"] = {
-        mapping.get(key, key): dict(value) for key, value in next_plan["encounters"].items()
+        if card.get("kind") == "mindmap_branch" and palace_id:
+            by_palace.setdefault(int(palace_id), []).append(card["card_id"])
+    return {
+        palace_id
+        for palace_id, card_ids in by_palace.items()
+        if card_ids
+        and not any(card_id in pending for card_id in card_ids)
+        and not any(card_id in excluded and card_id not in completed for card_id in card_ids)
+        and all(card_id in completed for card_id in card_ids)
     }
-    if reorder_unstarted:
-        next_plan["presented_ids"] = _reorder_unstarted_presented(next_plan, [item["card_id"] for item in incoming])
-    known = _known_presented_ids(next_plan)
-    next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
-    _repair_current(next_plan)
-    return next_plan
-
-
-def _reorder_unstarted_presented(plan: Plan, incoming_ids: Sequence[str]) -> list[str]:
-    locked = _locked_presented_ids(plan)
-    incoming_unstarted = [item for item in _unique(incoming_ids) if item not in locked]
-    used: set[str] = set()
-    result: list[str] = []
-    cursor = 0
-    for card_id in plan["presented_ids"]:
-        if card_id in locked:
-            if card_id not in used:
-                result.append(card_id)
-                used.add(card_id)
-            continue
-        while cursor < len(incoming_unstarted) and incoming_unstarted[cursor] in used:
-            cursor += 1
-        if cursor >= len(incoming_unstarted):
-            continue
-        nxt = incoming_unstarted[cursor]
-        result.append(nxt)
-        used.add(nxt)
-        cursor += 1
-    for card_id in incoming_unstarted:
-        if card_id not in used:
-            result.append(card_id)
-            used.add(card_id)
-    return result
-
-
-def _locked_presented_ids(plan: Plan) -> set[str]:
-    locked = set(plan["completed_ids"]) | set(plan["excluded_ids"])
-    for item in plan["occurrences"]:
-        status = item.get("status")
-        if status in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
-            source = _text(item.get("source_card_id"))
-            if source:
-                locked.add(source)
-        if status == OCCURRENCE_INSERTED:
-            occ_id = _text(item.get("occurrence_id"))
-            if occ_id:
-                locked.add(occ_id)
-    return locked
 
 
 def _known_presented_ids(plan: Plan) -> set[str]:
     known = {item["card_id"] for item in plan["original_cards"]}
     known.update(plan["completed_ids"])
     known.update(plan["excluded_ids"])
+    live = {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
     for item in plan["occurrences"]:
         status = item.get("status")
-        source = _text(item.get("source_card_id"))
-        if source and status in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
+        source, occ_id = _text(item.get("source_card_id")), _text(item.get("occurrence_id"))
+        if source and status in live:
             known.add(source)
-        occ_id = _text(item.get("occurrence_id"))
-        if occ_id and status == OCCURRENCE_INSERTED:
+        if occ_id and status in {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
             known.add(occ_id)
     return known
 
@@ -587,7 +458,7 @@ def _is_viewable_current(plan: Plan, card_id: str) -> bool:
         return False
     occ = _find_occurrence(plan, card_id)
     if occ is not None:
-        return occ["status"] == OCCURRENCE_INSERTED
+        return occ["status"] in {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
     return card_id not in plan["completed_ids"]
 
 
@@ -613,52 +484,45 @@ def _fail_source(
     round_id: str,
     occ: dict[str, Any] | None,
 ) -> None:
-    same = [
-        item
-        for item in plan["occurrences"]
-        if item["encounter_id"] == encounter_id and item["status"] != OCCURRENCE_CANCELLED
-    ]
+    rows = [item for item in plan["occurrences"] if item["source_card_id"] == source_id]
+    same = [item for item in plan["occurrences"] if item["encounter_id"] == encounter_id and item["status"] != OCCURRENCE_CANCELLED]
     if same:
         for item in same:
             item["rating"] = rating
+            _revive_occurrence(plan, item)
+        _collapse_retries(plan)
         return
-
-    pending = [
-        item
-        for item in plan["occurrences"]
-        if item["source_card_id"] == source_id and item["status"] == OCCURRENCE_PENDING
-    ]
-    if pending:
-        for item in pending:
-            item["retry_attempt"] = int(item["retry_attempt"] or 0) + 1
-            item["occurrence_id"] = occurrence_id_for(
-                round_id,
-                item["source_unit_id"] or source_unit_id or source_id,
-                item["retry_attempt"],
-            )
-            item["rating"] = rating
-            item["encounter_id"] = encounter_id
-            item["insert_target_index"] = _predicted_insert_index(plan, source_id)
+    live = [item for item in rows if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}]
+    completed = [item for item in rows if item["status"] == OCCURRENCE_COMPLETED]
+    keep = occ if occ is not None and occ in live else (live[0] if live else None)
+    if keep is None and completed:
+        keep = occ if occ is not None and occ in completed else max(completed, key=lambda item: int(item.get("retry_attempt") or 0))
+        _revive_occurrence(plan, keep)
+    if keep is not None:
+        keep["rating"] = rating
+        keep["encounter_id"] = encounter_id
+        if keep["status"] == OCCURRENCE_PENDING:
+            keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
+            keep["occurrence_id"] = occurrence_id_for(round_id, keep["source_unit_id"] or source_unit_id or source_id, keep["retry_attempt"])
+            keep["insert_target_index"] = _predicted_insert_index(plan, source_id)
+        elif keep["status"] != OCCURRENCE_INSERTED:
+            keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
+        _collapse_retries(plan)
         return
-
-    if occ is not None and occ["status"] == OCCURRENCE_INSERTED:
-        occ["rating"] = rating
-        occ["encounter_id"] = encounter_id
-
     attempt = _max_attempt(plan, source_id) + 1
     source_key = source_unit_id or source_id
-    plan["occurrences"].append(
-        {
-            "occurrence_id": occurrence_id_for(round_id, source_key, attempt),
-            "source_card_id": source_id,
-            "source_unit_id": source_unit_id,
-            "retry_attempt": attempt,
-            "rating": rating,
-            "insert_target_index": _predicted_insert_index(plan, source_id),
-            "status": OCCURRENCE_PENDING,
-            "encounter_id": encounter_id,
-        }
-    )
+    plan["occurrences"].append({
+        "occurrence_id": occurrence_id_for(round_id, source_key, attempt),
+        "source_card_id": source_id,
+        "source_unit_id": source_unit_id,
+        "retry_attempt": attempt,
+        "rating": rating,
+        "insert_target_index": _predicted_insert_index(plan, source_id),
+        "status": OCCURRENCE_PENDING,
+        "encounter_id": encounter_id,
+        "entered_on": _cohort_of(plan, source_id),
+    })
+    _collapse_retries(plan)
 
 
 def _settle_source(plan: Plan, source_id: str) -> None:
@@ -680,6 +544,74 @@ def _unsettle_source(plan: Plan, source_id: str) -> None:
     plan["completed_ids"] = [item for item in plan["completed_ids"] if item != target]
 
 
+def _revive_occurrence(plan: Plan, occ: Mapping[str, Any]) -> None:
+    item = occ if isinstance(occ, dict) else None
+    if item is None or item.get("status") != OCCURRENCE_COMPLETED:
+        return
+    occ_id = _text(item.get("occurrence_id"))
+    item["status"] = OCCURRENCE_INSERTED if occ_id in plan["presented_ids"] else OCCURRENCE_PENDING
+    plan["completed_ids"] = [entry for entry in plan["completed_ids"] if entry != occ_id]
+
+
+def _collapse_retries(plan: Plan) -> None:
+    """A unit may keep only one retry occurrence in the feed at a time."""
+    by_source: dict[str, list[dict[str, Any]]] = {}
+    for item in plan["occurrences"]:
+        source = _text(item.get("source_card_id"))
+        if source and item["status"] != OCCURRENCE_CANCELLED:
+            by_source.setdefault(source, []).append(item)
+    drop_ids: set[str] = set()
+    current = _text(plan.get("current_card_id"))
+    kept_by_dropped: dict[str, str] = {}
+    for items in by_source.values():
+        if len(items) <= 1:
+            continue
+        live = [item for item in items if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}]
+        pool = live or items
+        keep = next((item for item in pool if item["occurrence_id"] == current), None) or max(
+            pool,
+            key=lambda item: (1 if item["status"] == OCCURRENCE_INSERTED else 0, int(item.get("retry_attempt") or 0)),
+        )
+        keep_id = _text(keep.get("occurrence_id"))
+        for extra in items:
+            extra_id = _text(extra.get("occurrence_id"))
+            if extra is keep or not extra_id:
+                continue
+            extra["status"] = OCCURRENCE_CANCELLED
+            drop_ids.add(extra_id)
+            kept_by_dropped[extra_id] = keep_id
+    if not drop_ids:
+        return
+    plan["presented_ids"] = [item for item in plan["presented_ids"] if item not in drop_ids]
+    plan["completed_ids"] = [item for item in plan["completed_ids"] if item not in drop_ids]
+    if current in drop_ids:
+        plan["current_card_id"] = kept_by_dropped.get(current) or current
+
+
+def _reposition_retry_inplace(plan: Plan, occurrence_id: str, vacated_index: int) -> None:
+    occ_id = _text(occurrence_id)
+    occ = _find_occurrence(plan, occ_id)
+    if occ is None or occ["status"] == OCCURRENCE_CANCELLED:
+        return
+    presented = list(plan["presented_ids"])
+    if occ_id not in presented:
+        _insert_retry_inplace(plan, occ_id, vacated_index)
+        return
+    old = presented.index(occ_id)
+    cohort = _day(occ.get("entered_on")) or _cohort_of(plan, occ["source_card_id"])
+    if not occ.get("entered_on") and cohort:
+        occ["entered_on"] = cohort
+    segment_end = _segment_end(plan, presented, old, cohort)
+    remaining_in_segment = max(0, segment_end - old - 1)
+    insert_at = old + min(RETRY_GAP, remaining_in_segment)
+    presented = [item for item in presented if item != occ_id]
+    insert_at = max(0, min(insert_at, len(presented)))
+    presented.insert(insert_at, occ_id)
+    plan["presented_ids"] = presented
+    occ["status"] = OCCURRENCE_INSERTED
+    occ["insert_target_index"] = insert_at
+
+
 def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> None:
     occ_id = _text(occurrence_id)
     occ = _find_occurrence(plan, occ_id)
@@ -695,7 +627,11 @@ def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> 
         presented = [occ_id]
     else:
         anchor = max(0, min(_int(source_index), len(presented) - 1))
-        insert_at = min(anchor + 1 + RETRY_GAP, len(presented))
+        cohort = _day(occ.get("entered_on")) or _cohort_of(plan, occ["source_card_id"])
+        if not occ.get("entered_on") and cohort:
+            occ["entered_on"] = cohort
+        segment_end = _segment_end(plan, presented, anchor, cohort)
+        insert_at = min(anchor + 1 + RETRY_GAP, segment_end)
         presented.insert(insert_at, occ_id)
     plan["presented_ids"] = presented
     occ["status"] = OCCURRENCE_INSERTED
@@ -709,25 +645,51 @@ def _predicted_insert_index(plan: Plan, source_id: str) -> int:
     else:
         current = _text(plan.get("current_card_id"))
         anchor = presented.index(current) if current and current in presented else 0
-    return min(anchor + 1 + RETRY_GAP, len(presented))
+    cohort = _cohort_of(plan, source_id)
+    segment_end = _segment_end(plan, presented, anchor, cohort)
+    return min(anchor + 1 + RETRY_GAP, segment_end)
+
+
+def _source_id_of(plan: Plan, card_id: str) -> str:
+    target = _text(card_id)
+    occ = _find_occurrence(plan, target)
+    return (_text(occ.get("source_card_id")) or target) if occ else target
+
+
+def _cohort_of(plan: Plan, card_id: str) -> str:
+    occ = _find_occurrence(plan, card_id)
+    if occ is not None:
+        entered = _day(occ.get("entered_on"))
+        if entered:
+            return entered
+        source_id = _text(occ.get("source_card_id")) or _text(card_id)
+    else:
+        source_id = _text(card_id)
+    return _day((_original_card(plan, source_id) or {}).get("entered_on"))
+
+
+def _segment_end(plan: Plan, presented: Sequence[str], anchor: int, cohort: str) -> int:
+    end = min(max(anchor + 1, 0), len(presented))
+    while end < len(presented) and _cohort_of(plan, presented[end]) == cohort:
+        end += 1
+    return end
+
+
+def _day(value: Any) -> str:
+    text = _text(value)
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return text[:10]
+    return ""
 
 
 def _is_unfinished(plan: Plan, card_id: str) -> bool:
-    if not card_id:
-        return False
-    if card_id in plan["completed_ids"] or card_id in plan["excluded_ids"]:
+    if not card_id or card_id in plan["completed_ids"] or card_id in plan["excluded_ids"]:
         return False
     occ = _find_occurrence(plan, card_id)
     if occ is not None:
         return occ["status"] == OCCURRENCE_INSERTED
-    for item in plan["occurrences"]:
-        if item["source_card_id"] == card_id and item["status"] in {
-            OCCURRENCE_PENDING,
-            OCCURRENCE_INSERTED,
-            OCCURRENCE_COMPLETED,
-        }:
-            return False
-    return True
+    live = {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
+    return not any(item["source_card_id"] == card_id and item["status"] in live for item in plan["occurrences"])
 
 
 def _max_attempt(plan: Plan, source_id: str) -> int:

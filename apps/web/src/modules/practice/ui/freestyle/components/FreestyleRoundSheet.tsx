@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronRight,
   GripVertical,
-  RotateCcw,
   SlidersHorizontal,
   Undo2,
   X,
@@ -16,6 +15,10 @@ import {
   type FreestyleRoundPlanState,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
+import {
+  retryChromeClass,
+  visualPlanStatus,
+} from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { Button } from '@/shared/components/ui/button'
 import {
   Sheet,
@@ -55,6 +58,13 @@ function rowLabel(entry: FreestyleRoundPlanCard) {
     : entry.label || entry.cardId
 }
 
+function retryRowStatusLabel(isCurrent: boolean, done: boolean, status: FreestyleRoundPlanCardStatus) {
+  if (isCurrent) return done ? '当前 · 已过' : '当前复习'
+  if (done) return '重练已过'
+  if (status === 'retry' || status === 'pending' || status === 'active') return '待重练'
+  return STATUS_LABELS[status]
+}
+
 /**
  * In-round pace: open from the progress rail, glance, jump or reorder, close.
  * Configuration lives behind 「调整配置」 because it is a between-rounds decision —
@@ -66,28 +76,23 @@ export function FreestyleRoundSheet({
   currentIndex,
   queueState,
   roundPlan,
-  queueLimit,
   onOpenChange,
   onJump,
   onExclude,
   onRestore,
   onReorder,
-  onResetRound,
   onOpenConfig,
-  loading = false,
 }: {
   open: boolean
   cards: FreestyleCard[]
   currentIndex: number
   queueState: FreestyleSkipState
   roundPlan: FreestyleRoundPlanState | null
-  queueLimit: number
   onOpenChange: (open: boolean) => void
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
   onRestore: (cardIds: string[]) => void
   onReorder: (orderIds: string[]) => void
-  onResetRound: () => void
   onOpenConfig: () => void
   loading?: boolean
 }) {
@@ -101,21 +106,51 @@ export function FreestyleRoundSheet({
     if (!roundPlan) return []
     return roundPlan.orderIds.map((id) => roundPlan.cardsById[id]).filter(Boolean)
   }, [roundPlan])
-  const groups = useMemo(() => {
-    const result = new Map<number, FreestyleRoundPlanCard[]>()
-    rows.forEach((entry) => {
-      const id = palaceIdFromEntry(entry)
-      const bucket = result.get(id) ?? []
-      bucket.push(entry)
-      result.set(id, bucket)
-    })
-    return [...result.entries()]
-  }, [rows])
+  const sections = useMemo(() => {
+    const groupPalace = (entries: FreestyleRoundPlanCard[]) => {
+      const result = new Map<number, FreestyleRoundPlanCard[]>()
+      entries.forEach((entry) => {
+        const id = palaceIdFromEntry(entry)
+        const bucket = result.get(id) ?? []
+        bucket.push(entry)
+        result.set(id, bucket)
+      })
+      return [...result.entries()]
+    }
+    const today = roundPlan?.today || ''
+    if (!today) return [{ key: 'all', title: '', groups: groupPalace(rows) }]
+    const carried = rows.filter((entry) => entry.enteredOn !== today)
+    const fresh = rows.filter((entry) => entry.enteredOn === today)
+    if (!carried.length || !fresh.length) {
+      return [{ key: 'all', title: '', groups: groupPalace(rows) }]
+    }
+    return [
+      { key: 'carried', title: '此前欠账', groups: groupPalace(carried) },
+      { key: 'today', title: '今天新增', groups: groupPalace(fresh) },
+    ]
+  }, [rows, roundPlan?.today])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = new Set(selectedIds)
+  const fillStatus = (entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
+    const liveCard = liveById.get(entry.cardId)
+    const planStatus = liveCard
+      ? planCardStatus(liveCard, roundPlan, queueState.completedIds, queueState.hiddenIds, currentCardId)
+      : entry.status
+    return visualPlanStatus(
+      planStatus,
+      queueState.unitEncountersByCardId[entry.cardId],
+      entry.status,
+    )
+  }
 
   const moveRow = (sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
+    const today = roundPlan.today || ''
+    if (today) {
+      const source = roundPlan.cardsById[sourceId]
+      const target = roundPlan.cardsById[targetId]
+      if (source && target && (source.enteredOn === today) !== (target.enteredOn === today)) return
+    }
     const next = [...roundPlan.orderIds]
     const sourceIndex = next.indexOf(sourceId)
     const targetIndex = next.indexOf(targetId)
@@ -155,10 +190,6 @@ export function FreestyleRoundSheet({
           <SheetTitle className="text-base">本轮安排</SheetTitle>
           <SheetDescription className="text-xs">
             本轮 {roundPlan?.scheduledCount ?? rows.length} 张
-            {roundPlan && roundPlan.candidateCount > (roundPlan.scheduledCount || 0)
-              ? ` · 今天库里还到期 ${Math.max(0, roundPlan.candidateCount - roundPlan.scheduledCount)} 张没进本轮`
-              : ''}
-            {' · '}上限 {roundPlan?.queueLimit ?? queueLimit}
           </SheetDescription>
         </SheetHeader>
 
@@ -184,17 +215,6 @@ export function FreestyleRoundSheet({
           <Button
             type="button"
             size="sm"
-            variant="ghost"
-            disabled={loading}
-            aria-busy={loading}
-            onClick={onResetRound}
-          >
-            <RotateCcw className={cn('size-3.5', loading && 'animate-spin')} />
-            {loading ? '正在安排...' : '再来一轮'}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
             variant="outline"
             className="ml-auto"
             onClick={onOpenConfig}
@@ -204,18 +224,23 @@ export function FreestyleRoundSheet({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
-          {roundPlan?.limitReached ? (
-            <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-              候选内容超过本轮上限，只安排了前 {roundPlan.queueLimit} 张。
-            </div>
-          ) : null}
           {!roundPlan || !rows.length ? (
             <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
               当前还没有本轮安排。
             </div>
           ) : null}
-          <div className="space-y-3">
-            {groups.map(([palaceId, entries]) => {
+          <div className="space-y-4">
+            {sections.map((section) => (
+              <div key={section.key} className="space-y-3">
+                {section.title ? (
+                  <div
+                    data-testid={`round-plan-cohort-${section.key}`}
+                    className="text-xs font-semibold tracking-wide text-muted-foreground"
+                  >
+                    {section.title}
+                  </div>
+                ) : null}
+            {section.groups.map(([palaceId, entries]) => {
               const collapsed = collapsedPalaces.has(palaceId)
               const title = entries.find((entry) => entry.palaceTitle)?.palaceTitle
                 || (palaceId ? `宫殿 ${palaceId}` : '未归属宫殿')
@@ -243,19 +268,19 @@ export function FreestyleRoundSheet({
                     />
                     <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
                     <span className="text-xs text-muted-foreground">
-                      {entries.filter((entry) => entry.status === 'completed').length}/{entries.length}
+                      {entries.filter((entry) => fillStatus(entry) === 'completed').length}/{entries.length}
                     </span>
                   </div>
                   {!collapsed ? (
                     <div className="divide-y divide-border/50">
                       {entries.map((entry) => {
                         const liveCard = liveById.get(entry.cardId)
-                        const status = liveCard
-                          ? planCardStatus(liveCard, roundPlan, queueState.completedIds, queueState.hiddenIds, currentCardId)
-                          : entry.status
+                        const status = fillStatus(entry)
                         const isSelected = selectedSet.has(entry.cardId)
                         const canDrag = status !== 'completed' && status !== 'excluded'
-                        const isActive = status === 'active'
+                        const isCurrent = entry.cardId === currentCardId
+                        const retryDone = entry.occurrenceKind === 'retry' && status === 'completed'
+                        const retryPending = entry.occurrenceKind === 'retry' && status !== 'completed' && status !== 'excluded'
                         return (
                           <div key={entry.cardId}>
                             {dragOverId === entry.cardId && draggingId !== entry.cardId ? (
@@ -268,6 +293,8 @@ export function FreestyleRoundSheet({
                             ) : null}
                             <div
                               data-testid={`round-plan-card-${entry.cardId}`}
+                              data-fill={status}
+                              data-retry={entry.occurrenceKind === 'retry' ? (retryDone ? 'done' : 'pending') : undefined}
                               draggable={canDrag}
                               onDragStart={(event) => {
                                 if (!canDrag) return
@@ -295,10 +322,14 @@ export function FreestyleRoundSheet({
                               }}
                               className={cn(
                                 'mx-1 my-1 flex min-h-14 items-center gap-2 rounded-lg border px-2 py-2 text-sm transition-colors',
-                                isActive
+                                isCurrent
                                   ? 'border-emerald-500/60 bg-emerald-500/12 shadow-sm ring-1 ring-emerald-500/20'
-                                  : 'border-transparent hover:border-border/70 hover:bg-background/70',
-                                isSelected && !isActive && 'bg-primary/5',
+                                  : retryPending
+                                    ? 'border-amber-500/35 bg-amber-500/10 hover:border-amber-500/50'
+                                    : retryDone
+                                      ? 'border-emerald-500/25 bg-emerald-500/8 hover:border-emerald-500/40'
+                                      : 'border-transparent hover:border-border/70 hover:bg-background/70',
+                                isSelected && !isCurrent && 'bg-primary/5',
                                 draggingId === entry.cardId && 'opacity-45',
                                 status === 'excluded' && 'opacity-65',
                               )}
@@ -358,10 +389,19 @@ export function FreestyleRoundSheet({
                               >
                                 {rowLabel(entry)}
                               </button>
-                              <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[11px]', STATUS_CLASSES[status])}>
-                                {isActive ? '当前复习' : STATUS_LABELS[status]}
+                              <span className={cn(
+                                'shrink-0 rounded-full border px-2 py-0.5 text-[11px]',
+                                entry.occurrenceKind === 'retry'
+                                  ? retryChromeClass(retryDone)
+                                  : STATUS_CLASSES[status],
+                              )}>
+                                {entry.occurrenceKind === 'retry'
+                                  ? retryRowStatusLabel(isCurrent, retryDone, status)
+                                  : isCurrent
+                                    ? (status === 'completed' ? '当前 · 已过' : '当前复习')
+                                    : STATUS_LABELS[status]}
                               </span>
-                              {entry.occurrenceKind === 'retry' ? (
+                              {entry.occurrenceKind === 'retry' && !retryDone ? (
                                 <span className="shrink-0 text-[11px] text-amber-700 dark:text-amber-300">
                                   来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
                                 </span>
@@ -376,6 +416,8 @@ export function FreestyleRoundSheet({
                 </section>
               )
             })}
+              </div>
+            ))}
           </div>
         </div>
       </SheetContent>

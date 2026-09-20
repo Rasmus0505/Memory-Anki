@@ -108,7 +108,8 @@ describe('channelAdjustment', () => {
     )
     expect(adjustment).not.toBeNull()
     const next = adjustment!.apply(DEFAULT_FREESTYLE_FEED_CONFIG)
-    expect(next.streams.memory_palace.due_policy).toBe('all_content_due_weighted')
+    expect(next.streams.memory_palace.due_policy).toBe('due_only')
+    expect(next.streams.quiz.mastery_buckets).toContain('stable')
     expect(next.streams.quiz.weak_priority).toBe(true)
   })
 

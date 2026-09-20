@@ -1,6 +1,7 @@
 import {
   Brain,
   Check,
+  ClipboardList,
   Eye,
   FolderTree,
   Languages,
@@ -98,8 +99,8 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     importTextAction = null, englishAction = null, textAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
-  // englishAction stays a dedicated toggle unless a host puts it in moreActions (freestyle).
-  // quizAction is the first primary button; do not also bury it in ⋯ (avoids duplicate "做题").
+  // englishAction stays a dedicated icon toggle immediately left of 文字模式.
+  // quizAction is the first primary icon; do not also bury it in ⋯ (avoids duplicate "做题").
   const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowBase = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
   const recording = useSessionRecorderState().recording
@@ -120,12 +121,14 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           <Button
             type="button"
             variant="outline"
+            size="icon"
             disabled={quizAction.disabled}
             aria-label={quizAction.label}
             title={quizAction.label}
             onClick={quizAction.onClick}
+            className="max-sm:size-8"
           >
-            {quizAction.label}
+            <ClipboardList aria-hidden />
           </Button>
         ) : null}
         {ratingAction ? <Button type="button" variant={ratingAction.active ? 'default' : 'outline'} onClick={ratingAction.onClick} disabled={ratingAction.disabled}><Brain className="size-4" />{ratingAction.label}</Button> : null}
@@ -174,22 +177,21 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         ) : null}
         {/* modeToggle is optional primary chrome; freestyle puts 进入编辑 inside moreActions ⋯ instead. */}
         {modeToggle ? <Button type="button" variant="outline" onClick={modeToggle.onClick}><Wand2 className="size-4" />{modeToggle.label}</Button> : null}
-        {/* 英语 / 文字模式 are the two toggles review hosts keep inline. Their labels cost
-            ~120px of a 377px phone row, so under sm they collapse to icons and the label
-            moves to aria-label/title — the accessible name is unchanged either way. */}
+        {/* 英语 sits immediately left of 文字模式 as an icon. 做题 is also icon-only.
+            Accessible names stay on aria-label/title. */}
         {englishAction ? (
           <Button
             type="button"
             variant={englishAction.active ? 'default' : 'outline'}
+            size="icon"
             disabled={englishAction.disabled}
             aria-pressed={Boolean(englishAction.active)}
             aria-label={englishAction.label}
             title={englishAction.label}
             onClick={englishAction.onClick}
-            className={COMPACT_TOGGLE_CLASS}
+            className="max-sm:size-8"
           >
-            <Languages className="sm:hidden" aria-hidden />
-            <span className="max-sm:hidden">{englishAction.label}</span>
+            <Languages aria-hidden />
           </Button>
         ) : null}
         {textAction ? (

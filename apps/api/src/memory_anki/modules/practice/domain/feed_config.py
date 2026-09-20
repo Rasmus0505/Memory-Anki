@@ -122,6 +122,11 @@ def _as_int(value: Any, default: int, *, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, number))
 
 
+def _fold_due_policy(_value: Any) -> str:
+    """Freestyle palace streams only review due units; expand/fill policies fold away."""
+    return DUE_POLICY_DUE_ONLY
+
+
 def _as_positive_ids(value: Any) -> list[int]:
     if not isinstance(value, list):
         return []
@@ -397,9 +402,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         subject_scope=legacy_subject,
     )
     legacy_ids = _as_positive_ids(data.get("specific_palace_ids"))
-    legacy_due = str(data.get("due_policy") or DUE_POLICY_DUE_FIRST)
-    if legacy_due not in DUE_POLICIES:
-        legacy_due = DUE_POLICY_DUE_FIRST
+    legacy_due = _fold_due_policy(data.get("due_policy"))
     legacy_order = str(data.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
     if legacy_order not in PALACE_ORDERS:
         legacy_order = PALACE_ORDER_SEQUENTIAL
@@ -419,12 +422,11 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             ids=[] if legacy_subject == "english" else legacy_ids,
             subject_scope=memory_fallback_scope,
         ),
-        "due_policy": str(raw_memory.get("due_policy") or legacy_due),
+        "due_policy": _fold_due_policy(raw_memory.get("due_policy") or legacy_due),
         "palace_order": str(raw_memory.get("palace_order") or legacy_order),
         "unit_order": _as_unit_order(raw_memory.get("unit_order")),
     }
-    if memory["due_policy"] not in DUE_POLICIES:
-        memory["due_policy"] = DUE_POLICY_DUE_FIRST
+    memory["due_policy"] = DUE_POLICY_DUE_ONLY
     if memory["palace_order"] not in PALACE_ORDERS:
         memory["palace_order"] = PALACE_ORDER_SEQUENTIAL
 
@@ -434,13 +436,12 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             ids=legacy_ids if legacy_subject == "english" else [],
             subject_scope="english",
         ),
-        "due_policy": str(raw_english.get("due_policy") or legacy_due),
+        "due_policy": _fold_due_policy(raw_english.get("due_policy") or legacy_due),
         "palace_order": str(raw_english.get("palace_order") or legacy_order),
         "unit_order": _as_unit_order(raw_english.get("unit_order")),
     }
     english["subject_scope"] = "english"
-    if english["due_policy"] not in DUE_POLICIES:
-        english["due_policy"] = DUE_POLICY_DUE_FIRST
+    english["due_policy"] = DUE_POLICY_DUE_ONLY
     if english["palace_order"] not in PALACE_ORDERS:
         english["palace_order"] = PALACE_ORDER_SEQUENTIAL
 

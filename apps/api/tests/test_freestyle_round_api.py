@@ -209,6 +209,52 @@ def test_start_new_round_completes_previous(make_client):
     assert payload["round_id"] != first["round_id"]
 
 
+def test_active_round_freezes_when_fully_handled_with_leftover_due(make_client):
+    """Silent get_or_create must keep settlement; leftover due must not mint/append."""
+    client = _client(make_client)
+    created = _create(client, operation_id="op-first", cards=_cards("a"), round_id="round-done")
+    completed = client.post(
+        f"/api/v1/freestyle/rounds/{created['round_id']}/actions",
+        json={
+            "operation_id": "op-complete-a",
+            "expected_version": created["version"],
+            "action": "complete",
+            "card_id": "a",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["plan"]["completed_ids"] == ["a"]
+
+    frozen = _create(
+        client,
+        operation_id="op-leftover-due",
+        cards=_cards("a", "b"),
+        round_id="round-should-ignore",
+    )
+    assert frozen["round_id"] == created["round_id"]
+    assert frozen["status"] == "active"
+    assert frozen["plan"]["completed_ids"] == ["a"]
+    assert frozen["plan"]["presented_ids"] == ["a"]
+    assert "b" not in frozen["plan"]["presented_ids"]
+
+    started = client.post(
+        "/api/v1/freestyle/rounds/start",
+        json={
+            "operation_id": "op-start-next",
+            "scope_key": "scope-a",
+            "config": {"queue_length": 20},
+            "cards": _cards("b"),
+            "round_id": "round-next",
+        },
+    )
+    assert started.status_code == 200, started.text
+    payload = started.json()
+    assert payload["round_id"] == "round-next"
+    assert payload["current_card_id"] == "b"
+    previous = client.get(f"/api/v1/freestyle/rounds/{created['round_id']}")
+    assert previous.json()["status"] == "completed"
+
+
 def test_active_round_adopts_workspace_round_across_scope_key(make_client):
     client = _client(make_client)
     created = _create(
@@ -251,6 +297,40 @@ def test_active_round_adopts_workspace_round_across_scope_key(make_client):
     assert payload["scope_key"] == "scope-b"
     assert payload["status"] == "active"
     assert payload["plan"]["completed_ids"] == ["a"]
+
+
+def test_uncomplete_action_clears_completed_ids(make_client):
+    client = _client(make_client)
+    created = _create(
+        client,
+        operation_id="op-create-uncomplete",
+        cards=_cards("a", "b"),
+        round_id="round-uncomplete",
+    )
+    round_id = created["round_id"]
+    completed = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/actions",
+        json={
+            "operation_id": "op-complete-a",
+            "expected_version": created["version"],
+            "action": "complete",
+            "card_id": "a",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["plan"]["completed_ids"] == ["a"]
+
+    undone = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/actions",
+        json={
+            "operation_id": "op-uncomplete-a",
+            "expected_version": completed.json()["version"],
+            "action": "uncomplete",
+            "card_id": "a",
+        },
+    )
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["plan"]["completed_ids"] == []
 
 
 def test_rating_then_leave_inserts_at_plus_three(make_client):

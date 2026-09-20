@@ -67,6 +67,7 @@ export {
   nextRetryAttempt,
   resolveLeaveConfirmViewportId,
   restudyInterveningGap,
+  isImmediateRestudyGap,
   removeRetryOccurrencesForSource,
   deferPalace,
   filterMutedPalaces,

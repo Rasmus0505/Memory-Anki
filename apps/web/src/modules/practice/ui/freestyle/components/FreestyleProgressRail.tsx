@@ -1,38 +1,20 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import { type ReactNode } from 'react'
 import {
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
   progressSegmentHoverLabel,
   progressSegmentShapeClass,
-  retryNodeClass,
+  retryNodeToneClass,
   type FreestyleProgressSegment,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip'
-import type { SessionStatus } from '@/shared/hooks/timedSessionModel'
 import { cn } from '@/shared/lib/utils'
-
-/** Collapse the expanded clock after a glance so seconds stop pulling focus. */
-const TIMER_PEEK_MS = 4_000
-
-const TIMER_DOT_CLASS: Record<'running' | 'paused' | 'idle', string> = {
-  running: 'bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.18)]',
-  paused: 'bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)]',
-  idle: 'bg-zinc-500',
-}
-
-function timerTone(status: SessionStatus): 'running' | 'paused' | 'idle' {
-  if (status === 'running') return 'running'
-  if (status === 'paused') return 'paused'
-  return 'idle'
-}
 
 function ProgressRailItem({
   segment,
@@ -44,6 +26,12 @@ function ProgressRailItem({
   hoverLabel: string
 }) {
   const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
+  const viewing = Boolean(segment.viewing || segment.tone === 'current')
+  const gapClass = segment.cohortBoundary
+    ? 'ml-1.5 border-l border-white/45 pl-1'
+    : palaceGap
+      ? 'ml-0.5'
+      : null
   if (segment.kind === 'retry') {
     return (
       <Tooltip>
@@ -51,13 +39,16 @@ function ProgressRailItem({
           <span
             data-testid="freestyle-progress-retry-node"
             data-tone={segment.tone}
+            data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
+            data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
             aria-label={hoverLabel}
             className={cn(
-              'inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tabular-nums leading-none',
-              palaceGap ? 'ml-0.5' : null,
-              retryNodeClass,
+              'inline-flex shrink-0 items-center justify-center rounded-full font-semibold tabular-nums leading-none',
+              viewing ? 'size-5 text-[10px] ring-2 ring-white' : 'size-3.5 text-[9px]',
+              gapClass,
+              retryNodeToneClass(segment.tone),
             )}
           >
             {Math.max(1, Math.round(segment.retryAttempt || 1))}
@@ -73,18 +64,21 @@ function ProgressRailItem({
         <span
           aria-label={hoverLabel}
           className={cn(
-            'flex h-full min-w-px flex-1 items-center',
-            palaceGap ? 'ml-0.5' : null,
+            'flex h-full min-w-px items-end',
+            viewing ? 'flex-[1.8]' : 'flex-1',
+            gapClass,
           )}
         >
           <span
             data-testid="freestyle-progress-segment"
             data-tone={segment.tone}
+            data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
+            data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
             className={cn(
-              'w-full rounded-[1px] transition-[colors,height,box-shadow]',
-              progressSegmentShapeClass(segment.tone),
+              'w-full rounded-[1px] transition-[colors,height,box-shadow,min-width]',
+              progressSegmentShapeClass(segment.tone, viewing),
               palaceAccentToneClass(segment.palaceId, segment.tone),
             )}
           />
@@ -97,59 +91,29 @@ function ProgressRailItem({
 
 export function FreestyleProgressRail({
   summary,
-  timerStatus,
-  effectiveSeconds,
   onOpenPlan,
-  onTimerToggle,
   overflow,
   workspaceSwitcher,
 }: {
   summary: FreestyleProgressSummary
-  timerStatus: SessionStatus
-  effectiveSeconds: number
   onOpenPlan: () => void
-  onTimerToggle: () => void
   /** Overflow menu trigger + content, owned by the page. */
   overflow?: ReactNode
   workspaceSwitcher?: ReactNode
 }) {
-  const [timerExpanded, setTimerExpanded] = useState(false)
-  const peekTimerRef = useRef<number | null>(null)
-  const tone = timerTone(timerStatus)
-  const timerCompleted = timerStatus === 'completed'
-
-  useEffect(() => {
-    return () => {
-      if (peekTimerRef.current != null) window.clearTimeout(peekTimerRef.current)
-    }
-  }, [])
-
-  const schedulePeekCollapse = () => {
-    if (peekTimerRef.current != null) window.clearTimeout(peekTimerRef.current)
-    peekTimerRef.current = window.setTimeout(() => {
-      peekTimerRef.current = null
-      setTimerExpanded(false)
-    }, TIMER_PEEK_MS)
-  }
-
-  const handleTimerClick = () => {
-    if (!timerCompleted) onTimerToggle()
-    setTimerExpanded(true)
-    schedulePeekCollapse()
-  }
-
   const railLabel = progressRailLabel(summary)
   const hudText = progressHudText(summary)
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
-      <TooltipProvider delayDuration={200} skipDelayDuration={80}>
-      {/* Round progress: one segment per card, so restudy re-insertion is visible. */}
+      {/* Round progress: one segment per card, so restudy re-insertion is visible.
+          TooltipProvider lives on ImmersiveFreestylePage — nesting another here
+          loops Radix DropdownMenuTrigger refs under Vite. */}
       <div
         data-testid="freestyle-progress-rail"
         role="img"
         aria-label={railLabel}
-        className="pointer-events-auto flex h-5 w-full cursor-pointer items-center gap-px bg-zinc-950/55 px-0 pt-[max(0px,env(safe-area-inset-top,0px))]"
+        className="pointer-events-auto flex h-7 w-full cursor-pointer items-end gap-px bg-zinc-950/55 px-0 pb-1 pt-[max(0px,env(safe-area-inset-top,0px))]"
         onClick={onOpenPlan}
       >
         {summary.segments.length === 0 ? (
@@ -183,55 +147,12 @@ export function FreestyleProgressRail({
             </button>
           ) : null}
         </div>
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/82 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md">
-          <button
-            type="button"
-            data-testid="freestyle-timer-dot"
-            className={cn(
-              'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 tabular-nums text-xs transition-colors hover:bg-white/10 active:bg-white/15',
-              tone === 'running'
-                ? 'text-emerald-300'
-                : tone === 'paused'
-                  ? 'text-amber-200'
-                  : 'text-zinc-400',
-            )}
-            title={
-              timerExpanded
-                ? timerStatus === 'running'
-                  ? '暂停计时'
-                  : timerStatus === 'paused'
-                    ? '继续计时'
-                    : timerCompleted
-                      ? '本次计时已完成'
-                      : '开始计时'
-                : '查看计时'
-            }
-            aria-label={
-              timerExpanded
-                ? timerStatus === 'running'
-                  ? '暂停计时'
-                  : timerStatus === 'paused'
-                    ? '继续计时'
-                    : timerCompleted
-                      ? '本次计时已完成'
-                      : '开始计时'
-                : '查看计时'
-            }
-            onClick={handleTimerClick}
-          >
-            <span className={cn('size-2 shrink-0 rounded-full', TIMER_DOT_CLASS[tone])} aria-hidden />
-            {timerExpanded ? (
-              <span data-testid="freestyle-timer-readout">
-                {timerStatus === 'idle'
-                  ? '开始'
-                  : formatTimer(effectiveSeconds)}
-              </span>
-            ) : null}
-          </button>
-          {overflow}
-        </div>
+        {overflow ? (
+          <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-zinc-950/82 px-1 py-0.5 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            {overflow}
+          </div>
+        ) : null}
       </div>
-      </TooltipProvider>
     </div>
   )
 }

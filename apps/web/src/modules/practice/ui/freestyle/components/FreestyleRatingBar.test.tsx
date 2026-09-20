@@ -117,6 +117,16 @@ describe('FreestyleRatingBar', () => {
     expect(busy.onRate).not.toHaveBeenCalled()
   })
 
+  it('shows a this-round last rating without offering 再点取消', () => {
+    renderBar({ selectedRating: null, recordedRating: 3 })
+
+    expect(screen.getByText(/已选记得/)).toBeTruthy()
+    expect(screen.getByText('上次评分')).toBeTruthy()
+    expect(screen.queryByText('再点取消')).toBeNull()
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-label')).toContain('上次评分')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('keeps the selected rating clickable so a second tap can clear it', () => {
     const { onRate } = renderBar({ selectedRating: 3 })
     const remembered = screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement
@@ -184,14 +194,15 @@ describe('FreestyleRatingBar', () => {
   })
 
   describe('in-flight rate', () => {
-    it('shows the tapped rating as chosen before the server answers', () => {
-      // Without this the bar went silent on tap: nothing moved until the POST landed.
+    it('does not light the tapped rating as chosen before the server answers', () => {
       renderBar({ pendingRating: 2, busy: true })
 
       const pressed = screen.getByTestId('freestyle-rating-button-2')
-      expect(pressed.getAttribute('aria-pressed')).toBe('true')
+      expect(pressed.getAttribute('aria-pressed')).toBe('false')
       expect(pressed.getAttribute('aria-busy')).toBe('true')
       expect(screen.getByTestId('freestyle-rating-pending-2')).toBeTruthy()
+      expect(screen.getByTestId('freestyle-rating-effect-line').textContent)
+        .toContain('正在记录困难')
     })
 
     it('names the pending rating 正在记录 instead of 已选', () => {

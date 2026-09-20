@@ -52,6 +52,7 @@ export const FREESTYLE_RATINGS: Array<{
 export function FreestyleRatingBar({
   ratingEffects,
   selectedRating,
+  recordedRating = null,
   retryAfterCards,
   busy,
   pendingRating = null,
@@ -69,6 +70,8 @@ export function FreestyleRatingBar({
 }: {
   ratingEffects: UnitRatingEffectDto[]
   selectedRating: UnitRating | null
+  /** This-round last rating while the amend glance is still empty. */
+  recordedRating?: UnitRating | null
   retryAfterCards: number
   busy: boolean
   /** The rating being submitted right now — shown as selected before the server answers. */
@@ -87,10 +90,13 @@ export function FreestyleRatingBar({
   onRate: (rating: UnitRating) => void
   onDismissError?: () => void
 }) {
-  // Optimistic: the tapped button reads as chosen while the POST is in flight, so a
-  // slow network no longer looks like a dropped tap.
-  const shownRating = pendingRating ?? selectedRating
-  const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
+  // Confirmed fill only. In-flight uses 正在记录 so a failed POST cannot look like
+  // a kept score, and a late response cannot light the wrong button.
+  const shownRating = selectedRating ?? recordedRating
+  const showingRecorded = pendingRating == null && selectedRating == null && recordedRating != null
+  const selectedEffect = ratingEffects.find(
+    (effect) => effect.rating === (pendingRating ?? shownRating),
+  )
   const palaceMode = ratingScope === 'palace'
 
   useEffect(() => {
@@ -155,6 +161,8 @@ export function FreestyleRatingBar({
             </span>
             {locked && pendingRating == null ? (
               <span className="shrink-0 text-zinc-500">已锁定</span>
+            ) : showingRecorded ? (
+              <span className="shrink-0 text-zinc-500">上次评分</span>
             ) : pendingRating == null && shownRating != null ? (
               <span className="shrink-0 text-zinc-500">再点取消</span>
             ) : null}
@@ -235,7 +243,13 @@ export function FreestyleRatingBar({
                 aria-pressed={selected}
                 aria-busy={pending || undefined}
                 data-pending={pending ? 'true' : undefined}
-                aria-label={selected && !locked ? `${item.label}：${hint}。再点取消评分` : `${item.label}：${hint}`}
+                aria-label={
+                  selected && !locked && !showingRecorded
+                    ? `${item.label}：${hint}。再点取消评分`
+                    : selected && showingRecorded
+                      ? `${item.label}：${hint}。上次评分`
+                      : `${item.label}：${hint}`
+                }
                 title={actionError || hint}
                 className={cn(
                   // transition-[colors,transform] + scale-95: the old transition-colors

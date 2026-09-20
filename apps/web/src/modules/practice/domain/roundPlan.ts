@@ -24,6 +24,7 @@ export interface FreestyleRoundPlanCard {
   retryAfterCards: number
   attemptCount: number
   updatedAt: number
+  enteredOn?: string
 }
 
 export interface FreestyleRoundPlanState {
@@ -36,6 +37,7 @@ export interface FreestyleRoundPlanState {
   limitReached: boolean
   orderIds: string[]
   cardsById: Record<string, FreestyleRoundPlanCard>
+  today?: string
 }
 
 export interface FreestyleRoundMeta {
@@ -92,6 +94,7 @@ function asCards(value: unknown) {
       retryAfterCards: Math.max(0, Math.min(3, Math.round(Number(item.retryAfterCards) || 0))),
       attemptCount: Math.max(0, Math.round(Number(item.attemptCount) || 0)),
       updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : 0,
+      enteredOn: asString(item.enteredOn) || undefined,
     }
   })
   return result
@@ -108,7 +111,7 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
   Object.keys(cardsById).forEach((id) => {
     if (cardsById[id].status === 'stale') delete cardsById[id]
   })
-  return {
+  return collapseRetryPlanEntries({
     roundId,
     configSignature: asString(raw.configSignature),
     createdAt: Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now(),
@@ -118,6 +121,38 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     limitReached: Boolean(raw.limitReached),
     orderIds: asStringList(raw.orderIds).filter((id) => Boolean(cardsById[id])),
     cardsById,
+    today: asString(raw.today) || undefined,
+  })
+}
+
+function collapseRetryPlanEntries(plan: FreestyleRoundPlanState): FreestyleRoundPlanState {
+  const bySource = new Map<string, FreestyleRoundPlanCard[]>()
+  Object.values(plan.cardsById).forEach((item) => {
+    if (item.occurrenceKind !== 'retry') return
+    const source = item.sourceCardId || item.cardId
+    const list = bySource.get(source) ?? []
+    list.push(item)
+    bySource.set(source, list)
+  })
+  const drop = new Set<string>()
+  bySource.forEach((list) => {
+    if (list.length <= 1) return
+    const live = list.filter((item) => item.status === 'retry' || item.status === 'active' || item.status === 'pending')
+    const ranked = (live.length ? live : list)
+    const keep = ranked.reduce((best, item) => (item.retryAttempt >= best.retryAttempt ? item : best))
+    list.forEach((item) => {
+      if (item.cardId !== keep.cardId) drop.add(item.cardId)
+    })
+  })
+  if (!drop.size) return plan
+  const cardsById = { ...plan.cardsById }
+  drop.forEach((id) => {
+    delete cardsById[id]
+  })
+  return {
+    ...plan,
+    cardsById,
+    orderIds: plan.orderIds.filter((id) => !drop.has(id)),
   }
 }
 
@@ -201,11 +236,14 @@ export function createRoundPlan(
   previous?: FreestyleRoundPlanState | null,
   now = Date.now(),
 ): FreestyleRoundPlanState {
+  // Never inherit another round's completed/retry ledger into this plan — that
+  // left phantom 待重练 rows in 本轮安排 and blocked locate/settlement.
+  const prior = previous?.roundId === roundId ? previous : null
   const nextById: Record<string, FreestyleRoundPlanCard> = {}
   cards.forEach((card) => {
     const id = String(card.id || '').trim()
     if (!id) return
-    const existing = previous?.cardsById[id]
+    const existing = prior?.cardsById[id]
     if (existing && existing.status !== 'stale') {
       const retryGap = bookedRetryAfterCards(card)
       nextById[id] = existing.occurrenceKind === 'retry' && existing.retryAfterCards === 0 && retryGap > 0
@@ -226,6 +264,7 @@ export function createRoundPlan(
         retryAfterCards: bookedRetryAfterCards(card),
         attemptCount: 0,
         updatedAt: now,
+        enteredOn: existing?.enteredOn,
       }
     }
   })
@@ -234,8 +273,20 @@ export function createRoundPlan(
   // when the API omits them after a rebuild. Stale cards are intentionally not
   // retained: they are rebuildable projections, and retaining them can let an
   // old stale entry overwrite a fresh card with the same stable id.
-  Object.entries(previous?.cardsById ?? {}).forEach(([id, item]) => {
+  const retrySourceKept = new Set(
+    Object.values(nextById)
+      .filter((item) => item.occurrenceKind === 'retry')
+      .map((item) => item.sourceCardId || item.cardId),
+  )
+  Object.entries(prior?.cardsById ?? {}).forEach(([id, item]) => {
     if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry') {
+      if (item.occurrenceKind === 'retry') {
+        // retry:{roundId}:... from another round must not haunt 本轮安排.
+        if (id.startsWith('retry:') && !id.startsWith(`retry:${roundId}:`)) return
+        const source = item.sourceCardId || item.cardId
+        if (nextById[id] || retrySourceKept.has(source)) return
+        retrySourceKept.add(source)
+      }
       nextById[id] = item.occurrenceKind === 'retry' && item.retryAfterCards === 0
         ? { ...item, retryAfterCards: bookedRetryAfterCards({ occurrence_kind: 'retry', retry_after_cards: 0 }) }
         : item
@@ -243,16 +294,16 @@ export function createRoundPlan(
   })
 
   const currentIds = new Set(Object.keys(nextById))
-  const previousIds = new Set(previous?.orderIds ?? [])
+  const previousIds = new Set(prior?.orderIds ?? [])
   // Retry occurrences are local scheduling decisions. Remove their old
-  // persisted slots first so a rebuild cannot resurrect the pre-fix tail order.
+  // persisted slots first so a rebuild cannot resurrect the pre-leave tail order.
   const retryIdsInCards = new Set(
     cards
       .filter((card) => card.occurrence_kind === 'retry')
       .map((card) => String(card.id || '').trim())
       .filter(Boolean),
   )
-  let orderIds = (previous?.orderIds ?? []).filter(
+  let orderIds = (prior?.orderIds ?? []).filter(
     (id) => currentIds.has(id) && !retryIdsInCards.has(id),
   )
   cards.forEach((card, cardIndex) => {
@@ -274,7 +325,7 @@ export function createRoundPlan(
     if (previousIds.has(id)) return
     orderIds.push(id)
   })
-  if (shouldReorderUnstartedFreestylePlan(previous?.configSignature, config)) {
+  if (shouldReorderUnstartedFreestylePlan(prior?.configSignature, config)) {
     orderIds = reorderUnstartedPlanIds(
       orderIds,
       cards.map((card) => String(card.id || '').trim()).filter(Boolean),
@@ -282,17 +333,18 @@ export function createRoundPlan(
     )
   }
 
-  return {
+  return collapseRetryPlanEntries({
     roundId,
     configSignature: roundPlanConfigSignature(config),
-    createdAt: previous?.createdAt ?? now,
-    candidateCount: Math.max(0, Math.round(Number(meta?.candidate_count ?? previous?.candidateCount ?? cards.length) || 0)),
+    createdAt: prior?.createdAt ?? now,
+    candidateCount: Math.max(0, Math.round(Number(meta?.candidate_count ?? prior?.candidateCount ?? cards.length) || 0)),
     scheduledCount: Math.max(0, Math.round(Number(meta?.scheduled_count ?? cards.length) || 0)),
     queueLimit: Math.max(1, Math.round(Number(meta?.queue_limit ?? config.queue_length) || config.queue_length)),
-    limitReached: Boolean(meta?.limit_reached ?? previous?.limitReached),
+    limitReached: Boolean(meta?.limit_reached ?? prior?.limitReached),
     orderIds,
     cardsById: nextById,
-  }
+    today: prior?.today,
+  })
 }
 
 function cardPalaceTitle(card: FreestyleCard) {

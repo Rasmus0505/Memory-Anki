@@ -38,8 +38,6 @@ export function buildFlipCardToolbar(options: {
   onToggleEnglishMode: () => void
   onToggleTextMode: () => void
   onToggleFullscreen: (active?: boolean) => void
-  /** Freestyle: bury 英语 in ⋯ and shorten 文字模式. Other hosts leave this unset. */
-  englishInOverflow?: boolean
   textActionLabel?: string
 }): ReactNode {
   const {
@@ -59,25 +57,13 @@ export function buildFlipCardToolbar(options: {
     onToggleEnglishMode,
     onToggleTextMode,
     onToggleFullscreen,
-    englishInOverflow = false,
     textActionLabel,
   } = options
-
-  const incomingMore = toolbarExtensions?.moreActions ?? []
-  const englishOverflowAction = {
-    label: '英语',
-    active: englishModeActive,
-    onClick: onToggleEnglishMode,
-  }
-  const moreActions = englishInOverflow
-    ? insertEnglishOverflowAction(incomingMore, englishOverflowAction)
-    : incomingMore
 
   return (
     <MindMapPageToolbar
       {...toolbarExtensions}
       embedded
-      moreActions={moreActions}
       modeToggle={
         onToggleMode
           ? {
@@ -88,15 +74,11 @@ export function buildFlipCardToolbar(options: {
             }
           : null
       }
-      englishAction={
-        englishInOverflow
-          ? null
-          : {
-              label: '英语',
-              active: englishModeActive,
-              onClick: onToggleEnglishMode,
-            }
-      }
+      englishAction={{
+        label: '英语',
+        active: englishModeActive,
+        onClick: onToggleEnglishMode,
+      }}
       textAction={{
         label: textActionLabel ?? '文字模式',
         active: !isEditMode && textModeActive,
@@ -151,19 +133,4 @@ export function buildFlipCardToolbar(options: {
       }
     />
   )
-}
-
-function insertEnglishOverflowAction<T extends { label: string }>(
-  actions: T[],
-  englishAction: T,
-): T[] {
-  const enterIndex = actions.findIndex(
-    (action) => action.label === '进入编辑' || action.label === '返回学习',
-  )
-  if (enterIndex < 0) return [englishAction, ...actions]
-  return [
-    ...actions.slice(0, enterIndex + 1),
-    englishAction,
-    ...actions.slice(enterIndex + 1),
-  ]
 }

@@ -5,10 +5,67 @@ import type {
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
 
-import { cardUnitId, createRetryOccurrence, isRetryOccurrence, reviewUnitIdFromCardId, sourceCardId } from './queueState'
+import { updateRoundPlanCard, type FreestyleRoundPlanState } from './roundPlan'
+import {
+  cardUnitId,
+  createRetryOccurrence,
+  isRetryOccurrence,
+  reviewUnitIdFromCardId,
+  sourceCardId,
+  type FreestyleUnitEncounterState,
+} from './queueState'
 
 export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
   return `retry:${roundId}:${sourceId}:${attempt}`
+}
+
+/** Stamp leftover/today cohorts from the server plan onto the HUD round plan. */
+export function applyServerCohorts(
+  plan: FreestyleRoundPlanState,
+  server: FreestyleRoundPlanPayload | null | undefined,
+): FreestyleRoundPlanState {
+  if (!server) return plan
+  const sourceEntered = new Map(
+    (server.original_cards || []).map((item) => [item.card_id, String(item.entered_on || '').trim()]),
+  )
+  const occEntered = new Map(
+    (server.occurrences || []).map((item) => [
+      item.occurrence_id,
+      String(item.entered_on || '').trim() || sourceEntered.get(item.source_card_id) || '',
+    ]),
+  )
+  const cardsById = { ...plan.cardsById }
+  for (const id of Object.keys(cardsById)) {
+    const item = cardsById[id]
+    const entered = item.occurrenceKind === 'retry'
+      ? (occEntered.get(id) || sourceEntered.get(item.sourceCardId) || '')
+      : (sourceEntered.get(id) || sourceEntered.get(item.sourceCardId) || item.enteredOn || '')
+    if (entered && entered !== item.enteredOn) {
+      cardsById[id] = { ...item, enteredOn: entered }
+    }
+  }
+  const today = String(server.today || '').trim()
+  const presented = (server.presented_ids || []).filter((id) => Boolean(cardsById[id]))
+  const extra = plan.orderIds.filter((id) => !presented.includes(id) && Boolean(cardsById[id]))
+  return {
+    ...plan,
+    cardsById,
+    today: today || plan.today,
+    orderIds: presented.length ? [...presented, ...extra] : plan.orderIds,
+  }
+}
+
+export function planCardCohort(
+  cardId: string,
+  plan: FreestyleRoundPlanState | null | undefined,
+): string {
+  if (!plan) return ''
+  const item = plan.cardsById[cardId]
+  if (item?.enteredOn) return item.enteredOn
+  if (item?.sourceCardId && plan.cardsById[item.sourceCardId]?.enteredOn) {
+    return plan.cardsById[item.sourceCardId].enteredOn || ''
+  }
+  return ''
 }
 
 /** Rebuild a review-unit card the live queue omitted because it is already done. */
@@ -60,9 +117,15 @@ export function cardsForServerPlan(
   )
   const ordered: FreestyleCard[] = []
   const seen = new Set<string>()
+  const retrySources = new Set<string>()
 
   const push = (card: FreestyleCard | undefined) => {
     if (!card || seen.has(card.id)) return
+    if (isRetryOccurrence(card)) {
+      const source = sourceCardId(card) || card.id
+      if (retrySources.has(source)) return
+      retrySources.add(source)
+    }
     seen.add(card.id)
     ordered.push(card)
   }
@@ -94,6 +157,12 @@ export function cardsForServerPlan(
     push(createRetryOccurrence(source, roundId, attempt, 3, occurrence?.occurrence_id || id))
   }
 
+  // A fully handled round must keep settlement reachable: do not grow the feed
+  // with brand-new due tails until an explicit config confirm mints the next round.
+  if (nextUnfinishedCardId(plan, ordered) == null && (plan.presented_ids || []).length > 0) {
+    return ordered
+  }
+
   // Server presented_ids own retry copies. Local optimistic retries with a
   // different id must not append as a second clump after a cross-day rebind.
   for (const card of cards) {
@@ -101,6 +170,110 @@ export function cardsForServerPlan(
     push(card)
   }
   return ordered
+}
+
+/** True when incoming cards include identities absent from the server plan. */
+export function planHasNewDueWork(
+  plan: FreestyleRoundPlanPayload | null | undefined,
+  cards: FreestyleCard[],
+): boolean {
+  if (!plan || !cards.length) return false
+  const known = new Set<string>()
+  for (const item of plan.original_cards || []) {
+    const cardId = String(item.card_id || '').trim()
+    if (cardId) known.add(cardId)
+    const unitId = String(item.unit_id || '').trim()
+    if (unitId) known.add(`unit:${unitId}`)
+  }
+  for (const id of plan.presented_ids || []) {
+    const cardId = String(id || '').trim()
+    if (cardId) known.add(cardId)
+  }
+  return cards.some((card) => {
+    if (isRetryOccurrence(card)) return false
+    const cardId = String(card.id || '').trim()
+    if (cardId && known.has(cardId)) return false
+    const unitId = cardUnitId(card)
+    if (unitId && known.has(`unit:${unitId}`)) return false
+    return Boolean(cardId || unitId)
+  })
+}
+
+const LIVE_OCCURRENCE_STATUSES = new Set(['pending', 'inserted', 'completed'])
+
+/**
+ * Plan-only unfinished id (mirrors backend `next_unfinished_id`).
+ * Do not pass an empty live `cards` array into `nextUnfinishedCardId` for this
+ * check — that helper needs feed rows and returns null too eagerly.
+ */
+export function nextUnfinishedPlanCardId(
+  plan: FreestyleRoundPlanPayload | null | undefined,
+): string | null {
+  if (!plan) return null
+  const completed = new Set((plan.completed_ids || []).map(String))
+  const excluded = new Set((plan.excluded_ids || []).map(String))
+  const occurrences = plan.occurrences || []
+  const isUnfinished = (cardId: string) => {
+    if (!cardId || completed.has(cardId) || excluded.has(cardId)) return false
+    const occ = occurrences.find((item) => String(item.occurrence_id || '') === cardId)
+    if (occ) return String(occ.status || '') === 'inserted'
+    return !occurrences.some((item) => (
+      String(item.source_card_id || '') === cardId
+      && LIVE_OCCURRENCE_STATUSES.has(String(item.status || ''))
+    ))
+  }
+  const ordered = [...(plan.presented_ids || []).map(String).filter(Boolean)]
+  for (const item of plan.original_cards || []) {
+    const cardId = String(item.card_id || '').trim()
+    if (cardId && !ordered.includes(cardId)) ordered.push(cardId)
+  }
+  const seen = new Set<string>()
+  for (const id of ordered) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    if (isUnfinished(id)) return id
+  }
+  return null
+}
+
+/** True when every presented/original identity is completed or excluded. */
+export function planIsFullyHandled(
+  plan: FreestyleRoundPlanPayload | null | undefined,
+): boolean {
+  if (!plan) return false
+  if (!(plan.presented_ids || []).length && !(plan.original_cards || []).length) return false
+  return nextUnfinishedPlanCardId(plan) == null
+}
+
+/**
+ * Cold-start / rebuild prefer order for the card under the viewport.
+ * Non-silent refresh must keep the local draft cursor when it still exists in
+ * the feed; otherwise a stale server unfinished id yanks the learner to card 1.
+ */
+export function resolveResumePreferCardId(args: {
+  preferCardId?: string | null
+  silent?: boolean
+  draftCardId?: string | null
+  serverCurrentId?: string | null
+  userCardId?: string | null
+  nextCards: FreestyleCard[]
+}): string | null {
+  const inFeed = (value: string | null | undefined) => {
+    const id = String(value || '').trim()
+    if (!id) return null
+    return args.nextCards.some((card) => card.id === id) ? id : null
+  }
+  if (args.preferCardId != null && String(args.preferCardId).trim()) {
+    return inFeed(args.preferCardId) ?? String(args.preferCardId).trim()
+  }
+  if (args.silent) {
+    return inFeed(args.userCardId)
+      ?? inFeed(args.serverCurrentId)
+      ?? inFeed(args.draftCardId)
+  }
+  return inFeed(args.draftCardId)
+    ?? inFeed(args.serverCurrentId)
+    ?? inFeed(args.userCardId)
 }
 
 function finishedUnitIds(
@@ -166,6 +339,119 @@ export function serverPlanVersion(round: Partial<Pick<FreestyleRoundStatePayload
   if (!round) return 0
   const version = Number(round.plan_version ?? round.version)
   return Number.isInteger(version) && version > 0 ? version : 0
+}
+
+function asUnitRating(value: unknown): 1 | 2 | 3 | 4 | null {
+  const rating = Math.round(Number(value))
+  return rating === 1 || rating === 2 || rating === 3 || rating === 4 ? rating : null
+}
+
+/**
+ * Fill local draft ratings from the server plan after refresh.
+ * Keeps any richer local selectedRating; only fills gaps so cards do not look unanswered.
+ */
+export function mergeServerPlanIntoLocalEncounters(
+  encounters: Record<string, FreestyleUnitEncounterState>,
+  plan: FreestyleRoundPlanPayload | null | undefined,
+  roundId: string,
+): Record<string, FreestyleUnitEncounterState> {
+  if (!plan) return encounters
+  const next: Record<string, FreestyleUnitEncounterState> = { ...encounters }
+  const writeGap = (
+    cardId: string,
+    patch: {
+      encounterId?: string
+      unitRevision?: number
+      selectedRating?: 1 | 2 | 3 | 4 | null
+      passed?: boolean | null
+    },
+  ) => {
+    const id = String(cardId || '').trim()
+    if (!id) return
+    const existing = next[id]
+    if (existing?.selectedRating != null) return
+    const selectedRating = patch.selectedRating ?? existing?.selectedRating ?? null
+    const passed = patch.passed ?? existing?.passed ?? (
+      selectedRating == null ? null : selectedRating >= 3
+    )
+    next[id] = {
+      encounterId: patch.encounterId || existing?.encounterId || id,
+      roundId: existing?.roundId || roundId,
+      unitRevision: patch.unitRevision ?? existing?.unitRevision ?? 0,
+      status: selectedRating != null || passed != null ? 'closed' : (existing?.status ?? 'pending'),
+      sessionId: existing?.sessionId ?? null,
+      selectedRating,
+      passed,
+      retryAfterCards: existing?.retryAfterCards ?? 0,
+      effectiveSeconds: existing?.effectiveSeconds ?? null,
+    }
+  }
+
+  for (const occ of plan.occurrences || []) {
+    const rating = asUnitRating(occ.rating)
+    if (rating == null) continue
+    const targets = [occ.occurrence_id, occ.source_card_id]
+    for (const target of targets) {
+      writeGap(String(target || ''), {
+        encounterId: String(occ.encounter_id || '').trim() || undefined,
+        selectedRating: rating,
+        passed: rating >= 3,
+      })
+    }
+  }
+
+  for (const [cardId, enc] of Object.entries(plan.encounters || {})) {
+    const status = String(enc?.status || '').trim()
+    if (status !== 'passed' && status !== 'failed') continue
+    writeGap(cardId, {
+      encounterId: String(enc.encounter_id || '').trim() || undefined,
+      unitRevision: Number(enc.unit_revision) || undefined,
+      selectedRating: status === 'passed' ? 3 : 1,
+      passed: status === 'passed',
+    })
+  }
+
+  for (const cardId of plan.completed_ids || []) {
+    writeGap(String(cardId || ''), {
+      selectedRating: 3,
+      passed: true,
+    })
+  }
+  return next
+}
+
+/** Stamp occurrence ratings onto the HUD round plan without wiping local values. */
+export function applyServerRatingsToRoundPlan(
+  plan: FreestyleRoundPlanState,
+  server: FreestyleRoundPlanPayload | null | undefined,
+): FreestyleRoundPlanState {
+  if (!server) return plan
+  let next = plan
+  const ratings = new Map<string, 1 | 2 | 3 | 4>()
+  for (const occ of server.occurrences || []) {
+    const rating = asUnitRating(occ.rating)
+    if (rating == null) continue
+    const occId = String(occ.occurrence_id || '').trim()
+    const sourceId = String(occ.source_card_id || '').trim()
+    if (occId) ratings.set(occId, rating)
+    if (sourceId && !ratings.has(sourceId)) ratings.set(sourceId, rating)
+  }
+  for (const [cardId, enc] of Object.entries(server.encounters || {})) {
+    if (ratings.has(cardId)) continue
+    const status = String(enc?.status || '').trim()
+    if (status === 'passed') ratings.set(cardId, 3)
+    if (status === 'failed') ratings.set(cardId, 1)
+  }
+  for (const cardId of server.completed_ids || []) {
+    const id = String(cardId || '').trim()
+    if (id && !ratings.has(id)) ratings.set(id, 3)
+  }
+  for (const [cardId, rating] of ratings) {
+    const current = next.cardsById[cardId]
+    if (!current || current.lastRating != null) continue
+    next = updateRoundPlanCard(next, cardId, { lastRating: rating })
+  }
+  return next
 }
 
 function parseRetrySourceId(occurrenceId: string) {

@@ -11,6 +11,8 @@ export type FreestyleUnitEncounterState = {
   selectedRating: number | null
   passed: boolean | null
   retryAfterCards: number
+  /** Billable focus seconds for a closed rated encounter; null when unknown. */
+  effectiveSeconds?: number | null
   cancelled?: boolean
   abandoned?: boolean
 }
@@ -158,6 +160,10 @@ function asUnitEncounterMap(value: unknown) {
         : null,
       passed: typeof raw.passed === 'boolean' ? raw.passed : null,
       retryAfterCards: Math.max(0, Math.min(3, Math.round(Number(raw.retryAfterCards) || 0))),
+      effectiveSeconds: (() => {
+        const n = Number(raw.effectiveSeconds)
+        return Number.isFinite(n) && n >= 0 ? Math.round(n) : null
+      })(),
     }
   })
   return result
@@ -390,17 +396,34 @@ export function sourceCardId(card: FreestyleCard | null | undefined): string {
   return String(card?.source_card_id || card?.id || '').trim()
 }
 
+function isRecordedUnitRating(value: unknown): value is 1 | 2 | 3 | 4 {
+  return value === 1 || value === 2 || value === 3 || value === 4
+}
+
+function planRecordedRating(
+  roundPlan: FreestyleRoundPlanState | null | undefined,
+  id: string,
+  sourceId: string,
+): number | null {
+  const value = roundPlan?.cardsById[id]?.lastRating ?? roundPlan?.cardsById[sourceId]?.lastRating ?? null
+  return isRecordedUnitRating(value) ? value : null
+}
+
 /**
  * Cards that have already received a rating in the current freestyle round.
  * Weak ratings intentionally remain in this set for local "already attempted"
  * navigation, while {@link getFreestylePassedCardIds} is used by completion
  * and palace gates. Retry occurrences are folded back onto their source card
  * so one unit is never counted twice.
+ *
+ * An empty amend glance keeps this-round rating: swipe-back must not treat a
+ * scored unit as unrated just because the new encounter has no selectedRating.
  */
 export function getFreestyleRatedCardIds(
   cards: ReadonlyArray<FreestyleCard>,
   completedIds: Iterable<string>,
   encounters: Record<string, FreestyleUnitEncounterState> = {},
+  roundPlan: FreestyleRoundPlanState | null = null,
 ): string[] {
   const completed = new Set(Array.from(completedIds, String).map((id) => id.trim()).filter(Boolean))
   const ratedSources = new Set<string>()
@@ -410,10 +433,36 @@ export function getFreestyleRatedCardIds(
     ratedSources.add(sourceCardId(card) || String(cardId).trim())
   })
   const rated = new Set<string>()
+  const sourcePassed = (sourceId: string) => {
+    const recorded = planRecordedRating(roundPlan, sourceId, sourceId)
+    const encounter = encounters[sourceId]
+    const rating = Number(encounter?.selectedRating)
+    const passed = encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+    return completed.has(sourceId) || passed || (recorded != null && recorded >= 3)
+  }
   cards.forEach((card) => {
     const id = String(card.id || '').trim()
     const sourceId = sourceCardId(card)
-    if (completed.has(id) || completed.has(sourceId) || ratedSources.has(id) || ratedSources.has(sourceId)) {
+    if (isRetryOccurrence(card)) {
+      const recorded = planRecordedRating(roundPlan, id, id)
+      if (
+        completed.has(id)
+        || ratedSources.has(id)
+        || recorded != null
+        || sourcePassed(sourceId)
+      ) {
+        if (id) rated.add(id)
+      }
+      return
+    }
+    const recorded = planRecordedRating(roundPlan, id, sourceId)
+    if (
+      completed.has(id)
+      || completed.has(sourceId)
+      || ratedSources.has(id)
+      || ratedSources.has(sourceId)
+      || recorded != null
+    ) {
       if (id) rated.add(id)
       if (sourceId) rated.add(sourceId)
     }
@@ -429,8 +478,9 @@ export function findEarliestUnratedIndex(
   cards: ReadonlyArray<FreestyleCard>,
   completedIds: Iterable<string>,
   encounters: Record<string, FreestyleUnitEncounterState> = {},
+  roundPlan: FreestyleRoundPlanState | null = null,
 ): number | null {
-  const rated = new Set(getFreestyleRatedCardIds(cards, completedIds, encounters))
+  const rated = new Set(getFreestyleRatedCardIds(cards, completedIds, encounters, roundPlan))
   const index = cards.findIndex((card) => {
     const id = String(card.id || '').trim()
     return Boolean(id) && !rated.has(id)
@@ -447,6 +497,9 @@ export function findEarliestUnratedIndex(
  * gates must use this set so a 忘记/困难 score cannot unlock the next palace.
  * Explicit completed ids are included for quiz acknowledgements and for unit
  * settlements whose local encounter state has already been compacted.
+ *
+ * An empty amend glance does not drop a this-round pass. Cancel / uncomplete
+ * already removes the id from completedIds.
  */
 export function getFreestylePassedCardIds(
   cards: ReadonlyArray<FreestyleCard>,
@@ -509,8 +562,13 @@ export function insertRetryOccurrenceAfterGap(
   occurrence: FreestyleCard,
   currentIndex: number,
   maxIntervening = 3,
+  cohortOf?: (cardId: string) => string,
 ): FreestyleCard[] {
-  const withoutExisting = cards.filter((card) => card.id !== occurrence.id)
+  const sourceId = sourceCardId(occurrence) || occurrence.id
+  const withoutExisting = cards.filter((card) => {
+    if (card.id === occurrence.id) return false
+    return !(isRetryOccurrence(card) && sourceCardId(card) === sourceId)
+  })
   if (!withoutExisting.length) return [occurrence]
   const requestedIndex = Math.round(currentIndex)
   const anchor = Math.max(
@@ -520,9 +578,22 @@ export function insertRetryOccurrenceAfterGap(
       withoutExisting.length - 1,
     ),
   )
-  const remainingOthers = Math.max(0, withoutExisting.length - anchor - 1)
+  const cohort = cohortOf
+    ? (cohortOf(occurrence.id) || cohortOf(sourceCardId(occurrence) || occurrence.id) || '')
+    : ''
+  let segmentEnd = withoutExisting.length
+  if (cohortOf) {
+    segmentEnd = Math.min(anchor + 1, withoutExisting.length)
+    while (
+      segmentEnd < withoutExisting.length
+      && (cohortOf(withoutExisting[segmentEnd].id) || '') === cohort
+    ) {
+      segmentEnd += 1
+    }
+  }
+  const remainingOthers = Math.max(0, segmentEnd - anchor - 1)
   const gap = restudyInterveningGap(remainingOthers, maxIntervening)
-  const insertAt = Math.min(anchor + 1 + gap, withoutExisting.length)
+  const insertAt = Math.min(anchor + 1 + gap, segmentEnd)
   const next = withoutExisting.slice()
   next.splice(insertAt, 0, occurrence)
   return next
@@ -775,6 +846,11 @@ export function restudyInterveningGap(
   const wantedRaw = Math.round(Number(requested) || 0)
   const wanted = wantedRaw > 0 ? wantedRaw : RESTUDY_MAX_INTERVENING
   return Math.max(1, Math.min(RESTUDY_MAX_INTERVENING, wanted, others))
+}
+
+/** True when nothing remains after the weak-rated source (insert retry immediately). */
+export function isImmediateRestudyGap(remainingOtherCards: number): boolean {
+  return restudyInterveningGap(remainingOtherCards) === 0
 }
 
 /** Retry rows in the round sheet inherit 3 when the booked gap was missing/0. */

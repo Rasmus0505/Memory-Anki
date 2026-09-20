@@ -154,12 +154,12 @@ describe('isPalaceRoundCleared', () => {
 describe('palaceClearanceCopy', () => {
   it('says today is clear when nothing was left out of the round', () => {
     expect(palaceClearanceCopy({ palaceId: 1, palaceTitle: '卢梭', leftoverDue: 0 }))
-      .toBe('《卢梭》今日安排已清')
+      .toBe('《卢梭》今日到期已清')
   })
 
-  it('keeps leftover due honest when the queue limit cut the palace', () => {
+  it('names leftover due when more units arrive after this palace is clear', () => {
     expect(palaceClearanceCopy({ palaceId: 2, palaceTitle: '康德', leftoverDue: 3 }))
-      .toBe('《康德》本轮已清，今日还剩 3')
+      .toBe('《康德》今日到期已清，还剩 3')
   })
 })
 

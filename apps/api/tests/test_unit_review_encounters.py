@@ -197,6 +197,29 @@ def test_freestyle_start_reopens_after_content_invalidation(db_session):
     assert unit["encounter"]["status"] == "open"
 
 
+def test_retry_glance_same_rating_keeps_this_encounter(db_session):
+    state = _seed_review_unit(db_session)
+    first = _start(db_session, state, "encounter-source")
+    _rate(db_session, first, state, "encounter-source", "rating-hard", 2)
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=first["id"],
+        unit_id=state.id,
+        encounter_id="encounter-source",
+        operation_id="close-hard",
+    )
+    assert closed["session_status"] == "active"
+
+    retry = _start(db_session, state, "encounter-retry")
+    assert retry["units"][0]["encounter"]["id"] == "encounter-retry"
+    rated = _rate(db_session, retry, state, "encounter-retry", "rating-retry-hard", 2)
+
+    assert rated["encounter"]["id"] == "encounter-retry"
+    assert rated["encounter_id"] == "encounter-retry"
+    assert rated["rating"] == 2
+    assert rated["passed"] is False
+
+
 def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-amend")
@@ -279,6 +302,50 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
         unit_revision=state.revision,
         encounter_id="encounter-amend",
         operation_id="rating-amend",
+        rating=4,
+        round_id="round-2026-07-27",
+    )
+    assert amended["amended"] is True
+    assert amended["rating"] == 4
+
+
+def test_start_reopens_passed_unit_when_session_still_active(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-pass")
+    _rate(db_session, review_session, state, "encounter-pass", "rating-pass", 3)
+    encounter = db_session.get(ReviewUnitEncounter, "encounter-pass")
+    encounter.status = "closed"
+    encounter.closed_at = utc_now_naive()
+    db_session.commit()
+    study = db_session.get(StudySession, review_session["id"])
+    item = (
+        db_session.query(ReviewSessionUnit)
+        .filter_by(study_session_id=review_session["id"], unit_id=state.id)
+        .one()
+    )
+    assert study.status == "active"
+    assert item.status == "passed"
+
+    resumed = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-amend",
+        round_id="round-2026-07-27",
+        allow_not_due=True,
+    )
+
+    assert resumed["id"] != review_session["id"]
+    assert resumed["units"][0]["encounter"]["id"] == "encounter-amend"
+    assert resumed["units"][0]["encounter"]["status"] == "open"
+    assert db_session.get(StudySession, review_session["id"]).status == "completed"
+    amended = rate_review_unit(
+        db_session,
+        study_session_id=resumed["id"],
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-amend",
+        operation_id="rating-amend-active",
         rating=4,
         round_id="round-2026-07-27",
     )

@@ -702,7 +702,6 @@ export function FreestyleUnitReviewFlipPanel({
             ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true }
             : null,
         }}
-        englishInOverflow
         textActionLabel="文字"
         revealSettings={flipCardRevealSettings}
         freestyleFlipMode={onFreestyleFlipModeChange

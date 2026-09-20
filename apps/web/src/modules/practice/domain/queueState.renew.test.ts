@@ -5,6 +5,7 @@ import {
   rebindCompletedIdsByUnit,
   rebindUnitEncountersByUnitId,
   removeRetryOccurrencesForSource,
+  resolveRebuildIndex,
   shouldRenewFreestyleEncounter,
   type FreestyleUnitEncounterState,
 } from './queueState'
@@ -143,5 +144,23 @@ describe('removeRetryOccurrencesForSource', () => {
       'a',
       first.id,
     ])
+  })
+})
+
+describe('resolveRebuildIndex', () => {
+  it('keeps a just-rated retry occurrence in the viewport', () => {
+    const nextCards = [
+      { id: 'review_unit:u1:r1', unit_id: 'u1' },
+      { id: 'retry:round-1:u1:1', unit_id: 'u1', occurrence_kind: 'retry' as const, source_card_id: 'review_unit:u1:r1' },
+      { id: 'review_unit:u2:r1', unit_id: 'u2' },
+    ]
+    expect(
+      resolveRebuildIndex({
+        nextCards,
+        preferCardId: 'retry:round-1:u1:1',
+        userCardId: 'retry:round-1:u1:1',
+        fallbackIndex: 0,
+      }),
+    ).toBe(1)
   })
 })

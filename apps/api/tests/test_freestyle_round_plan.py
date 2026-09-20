@@ -14,11 +14,18 @@ from memory_anki.modules.practice.domain.round_plan import (
     insert_retry_after_gap,
     leave_card,
     next_unfinished_id,
+    normalize_plan,
     occurrence_id_for,
     plan_from_cards,
-    rebind_plan_cards,
+    plan_is_fully_handled,
     set_cursor,
 )
+from memory_anki.modules.practice.domain.round_rebind import (
+    append_today_cards,
+    rebind_plan_cards,
+    replan_remaining,
+)
+from memory_anki.modules.practice.domain.round_uncomplete import uncomplete_card
 
 ROUND_ID = "round-1"
 
@@ -132,10 +139,84 @@ def test_consecutive_failures_increment_retry_attempt():
     plan = leave_card(plan, "a")
     inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     plan = _rate(plan, inserted["occurrence_id"], 2, "enc-3", occurrence_id=inserted["occurrence_id"])
-    next_pending = _pending(plan, "a")
-    assert next_pending["retry_attempt"] == 3
-    assert next_pending["status"] == "pending"
-    assert inserted["occurrence_id"] != next_pending["occurrence_id"]
+    live = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
+    ]
+    assert len(live) == 1
+    assert live[0]["retry_attempt"] == 2
+    assert live[0]["status"] == "inserted"
+    assert live[0]["occurrence_id"] == inserted["occurrence_id"]
+    plan = leave_card(plan, inserted["occurrence_id"])
+    live = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
+    ]
+    assert len(live) == 1
+    assert live[0]["retry_attempt"] == 3
+    assert live[0]["occurrence_id"] == inserted["occurrence_id"]
+    assert plan["presented_ids"].count(inserted["occurrence_id"]) == 1
+
+
+def test_failing_a_retry_keeps_one_slot_and_leave_repositions_it():
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+        _card("e", unit_id="unit-e"),
+        _card("f", unit_id="unit-f"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-1"), "a")
+    retry_id = plan["occurrences"][0]["occurrence_id"]
+    assert plan["presented_ids"] == ["a", "b", "c", "d", retry_id, "e", "f"]
+
+    plan = set_cursor(plan, retry_id)
+    plan = _rate(plan, retry_id, 1, "enc-2", occurrence_id=retry_id)
+    live = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] != "cancelled"
+    ]
+    assert len(live) == 1
+    assert live[0]["retry_attempt"] == 1
+    assert live[0]["occurrence_id"] == retry_id
+    assert plan["presented_ids"].count(retry_id) == 1
+
+    plan = leave_card(plan, retry_id)
+    assert [item["status"] for item in plan["occurrences"] if item["source_card_id"] == "a"] == [
+        "inserted"
+    ]
+    presented = plan["presented_ids"]
+    assert presented.count(retry_id) == 1
+    assert plan["occurrences"][0]["retry_attempt"] == 2
+    assert presented == ["a", "b", "c", "d", "e", "f", retry_id]
+
+
+def test_normalize_collapses_duplicate_live_retries():
+    plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b"), _card("c")])
+    plan = leave_card(_rate(plan, "a", 1, "enc-1"), "a")
+    first = plan["occurrences"][0]
+    duplicate = {
+        **first,
+        "occurrence_id": occurrence_id_for(ROUND_ID, "unit-a", 2),
+        "retry_attempt": 2,
+        "status": "inserted",
+    }
+    plan["occurrences"].append(duplicate)
+    plan["presented_ids"].append(duplicate["occurrence_id"])
+
+    collapsed = normalize_plan(plan)
+    live = [
+        item
+        for item in collapsed["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
+    ]
+    assert len(live) == 1
+    assert collapsed["presented_ids"].count(live[0]["occurrence_id"]) == 1
+    assert duplicate["occurrence_id"] not in collapsed["presented_ids"] or live[0]["occurrence_id"] == duplicate["occurrence_id"]
 
 
 def test_same_encounter_amend_does_not_increment():
@@ -168,7 +249,14 @@ def test_pass_settles_source_and_unfinished_occurrences():
     inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     assert inserted["status"] == "inserted"
     plan = _rate(plan, inserted["occurrence_id"], 2, "enc-retry", occurrence_id=inserted["occurrence_id"])
-    assert _pending(plan, "a")["status"] == "pending"
+    live = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
+    ]
+    assert len(live) == 1
+    assert live[0]["occurrence_id"] == inserted["occurrence_id"]
+    assert live[0]["retry_attempt"] == 1
 
     plan = _rate(plan, "a", 3, "enc-pass")
     assert "a" in plan["completed_ids"]
@@ -176,9 +264,34 @@ def test_pass_settles_source_and_unfinished_occurrences():
     assert by_status[inserted["occurrence_id"]] == "completed"
     assert inserted["occurrence_id"] in plan["completed_ids"]
     assert "pending" not in by_status.values()
-    assert "cancelled" in by_status.values()
     left = leave_card(plan, "a")
     assert left["presented_ids"] == plan["presented_ids"]
+
+
+def test_passing_a_retry_keeps_that_occurrence_in_presented_ids():
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+        _card("e", unit_id="unit-e"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-fail"), "a")
+    inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
+    plan = set_cursor(plan, inserted["occurrence_id"])
+    plan = _rate(
+        plan,
+        inserted["occurrence_id"],
+        3,
+        "enc-pass",
+        occurrence_id=inserted["occurrence_id"],
+    )
+    assert inserted["occurrence_id"] in plan["presented_ids"]
+    assert inserted["occurrence_id"] in plan["completed_ids"]
+    assert plan["current_card_id"] == inserted["occurrence_id"]
+    rebound = rebind_plan_cards(plan, cards)
+    assert inserted["occurrence_id"] in rebound["presented_ids"]
+    assert rebound["current_card_id"] == inserted["occurrence_id"]
 
 
 def test_rebind_by_unit_id_keeps_ratings_and_retry_counts():
@@ -262,7 +375,15 @@ def test_rebind_drop_missing_unstarted_keeps_order_and_completed():
     assert "c" in original_ids
     assert "d" in original_ids
     assert "extra" not in original_ids
-    assert rebound["presented_ids"] == ["a", "b", "c", "d"]
+    assert rebound["presented_ids"] == ["a", "c", "b", "d"]
+
+
+def test_uncomplete_card_clears_a_cancelled_rating():
+    plan = complete_card(plan_from_cards([_card("a"), _card("b")]), "a")
+    assert plan["completed_ids"] == ["a"]
+    cleared = uncomplete_card(plan, "a")
+    assert "a" not in cleared["completed_ids"]
+    assert cleared["presented_ids"] == ["a", "b"]
 
 
 def test_rebind_completed_unit_keeps_parent_rating():
@@ -439,6 +560,91 @@ def test_insert_retry_after_gap_uses_all_presented_ids():
     assert inserted["presented_ids"][:4] == ["a", "quiz", "b", "c"]
 
 
+def test_retry_stays_in_leftover_when_today_cards_append():
+    yesterday = "2026-09-17"
+    today = "2026-09-18"
+    plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")], today=yesterday)
+    plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
+    retry_a = plan["occurrences"][0]["occurrence_id"]
+    assert plan["presented_ids"] == ["a", "b", retry_a]
+
+    rebound = append_today_cards(
+        plan,
+        [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 11)],
+        today=today,
+    )
+    presented = rebound["presented_ids"]
+    assert presented[:3] == ["a", "b", retry_a]
+    assert presented[3:] == [f"c{index}" for index in range(1, 11)]
+    entered = {item["card_id"]: item["entered_on"] for item in rebound["original_cards"]}
+    assert entered["a"] == yesterday
+    assert entered["b"] == yesterday
+    assert entered["c1"] == today
+    assert entered["c10"] == today
+
+
+def test_retry_insert_does_not_borrow_today_segment():
+    yesterday = "2026-09-17"
+    today = "2026-09-18"
+    plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")], today=yesterday)
+    plan = append_today_cards(
+        plan,
+        [
+            _card("a", unit_id="unit-a"),
+            _card("b", unit_id="unit-b"),
+            _card("c1", unit_id="unit-c1"),
+            _card("c2", unit_id="unit-c2"),
+            _card("c3", unit_id="unit-c3"),
+        ],
+        today=today,
+    )
+    plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
+    retry_a = plan["occurrences"][0]["occurrence_id"]
+    assert plan["presented_ids"][:3] == ["a", "b", retry_a]
+    assert plan["presented_ids"][3:] == ["c1", "c2", "c3"]
+
+
+def test_replan_remaining_parks_retries_near_new_queue_start():
+    yesterday = "2026-09-17"
+    today = "2026-09-18"
+    plan = plan_from_cards(
+        [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b"), _card("c", unit_id="unit-c")],
+        today=yesterday,
+    )
+    plan = complete_card(plan, "b")
+    plan = leave_card(_rate(plan, "a", 1, "enc-a"), "a")
+    retry_a = plan["occurrences"][0]["occurrence_id"]
+    rebound = replan_remaining(
+        plan,
+        [
+            _card("n1", unit_id="unit-n1"),
+            _card("n2", unit_id="unit-n2"),
+            _card("n3", unit_id="unit-n3"),
+            _card("n4", unit_id="unit-n4"),
+        ],
+        today=today,
+    )
+    presented = rebound["presented_ids"]
+    assert presented == ["a", "b", "n1", "n2", "n3", retry_a, "n4"]
+    assert "c" not in [item["card_id"] for item in rebound["original_cards"]]
+
+
+def test_multi_day_append_keeps_two_cohorts():
+    today = "2026-09-18"
+    plan = plan_from_cards([_card("a"), _card("b")], today="2026-09-16")
+    plan = append_today_cards(plan, [_card("a"), _card("b"), _card("c")], today="2026-09-17")
+    plan = append_today_cards(
+        plan,
+        [_card("a"), _card("b"), _card("c"), _card("d")],
+        today=today,
+    )
+    carried = [item["card_id"] for item in plan["original_cards"] if item["entered_on"] < today]
+    new = [item["card_id"] for item in plan["original_cards"] if item["entered_on"] == today]
+    assert carried == ["a", "b", "c"]
+    assert new == ["d"]
+    assert plan["presented_ids"] == ["a", "b", "c", "d"]
+
+
 def test_progress_identity_ignores_revision_and_maps_quiz_cards():
     unit = _card("review_unit:u1:r2", unit_id="u1", revision=2)
     quiz = _card("quiz_question:9", kind="quiz_question")
@@ -509,3 +715,64 @@ def test_new_round_skips_peer_completed_as_current():
     )
     seeded = apply_peer_progress(fresh, peer, preserve_cursor=False)
     assert seeded["current_card_id"] == "review_unit:unit-b:r1"
+
+
+def test_rating_rejects_retry_card_without_occurrence_id():
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+        _card("e", unit_id="unit-e"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-fail"), "a")
+    retry_id = plan["occurrences"][0]["occurrence_id"]
+    try:
+        _rate(plan, retry_id, 3, "enc-pass")
+    except ValueError as error:
+        assert "identity" in str(error)
+    else:
+        raise AssertionError("expected rating identity mismatch")
+
+
+def test_rating_rejects_occurrence_from_another_unit():
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+        _card("e", unit_id="unit-e"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-fail"), "a")
+    retry_id = plan["occurrences"][0]["occurrence_id"]
+    try:
+        _rate(plan, retry_id, 3, "enc-pass", occurrence_id=retry_id, unit_id="unit-b")
+    except ValueError as error:
+        assert "identity" in str(error)
+    else:
+        raise AssertionError("expected rating identity mismatch")
+
+
+def test_rating_rejects_card_id_that_does_not_match_occurrence():
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+        _card("e", unit_id="unit-e"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-fail"), "a")
+    retry_id = plan["occurrences"][0]["occurrence_id"]
+    try:
+        _rate(plan, "b", 3, "enc-pass", occurrence_id=retry_id, unit_id="unit-a")
+    except ValueError as error:
+        assert "identity" in str(error)
+    else:
+        raise AssertionError("expected rating identity mismatch")
+
+
+def test_plan_is_fully_handled_after_every_source_passes():
+    plan = _rate(plan_from_cards([_card("a", unit_id="unit-a")]), "a", 3, "enc-pass")
+    assert plan_is_fully_handled(plan) is True
+    unfinished = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")])
+    assert plan_is_fully_handled(unfinished) is False

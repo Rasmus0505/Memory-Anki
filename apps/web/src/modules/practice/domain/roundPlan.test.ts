@@ -3,6 +3,7 @@ import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { sanitizeFreestyleFeedConfig } from './feedConfig'
 import {
   applyCompletedIdsToRoundPlan,
+  syncCompletedIdsToRoundPlan,
   countIncompletePalaceUnits,
   createRoundPlan,
   isSequentialPalaceBlocked,
@@ -60,6 +61,40 @@ describe('round plan reducer', () => {
     const retryPlan = createRoundPlan('round-1', next, config, undefined, plan)
     expect(retryPlan.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
     expect(retryPlan.cardsById[retry.id].retryAfterCards).toBe(3)
+  })
+
+  it('replaces an existing retry for the same source instead of stacking a second copy', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 1), card('d', 1), card('e', 1)]
+    const first = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withFirst = insertRetryOccurrenceAfterGap(cards, first, 0, 3)
+    const next = insertRetryOccurrenceAfterGap(
+      withFirst,
+      { ...first, retry_attempt: 2 },
+      withFirst.findIndex((item) => item.id === first.id),
+      3,
+    )
+    expect(next.filter((item) => item.occurrence_kind === 'retry').map((item) => item.id)).toEqual([first.id])
+    expect(next.find((item) => item.id === first.id)?.retry_attempt).toBe(2)
+  })
+
+  it('keeps only one retry plan row per source unit', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const first = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const second = createRetryOccurrence(cards[0], 'round-1', 2, 3)
+    const plan = createRoundPlan('round-1', [...cards, first, second], config)
+    const retryIds = plan.orderIds.filter((id) => plan.cardsById[id]?.occurrenceKind === 'retry')
+    expect(retryIds).toHaveLength(1)
+    const sanitized = sanitizeRoundPlan({
+      ...plan,
+      orderIds: [...plan.orderIds, first.id, second.id],
+      cardsById: {
+        ...plan.cardsById,
+        [first.id]: { ...plan.cardsById[retryIds[0]], cardId: first.id, retryAttempt: 1, status: 'completed' },
+        [second.id]: { ...plan.cardsById[retryIds[0]], cardId: second.id, retryAttempt: 2, status: 'retry' },
+      },
+    })
+    const sanitizedRetry = sanitized?.orderIds.filter((id) => sanitized.cardsById[id]?.occurrenceKind === 'retry') ?? []
+    expect(sanitizedRetry).toHaveLength(1)
   })
 
   it('repairs a retry row that was persisted with 0张后', () => {
@@ -185,6 +220,48 @@ describe('round plan reducer', () => {
     expect(rebuilt.cardsById.b).toBeUndefined()
   })
 
+  it('does not inherit another roundId plan ledger into a new round', () => {
+    const previous = updateRoundPlanCard(
+      createRoundPlan('round-old', [card('a', 1), card('b', 1)], config),
+      'a',
+      { status: 'retry', lastRating: 2, retryAfterCards: 3 },
+    )
+    const next = createRoundPlan('round-new', [card('a', 1)], config, undefined, previous)
+    expect(next.roundId).toBe('round-new')
+    expect(next.cardsById.a.status).toBe('pending')
+    expect(next.cardsById.a.lastRating).toBeNull()
+    expect(next.orderIds).toEqual(['a'])
+  })
+
+  it('drops foreign retry occurrence ids even when previous.roundId matches', () => {
+    const first = createRoundPlan('round-1', [card('a', 1)], config)
+    const polluted = {
+      ...first,
+      cardsById: {
+        ...first.cardsById,
+        'retry:other-round:a:1': {
+          cardId: 'retry:other-round:a:1',
+          sourceCardId: 'a',
+          occurrenceKind: 'retry' as const,
+          retryAttempt: 1,
+          palaceId: 1,
+          palaceTitle: '',
+          label: 'a',
+          kind: 'mindmap_branch',
+          status: 'retry' as const,
+          lastRating: 2,
+          retryAfterCards: 3,
+          attemptCount: 1,
+          updatedAt: Date.now(),
+        },
+      },
+      orderIds: [...first.orderIds, 'retry:other-round:a:1'],
+    }
+    const rebuilt = createRoundPlan('round-1', [card('a', 1)], config, undefined, polluted)
+    expect(rebuilt.cardsById['retry:other-round:a:1']).toBeUndefined()
+    expect(rebuilt.orderIds).toEqual(['a'])
+  })
+
   it('lets a freshly rebuilt card replace an old stale entry with the same id', () => {
     const first = createRoundPlan('round-1', [card('a', 1)], config)
     const stale = updateRoundPlanCard(first, 'a', { status: 'stale' })
@@ -253,5 +330,13 @@ describe('round plan reducer', () => {
     const done = applyCompletedIdsToRoundPlan(first, ['a'])
     expect(planCardStatus(card('a', 1), done, [], [], 'b')).toBe('completed')
     expect(planCardStatus(card('b', 1), done, [], [], 'b')).toBe('active')
+  })
+
+  it('drops a cancelled rating from completed ticks when hydrating the server set', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const done = applyCompletedIdsToRoundPlan(first, ['a', 'b'])
+    const synced = syncCompletedIdsToRoundPlan(done, ['b'])
+    expect(planCardStatus(card('a', 1), synced, [], [], 'a')).toBe('active')
+    expect(planCardStatus(card('b', 1), synced, ['b'], [], 'a')).toBe('completed')
   })
 })

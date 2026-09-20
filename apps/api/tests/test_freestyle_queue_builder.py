@@ -80,7 +80,7 @@ def test_queue_emits_only_due_review_units_with_stable_identity():
     assert "due_node_uids" not in result.cards[0]
 
 
-def test_queue_reports_candidate_and_scheduled_counts_when_limit_truncates():
+def test_queue_schedules_every_due_palace_unit_without_truncating():
     result = _assemble(
         units=[
             _unit("a", ("a",), unit_id="review-a"),
@@ -98,12 +98,11 @@ def test_queue_reports_candidate_and_scheduled_counts_when_limit_truncates():
             "queue_length": 5,
         },
     )
-    assert len(result.cards) == 5
+    assert len(result.cards) == 6
     assert result.phase_stats["candidate_count"] == 6
-    assert result.phase_stats["scheduled_count"] == 5
-    assert result.phase_stats["queue_limit"] == 5
-    assert result.phase_stats["limit_reached"] is True
-    assert result.phase_stats["palace_leftover_due"] == {"1": 1}
+    assert result.phase_stats["scheduled_count"] == 6
+    assert result.phase_stats["limit_reached"] is False
+    assert result.phase_stats["palace_leftover_due"] == {}
     assert "ratable_node_uids" not in result.cards[0]
 
 
@@ -120,7 +119,7 @@ def test_leftover_due_counts_only_unscheduled_due_review_units():
     assert merge_leftover_due({"1": 1}, {"1": 2, "3": 4}) == {"1": 3, "3": 4}
 
 
-def test_queue_reports_leftover_due_per_palace_when_limit_cuts_the_second():
+def test_queue_keeps_every_due_palace_without_a_leftover_cut():
     result = assemble_queue(
         config=sanitize_feed_config(
             {
@@ -142,8 +141,8 @@ def test_queue_reports_leftover_due_per_palace_when_limit_cuts_the_second():
         quizzes=[],
         nodes_by_palace={1: {}, 2: {}},
     )
-    assert len(result.cards) == 5
-    assert result.phase_stats["palace_leftover_due"] == {"2": 1}
+    assert len(result.cards) == 6
+    assert result.phase_stats["palace_leftover_due"] == {}
 
 
 def test_anki_cards_are_not_emitted_by_the_new_freestyle_queue():
@@ -365,8 +364,7 @@ def test_mix_ratio_includes_bound_quizzes_when_into_mix():
     )
     types = [card["type"] for card in result.cards]
     assert types.count("mindmap_branch") == 4
-    assert types.count("quiz_question") == 4
-    # While both streams still have items, ratio should interleave ~2 maps then 1 quiz.
+    assert types.count("quiz_question") == 2
     prefix = types[:6]
     assert prefix.count("mindmap_branch") == 4
     assert prefix.count("quiz_question") == 2

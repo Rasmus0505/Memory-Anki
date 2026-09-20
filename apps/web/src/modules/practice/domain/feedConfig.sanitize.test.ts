@@ -84,11 +84,13 @@ describe('freestyle feed config', () => {
     expect(config.quiz_scope).toBe('single_palace_random')
   })
 
-  it('maps legacy expand due_policy to include stable when scopes missing', () => {
+  it('folds expand due_policy to due_only and keeps default mastery buckets', () => {
     const config = sanitizeFreestyleFeedConfig({
       due_policy: 'due_first_then_expand',
     })
-    expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce', 'stable'])
+    expect(config.due_policy).toBe('due_only')
+    expect(config.streams.memory_palace.due_policy).toBe('due_only')
+    expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce'])
   })
 
   it('infers mindmap_only / quiz_only from content when mix_mode missing', () => {

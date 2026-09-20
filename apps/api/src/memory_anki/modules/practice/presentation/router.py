@@ -90,6 +90,7 @@ def api_freestyle_round_active(
             operation_id=data.operation_id,
             round_id=data.round_id,
             workspace=data.workspace,
+            replan=bool(data.replan),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

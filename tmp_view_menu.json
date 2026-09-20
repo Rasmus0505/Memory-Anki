@@ -1,0 +1,55 @@
+﻿{
+  "id": "8087ed66-8e42-4b12-949d-15d0a3176e28",
+  "ok": true,
+  "result": {
+    "snapshot": {
+      "id": "fa529cc2-d245-4c33-a35d-7d15c524f7be",
+      "app": {
+        "name": "electron",
+        "bundleId": "electron",
+        "pid": 23992
+      },
+      "window": {
+        "title": "",
+        "id": 395474,
+        "index": null,
+        "x": 320,
+        "y": 86,
+        "width": 1280,
+        "height": 860,
+        "isMinimized": null,
+        "isOffscreen": null,
+        "screenIndex": null
+      },
+      "coordinateSpace": "window",
+      "treeText": "App=electron (pid 23992)\nWindow: \"\", App: electron.\n\n0 window\n\t1 鍖哄煙\n\t\t2 鍖哄煙\n\t\t\t3 鍖哄煙\n\t\t\t\t4 鍖哄煙\n\t\t\t\t\t5 鍖哄煙\n\t\t\t\t\t\t6 鑿滃崟鏍廫n\t\t\t\t\t\t\t7 鎸夐挳 File\n\t\t\t\t\t\t\t8 鎸夐挳 Edit\n\t\t\t\t\t\t\t9 鎸夐挳 View\n\t\t\t\t\t\t\t10 鎸夐挳 Window\n\t\t\t\t\t\t\t11 鎸夐挳 Help\n\t\t\t\t\t\t12 鍖哄煙\n\t\t\t\t\t\t\t13 鍖哄煙\n\t\t\t\t\t\t\t\t14 鏂囨。 RootWebArea, Value: chrome-error://chromewebdata/, Secondary Actions: SetValue, Scroll\n\t\t\t\t\t\t\t15 鍖哄煙",
+      "elementCount": 16,
+      "focusedElementId": null,
+      "truncation": {
+        "truncated": false,
+        "maxNodes": 1200,
+        "maxDepth": 64,
+        "maxDepthReached": false
+      }
+    },
+    "screenshot": {
+      "format": "png",
+      "width": 1280,
+      "height": 860,
+      "scale": 1,
+      "path": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\orca-computer-use\\8087ed66-8e42-4b12-949d-15d0a3176e28-screenshot.png",
+      "dataOmitted": true,
+      "expiresAt": "2026-09-20T07:08:37.955Z"
+    },
+    "screenshotStatus": {
+      "state": "captured",
+      "metadata": {
+        "engine": "unknown",
+        "windowId": 395474
+      }
+    }
+  },
+  "_meta": {
+    "runtimeId": "2fd46483-1cb0-4bbe-bc83-a0bef6d79aa2"
+  }
+}

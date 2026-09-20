@@ -35,7 +35,6 @@ function renderSheet(overrides: Partial<Parameters<typeof FreestyleRoundSheet>[0
     onExclude: vi.fn(),
     onRestore: vi.fn(),
     onReorder: vi.fn(),
-    onResetRound: vi.fn(),
     onOpenConfig: vi.fn(),
   }
   const props = {
@@ -49,7 +48,6 @@ function renderSheet(overrides: Partial<Parameters<typeof FreestyleRoundSheet>[0
       queue_limit: 50,
       limit_reached: false,
     }),
-    queueLimit: 50,
     ...callbacks,
     ...overrides,
   }
@@ -62,7 +60,7 @@ describe('FreestyleRoundSheet', () => {
     renderSheet()
 
     expect(await screen.findByText('宫殿 A')).toBeTruthy()
-    expect(screen.getByText('本轮 2 张 · 今天库里还到期 6 张没进本轮 · 上限 50')).toBeTruthy()
+    expect(screen.getByText('本轮 2 张')).toBeTruthy()
   })
 
   it('supports batch exclusion', () => {
@@ -108,19 +106,148 @@ describe('FreestyleRoundSheet', () => {
     expect(onOpenConfig).toHaveBeenCalledTimes(1)
   })
 
-  it('shows rebuild progress and blocks duplicate clicks', async () => {
-    const { onResetRound } = renderSheet({ loading: true })
-
-    await screen.findByText('宫殿 A')
-    const button = screen.getByRole('button', { name: '正在安排...' }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    act(() => fireEvent.click(button))
-    expect(onResetRound).not.toHaveBeenCalled()
-  })
-
   it('states an empty round plainly', () => {
     renderSheet({ cards: [], roundPlan: null })
 
     expect(screen.getByText('当前还没有本轮安排。')).toBeTruthy()
+  })
+
+  it('splits leftover and today into two blocks and rejects cross-block drag', () => {
+    const cards = [card('one'), card('two')]
+    const base = createRoundPlan('round-1', cards, config)
+    const { onReorder } = renderSheet({
+      cards,
+      roundPlan: {
+        ...base,
+        today: '2026-09-18',
+        cardsById: {
+          ...base.cardsById,
+          one: { ...base.cardsById.one, enteredOn: '2026-09-17' },
+          two: { ...base.cardsById.two, enteredOn: '2026-09-18' },
+        },
+      },
+    })
+
+    expect(screen.getByTestId('round-plan-cohort-carried').textContent).toContain('此前欠账')
+    expect(screen.getByTestId('round-plan-cohort-today').textContent).toContain('今天新增')
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn(() => 'two'),
+    }
+    act(() => {
+      fireEvent.dragStart(screen.getByTestId('round-plan-card-two'), { dataTransfer })
+      fireEvent.drop(screen.getByTestId('round-plan-card-one'), { dataTransfer })
+    })
+    expect(onReorder).not.toHaveBeenCalled()
+  })
+
+  it('styles completed retry rows differently from unfinished retry rows', () => {
+    const source = card('one')
+    const other = card('two')
+    const retry = {
+      ...card('retry:round-1:one:1'),
+      source_card_id: 'one',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const pendingRetry = {
+      ...card('retry:round-1:two:2'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 2,
+    }
+    const cards = [source, other, retry, pendingRetry]
+    const base = createRoundPlan('round-1', cards, config)
+    renderSheet({
+      cards,
+      currentIndex: 0,
+      queueState: {
+        ...DEFAULT_QUEUE_STATE,
+        roundId: 'round-1',
+        currentCardId: 'one',
+        completedIds: ['retry:round-1:one:1'],
+      },
+      roundPlan: {
+        ...base,
+        cardsById: {
+          ...base.cardsById,
+          'retry:round-1:one:1': {
+            ...base.cardsById['retry:round-1:one:1'],
+            occurrenceKind: 'retry',
+            retryAttempt: 1,
+            sourceCardId: 'one',
+            status: 'completed',
+          },
+          'retry:round-1:two:2': {
+            ...base.cardsById['retry:round-1:two:2'],
+            occurrenceKind: 'retry',
+            retryAttempt: 2,
+            sourceCardId: 'two',
+            status: 'retry',
+          },
+        },
+      },
+    })
+
+    const doneRow = screen.getByTestId('round-plan-card-retry:round-1:one:1')
+    const pendingRow = screen.getByTestId('round-plan-card-retry:round-1:two:2')
+    expect(doneRow.getAttribute('data-retry')).toBe('done')
+    expect(pendingRow.getAttribute('data-retry')).toBe('pending')
+    expect(doneRow.textContent).toContain('重练已过')
+    expect(pendingRow.textContent).toContain('待重练')
+    expect(pendingRow.className).toContain('bg-amber-500/10')
+    expect(doneRow.className).toContain('bg-emerald-500/8')
+  })
+
+  it('keeps a completed retry row filled when the live glance has no rating yet', () => {
+    const retry = {
+      ...card('retry:round-1:one:1'),
+      source_card_id: 'one',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const cards = [card('one'), retry]
+    const base = createRoundPlan('round-1', cards, config)
+    renderSheet({
+      cards,
+      currentIndex: 1,
+      queueState: {
+        ...DEFAULT_QUEUE_STATE,
+        roundId: 'round-1',
+        currentCardId: retry.id,
+        completedIds: [retry.id],
+        unitEncountersByCardId: {
+          [retry.id]: {
+            encounterId: 'enc-retry',
+            unitRevision: 1,
+            status: 'open',
+            sessionId: 'session-retry',
+            selectedRating: null,
+            passed: null,
+            retryAfterCards: 0,
+          },
+        },
+      },
+      roundPlan: {
+        ...base,
+        cardsById: {
+          ...base.cardsById,
+          [retry.id]: {
+            ...base.cardsById[retry.id],
+            occurrenceKind: 'retry',
+            retryAttempt: 1,
+            sourceCardId: 'one',
+            status: 'completed',
+          },
+        },
+      },
+    })
+
+    const row = screen.getByTestId(`round-plan-card-${retry.id}`)
+    expect(row.getAttribute('data-retry')).toBe('done')
+    expect(row.getAttribute('data-fill')).toBe('completed')
+    expect(row.textContent).toContain('当前 · 已过')
   })
 })

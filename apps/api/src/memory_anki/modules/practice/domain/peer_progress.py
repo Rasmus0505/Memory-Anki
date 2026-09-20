@@ -7,6 +7,7 @@ from typing import Any
 
 from .overlay_quiz import inherit_overlay_completed
 from .round_plan import (
+    OCCURRENCE_CANCELLED,
     OCCURRENCE_COMPLETED,
     OCCURRENCE_INSERTED,
     OCCURRENCE_PENDING,
@@ -166,12 +167,13 @@ def _align_peer_retry(
     existing = [
         item
         for item in plan["occurrences"]
-        if item["source_card_id"] == source_id and int(item.get("retry_attempt") or 0) == attempt
+        if item["source_card_id"] == source_id and item["status"] != OCCURRENCE_CANCELLED
     ]
     status = _text(peer_occ.get("status")) or OCCURRENCE_PENDING
     source_key = source_unit_id or source_id
     if existing:
-        occ = existing[0]
+        occ = max(existing, key=lambda item: int(item.get("retry_attempt") or 0))
+        occ["retry_attempt"] = max(int(occ.get("retry_attempt") or 0), attempt)
     else:
         occ = {
             "occurrence_id": occurrence_id_for(round_id, source_key, attempt),
@@ -185,6 +187,8 @@ def _align_peer_retry(
         }
         plan["occurrences"].append(occ)
     if status == OCCURRENCE_COMPLETED:
+        if occ["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}:
+            return
         occ["status"] = OCCURRENCE_COMPLETED
         _append_unique(plan["completed_ids"], occ["occurrence_id"])
         return

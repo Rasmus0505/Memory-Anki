@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest'
 import type { FreestyleReviewUnitCard, FreestyleRoundPlanPayload } from '@/shared/api/contracts'
 
 import { createRetryOccurrence } from './queueState'
-import { cardsForServerPlan, nextUnfinishedCardId } from './serverRoundPlan'
+import {
+  applyServerRatingsToRoundPlan,
+  cardsForServerPlan,
+  mergeServerPlanIntoLocalEncounters,
+  nextUnfinishedCardId,
+  nextUnfinishedPlanCardId,
+  planHasNewDueWork,
+  planIsFullyHandled,
+  resolveResumePreferCardId,
+} from './serverRoundPlan'
+import { createRoundPlan } from './roundPlan'
+import { DEFAULT_FREESTYLE_FEED_CONFIG } from './feedConfig'
 
 function branch(id: string, palaceId = 1): FreestyleReviewUnitCard {
   return {
@@ -46,6 +57,32 @@ describe('server round plan hydrate', () => {
     }
     expect(cardsForServerPlan(cards, plan, 'round-1').map((card) => card.id))
       .toEqual(['a', 'b', 'c', retry.id])
+  })
+
+  it('keeps a completed retry occurrence in presented order', () => {
+    const source = branch('a')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['a', 'b', retry.id, 'c'],
+      current_card_id: retry.id,
+      current_index: 2,
+      completed_ids: ['a', retry.id],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: retry.id,
+        source_card_id: 'a',
+        source_unit_id: 'a-unit',
+        retry_attempt: 1,
+        rating: 3,
+        insert_target_index: 2,
+        status: 'completed',
+        encounter_id: 'enc-retry',
+      }],
+      encounters: {},
+    }
+    expect(cardsForServerPlan([source, branch('b'), branch('c'), retry], plan, 'round-1').map((card) => card.id))
+      .toEqual(['a', 'b', retry.id, 'c'])
   })
 
   it('skips a completed current card and selects the next unfinished id', () => {
@@ -112,6 +149,123 @@ describe('server round plan hydrate', () => {
       palace_id: 4,
       palace_title: 'Palace 4',
     })
+  })
+
+  it('does not append leftover due onto a fully handled round', () => {
+    const cards = [branch('a'), branch('b'), branch('c')]
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'a', unit_id: 'a-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'a' },
+        { card_id: 'b', unit_id: 'b-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'b' },
+      ],
+      presented_ids: ['a', 'b'],
+      current_card_id: 'b',
+      current_index: 1,
+      completed_ids: ['a', 'b'],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {},
+    }
+    const hydrated = cardsForServerPlan(cards, plan, 'round-1')
+    expect(hydrated.map((card) => card.id)).toEqual(['a', 'b'])
+    expect(planHasNewDueWork(plan, cards)).toBe(true)
+    expect(nextUnfinishedCardId(plan, hydrated)).toBeNull()
+    expect(planIsFullyHandled(plan)).toBe(true)
+  })
+
+  it('treats an unfinished plan as not fully handled even without live cards', () => {
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'a', unit_id: 'a-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'a' },
+        { card_id: 'b', unit_id: 'b-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'b' },
+      ],
+      presented_ids: ['a', 'b'],
+      current_card_id: 'a',
+      current_index: 0,
+      completed_ids: ['a'],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {},
+    }
+    // The feed helper needs live rows; an empty array must not be used as a
+    // "fully handled" signal (that used to mint a new round on every F5).
+    expect(nextUnfinishedCardId(plan, [])).toBeNull()
+    expect(nextUnfinishedPlanCardId(plan)).toBe('b')
+    expect(planIsFullyHandled(plan)).toBe(false)
+  })
+
+  it('prefers the local draft cursor on cold-start refresh when it is still in-feed', () => {
+    const cards = [branch('a'), branch('b'), branch('c')]
+    expect(resolveResumePreferCardId({
+      silent: false,
+      draftCardId: 'c',
+      serverCurrentId: 'a',
+      userCardId: null,
+      nextCards: cards,
+    })).toBe('c')
+    expect(resolveResumePreferCardId({
+      silent: true,
+      draftCardId: 'c',
+      serverCurrentId: 'a',
+      userCardId: 'b',
+      nextCards: cards,
+    })).toBe('b')
+  })
+
+  it('fills missing local ratings from the server plan after refresh', () => {
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'a', unit_id: 'a-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'a' },
+        { card_id: 'b', unit_id: 'b-unit', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'b' },
+      ],
+      presented_ids: ['a', 'b'],
+      current_card_id: 'b',
+      current_index: 1,
+      completed_ids: ['a'],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: 'retry:round-1:b-unit:1',
+        source_card_id: 'b',
+        source_unit_id: 'b-unit',
+        retry_attempt: 1,
+        rating: 2,
+        insert_target_index: 2,
+        status: 'inserted',
+        encounter_id: 'enc-b',
+      }],
+      encounters: {
+        a: { encounter_id: 'enc-a', status: 'passed', unit_revision: 1 },
+        b: { encounter_id: 'enc-b', status: 'failed', unit_revision: 1 },
+      },
+    }
+    const merged = mergeServerPlanIntoLocalEncounters({}, plan, 'round-1')
+    expect(merged.a).toMatchObject({ selectedRating: 3, passed: true, status: 'closed' })
+    expect(merged.b).toMatchObject({ selectedRating: 2, passed: false, status: 'closed' })
+    // Local draft wins when it already has a rating.
+    expect(mergeServerPlanIntoLocalEncounters({
+      a: {
+        encounterId: 'local-a',
+        roundId: 'round-1',
+        unitRevision: 1,
+        status: 'closed',
+        sessionId: null,
+        selectedRating: 4,
+        passed: true,
+        retryAfterCards: 0,
+      },
+    }, plan, 'round-1').a.selectedRating).toBe(4)
+
+    const hud = applyServerRatingsToRoundPlan(
+      createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG, {
+        candidate_count: 2,
+        scheduled_count: 2,
+        queue_limit: 20,
+        limit_reached: false,
+      }),
+      plan,
+    )
+    expect(hud.cardsById.a.lastRating).toBe(3)
+    expect(hud.cardsById.b.lastRating).toBe(2)
   })
 
   it('uses the server occurrence id and does not append extra local retries', () => {

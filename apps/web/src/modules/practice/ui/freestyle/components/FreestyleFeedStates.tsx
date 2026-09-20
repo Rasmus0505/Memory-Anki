@@ -1,4 +1,4 @@
-import { Copy, LoaderCircle, RotateCcw, Shuffle, SlidersHorizontal } from 'lucide-react'
+import { Copy, LoaderCircle, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { FreestyleConfig } from '@/modules/practice/ui/freestyle/model/freestyle'
 import type { FreestyleMode, TodayTrainingConfig } from '@/modules/practice/ui/freestyle/model/today-training'
@@ -82,7 +82,7 @@ export function FreestyleFeedErrorState({
 export function FreestyleEmptyState({
   mode,
   onSwitchMode,
-  onReshuffle,
+  onReshuffle: _onReshuffle,
   onOpenSettings,
   completedCount = 0,
   mutedCount = 0,
@@ -105,8 +105,8 @@ export function FreestyleEmptyState({
     mutedCount > 0 ? `少看 ${mutedCount} 座宫殿` : null,
   ].filter(Boolean)
   const freeDescription = filteredRound
-    ? `${facts.join(' · ')}。再来一轮会按今天仍到期的重新抽。`
-    : '当前范围里没有到期导图或题目。'
+    ? `${facts.join(' · ')}。可以改范围或等新的到期。`
+    : '今天没有到期。点顶上进度可以改配置。'
   return (
     <section className="flex h-full snap-start items-center justify-center px-4">
       <EmptyState
@@ -124,16 +124,10 @@ export function FreestyleEmptyState({
                   切到自由随心
                 </Button>
               ) : (
-                <>
-                  <Button type="button" onClick={onReshuffle}>
-                    <Shuffle className="size-4" />
-                    再来一轮
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={onOpenSettings}>
-                    <SlidersHorizontal className="size-4" />
-                    设置
-                  </Button>
-                </>
+                <Button type="button" variant="secondary" onClick={onOpenSettings}>
+                  <SlidersHorizontal className="size-4" />
+                  去改配置
+                </Button>
               )}
               <Button asChild variant="outline">
                 <Link to={mode === 'today' ? '/palaces/new' : '/freestyle'}>
@@ -142,7 +136,7 @@ export function FreestyleEmptyState({
               </Button>
             </div>
             <p className="mt-3 text-xs text-zinc-600">
-              再来一轮会清空本轮完成/隐藏，按今天仍到期的重抽。
+              今天没有到期时，改学科或宫殿范围后再刷。
             </p>
           </div>
         }

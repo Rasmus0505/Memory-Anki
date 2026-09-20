@@ -312,6 +312,7 @@ export interface FreestyleRoundOriginalCard {
   palace_id: number | null
   palace_title: string
   label: string
+  entered_on?: string
 }
 
 export interface FreestyleRoundOccurrence {
@@ -323,6 +324,7 @@ export interface FreestyleRoundOccurrence {
   insert_target_index: number
   status: FreestyleRoundOccurrenceStatus
   encounter_id: string
+  entered_on?: string
 }
 
 export interface FreestyleRoundPlanPayload {
@@ -332,6 +334,7 @@ export interface FreestyleRoundPlanPayload {
   current_index: number
   completed_ids: string[]
   excluded_ids: string[]
+  today?: string
   occurrences: FreestyleRoundOccurrence[]
   encounters: Record<string, {
     encounter_id: string
@@ -383,6 +386,7 @@ export interface FreestyleRoundActiveRequest {
   cards?: FreestyleCard[]
   round_id?: string
   workspace?: 'primary' | 'secondary'
+  replan?: boolean
 }
 
 export interface FreestyleRoundActionRequest {

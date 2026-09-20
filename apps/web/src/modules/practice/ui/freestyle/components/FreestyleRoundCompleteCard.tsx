@@ -1,28 +1,36 @@
-import { Play, RotateCcw, SlidersHorizontal } from 'lucide-react'
-import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import { useMemo, useState } from 'react'
+import { ChevronDown, RotateCcw } from 'lucide-react'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
-import { Button } from '@/shared/components/ui/button'
+import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import { cn } from '@/shared/lib/utils'
+
+function subjectKey(subjectId: number | null, subjectName: string) {
+  return subjectId == null ? `name:${subjectName}` : `id:${subjectId}`
+}
 
 /**
- * Closing slot of a round. Rating the last card used to leave the feed simply
- * empty; flow needs a visible end before the next start.
+ * Closing slot of a round: overview stats, subject/palace time breakdown,
+ * and 「再来一轮」 to reopen config for a fresh server round.
  */
 export function FreestyleRoundCompleteCard({
   completion,
-  durationSeconds,
-  onNextRound,
-  onOpenConfig,
-  onReviewRound,
-  loading = false,
+  onAnotherRound,
 }: {
   completion: FreestyleRoundCompletion
-  durationSeconds: number
-  onNextRound: () => void
-  onOpenConfig: () => void
-  /** Back to the first card, so a finished round stays reviewable. */
-  onReviewRound: () => void
-  loading?: boolean
+  onAnotherRound: () => void
 }) {
+  const subjects = useMemo(() => completion.bySubject ?? [], [completion.bySubject])
+  const firstKey = subjects[0]
+    ? subjectKey(subjects[0].subjectId, subjects[0].subjectName)
+    : null
+  const [expandedKey, setExpandedKey] = useState<string | null>(firstKey)
+  const openKey = useMemo(() => {
+    if (expandedKey && subjects.some((item) => subjectKey(item.subjectId, item.subjectName) === expandedKey)) {
+      return expandedKey
+    }
+    return firstKey
+  }, [expandedKey, firstKey, subjects])
+
   return (
     <div
       data-testid="freestyle-round-complete"
@@ -30,7 +38,7 @@ export function FreestyleRoundCompleteCard({
     >
       <div className="rounded-3xl border border-emerald-300/20 bg-zinc-900/90 p-5 text-zinc-50 shadow-[0_16px_56px_rgba(0,0,0,0.5)] backdrop-blur sm:p-7">
         <div className="text-center">
-          <div className="text-xs font-semibold tracking-wide text-emerald-300">本轮完成</div>
+          <div className="text-xs font-semibold tracking-wide text-emerald-300">今日到期已清</div>
           <h2 className="mt-1.5 text-2xl font-semibold leading-tight sm:text-3xl">
             {completion.ratedCount} 张已评分
           </h2>
@@ -53,38 +61,87 @@ export function FreestyleRoundCompleteCard({
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-center">
             <div className="text-2xl font-bold tabular-nums sm:text-3xl">
-              {formatTimer(durationSeconds)}
+              {completion.quizCount}
             </div>
-            <div className="mt-1 text-[11px] text-zinc-400 sm:text-xs">用时</div>
+            <div className="mt-1 text-[11px] text-zinc-400 sm:text-xs">题目</div>
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-center text-xs text-zinc-300">
-          {completion.remainingCandidates > 0
-            ? `还有 ${completion.remainingCandidates} 张候选没安排进本轮`
-            : '候选内容已全部安排完'}
+        <div
+          data-testid="freestyle-round-complete-total-time"
+          className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-center"
+        >
+          <div className="text-[11px] font-medium tracking-wide text-emerald-200/80">本次随心</div>
+          <div className="mt-0.5 text-2xl font-semibold tabular-nums text-emerald-100 sm:text-3xl">
+            {formatTimer(completion.totalEffectiveSeconds ?? 0)}
+          </div>
         </div>
 
-        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button
-            type="button"
-            disabled={loading}
-            aria-busy={loading}
-            className="bg-emerald-300 text-zinc-950 hover:bg-emerald-200"
-            onClick={onNextRound}
+        {subjects.length > 0 ? (
+          <div
+            data-testid="freestyle-round-complete-subjects"
+            className="mt-4 max-h-[min(40dvh,18rem)] space-y-2 overflow-y-auto pr-0.5"
           >
-            <Play className="size-4" />
-            {loading ? '正在安排...' : '再来一轮'}
-          </Button>
-          <Button type="button" variant="outline" onClick={onOpenConfig}>
-            <SlidersHorizontal className="size-4" />
-            调整配置
-          </Button>
-          <Button type="button" variant="ghost" onClick={onReviewRound}>
-            <RotateCcw className="size-4" />
-            回看本轮
-          </Button>
-        </div>
+            {subjects.map((subject) => {
+              const key = subjectKey(subject.subjectId, subject.subjectName)
+              const open = openKey === key
+              return (
+                <div
+                  key={key}
+                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/5"
+                >
+                  <button
+                    type="button"
+                    data-testid="freestyle-round-complete-subject"
+                    data-open={open ? 'true' : 'false'}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+                    onClick={() => setExpandedKey(open ? null : key)}
+                    aria-expanded={open}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'size-4 shrink-0 text-zinc-400 transition-transform',
+                        open ? 'rotate-0' : '-rotate-90',
+                      )}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium text-zinc-50">
+                      {subject.subjectName}
+                    </span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-zinc-400 sm:text-xs">
+                      {subject.palaceCount} 宫 · {subject.cardCount} 卡 · {formatTimer(subject.effectiveSeconds)}
+                    </span>
+                  </button>
+                  {open ? (
+                    <div className="space-y-1 border-t border-white/8 px-3 py-2">
+                      {subject.palaces.map((palace) => (
+                        <div
+                          key={palace.palaceId}
+                          data-testid="freestyle-round-complete-palace"
+                          className="flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-sm text-zinc-200"
+                        >
+                          <span className="min-w-0 truncate">{palace.palaceTitle}</span>
+                          <span className="shrink-0 text-[11px] tabular-nums text-zinc-400">
+                            {palace.cardCount} 卡 · {formatTimer(palace.effectiveSeconds)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          data-testid="freestyle-round-another"
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400/90 px-4 py-3 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-300 active:bg-emerald-200"
+          onClick={onAnotherRound}
+        >
+          <RotateCcw className="size-4" />
+          再来一轮
+        </button>
       </div>
     </div>
   )

@@ -195,7 +195,7 @@ def build_freestyle_queue(
                 "specific_palace_ids": ids,
                 "subject_scope": stream_subjects.get(stream_name, "all"),
                 "palace_order": raw.get("palace_order") or "finish_palace_then_next",
-                "due_policy": raw.get("due_policy") or "due_first_then_expand",
+                "due_policy": "due_only",
                 "unit_order": raw.get("unit_order") or "structured",
                 "queue_length": 100,
             }
@@ -250,12 +250,13 @@ def build_freestyle_queue(
         if str(card.get("id") or "") not in completed
         and str(card.get("id") or "") not in hidden
     ]
+    quiz_only = str(training_mode or "") == "quiz"
     queue_length = int(config.get("queue_length") or 20)
-    limited = remaining[:queue_length]
+    limited = remaining[:queue_length] if quiz_only else remaining
     phase_stats = {
         "candidate_count": len(remaining),
         "scheduled_count": len(limited),
-        "queue_limit": queue_length,
+        "queue_limit": queue_length if quiz_only else len(limited),
         "limit_reached": len(remaining) > len(limited),
         # Preserve the former top-level diagnostic while each palace stream
         # now owns its own due-policy evaluation.
@@ -289,7 +290,7 @@ def build_freestyle_queue(
         "round_meta": {
             "candidate_count": len(remaining),
             "scheduled_count": len(limited),
-            "queue_limit": queue_length,
+            "queue_limit": queue_length if quiz_only else len(limited),
             "limit_reached": len(remaining) > len(limited),
             "palace_leftover_due": palace_leftover_due,
         },

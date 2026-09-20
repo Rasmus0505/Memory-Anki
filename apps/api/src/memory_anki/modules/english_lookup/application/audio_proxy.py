@@ -95,6 +95,7 @@ def proxied_audio_pair(audio: dict[str, str | None] | None) -> dict[str, str | N
 def rewrite_speaker_urls(markup: str, query: str | None = None) -> str:
     def replace(match: re.Match[str]) -> str:
         raw = html.unescape(match.group(1) or "")
+        rewritten: str | None
         if query:
             rewritten = voice_url(query, infer_accent(raw))
         else:

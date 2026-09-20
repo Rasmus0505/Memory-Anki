@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -33,19 +34,24 @@ from memory_anki.modules.practice.domain.peer_progress import (
 from memory_anki.modules.practice.domain.round_plan import (
     PASS_RATINGS,
     apply_rating,
+    assert_rating_identity,
     cleared_review_palace_ids,
     complete_card,
     exclude_card,
     leave_card,
-    uncomplete_card,
     normalize_plan,
     plan_from_cards,
-    rebind_plan_cards,
+    plan_is_fully_handled,
     restore_card,
     set_cursor,
     set_encounter,
     skip_card,
 )
+from memory_anki.modules.practice.domain.round_rebind import (
+    append_today_cards,
+    replan_remaining,
+)
+from memory_anki.modules.practice.domain.round_uncomplete import uncomplete_card
 from memory_anki.modules.practice.domain.workspace import (
     normalize_workspace,
     peer_workspace,
@@ -90,6 +96,10 @@ def _progress_identity_in_plan(plan: dict[str, Any], card_id: str) -> str:
         if isinstance(item, dict) and _text(item.get("card_id")) == target:
             return progress_identity(item, card_id=target)
     return progress_identity({"card_id": target}, card_id=target)
+
+
+def _local_today() -> str:
+    return date.today().isoformat()
 
 
 def _require_operation_id(operation_id: str | None) -> str:
@@ -301,7 +311,7 @@ def _create_row(
     overlay_quiz: dict[str, Any] | None = None,
 ) -> FreestyleRoundState:
     slot = normalize_workspace(workspace)
-    plan = normalize_plan(plan_from_cards(cards))
+    plan = normalize_plan(plan_from_cards(cards, today=_local_today()))
     plan["overlay_quiz"] = normalize_overlay_quiz(overlay_quiz)
     plan = apply_peer_progress(
         plan,
@@ -374,6 +384,7 @@ def get_or_create_active_round(
     operation_id: str,
     round_id: str | None = None,
     workspace: str = "primary",
+    replan: bool = False,
 ) -> dict[str, Any]:
     op_id = _require_operation_id(operation_id)
     key = _text(scope_key)
@@ -392,15 +403,26 @@ def get_or_create_active_round(
             next_config
         )
         scope_changed = _text(row.scope_key) != key[:256]
-        persist_config = reorder or scope_changed
+        persist_config = reorder or scope_changed or replan
         next_plan = _plan_of(row)
-        if cards:
-            next_plan = rebind_plan_cards(
+        today = _local_today()
+        # Fully handled rounds freeze on get_or_create: silent post-complete
+        # rebuilds must not mint or append leftover due into the live feed, or
+        # the closing settlement slot disappears. /rounds/start advances.
+        if plan_is_fully_handled(next_plan) and not persist_config:
+            return _payload(row)
+        if persist_config:
+            next_plan = replan_remaining(next_plan, cards, today=today)
+            next_plan = _clear_scored_palace_overlay(next_plan)
+            next_plan = _seed_from_peer(
+                session,
                 next_plan,
-                cards,
-                reorder_unstarted=reorder,
-                drop_missing_unstarted=scope_changed and not reorder,
+                workspace=slot,
+                round_id=row.round_id,
+                preserve_cursor=True,
             )
+        elif cards:
+            next_plan = append_today_cards(next_plan, cards, today=today)
             next_plan = _clear_scored_palace_overlay(next_plan)
             next_plan = _seed_from_peer(
                 session,
@@ -515,7 +537,7 @@ def apply_round_action(
         restore_identity = _progress_identity_in_plan(plan, target_id)
         plan = restore_card(plan, target_id)
     elif name == "bind_cards":
-        plan = rebind_plan_cards(plan, cards)
+        plan = append_today_cards(plan, cards, today=_local_today())
         plan = _seed_from_peer(
             session,
             plan,
@@ -601,6 +623,14 @@ def rate_freestyle_round_unit(
         raise ValueError("freestyle round not found")
     # Ratings last-write-wins: a stale expected_version still applies so PWA
     # and desktop cannot 409 each other after one side already scored.
+    # Wrong card / occurrence / encounter / unit never last-writes.
+    assert_rating_identity(
+        _plan_of(row),
+        card_id=card_id,
+        occurrence_id=occurrence_id or "",
+        encounter_id=encounter_id,
+        unit_id=unit_id,
+    )
 
     item: dict[str, Any] | None = None
     batch = palace_batch if isinstance(palace_batch, dict) else None

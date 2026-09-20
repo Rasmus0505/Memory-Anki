@@ -26,13 +26,17 @@ const config = {
   seed: 17,
 } as unknown as FreestyleFeedConfig
 
-function renderDialog(onSaveConfig = vi.fn()) {
+function renderDialog(
+  onSaveConfig = vi.fn(),
+  mode: 'replan' | 'nextRound' = 'replan',
+) {
   render(
     <FreestyleRoundConfigDialog
       open
       config={config}
       onOpenChange={vi.fn()}
       onSaveConfig={onSaveConfig}
+      mode={mode}
     />,
   )
   return { onSaveConfig }
@@ -52,6 +56,15 @@ describe('FreestyleRoundConfigDialog', () => {
     expect(screen.getByRole('radio', { name: /^混合模式/ })).toBeTruthy()
     expect(screen.queryByRole('radio', { name: /英语宫殿/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    expect(onSaveConfig).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses next-round copy and CTA after settlement', async () => {
+    const { onSaveConfig } = renderDialog(vi.fn(), 'nextRound')
+
+    await screen.findByText('快捷预设')
+    expect(screen.getByText(/确认后开始全新一轮/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '开始下一轮' }))
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
   })
 

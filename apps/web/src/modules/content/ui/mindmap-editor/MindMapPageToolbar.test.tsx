@@ -75,12 +75,11 @@ describe('MindMapPageToolbar', () => {
     )
 
     const buttons = screen.getAllByRole('button')
-    const labels = buttons.map((button) => button.textContent ?? '')
-    const editIndex = labels.findIndex((label) => label.includes('编辑'))
-    const englishIndex = labels.findIndex((label) => label.includes('英语'))
-    expect(editIndex).toBeGreaterThanOrEqual(0)
-    expect(englishIndex).toBe(editIndex + 1)
-    expect(screen.getByRole('button', { name: '英语' }).getAttribute('aria-pressed')).toBe('true')
+    const edit = screen.getByRole('button', { name: '编辑' })
+    const english = screen.getByRole('button', { name: '英语' })
+    expect(buttons.indexOf(english)).toBe(buttons.indexOf(edit) + 1)
+    expect(english.getAttribute('aria-pressed')).toBe('true')
+    expect(english.textContent).not.toContain('英语')
 
     fireEvent.click(screen.getByRole('button', { name: '英语' }))
     expect(onEnglish).toHaveBeenCalledTimes(1)
@@ -115,8 +114,13 @@ describe('MindMapPageToolbar', () => {
     )
 
     const buttons = screen.getAllByRole('button')
-    expect(buttons[0]?.textContent).toContain('做题')
-    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
+    const quiz = screen.getByRole('button', { name: '做题' })
+    const english = screen.getByRole('button', { name: '英语' })
+    const text = screen.getByRole('button', { name: '文字' })
+    expect(buttons[0]).toBe(quiz)
+    expect(buttons.indexOf(english)).toBe(buttons.indexOf(text) - 1)
+    expect(quiz.textContent).not.toContain('做题')
+    expect(english.textContent).not.toContain('英语')
     expect(screen.getByRole('button', { name: '更多脑图操作' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '进入编辑' })).toBeNull()
 

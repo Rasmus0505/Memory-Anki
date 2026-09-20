@@ -12,7 +12,6 @@ from .feed_config import (
     BOUND_QUIZ_INTO_MIX,
     DEFAULT_QUIZ_MASTERY_BUCKETS,
     DUE_POLICY_ALL_WEIGHTED,
-    DUE_POLICY_DUE_FIRST,
     DUE_POLICY_DUE_ONLY,
     MIX_MODE_MINDMAP_ONLY,
     MIX_MODE_QUIZ_ONLY,
@@ -425,9 +424,7 @@ def assemble_queue(
     streams = raw_streams if isinstance(raw_streams, Mapping) else {}
     raw_memory = streams.get("memory_palace")
     memory_stream = raw_memory if isinstance(raw_memory, Mapping) else {}
-    due_policy = str(
-        config.get("due_policy") or memory_stream.get("due_policy") or DUE_POLICY_DUE_FIRST
-    )
+    due_policy = DUE_POLICY_DUE_ONLY
     palace_order = str(
         config.get("palace_order") or memory_stream.get("palace_order") or PALACE_ORDER_SEQUENTIAL
     )
@@ -614,12 +611,6 @@ def assemble_queue(
         palace_quizzes: Sequence[QuizCandidate],
         phase: str,
     ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
-        """Return pure map cards, bound quizzes keyed by map card id, and free quiz cards.
-
-        When bound_quiz_placement is follow_unit, bound quizzes are re-attached after
-        their unit's map card post-mix so ratio/random cannot split them apart.
-        Otherwise every quiz goes into the free quiz stream for global mix_mode.
-        """
         unit_questions, unbound = attach_questions_to_units(units, palace_quizzes)
         map_cards = palace_map_stream(units, phase)
         if bound_quiz_placement != BOUND_QUIZ_FOLLOW_UNIT:
@@ -702,6 +693,11 @@ def assemble_queue(
             quiz_scope=quiz_scope,
             seed=seed + (0 if phase == "due" else 11),
         )
+        if mix_mode == MIX_MODE_QUIZ_ONLY:
+            quiz_side = quiz_side[:queue_length]
+        elif map_side:
+            weight = max(1, mix_ratio_mindmap)
+            quiz_side = quiz_side[: (len(map_side) * max(1, mix_ratio_quiz) + weight - 1) // weight]
         mixed = merge_streams_by_mix_mode(
             map_side,
             quiz_side,
@@ -743,7 +739,10 @@ def assemble_queue(
         phase2 = []
     combined = phase1 + phase2
     remaining = filter_completed(combined, completed_ids=completed, hidden_ids=hidden)
-    limited = remaining[:queue_length]
+    if mix_mode == MIX_MODE_QUIZ_ONLY:
+        limited = remaining[:queue_length]
+    else:
+        limited = remaining
     palace_leftover_due = leftover_due_by_palace(remaining, limited)
 
     return QueueBuildResult(

@@ -1,9 +1,27 @@
 import {
+  cardPalaceId,
   isRetryOccurrence,
   sourceCardId,
+  type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
+
+export interface FreestyleRoundSubjectPalaceStat {
+  palaceId: number
+  palaceTitle: string
+  cardCount: number
+  effectiveSeconds: number
+}
+
+export interface FreestyleRoundSubjectStat {
+  subjectId: number | null
+  subjectName: string
+  palaceCount: number
+  cardCount: number
+  effectiveSeconds: number
+  palaces: FreestyleRoundSubjectPalaceStat[]
+}
 
 export interface FreestyleRoundCompletion {
   ratedCount: number
@@ -12,8 +30,14 @@ export interface FreestyleRoundCompletion {
   retriedCount: number
   /** Kept for older callers; same as retriedCount once the round is complete. */
   retryCount: number
-  /** Candidates the round limit left out, so 「再来一轮」 has an honest expectation. */
+  /** Candidates the round limit left out (0 when the round is all due). */
   remainingCandidates: number
+  /** Quiz cards handled in the feed plus overlay 做题. */
+  quizCount: number
+  /** Sum of closed+rated encounter focus seconds this round. */
+  totalEffectiveSeconds: number
+  /** Attempted sources grouped by subject → palace for settlement. */
+  bySubject: FreestyleRoundSubjectStat[]
 }
 
 function sourceIdOf(card: FreestyleCard) {
@@ -25,26 +49,56 @@ function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
   return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
 }
 
+function billableSeconds(encounter: FreestyleUnitEncounterState | undefined) {
+  if (!encounter || encounter.status !== 'closed' || encounter.selectedRating == null) return 0
+  return Math.max(0, encounter.effectiveSeconds ?? 0)
+}
+
+function resolvePalaceTitle(card: FreestyleCard, palaceId: number) {
+  if ('palace_title' in card && card.palace_title) return String(card.palace_title)
+  const contextTitle = card.palace_context?.title
+  if (contextTitle) return String(contextTitle)
+  return `宫殿 ${palaceId}`
+}
+
+function planLastRating(
+  roundPlan: FreestyleRoundPlanState | null | undefined,
+  cardId: string,
+) {
+  const value = roundPlan?.cardsById[cardId]?.lastRating
+  return typeof value === 'number' && value >= 1 && value <= 4 ? value : null
+}
+
 function isHandled(
   card: FreestyleCard,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
   cards: ReadonlyArray<FreestyleCard> = [card],
+  roundPlan: FreestyleRoundPlanState | null = null,
 ) {
   const completed = new Set(Array.from(completedIds, String))
-  if (completed.has(card.id) || completed.has(sourceIdOf(card))) return true
+  const sourceId = sourceIdOf(card)
+  const entry = roundPlan?.cardsById[card.id] ?? roundPlan?.cardsById[sourceId]
+  if (entry?.status === 'excluded') return true
+  if (completed.has(card.id) || completed.has(sourceId)) return true
+  if (entry?.status === 'completed') return true
+  const encounter = encountersByCardId[card.id]
+  const ownLast = planLastRating(roundPlan, card.id)
+  const sourceLast = planLastRating(roundPlan, sourceId)
+  if (encounterPassed(encounter) || (ownLast != null && ownLast >= 3) || (sourceLast != null && sourceLast >= 3)) {
+    return true
+  }
   // A weak rating is an acknowledged attempt, but not completion: its retry
   // occurrence must still be rated before the round can close.
-  const encounter = encountersByCardId[card.id]
-  if (encounterPassed(encounter)) return true
-  if (encounter?.selectedRating != null) {
-    const sourceId = sourceIdOf(card)
-    return cards.some(
-      (candidate) => sourceIdOf(candidate) === sourceId
-        && encounterPassed(encountersByCardId[candidate.id]),
-    )
-  }
-  return false
+  const weak = encounter?.selectedRating != null || (ownLast != null && ownLast < 3) || (sourceLast != null && sourceLast < 3)
+  if (!weak) return false
+  return cards.some((candidate) => {
+    if (sourceIdOf(candidate) !== sourceId) return false
+    const last = planLastRating(roundPlan, candidate.id)
+    return encounterPassed(encountersByCardId[candidate.id])
+      || (last != null && last >= 3)
+      || completed.has(candidate.id)
+  })
 }
 
 /**
@@ -63,18 +117,42 @@ export function buildFreestyleRoundCompletion(
   options?: {
     completedIds?: Iterable<string>
     scheduledCount?: number
+    quizCount?: number
+    roundPlan?: FreestyleRoundPlanState | null
+    subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
   },
 ): FreestyleRoundCompletion {
   const completedIds = options?.completedIds ?? []
   const completed = new Set(Array.from(completedIds, String))
   const scheduledCount = options?.scheduledCount ?? cards.filter((card) => !isRetryOccurrence(card)).length
-  const sources = new Map<string, { passed: boolean; retried: boolean; handled: boolean; attempted: boolean }>()
+  const subjectByPalaceId = options?.subjectByPalaceId
+  const sources = new Map<string, {
+    passed: boolean
+    retried: boolean
+    handled: boolean
+    attempted: boolean
+    palaceId: number | null
+    palaceTitle: string
+    subjectId: number | null
+    subjectName: string
+    effectiveSeconds: number
+  }>()
 
   for (const card of cards) {
     const sourceId = sourceIdOf(card)
-    const current = sources.get(sourceId) ?? { passed: false, retried: false, handled: false, attempted: false }
+    const current = sources.get(sourceId) ?? {
+      passed: false,
+      retried: false,
+      handled: false,
+      attempted: false,
+      palaceId: null,
+      palaceTitle: '',
+      subjectId: null,
+      subjectName: '未分类',
+      effectiveSeconds: 0,
+    }
     const encounter = encountersByCardId[card.id]
-    const handled = isHandled(card, encountersByCardId, completedIds, cards)
+    const handled = isHandled(card, encountersByCardId, completedIds, cards, options?.roundPlan)
     if (handled) current.handled = true
     if (
       encounter?.selectedRating != null
@@ -87,18 +165,86 @@ export function buildFreestyleRoundCompletion(
       current.passed = true
     }
     if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
+    current.effectiveSeconds += billableSeconds(encounter)
+    // Prefer the source card for palace/subject labels; fall back to retry metadata.
+    if (current.palaceId == null || !isRetryOccurrence(card)) {
+      const palaceId = cardPalaceId(card)
+      if (palaceId != null) {
+        current.palaceId = palaceId
+        current.palaceTitle = resolvePalaceTitle(card, palaceId)
+        const subject = subjectByPalaceId?.get(palaceId)
+        if (subject) {
+          current.subjectId = subject.id
+          current.subjectName = subject.name
+        } else {
+          current.subjectId = null
+          current.subjectName = '未分类'
+        }
+      }
+    }
     sources.set(sourceId, current)
   }
 
   let ratedCount = 0
   let passedCount = 0
   let retriedCount = 0
+  const subjectBuckets = new Map<string, {
+    subjectId: number | null
+    subjectName: string
+    palaces: Map<number, FreestyleRoundSubjectPalaceStat>
+  }>()
   sources.forEach((entry) => {
     if (!entry.attempted) return
     ratedCount += 1
     if (entry.passed) passedCount += 1
     if (entry.retried) retriedCount += 1
+
+    const palaceId = entry.palaceId ?? 0
+    const palaceTitle = entry.palaceTitle || `宫殿 ${palaceId}`
+    const subjectKey = entry.subjectId == null ? `name:${entry.subjectName}` : `id:${entry.subjectId}`
+    let subject = subjectBuckets.get(subjectKey)
+    if (!subject) {
+      subject = {
+        subjectId: entry.subjectId,
+        subjectName: entry.subjectName,
+        palaces: new Map(),
+      }
+      subjectBuckets.set(subjectKey, subject)
+    }
+    const palace = subject.palaces.get(palaceId) ?? {
+      palaceId,
+      palaceTitle,
+      cardCount: 0,
+      effectiveSeconds: 0,
+    }
+    palace.cardCount += 1
+    palace.effectiveSeconds += entry.effectiveSeconds
+    if (!palace.palaceTitle && palaceTitle) palace.palaceTitle = palaceTitle
+    subject.palaces.set(palaceId, palace)
   })
+
+  const bySubject = Array.from(subjectBuckets.values()).map((subject) => {
+    const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
+      right.effectiveSeconds - left.effectiveSeconds
+      || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
+    ))
+    return {
+      subjectId: subject.subjectId,
+      subjectName: subject.subjectName,
+      palaceCount: palaces.length,
+      cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
+      effectiveSeconds: palaces.reduce((sum, palace) => sum + palace.effectiveSeconds, 0),
+      palaces,
+    }
+  }).sort((left, right) => (
+    right.effectiveSeconds - left.effectiveSeconds
+    || left.subjectName.localeCompare(right.subjectName, 'zh')
+  ))
+
+  let totalEffectiveSeconds = 0
+  for (const encounter of Object.values(encountersByCardId)) {
+    totalEffectiveSeconds += billableSeconds(encounter)
+  }
 
   return {
     ratedCount,
@@ -106,6 +252,9 @@ export function buildFreestyleRoundCompletion(
     retriedCount,
     retryCount: retriedCount,
     remainingCandidates: Math.max(0, candidateCount - scheduledCount),
+    quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
+    totalEffectiveSeconds,
+    bySubject,
   }
 }
 
@@ -118,9 +267,49 @@ export function isFreestyleRoundComplete(
   cards: FreestyleCard[],
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
+  roundPlan: FreestyleRoundPlanState | null = null,
 ): boolean {
   if (cards.length === 0) return false
-  return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards))
+  return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards, roundPlan))
+}
+
+/**
+ * First card that still blocks round completion: unrated, or weak-rated while its
+ * retry copy is missing / unfinished. Skipped-ahead units stay seekable.
+ */
+export function findEarliestUnhandledIndex(
+  cards: ReadonlyArray<FreestyleCard>,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
+  roundPlan: FreestyleRoundPlanState | null = null,
+): number | null {
+  const index = cards.findIndex((card) => {
+    const id = String(card.id || '').trim()
+    if (!id) return false
+    return !isHandled(card, encountersByCardId, completedIds, cards, roundPlan)
+  })
+  return index >= 0 ? index : null
+}
+
+/**
+ * Right-side 完成: open the settlement slot when the round is handled,
+ * otherwise seek the earliest unfinished unit. Null means the viewport
+ * is already on that target (or the feed is empty).
+ */
+export function resolveFreestyleCompleteSeek(options: {
+  roundComplete: boolean
+  cardCount: number
+  earliestUnhandledIndex: number | null
+  visualIndex: number
+}): number | null {
+  const { roundComplete, cardCount, earliestUnhandledIndex, visualIndex } = options
+  if (cardCount <= 0) return null
+  if (roundComplete) {
+    const settlementIndex = cardCount
+    return visualIndex === settlementIndex ? null : settlementIndex
+  }
+  if (earliestUnhandledIndex == null) return null
+  return earliestUnhandledIndex === visualIndex ? null : earliestUnhandledIndex
 }
 
 /**
@@ -148,4 +337,20 @@ export function clampFreestyleFeedIndex(
 ): number {
   const max = Math.max(0, freestyleFeedSlotCount(cardCount, roundComplete) - 1)
   return Math.max(0, Math.min(index, max))
+}
+
+/**
+ * Pager 下一张: beyond the last live card only when a pending restudy still needs
+ * leave/insert, or when the closing settlement slot is open.
+ */
+export function freestyleCanPageNext(
+  visualIndex: number,
+  cardCount: number,
+  roundComplete: boolean,
+  hasPendingRestudyOnCurrent = false,
+): boolean {
+  if (cardCount <= 0) return false
+  if (isFreestyleCompleteSlot(visualIndex, cardCount, roundComplete)) return false
+  if (visualIndex < freestyleFeedSlotCount(cardCount, roundComplete) - 1) return true
+  return hasPendingRestudyOnCurrent
 }

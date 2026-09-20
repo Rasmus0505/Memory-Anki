@@ -50,6 +50,7 @@ class FreestyleRoundActiveRequest(BaseModel):
     cards: list[dict[str, Any]] = Field(default_factory=list)
     round_id: str = ""
     workspace: str = "primary"
+    replan: bool = False
 
 
 class FreestyleRoundStartRequest(FreestyleRoundActiveRequest):

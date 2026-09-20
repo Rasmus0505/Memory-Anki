@@ -95,9 +95,9 @@ export function isPalaceRoundCleared(input: {
 export function palaceClearanceCopy(clearance: PalaceClearance): string {
   const name = clearance.palaceTitle.trim() || `宫殿 ${clearance.palaceId}`
   if (clearance.leftoverDue > 0) {
-    return `《${name}》本轮已清，今日还剩 ${clearance.leftoverDue}`
+    return `《${name}》今日到期已清，还剩 ${clearance.leftoverDue}`
   }
-  return `《${name}》今日安排已清`
+  return `《${name}》今日到期已清`
 }
 
 export function leftoverDueForPalace(

@@ -128,15 +128,17 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport overlapping identities\n",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill faint amber fill not only the HUD rail queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport must not remount the map at the root one live retry must not mint a second copy overlapping identities append_today_cards replan_remaining entered_on\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
-        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n_latest_active_for_workspace = True\n",
+        "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n"
+        "_latest_active_for_workspace = True\nplan_is_fully_handled = True\n"
+        "if plan_is_fully_handled(next_plan) and not persist_config:\n    return _payload(row)\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\nreorder_unstarted = True\ndrop_missing_unstarted = True\n_is_viewable_current = True\nlive_retry_sources = set()\n",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\ndef _collapse_retries(): pass\ndef append_today_cards(): pass\ndef replan_remaining(): pass\nentered_on = ''\n_is_viewable_current = True\nlive_retry_sources = set()\n",
     )
     write_file(
         api_src / "modules" / "practice" / "presentation" / "router.py",
@@ -144,7 +146,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
-        "scheduledBase retryInserted progressHudText bg-sky-400/25 orderIds\n",
+        "scheduledBase retryInserted progressHudText bg-sky-400/25 orderIds retryNodeToneClass bg-amber-400/25 retryChromeClass\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
@@ -157,9 +159,10 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
         "rebuildKeepingProgress\n"
-        "startNewRound(queueStateRef.current, nextSeed)\n"
-        "applyCompletedIdsToRoundPlan\n"
-        "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n",
+        "syncCompletedIdsToRoundPlan\n"
+        "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n"
+        "startFreestyleRoundApi\n"
+        "forceStart\n",
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "queueState.ts",
@@ -168,6 +171,10 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(
         web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
         "export function cardFromOriginalSnapshot() { return null }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewCardView.tsx",
+        "function adoptRatedEncounter() { return null }\nconst sameRatedOpenGlance = true\n",
     )
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
@@ -189,7 +196,8 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
         "startNewRound(queueStateRef.current, nextConfig.seed)\n"
-        "startNewRound(queueStateRef.current, next.seed)\n",
+        "startNewRound(queueStateRef.current, next.seed)\n"
+        "planHasNewDueWork\n",
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "queueState.ts",
@@ -198,6 +206,10 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
     write_file(
         web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
         "export function cardsForServerPlan() { return [] }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewCardView.tsx",
+        "export function FreestyleUnitReviewCardView() { return null }\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
@@ -210,14 +222,18 @@ def test_freestyle_facade_rejects_refresh_wiping_round_progress(
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
-    assert any("must not mint a new round" in error for error in errors)
-    assert any("only 「再来一轮」 may call startNewRound" in error for error in errors)
+    assert any("must not mint via local startNewRound" in error for error in errors)
+    assert any("startFreestyleRoundApi" in error for error in errors)
+    assert any("forceStart" in error for error in errors)
+    assert any("must not auto-start the next round via planHasNewDueWork" in error for error in errors)
     assert any("rebuild without minting a round" in error for error in errors)
     assert any("re-score" in error for error in errors)
     assert any("retry occurrence's own encounter" in error for error in errors)
     assert any("keep the card under the viewport" in error for error in errors)
     assert any("reconstruct completed review units" in error for error in errors)
     assert any("does not mint a new round_id" in error for error in errors)
+    assert any("keep its own encounter instead of remounting the map" in error for error in errors)
+    assert any("just-rated open glance must not reload" in error for error in errors)
 
 
 def test_freestyle_facade_rejects_missing_unstarted_reorder(
@@ -254,7 +270,7 @@ def test_freestyle_facade_rejects_missing_unstarted_reorder(
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
-    assert any("reorder_unstarted" in error for error in errors)
+    assert any("append_today_cards" in error for error in errors)
     assert any("queue_construction_signature" in error for error in errors)
     assert any("shouldReorderUnstartedFreestylePlan" in error for error in errors)
     assert any("queue-construction fields" in error for error in errors)
@@ -284,6 +300,8 @@ def test_freestyle_progress_rail_rejects_near_identical_pending_done(
 
     assert any("near-identical opacities" in error for error in errors)
     assert any("faint palace fill" in error for error in errors)
+    assert any("faint amber fill" in error for error in errors)
+    assert any("beyond the rail" in error for error in errors)
 
 
 def test_freestyle_facade_rejects_client_local_round_authority(
@@ -415,6 +433,75 @@ def test_freestyle_rating_retap_clears_accepts_clear_all(
     assert errors == []
 
 
+def test_freestyle_passed_unit_reopen_requires_finish_helper(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "def start_freestyle_unit_review_session():\n    raise ValueError('passed review unit')\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx",
+        "onSaveFailed(rawMessage)\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "Re-scoring a completed unit amends from that round's original baseline.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_passed_unit_reopen(errors)
+
+    assert any("finish a stale passed session" in error for error in errors)
+    assert any("重试 / 跳过这张 / 重建本轮 / 只看不评" in error for error in errors)
+    assert any("must not toast English API text" in error for error in errors)
+    assert any("passed-unit start must amend" in error for error in errors)
+
+
+def test_freestyle_passed_unit_reopen_accepts_finish_helper(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "def _finish_stale_passed_freestyle_session():\n    return None\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx",
+        "重试\n跳过这张\n重建本轮\n只看不评\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "must not return `passed review unit cannot start another encounter`. 只看不评.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_passed_unit_reopen(errors)
+
+    assert errors == []
+
+
 def test_freestyle_rating_last_write_wins_requires_reopen_helper(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -435,6 +522,7 @@ def test_freestyle_rating_last_write_wins_requires_reopen_helper(
 
     assert any("reopen a dead freestyle glance" in error for error in errors)
     assert any("latest rating reopens a dead glance" in error for error in errors)
+    assert any("idempotent rating replay must stay on this retry glance" in error for error in errors)
 
 
 def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
@@ -446,7 +534,8 @@ def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
     write_file(
         api_src / "modules" / "memory" / "application" / "unit_review_service.py",
         "def _ensure_open_freestyle_rating_target():\n"
-        "    return start_freestyle_unit_review_session()\n",
+        "    return start_freestyle_unit_review_session()\n"
+        "retry occurrence must not return the source glance\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
@@ -506,7 +595,28 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n",
+        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n"
+        "settlement 再来一轮 mints via startFreestyleRoundApi.\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundCompleteCard.tsx",
+        "onAnotherRound()\n再来一轮\ntotalEffectiveSeconds\nbySubject\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "hooks"
+        / "useImmersiveQueue.ts",
+        "forceStart\nstartNextRound\nstartFreestyleRoundApi\n",
     )
 
     errors: list[str] = []
@@ -2645,6 +2755,48 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     assert any("empty overlay quiz progress" in error for error in errors)
 
 
+def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", tmp_path / "apps" / "api" / "src" / "memory_anki")
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return null }\n",
+    )
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "MindMapCanvas.tsx",
+        "onZoomIn={state.zoomInCanvas}\nonZoomOut={state.zoomOutCanvas}\n",
+    )
+    write_file(
+        web_src / "modules" / "content" / "ui" / "mindmap-editor" / "MindMapPageToolbar.tsx",
+        "export function MindMapPageToolbar() { return quizAction.label }\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "englishInOverflow\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "The immersive mind-map toolbar leads with 做题 and puts **英语** in ⋯.\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("zoom in/out buttons" in error for error in errors)
+    assert any("ClipboardList icon" in error for error in errors)
+    assert any("keep 英语 inline" in error for error in errors)
+    assert any("must not bury 英语" in error for error in errors)
+    assert any("immediately left of 文字" in error for error in errors)
+
+
 def test_timed_session_architecture_requires_dwell_and_segment_markers(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -2689,4 +2841,91 @@ def test_timed_session_architecture_requires_dwell_and_segment_markers(
     assert any("dwell" in error for error in errors)
     assert any("visiblePageDwell" in error for error in errors)
     assert any("continuousBlock" in error for error in errors)
+
+
+def test_freestyle_viewing_playhead_rejects_rating_owned_tick(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
+        "export function progressSegmentShapeClass(tone) { return tone === 'current' ? 'h-2.5' : 'h-1.5' }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "onEarliestUnrated={handleGoToEarliestUnrated}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleFeedPager.tsx",
+        "aria-label=\"下一张\"\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "action: 'complete'\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_uncomplete.py",
+        "def complete_card():\n    return None\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "the current tick is taller\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_viewing_playhead(errors)
+
+    assert any("viewing playhead must be independent" in error for error in errors)
+    assert any("settle the round or seek the earliest unfinished unit" in error for error in errors)
+    assert any("settles the round or seeks the earliest unfinished unit" in error for error in errors)
+    assert any("uncomplete the round-plan tick" in error for error in errors)
+    assert any("cancelled rating from completed_ids" in error for error in errors)
+    assert any("viewing playhead and rating-cancel un-light" in error for error in errors)
+
+
+def test_freestyle_viewing_playhead_accepts_independent_tick(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
+        "viewing?: boolean\nif (viewing || tone === 'current') return 'h-3.5'\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "resolveFreestyleCompleteSeek\nonComplete={handleCompleteRound}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleFeedPager.tsx",
+        'aria-label="完成"\nonComplete\n',
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "action: 'uncomplete'\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "queueState.ts",
+        "An empty amend glance keeps this-round rating\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_uncomplete.py",
+        "def uncomplete_card():\n    return None\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "The viewing playhead is independent. Clearing the rating also uncompletes that card in the round plan. Fill follows this-round last rating until the learner changes or cancels it. The right-side pager has 完成, not 定位.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_viewing_playhead(errors)
+
+    assert errors == []
 

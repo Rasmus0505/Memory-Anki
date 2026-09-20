@@ -108,7 +108,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       specific_palace_ids: [],
       subject_scope: 'all',
       subject_ids: [],
-      due_policy: 'due_first_then_expand',
+      due_policy: 'due_only',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
     },
@@ -126,7 +126,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       specific_palace_ids: [],
       subject_scope: 'english',
       subject_ids: [],
-      due_policy: 'due_first_then_expand',
+      due_policy: 'due_only',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
     },
@@ -156,7 +156,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
   // Legacy projection only; new palace streams default to due-first expansion.
-  due_policy: 'due_first_then_expand',
+  due_policy: 'due_only',
   quiz_mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
   quiz_scope: 'cross_palace_random',
   specific_palace_ids: [],
@@ -195,9 +195,8 @@ function asPalaceOrder(value: unknown): FreestylePalaceOrder {
   return value === 'interleave_palaces' ? 'interleave_palaces' : 'finish_palace_then_next'
 }
 
-function asDuePolicy(value: unknown, fallback: FreestyleDuePolicy = 'due_first_then_expand'): FreestyleDuePolicy {
-  if (value === 'due_first_then_expand' || value === 'due_only' || value === 'all_content_due_weighted') return value
-  return fallback
+function asDuePolicy(_value: unknown, _fallback: FreestyleDuePolicy = 'due_only'): FreestyleDuePolicy {
+  return 'due_only'
 }
 
 function asQuestionType(value: unknown): FreestyleQuestionTypeFilter {

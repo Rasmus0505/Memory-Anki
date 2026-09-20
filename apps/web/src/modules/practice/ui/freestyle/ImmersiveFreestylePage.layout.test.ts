@@ -22,11 +22,31 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('viewingCompleteSlot')
   })
 
+  it('uses the right-side 完成 button to settle or seek unfinished work', () => {
+    expect(source).toContain('findEarliestUnhandledIndex')
+    expect(source).toContain('resolveFreestyleCompleteSeek')
+    expect(source).toContain('onComplete={handleCompleteRound}')
+    expect(source).toContain('viewingCardId')
+  })
+
+  it('wires settlement 再来一轮 through nextRound config then startNextRound', () => {
+    expect(source).toContain('onAnotherRound=')
+    expect(source).toContain("setConfigIntent('nextRound')")
+    expect(source).toContain('startNextRound')
+    expect(source).toContain("mode={configIntent}")
+  })
+
   it('pages cards with the dock arrows regardless of palace rating scope', () => {
     expect(source).toContain('canGoPrevious && cards.length > 0')
-    expect(source).toContain('visualIndex < feedSlotCount - 1')
+    expect(source).toContain('freestyleCanPageNext(')
     expect(source).not.toContain('palaceMode={ratingScope === \'palace\'}')
     expect(source).not.toContain('? canGoPreviousPalace')
     expect(source).not.toContain('? canGoNextPalace')
+  })
+
+  it('styles the 重练 badge by completed vs unfinished, not a single chrome', () => {
+    expect(source).toContain('retryChromeClass')
+    expect(source).toContain('liveEncounterFillDone')
+    expect(source).toContain('data-completed={done ? \'true\' : \'false\'}')
   })
 })

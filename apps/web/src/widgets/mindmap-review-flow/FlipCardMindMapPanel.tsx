@@ -112,8 +112,7 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
     enterEdit?: string
     leaveEdit?: string
   }
-  /** Freestyle only: put 英语 in ⋯ and label the text toggle 文字. */
-  englishInOverflow?: boolean
+  /** Freestyle shortens the text toggle to 文字. Other hosts leave this unset. */
   textActionLabel?: string
   visibleEditorState: MindMapEditorState
   editableEditorState?: MindMapEditorState | null
@@ -170,7 +169,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onToggleFullscreen,
   onToggleMode,
   modeToggleLabels,
-  englishInOverflow = false,
   textActionLabel,
   visibleEditorState,
   editableEditorState = null,
@@ -565,7 +563,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           onToggleEnglishMode: handleToggleEnglishModeFromToolbar,
           onToggleTextMode: handleToggleTextMode,
           onToggleFullscreen,
-          englishInOverflow,
           textActionLabel,
         })}
         toolbarCenterContent={toolbarCenterContent}

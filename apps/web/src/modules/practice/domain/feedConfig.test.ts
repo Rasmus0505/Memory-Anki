@@ -12,6 +12,7 @@ import {
   insertRetryOccurrenceAfterGap,
   nextRetryAttempt,
   resolveLeaveConfirmViewportId,
+  isImmediateRestudyGap,
   restudyInterveningGap,
   moveRemainingPalaceToTail,
   mergeQueuePreservingHistory,
@@ -689,6 +690,15 @@ describe('restudy placement counts every presented card', () => {
       occurrence.id,
     ])
   })
+
+  it('does not borrow today-segment cards to fill a leftover retry gap', () => {
+    const cards = [branch('a', 1), branch('b', 1), branch('c1', 2), branch('c2', 2), branch('c3', 2)]
+    const occurrence = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const cohortOf = (id: string) => (id.startsWith('c') ? '2026-09-18' : '2026-09-17')
+    expect(
+      insertRetryOccurrenceAfterGap(cards, occurrence, 0, 3, cohortOf).map((card) => card.id),
+    ).toEqual(['a', 'b', occurrence.id, 'c1', 'c2', 'c3'])
+  })
   it('keeps a restudied unit inside its palace via placeRestudyCardWithMaxGap', () => {
     const cards = [
       branch('a1', 1),
@@ -715,6 +725,8 @@ describe('restudy gap helpers', () => {
     expect(restudyInterveningGap(2, 0)).toBe(2)
     expect(restudyInterveningGap(1, 3)).toBe(1)
     expect(restudyInterveningGap(0, 3)).toBe(0)
+    expect(isImmediateRestudyGap(0)).toBe(true)
+    expect(isImmediateRestudyGap(1)).toBe(false)
   })
 
   it('pins the live viewport after leave, not the source card', () => {

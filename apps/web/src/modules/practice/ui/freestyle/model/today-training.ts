@@ -262,9 +262,9 @@ export function buildTodayTrainingSummary(
     if (state.correct === false) incorrectCount += 1
   })
 
-  let suggestion = '状态不错，可以再来一轮。'
+  let suggestion = '状态不错，今天到期已经刷完。'
   if (incorrectCount > 0) {
-    suggestion = '先把答错题再过一遍，再来一轮会更稳。'
+    suggestion = '先把答错题再过一遍会更稳。'
   } else if (dueActionCount > 0) {
     suggestion = '先把到期复习推进掉，今天的节奏会轻很多。'
   } else if (answeredCount === 0) {

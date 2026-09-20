@@ -10,9 +10,12 @@ import {
   progressRailLabel,
   progressSegmentHoverLabel,
   progressSegmentShapeClass,
-  retryNodeClass,
+  liveEncounterFillDone,
+  retryChromeClass,
   retryNodeLabel,
+  retryNodeToneClass,
   segmentTone,
+  visualPlanStatus,
 } from './freestyleProgressSegments'
 
 function card(id: string): FreestyleCard {
@@ -37,7 +40,7 @@ function plan(cards: FreestyleCard[]) {
 
 describe('segmentTone', () => {
   it('collapses plan statuses into tones; palace accent carries identity hue', () => {
-    expect(segmentTone('active')).toBe('current')
+    expect(segmentTone('active')).toBe('pending')
     expect(segmentTone('completed')).toBe('done')
     expect(segmentTone('retry')).toBe('retry')
     expect(segmentTone('pending')).toBe('pending')
@@ -68,8 +71,10 @@ describe('palaceAccent', () => {
     expect(palaceAccentToneClass(null, 'done')).not.toMatch(/\/\d+/)
     expect(progressSegmentShapeClass('pending')).toBe('h-1.5')
     expect(progressSegmentShapeClass('done')).toBe('h-1.5')
-    expect(progressSegmentShapeClass('current')).toContain('h-2.5')
-    expect(progressSegmentShapeClass('current')).toContain('ring-1')
+    expect(progressSegmentShapeClass('current')).toContain('h-3.5')
+    expect(progressSegmentShapeClass('current')).toContain('ring-2')
+    expect(progressSegmentShapeClass('done', true)).toContain('h-3.5')
+    expect(progressSegmentShapeClass('pending', true)).toContain('h-3.5')
   })
 })
 
@@ -82,7 +87,8 @@ describe('buildFreestyleProgressSummary', () => {
     const summary = buildFreestyleProgressSummary(cards, withRetry, ['one'], [], 'three')
 
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
-    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'retry', 'pending'])
+    expect(summary.segments.map((segment) => Boolean(segment.viewing))).toEqual([false, false, true])
     expect(summary.segments.map((segment) => segment.palaceId)).toEqual([1, 1, 1])
     expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'source', 'source'])
     expect(summary.segments[1]).toMatchObject({ waitingRetry: true, retryAfterCards: 0 })
@@ -127,7 +133,7 @@ describe('buildFreestyleProgressSummary', () => {
     })
     const summary = buildFreestyleProgressSummary(cards, withOccurrence, [], [], 'two')
 
-    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'pending'])
     expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
     expect(summary.segments[0]).toMatchObject({ waitingRetry: true, retryAfterCards: 3 })
     expect(summary.segments[1]).toMatchObject({
@@ -139,8 +145,8 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.retryCount).toBe(2)
     expect(summary.scheduledBase).toBe(2)
     expect(summary.retryInserted).toBe(1)
-    expect(progressHudText(summary)).toBe('2/2 · 重练 +1')
-    expect(progressRailLabel(summary)).toBe('本轮进度 2/2，重练 1 张。点击查看本轮安排')
+    expect(progressHudText(summary)).toBe('3/3')
+    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
   })
 
   it('marks a palace group done only when every rendered segment of it is done', () => {
@@ -180,6 +186,62 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.position).toBe(0)
   })
 
+  it('keeps a this-round completed tick filled when swipe-back opens an empty amend glance', () => {
+    const cards = [card('one'), card('two')]
+    const roundPlan = applyCompletedIdsToRoundPlan(plan(cards), ['one'])
+    const encounters = {
+      one: {
+        encounterId: 'enc-one',
+        unitRevision: 1,
+        status: 'open' as const,
+        sessionId: 'session-one',
+        selectedRating: null,
+        passed: null,
+        retryAfterCards: 0,
+      },
+    }
+    const summary = buildFreestyleProgressSummary(cards, roundPlan, ['one'], [], 'one', encounters)
+
+    expect(summary.segments[0]).toMatchObject({ cardId: 'one', tone: 'done', viewing: true })
+    expect(summary.segments[1]).toMatchObject({ cardId: 'two', tone: 'pending', viewing: false })
+    expect(progressSegmentHoverLabel(summary.segments[0], 0, 2)).toBe('1/2 · 《one》 · 当前 · 已过')
+    expect(summary.passedCount).toBe(1)
+  })
+
+  it('keeps a leftover retry source amber when today\'s glance has no selected rating yet', () => {
+    const cards = [card('one'), card('two')]
+    const withRetry = updateRoundPlanCard(plan(cards), 'one', { status: 'retry', retryAfterCards: 3 })
+    const encounters = {
+      one: {
+        encounterId: 'enc-retry',
+        unitRevision: 1,
+        status: 'open' as const,
+        sessionId: 'session-retry',
+        selectedRating: null,
+        passed: null,
+        retryAfterCards: 3,
+      },
+    }
+    const summary = buildFreestyleProgressSummary(cards, withRetry, [], [], 'one', encounters)
+
+    expect(summary.segments[0]).toMatchObject({
+      cardId: 'one',
+      tone: 'retry',
+      viewing: true,
+      waitingRetry: true,
+    })
+  })
+
+  it('keeps the viewing playhead on a rated card instead of dropping it into done height', () => {
+    const cards = [card('one'), card('two')]
+    const summary = buildFreestyleProgressSummary(cards, plan(cards), ['one'], [], 'one')
+
+    expect(summary.segments[0]).toMatchObject({ cardId: 'one', tone: 'done', viewing: true })
+    expect(summary.segments[1]).toMatchObject({ cardId: 'two', tone: 'pending', viewing: false })
+    expect(progressSegmentShapeClass(summary.segments[0].tone, summary.segments[0].viewing)).toContain('h-3.5')
+    expect(progressSegmentHoverLabel(summary.segments[0], 0, 2)).toContain('当前 · 已过')
+  })
+
   it('keeps completed ticks from the plan when live cards only have remaining work', () => {
     const scheduled = [card('one'), card('two'), card('three')]
     const remaining = [card('two'), card('three')]
@@ -187,10 +249,49 @@ describe('buildFreestyleProgressSummary', () => {
     const summary = buildFreestyleProgressSummary(remaining, roundPlan, ['one'], [], 'two')
 
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
-    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'current', 'pending'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'pending', 'pending'])
     expect(summary.scheduledBase).toBe(3)
     expect(summary.passedCount).toBe(1)
-    expect(progressHudText(summary)).toContain('过 1')
+    expect(progressHudText(summary)).toBe('2/3')
+  })
+
+  it('shows only one retry tick per source unit', () => {
+    const cards = [
+      card('one'),
+      { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
+      { ...card('retry:round-1:one:2'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 2 },
+      card('two'),
+    ]
+    const summary = buildFreestyleProgressSummary(cards, plan(cards), [], [], 'two')
+    const retries = summary.segments.filter((segment) => segment.kind === 'retry')
+    expect(retries).toHaveLength(1)
+    expect(retries[0]?.retryAttempt).toBe(2)
+    expect(summary.retryInserted).toBe(1)
+  })
+
+  it('tones a completed retry occurrence as done instead of leftover retry', () => {
+    const cards = [
+      card('one'),
+      { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
+      card('two'),
+    ]
+    const marked = updateRoundPlanCard(plan(cards), 'one', { status: 'completed' })
+    const withOccurrence = updateRoundPlanCard(marked, 'retry:round-1:one:1', {
+      status: 'completed',
+      occurrenceKind: 'retry',
+      sourceCardId: 'one',
+    })
+    const summary = buildFreestyleProgressSummary(
+      cards,
+      withOccurrence,
+      ['one', 'retry:round-1:one:1'],
+      [],
+      'two',
+    )
+
+    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'done', 'pending'])
+    expect(progressSegmentHoverLabel(summary.segments[1], 1, 3)).toBe('2/3 · 重练《one》第 1 次 · 已过')
   })
 
   it('keeps a retry occurrence tick when it is missing from live cards', () => {
@@ -214,7 +315,7 @@ describe('buildFreestyleProgressSummary', () => {
     )
 
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'retry:round-1:one:1', 'two'])
-    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'current'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'pending'])
     expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
     expect(summary.segments[1]).toMatchObject({
       kind: 'retry',
@@ -223,6 +324,26 @@ describe('buildFreestyleProgressSummary', () => {
       sourceCardId: 'one',
     })
     expect(summary.retryInserted).toBe(1)
+  })
+
+  it('marks the first today source as the leftover/today rail split', () => {
+    const cards = [card('one'), card('two'), card('three')]
+    const roundPlan = {
+      ...plan(cards),
+      today: '2026-09-18',
+      cardsById: {
+        ...plan(cards).cardsById,
+        one: { ...plan(cards).cardsById.one, enteredOn: '2026-09-17' },
+        two: { ...plan(cards).cardsById.two, enteredOn: '2026-09-17' },
+        three: { ...plan(cards).cardsById.three, enteredOn: '2026-09-18' },
+      },
+    }
+    const summary = buildFreestyleProgressSummary(cards, roundPlan, [], [], 'one')
+    expect(summary.segments.map((segment) => Boolean(segment.cohortBoundary))).toEqual([
+      false,
+      false,
+      true,
+    ])
   })
 })
 
@@ -251,7 +372,22 @@ describe('progressSegmentHoverLabel', () => {
         1,
         4,
       ),
-    ).toBe('2/4 · 重练《锚点》第 2 次')
+    ).toBe('2/4 · 重练《锚点》第 2 次 · 待重练')
+    expect(
+      progressSegmentHoverLabel(
+        {
+          cardId: 'retry:1',
+          tone: 'done',
+          palaceId: 1,
+          palaceDone: false,
+          kind: 'retry',
+          retryAttempt: 2,
+          sourceLabel: '锚点',
+        },
+        1,
+        4,
+      ),
+    ).toBe('2/4 · 重练《锚点》第 2 次 · 已过')
   })
 })
 
@@ -278,7 +414,44 @@ describe('retryNodeLabel', () => {
         retryAttempt: 1,
       }),
     ).toBe('重练第 1 次')
-    expect(retryNodeClass).toContain('bg-amber-400')
+  })
+
+  it('keeps unfinished retry faint and completed retry solid', () => {
+    expect(retryNodeToneClass('pending')).toContain('/25')
+    expect(retryNodeToneClass('retry')).toContain('/25')
+    expect(retryNodeToneClass('done')).toBe('bg-amber-400 text-zinc-950')
+    expect(retryNodeToneClass('done')).not.toMatch(/\/\d+/)
+    expect(retryChromeClass(false)).toContain('bg-amber-400')
+    expect(retryChromeClass(true)).toContain('bg-emerald-500/12')
+    const emptyGlance = {
+      encounterId: 'enc',
+      unitRevision: 1,
+      status: 'open' as const,
+      sessionId: 'session',
+      selectedRating: null,
+      passed: null,
+      retryAfterCards: 0,
+    }
+    expect(visualPlanStatus('completed', emptyGlance)).toBe('completed')
+    expect(visualPlanStatus('active', emptyGlance, 'retry')).toBe('retry')
+    expect(liveEncounterFillDone({
+      encounterId: 'enc',
+      unitRevision: 1,
+      status: 'closed',
+      sessionId: 'session',
+      selectedRating: 3,
+      passed: true,
+      retryAfterCards: 0,
+    }, false)).toBe(true)
+    expect(liveEncounterFillDone({
+      encounterId: 'enc',
+      unitRevision: 1,
+      status: 'open',
+      sessionId: 'session',
+      selectedRating: null,
+      passed: null,
+      retryAfterCards: 0,
+    }, true)).toBe(true)
   })
 })
 
@@ -288,8 +461,8 @@ describe('progressRailLabel', () => {
     const withRetry = updateRoundPlanCard(plan(cards), 'two', { status: 'retry' })
     const summary = buildFreestyleProgressSummary(cards, withRetry, ['one'], [], 'three')
 
-    expect(progressRailLabel(summary)).toBe('本轮进度 3/3，已通过 1。点击查看本轮安排')
-    expect(progressHudText(summary)).toBe('3/3 · 过 1')
+    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
+    expect(progressHudText(summary)).toBe('3/3')
   })
 
   it('omits zero counts', () => {

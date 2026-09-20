@@ -309,6 +309,7 @@ function renderCard(
     active?: boolean
     readOnly?: boolean
     encounter?: FreestyleUnitEncounterState
+    lastRating?: number | null
     roundId?: string
     ratingScope?: 'unit' | 'palace'
     preferredZoom?: number
@@ -330,6 +331,7 @@ function renderCard(
     onBranchComplete: vi.fn(),
     onBatchCardsSettled: vi.fn(),
     onStaleDrop: vi.fn(),
+    onRebuildRound: vi.fn(),
     onRevisionAdopted: vi.fn(),
     onSaveFailed: vi.fn(),
     onUnitsReconciled: vi.fn(),
@@ -344,6 +346,7 @@ function renderCard(
     readOnly: options.readOnly ?? false,
     roundId: options.roundId ?? 'round-1',
     encounter: options.encounter ?? queueEncounter(),
+    lastRating: options.lastRating,
     retryAfterCards: 3,
     ratingScope: options.ratingScope,
     preferredZoom: options.preferredZoom,
@@ -566,7 +569,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(moreActions?.moreActions?.some((item) => item.label === '复习进度')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '复制导图')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '导出脑图')).toBe(true)
-    expect(capturedPanelProps?.englishInOverflow).toBe(true)
+    expect(capturedPanelProps?.englishInOverflow).toBeUndefined()
     expect(capturedPanelProps?.textActionLabel).toBe('文字')
 
     act(() => enter!.onClick())
@@ -602,7 +605,7 @@ describe('FreestyleUnitReviewCardView', () => {
     })
   })
 
-  it('exposes 做题 as a toolbar action without putting 英语 on the canvas chrome', async () => {
+  it('exposes 做题 as a toolbar action and keeps 英语 inline rather than in ⋯', async () => {
     const onOpenScopeQuiz = vi.fn()
     const card = buildCard('unit-quiz-toolbar')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
@@ -611,7 +614,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await screen.findByTestId('flip-card-mind-map-panel')
     const quizAction = (capturedPanelProps?.toolbarExtensions as { quizAction?: { label: string; onClick: () => void } | null })?.quizAction
     expect(quizAction?.label).toBe('做题')
-    expect(capturedPanelProps?.englishInOverflow).toBe(true)
+    expect(capturedPanelProps?.englishInOverflow).toBeUndefined()
     expect(capturedPanelProps?.textActionLabel).toBe('文字')
     act(() => quizAction!.onClick())
     expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
@@ -1275,6 +1278,70 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.getByText(/已选困难/)).toBeTruthy()
   })
 
+  it('does not remount the map when a retry pass returns the source encounter', async () => {
+    const source = buildCard('unit-retry-keep-view')
+    const retryCard: FreestyleReviewUnitCard = {
+      ...source,
+      id: `retry:round-1:${source.id}:1`,
+      source_card_id: source.id,
+      occurrence_kind: 'retry',
+      retry_attempt: 1,
+    }
+    const session = buildSession(retryCard.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) => {
+        const payload = ratingResult(session, rating, operationId)
+        return Promise.resolve({
+          ...payload,
+          encounter_id: 'encounter-source',
+          encounter: { ...payload.encounter, id: 'encounter-source', status: 'closed' },
+          unit: {
+            ...payload.unit,
+            encounter: { ...payload.encounter, id: 'encounter-source', status: 'closed' },
+          },
+        })
+      },
+    )
+    const view = renderCard(retryCard)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const onNodeClick = capturedPanelProps?.onNodeClick as (nodes: MindMapSelection[]) => void
+    act(() => onNodeClick([selection('root', '完整宫殿')]))
+    flushRevealFrame()
+    const revealedBefore = (
+      capturedPanelProps?.visibleEditorState as { editor_doc: { root: { children: unknown[] } } }
+    ).editor_doc.root.children.length
+    expect(revealedBefore).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
+    await screen.findByText(/已选记得/)
+    expect(view.onEncounterChange).toHaveBeenCalledWith(
+      retryCard.id,
+      expect.objectContaining({ encounterId: 'encounter-1', status: 'open' }),
+    )
+    expect(
+      (capturedPanelProps?.visibleEditorState as { editor_doc: { root: { children: unknown[] } } })
+        .editor_doc.root.children.length,
+    ).toBe(revealedBefore)
+
+    view.rerenderCard({
+      card: { ...retryCard },
+      encounter: queueEncounter({
+        encounterId: 'encounter-source',
+        status: 'closed',
+        sessionId: session.id,
+        selectedRating: 3,
+        passed: true,
+      }),
+    })
+    await waitFor(() => expect(screen.getByTestId('flip-card-mind-map-panel')).toBeTruthy())
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/已选记得/)).toBeTruthy()
+  })
+
   it('starts a retry encounter from the root instead of the prior reveal state', async () => {
     const card = buildCard('unit-retry-fresh-reveal')
     const firstSession = buildSession(card.unit_id!)
@@ -1460,22 +1527,13 @@ describe('FreestyleUnitReviewCardView', () => {
     )
   })
 
-  it('rates the palace due set through the batch command', async () => {
+  it('rates only the current card even if a palace target is supplied', async () => {
     const card = buildCard('unit-palace-rate')
     const session = buildSession(card.unit_id!)
-    const unitResult = ratingResult(session, 3, 'batch-palace')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
-    apiMocks.ratePalaceDueUnitsApi.mockResolvedValue({
-      batch_id: 'batch-palace',
-      palace_id: card.palace_id,
-      rating: 3,
-      items: [
-        unitResult,
-        { ...unitResult, operation_id: 'batch-palace:unit-b', unit: { ...unitResult.unit, id: 'unit-b' } },
-      ],
-      rated_unit_ids: [card.unit_id, 'unit-b'],
-      remaining_due_count: 0,
-      current: unitResult,
+    apiMocks.rateFreestyleRoundUnitApi.mockResolvedValue({
+      item: ratingResult(session, 3, 'op-current-only'),
+      round: { conflict: false, version: 2, plan_version: 2 },
     })
     const { onBatchCardsSettled, onBranchComplete } = renderCard(card, {
       ratingScope: 'palace',
@@ -1493,69 +1551,16 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
-    await screen.findByText('已选记得 · 今日 2 个到期 · 未首学只改当前卡')
-    expect(apiMocks.ratePalaceDueUnitsApi).toHaveBeenCalledTimes(1)
-    expect(apiMocks.ratePalaceDueUnitsApi.mock.calls[0][1].includeUnitIds).toEqual([
-      card.unit_id,
-      'unit-b',
-    ])
-    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
-    expect(onBranchComplete).not.toHaveBeenCalled()
-    expect(onBatchCardsSettled).toHaveBeenCalledWith([
-      { cardId: card.id, restudy: false, rating: 3, retryAfterCards: 0 },
-      { cardId: 'card-b', restudy: false, rating: 3, retryAfterCards: 0 },
-    ])
-  })
-
-  it('keeps failed sibling units in palace batch settlement for restudy', async () => {
-    const card = buildCard('unit-palace-retry')
-    const session = buildSession(card.unit_id!)
-    const currentResult = ratingResult(session, 2, 'batch-palace-retry')
-    const siblingResult = {
-      ...ratingResult(session, 2, 'batch-palace-retry:unit-b'),
-      operation_id: 'batch-palace-retry:unit-b',
-      unit: { ...currentResult.unit, id: 'unit-b' },
-    }
-    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
-    apiMocks.ratePalaceDueUnitsApi.mockResolvedValue({
-      batch_id: 'batch-palace-retry',
-      palace_id: card.palace_id,
-      rating: 2,
-      items: [currentResult, siblingResult],
-      rated_unit_ids: [card.unit_id, 'unit-b'],
-      remaining_due_count: 2,
-      current: currentResult,
+    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
+    expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1)
+    expect(apiMocks.rateFreestyleRoundUnitApi.mock.calls[0][1].palace_batch).toBeUndefined()
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
+      restudy: false,
+      rating: 3,
+      retryAfterCards: 0,
     })
-    const { onBatchCardsSettled, onEncounterChange } = renderCard(card, {
-      ratingScope: 'palace',
-      palaceTarget: {
-        palaceId: card.palace_id,
-        dueCount: 2,
-        excludeUnitIds: [],
-        includeUnitIds: [card.unit_id, 'unit-b'],
-        settleCards: [
-          { cardId: card.id, unitId: card.unit_id },
-          { cardId: 'card-b', unitId: 'unit-b' },
-        ],
-      },
-    })
-
-    await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
-    await waitFor(() => {
-      expect(onBatchCardsSettled).toHaveBeenCalledWith([
-        { cardId: card.id, restudy: true, rating: 2, retryAfterCards: 3 },
-        { cardId: 'card-b', restudy: true, rating: 2, retryAfterCards: 3 },
-      ])
-    })
-    expect(onEncounterChange).toHaveBeenCalledWith(
-      'card-b',
-      expect.objectContaining({
-        selectedRating: 2,
-        passed: false,
-        retryAfterCards: 3,
-      }),
-    )
+    expect(onBatchCardsSettled).not.toHaveBeenCalled()
   })
 
   it('marks the tapped rating as chosen while the rate is still in flight', async () => {
@@ -1578,7 +1583,7 @@ describe('FreestyleUnitReviewCardView', () => {
     // as a dropped tap.
     const pressed = await screen.findByTestId('freestyle-rating-pending-3')
     expect(pressed).toBeTruthy()
-    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('正在记录记得')
 
     await act(async () => {
@@ -1779,6 +1784,39 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe(false)
   })
 
+  it('keeps the last this-round rating visible after an empty amend glance starts', async () => {
+    const card = buildCard('unit-amend-display')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const view = renderCard(card, {
+      encounter: queueEncounter({
+        encounterId: 'encounter-amend',
+        status: 'pending',
+        selectedRating: 3,
+        passed: true,
+      }),
+      lastRating: 3,
+    })
+
+    await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalled())
+    await screen.findByTestId('flip-card-mind-map-panel')
+    view.rerenderCard({
+      encounter: queueEncounter({
+        encounterId: 'encounter-amend',
+        status: 'open',
+        sessionId: `session:${card.unit_id}`,
+        selectedRating: null,
+        passed: null,
+      }),
+      lastRating: 3,
+    })
+
+    await screen.findByText(/已选记得/)
+    expect(screen.getByText('上次评分')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
+    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
+  })
+
   it('adopts a live unit revision instead of dropping when the session succeeds', async () => {
     const card = buildCard('unit-stale', 3)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!, 4))
@@ -1818,13 +1856,16 @@ describe('FreestyleUnitReviewCardView', () => {
   it('shows recovery actions instead of an endless loading state for a non-stale load failure', async () => {
     const card = buildCard('unit-load-failure')
     apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue(new Error('temporary API failure'))
-    const { onSaveFailed, onStaleDrop } = renderCard(card)
+    const { onSaveFailed, onStaleDrop, onRebuildRound } = renderCard(card)
 
-    await screen.findByText(/单元加载失败：temporary API failure/)
-    expect(onSaveFailed).toHaveBeenCalledWith('temporary API failure')
-    expect(screen.getByRole('button', { name: '重试加载' })).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '重建队列' }))
+    await screen.findByText('这张卡暂时打不开')
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(screen.queryByText(/temporary API failure/)).toBeNull()
+    expect(screen.getByRole('button', { name: '重试' })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '跳过这张' }))
     expect(onStaleDrop).toHaveBeenCalledWith(card.id)
+    fireEvent.click(screen.getByRole('button', { name: '重建本轮' }))
+    expect(onRebuildRound).toHaveBeenCalled()
   })
 
   it('drops silently when encounter_id belongs to another review unit', async () => {
@@ -1852,9 +1893,26 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     const { onStaleDrop, onSaveFailed } = renderCard(card)
 
-    expect(await screen.findByRole('button', { name: '重试加载' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '重试' })).toBeTruthy()
+    expect(await screen.findByText('复习会话还没准备好')).toBeTruthy()
     expect(onStaleDrop).not.toHaveBeenCalled()
-    expect(onSaveFailed).toHaveBeenCalled()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('offers choices instead of a blocking banner when a passed unit cannot start', async () => {
+    const card = buildCard('unit-passed-start')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue({
+      status: 400,
+      message: 'passed review unit cannot start another encounter',
+    })
+    const { onSaveFailed, onStaleDrop } = renderCard(card)
+
+    expect(await screen.findByText('这张已经评过')).toBeTruthy()
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '只看不评' }))
+    expect(await screen.findByText('这张已经评过，当前只看不评')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '改评分' })).toBeTruthy()
+    expect(onStaleDrop).not.toHaveBeenCalled()
   })
 
   it('does not post when the mirrored rating is already selected', async () => {
@@ -1917,41 +1975,27 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, { cleared: true })
   })
 
-  it('retries a stale palace rating once instead of throwing', async () => {
+  it('retries a null unit rating once instead of throwing', async () => {
     const card = buildCard('unit-stale-palace')
     const session = buildSession(card.unit_id!)
-    const unitResult = ratingResult(session, 2, 'batch-overwrite')
+    const unitResult = ratingResult(session, 2, 'overwrite')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
     apiMocks.rateFreestyleRoundUnitApi
       .mockResolvedValueOnce({ item: null, round: { conflict: true, version: 4, plan_version: 4 } })
       .mockResolvedValueOnce({
-        item: {
-          batch_id: 'batch-overwrite',
-          palace_id: card.palace_id,
-          rating: 2,
-          items: [unitResult],
-          rated_unit_ids: [card.unit_id],
-          remaining_due_count: 1,
-          current: unitResult,
-        },
+        item: unitResult,
         round: { conflict: false, version: 5, plan_version: 5 },
       })
-    const { onSaveFailed, onRoundSync, onBatchCardsSettled } = renderCard(card, {
-      ratingScope: 'palace',
-      palaceTarget: {
-        palaceId: card.palace_id,
-        dueCount: 1,
-        excludeUnitIds: [],
-        includeUnitIds: [card.unit_id],
-        settleCards: [{ cardId: card.id, unitId: card.unit_id }],
-      },
-    })
+    const { onSaveFailed, onRoundSync, onBranchComplete } = renderCard(card)
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(2))
     expect(onRoundSync).toHaveBeenCalled()
     expect(onSaveFailed).not.toHaveBeenCalled()
-    expect(screen.queryByText(/宫殿评分没有返回当前单元结果/)).toBeNull()
-    expect(onBatchCardsSettled).toHaveBeenCalled()
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
+      restudy: true,
+      rating: 2,
+      retryAfterCards: 3,
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, ChevronsUp, Waypoints } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, ChevronsUp, Waypoints } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
 const pagerButtonClass =
@@ -13,8 +13,11 @@ export function FreestyleFeedPager({
   canGoPreviousPalace,
   canGoNextPalace,
   sequentialBlockedHint,
+  canComplete,
+  completeTitle,
   onPrevious,
   onNext,
+  onComplete,
   onPreviousPalace,
   onSkipPalace,
 }: {
@@ -22,9 +25,12 @@ export function FreestyleFeedPager({
   canGoNext: boolean
   canGoPreviousPalace: boolean
   canGoNextPalace: boolean
+  canComplete: boolean
+  completeTitle: string
   sequentialBlockedHint: string | null
   onPrevious: () => void
   onNext: () => void
+  onComplete: () => void
   onPreviousPalace: () => void
   onSkipPalace: () => void
 }) {
@@ -54,7 +60,17 @@ export function FreestyleFeedPager({
         >
           <ChevronDown className="size-5 sm:size-4" />
         </button>
-        {/* Palace skip stays desktop-only so the phone dock is two large targets. */}
+        <button
+          type="button"
+          className={pagerButtonClass}
+          title={completeTitle}
+          aria-label="完成"
+          disabled={!canComplete}
+          onClick={onComplete}
+        >
+          <Check className="size-5 sm:size-4" />
+        </button>
+        {/* Palace skip stays desktop-only so the phone dock is prev / next / 完成. */}
         <button
           type="button"
           className={cn('hidden lg:inline-flex', palaceButtonClass)}

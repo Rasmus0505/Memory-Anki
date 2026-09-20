@@ -372,8 +372,6 @@ function MindMapCanvasInner({
           onRefreshHost={onHostRefresh}
           onFitWholeTree={() => state.runFitView(240)}
           onFitSelectionBranch={state.fitSelectionBranch}
-          onZoomIn={props.onUserZoomChange ? state.zoomInCanvas : undefined}
-          onZoomOut={props.onUserZoomChange ? state.zoomOutCanvas : undefined}
           onExpandSelectionSubtree={
             props.practiceModeActive ? undefined : state.expandSelectionSubtree
           }

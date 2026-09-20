@@ -121,8 +121,8 @@ export function readQueueState(workspace?: FreestyleWorkspaceId): FreestyleSkipS
   try {
     const raw = window.localStorage.getItem(queueStateStorageKey(workspace))
     if (!raw) return createQueueRoundState()
-    // Unfinished rounds survive midnight. The page tells the learner this is
-    // yesterday's work; 「再来一轮」 is the only path that starts a new day.
+    // Unfinished and fully handled rounds survive midnight/refresh. A new
+    // round_id is minted only after explicit config confirm (再来一轮).
     return sanitizeQueueState(JSON.parse(raw))
   } catch {
     return createQueueRoundState()

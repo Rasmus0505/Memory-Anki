@@ -552,7 +552,7 @@ export function useMindMapCanvasState(
       if (textSelectionModeActive) return
       menus.handleNodeClick(event, node)
     },
-    [menus.handleNodeClick, textSelectionModeActive],
+    [menus, textSelectionModeActive],
   )
   const handleCancelEdit = useCallback(
     (nodeId: string) => {
