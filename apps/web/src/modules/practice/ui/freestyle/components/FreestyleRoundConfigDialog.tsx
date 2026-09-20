@@ -132,7 +132,7 @@ export function FreestyleRoundConfigDialog({
               </DialogTitle>
               <DialogDescription>
                 {mode === 'nextRound'
-                  ? '确认后开始全新一轮：按当前配置重新生成队列。'
+                  ? '确认后开始全新一轮：按当前配置重新生成队列，并清空本轮做题进度。'
                   : '保存后重排尚未开始的卡片，保留本轮已完成和已排除状态。'}
               </DialogDescription>
             </div>

@@ -325,13 +325,15 @@ opens skip setup. Config stays reachable from the dialog’s top-left.
 
 Answer-then-rate: 忘记 / 困难 / 记得 / 轻松 always write **first-learning** on the question
 (`schedule_stage` / `schedule_due_on`), never palace review units. The first rating auto-advances
-except on the last question; amending a rating does not advance. Session 已做 is shared with
-node-bound badges and Palace Quiz practice and clears on reload, a new round, or when that
-palace’s review units in the round are all scored.
+except on the last question; amending a rating does not advance.
 
-Progress membership still lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
-runtime states, per-question palace ids, and `parked` out-of-scope progress). Starting a new round
-starts overlay 已做 empty. Changing subject or palace scope parks answered questions that left the
-filter instead of deleting them. They return when the palace is in scope again. Overlay progress for
-a palace is dropped only when that palace's review units in the current round are all scored
-(palace-scope 记得/轻松 counts as scoring that palace).
+Durable progress lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
+runtime states, per-question palace ids, and `parked` out-of-scope progress). PWA reload, app
+restart, and next-day reopen restore answered content and the current index from that plan. The
+SPA `quizSessionProgress` mirror is same-session only: reload empties it, and toolbar 做题
+re-seeds it from `overlay_quiz` on ensure/hydrate so node-bound badges stay in sync for the SPA
+lifetime. Starting a new round (`「再来一轮」` → config confirm → `/rounds/start`) starts overlay
+已做 empty and clears the SPA mirror. Changing subject or palace scope parks answered questions
+that left the filter instead of deleting them; they return when the palace is in scope again.
+When a palace's review units in the current round are all scored, the UI asks whether to clear
+that palace's overlay 已做; cancel keeps it, confirm calls `/overlay-quiz/drop-palaces`.

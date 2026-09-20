@@ -18,13 +18,17 @@ import {
   QuizQuestionInteraction,
   QuizQuestionRatingBar,
   QuizQuestionStem,
-  readQuizSessionStates,
   submitQuizQuestionRating,
   useQuizAnswerMode,
   useQuizAttemptOrchestration,
   writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
+import {
+  mergeOverlayAndSessionStates,
+  overlayFromRound,
+  resolveOverlayResumeIndex,
+} from './overlayQuizHydrate'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
@@ -54,10 +58,6 @@ import {
 } from '@/widgets/palace-memory-lookup'
 
 const PROGRESS_DEBOUNCE_MS = 320
-
-function overlayFromRound(round: FreestyleRoundStatePayload | null | undefined) {
-  return round?.plan?.overlay_quiz ?? null
-}
 
 export function FreestyleScopeQuizDialog({
   open,
@@ -104,6 +104,10 @@ export function FreestyleScopeQuizDialog({
   const planVersionRef = useRef(planVersion)
   const persistTimerRef = useRef<number | null>(null)
   const storedConfigRef = useRef(storedConfig)
+  const indexRef = useRef(0)
+  const questionStatesRef = useRef<Record<number, QuizRuntimeState>>({})
+  const roundIdRef = useRef(roundId)
+  const dirtyProgressRef = useRef(false)
 
   useEffect(() => {
     planVersionRef.current = planVersion
@@ -112,6 +116,18 @@ export function FreestyleScopeQuizDialog({
   useEffect(() => {
     storedConfigRef.current = storedConfig
   }, [storedConfig])
+
+  useEffect(() => {
+    roundIdRef.current = roundId
+  }, [roundId])
+
+  useEffect(() => {
+    indexRef.current = index
+  }, [index])
+
+  useEffect(() => {
+    questionStatesRef.current = questionStates
+  }, [questionStates])
 
   useEffect(() => {
     if (!open) return
@@ -130,18 +146,20 @@ export function FreestyleScopeQuizDialog({
 
   const adoptRound = useCallback((round: FreestyleRoundStatePayload) => {
     onRoundSync(round)
+    if (typeof round.plan_version === 'number' && round.plan_version > 0) {
+      planVersionRef.current = round.plan_version
+    } else if (typeof round.version === 'number' && round.version > 0) {
+      planVersionRef.current = round.version
+    }
     const next = overlayFromRound(round)
     setOverlay(next)
     if (next) {
-      const sessionStates = readQuizSessionStates()
-      const merged: Record<number, QuizRuntimeState> = {}
-      for (const questionId of next.question_ids) {
-        const existing = sessionStates[questionId]
-        if (existing) merged[questionId] = existing
-      }
+      const merged = mergeOverlayAndSessionStates(next)
       setQuestionStates(merged)
-      const firstOpen = next.question_ids.findIndex((questionId) => !merged[questionId]?.resolved)
-      setIndex(firstOpen >= 0 ? firstOpen : 0)
+      questionStatesRef.current = merged
+      const nextIndex = resolveOverlayResumeIndex(next, merged)
+      setIndex(nextIndex)
+      indexRef.current = nextIndex
     }
     return next
   }, [onRoundSync])
@@ -186,41 +204,88 @@ export function FreestyleScopeQuizDialog({
     void ensureSession()
   }, [configOpen, ensureSession, open, setupDone])
 
-  const persistProgress = useCallback((
+  const writeProgressNow = useCallback(async (
     nextIndex: number,
     nextStates: Record<number, QuizRuntimeState>,
+    { retryOnConflict = true }: { retryOnConflict?: boolean } = {},
   ) => {
-    if (!roundId) return
-    if (persistTimerRef.current != null) window.clearTimeout(persistTimerRef.current)
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null
-      const completedIds = Object.entries(nextStates)
-        .filter(([, state]) => state.resolved)
-        .map(([id]) => Number(id))
-        .filter((id) => Number.isInteger(id) && id > 0)
-      const states: Record<string, Record<string, unknown>> = {}
-      for (const [id, state] of Object.entries(nextStates)) {
-        states[id] = { ...state }
-      }
-      void progressFreestyleOverlayQuizApi(roundId, {
+    const activeRoundId = roundIdRef.current
+    if (!activeRoundId || !dirtyProgressRef.current) return
+    const completedIds = Object.entries(nextStates)
+      .filter(([, state]) => state.resolved)
+      .map(([id]) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0)
+    const states: Record<string, Record<string, unknown>> = {}
+    for (const [id, state] of Object.entries(nextStates)) {
+      states[id] = { ...state }
+    }
+    const postProgress = async (allowRetry: boolean) => {
+      const round = await progressFreestyleOverlayQuizApi(activeRoundId, {
         operation_id: createOperationId(),
         expected_version: planVersionRef.current,
         current_index: nextIndex,
         completed_ids: completedIds,
         states,
-      }).then((round) => {
-        onRoundSync(round)
-        const next = overlayFromRound(round)
-        if (next) setOverlay(next)
-      }).catch((error) => {
-        toast.error(error instanceof Error ? error.message : '保存做题进度失败。')
       })
-    }, PROGRESS_DEBOUNCE_MS)
-  }, [onRoundSync, roundId])
+      dirtyProgressRef.current = false
+      onRoundSync(round)
+      if (typeof round.plan_version === 'number' && round.plan_version > 0) {
+        planVersionRef.current = round.plan_version
+      } else if (typeof round.version === 'number' && round.version > 0) {
+        planVersionRef.current = round.version
+      }
+      const next = overlayFromRound(round)
+      if (next) setOverlay(next)
+      if (round.conflict && allowRetry) {
+        dirtyProgressRef.current = true
+        await postProgress(false)
+      }
+    }
+    try {
+      await postProgress(retryOnConflict)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存做题进度失败。')
+    }
+  }, [onRoundSync])
 
-  useEffect(() => () => {
+  const flushProgressNow = useCallback(() => {
+    if (persistTimerRef.current != null) {
+      window.clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+    }
+    if (!dirtyProgressRef.current) return
+    void writeProgressNow(indexRef.current, questionStatesRef.current)
+  }, [writeProgressNow])
+
+  const persistProgress = useCallback((
+    nextIndex: number,
+    nextStates: Record<number, QuizRuntimeState>,
+  ) => {
+    if (!roundIdRef.current) return
+    dirtyProgressRef.current = true
+    indexRef.current = nextIndex
+    questionStatesRef.current = nextStates
     if (persistTimerRef.current != null) window.clearTimeout(persistTimerRef.current)
-  }, [])
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null
+      void writeProgressNow(nextIndex, nextStates)
+    }, PROGRESS_DEBOUNCE_MS)
+  }, [writeProgressNow])
+
+  useEffect(() => {
+    if (!open) return
+    const onPageHide = () => flushProgressNow()
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushProgressNow()
+    }
+    window.addEventListener('pagehide', onPageHide)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      flushProgressNow()
+      window.removeEventListener('pagehide', onPageHide)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [flushProgressNow, open])
 
   const current = questions[index] ?? null
   const currentState = current ? questionStates[current.id] ?? {} : {}

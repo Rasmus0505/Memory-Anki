@@ -1,8 +1,9 @@
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
 
 /**
- * SPA-lifetime 已做 / drafts shared by node-bound badges, toolbar overlay, and
- * palace quiz practice. A full page reload or app restart clears it.
+ * Same-session 已做 / drafts shared by node-bound badges, toolbar overlay, and
+ * palace quiz practice. Reload empties this mirror; freestyle toolbar 做题
+ * re-seeds it from the durable round-plan `overlay_quiz` on hydrate.
  */
 const completedIds = new Set<number>()
 const questionStates: Record<number, QuizRuntimeState> = {}

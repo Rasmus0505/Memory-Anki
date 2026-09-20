@@ -422,6 +422,12 @@ export interface FreestyleOverlayQuizProgressRequest {
   states: Record<string, Record<string, unknown>>
 }
 
+export interface FreestyleOverlayQuizDropPalacesRequest {
+  operation_id: string
+  expected_version: number
+  palace_ids: number[]
+}
+
 export interface FreestyleRoundRatingRequest {
   operation_id: string
   expected_version: number

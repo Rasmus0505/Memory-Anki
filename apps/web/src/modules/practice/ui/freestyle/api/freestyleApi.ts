@@ -11,6 +11,7 @@ import type {
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
+  FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
   FreestyleRoundActionRequest,
@@ -198,6 +199,24 @@ export function progressFreestyleOverlayQuizApi(
       persistence: {
         resourceKey: `freestyle-overlay-quiz-progress:${payload.operation_id}`,
         description: '保存随心做题进度',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function dropFreestyleOverlayQuizPalacesApi(
+  roundId: string,
+  payload: FreestyleOverlayQuizDropPalacesRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/drop-palaces`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-overlay-quiz-drop:${payload.operation_id}`,
+        description: '清除宫殿做题进度',
         replayMode: 'auto',
       },
     },

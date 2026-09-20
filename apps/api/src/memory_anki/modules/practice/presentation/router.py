@@ -18,6 +18,7 @@ from memory_anki.modules.practice.application.history_service import (
 from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
+    drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     get_or_create_active_round,
     get_round,
@@ -26,6 +27,7 @@ from memory_anki.modules.practice.application.round_state_service import (
     start_new_round,
 )
 from memory_anki.modules.practice.domain.schemas import (
+    FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
     FreestyleQuestionAttemptCreate,
@@ -159,6 +161,24 @@ def api_freestyle_overlay_quiz_progress(
             current_index=data.current_index,
             completed_ids=list(data.completed_ids or []),
             states=data.states,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/overlay-quiz/drop-palaces")
+def api_freestyle_overlay_quiz_drop_palaces(
+    round_id: str,
+    data: FreestyleOverlayQuizDropPalacesRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return drop_overlay_quiz_for_palaces(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            palace_ids=list(data.palace_ids or []),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

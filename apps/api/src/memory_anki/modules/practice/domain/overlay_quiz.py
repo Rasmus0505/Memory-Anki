@@ -3,7 +3,8 @@
 Progress is not wiped when the learner changes subject/palace scope. A new round
 starts overlay 已做 empty. Out-of-scope answered questions stay in `parked` and
 return when that palace is in scope again. A palace's overlay progress is dropped
-only after its review units in the current round are all scored.
+only after the learner explicitly confirms clear once that palace's review units
+in the current round are all scored.
 """
 
 from __future__ import annotations
@@ -189,20 +190,26 @@ def inherit_overlay_completed(
     overlay: Mapping[str, Any] | None,
     peer_overlay: Mapping[str, Any] | None,
 ) -> OverlayQuiz:
-    """Union peer completed question ids that are in this overlay pack. Do not move the index."""
+    """Union peer completed ids + answer states in this overlay pack. Do not move the index."""
     current = normalize_overlay_quiz(overlay)
     peer = normalize_overlay_quiz(peer_overlay)
     peer_completed = _unique_positive_ids([*peer["completed_ids"], *peer["parked"]["completed_ids"]])
+    peer_states = {**peer["parked"]["states"], **peer["states"]}
     allowed = set(current["question_ids"])
     parked_allowed = set(current["parked"]["question_ids"])
     for question_id in peer_completed:
+        state = peer_states.get(str(question_id))
         if question_id in allowed:
             if question_id not in current["completed_ids"]:
                 current["completed_ids"].append(question_id)
+            if isinstance(state, Mapping) and str(question_id) not in current["states"]:
+                current["states"][str(question_id)] = dict(state)
         elif question_id in parked_allowed:
             parked = current["parked"]
             if question_id not in parked["completed_ids"]:
                 parked["completed_ids"].append(question_id)
+            if isinstance(state, Mapping) and str(question_id) not in parked["states"]:
+                parked["states"][str(question_id)] = dict(state)
     return normalize_overlay_quiz(current)
 
 

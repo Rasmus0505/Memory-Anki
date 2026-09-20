@@ -1,5 +1,6 @@
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_rating,
+    drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     get_or_create_active_round,
     progress_overlay_quiz,
@@ -8,6 +9,7 @@ from memory_anki.modules.practice.application.round_state_service import (
 from memory_anki.modules.practice.domain.overlay_quiz import (
     apply_overlay_progress,
     drop_overlay_for_palaces,
+    inherit_overlay_completed,
     merge_overlay_quiz,
     normalize_overlay_quiz,
     overlay_quiz_scope_signature,
@@ -331,7 +333,29 @@ def test_start_new_round_clears_overlay_progress(db_session, monkeypatch) -> Non
     assert overlay_back["states"].get("101") in (None, {})
 
 
-def test_rating_last_unit_clears_that_palace_overlay(db_session, monkeypatch) -> None:
+def test_inherit_overlay_completed_copies_states() -> None:
+    current = normalize_overlay_quiz(
+        {
+            "question_ids": [101, 102],
+            "completed_ids": [],
+            "states": {},
+            "question_palace_ids": {"101": 10, "102": 10},
+        }
+    )
+    peer = normalize_overlay_quiz(
+        {
+            "question_ids": [101],
+            "completed_ids": [101],
+            "states": {"101": {"resolved": True, "selectedOptionId": "A"}},
+            "question_palace_ids": {"101": 10},
+        }
+    )
+    inherited = inherit_overlay_completed(current, peer)
+    assert inherited["completed_ids"] == [101]
+    assert inherited["states"]["101"]["selectedOptionId"] == "A"
+
+
+def test_rating_last_unit_keeps_overlay_until_explicit_drop(db_session, monkeypatch) -> None:
     monkeypatch.setattr(
         "memory_anki.modules.practice.application.round_state_service.build_overlay_question_pack",
         lambda session, config: {
@@ -380,7 +404,7 @@ def test_rating_last_unit_clears_that_palace_overlay(db_session, monkeypatch) ->
         unit_id="unit-a",
         unit_revision=1,
     )
-    after_one = apply_round_rating(
+    after_both = apply_round_rating(
         db_session,
         round_id=created["round_id"],
         operation_id="op-rate-b",
@@ -392,7 +416,19 @@ def test_rating_last_unit_clears_that_palace_overlay(db_session, monkeypatch) ->
         unit_id="unit-b",
         unit_revision=1,
     )
-    overlay = after_one["plan"]["overlay_quiz"]
-    assert 101 not in overlay["completed_ids"]
-    assert "101" not in overlay["question_palace_ids"]
-    assert overlay["question_ids"] == [201]
+    assert after_both["cleared_review_palace_ids"] == [10]
+    overlay = after_both["plan"]["overlay_quiz"]
+    assert overlay["completed_ids"] == [101]
+    assert overlay["states"]["101"]["resolved"] is True
+
+    dropped = drop_overlay_quiz_for_palaces(
+        db_session,
+        round_id=created["round_id"],
+        operation_id="op-drop",
+        expected_version=after_both["version"],
+        palace_ids=[10],
+    )
+    overlay_after = dropped["plan"]["overlay_quiz"]
+    assert 101 not in overlay_after["completed_ids"]
+    assert "101" not in overlay_after["question_palace_ids"]
+    assert overlay_after["question_ids"] == [201]

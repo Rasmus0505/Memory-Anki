@@ -2718,6 +2718,7 @@ def test_freestyle_scope_quiz_overlay_rejects_training_mode_switch(
     assert any("training_mode" in error for error in errors)
     assert any("overlay_quiz_setup_done" in error for error in errors)
     assert any("overlay-quiz ensure" in error for error in errors)
+    assert any("overlay-quiz drop-palaces" in error for error in errors)
 
 
 def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
@@ -2735,11 +2736,13 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     write_file(
         web_src / "shared" / "api" / "contracts" / "freestyle.ts",
         "export type FreestyleOverlayQuizState = { overlay_quiz_setup_done: boolean }\n"
-        "export const overlay_quiz_setup_done = true\n",
+        "export const overlay_quiz_setup_done = true\n"
+        "export type FreestyleOverlayQuestionRange = 'due' | 'all'\n"
+        "export const overlay_question_range = 'all'\n",
     )
     write_file(
         api_src / "modules" / "practice" / "presentation" / "router.py",
-        "@router.post('/overlay-quiz/ensure')\n",
+        "@router.post('/overlay-quiz/ensure')\n@router.post('/overlay-quiz/drop-palaces')\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "overlay_quiz.py",

@@ -1913,6 +1913,11 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{router_path.relative_to(REPO_ROOT).as_posix()}: "
                 "must expose overlay-quiz ensure for round-scoped 做题 progress."
             )
+        if "/overlay-quiz/drop-palaces" not in router_source:
+            errors.append(
+                f"{router_path.relative_to(REPO_ROOT).as_posix()}: "
+                "must expose overlay-quiz drop-palaces for confirmed palace clear."
+            )
     overlay_domain = API_SRC / "modules" / "practice" / "domain" / "overlay_quiz.py"
     if overlay_domain.exists():
         overlay_source = overlay_domain.read_text(encoding="utf-8", errors="ignore")
@@ -1920,7 +1925,7 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
             if marker not in overlay_source:
                 errors.append(
                     f"{overlay_domain.relative_to(REPO_ROOT).as_posix()}: "
-                    "overlay quiz must park out-of-scope progress and drop it only after palace scoring."
+                    "overlay quiz must park out-of-scope progress and drop only after user confirm."
                 )
     round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
     if round_service.exists():

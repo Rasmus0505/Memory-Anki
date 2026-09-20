@@ -32,7 +32,6 @@ from memory_anki.modules.practice.domain.peer_progress import (
     progress_identity,
 )
 from memory_anki.modules.practice.domain.round_plan import (
-    PASS_RATINGS,
     apply_rating,
     assert_rating_identity,
     cleared_review_palace_ids,
@@ -290,15 +289,6 @@ def _new_round_id(session: Session, requested: str | None) -> str:
     return str(uuid.uuid4())
 
 
-def _clear_scored_palace_overlay(plan: dict[str, Any]) -> dict[str, Any]:
-    next_plan = normalize_plan(plan)
-    next_plan["overlay_quiz"] = drop_overlay_for_palaces(
-        next_plan.get("overlay_quiz"),
-        cleared_review_palace_ids(next_plan),
-    )
-    return next_plan
-
-
 def _create_row(
     session: Session,
     *,
@@ -413,7 +403,6 @@ def get_or_create_active_round(
             return _payload(row)
         if persist_config:
             next_plan = replan_remaining(next_plan, cards, today=today)
-            next_plan = _clear_scored_palace_overlay(next_plan)
             next_plan = _seed_from_peer(
                 session,
                 next_plan,
@@ -423,7 +412,6 @@ def get_or_create_active_round(
             )
         elif cards:
             next_plan = append_today_cards(next_plan, cards, today=today)
-            next_plan = _clear_scored_palace_overlay(next_plan)
             next_plan = _seed_from_peer(
                 session,
                 next_plan,
@@ -591,7 +579,6 @@ def apply_round_rating(
         round_id=row.round_id,
         unit_revision=unit_revision,
     )
-    plan = _clear_scored_palace_overlay(plan)
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)
     if changed:
@@ -680,16 +667,6 @@ def rate_freestyle_round_unit(
         unit_id=unit_id,
         unit_revision=unit_revision,
     )
-    palace_id = int(batch.get("palace_id") or 0) if batch else 0
-    if palace_id > 0 and int(rating) in PASS_RATINGS:
-        latest = _row_by_id(session, row.round_id)
-        if latest is not None:
-            plan = _plan_of(latest)
-            plan["overlay_quiz"] = drop_overlay_for_palaces(plan.get("overlay_quiz"), {palace_id})
-            if _apply_plan(latest, plan, operation_id=op_id):
-                _sync_peer_progress(session, latest, op_id)
-                session.commit()
-            payload = _payload(latest)
     return {"item": item, "round": payload}
 
 
@@ -732,8 +709,7 @@ def ensure_overlay_quiz(
     assert row is not None
     pack = build_overlay_question_pack(session, config if isinstance(config, dict) else _json_load_object(row.config_json))
     plan = _plan_of(row)
-    overlay = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
-    plan["overlay_quiz"] = drop_overlay_for_palaces(overlay, cleared_review_palace_ids(plan))
+    plan["overlay_quiz"] = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)
@@ -769,6 +745,35 @@ def progress_overlay_quiz(
         completed_ids=list(completed_ids or []),
         states=states if isinstance(states, dict) else {},
     )
+    op_id = _require_operation_id(operation_id)
+    changed = _apply_plan(row, plan, operation_id=op_id)
+    _sync_peer_progress(session, row, op_id)
+    if not changed:
+        row.last_operation_id = op_id
+    session.commit()
+    return _payload(row)
+
+
+def drop_overlay_quiz_for_palaces(
+    session: Session,
+    *,
+    round_id: str,
+    operation_id: str,
+    expected_version: int,
+    palace_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Explicit confirm path: drop overlay progress for scored palaces."""
+    row, early = _begin_round_write(
+        session,
+        round_id=round_id,
+        operation_id=operation_id,
+        expected_version=expected_version,
+    )
+    if early is not None:
+        return early
+    assert row is not None
+    plan = _plan_of(row)
+    plan["overlay_quiz"] = drop_overlay_for_palaces(plan.get("overlay_quiz"), list(palace_ids or []))
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)

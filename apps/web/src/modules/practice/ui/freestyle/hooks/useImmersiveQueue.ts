@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import {
   applyFreestyleRoundActionApi,
   buildFreestyleQueueApi,
+  dropFreestyleOverlayQuizPalacesApi,
   getFreestyleRoundApi,
   getOrCreateFreestyleRoundApi,
   startFreestyleRoundApi,
@@ -77,9 +78,20 @@ import {
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import {
+  clearQuizSessionProgress,
   clearQuizSessionProgressForPalaces,
 } from '@/modules/quiz/public'
-import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
+import type {
+  FreestyleCard,
+  FreestyleFeedConfig,
+  FreestyleRoundStatePayload,
+} from '@/shared/api/contracts'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
+import { toast } from '@/shared/feedback/toast'
+import {
+  overlayClearConfirmLabel,
+  overlayPalacesNeedingClearConfirm,
+} from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
 import {
   applyFreestyleEntryScopeUnlessSaved,
   persistFreestyleConfigWithoutEntryLock,
@@ -315,6 +327,11 @@ export function useImmersiveQueue(
   const serverPlanVersionRef = useRef(0)
   const [planVersion, setPlanVersion] = useState(0)
   const [queueFrozen, setQueueFrozen] = useState(false)
+  const declinedOverlayClearRef = useRef<{ roundId: string; palaceIds: Set<number> }>({
+    roundId: '',
+    palaceIds: new Set(),
+  })
+  const overlayClearPromptRef = useRef(false)
   cardsRef.current = cards
   queueStateRef.current = queueState
   configRef.current = config
@@ -1000,6 +1017,8 @@ export function useImmersiveQueue(
     pendingRestudyByIdRef.current.clear()
     syncPendingRestudyIds()
     staleCardKeysRef.current.clear()
+    declinedOverlayClearRef.current = { roundId: '', palaceIds: new Set() }
+    clearQuizSessionProgress()
     const mutedPalaceIds = [...queueStateRef.current.mutedPalaceIds]
     persistQueueState({
       ...queueStateRef.current,
@@ -1777,9 +1796,59 @@ export function useImmersiveQueue(
     return currentIndexRef.current
   }, [applyCurrentIndex, applyPendingRestudyPlacement, commitRoundCursor])
 
+  const promptOverlayPalaceClear = useCallback(async (round: FreestyleRoundStatePayload) => {
+    const cleared = Array.isArray(round.cleared_review_palace_ids)
+      ? round.cleared_review_palace_ids
+      : []
+    const roundId = round.round_id || queueStateRef.current.roundId
+    if (!roundId || cleared.length === 0) return
+    if (declinedOverlayClearRef.current.roundId !== roundId) {
+      declinedOverlayClearRef.current = { roundId, palaceIds: new Set() }
+    }
+    const needing = overlayPalacesNeedingClearConfirm(
+      round.plan?.overlay_quiz,
+      cleared,
+      declinedOverlayClearRef.current.palaceIds,
+    )
+    if (needing.length === 0 || overlayClearPromptRef.current) return
+    overlayClearPromptRef.current = true
+    try {
+      const confirmed = await appConfirm(
+        overlayClearConfirmLabel(needing, cardsRef.current),
+        {
+          title: '清除做题进度',
+          confirmText: '清除',
+          cancelText: '保留',
+          tone: 'danger',
+        },
+      )
+      if (!confirmed) {
+        for (const palaceId of needing) declinedOverlayClearRef.current.palaceIds.add(palaceId)
+        return
+      }
+      const dropped = await dropFreestyleOverlayQuizPalacesApi(roundId, {
+        operation_id: createOperationId(),
+        expected_version: serverPlanVersion(round) || serverPlanVersionRef.current,
+        palace_ids: needing,
+      })
+      clearQuizSessionProgressForPalaces(needing)
+      const version = serverPlanVersion(dropped)
+      if (version > 0) {
+        serverPlanVersionRef.current = version
+        setPlanVersion(version)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '清除做题进度失败。')
+    } finally {
+      overlayClearPromptRef.current = false
+    }
+  }, [])
+
   const adoptRoundVersion = useCallback((round: {
     plan_version?: number
     version?: number
+    round_id?: string
+    plan?: FreestyleRoundStatePayload['plan']
     cleared_review_palace_ids?: number[]
   } | null | undefined) => {
     const version = serverPlanVersion(round)
@@ -1787,10 +1856,10 @@ export function useImmersiveQueue(
       serverPlanVersionRef.current = version
       setPlanVersion(version)
     }
-    if (Array.isArray(round?.cleared_review_palace_ids) && round.cleared_review_palace_ids.length) {
-      clearQuizSessionProgressForPalaces(round.cleared_review_palace_ids)
+    if (round?.plan && Array.isArray(round.cleared_review_palace_ids) && round.cleared_review_palace_ids.length) {
+      void promptOverlayPalaceClear(round as FreestyleRoundStatePayload)
     }
-  }, [])
+  }, [promptOverlayPalaceClear])
 
   const reshuffleQueueWithRestudyClear = useCallback(() => {
     pendingRestudyByIdRef.current.clear()
@@ -1814,7 +1883,7 @@ export function useImmersiveQueue(
       }
       if (!round?.plan) return
       if (Array.isArray(round.cleared_review_palace_ids) && round.cleared_review_palace_ids.length) {
-        clearQuizSessionProgressForPalaces(round.cleared_review_palace_ids)
+        void promptOverlayPalaceClear(round)
       }
       const adoptedRoundId = round.round_id || roundId
       serverPlanVersionRef.current = serverPlanVersion(round)
@@ -1871,7 +1940,7 @@ export function useImmersiveQueue(
     } catch {
       // Offline: keep the local draft.
     }
-  }, [applyCurrentIndex, persistQueueState, slot])
+  }, [applyCurrentIndex, persistQueueState, promptOverlayPalaceClear, slot])
 
   useEffect(() => {
     return onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail) => {

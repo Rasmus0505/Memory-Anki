@@ -298,4 +298,65 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(screen.getByRole('button', { name: '21' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '1' })).toBeNull()
   })
+
+  it('restores answered progress and index from overlay_quiz after reopen', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 4,
+      version: 4,
+      plan: {
+        overlay_quiz: {
+          question_ids: [11, 12, 13],
+          current_index: 2,
+          completed_ids: [11, 12],
+          states: {
+            11: { resolved: true, correct: true, selectedOptionId: 'A' },
+            12: { resolved: true, correct: false, selectedOptionId: 'B' },
+          },
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 3,
+          question_palace_ids: { 11: 7, 12: 7, 13: 7 },
+        },
+      },
+    } as never)
+    getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
+      items: [11, 12, 13].map((id) => ({
+        id,
+        palace_id: 7,
+        sort_order: id,
+        correct_count: 0,
+        incorrect_count: 0,
+        attempt_count: 0,
+        question_type: 'multiple_choice',
+        stem: `第 ${id} 题干`,
+        options: [{ id: 'A', text: 'A' }, { id: 'B', text: 'B' }],
+        answer_payload: { correct_option_id: 'A' },
+        analysis: '',
+        source_meta: {},
+        created_at: null,
+        updated_at: null,
+      })),
+      item_count: 3,
+    } as never)
+
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="当前配置下的全部宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText(/第 3 \/ 3 题/)).toBeTruthy()
+    expect(screen.getByText(/已答 2 \/ 3/)).toBeTruthy()
+  })
 })
