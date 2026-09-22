@@ -1,4 +1,7 @@
-"""Published-question and mastery projections for freestyle queue building."""
+"""Non-deleted question projections for freestyle queue building.
+
+Lifecycle status is not an eligibility gate. Soft-deleted rows stay out.
+"""
 
 from __future__ import annotations
 
@@ -28,10 +31,7 @@ def list_published_questions_for_palaces(
             selectinload(PalaceQuizQuestion.source_chapter),
             selectinload(PalaceQuizQuestion.classified_chapter),
         )
-        .filter(
-            PalaceQuizQuestion.deleted_at.is_(None),
-            PalaceQuizQuestion.lifecycle_status == "published",
-        )
+        .filter(PalaceQuizQuestion.deleted_at.is_(None))
         .order_by(PalaceQuizQuestion.palace_id.asc(), PalaceQuizQuestion.id.asc())
     )
     if palace_ids is not None:

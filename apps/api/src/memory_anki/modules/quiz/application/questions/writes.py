@@ -31,7 +31,6 @@ def apply_normalized_question_to_row(
     if isinstance(source_meta, dict) and (
         source_meta.get("ai_call_log_id") or source_meta.get("generation_mode")
     ):
-        row.lifecycle_status = "candidate"
         evidence = source_meta.get("evidence")
         if not isinstance(evidence, list):
             page_numbers = source_meta.get("page_numbers")

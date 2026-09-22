@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   QuizQuestionInteraction,
   type QuizRuntimeState,
@@ -270,6 +270,53 @@ describe('QuizQuestionInteraction', () => {
     expect(screen.getByText('遗漏或有偏差')).toBeTruthy()
     expect(screen.getByText('要点B')).toBeTruthy()
     expect(screen.getByText('建议')).toBeTruthy()
+  })
+
+  it('puts the mark button beside submit in subjective mode and keeps it below choices', () => {
+    const onToggle = vi.fn()
+    const question = {
+      question_type: 'multiple_choice' as const,
+      stem: '细胞的供能结构是？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '线粒体' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '线粒体是主要供能结构。',
+      source_meta: MANUAL_SOURCE,
+    }
+    const { rerender } = render(
+      <QuizQuestionInteraction
+        question={question}
+        state={{}}
+        onStateChange={() => {}}
+        mark={{ marked: false, onToggle }}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'AI点评' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交答案' })).toBeNull()
+    expect(screen.getByRole('button', { name: '标记' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    const submit = screen.getByRole('button', { name: '提交答案' })
+    const mark = screen.getByRole('button', { name: '标记' })
+    expect(screen.getAllByRole('button', { name: '标记' })).toHaveLength(1)
+    expect(submit.parentElement?.contains(mark)).toBe(true)
+    expect(screen.queryByRole('button', { name: 'AI点评' })).toBeNull()
+
+    fireEvent.click(mark)
+    expect(onToggle).toHaveBeenCalledWith(true)
+
+    rerender(
+      <QuizQuestionInteraction
+        question={question}
+        state={{}}
+        onStateChange={() => {}}
+        mark={{ marked: true, onToggle }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '取消标记' })).toBeTruthy()
   })
 
   it('does not show the choice/subjective toggle on non-choice questions', () => {

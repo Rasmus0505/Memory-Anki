@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
-import { getPalaceEditorApi } from '@/modules/content/public'
-import { QuizGenerationWorkspace } from '@/modules/quiz/ui/palace-quiz/components/QuizGenerationWorkspace'
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
 import {
   PalaceMemoryLookupDialog,
@@ -16,7 +14,6 @@ import {
   QuizKnowledgeEdgePicker,
 } from '@/widgets/quiz-knowledge-digression'
 import { PalaceQuizPracticePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizPracticePanel'
-import { PalaceQuizRangeDialog } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizRangeDialog'
 import {
   listQuestionNodeBindingsApi,
   resetPalaceQuizQuestionAttemptsApi,
@@ -27,7 +24,6 @@ import {
   submitQuizQuestionMark,
 } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
-import { usePalaceQuizGeneration } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
 import { usePalaceQuizPractice } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizPractice'
 import { usePalaceQuizQuestionBrowser } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizQuestionBrowser'
@@ -66,7 +62,6 @@ export default function PalaceQuizPage() {
   const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
-  const [mindMapPromptContext, setMindMapPromptContext] = useState('')
   const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
   const [knowledgePickerEdges, setKnowledgePickerEdges] = useState<QuizNodeBindingEdge[]>([])
   const [knowledgeDigressionOpen, setKnowledgeDigressionOpen] = useState(false)
@@ -76,42 +71,6 @@ export default function PalaceQuizPage() {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
-  useEffect(() => {
-    if (!palaceId) {
-      setMindMapPromptContext('')
-      return
-    }
-    let cancelled = false
-    void getPalaceEditorApi(palaceId).then((result) => {
-      if (!cancelled) setMindMapPromptContext(JSON.stringify(result.editor_doc))
-    }).catch(() => {
-      if (!cancelled) setMindMapPromptContext('')
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [palaceId])
-  const quizPromptContext = useMemo(
-    () => JSON.stringify(questions.map((question) => ({
-      stem: question.stem,
-      options: question.options,
-      answer: question.answer_payload,
-      analysis: question.analysis,
-    }))),
-    [questions],
-  )
-  const promptForGenerationAiOptions = (request: Parameters<typeof promptForAiOptions>[0]) =>
-    promptForAiOptions({
-      ...request,
-      contextOptions: [
-        ...(mindMapPromptContext
-          ? [{ id: 'mindmap', label: '包含当前思维导图', content: mindMapPromptContext }]
-          : []),
-        ...(questions.length > 0
-          ? [{ id: 'quiz', label: '包含当前题库', content: quizPromptContext }]
-          : []),
-      ],
-    })
   const miniPalaces = palace?.segments || []
   const timer = useTimedSession({
     sessionKey:
@@ -155,7 +114,7 @@ export default function PalaceQuizPage() {
   const practice = usePalaceQuizPractice({
     palaceId,
     setQuestions,
-    promptForAiOptions: promptForGenerationAiOptions,
+    promptForAiOptions,
     registerQuizActivity,
     emitQuizFeedback,
   })
@@ -168,15 +127,6 @@ export default function PalaceQuizPage() {
     registerQuizActivity,
     emitQuizFeedback,
   })
-  const generation = usePalaceQuizGeneration({
-    palaceId,
-    palace,
-    refreshQuestions,
-    promptForAiOptions,
-    registerQuizActivity,
-    emitQuizFeedback,
-  })
-
   useEffect(() => {
     const nextTab = readInitialTab(searchParams)
     setActiveTab((current) => (current === nextTab ? current : nextTab))
@@ -314,7 +264,6 @@ export default function PalaceQuizPage() {
   const pageTabs: Array<{ key: PalaceQuizTabKey; label: string }> = [
     { key: 'practice', label: '做题' },
     { key: 'manage', label: '管理' },
-    { key: 'generate', label: 'AI生成' },
   ]
 
   const handleScopeChange = (
@@ -455,7 +404,7 @@ export default function PalaceQuizPage() {
       <PageIntro
         eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
-        description="这里把宫殿级题库、手动管理和 AI 预览生成放在一起。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
+        description="这里做宫殿题库练习，也可以手动管理题目。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
         actions={
           <>
             <Button
@@ -514,7 +463,6 @@ export default function PalaceQuizPage() {
           onChoiceSelect={practice.handleChoiceSelect}
           onStateChange={practice.updateQuestionState}
           onShortAnswerSubmit={practice.handleShortAnswerSubmit}
-          onShortAnswerFeedback={practice.handleShortAnswerFeedback}
           onToggleMark={(question, marked) => void handleToggleMark(question, marked)}
           onReset={practice.handleResetQuestionState}
           onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
@@ -554,36 +502,8 @@ export default function PalaceQuizPage() {
           onDeleteQuestion={management.handleDeleteQuestion}
           onSaveQuestion={management.handleSaveQuestion}
           onResetForm={management.resetEditingState}
-          onReviewUpdated={refreshQuestions}
         />
       ) : null}
-
-      {!loading && activeTab === 'generate' ? (
-        <QuizGenerationWorkspace
-          palaceId={palaceId}
-          palace={palace}
-          selectedChapterId={generation.selectedChapterId}
-          selectedChapterSummary={generation.selectedChapterSummary}
-          onOpenRangeDialog={generation.handleOpenRangeDialog}
-          promptForAiOptions={promptForAiOptions}
-          onSaved={async () => {
-            await refreshQuestions()
-            setActiveTab('manage')
-          }}
-        />
-      ) : null}
-
-      <PalaceQuizRangeDialog
-        open={generation.rangeDialogOpen}
-        onOpenChange={generation.setRangeDialogOpen}
-        pendingChapterId={generation.pendingChapterId}
-        pendingChapterSummary={generation.pendingChapterSummary}
-        chapterTreesLoading={generation.chapterTreesLoading}
-        chapterTrees={generation.chapterTrees}
-        allowedChapterIds={generation.allowedChapterIds}
-        onSelect={generation.setPendingChapterId}
-        onConfirm={generation.handleConfirmRangeSelection}
-      />
     </div>
   )
 }

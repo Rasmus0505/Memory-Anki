@@ -175,7 +175,7 @@ export function readPersistedViewMode(): PalaceQuizViewMode {
 
 export function readInitialTab(searchParams: URLSearchParams): PalaceQuizTabKey {
   const requested = searchParams.get('tab')
-  return requested === 'manage' || requested === 'generate' ? requested : 'practice'
+  return requested === 'manage' ? 'manage' : 'practice'
 }
 
 export function getQuestionOwnershipLabel(question: PalaceQuizQuestion) {

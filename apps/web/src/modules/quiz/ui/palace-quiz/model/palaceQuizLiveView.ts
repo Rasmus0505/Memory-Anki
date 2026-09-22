@@ -10,13 +10,14 @@ export interface PalaceQuizLiveView {
   questionState: { questionId: number; state: QuizRuntimeState } | null
 }
 
-const TABS: PalaceQuizTabKey[] = ['practice', 'manage', 'generate']
+const TABS: PalaceQuizTabKey[] = ['practice', 'manage']
 const VIEW_MODES: PalaceQuizViewMode[] = ['single', 'list']
 
 export function decodePalaceQuizLiveView(raw: unknown): PalaceQuizLiveView | null {
   if (!raw || typeof raw !== 'object') return null
   const record = raw as Record<string, unknown>
-  const tab = TABS.includes(record.tab as PalaceQuizTabKey) ? record.tab as PalaceQuizTabKey : 'practice'
+  const requestedTab = record.tab === 'generate' ? 'practice' : record.tab
+  const tab = TABS.includes(requestedTab as PalaceQuizTabKey) ? requestedTab as PalaceQuizTabKey : 'practice'
   const viewMode = VIEW_MODES.includes(record.viewMode as PalaceQuizViewMode)
     ? record.viewMode as PalaceQuizViewMode
     : 'single'

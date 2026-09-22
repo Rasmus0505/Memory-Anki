@@ -77,11 +77,6 @@ export function usePalaceQuizPractice({
     orchestration.handleShortAnswerSubmit(questionId)
   }
 
-  const handleShortAnswerFeedback = async (question: PalaceQuizQuestion) => {
-    registerQuizActivity('short_answer_feedback')
-    await orchestration.handleShortAnswerFeedback(question)
-  }
-
   const setQuestionStates = (
     next:
       | Record<number, QuizRuntimeState>
@@ -103,6 +98,5 @@ export function usePalaceQuizPractice({
     handleResetQuestionState,
     handleChoiceSelect,
     handleShortAnswerSubmit,
-    handleShortAnswerFeedback,
   }
 }

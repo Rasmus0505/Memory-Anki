@@ -1,7 +1,6 @@
 import { RotateCcw } from 'lucide-react'
 import {
   QuizQuestionInteraction,
-  QuizQuestionMarkToggle,
   QuizQuestionStem,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
@@ -200,7 +199,6 @@ interface QuizQuestionCardProps {
     updater: (current: QuizRuntimeState) => QuizRuntimeState,
   ) => void
   onShortAnswerSubmit: (questionId: number) => void
-  onShortAnswerFeedback: (question: PalaceQuizQuestion) => void
   onReset: (questionId: number) => void
   onEdit: (question: PalaceQuizQuestion) => void
   onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
@@ -213,7 +211,6 @@ export function QuizQuestionCard({
   onChoiceSelect,
   onStateChange,
   onShortAnswerSubmit,
-  onShortAnswerFeedback,
   onReset,
   onEdit,
   onToggleMark,
@@ -265,14 +262,15 @@ export function QuizQuestionCard({
           onStateChange={(updater) => onStateChange(question.id, updater)}
           onChoiceResolve={(optionId) => onChoiceSelect(question, optionId)}
           onShortAnswerSubmit={() => onShortAnswerSubmit(question.id)}
-          onRequestShortAnswerFeedback={() => void onShortAnswerFeedback(question)}
+          mark={
+            onToggleMark
+              ? {
+                  marked: Boolean(question.marked),
+                  onToggle: (marked) => onToggleMark(question, marked),
+                }
+              : undefined
+          }
         />
-        {onToggleMark ? (
-          <QuizQuestionMarkToggle
-            marked={Boolean(question.marked)}
-            onToggle={(marked) => onToggleMark(question, marked)}
-          />
-        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => onReset(question.id)}>

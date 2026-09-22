@@ -13,7 +13,6 @@ import {
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
-  QuizQuestionMarkToggle,
   QuizQuestionStem,
   submitQuizQuestionMark,
   useQuizAnswerMode,
@@ -34,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import {
@@ -80,6 +80,14 @@ export function NodeBoundQuizDialog({
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  useDwellFragmentOverride(open, {
+    scene: 'quiz',
+    kind: 'quiz',
+    title: '关联题目',
+    palaceId,
+    sourceKind: palaceId != null ? 'palace' : null,
+    priority: 1,
+  })
 
   const questionIdsKey = questionIds.join(',')
 
@@ -452,15 +460,12 @@ export function NodeBoundQuizDialog({
                       orchestration.handleShortAnswerSubmit(current.id)
                       markCompleted(current.id)
                     }}
-                    onRequestShortAnswerFeedback={() =>
-                      void orchestration.handleShortAnswerFeedback(current)
-                    }
+                    mark={{
+                      marked: Boolean(current.marked),
+                      onToggle: (marked) => void handleToggleMark(marked),
+                    }}
                   />
                 </div>
-                <QuizQuestionMarkToggle
-                  marked={Boolean(current.marked)}
-                  onToggle={(marked) => void handleToggleMark(marked)}
-                />
               </>
             )}
           </div>

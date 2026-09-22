@@ -3,9 +3,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.ai_learning.application.service import (
-    execute_run,
     list_runs,
-    preview_run,
     purge_run,
     set_application_status,
     set_deleted,
@@ -18,26 +16,20 @@ from memory_anki.modules.ai_learning.domain.schemas import (
     AiRunFeedback,
     AiRunItemDecision,
 )
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
 router = APIRouter(prefix="/ai-learning", tags=["ai-learning"])
 
 
 @router.post("/preview")
 def api_preview_run(data: AiRunDraft, session: Session = Depends(session_dep)):
-    return {"preview": preview_run(data, SettingsPromptCatalog(session))}
+    del data, session
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/runs")
 def api_execute_run(data: AiRunDraft, session: Session = Depends(session_dep)):
-    return {
-        "item": execute_run(
-            session,
-            data,
-            SettingsAiRuntimeProvider(session),
-            SettingsPromptCatalog(session),
-        )
-    }
+    del data, session
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.get("/runs")

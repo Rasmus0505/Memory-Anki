@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { FolderTree, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
+import { FolderTree, Plus, Save, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
@@ -354,13 +354,6 @@ export default function Knowledge() {
     })
   }
 
-  const handleOpenChapterQuizDialog = () => {
-    setChapterQuizPreview(null)
-    setChapterQuizExtraPrompt('')
-    setChapterQuizClassify(false)
-    setChapterQuizDialogOpen(true)
-  }
-
   const handleGenerateChapterQuiz = async () => {
     if (!selectedChapterId) return
     setChapterQuizLoading(true)
@@ -556,12 +549,6 @@ export default function Knowledge() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-semibold">关联宫殿</div>
                       <div className="flex items-center gap-2">
-                        {selectedChapterId ? (
-                          <Button size="sm" variant="outline" onClick={handleOpenChapterQuizDialog}>
-                            <Sparkles className="mr-2 size-4" />
-                            AI 出题
-                          </Button>
-                        ) : null}
                         {selectedChapterId ? (
                           <Link to="/freestyle">
                             <Button size="sm" variant="outline">开始随心复习</Button>

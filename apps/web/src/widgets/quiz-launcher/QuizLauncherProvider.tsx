@@ -7,17 +7,9 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react'
-import { ImagePlus, LoaderCircle, Play, Save, Sparkles } from 'lucide-react'
+import { LoaderCircle, Play } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from '@/shared/feedback/toast'
-import { useAiRunConfigDialog } from '@/modules/settings/public'
-import {
-  generatePalaceQuizPreview,
-  savePalaceQuizGenerationPreview,
-  type QuizGenerationRequestConfig,
-  type QuizLauncherGenerationSourceKind,
-} from '@/modules/quiz/public'
-import type { MindMapEditorState, PalaceQuizGenerationPreview, PalaceQuizQuestionType } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import { getPalaceApi } from '@/modules/content/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { Button } from '@/shared/components/ui/button'
@@ -30,9 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { Input } from '@/shared/components/ui/input'
-import { Textarea } from '@/shared/components/ui/textarea'
-import { cn } from '@/shared/lib/utils'
 
 type QuizLauncherScene = 'edit' | 'practice' | 'review'
 
@@ -49,48 +38,21 @@ interface QuizLauncherContextValue {
 interface LauncherPalaceMeta {
   id: number
   title: string
-  chapters?: Array<{
-    id: number
-    subject?: { id: number; name: string } | null
-  }>
 }
-
-const QUIZ_LAUNCHER_QUESTION_TYPES: PalaceQuizQuestionType[] = [
-  'multiple_choice',
-  'true_false',
-  'fill_blank',
-  'matching',
-  'ordering',
-  'categorization',
-  'short_answer',
-]
 
 const QuizLauncherContext = createContext<QuizLauncherContextValue | null>(null)
-
-function getDefaultSourceKind(scene: QuizLauncherScene): QuizLauncherGenerationSourceKind {
-  return scene === 'review' ? 'review-mindmap' : 'image-single'
-}
 
 export function QuizLauncherProvider({ children }: PropsWithChildren) {
   const navigate = useNavigate()
   const [request, setRequest] = useState<QuizLauncherRequest | null>(null)
   const [palace, setPalace] = useState<LauncherPalaceMeta | null>(null)
   const [loading, setLoading] = useState(false)
-  const [sourceKind, setSourceKind] = useState<QuizLauncherGenerationSourceKind>('image-single')
-  const [extraPrompt, setExtraPrompt] = useState('')
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [questionCount, setQuestionCount] = useState(6)
   const [error, setError] = useState('')
-  const [starting, setStarting] = useState(false)
-  const [generationPreview, setGenerationPreview] = useState<PalaceQuizGenerationPreview | null>(null)
-  const [previewConfig, setPreviewConfig] = useState<QuizGenerationRequestConfig | null>(null)
-  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
 
   useEffect(() => {
     if (!request) return
     setLoading(true)
     setError('')
-    setSourceKind(getDefaultSourceKind(request.scene))
     let cancelled = false
     void getPalaceApi(request.palaceId)
       .then((palaceResponse) => {
@@ -112,13 +74,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
   const closeLauncher = useCallback(() => {
     setRequest(null)
     setLoading(false)
-    setStarting(false)
     setError('')
-    setExtraPrompt('')
-    setImageFiles([])
-    setQuestionCount(6)
-    setGenerationPreview(null)
-    setPreviewConfig(null)
   }, [])
 
   const openQuizLauncher = useCallback((nextRequest: QuizLauncherRequest) => {
@@ -140,90 +96,15 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
     closeLauncher()
   }
 
-  const buildGenerationConfig = async (): Promise<QuizGenerationRequestConfig | null> => {
-    if (!request || !palace) return null
-    if (sourceKind === 'review-mindmap') {
-      if (!request.reviewEditorDoc) {
-        throw new Error('当前复习上下文缺少脑图数据，暂时无法直接生成题目。')
-      }
-      return {
-        palaceId: request.palaceId,
-        sourceKind,
-        extraPrompt,
-        reviewMindmap: {
-          mode: 'chapter',
-          question_types: QUIZ_LAUNCHER_QUESTION_TYPES,
-          question_count: Math.max(1, Math.min(12, questionCount)),
-          review_editor_doc: request.reviewEditorDoc,
-        },
-      }
-    }
-    if (imageFiles.length === 0) {
-      throw new Error(sourceKind === 'text-files' ? '请先上传文本文件。' : '请先上传图片。')
-    }
-    return {
-      palaceId: request.palaceId,
-      sourceKind,
-      extraPrompt,
-      files: sourceKind === 'image-single' ? imageFiles.slice(0, 1) : imageFiles,
-    }
-  }
-
-  const handleStartGeneration = async () => {
-    if (!request || !palace) return
-    setStarting(true)
-    setError('')
-    try {
-      const generationConfig = await buildGenerationConfig()
-      if (!generationConfig) return
-      const aiOptions = await promptForAiOptions({
-        scenarioKey: sourceKind === 'review-mindmap' ? 'quiz_review_mindmap_generation' : 'quiz_image_generation',
-        entrypointKey: sourceKind === 'review-mindmap' ? 'quiz-generate-review-mindmap' : sourceKind === 'image-batch' ? 'quiz-generate-images-batch' : 'quiz-generate-images-single',
-        title: sourceKind === 'review-mindmap' ? '复习脑图做题生成配置' : '图片做题生成配置',
-        description: '确认模型和最终提示词后生成预览；预览不会自动写入题库。',
-      })
-      if (!aiOptions) return
-      const resolvedConfig = { ...generationConfig, aiOptions }
-      const preview = await generatePalaceQuizPreview(resolvedConfig)
-      setPreviewConfig(resolvedConfig)
-      setGenerationPreview(preview)
-      toast.success(`已生成 ${preview.questions.length} 道题目预览`)
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '生成题目失败。')
-    } finally {
-      setStarting(false)
-    }
-  }
-
-  const handleApplyPreview = async () => {
-    if (!generationPreview || !previewConfig) return
-    setStarting(true)
-    setError('')
-    try {
-      const result = await savePalaceQuizGenerationPreview(previewConfig, generationPreview)
-      dispatchGlobalFeedback('quiz_generate_save', { label: '已入题库', audioScope: 'global' })
-      toast.success(`已保存 ${result.savedCount} 道题目`)
-      navigate(`/palaces/${previewConfig.palaceId}/quiz?tab=practice`)
-      closeLauncher()
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '保存题目失败。')
-    } finally {
-      setStarting(false)
-    }
-  }
-
   return (
     <QuizLauncherContext.Provider value={contextValue}>
       {children}
-      {aiRunConfigDialog}
       <Dialog open={Boolean(request)} onOpenChange={(open) => !open && closeLauncher()}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <div>
               <DialogTitle>做题</DialogTitle>
-              <DialogDescription>
-                这里可以直接进入当前宫殿做题页，也可以先生成新题。生成开始后会缩成可拖拽气泡，不会打断你继续看脑图。
-              </DialogDescription>
+              <DialogDescription>直接进入当前宫殿做题。</DialogDescription>
             </div>
             <DialogClose onClick={closeLauncher} />
           </DialogHeader>
@@ -241,7 +122,7 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                     {palace?.title ? `${palace.title} · 做题入口` : '做题入口'}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    直接进入当前宫殿做题页，或者先生成新题再去做。
+                    直接进入当前宫殿做题页。
                   </div>
                   <div className="mt-3">
                     <Button type="button" onClick={handleDirectEnter}>
@@ -250,123 +131,6 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
                     </Button>
                   </div>
                 </div>
-
-                <div className="space-y-4 rounded-lg border border-border/70 bg-background/70 p-4">
-                  <div className="flex flex-wrap gap-2">
-                    {request?.scene === 'review' ? (
-                      <Button
-                        type="button"
-                        variant={sourceKind === 'review-mindmap' ? 'default' : 'outline'}
-                        onClick={() => {
-                          dispatchGlobalFeedback('quiz_nav_scope_change', {
-                            label: '复习脑图',
-                            audioScope: 'global',
-                          })
-                          setSourceKind('review-mindmap')
-                        }}
-                      >
-                        <Sparkles className="size-4" />
-                        基于当前复习脑图
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant={sourceKind === 'image-single' ? 'default' : 'outline'}
-                      onClick={() => {
-                        dispatchGlobalFeedback('quiz_nav_scope_change', {
-                          label: '单图',
-                          audioScope: 'global',
-                        })
-                        setSourceKind('image-single')
-                      }}
-                    >
-                      <ImagePlus className="size-4" />
-                      单图
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={sourceKind === 'image-batch' ? 'default' : 'outline'}
-                      onClick={() => {
-                        dispatchGlobalFeedback('quiz_nav_scope_change', {
-                          label: '多图',
-                          audioScope: 'global',
-                        })
-                        setSourceKind('image-batch')
-                      }}
-                    >
-                      <Sparkles className="size-4" />
-                      多图
-                    </Button>
-                  </div>
-
-                  {sourceKind === 'review-mindmap' ? (
-                    <div className="grid gap-3 sm:grid-cols-[160px_minmax(0,1fr)] sm:items-end">
-                      <label className="grid gap-2">
-                        <span className="text-sm font-medium">题目数量</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={questionCount}
-                          onChange={(event) => setQuestionCount(Number(event.target.value))}
-                        />
-                      </label>
-                      <div className="rounded-xl border border-border/70 bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
-                        会基于当前复习脑图生成综合题预览，确认后才写入题库。
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {sourceKind === 'image-single' || sourceKind === 'image-batch' ? (
-                    <div className="space-y-3">
-                      <label className="grid gap-2 text-sm">
-                        <span className="font-medium">上传图片</span>
-                        <Input
-                          type="file"
-                          multiple={sourceKind === 'image-batch'}
-                          accept="image/*"
-                          onChange={(event) => {
-                            dispatchGlobalFeedback('quiz_generate_attach_source', {
-                              label: '选择图片',
-                              audioScope: 'local',
-                            })
-                            setImageFiles(Array.from(event.target.files || []))
-                          }}
-                        />
-                      </label>
-                      {imageFiles.length > 0 ? (
-                        <div className="rounded-xl border border-border/70 bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                          已选择：{imageFiles.map((file) => file.name).join('、')}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium">补充提示</span>
-                    <Textarea
-                      value={extraPrompt}
-                      onChange={(event) => setExtraPrompt(event.target.value)}
-                      rows={4}
-                      placeholder="可选：补充本次希望强调的知识点、题型风格或范围。"
-                    />
-                  </label>
-                </div>
-
-
-                  {generationPreview ? (
-                    <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
-                      <div className="font-medium">题目预览 · {generationPreview.questions.length} 题</div>
-                      <div className="max-h-64 space-y-2 overflow-auto">
-                        {generationPreview.questions.map((question, index) => (
-                          <div key={`${question.stem}-${index}`} className="rounded-lg border bg-background p-3 text-sm">
-                            <div className="font-medium">{index + 1}. {question.stem}</div>
-                            <div className="mt-1 text-muted-foreground">{question.analysis || '暂无解析'}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                 {error ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                     {error}
@@ -376,21 +140,10 @@ export function QuizLauncherProvider({ children }: PropsWithChildren) {
             )}
           </div>
 
-          <DialogFooter className={cn(loading && 'justify-end')}>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={closeLauncher}>
               取消
             </Button>
-            {generationPreview ? (
-              <Button type="button" disabled={loading || starting} onClick={() => void handleApplyPreview()}>
-                {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
-                确认保存到题库
-              </Button>
-            ) : (
-              <Button type="button" disabled={loading || starting} onClick={() => void handleStartGeneration()}>
-                {starting ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                生成并预览
-              </Button>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

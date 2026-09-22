@@ -13,23 +13,11 @@ from memory_anki.modules.quiz.application.ai_dependencies import (
 )
 from memory_anki.modules.quiz.application.ai_service import (
     PalaceQuizAiError,
-    classify_existing_quiz_questions_to_mini_palaces,
-    explain_question,
-    generate_quiz_preview_from_chapter_outline,
-    generate_quiz_preview_from_images,
-    generate_quiz_preview_from_review_mindmap,
-    generate_quiz_preview_from_text_files,
-    generate_short_answer_feedback,
-)
-from memory_anki.modules.quiz.application.generation.shared import (
-    recover_quiz_preview_from_log,
 )
 from memory_anki.modules.quiz.application.learning_loop import (
     build_mastery_profile,
-    list_review_queue,
     record_attempt_event,
     review_and_store_question_quality,
-    transition_question,
 )
 from memory_anki.modules.quiz.application.node_binding import (
     apply_quiz_node_binding_preview,
@@ -368,7 +356,8 @@ def api_quiz_review_queue(
     limit: int = 100,
     s: Session = Depends(session_dep),
 ):
-    return {"items": list_review_queue(s, palace_id=palace_id, limit=limit)}
+    del palace_id, limit, s
+    return {"items": []}
 
 
 @router.post("/palace-quiz-questions/{question_id}/quality-review")
@@ -381,10 +370,8 @@ def api_review_quiz_question_quality(question_id: int, s: Session = Depends(sess
 
 @router.post("/palace-quiz-questions/{question_id}/lifecycle")
 def api_transition_quiz_question(question_id: int, data: dict, s: Session = Depends(session_dep)):
-    try:
-        return {"item": transition_question(s, question_id, str(data.get("status") or ""))}
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    del question_id, data, s
+    raise HTTPException(status_code=410, detail="题目不再区分发布状态。")
 
 
 @router.post("/palace-quiz-attempt-events")
@@ -447,17 +434,8 @@ def api_short_answer_feedback(
     data: dict,
     s: Session = Depends(session_dep),
 ):
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return generate_short_answer_feedback(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                question_id=question_id,
-                user_answer=str(data.get("user_answer") or ""),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del question_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palace-quiz-questions/{question_id}/explain")
@@ -466,17 +444,8 @@ def api_explain_question(
     data: dict,
     s: Session = Depends(session_dep),
 ):
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return explain_question(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                question_id=question_id,
-                user_question=str(data.get("user_question") or ""),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del question_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palaces/{palace_id}/quiz-generation/recover-from-log")
@@ -485,14 +454,8 @@ def api_recover_palace_quiz_preview_from_log(
     data: dict,
     s: Session = Depends(session_dep),
 ):
-    try:
-        return recover_quiz_preview_from_log(
-            s,
-            palace_id=palace_id,
-            log_id=str(data.get("log_id") or ""),
-        )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del palace_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palaces/{palace_id}/quiz-generation/images")
@@ -505,27 +468,8 @@ async def api_generate_palace_quiz_from_images(
     ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
-    try:
-        image_items: list[tuple[bytes, str | None]] = []
-        for item in files:
-            image_items.append((await item.read(), item.filename))
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return generate_quiz_preview_from_images(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                palace_id=palace_id,
-                image_items=image_items,
-                extra_prompt=extra_prompt,
-                classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
-                selected_chapter_id=(
-                    int(selected_chapter_id) if str(selected_chapter_id or "").strip() else None
-                ),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(
-                    json.loads(ai_options) if ai_options else None
-                ),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del palace_id, files, extra_prompt, classify_by_mini_palace, selected_chapter_id, ai_options, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palaces/{palace_id}/quiz-generation/text-files")
@@ -538,27 +482,8 @@ async def api_generate_palace_quiz_from_text_files(
     ai_options: str = Form(default=""),
     s: Session = Depends(session_dep),
 ):
-    try:
-        file_items: list[tuple[bytes, str | None, str | None]] = []
-        for item in files:
-            file_items.append((await item.read(), item.filename, item.content_type))
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return generate_quiz_preview_from_text_files(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                palace_id=palace_id,
-                file_items=file_items,
-                extra_prompt=extra_prompt,
-                classify_by_mini_palace=str(classify_by_mini_palace).lower() == "true",
-                selected_chapter_id=(
-                    int(selected_chapter_id) if str(selected_chapter_id or "").strip() else None
-                ),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(
-                    json.loads(ai_options) if ai_options else None
-                ),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del palace_id, files, extra_prompt, classify_by_mini_palace, selected_chapter_id, ai_options, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palaces/{palace_id}/quiz-generation/review-mindmap")
@@ -567,21 +492,8 @@ def api_generate_palace_quiz_from_review_mindmap(
     data: dict,
     s: Session = Depends(session_dep),
 ):
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return generate_quiz_preview_from_review_mindmap(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                palace_id=palace_id,
-                mode=str(data.get("mode") or "chapter"),
-                question_types=list(data.get("question_types") or []),
-                question_count=int(data.get("question_count") or 5),
-                review_editor_doc=data.get("review_editor_doc"),
-                related_palace_ids=list(data.get("related_palace_ids") or []),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del palace_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/chapters/{chapter_id}/quiz-generation/outline")
@@ -590,20 +502,8 @@ def api_generate_chapter_quiz_from_outline(
     data: dict,
     s: Session = Depends(session_dep),
 ):
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return generate_quiz_preview_from_chapter_outline(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                chapter_id=chapter_id,
-                question_types=list(data.get("question_types") or []),
-                question_count=int(data.get("question_count") or 5),
-                extra_prompt=str(data.get("extra_prompt") or ""),
-                classify_by_child_chapter=bool(data.get("classify_by_child_chapter", False)),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(data.get("ai_options")),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del chapter_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/palaces/{palace_id}/quiz-classification/segments")
@@ -612,18 +512,8 @@ def api_classify_existing_quiz_questions_to_mini_palaces(
     data: dict | None = None,
     s: Session = Depends(session_dep),
 ):
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return classify_existing_quiz_questions_to_mini_palaces(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                palace_id=palace_id,
-                ai_options=_ai_dependencies(s).runtime.normalize_options(
-                    (data or {}).get("ai_options")
-                ),
-            )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
+    del palace_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.get("/palaces/{palace_id}/quiz-node-bindings")

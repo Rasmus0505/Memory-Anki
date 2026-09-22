@@ -114,10 +114,8 @@ def confirm_outline(book_id: str, payload: ConfirmOutlineRequest, service: Batch
 
 @router.post("/sections/{section_id}/prompt-preview")
 def prompt_preview(section_id: str, payload: PromptPreviewRequest, service: BatchWorkspaceService = Depends(workspace_service_dep)):
-    try:
-        return service.prompt_preview(section_id, payload.kind, payload.model, payload.system_prompt, payload.user_prompt)
-    except Exception as exc:
-        raise _translate_error(exc) from exc
+    del section_id, payload, service
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.put("/sections/{section_id}/draft")

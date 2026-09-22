@@ -10,8 +10,6 @@ from memory_anki.infrastructure.db._tables.palaces import PalaceQuizQuestion, Qu
 from memory_anki.modules.quiz.application.question_contracts import json_dump, json_load
 from memory_anki.modules.quiz.application.question_schema import serialize_question
 
-LIFECYCLE_STATUSES = {"temporary", "candidate", "published", "rejected"}
-
 
 def record_attempt_event(
     session: Session, payload: dict[str, Any], *, commit: bool = True
@@ -109,43 +107,19 @@ def review_and_store_question_quality(session: Session, question_id: int) -> dic
 def list_review_queue(
     session: Session, *, palace_id: int | None = None, limit: int = 100
 ) -> list[dict[str, Any]]:
-    query = session.query(PalaceQuizQuestion).filter(
-        PalaceQuizQuestion.deleted_at.is_(None),
-        PalaceQuizQuestion.lifecycle_status.in_(("temporary", "candidate")),
-    )
-    if palace_id:
-        query = query.filter(PalaceQuizQuestion.palace_id == palace_id)
-    rows = (
-        query.order_by(PalaceQuizQuestion.updated_at.asc(), PalaceQuizQuestion.id.asc())
-        .limit(max(1, min(limit, 300)))
-        .all()
-    )
-    return [serialize_question(row) for row in rows]
+    del session, palace_id, limit
+    return []
 
 
 def transition_question(session: Session, question_id: int, status: str) -> dict[str, Any]:
-    if status not in LIFECYCLE_STATUSES:
-        raise ValueError("不支持的题目生命周期状态。")
-    question = session.get(PalaceQuizQuestion, question_id)
-    if question is None or question.deleted_at is not None:
-        raise ValueError("题目不存在。")
-    review = review_question_quality(question)
-    if status == "published" and not review["passed"]:
-        raise ValueError("题目未通过质量检查，不能发布：" + "；".join(review["issues"]))
-    question.lifecycle_status = status
-    question.quality_score = float(review["score"])
-    question.quality_review_json = json_dump(review, default={})
-    question.updated_at = utc_now_naive()
-    session.commit()
-    return serialize_question(question)
+    del session, question_id, status
+    raise ValueError("题目不再区分发布状态。")
 
 
 def build_mastery_profile(
     session: Session, *, palace_id: int | None = None, limit: int = 100
 ) -> list[dict[str, Any]]:
-    query = session.query(PalaceQuizQuestion).filter(
-        PalaceQuizQuestion.deleted_at.is_(None), PalaceQuizQuestion.lifecycle_status == "published"
-    )
+    query = session.query(PalaceQuizQuestion).filter(PalaceQuizQuestion.deleted_at.is_(None))
     if palace_id:
         query = query.filter(PalaceQuizQuestion.palace_id == palace_id)
     questions = query.limit(max(1, min(limit, 500))).all()

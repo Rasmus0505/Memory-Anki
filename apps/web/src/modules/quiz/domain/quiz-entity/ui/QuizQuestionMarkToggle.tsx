@@ -4,17 +4,19 @@ import { Button } from '@/shared/components/ui/button'
 export function QuizQuestionMarkToggle({
   marked,
   disabled = false,
+  size = 'sm',
   onToggle,
 }: {
   marked: boolean
   disabled?: boolean
+  size?: 'default' | 'sm'
   onToggle: (marked: boolean) => void
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="quiz-question-mark-toggle">
       <Button
         type="button"
-        size="sm"
+        size={size}
         variant={marked ? 'default' : 'outline'}
         disabled={disabled}
         aria-pressed={marked}

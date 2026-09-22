@@ -1,3 +1,5 @@
+import pytest
+
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.modules.quiz.application.learning_loop import (
     build_mastery_profile,
@@ -22,7 +24,7 @@ def _question(*, evidence=None, status="candidate"):
     )
 
 
-def test_candidate_requires_evidence_before_publish(db_session):
+def test_lifecycle_transition_is_rejected(db_session):
     palace = Palace(title="生物", description="")
     db_session.add(palace)
     db_session.flush()
@@ -33,13 +35,8 @@ def test_candidate_requires_evidence_before_publish(db_session):
     review = review_question_quality(question)
     assert review["passed"] is False
     assert "缺少可追溯来源证据" in review["issues"]
-    question.evidence_json = json_dump(
-        [{"source_name": "教材.pdf", "page_numbers": [12], "excerpt": "染色体平均分配"}], default=[]
-    )
-    db_session.commit()
-    assert (
-        transition_question(db_session, question.id, "published")["lifecycle_status"] == "published"
-    )
+    with pytest.raises(ValueError, match="题目不再区分发布状态"):
+        transition_question(db_session, question.id, "published")
 
 
 def test_attempt_events_drive_explainable_mastery(db_session):
@@ -69,7 +66,7 @@ def test_attempt_events_drive_explainable_mastery(db_session):
     assert profile[0]["score"] >= 0.8
 
 
-def test_review_queue_excludes_published_questions(db_session):
+def test_review_queue_is_empty(db_session):
     palace = Palace(title="生物", description="")
     db_session.add(palace)
     db_session.flush()
@@ -79,6 +76,4 @@ def test_review_queue_excludes_published_questions(db_session):
     published.palace_id = palace.id
     db_session.add_all([candidate, published])
     db_session.commit()
-    assert [item["id"] for item in list_review_queue(db_session, palace_id=palace.id)] == [
-        candidate.id
-    ]
+    assert list_review_queue(db_session, palace_id=palace.id) == []

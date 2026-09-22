@@ -8,8 +8,6 @@ import {
 } from '@/shared/debug/session-recorder'
 import {
   __resetBackgroundTaskStoreForTest,
-  completeTask,
-  getBackgroundTasks,
   registerTask,
 } from '@/shared/background-tasks/backgroundTaskRegistry'
 
@@ -464,7 +462,7 @@ describe('AppShell', () => {
     })
   })
 
-  it('renders quiz-generation bubbles and navigates to practice mode', async () => {
+  it('does not render quiz-generation bubbles', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -483,7 +481,6 @@ describe('AppShell', () => {
       navigateTarget: '/palaces/1/quiz?tab=practice',
       bubble: { x: 100, y: 120 },
     })
-    completeTask('quiz-1', { detail: '已保存 4 题，点击去做题。' })
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -493,15 +490,8 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText('细胞生物学宫殿 · 做题生成中')
-    expect(screen.getByRole('button', { name: '去做题' })).toBeTruthy()
-    expect(getBackgroundTasks()[0]?.bubble).toEqual({ x: 100, y: 120 })
-
-    fireEvent.click(screen.getByRole('button', { name: '去做题' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('/palaces/1/quiz?tab=practice')).toBeTruthy()
-    })
+    await screen.findAllByText(/Stable abcdef12/)
+    expect(screen.queryByRole('button', { name: '去做题' })).toBeNull()
   })
 
   it('shows the global recorder stop control only while recording', async () => {

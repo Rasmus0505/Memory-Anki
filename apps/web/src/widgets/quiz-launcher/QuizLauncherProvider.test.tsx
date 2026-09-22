@@ -108,48 +108,21 @@ describe('QuizLauncherProvider', () => {
     })
   })
 
-  it('previews review-based generation before saving', async () => {
+  it('does not offer question generation from the launcher', async () => {
     render(
       <MemoryRouter initialEntries={['/freestyle?palaceId=1']}>
         <QuizLauncherProvider>
-          <LauncherHarness
-            scene="review"
-            reviewEditorDoc={{
-              root: {
-                data: { text: 'Root', uid: 'root' },
-                children: [],
-              },
-            }}
-          />
+          <LauncherHarness scene="review" />
         </QuizLauncherProvider>
       </MemoryRouter>,
     )
 
     fireEvent.click(screen.getByRole('button', { name: '打开做题入口' }))
 
-    expect(await screen.findByRole('button', { name: '基于当前复习脑图' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '生成并预览' }))
-
-    await waitFor(() => {
-      expect(generatePalaceQuizPreviewMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          palaceId: 1,
-          sourceKind: 'review-mindmap',
-          reviewMindmap: expect.objectContaining({ mode: 'chapter', question_count: 6 }),
-        }),
-      )
-    })
-    expect(await screen.findByText(/示例题/)).toBeTruthy()
-    expect(savePalaceQuizGenerationPreviewMock).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '确认保存到题库' }))
-    await waitFor(() => expect(savePalaceQuizGenerationPreviewMock).toHaveBeenCalled())
-    await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/palaces/1/quiz?tab=practice')
-    })
-    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
-      'quiz_generate_save',
-      expect.objectContaining({ label: '已入题库', audioScope: 'global' }),
-    )
+    expect(await screen.findByRole('button', { name: '直接进入做题' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '基于当前复习脑图' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '生成并预览' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '确认保存到题库' })).toBeNull()
+    expect(generatePalaceQuizPreviewMock).not.toHaveBeenCalled()
   })
 })

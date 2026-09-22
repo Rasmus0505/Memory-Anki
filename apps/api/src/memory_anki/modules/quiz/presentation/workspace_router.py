@@ -186,17 +186,8 @@ def api_reorder_sources(job_id: str, data: dict, s: Session = Depends(session_de
 
 @router.post("/quiz-generation-jobs/{job_id}/extract-match")
 def api_extract_match(job_id: str, data: dict | None = None, s: Session = Depends(session_dep)):
-    try:
-        return {
-            "item": service.extract_and_match(
-                s,
-                job_id,
-                ai_dependencies=_ai_dependencies(s),
-                ai_options=(data or {}).get("ai_options"),
-            )
-        }
-    except Exception as exc:
-        _handle(exc)
+    del job_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.put("/quiz-generation-jobs/{job_id}/matching")
@@ -209,22 +200,14 @@ def api_update_matching(job_id: str, data: dict, s: Session = Depends(session_de
 
 @router.post("/quiz-generation-jobs/{job_id}/matching/rematch")
 def api_rematch_selected(job_id: str, data: dict, s: Session = Depends(session_dep)):
-    try:
-        return {
-            "item": service.rematch_selected(
-                s, job_id, [str(value) for value in data.get("item_ids") or []]
-            )
-        }
-    except Exception as exc:
-        _handle(exc)
+    del job_id, data, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/quiz-generation-jobs/{job_id}/generate-preview")
 def api_generate_preview(job_id: str, s: Session = Depends(session_dep)):
-    try:
-        return {"item": service.generate_preview(s, job_id)}
-    except Exception as exc:
-        _handle(exc)
+    del job_id, s
+    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
 
 
 @router.post("/quiz-generation-jobs/{job_id}/mark-saved")

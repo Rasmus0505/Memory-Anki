@@ -17,6 +17,7 @@ import {
   QuizAnswerModeToggle,
   ShortAnswerBlock,
 } from '@/modules/quiz/domain/quiz-entity/ui/QuizShortAnswerBlock'
+import { QuizQuestionMarkToggle } from '@/modules/quiz/domain/quiz-entity/ui/QuizQuestionMarkToggle'
 import { useQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/ui/useQuizAnswerMode'
 
 
@@ -70,7 +71,7 @@ export function QuizQuestionInteraction({
   onStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
-  onRequestShortAnswerFeedback,
+  mark,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -80,7 +81,11 @@ export function QuizQuestionInteraction({
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onChoiceResolve?: (optionId: string, isCorrect: boolean) => void
   onShortAnswerSubmit?: () => void
-  onRequestShortAnswerFeedback?: () => void
+  mark?: {
+    marked: boolean
+    disabled?: boolean
+    onToggle: (marked: boolean) => void
+  }
 }) {
   const currentState = state || {}
   const { mode, updateMode } = useQuizAnswerMode()
@@ -89,6 +94,15 @@ export function QuizQuestionInteraction({
   const resolved = Boolean(currentState.resolved || currentState.shortAnswerSubmitted)
   const modeToggle = canSwitchQuizAnswerMode(question.question_type) ? (
     <QuizAnswerModeToggle mode={mode} disabled={resolved} onChange={updateMode} />
+  ) : null
+  const subjective = isQuizSubjectivePresentation(question.question_type, mode)
+  const markControl = mark ? (
+    <QuizQuestionMarkToggle
+      marked={mark.marked}
+      disabled={mark.disabled}
+      size={subjective ? 'default' : 'sm'}
+      onToggle={mark.onToggle}
+    />
   ) : null
 
   useLayoutEffect(() => {
@@ -106,9 +120,9 @@ export function QuizQuestionInteraction({
           referenceAnswer={mcqSubjectiveReferenceAnswer(question) || mcqReferenceAnswer(question)}
           captureShortcuts={captureShortcuts}
           modeToggle={modeToggle}
+          extraAction={markControl}
           onStateChange={onStateChange}
           onShortAnswerSubmit={onShortAnswerSubmit}
-          onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
         />
       )
     }
@@ -570,9 +584,9 @@ export function QuizQuestionInteraction({
       referenceAnswer={question.answer_payload.reference_answer || ''}
       captureShortcuts={captureShortcuts}
       modeToggle={null}
+      extraAction={markControl}
       onStateChange={onStateChange}
       onShortAnswerSubmit={onShortAnswerSubmit}
-      onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
     />
     )
   }
@@ -585,6 +599,7 @@ export function QuizQuestionInteraction({
       data-quiz-shortcut-surface=""
     >
       {renderBody()}
+      {subjective ? null : markControl}
     </div>
   )
 }

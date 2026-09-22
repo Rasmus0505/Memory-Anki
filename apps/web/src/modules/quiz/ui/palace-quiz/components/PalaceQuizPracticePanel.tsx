@@ -19,7 +19,6 @@ export function PalaceQuizPracticePanel({
   onChoiceSelect,
   onStateChange,
   onShortAnswerSubmit,
-  onShortAnswerFeedback,
   onToggleMark,
   onReset,
   onResetVisibleAttempts,
@@ -42,7 +41,6 @@ export function PalaceQuizPracticePanel({
   onChoiceSelect: (question: PalaceQuizQuestion, optionId: string) => void
   onStateChange: (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit: (questionId: number) => void
-  onShortAnswerFeedback: (question: PalaceQuizQuestion) => void
   onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
   onReset: (questionId: number) => void
   onResetVisibleAttempts: () => void
@@ -123,7 +121,7 @@ export function PalaceQuizPracticePanel({
         <Card className="border-border/70 bg-card/92">
           <CardContent className="flex min-h-[220px] items-center justify-center text-sm text-muted-foreground">
             {questions.length === 0
-              ? '这个宫殿还没有题目，先去“管理”手动新增，或者到“AI生成”里预览后保存。'
+              ? '这个宫殿还没有题目，先去“管理”手动新增。'
               : '当前范围下还没有题目。'}
           </CardContent>
         </Card>
@@ -170,7 +168,6 @@ export function PalaceQuizPracticePanel({
             onChoiceSelect={onChoiceSelect}
             onStateChange={onStateChange}
             onShortAnswerSubmit={onShortAnswerSubmit}
-            onShortAnswerFeedback={onShortAnswerFeedback}
             onReset={onReset}
             onEdit={onEdit}
             onToggleMark={onToggleMark}
@@ -194,7 +191,6 @@ export function PalaceQuizPracticePanel({
                 onChoiceSelect={onChoiceSelect}
                 onStateChange={onStateChange}
                 onShortAnswerSubmit={onShortAnswerSubmit}
-                onShortAnswerFeedback={onShortAnswerFeedback}
                 onReset={onReset}
                 onEdit={onEdit}
                 onToggleMark={onToggleMark}

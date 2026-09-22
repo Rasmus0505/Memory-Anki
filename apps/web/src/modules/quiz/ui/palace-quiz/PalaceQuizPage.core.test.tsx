@@ -10,11 +10,9 @@ import {
   getPalaceQuizQuestionsApiMock,
   listQuestionNodeBindingsApiMock,
   mindMapFramePropsMock,
-  promptForAiOptionsMock,
   recordPalaceQuizChoiceAttemptApiMock,
   renderPage,
   resetPalaceQuizQuestionAttemptsApiMock,
-  requestPalaceShortAnswerFeedbackApiMock,
   setupPalaceQuizPageTest,
   useTimedSessionMock,
 } from '@/modules/quiz/ui/palace-quiz/PalaceQuizPage.test-utils'
@@ -22,7 +20,7 @@ import {
 describe('PalaceQuizPage core flows', () => {
   beforeEach(setupPalaceQuizPageTest)
 
-  it('renders the route and switches among practice, manage, and AI tabs', async () => {
+  it('renders the route and switches between practice and manage', async () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
@@ -41,10 +39,8 @@ describe('PalaceQuizPage core flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect(await screen.findByText('题库列表')).toBeTruthy()
     expect(screen.getByRole('button', { name: /新增题目/ })).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'AI生成' }))
-    expect(await screen.findByText('AI 题库生成工作台')).toBeTruthy()
-    expect(await screen.findByText('生物 / 第三章')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'AI生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '审核发布' })).toBeNull()
   })
 
   it('opens a floating memory palace lookup without leaving the quiz state', async () => {
@@ -63,6 +59,7 @@ describe('PalaceQuizPage core flows', () => {
     )
     expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '翻卡模式' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
     expect(screen.getByText('只读脑图预览')).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
@@ -126,6 +123,24 @@ describe('PalaceQuizPage core flows', () => {
         'false',
       )
     })
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
+    expect(screen.getByText('编辑模式：直接修改节点，改动会自动保存。')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
+        'false',
+      )
+    })
+    expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
+      'root-1',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '查看模式' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
+        'true',
+      )
+    })
+    expect(screen.getByText('只读脑图预览')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '缩小为胶囊' }))
     expect(await screen.findByRole('button', { name: '打开记忆宫殿查看' })).toBeTruthy()
@@ -245,6 +260,7 @@ describe('PalaceQuizPage core flows', () => {
 
     expect(await screen.findByRole('button', { name: '关闭记忆宫殿查看' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeNull()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
@@ -352,7 +368,7 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByText('简答题')).toBeTruthy()
   })
 
-  it('reveals short-answer reference content after submit and enables AI feedback', async () => {
+  it('reveals short-answer reference content after submit', async () => {
     window.localStorage.setItem('memory_anki_palace_quiz_view_mode', 'list')
     renderPage()
 
@@ -363,12 +379,8 @@ describe('PalaceQuizPage core flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
 
     expect(await screen.findByText('参考答案')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'AI点评' }))
-    expect(
-      await screen.findByText('你的答案方向是对的，还可以补充遗传稳定性。'),
-    ).toBeTruthy()
-    expect(promptForAiOptionsMock).toHaveBeenCalled()
-    expect(requestPalaceShortAnswerFeedbackApiMock).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'AI点评' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: '标记' }).length).toBeGreaterThan(0)
   })
 
   it('supports filtering questions by palace scope in manage view', async () => {

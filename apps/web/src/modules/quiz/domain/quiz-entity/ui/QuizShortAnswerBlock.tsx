@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
-import { LoaderCircle, Sparkles } from 'lucide-react'
 import type {
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
@@ -153,9 +152,9 @@ export function ShortAnswerBlock({
   referenceAnswer,
   captureShortcuts,
   modeToggle,
+  extraAction,
   onStateChange,
   onShortAnswerSubmit,
-  onRequestShortAnswerFeedback,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -163,9 +162,9 @@ export function ShortAnswerBlock({
   referenceAnswer: string
   captureShortcuts: boolean
   modeToggle: ReactNode
+  extraAction?: ReactNode
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit?: () => void
-  onRequestShortAnswerFeedback?: () => void
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const currentState = state || {}
@@ -252,19 +251,7 @@ export function ShortAnswerBlock({
         <Button type="button" onClick={submit} disabled={submitted}>
           提交答案
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!currentState.shortAnswerSubmitted || currentState.shortAnswerFeedbackLoading}
-          onClick={() => onRequestShortAnswerFeedback?.()}
-        >
-          {currentState.shortAnswerFeedbackLoading ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
-          AI点评
-        </Button>
+        {extraAction}
         {!submitted ? (
           <span className="text-xs text-muted-foreground">Enter 提交，Shift+Enter 换行</span>
         ) : null}

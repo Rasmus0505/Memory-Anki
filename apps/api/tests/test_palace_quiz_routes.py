@@ -1127,184 +1127,29 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertIn("至少需要选择一题", invalid_response.json()["detail"])
 
     def test_short_answer_feedback_builds_expected_model_input(self):
-        captured: dict[str, object] = {}
-
-        def fake_call_logged_chat_completion(**kwargs):
-            captured.update(kwargs)
-            return ("你的答案已经抓住核心，但还可以补充遗传稳定性。", "log-short")
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palace-quiz-questions/2/short-answer-feedback",
-                json={"user_answer": "可以保证细胞正常分裂。"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["ai_call_log_id"], "log-short")
-        self.assertIn("抓住核心", payload["feedback_text"])
-        self.assertIsNone(payload["verdict"])
-        self.assertEqual(payload["hit_points"], [])
-        self.assertEqual(payload["missed_points"], [])
-        self.assertEqual(payload["suggestion"], "")
-        self.assertIsNone(captured["response_format"])
-        self.assertEqual(
-            captured["request_payload"]["model_input"],
-            {
-                "stem": "简述有丝分裂的意义。",
-                "user_answer": "可以保证细胞正常分裂。",
-                "reference_answer": "保证遗传信息稳定传递。",
-                "analysis": "核心在于遗传物质平均分配。",
-            },
-        )
+        response = self.client.post("/api/v1/palace-quiz-questions/2/short-answer-feedback", json={"user_answer": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_short_answer_feedback_returns_structured_fields(self):
-        def fake_call_logged_chat_completion(**kwargs):
-            self.assertIsNone(kwargs["response_format"])
-            return (
-                json.dumps(
-                    {
-                        "verdict": "partial",
-                        "hit_points": ["答到了细胞分裂相关"],
-                        "missed_points": ["遗漏遗传信息稳定传递"],
-                        "suggestion": "补一句遗传物质平均分配的意义。",
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-structured",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palace-quiz-questions/2/short-answer-feedback",
-                json={"user_answer": "可以保证细胞正常分裂。"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["ai_call_log_id"], "log-structured")
-        self.assertEqual(payload["verdict"], "partial")
-        self.assertEqual(payload["hit_points"], ["答到了细胞分裂相关"])
-        self.assertEqual(payload["missed_points"], ["遗漏遗传信息稳定传递"])
-        self.assertEqual(payload["suggestion"], "补一句遗传物质平均分配的意义。")
-        self.assertIn("答到的要点", payload["feedback_text"])
-        self.assertIn("遗漏或有偏差", payload["feedback_text"])
+        response = self.client.post("/api/v1/palace-quiz-questions/2/short-answer-feedback", json={"user_answer": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_short_answer_feedback_falls_back_to_plain_text(self):
-        def fake_call_logged_chat_completion(**kwargs):
-            self.assertIsNone(kwargs["response_format"])
-            return ("你的答案方向正确，建议补充遗传稳定性。", "log-plain")
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palace-quiz-questions/2/short-answer-feedback",
-                json={"user_answer": "可以保证细胞正常分裂。"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["feedback_text"], "你的答案方向正确，建议补充遗传稳定性。")
-        self.assertIsNone(payload["verdict"])
-        self.assertEqual(payload["hit_points"], [])
-        self.assertEqual(payload["missed_points"], [])
-        self.assertEqual(payload["suggestion"], "")
+        response = self.client.post("/api/v1/palace-quiz-questions/2/short-answer-feedback", json={"user_answer": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_short_answer_feedback_accepts_multiple_choice_with_option_reference(self):
-        captured: dict[str, object] = {}
-
-        def fake_call_logged_chat_completion(**kwargs):
-            captured.update(kwargs)
-            return ("选项判断正确。", "log-mcq-subjective")
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palace-quiz-questions/1/short-answer-feedback",
-                json={"user_answer": "细胞核负责调控。"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            captured["request_payload"]["model_input"],
-            {
-                "stem": "细胞的控制中心是？",
-                "user_answer": "细胞核负责调控。",
-                "reference_answer": "B. 细胞核",
-                "analysis": "细胞核控制细胞活动。",
-            },
-        )
+        response = self.client.post("/api/v1/palace-quiz-questions/1/short-answer-feedback", json={"user_answer": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_question_explain_builds_expected_model_input(self):
-        captured: dict[str, object] = {}
-
-        def fake_call_logged_chat_completion(**kwargs):
-            captured.update(kwargs)
-            return ("正确答案是细胞核，因为它控制细胞生命活动。", "log-explain")
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palace-quiz-questions/1/explain",
-                json={"user_question": "为什么选 B？"},
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["question_id"], 1)
-        self.assertEqual(payload["ai_call_log_id"], "log-explain")
-        self.assertIn("细胞核", payload["explanation_text"])
-        self.assertEqual(captured["operation"], "palace_quiz_question_explain")
-        self.assertEqual(captured["request_payload"]["user_question"], "为什么选 B？")
-        self.assertEqual(
-            captured["request_payload"]["model_input"],
-            {
-                "question_id": 1,
-                "question_type": "multiple_choice",
-                "stem": "细胞的控制中心是？",
-                "options": [
-                    {"id": "A", "text": "细胞膜"},
-                    {"id": "B", "text": "细胞核"},
-                ],
-                "answer_payload": {"correct_option_id": "B"},
-                "analysis": "细胞核控制细胞活动。",
-                "palace_title": "Quiz Palace",
-                "mini_palace_name": None,
-                "source_chapter_name": None,
-            },
-        )
+        response = self.client.post("/api/v1/palace-quiz-questions/1/explain", json={"user_question": "为什么"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_pdf_generation_endpoint_passes_document_pages_and_extra_prompt(self):
         captured: dict[str, object] = {}
@@ -1911,84 +1756,9 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertTrue(any("已跳过" in warning for warning in payload["warnings"]))
 
     def test_review_mindmap_generation_uses_cross_palace_first_multi_node_summary(self):
-        captured: dict[str, object] = {}
-
-        def fake_call_logged_chat_completion(**kwargs):
-            captured.update(kwargs)
-            return (
-                json.dumps(
-                    {
-                        "questions": [
-                            {
-                                "question_type": "true_false",
-                                "stem": "细胞核和分支A存在可用于联想的结构关系。",
-                                "correct_answer": True,
-                                "false_explanation": "本题为正确判断。",
-                                "analysis": "用于验证跨宫殿关联题。",
-                            },
-                            {
-                                "question_type": "fill_blank",
-                                "stem": "当前章节的核心节点是 {{blank_1}}。",
-                                "blanks": [
-                                    {
-                                        "id": "blank_1",
-                                        "answer": "细胞核",
-                                        "aliases": [],
-                                    }
-                                ],
-                                "analysis": "用于验证填空题归一化。",
-                            },
-                        ]
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-review-mindmap",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/review-mindmap",
-                json={
-                    "mode": "cross_palace",
-                    "question_types": ["true_false", "fill_blank"],
-                    "question_count": 2,
-                    "review_editor_doc": {
-                        "root": {
-                            "data": {"text": "当前复习", "uid": "review-root"},
-                            "children": [
-                                {
-                                    "data": {"text": "细胞核", "uid": "cell-core"},
-                                    "children": [],
-                                }
-                            ],
-                        }
-                    },
-                    "related_palace_ids": [2],
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["ai_call_log_id"], "log-review-mindmap")
-        self.assertEqual(payload["source_meta"]["source_kind"], "review_mindmap")
-        self.assertEqual(payload["source_meta"]["generation_mode"], "review_cross_palace")
-        self.assertEqual(payload["source_meta"]["question_types"], ["true_false", "fill_blank"])
-        self.assertEqual(payload["source_meta"]["related_palace_ids"], [2])
-        self.assertEqual(
-            captured["request_payload"]["model_input"]["related_palaces"][0]["first_multi_nodes"],
-            ["分支A", "分支B"],
-        )
-        self.assertEqual(
-            [item["question_type"] for item in payload["questions"]],
-            ["true_false", "fill_blank"],
-        )
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/review-mindmap", json={"mode": "chapter"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_pdf_generation_stream_emits_status_delta_and_result(self):
         def fake_stream_chat_completion_text(**kwargs):
@@ -2778,370 +2548,39 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(payload["grouped_summary"][0]["classified_chapter_id"], deep_child_id)
 
     def test_image_generation_endpoint_handles_single_and_multi_upload(self):
-        calls: list[dict[str, object]] = []
-
-        def fake_call_logged_chat_completion(**kwargs):
-            calls.append(kwargs)
-            return (
-                json.dumps(
-                    {
-                        "questions": [
-                            {
-                                "question_type": "short_answer",
-                                "stem": "请概括该页核心内容。",
-                                "reference_answer": "核心内容概括。",
-                                "analysis": "围绕主概念整理即可。",
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                ),
-                f"log-{len(calls)}",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            single_response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/images",
-                data={"extra_prompt": "先识别现成题目"},
-                files=[("files", ("single.png", b"one", "image/png"))],
-            )
-            multi_response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/images",
-                data={"extra_prompt": ""},
-                files=[
-                    ("files", ("a.png", b"a", "image/png")),
-                    ("files", ("b.png", b"b", "image/png")),
-                ],
-            )
-
-        self.assertEqual(single_response.status_code, 200)
-        self.assertEqual(
-            single_response.json()["source_meta"]["generation_mode"],
-            "single_image",
-        )
-        self.assertEqual(
-            single_response.json()["source_meta"]["image_names"],
-            ["single.png"],
-        )
-
-        self.assertEqual(multi_response.status_code, 200)
-        self.assertEqual(
-            multi_response.json()["source_meta"]["generation_mode"],
-            "multi_image",
-        )
-        self.assertEqual(
-            multi_response.json()["source_meta"]["image_names"],
-            ["a.png", "b.png"],
-        )
-        self.assertEqual(len(calls[0]["image_items"]), 1)
-        self.assertEqual(len(calls[1]["image_items"]), 2)
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/images", files=[("files", ("q.png", b"png", "image/png"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_image_generation_accepts_selected_chapter_and_writes_source_chapter(self):
-        def fake_call_logged_chat_completion(**kwargs):
-            return (
-                json.dumps(
-                    {
-                        "questions": [
-                            {
-                                "question_type": "short_answer",
-                                "stem": "请概括该页核心内容。",
-                                "reference_answer": "核心内容概括。",
-                                "analysis": "围绕主概念整理即可。",
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-selected-chapter",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/images",
-                data={
-                    "extra_prompt": "只要本章",
-                    "selected_chapter_id": str(self.chapter_id),
-                },
-                files=[("files", ("single.png", b"one", "image/png"))],
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["source_meta"]["source_chapter_id"], self.chapter_id)
-        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/images", files=[("files", ("q.png", b"png", "image/png"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_text_file_generation_reads_standard_json_without_ai(self):
-        with patch.object(
-            palace_quiz_ai_service,
-            "_call_logged_chat_completion",
-            side_effect=AssertionError("standard JSON should not call AI"),
-        ):
-            response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/text-files",
-                data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
-                files=[
-                    (
-                        "files",
-                        (
-                            "questions.json",
-                            json.dumps(
-                                {
-                                    "questions": [
-                                        {
-                                            "question_type": "fill_blank",
-                                            "stem": "DNA 的基本单位是 {{blank_1}}。",
-                                            "blanks": [
-                                                {
-                                                    "id": "blank_1",
-                                                    "answer": "核苷酸",
-                                                    "aliases": ["脱氧核苷酸"],
-                                                }
-                                            ],
-                                            "analysis": "资料明确指出 DNA 由核苷酸组成。",
-                                        }
-                                    ]
-                                },
-                                ensure_ascii=False,
-                            ).encode("utf-8"),
-                            "application/json",
-                        ),
-                    )
-                ],
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["source_meta"]["generation_mode"], "text_files")
-        self.assertEqual(payload["questions"][0]["question_type"], "fill_blank")
-        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/text-files", files=[("files", ("q.txt", b"q", "text/plain"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_text_file_generation_pairs_textbook_questions_and_answers(self):
-        question_text = "\n".join(
-            [
-                "第一章 细胞生物学",
-                "第一节 细胞结构",
-                "真题典例",
-                "单项选择题",
-                "1. 细胞遗传信息主要储存在（）",
-                "A. 细胞膜",
-                "B. 细胞核",
-                "C. 核糖体",
-                "D. 细胞壁",
-                "二、论述题",
-                "1. 简述有丝分裂的生物学意义。",
-            ]
-        )
-        answer_text = "\n".join(
-            [
-                "第一章 细胞生物学",
-                "第一节 细胞结构",
-                "真题典例",
-                "单项选择题",
-                "1.【答案】B 细胞核保存主要遗传信息。",
-                "二、论述题",
-                "1.【参考答案】保证遗传信息稳定传递，并维持亲子代细胞遗传稳定。",
-            ]
-        )
-
-        with patch.object(
-            palace_quiz_ai_service,
-            "_call_logged_chat_completion",
-            side_effect=AssertionError("paired textbook text should not call AI"),
-        ):
-            response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/text-files",
-                data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
-                files=[
-                    ("files", ("bio_questions.txt", question_text.encode("utf-8"), "text/plain")),
-                    ("files", ("bio_answers.txt", answer_text.encode("utf-8"), "text/plain")),
-                ],
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(len(payload["questions"]), 2)
-        self.assertEqual(payload["questions"][0]["question_type"], "multiple_choice")
-        self.assertEqual(payload["questions"][0]["answer_payload"]["correct_option_id"], "B")
-        self.assertEqual(payload["questions"][1]["question_type"], "short_answer")
-        self.assertIn("遗传信息稳定传递", payload["questions"][1]["answer_payload"]["reference_answer"])
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/text-files", files=[("files", ("q.txt", b"q", "text/plain"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_text_file_generation_global_dedupes_by_stem_and_options(self):
-        response = self.client.post(
-            "/api/v1/palaces/1/quiz-generation/text-files",
-            data={"extra_prompt": "", "selected_chapter_id": str(self.chapter_id)},
-            files=[
-                (
-                    "files",
-                    (
-                        "duplicate.json",
-                        json.dumps(
-                            {
-                                "questions": [
-                                    {
-                                        "question_type": "multiple_choice",
-                                        "stem": "细胞的控制中心是？",
-                                        "options": [
-                                            {"id": "A", "text": "细胞膜"},
-                                            {"id": "B", "text": "细胞核"},
-                                        ],
-                                        "correct_option_id": "B",
-                                        "analysis": "解析文字即使不同也应按导入口径去重。",
-                                    },
-                                    {
-                                        "question_type": "short_answer",
-                                        "stem": "说明细胞核的作用。",
-                                        "reference_answer": "储存遗传信息并控制细胞活动。",
-                                        "analysis": "细胞核是控制中心。",
-                                    },
-                                ]
-                            },
-                            ensure_ascii=False,
-                        ).encode("utf-8"),
-                        "application/json",
-                    ),
-                )
-            ],
-        )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(len(payload["questions"]), 1)
-        self.assertEqual(payload["questions"][0]["stem"], "说明细胞核的作用。")
-        self.assertEqual(payload["generation_stats"]["skipped_count"], 1)
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/text-files", files=[("files", ("q.txt", b"q", "text/plain"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_image_generation_accepts_parent_chapter_when_only_child_is_explicitly_bound(self):
-        with self.SessionLocal() as session:
-            palace = session.query(Palace).filter_by(id=1).first()
-            self.assertIsNotNone(palace)
-            set_palace_chapter_links(session, palace, [self.child_chapter_id])
-            reconcile_palace_chapter_binding(
-                session,
-                palace,
-                preferred_primary_chapter_id=self.child_chapter_id,
-            )
-            session.commit()
-
-        calls: list[dict[str, object]] = []
-
-        def fake_call_logged_chat_completion(**kwargs):
-            calls.append(kwargs)
-            if kwargs["operation"] == "palace_quiz_generate_images":
-                return (
-                    json.dumps(
-                        {
-                            "questions": [
-                                {
-                                    "question_type": "short_answer",
-                                    "stem": "请概括该页核心内容。",
-                                    "reference_answer": "核心内容概括。",
-                                    "analysis": "围绕主概念整理即可。",
-                                }
-                            ]
-                        },
-                        ensure_ascii=False,
-                    ),
-                    "log-selected-parent-image",
-                )
-            return (
-                json.dumps(
-                    {
-                        "mini_palace_groups": [
-                            {"mini_palace_id": self.child_chapter_id, "question_indexes": [0]}
-                        ],
-                        "unassigned_question_indexes": [],
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-selected-parent-image-group",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                "/api/v1/palaces/1/quiz-generation/images",
-                data={
-                    "extra_prompt": "只要本章",
-                    "classify_by_mini_palace": "true",
-                    "selected_chapter_id": str(self.chapter_id),
-                },
-                files=[("files", ("single.png", b"one", "image/png"))],
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["source_meta"]["source_chapter_id"], self.chapter_id)
-        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
-        self.assertEqual(
-            payload["grouped_questions"]["child_chapter_groups"][0]["classified_chapter_id"],
-            self.child_chapter_id,
-        )
-        self.assertEqual(calls[1]["operation"], "palace_quiz_group_by_child_chapter")
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/images", files=[("files", ("q.png", b"png", "image/png"))])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_classify_existing_quiz_questions_to_segments_is_idempotent(self):
-        calls: list[dict[str, object]] = []
-
-        def fake_call_logged_chat_completion(**kwargs):
-            calls.append(kwargs)
-            return (
-                json.dumps(
-                    {
-                        "segment_groups": [
-                            {"segment_id": 1, "question_indexes": [0]}
-                        ],
-                        "unassigned_question_indexes": [1],
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-classify",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            first_response = self.client.post(
-                "/api/v1/palaces/1/quiz-classification/segments"
-            )
-            second_response = self.client.post(
-                "/api/v1/palaces/1/quiz-classification/segments"
-            )
-
-        self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(first_response.json()["associated_question_count"], 1)
-        listed = self.client.get("/api/v1/palaces/1/quiz-questions")
-        self.assertEqual(listed.status_code, 200)
-        self.assertEqual(len(listed.json()["items"]), 2)
-        associated_questions = [
-            item for item in listed.json()["items"] if 1 in item["segment_ids"]
-        ]
-        self.assertEqual(len(associated_questions), 1)
-        self.assertEqual(associated_questions[0]["id"], 1)
-        self.assertEqual(calls[0]["messages"][0]["content"], calls[1]["messages"][0]["content"])
+        response = self.client.post("/api/v1/palaces/1/quiz-classification/segments", json={})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_pdf_generation_can_return_grouped_questions_by_mini_palace(self):
         calls: list[dict[str, object]] = []
@@ -3811,170 +3250,19 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(matched, [])
 
     def test_chapter_outline_generation_can_group_by_child_chapter(self):
-        calls: list[dict[str, object]] = []
-
-        def fake_call_logged_chat_completion(**kwargs):
-            calls.append(kwargs)
-            if kwargs["operation"] == "chapter_quiz_generate_outline":
-                return (
-                    json.dumps(
-                        {
-                            "questions": [
-                                {
-                                    "question_type": "multiple_choice",
-                                    "stem": "细胞核的功能是什么？",
-                                    "options": [
-                                        {"id": "A", "text": "控制细胞活动"},
-                                        {"id": "B", "text": "储存能量"},
-                                    ],
-                                    "correct_option_id": "A",
-                                    "analysis": "细胞核负责调控。 ",
-                                }
-                            ]
-                        },
-                        ensure_ascii=False,
-                    ),
-                    "log-outline",
-                )
-            return (
-                json.dumps(
-                    {
-                        "mini_palace_groups": [
-                            {"mini_palace_id": self.child_chapter_id, "question_indexes": [0]}
-                        ],
-                        "unassigned_question_indexes": [],
-                    },
-                    ensure_ascii=False,
-                ),
-                "log-outline-group",
-            )
-
-        with (
-            patch.object(palace_quiz_ai_service, "DASHSCOPE_API_KEY", "test-key"),
-            patch.object(
-                palace_quiz_ai_service,
-                "_call_logged_chat_completion",
-                side_effect=fake_call_logged_chat_completion,
-            ),
-        ):
-            response = self.client.post(
-                f"/api/v1/chapters/{self.chapter_id}/quiz-generation/outline",
-                json={
-                    "question_types": ["multiple_choice"],
-                    "question_count": 1,
-                    "extra_prompt": "",
-                    "classify_by_child_chapter": True,
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["chapter_id"], self.chapter_id)
-        self.assertEqual(payload["questions"][0]["source_chapter_id"], self.chapter_id)
-        self.assertEqual(
-            payload["grouped_questions"]["child_chapter_groups"][0]["classified_chapter_id"],
-            self.child_chapter_id,
-        )
-        self.assertEqual(calls[0]["operation"], "chapter_quiz_generate_outline")
+        response = self.client.post("/api/v1/chapters/1/quiz-generation/outline", json={"question_count": 1})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_recover_quiz_generation_preview_from_successful_ai_log(self):
-        with self.SessionLocal() as session:
-            session.add(
-                ExternalAiCallLog(
-                    id="recover-success-log",
-                    feature="宫殿做题",
-                    operation="palace_quiz_generate_images",
-                    palace_id=1,
-                    status="success",
-                    provider="openai_compatible",
-                    base_url="https://example.test",
-                    model="test-model",
-                    request_id="test-request",
-                    request_json=json.dumps(
-                        {
-                            "source_meta": {
-                                "source_kind": "image_upload",
-                                "generation_mode": "single_image",
-                                "extra_prompt": "偏重细胞核",
-                                "image_names": ["cell.png"],
-                                "page_numbers": None,
-                                "ai_call_log_id": "recover-success-log",
-                            }
-                        },
-                        ensure_ascii=False,
-                    ),
-                    response_json=json.dumps(
-                        {
-                            "response_text": json.dumps(
-                                {
-                                    "questions": [
-                                        {
-                                            "question_type": "multiple_choice",
-                                            "stem": "细胞核的功能是什么？",
-                                            "options": [
-                                                {"id": "A", "text": "控制细胞活动"},
-                                                {"id": "B", "text": "储存能量"},
-                                            ],
-                                            "correct_option_id": "A",
-                                            "analysis": "细胞核负责调控细胞活动。",
-                                        }
-                                    ]
-                                },
-                                ensure_ascii=False,
-                            )
-                        },
-                        ensure_ascii=False,
-                    ),
-                    error_json="{}",
-                )
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/palaces/1/quiz-generation/recover-from-log",
-            json={"log_id": "recover-success-log"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["recovered_from_log"])
-        self.assertEqual(payload["ai_call_log_id"], "recover-success-log")
-        self.assertEqual(payload["ocr_sources"], [])
-        self.assertEqual(len(payload["questions"]), 1)
-        self.assertEqual(payload["questions"][0]["stem"], "细胞核的功能是什么？")
-        self.assertEqual(
-            payload["questions"][0]["source_meta"]["recovered_from_ai_call_log_id"],
-            "recover-success-log",
-        )
-        self.assertIn("历史 AI 日志恢复", "；".join(payload["warnings"]))
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/recover-from-log", json={"log_id": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_recover_quiz_generation_preview_rejects_failed_ai_log(self):
-        with self.SessionLocal() as session:
-            session.add(
-                ExternalAiCallLog(
-                    id="recover-error-log",
-                    feature="宫殿做题",
-                    operation="palace_quiz_generate_images",
-                    palace_id=1,
-                    status="error",
-                    provider="openai_compatible",
-                    base_url="https://example.test",
-                    model="test-model",
-                    request_id="test-request",
-                    request_json="{}",
-                    response_json="{}",
-                    error_json=json.dumps({"message": "boom"}, ensure_ascii=False),
-                )
-            )
-            session.commit()
-
-        response = self.client.post(
-            "/api/v1/palaces/1/quiz-generation/recover-from-log",
-            json={"log_id": "recover-error-log"},
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("不是成功记录", response.json()["detail"])
+        response = self.client.post("/api/v1/palaces/1/quiz-generation/recover-from-log", json={"log_id": "x"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"], "AI 出题、讲解、纠错和自由提问已禁用")
 
     def test_settings_list_quiz_scene_bindings(self):
         model_response = self.client.get("/api/v1/settings/ai-models")

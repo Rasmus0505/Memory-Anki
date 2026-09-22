@@ -1,5 +1,6 @@
 import { setPalaceQuizQuestionMarkedApi } from '@/modules/quiz/domain/quiz-entity/api'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
+import { publishQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
 
 const markRequestTokens = new Map<number, number>()
 
@@ -21,5 +22,7 @@ export async function submitQuizQuestionMark({
   marked: boolean
 }) {
   const response = await setPalaceQuizQuestionMarkedApi(questionId, marked)
-  return { question: response.item as PalaceQuizQuestion }
+  const saved = response.item as PalaceQuizQuestion
+  publishQuizQuestionMarked(questionId, Boolean(saved?.marked ?? marked))
+  return { question: saved }
 }
