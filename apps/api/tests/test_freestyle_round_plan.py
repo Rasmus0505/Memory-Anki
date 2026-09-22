@@ -22,6 +22,7 @@ from memory_anki.modules.practice.domain.round_plan import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
+    drop_vanished_unstarted,
     rebind_plan_cards,
     replan_remaining,
 )
@@ -776,3 +777,105 @@ def test_plan_is_fully_handled_after_every_source_passes():
     assert plan_is_fully_handled(plan) is True
     unfinished = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")])
     assert plan_is_fully_handled(unfinished) is False
+
+
+def test_last_card_forget_or_hard_stays_unfinished_until_retry_follows_source():
+    ids = ["c1", "c2", "c3", "c4", "source"]
+    cards = [_card(card_id, unit_id=f"unit-{card_id}") for card_id in ids]
+    for rating, encounter in ((1, "enc-forget"), (2, "enc-hard")):
+        plan = plan_from_cards(cards, today="2026-09-22")
+        for card_id in ids[:-1]:
+            plan = _rate(plan, card_id, 3, f"pass-{card_id}-{encounter}")
+        plan = _rate(plan, "source", rating, encounter)
+        assert plan["presented_ids"] == ids
+        assert plan["occurrences"][0]["status"] == "pending"
+        assert "source" not in plan["completed_ids"]
+        assert plan_is_fully_handled(plan) is False
+        assert next_unfinished_id(plan) == "source"
+        left = leave_card(plan, "source")
+        retry_id = left["occurrences"][0]["occurrence_id"]
+        assert left["occurrences"][0]["status"] == "inserted"
+        assert left["presented_ids"] == [*ids, retry_id]
+        assert plan_is_fully_handled(left) is False
+        assert next_unfinished_id(left) == retry_id
+
+
+def test_retry_parked_before_source_moves_behind_source_on_leave_and_append():
+    ids = ["c1", "c2", "c3", "c4", "source"]
+    cards = [_card(card_id, unit_id=f"unit-{card_id}") for card_id in ids]
+    plan = _rate(plan_from_cards(cards, today="2026-09-22"), "source", 2, "enc-hard")
+    occ = plan["occurrences"][0]
+    retry_id = occ["occurrence_id"]
+    parked = dict(plan)
+    parked["occurrences"] = [dict(occ, status="inserted", entered_on="", insert_target_index=0)]
+    parked["presented_ids"] = [retry_id, *ids]
+    parked["current_card_id"] = "source"
+
+    left = leave_card(parked, "source")
+    assert left["presented_ids"] == [*ids, retry_id]
+    assert left["occurrences"][0]["status"] == "inserted"
+    assert left["occurrences"][0]["entered_on"] == "2026-09-22"
+    assert left["current_card_id"] == "source"
+
+    appended = append_today_cards(parked, cards, today="2026-09-22")
+    assert appended["presented_ids"] == [*ids, retry_id]
+
+    healthy = leave_card(
+        _rate(plan_from_cards(cards, today="2026-09-22"), "source", 1, "enc-forget"),
+        "source",
+    )
+    healthy_retry = healthy["occurrences"][0]["occurrence_id"]
+    assert leave_card(healthy, "c1")["presented_ids"] == [*ids, healthy_retry]
+
+
+def test_drop_vanished_unstarted_keeps_live_quiz_and_completed():
+    cards = [
+        _card("gone", unit_id="missing"),
+        _card("live", unit_id="live"),
+        _card("quiz", kind="quiz_question"),
+        _card("done", unit_id="also-missing"),
+    ]
+    plan = complete_card(plan_from_cards(cards), "done")
+    plan["current_card_id"] = "gone"
+    dropped = drop_vanished_unstarted(plan, {"live"})
+    assert [item["card_id"] for item in dropped["original_cards"]] == ["live", "quiz", "done"]
+    assert "gone" not in dropped["presented_ids"]
+    assert dropped["completed_ids"] == ["done"]
+    assert dropped["current_card_id"] == "live"
+
+
+def test_drop_vanished_unstarted_keeps_retry_source_and_drops_the_other():
+    cards = [
+        _card("weak", unit_id="gone-unit"),
+        _card("other", unit_id="also-gone"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "weak", 2, "enc-weak"), "weak")
+    dropped = drop_vanished_unstarted(plan, set())
+    assert [item["card_id"] for item in dropped["original_cards"]] == ["weak"]
+    assert dropped["occurrences"][0]["source_card_id"] == "weak"
+    assert dropped["occurrences"][0]["occurrence_id"] in dropped["presented_ids"]
+    assert "other" not in dropped["presented_ids"]
+
+
+def test_append_after_drop_does_not_resurrect_ghost_and_keeps_leftover():
+    plan = plan_from_cards(
+        [
+            _card("ghost", unit_id="ghost"),
+            _card("leftover", unit_id="leftover"),
+        ],
+        today="2026-09-21",
+    )
+    dropped = drop_vanished_unstarted(plan, {"leftover"})
+    appended = append_today_cards(
+        dropped,
+        [
+            _card("leftover", unit_id="leftover"),
+            _card("today", unit_id="today-unit"),
+        ],
+        today="2026-09-22",
+    )
+    ids = [item["card_id"] for item in appended["original_cards"]]
+    assert "ghost" not in ids
+    assert "leftover" in ids
+    assert "today" in ids
+    assert appended["presented_ids"][:2] == ["leftover", "today"]

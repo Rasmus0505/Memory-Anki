@@ -256,8 +256,11 @@ def apply_rating(
 
 def leave_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     next_plan = normalize_plan(plan)
+    from .round_rebind import repair_retries_parked_before_source
+    repair_retries_parked_before_source(next_plan)
     left_id = _text(card_id) or _text(next_plan.get("current_card_id"))
     if not left_id:
+        _sync_index(next_plan)
         return next_plan
     left_occ = _find_occurrence(next_plan, left_id)
     source_id = _text(left_occ.get("source_card_id") if left_occ else left_id) or left_id
@@ -413,6 +416,29 @@ def next_unfinished_id(plan: Mapping[str, Any], after_id: str | None = None) -> 
         if _is_unfinished(normalized, card_id):
             return card_id
     return None
+
+
+def review_palace_ids(plan: Mapping[str, Any] | None) -> list[int]:
+    """Palaces this round actually scheduled for review, in plan order.
+
+    Quiz cards and retries are not review palaces. An empty plan is an empty
+    scope: callers must not widen it to a subject or saved palace list.
+    """
+    normalized = normalize_plan(plan)
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        palace_id = card.get("palace_id")
+        if not palace_id:
+            continue
+        number = int(palace_id)
+        if number in seen:
+            continue
+        seen.add(number)
+        ordered.append(number)
+    return ordered
 
 
 def cleared_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
@@ -688,7 +714,7 @@ def _is_unfinished(plan: Plan, card_id: str) -> bool:
     occ = _find_occurrence(plan, card_id)
     if occ is not None:
         return occ["status"] == OCCURRENCE_INSERTED
-    live = {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
+    live = {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
     return not any(item["source_card_id"] == card_id and item["status"] in live for item in plan["occurrences"])
 
 

@@ -34,7 +34,7 @@ import {
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundConfigDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundConfigDialog'
-import { overlayQuizRangeLabel } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
+import { overlayQuizRangeLabel, overlayReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { FreestyleScopeQuizDialog } from '@/modules/practice/ui/freestyle/components/FreestyleDialogsHost'
 import { FreestyleRoundSheet } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSheet'
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
@@ -95,8 +95,6 @@ import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   canPopViewHistory,
   cardPalaceId,
-  findNextPalaceIndex,
-  findPreviousPalaceIndex,
   RESTUDY_MAX_INTERVENING,
   popViewHistory,
   pushViewHistory,
@@ -307,7 +305,6 @@ export default function ImmersiveFreestylePage({
     reorderPlan,
     excludePlanCards,
     restorePlanCards,
-    skipToNextPalace,
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
@@ -510,7 +507,6 @@ export default function ImmersiveFreestylePage({
     updateQuestionState,
     handleChoiceResolve,
     handleShortAnswerSubmit,
-    handleShortAnswerFeedback,
     answeredQuestionIds,
   } = useFreestyleQuizFlow({
     mode: 'free',
@@ -1015,41 +1011,6 @@ export default function ImmersiveFreestylePage({
     [cards.length, flushScrollSettled, roundComplete],
   )
 
-  /**
-   * 「下个宫殿」reorders the feed under the current slot (nextIndex often equals
-   * currentIndex). Force an auto scroll after paint so snap / scroll-anchoring
-   * cannot keep the previous card in view — that looked like「下一题」.
-   */
-  const handleSkipToNextPalace = useCallback(() => {
-    setReadOnlyHistoryCardId(null)
-    const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
-    if (nextPalaceIndex == null) return
-    const leavingId = cards[currentIndex]?.id
-    if (leavingId) {
-      viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
-    }
-    const nextIndex = skipToNextPalace()
-    requestedScrollIndexRef.current = nextIndex
-    refreshCanGoPrevious(nextIndex)
-    // Double-rAF: wait until React commits the reordered children, then snap.
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        scrollToIndex(nextIndex, 'auto')
-        requestedScrollIndexRef.current = null
-      })
-    })
-  }, [cards, currentIndex, refreshCanGoPrevious, scrollToIndex, skipToNextPalace])
-
-  const handleGoToPreviousPalace = useCallback(() => {
-    const previousPalaceIndex = findPreviousPalaceIndex(cards, currentIndex)
-    if (previousPalaceIndex == null) return
-    navigateToIndex(previousPalaceIndex, { skipHistory: true })
-  }, [cards, currentIndex, navigateToIndex])
-
-  const canGoPreviousPalace = findPreviousPalaceIndex(cards, currentIndex) != null
-  const nextPalaceIndex = findNextPalaceIndex(cards, currentIndex)
-  const canGoNextPalace = nextPalaceIndex != null
-
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       const target = event.target
@@ -1497,7 +1458,7 @@ export default function ImmersiveFreestylePage({
           planVersion={planVersion}
           storedConfig={readFreestyleFeedConfig(slot)}
           setupDone={Boolean(readFreestyleFeedConfig(slot).overlay_quiz_setup_done)}
-          rangeLabel={overlayQuizRangeLabel(readFreestyleFeedConfig(slot))}
+          rangeLabel={overlayQuizRangeLabel(overlayReviewPalaceIds(roundPlan).length)}
           onConfirmSetup={({ quizScope, overlayQuestionRange }) => {
             setConfigAndPersist((current) => ({
               ...current,
@@ -1664,37 +1625,7 @@ export default function ImmersiveFreestylePage({
           className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-contain [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           onScroll={handleScroll}
         >
-          {loading ? (
-            <FreestyleLoadingState />
-          ) : error ? (
-            <FreestyleFeedErrorState
-              feedError={error}
-              mode="free"
-              config={config}
-              onLoadFeed={async () => { refreshQueue() }}
-              onCopyDiagnostics={async () => {
-                await navigator.clipboard.writeText(error)
-                toast.success('已复制诊断信息')
-              }}
-            />
-          ) : cards.length === 0 ? (
-            <FreestyleEmptyState
-              mode="free"
-              onSwitchMode={() => undefined}
-              onReshuffle={() => {
-                setConfigIntent('replan')
-                setConfigOpen(true)
-              }}
-              // Empty round: the useful surface is config, not an empty plan list.
-              onOpenSettings={() => {
-                setConfigIntent('replan')
-                setConfigOpen(true)
-              }}
-              completedCount={queueState.completedIds.length}
-              mutedCount={queueState.mutedPalaceIds.length}
-              hiddenCount={queueState.hiddenIds.length}
-            />
-          ) : (
+          {cards.length > 0 ? (
             cards.map((card, index) => {
               const planEntry = roundPlan?.cardsById[card.id]
               if (!mounted.has(index)) {
@@ -1798,9 +1729,6 @@ export default function ImmersiveFreestylePage({
                       onShortAnswerSubmit={() => {
                         onShortAnswerSubmit(card)
                       }}
-                      onRequestShortAnswerFeedback={() => {
-                        void handleShortAnswerFeedback(card)
-                      }}
                       onRequestNext={() => {
                         navigateToIndex(index + 1)
                       }}
@@ -1821,9 +1749,39 @@ export default function ImmersiveFreestylePage({
                 </div>
               )
             })
+          ) : loading ? (
+            <FreestyleLoadingState />
+          ) : error ? (
+            <FreestyleFeedErrorState
+              feedError={error}
+              mode="free"
+              config={config}
+              onLoadFeed={async () => { refreshQueue() }}
+              onCopyDiagnostics={async () => {
+                await navigator.clipboard.writeText(error)
+                toast.success('已复制诊断信息')
+              }}
+            />
+          ) : (
+            <FreestyleEmptyState
+              mode="free"
+              onSwitchMode={() => undefined}
+              onReshuffle={() => {
+                setConfigIntent('replan')
+                setConfigOpen(true)
+              }}
+              // Empty round: the useful surface is config, not an empty plan list.
+              onOpenSettings={() => {
+                setConfigIntent('replan')
+                setConfigOpen(true)
+              }}
+              completedCount={queueState.completedIds.length}
+              mutedCount={queueState.mutedPalaceIds.length}
+              hiddenCount={queueState.hiddenIds.length}
+            />
           )}
           {/* Closing slot, appended rather than replacing the feed so 回看 still works. */}
-          {!loading && !error && roundComplete ? (
+          {(!loading || cards.length > 0) && !error && roundComplete ? (
             <div className="relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]">
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
@@ -1836,10 +1794,7 @@ export default function ImmersiveFreestylePage({
           ) : null}
         </div>
 
-        {/*
-          Card paging stays on this pager so the review map can keep one-finger pan.
-          Palace skip stays desktop-only.
-        */}
+        {/* Card paging stays on this pager so the review map can keep one-finger pan. */}
         {!inlineEditing ? (
         <FreestyleFeedPager
           canGoPrevious={
@@ -1855,16 +1810,11 @@ export default function ImmersiveFreestylePage({
               Boolean(viewingCardId && pendingRestudyCardIds.includes(viewingCardId)),
             )
           }
-          canGoPreviousPalace={canGoPreviousPalace}
-          canGoNextPalace={canGoNextPalace}
           canComplete={canCompleteRound}
           completeTitle={completeTitle}
-          sequentialBlockedHint={sequentialBlockedHint}
           onPrevious={navigatePrevious}
           onNext={navigateNext}
           onComplete={handleCompleteRound}
-          onPreviousPalace={handleGoToPreviousPalace}
-          onSkipPalace={handleSkipToNextPalace}
         />
         ) : null}
       </div>

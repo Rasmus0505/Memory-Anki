@@ -163,11 +163,57 @@ export function cardsForServerPlan(
     return ordered
   }
 
-  // Server presented_ids own retry copies. Local optimistic retries with a
-  // different id must not append as a second clump after a cross-day rebind.
+  // Confirmed retries already in presented_ids own the slot. A pending or
+  // not-yet-echoed fail (last card: leave_card and the silent rebuild race)
+  // must keep the optimistic copy, or 下一张 has no 重练 to open.
+  const occurrenceStatusBySource = new Map<string, string>()
+  const occurrenceRank = (status: string) => {
+    if (status === 'inserted' || status === 'completed') return 3
+    if (status === 'pending') return 2
+    if (status === 'cancelled') return 1
+    return 0
+  }
+  for (const item of plan.occurrences || []) {
+    const source = String(item.source_card_id || '').trim()
+    const status = String(item.status || '').trim()
+    if (!source || !status) continue
+    const previous = occurrenceStatusBySource.get(source) || ''
+    if (occurrenceRank(status) < occurrenceRank(previous)) continue
+    occurrenceStatusBySource.set(source, status)
+  }
   for (const card of cards) {
-    if (isRetryOccurrence(card)) continue
+    if (!isRetryOccurrence(card)) {
+      push(card)
+      continue
+    }
+    const source = sourceCardId(card) || ''
+    if (!source || retrySources.has(source)) continue
+    const status = occurrenceStatusBySource.get(source)
+    // Missing: the rating has not echoed yet. Pending: leave_card has not
+    // inserted it. Cancelled or already placed copies must not come back.
+    if (status !== undefined && status !== 'pending') continue
+    const localIndex = cards.indexOf(card)
+    let predecessorId = ''
+    for (let index = localIndex - 1; index >= 0; index -= 1) {
+      const candidateId = cards[index]?.id
+      if (candidateId && seen.has(candidateId)) {
+        predecessorId = candidateId
+        break
+      }
+    }
     push(card)
+    if (ordered[ordered.length - 1]?.id !== card.id) continue
+    let insertAt = ordered.length - 1
+    if (predecessorId) {
+      const predecessorIndex = ordered.findIndex((item) => item.id === predecessorId)
+      if (predecessorIndex >= 0) insertAt = predecessorIndex + 1
+    } else {
+      const sourceIndex = ordered.findIndex((item) => item.id === source || sourceCardId(item) === source)
+      if (sourceIndex >= 0) insertAt = sourceIndex + 1
+    }
+    if (insertAt >= ordered.length - 1) continue
+    const placed = ordered.pop()
+    if (placed) ordered.splice(insertAt, 0, placed)
   }
   return ordered
 }
@@ -199,7 +245,8 @@ export function planHasNewDueWork(
   })
 }
 
-const LIVE_OCCURRENCE_STATUSES = new Set(['pending', 'inserted', 'completed'])
+/** Inserted or completed retries finish the source. Pending is not in the queue yet. */
+const SETTLED_SOURCE_OCCURRENCE_STATUSES = new Set(['inserted', 'completed'])
 
 /**
  * Plan-only unfinished id (mirrors backend `next_unfinished_id`).
@@ -219,7 +266,7 @@ export function nextUnfinishedPlanCardId(
     if (occ) return String(occ.status || '') === 'inserted'
     return !occurrences.some((item) => (
       String(item.source_card_id || '') === cardId
-      && LIVE_OCCURRENCE_STATUSES.has(String(item.status || ''))
+      && SETTLED_SOURCE_OCCURRENCE_STATUSES.has(String(item.status || ''))
     ))
   }
   const ordered = [...(plan.presented_ids || []).map(String).filter(Boolean)]

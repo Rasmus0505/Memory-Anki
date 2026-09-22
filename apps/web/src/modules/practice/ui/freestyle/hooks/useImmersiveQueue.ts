@@ -25,7 +25,6 @@ import {
   clearMutedPalaces,
   createRoundPlan,
   createOperationId,
-  deferPalace,
   filterMutedPalaces,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   markCompleted,
@@ -37,7 +36,6 @@ import {
   rebindCompletedIdsByUnit,
   rebindUnitEncountersByUnitId,
   moveCardToTail,
-  moveRemainingPalaceToTail,
   mutePalace,
 
   createRetryOccurrence,
@@ -473,6 +471,19 @@ export function useImmersiveQueue(
     [persistCurrentCardId],
   )
 
+  const buildQueueRef = useRef<
+    ((
+      nextConfig: FreestyleFeedConfig,
+      options?: {
+        preserveCompleted?: boolean
+        silent?: boolean
+        preferCardId?: string | null
+        reason?: string
+        studyWindow?: boolean
+      },
+    ) => Promise<void>) | null
+  >(null)
+
   const buildQueue = useCallback(
     async (
       nextConfig: FreestyleFeedConfig,
@@ -495,6 +506,11 @@ export function useImmersiveQueue(
         /** Force replan_remaining on the current round (重建本轮). */
         replan?: boolean
         /**
+         * Cold start with no stored round: ask for a prefix, then silently
+         * load the tail. Never set this once a round id exists.
+         */
+        studyWindow?: boolean
+        /**
          * Explicit mint after config confirm (settlement 「再来一轮」 → 开始下一轮).
          * Refresh / restart / queue rebuild must never set this.
          */
@@ -503,6 +519,8 @@ export function useImmersiveQueue(
     ) => {
       const operationId = createOperationId()
       const startedAt = Date.now()
+      let tailPending = false
+      let tailPreferId: string | null = null
       queueBuildControllerRef.current?.abort()
       const queueBuildController = new AbortController()
       queueBuildControllerRef.current = queueBuildController
@@ -544,6 +562,7 @@ export function useImmersiveQueue(
             config: nextConfig,
             completed_ids: completedIds,
             hidden_ids: hiddenIds,
+            study_window: options?.studyWindow === true,
           },
           queueBuildController.signal,
         )
@@ -789,6 +808,8 @@ export function useImmersiveQueue(
         })
         applyCurrentIndex(resolved, nextCards)
         setQueueFrozen(false)
+        tailPending = Boolean(response.round_meta?.tail_pending) && options?.studyWindow === true
+        tailPreferId = nextCards[resolved]?.id ?? queueStateRef.current.currentCardId
       } catch (err) {
         if (operationIdRef.current !== operationId) return
         const diagnostic = queueBuildDiagnostic({
@@ -815,14 +836,26 @@ export function useImmersiveQueue(
         if (queueBuildControllerRef.current === queueBuildController) {
           queueBuildControllerRef.current = null
         }
-        if (operationIdRef.current === operationId && !silent) {
+        if (
+          operationIdRef.current === operationId
+          && (!silent || cardsRef.current.length > 0)
+        ) {
           setLoading(false)
         }
         if (operationIdRef.current === operationId) setQueueFrozen(false)
       }
+      if (tailPending && operationIdRef.current === operationId) {
+        void buildQueueRef.current?.(nextConfig, {
+          preserveCompleted: true,
+          silent: true,
+          preferCardId: tailPreferId,
+          reason: 'study_window_tail',
+        })
+      }
     },
     [applyCurrentIndex, notifyPeerRound, persistQueueState, slot, syncPendingRestudyIds],
   )
+  buildQueueRef.current = buildQueue
 
   const rebuildKeepingProgress = useCallback(
     (
@@ -859,38 +892,6 @@ export function useImmersiveQueue(
       })
     }, STALE_REBUILD_DEBOUNCE_MS)
   }, [buildQueue])
-
-  useEffect(() => {
-    let cancelled = false
-    let didLoad = false
-    const runInitialLoad = (reason: string) => {
-      if (cancelled || didLoad) return
-      didLoad = true
-      const next = scopeEntryConfig(readFreestyleFeedConfig(slot))
-      if (!sameFeedConfig(next, configRef.current)) {
-        configRef.current = next
-        setConfig(next)
-      }
-      void buildQueue(configRef.current, { preserveCompleted: true, reason })
-    }
-    if (hasLoadedClientPreferences()) {
-      runInitialLoad('initial_load')
-      return () => {
-        cancelled = true
-      }
-    }
-    const offPrefs = onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, () => {
-      runInitialLoad('initial_load')
-    })
-    const timeout = window.setTimeout(() => runInitialLoad('initial_load_timeout'), 1_500)
-    return () => {
-      cancelled = true
-      offPrefs()
-      window.clearTimeout(timeout)
-    }
-    // Initial load only; subsequent rebuilds are explicit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     const next = scopeEntryConfig(readFreestyleFeedConfig(slot))
@@ -1699,33 +1700,6 @@ export function useImmersiveQueue(
     })
   }, [buildQueue, notifyPeerRound, persistQueueState])
 
-  /**
-   * Jump past the rest of the current palace: move remaining cards to the tail
-   * (and record deferred palace) so a later rebuild cannot reinsert them at the front.
-   *
-   * Returns the landing index so the page can force the scroll viewport — React may
-   * bail out of setState when nextIndex === currentIndex after reorder, and CSS
-   * scroll-snap can keep the old card snapped without an explicit scrollTo.
-   */
-  const skipToNextPalace = useCallback((): number => {
-    const index = currentIndexRef.current
-    const leaving = cardsRef.current[index]
-    applyPendingRestudyPlacement(leaving?.id)
-    // Restudy placement may reorder; re-resolve the card we intended to leave.
-    let workingIndex = index
-    if (leaving) {
-      const found = cardsRef.current.findIndex((card) => card.id === leaving.id)
-      if (found >= 0) workingIndex = found
-    }
-    const result = moveRemainingPalaceToTail(cardsRef.current, workingIndex)
-    if (result.deferredPalaceId != null) {
-      persistQueueState(deferPalace(queueStateRef.current, result.deferredPalaceId))
-    }
-    cardsRef.current = result.cards
-    setCards(result.cards)
-    return applyCurrentIndex(result.nextIndex, result.cards)
-  }, [applyCurrentIndex, applyPendingRestudyPlacement, persistQueueState])
-
   const goToIndex = useCallback(
     (index: number, options?: { reorderRestudy?: boolean }) => {
       const previous = cardsRef.current
@@ -1928,11 +1902,22 @@ export function useImmersiveQueue(
           round.plan,
         ),
       })
+      const feedWasEmpty = cardsRef.current.length === 0
       cardsRef.current = nextCards
       setCards(nextCards)
       const currentId = nextCards[currentIndexRef.current]?.id
       const handled = new Set([...serverCompleted, ...serverHidden])
-      if (advanceIfCompleted && currentId && handled.has(currentId)) {
+      if (feedWasEmpty && nextCards.length > 0) {
+        setLoading(false)
+        const prefer = String(
+          queueStateRef.current.currentCardId
+          || round.plan.current_card_id
+          || round.current_card_id
+          || '',
+        ).trim()
+        const restored = prefer ? nextCards.findIndex((card) => card.id === prefer) : -1
+        if (restored >= 0) applyCurrentIndex(restored, nextCards)
+      } else if (advanceIfCompleted && currentId && handled.has(currentId)) {
         const nextId = nextUnfinishedCardId(round.plan, nextCards)
         const idx = nextId ? nextCards.findIndex((card) => card.id === nextId) : -1
         if (idx >= 0) applyCurrentIndex(idx, nextCards)
@@ -1941,6 +1926,55 @@ export function useImmersiveQueue(
       // Offline: keep the local draft.
     }
   }, [applyCurrentIndex, persistQueueState, promptOverlayPalaceClear, slot])
+
+  useEffect(() => {
+    let cancelled = false
+    let didLoad = false
+    const runInitialLoad = (reason: string) => {
+      if (cancelled || didLoad) return
+      didLoad = true
+      const next = scopeEntryConfig(readFreestyleFeedConfig(slot))
+      if (!sameFeedConfig(next, configRef.current)) {
+        configRef.current = next
+        setConfig(next)
+      }
+      void (async () => {
+        const roundId = queueStateRef.current.roundId
+        let painted = false
+        if (roundId) {
+          await hydrateFromServerRound(true)
+          if (cancelled) return
+          painted = cardsRef.current.length > 0
+          if (painted) setLoading(false)
+        }
+        if (cancelled) return
+        await buildQueue(configRef.current, {
+          preserveCompleted: true,
+          reason,
+          silent: painted,
+          preferCardId: painted ? queueStateRef.current.currentCardId : null,
+          studyWindow: !painted && !roundId,
+        })
+      })()
+    }
+    if (hasLoadedClientPreferences()) {
+      runInitialLoad('initial_load')
+      return () => {
+        cancelled = true
+      }
+    }
+    const offPrefs = onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, () => {
+      runInitialLoad('initial_load')
+    })
+    const timeout = window.setTimeout(() => runInitialLoad('initial_load_timeout'), 1_500)
+    return () => {
+      cancelled = true
+      offPrefs()
+      window.clearTimeout(timeout)
+    }
+    // Initial load only; subsequent rebuilds are explicit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     return onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail) => {
@@ -1952,8 +1986,15 @@ export function useImmersiveQueue(
   const workspacePath = freestyleWorkspacePath(slot)
   const isActiveRoute =
     location.pathname === workspacePath || location.pathname.startsWith(`${workspacePath}/`)
+  const skipInitialRouteHydrateRef = useRef(true)
   useEffect(() => {
     if (!isActiveRoute) return
+    // The initial load awaits hydrate itself. A parallel route hydrate can
+    // finish later and paint the pre-drop 315-card plan over the rebuilt queue.
+    if (skipInitialRouteHydrateRef.current) {
+      skipInitialRouteHydrateRef.current = false
+      return
+    }
     void hydrateFromServerRound(true)
   }, [hydrateFromServerRound, isActiveRoute])
 
@@ -1986,7 +2027,6 @@ export function useImmersiveQueue(
     staleRecoveryCardId,
     resetStaleRecovery,
     skipCurrent,
-    skipToNextPalace,
     undoLastSkip,
     muteCurrentPalace,
     reorderPlan,

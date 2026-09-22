@@ -7,7 +7,8 @@ import { useRevealSession } from '@/modules/memory/public'
 import { isWeakerRevealMap, type RevealState } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import { FreestyleUnitReviewFlipDialogs, FreestyleUnitReviewStatusBanner } from './FreestyleUnitReviewFlipCanvas'
-import { useFreestyleUnitReviewMoreActions, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
+import { useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
+import { useFreestyleTextToMindMap } from './useFreestyleTextToMindMap'
 import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
@@ -632,17 +633,13 @@ export function FreestyleUnitReviewFlipPanel({
     palaceId: session.palace_id,
     editorDoc: (isEditMode ? editEditorState : editorState).editor_doc,
   })
-  const moreActions = useFreestyleUnitReviewMoreActions({
-    card,
-    sessionTitle: session.title || '',
-    editorState,
-    isEditMode,
-    handleToggleMode,
-    setReviewUnitsPanelOpen,
-    permanentMarkMode,
-    permanentMarkHighlightsLength: permanentMarkHighlights.length,
-    handleTogglePermanentMarkMode,
-    savingEdit,
+  const textToMindMap = useFreestyleTextToMindMap({
+    palaceId: session.palace_id, card, sessionTitle: session.title || '', isEditMode,
+    editorState, editEditorState, handleToggleMode, setReviewUnitsPanelOpen,
+    permanentMarkMode, permanentMarkHighlightsLength: permanentMarkHighlights.length,
+    handleTogglePermanentMarkMode, savingEdit, onRevealMapChange, revealApiRef,
+    displayModeRef, editRevealSnapshotRef, setPermanentMarkMode, setDisplayMode,
+    setModeSyncVersion, handleEditorStateChange,
   })
 
   return (
@@ -697,7 +694,7 @@ export function FreestyleUnitReviewFlipPanel({
             : undefined
         }
         toolbarExtensions={{
-          moreActions,
+          moreActions: textToMindMap.moreActions,
           quizAction: onOpenScopeQuiz
             ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true }
             : null,
@@ -719,7 +716,7 @@ export function FreestyleUnitReviewFlipPanel({
             refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
           />
         }
-        onNodeActive={() => undefined}
+        onNodeActive={textToMindMap.onNodeActive}
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
         onPaneDoubleClick={handleToggleMode}
         preserveViewOnSync
@@ -744,6 +741,7 @@ export function FreestyleUnitReviewFlipPanel({
         recentUnitChanges={recentUnitChanges}
         onUnitsReconciled={onUnitsReconciled}
       />
+      {textToMindMap.drawer}
     </>
   )
 }

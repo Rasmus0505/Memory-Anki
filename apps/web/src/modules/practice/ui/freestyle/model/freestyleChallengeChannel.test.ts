@@ -90,53 +90,31 @@ describe('shouldSurfaceChannelHint', () => {
 })
 
 describe('channelAdjustment', () => {
-  it('tightens to due-only when anxious', () => {
-    const adjustment = channelAdjustment(
-      { state: 'anxious', sampleCount: 8 },
-      DEFAULT_FREESTYLE_FEED_CONFIG,
-    )
-    expect(adjustment).not.toBeNull()
-    const next = adjustment!.apply(DEFAULT_FREESTYLE_FEED_CONFIG)
-    expect(next.streams.memory_palace.due_policy).toBe('due_only')
-    expect(next.streams.quiz.mastery_buckets).not.toContain('unseen')
+  it('does not filter questions when anxious or bored', () => {
+    expect(
+      channelAdjustment({ state: 'anxious', sampleCount: 8 }, DEFAULT_FREESTYLE_FEED_CONFIG),
+    ).toBeNull()
+    expect(
+      channelAdjustment({ state: 'bored', sampleCount: 8 }, DEFAULT_FREESTYLE_FEED_CONFIG),
+    ).toBeNull()
   })
 
-  it('widens the pool when bored', () => {
-    const adjustment = channelAdjustment(
-      { state: 'bored', sampleCount: 8 },
-      DEFAULT_FREESTYLE_FEED_CONFIG,
-    )
-    expect(adjustment).not.toBeNull()
-    const next = adjustment!.apply(DEFAULT_FREESTYLE_FEED_CONFIG)
-    expect(next.streams.memory_palace.due_policy).toBe('due_only')
-    expect(next.streams.quiz.mastery_buckets).toContain('stable')
-    expect(next.streams.quiz.weak_priority).toBe(true)
-  })
-
-  /**
-   * The load-bearing one. An in-feed hint must not swap palace/subject scope
-   * under the card the learner is reading.
-   */
-  it('never changes palace scope, so the round it rescues survives', () => {
+  it('never changes palace scope, because the default adjustment is a no-op', () => {
     for (const state of ['anxious', 'bored'] as const) {
-      const adjustment = channelAdjustment({ state, sampleCount: 8 }, DEFAULT_FREESTYLE_FEED_CONFIG)
-      const next = adjustment!.apply(DEFAULT_FREESTYLE_FEED_CONFIG)
-      expect(freestylePalaceScopeUnchanged(DEFAULT_FREESTYLE_FEED_CONFIG, next)).toBe(true)
-      expect(next.streams.memory_palace.specific_palace_ids)
-        .toEqual(DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace.specific_palace_ids)
-      expect(next.streams.memory_palace.subject_scope)
-        .toBe(DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace.subject_scope)
+      expect(
+        channelAdjustment({ state, sampleCount: 8 }, DEFAULT_FREESTYLE_FEED_CONFIG),
+      ).toBeNull()
+      expect(
+        freestylePalaceScopeUnchanged(
+          DEFAULT_FREESTYLE_FEED_CONFIG,
+          DEFAULT_FREESTYLE_FEED_CONFIG,
+        ),
+      ).toBe(true)
     }
   })
 
-  it('offers nothing when in flow or when the lever is already at its end', () => {
+  it('offers nothing when in flow', () => {
     expect(channelAdjustment({ state: 'flow', sampleCount: 8 }, DEFAULT_FREESTYLE_FEED_CONFIG))
       .toBeNull()
-
-    const tightest = channelAdjustment(
-      { state: 'anxious', sampleCount: 8 },
-      DEFAULT_FREESTYLE_FEED_CONFIG,
-    )!.apply(DEFAULT_FREESTYLE_FEED_CONFIG)
-    expect(channelAdjustment({ state: 'anxious', sampleCount: 8 }, tightest)).toBeNull()
   })
 })

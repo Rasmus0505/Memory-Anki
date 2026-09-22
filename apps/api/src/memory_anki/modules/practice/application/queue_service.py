@@ -9,11 +9,9 @@ from sqlalchemy.orm import Session
 from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_ids,
     list_active_palace_ids_by_subject_scope,
-    list_active_palace_tree_structures,
 )
-from memory_anki.modules.memory.public.queries import project_palace_review_summaries
+from memory_anki.modules.memory.public.queries import list_trusted_due_units_for_queue
 from memory_anki.modules.quiz.public.queries import (
-    list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
@@ -25,7 +23,8 @@ from ..domain.queue_builder import (
     assemble_queue,
     merge_content_streams,
 )
-from ..domain.review_units import candidate_from_projection
+from ..domain.review_units import ReviewUnitCandidate
+from ..domain.study_window import take_study_window
 
 
 def build_freestyle_queue(
@@ -36,6 +35,7 @@ def build_freestyle_queue(
     round_id: str = "",
     completed_ids: list[str] | None = None,
     hidden_ids: list[str] | None = None,
+    study_window: bool = False,
 ) -> dict[str, Any]:
     config = sanitize_feed_config(config_raw or {})
     op_id = str(operation_id or "").strip()
@@ -78,49 +78,42 @@ def build_freestyle_queue(
         stream_ids[stream_name], stream_subjects[stream_name] = resolve_stream_ids(stream_name)
 
     all_selected_ids = sorted({item for values in stream_ids.values() for item in values})
-    trees = list_active_palace_tree_structures(
+    # Empty id list means every active palace (subject scope "all" with no
+    # explicit palaces). A non-empty list is the in-scope subset. Due cards
+    # come from active ReviewUnitState rows — no editor_doc parse, no bulk
+    # reconcile. Opening a unit reconciles that palace.
+    due_rows = list_trusted_due_units_for_queue(
         session,
-        palace_ids=all_selected_ids or None,
+        all_selected_ids or None,
     )
-    # Drop trees with no root / no stable nodes.
-    trees = [tree for tree in trees if tree.get("root_uid") and tree.get("nodes")]
-    palace_ids = [int(tree["palace_id"]) for tree in trees]
 
     palace_meta: dict[int, dict[str, Any]] = {}
     units_by_palace: dict[int, list[Any]] = {}
     due_by_palace: dict[int, set[str]] = {}
     mastery_by_palace: dict[int, float] = {}
     recent_practice_rank: dict[int, int] = {}
-
-    if palace_ids:
-        # Batch path expects palace ids (or Palace rows); never raw tree dicts.
-        projections = project_palace_review_summaries(session, palace_ids)
-        for tree in trees:
-            palace_id = int(tree["palace_id"])
-            palace_meta[palace_id] = {
-                "title": str(tree.get("title") or ""),
-            }
-            nodes = tree["nodes"]
-            projection = projections.get(palace_id, {"units": []})
-            projected_units = list(projection.get("units") or [])
-            units_by_palace[palace_id] = [
-                candidate_from_projection(
-                    palace_id=palace_id,
-                    nodes=nodes,
-                    projection=item,
-                )
-                for item in projected_units
-            ]
-            due_by_palace[palace_id] = {
-                uid
-                for item in projected_units
-                if item.get("due")
-                for uid in item.get("node_uids") or []
-            }
-            mastery_by_palace[palace_id] = (
-                sum(int(item.get("stage_index") or 0) for item in projected_units)
-                / max(1, len(projected_units) * 8)
+    for row in due_rows:
+        palace_id = int(row["palace_id"])
+        title = str(row.get("title") or "")
+        if palace_id not in palace_meta:
+            palace_meta[palace_id] = {"title": title}
+        anchor = str(row.get("anchor_uid") or "")
+        node_uids = tuple(
+            str(uid) for uid in (row.get("node_uids") or []) if str(uid).strip()
+        )
+        if not node_uids and anchor:
+            node_uids = (anchor,)
+        units_by_palace.setdefault(palace_id, []).append(
+            ReviewUnitCandidate(
+                palace_id=palace_id,
+                anchor_uid=anchor,
+                context_path=({"uid": anchor or str(row["id"]), "text": title},),
+                node_uids=node_uids,
+                unit_id=str(row["id"]),
+                revision=int(row.get("revision") or 1),
             )
+        )
+        due_by_palace.setdefault(palace_id, set()).update(node_uids)
 
     # Quiz projections only when the quiz stream is active. Its scope is
     # independent from both palace streams in a mixed round.
@@ -139,33 +132,20 @@ def build_freestyle_queue(
         for row in bindings:
             qid = int(row["question_id"])
             bound_map.setdefault(qid, []).append(str(row["node_uid"]))
-        mastery_rows = list_mastery_profiles_for_palaces(
-            session,
-            palace_ids=quiz_filter,
-        )
-        mastery_by_question = {
-            int(row["question_id"]): row
-            for row in mastery_rows
-            if row.get("question_id") is not None
-        }
         for question in questions:
             qid = int(question.get("id") or 0)
             palace_id = int(question.get("palace_id") or 0)
             if qid <= 0 or palace_id <= 0:
                 continue
-            if palace_ids and palace_id not in palace_meta:
+            if all_selected_ids and palace_id not in set(all_selected_ids):
                 continue
-            mastery = mastery_by_question.get(qid) or {}
-            raw_score = mastery.get("score")
-            score = float(raw_score if raw_score is not None else 0.35)
-            label = str(mastery.get("label") or "unseen")
             quizzes.append(
                 QuizCandidate(
                     question_id=qid,
                     palace_id=palace_id,
                     bound_node_uids=tuple(bound_map.get(qid) or ()),
-                    mastery_score=score,
-                    mastery_label=label,
+                    mastery_score=0.0,
+                    mastery_label="",
                     question=question,
                 )
             )
@@ -174,10 +154,7 @@ def build_freestyle_queue(
                     "title": str(question.get("palace_title") or f"宫殿 {palace_id}"),
                 }
 
-    nodes_by_palace = {
-        int(tree["palace_id"]): tree.get("nodes") or {}
-        for tree in trees
-    }
+    nodes_by_palace: dict[int, dict[str, Any]] = {}
 
     def subset(mapping: dict[int, Any], ids: list[int]) -> dict[int, Any]:
         allowed = set(ids) if ids else set(mapping)
@@ -215,7 +192,7 @@ def build_freestyle_queue(
     stream_results: dict[str, Any] = {}
     stream_cards: dict[str, list[dict[str, Any]]] = {}
     for stream_name in active_streams:
-        scoped_ids = stream_ids.get(stream_name) or palace_ids
+        scoped_ids = stream_ids.get(stream_name) or list(palace_meta.keys())
         result = assemble_queue(
             config=stream_config(stream_name),
             palace_meta=subset(palace_meta, scoped_ids),
@@ -252,12 +229,19 @@ def build_freestyle_queue(
     ]
     quiz_only = str(training_mode or "") == "quiz"
     queue_length = int(config.get("queue_length") or 20)
-    limited = remaining[:queue_length] if quiz_only else remaining
+    full_limited = remaining[:queue_length] if quiz_only else remaining
+    # Cold start only: a prefix of the same order (8 cards, or the first palace
+    # boundary, whichever comes first). The tail is not a reshuffle.
+    tail_pending = False
+    limited = full_limited
+    if study_window and not quiz_only:
+        limited = take_study_window(full_limited)
+        tail_pending = len(limited) < len(full_limited)
     phase_stats = {
         "candidate_count": len(remaining),
         "scheduled_count": len(limited),
-        "queue_limit": queue_length if quiz_only else len(limited),
-        "limit_reached": len(remaining) > len(limited),
+        "queue_limit": queue_length if quiz_only else len(full_limited),
+        "limit_reached": len(remaining) > len(full_limited),
         # Preserve the former top-level diagnostic while each palace stream
         # now owns its own due-policy evaluation.
         "due_unit_count": sum(
@@ -277,7 +261,7 @@ def build_freestyle_queue(
             result.phase_stats.get("palace_leftover_due")
             for result in stream_results.values()
         ),
-        leftover_due_by_palace(remaining, limited),
+        leftover_due_by_palace(remaining, full_limited),
     )
     phase_stats["palace_leftover_due"] = palace_leftover_due
 
@@ -290,8 +274,9 @@ def build_freestyle_queue(
         "round_meta": {
             "candidate_count": len(remaining),
             "scheduled_count": len(limited),
-            "queue_limit": queue_length if quiz_only else len(limited),
-            "limit_reached": len(remaining) > len(limited),
+            "queue_limit": queue_length if quiz_only else len(full_limited),
+            "limit_reached": len(remaining) > len(full_limited),
+            "tail_pending": tail_pending,
             "palace_leftover_due": palace_leftover_due,
         },
         "counts": {

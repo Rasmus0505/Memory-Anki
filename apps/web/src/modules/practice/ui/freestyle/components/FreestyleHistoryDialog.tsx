@@ -3,10 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getFreestyleHistorySummaryApi,
   getFreestyleQuestionAttemptsApi,
-  getFreestyleQuestionExplanationsApi,
 } from '@/modules/practice/ui/freestyle/api'
 import type {
-  FreestyleAiExplanationRecord,
   FreestyleCard,
   FreestyleHistoryMode,
   FreestyleHistorySummary,
@@ -28,7 +26,6 @@ import { EmptyState } from '@/shared/components/state-placeholders'
 import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
 
-type HistoryTab = 'attempts' | 'explanations'
 type HistoryScope = 'all' | 'palace' | 'question'
 
 const EMPTY_SUMMARY: FreestyleHistorySummary = {
@@ -123,29 +120,6 @@ function AttemptList({ items }: { items: FreestyleQuizAttemptRecord[] }) {
   )
 }
 
-function ExplanationList({ items }: { items: FreestyleAiExplanationRecord[] }) {
-  if (items.length === 0) {
-    return <EmptyState title="还没有 AI 讲解历史" description="在题卡里请求 AI 讲解后，会自动留在这里。" />
-  }
-  return (
-    <div className="space-y-2">
-      {items.map((item) => (
-        <article key={item.id} className="rounded-md border border-border/70 px-3 py-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {item.palace_title ? <span>{item.palace_title}</span> : null}
-            <span>{formatDate(item.created_at)}</span>
-            {item.ai_call_log_id ? <Badge variant="outline">AI 日志</Badge> : null}
-          </div>
-          <div className="mt-2 text-sm font-medium">{item.user_question}</div>
-          <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">
-            {item.explanation_text}
-          </div>
-        </article>
-      ))}
-    </div>
-  )
-}
-
 export function FreestyleHistoryDialog({
   open,
   currentCard,
@@ -159,11 +133,9 @@ export function FreestyleHistoryDialog({
   mode: FreestyleHistoryMode
   onOpenChange: (open: boolean) => void
 }) {
-  const [tab, setTab] = useState<HistoryTab>('attempts')
   const [scope, setScope] = useState<HistoryScope>('all')
   const [summary, setSummary] = useState<FreestyleHistorySummary>(EMPTY_SUMMARY)
   const [attempts, setAttempts] = useState<FreestyleQuizAttemptRecord[]>([])
-  const [explanations, setExplanations] = useState<FreestyleAiExplanationRecord[]>([])
   const [loading, setLoading] = useState(false)
 
   const currentQuestionId = isQuizCard(currentCard) ? currentCard.question.id : null
@@ -178,22 +150,16 @@ export function FreestyleHistoryDialog({
     try {
       const [nextSummary, list] = await Promise.all([
         getFreestyleHistorySummaryApi(),
-        tab === 'attempts'
-          ? getFreestyleQuestionAttemptsApi({ ...query, mode, limit: 80 })
-          : getFreestyleQuestionExplanationsApi({ ...query, limit: 80 }),
+        getFreestyleQuestionAttemptsApi({ ...query, mode, limit: 80 }),
       ])
       setSummary(nextSummary)
-      if (tab === 'attempts') {
-        setAttempts(list.items as FreestyleQuizAttemptRecord[])
-      } else {
-        setExplanations(list.items as FreestyleAiExplanationRecord[])
-      }
+      setAttempts(list.items)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载随心历史失败。')
     } finally {
       setLoading(false)
     }
-  }, [mode, query, tab])
+  }, [mode, query])
 
   useEffect(() => {
     if (!open) return
@@ -219,7 +185,7 @@ export function FreestyleHistoryDialog({
               <History className="size-4" />
               随心历史
             </DialogTitle>
-            <DialogDescription>做题记录和 AI 讲解历史。</DialogDescription>
+            <DialogDescription>做题记录。</DialogDescription>
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>
@@ -227,14 +193,12 @@ export function FreestyleHistoryDialog({
         <SummaryStrip summary={summary} />
 
         <Tabs
-          value={tab}
-          onValueChange={(value) => setTab(value as HistoryTab)}
+          value="attempts"
           className="flex min-h-0 flex-1 flex-col px-5 py-4"
         >
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-2">
               <TabsList>
                 <TabsTrigger value="attempts">做题记录</TabsTrigger>
-                <TabsTrigger value="explanations">AI 讲解</TabsTrigger>
               </TabsList>
             <div className="flex flex-wrap items-center gap-2">
               {(['all', 'palace', 'question'] as const).map((item) => {
@@ -268,12 +232,6 @@ export function FreestyleHistoryDialog({
             className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1', loading && 'opacity-70')}
           >
             <AttemptList items={attempts} />
-          </TabsContent>
-          <TabsContent
-            value="explanations"
-            className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1', loading && 'opacity-70')}
-          >
-            <ExplanationList items={explanations} />
           </TabsContent>
         </Tabs>
       </DialogContent>

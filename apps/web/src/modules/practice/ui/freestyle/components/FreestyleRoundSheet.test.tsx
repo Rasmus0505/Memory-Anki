@@ -201,6 +201,66 @@ describe('FreestyleRoundSheet', () => {
     expect(doneRow.className).toContain('bg-emerald-500/8')
   })
 
+  it('lists cards in progress-rail order when the header toggle asks for it', () => {
+    const palaceA = card('a1')
+    const palaceB = { ...card('b1'), palace_id: 2, palace_title: '宫殿 B' }
+    const palaceALater = card('a2')
+    const cards = [palaceA, palaceB, palaceALater]
+    renderSheet({
+      cards,
+      roundPlan: createRoundPlan('round-1', cards, config),
+    })
+
+    const rowOrder = () => screen.getAllByTestId(/^round-plan-card-/).map((node) => node.getAttribute('data-testid'))
+    expect(screen.getByRole('button', { name: '按宫殿' }).getAttribute('aria-pressed')).toBe('true')
+    expect(rowOrder()).toEqual([
+      'round-plan-card-a1',
+      'round-plan-card-a2',
+      'round-plan-card-b1',
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: '按进度' }))
+
+    expect(screen.getByRole('button', { name: '按进度' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('round-plan-list').getAttribute('data-mode')).toBe('progress')
+    expect(rowOrder()).toEqual([
+      'round-plan-card-a1',
+      'round-plan-card-b1',
+      'round-plan-card-a2',
+    ])
+    expect(screen.getByTestId('round-plan-card-b1').getAttribute('data-rail-index')).toBe('2')
+    expect(screen.getByTestId('round-plan-accent-b1')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '折叠宫殿 A' })).toBeNull()
+    expect(screen.getByText('宫殿 B')).toBeTruthy()
+  })
+
+  it('keeps the leftover and today split when reading the progress order', () => {
+    const cards = [card('one'), { ...card('two'), palace_id: 2, palace_title: '宫殿 B' }]
+    const base = createRoundPlan('round-1', cards, config)
+    renderSheet({
+      cards,
+      roundPlan: {
+        ...base,
+        today: '2026-09-18',
+        cardsById: {
+          ...base.cardsById,
+          one: { ...base.cardsById.one, enteredOn: '2026-09-17' },
+          two: { ...base.cardsById.two, enteredOn: '2026-09-18' },
+        },
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '按进度' }))
+
+    expect(screen.getByTestId('round-plan-cohort-carried').textContent).toContain('此前欠账')
+    expect(screen.getByTestId('round-plan-cohort-today').textContent).toContain('今天新增')
+    const carried = screen.getByTestId('round-plan-cohort-carried').parentElement
+    const today = screen.getByTestId('round-plan-cohort-today').parentElement
+    expect(carried?.querySelector('[data-testid="round-plan-card-one"]')).toBeTruthy()
+    expect(today?.querySelector('[data-testid="round-plan-card-two"]')).toBeTruthy()
+    expect(carried?.querySelector('[data-testid="round-plan-card-two"]')).toBeNull()
+  })
+
   it('keeps a completed retry row filled when the live glance has no rating yet', () => {
     const retry = {
       ...card('retry:round-1:one:1'),

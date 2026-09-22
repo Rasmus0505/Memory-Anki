@@ -14,6 +14,7 @@ import {
   retryPositionLabel,
 } from './FreestyleUnitReviewCardView'
 import { writeFlipCardRevealSettings } from '@/modules/settings/public'
+import { toast } from '@/shared/feedback/toast'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 
 const apiMocks = vi.hoisted(() => ({
@@ -37,8 +38,8 @@ const quizBindingMocks = vi.hoisted(() => ({
   markQuestionCompleted: vi.fn(),
   updateQuestionState: vi.fn(),
   countBadgeByNodeUid: {
-    'unit-node': { text: '2', tone: 'success' as const, title: '2/2 道未做关联题' },
-    'unit-child': { text: '1', tone: 'success' as const, title: '1/1 道未做关联题' },
+    'unit-node': [{ text: '2', tone: 'success' as const, title: '客观 2 道（含子树）', kind: 'objective' as const }],
+    'unit-child': [{ text: '1', tone: 'info' as const, title: '主观 1 道（含子树）', kind: 'subjective' as const }],
   },
   questionStates: {} as Record<number, unknown>,
 }))
@@ -547,7 +548,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await screen.findByTestId('flip-card-mind-map-panel')
     const onCountBadgeClick = capturedPanelProps?.onCountBadgeClick as (nodeUid: string) => void
     act(() => onCountBadgeClick('unit-node'))
-    expect(quizBindingMocks.getOpenQuestionIds).toHaveBeenCalledWith('unit-node')
+    expect(quizBindingMocks.getOpenQuestionIds).toHaveBeenCalledWith('unit-node', undefined)
     const dialog = await screen.findByTestId('node-bound-quiz-dialog')
     expect(dialog.textContent).toBe('unit-node:101,102')
   })
@@ -568,6 +569,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(enter).toBeTruthy()
     expect(moreActions?.moreActions?.some((item) => item.label === '复习进度')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '复制导图')).toBe(true)
+    expect(moreActions?.moreActions?.some((item) => item.label === '文字转脑图')).toBe(true)
     expect(moreActions?.moreActions?.some((item) => item.label === '导出脑图')).toBe(true)
     expect(capturedPanelProps?.englishInOverflow).toBeUndefined()
     expect(capturedPanelProps?.textActionLabel).toBe('文字')
@@ -595,6 +597,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(labels).toContain('永久标记')
     expect(labels).toContain('复习进度')
     expect(labels).toContain('复制导图')
+    expect(labels).toContain('文字转脑图')
     expect(labels).toContain('导出脑图')
     expect(screen.queryByRole('button', { name: /忘记/ })).toBeNull()
 
@@ -603,6 +606,68 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => {
       expect(capturedPanelProps?.displayMode).toBe('review')
     })
+  })
+
+  it('turns clipboard JSON into a mind-map preview and appends it onto the selected node', async () => {
+    const clipboardJson = JSON.stringify({
+      title: '外部片段',
+      children: [{ text: '新知识点', children: [] }],
+    })
+    const readText = vi.fn().mockResolvedValue(clipboardJson)
+    Object.assign(navigator, { clipboard: { readText } })
+    const card = buildCard('unit-text-to-mindmap')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const moreActions = () => (capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void; opensOverlay?: boolean }>
+    }).moreActions
+    const action = moreActions()?.find((item) => item.label === '文字转脑图')
+    expect(action?.opensOverlay).toBe(true)
+    act(() => action?.onClick())
+
+    const dialog = await screen.findByRole('dialog', { name: '手动转脑图' })
+    expect(dialog.textContent).toContain('外部片段')
+    expect((screen.getByLabelText('粘贴 JSON 或大纲文本') as HTMLTextAreaElement).value).toBe(clipboardJson)
+    expect((screen.getByRole('button', { name: '追加到选中知识点' }) as HTMLButtonElement).disabled).toBe(true)
+
+    const onNodeActive = capturedPanelProps?.onNodeActive as (nodes: MindMapSelection[]) => void
+    act(() => onNodeActive([selection('unit-node', '当前单元')]))
+    await waitFor(() => {
+      expect(screen.getByText('追加目标：当前单元')).toBeTruthy()
+      expect((screen.getByRole('button', { name: '追加到选中知识点' }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '追加到选中知识点' }))
+
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+    const savedDoc = JSON.stringify(capturedPanelProps?.editableEditorState)
+    expect(savedDoc).toContain('外部片段')
+    expect(savedDoc).toContain('新知识点')
+    expect(savedDoc).toContain('其他单元')
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalled(), { timeout: 3000 })
+    const persisted = JSON.stringify(persistMocks.persistPalaceEditor.mock.calls.at(-1)?.[1])
+    expect(persisted).toContain('外部片段')
+    expect(persisted).toContain('新知识点')
+  })
+
+  it('opens the manual paste surface when the clipboard is empty', async () => {
+    const readText = vi.fn().mockResolvedValue('')
+    Object.assign(navigator, { clipboard: { readText } })
+    const card = buildCard('unit-text-to-mindmap-empty')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const action = (capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }).moreActions?.find((item) => item.label === '文字转脑图')
+    act(() => action?.onClick())
+
+    const dialog = await screen.findByRole('dialog', { name: '手动转脑图' })
+    expect(dialog.textContent).toContain('请先粘贴 JSON 或大纲文本')
+    expect((screen.getByLabelText('粘贴 JSON 或大纲文本') as HTMLTextAreaElement).value).toBe('')
+    expect((screen.getByRole('button', { name: '追加到选中知识点' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('exposes 做题 as a toolbar action and keeps 英语 inline rather than in ⋯', async () => {

@@ -1,3 +1,8 @@
+from memory_anki.infrastructure.db._tables.knowledge import Subject
+from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
+from memory_anki.modules.practice.application.overlay_quiz_service import (
+    build_overlay_question_pack,
+)
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_rating,
     drop_overlay_quiz_for_palaces,
@@ -19,6 +24,7 @@ from memory_anki.modules.practice.domain.round_plan import (
     cleared_review_palace_ids,
     normalize_plan,
     plan_from_cards,
+    review_palace_ids,
 )
 
 
@@ -111,8 +117,10 @@ def test_apply_overlay_progress_clamps_to_membership() -> None:
 
 def test_scope_signature_is_stable() -> None:
     left = overlay_quiz_scope_signature([2, 1], "cross_palace_random", "all", ["weak", "unseen"], True)
-    right = overlay_quiz_scope_signature([1, 2], "cross_palace_random", "all", ["unseen", "weak"], True)
+    right = overlay_quiz_scope_signature([1, 2], "cross_palace_random", "all", ["unseen", "weak"], True, "due")
     assert left == right
+    assert "mastery_buckets" not in left
+    assert "overlay_question_range" not in left
 
 
 def test_merge_parks_out_of_scope_progress_and_restores_it() -> None:
@@ -204,6 +212,60 @@ def test_drop_overlay_for_palaces_removes_visible_and_parked() -> None:
     assert cleared["parked"]["question_ids"] == []
 
 
+def test_review_palace_ids_follow_scheduled_mindmap_cards() -> None:
+    plan = plan_from_cards(
+        [
+            {"id": "a", "type": "mindmap_branch", "palace_id": 39, "unit_id": "u1"},
+            {"id": "b", "type": "mindmap_branch", "palace_id": 39, "unit_id": "u2"},
+            {"id": "q", "type": "quiz_question", "palace_id": 61, "unit_id": ""},
+            {"id": "c", "type": "mindmap_branch", "palace_id": 42, "unit_id": "u3"},
+        ]
+    )
+    assert review_palace_ids(plan) == [39, 42]
+    assert review_palace_ids(plan_from_cards([])) == []
+
+
+def test_overlay_pack_ignores_subject_palaces_outside_the_round(db_session) -> None:
+    subject = Subject(name="外国教育史")
+    in_round = Palace(title="第一节 夸美纽斯的教育思想", subjects=[subject])
+    outside = Palace(title="第二节现代欧美教育思潮", subjects=[subject])
+    db_session.add_all([subject, in_round, outside])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PalaceQuizQuestion(palace_id=in_round.id, stem="夸美纽斯题"),
+            PalaceQuizQuestion(palace_id=outside.id, stem="永恒主义题"),
+        ]
+    )
+    db_session.commit()
+    pack = build_overlay_question_pack(
+        db_session,
+        {
+            "training_mode": "memory_palace",
+            "streams": {
+                "quiz": {
+                    "specific_palace_ids": [],
+                    "subject_ids": [subject.id],
+                    "subject_scope": "all",
+                    "question_type": "all",
+                    "quiz_scope": "cross_palace_random",
+                },
+                "memory_palace": {
+                    "specific_palace_ids": [],
+                    "subject_ids": [subject.id],
+                    "subject_scope": "all",
+                },
+            },
+            "subject_ids": [subject.id],
+            "specific_palace_ids": [],
+        },
+        palace_ids=[in_round.id],
+    )
+    assert pack["question_palace_ids"]
+    assert set(pack["question_palace_ids"].values()) == {in_round.id}
+    assert outside.id not in pack["question_palace_ids"].values()
+
+
 def test_cleared_review_palace_ids_requires_all_units_rated() -> None:
     plan = plan_from_cards(
         [
@@ -262,7 +324,7 @@ def test_start_new_round_clears_overlay_progress(db_session, monkeypatch) -> Non
     packs = {"current": all_pack}
     monkeypatch.setattr(
         "memory_anki.modules.practice.application.round_state_service.build_overlay_question_pack",
-        lambda session, config: packs["current"],
+        lambda session, config, **_kwargs: packs["current"],
     )
 
     first = get_or_create_active_round(
@@ -358,7 +420,7 @@ def test_inherit_overlay_completed_copies_states() -> None:
 def test_rating_last_unit_keeps_overlay_until_explicit_drop(db_session, monkeypatch) -> None:
     monkeypatch.setattr(
         "memory_anki.modules.practice.application.round_state_service.build_overlay_question_pack",
-        lambda session, config: {
+        lambda session, config, **_kwargs: {
             "question_ids": [101, 201],
             "quiz_scope": "cross_palace_random",
             "seed": 1,

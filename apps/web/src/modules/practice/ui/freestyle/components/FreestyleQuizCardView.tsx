@@ -26,7 +26,6 @@ export function FreestyleQuizCardView({
   onStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
-  onRequestShortAnswerFeedback,
   onRequestNext,
   active = false,
 }: {
@@ -36,7 +35,6 @@ export function FreestyleQuizCardView({
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onChoiceResolve: (optionId: string, isCorrect: boolean) => void
   onShortAnswerSubmit: () => void
-  onRequestShortAnswerFeedback: () => void
   /** Immersive feed: explicit next after reading analysis. */
   onRequestNext?: () => void
   /** Only the card currently under the feed viewport owns choice shortcuts. */
@@ -176,7 +174,6 @@ export function FreestyleQuizCardView({
             onStateChange={onStateChange}
             onChoiceResolve={onChoiceResolve}
             onShortAnswerSubmit={onShortAnswerSubmit}
-            onRequestShortAnswerFeedback={onRequestShortAnswerFeedback}
           />
         </div>
         {isResolved && onRequestNext ? (

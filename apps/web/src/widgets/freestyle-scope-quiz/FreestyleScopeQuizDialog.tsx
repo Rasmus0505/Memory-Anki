@@ -17,7 +17,6 @@ import {
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
-  QuizQuestionMarkToggle,
   QuizQuestionStem,
   submitQuizQuestionMark,
   useQuizAnswerMode,
@@ -49,6 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
@@ -89,9 +89,6 @@ export function FreestyleScopeQuizDialog({
   const { mode: answerMode } = useQuizAnswerMode()
   const [configOpen, setConfigOpen] = useState(!setupDone)
   const [draftScope, setDraftScope] = useState<FreestyleQuizScope>(storedConfig.streams.quiz.quiz_scope)
-  const [draftRange, setDraftRange] = useState<FreestyleOverlayQuestionRange>(
-    storedConfig.streams.quiz.overlay_question_range ?? storedConfig.overlay_question_range ?? 'all',
-  )
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [overlay, setOverlay] = useState<FreestyleOverlayQuizState | null>(null)
@@ -110,6 +107,15 @@ export function FreestyleScopeQuizDialog({
   const questionStatesRef = useRef<Record<number, QuizRuntimeState>>({})
   const roundIdRef = useRef(roundId)
   const dirtyProgressRef = useRef(false)
+  const dwellPalaceId = questions[index]?.palace_id ?? null
+  useDwellFragmentOverride(open, {
+    scene: 'quiz',
+    kind: 'quiz',
+    title: '做题',
+    palaceId: dwellPalaceId,
+    sourceKind: dwellPalaceId != null ? 'palace' : null,
+    priority: 1,
+  })
 
   useEffect(() => {
     planVersionRef.current = planVersion
@@ -135,14 +141,9 @@ export function FreestyleScopeQuizDialog({
     if (!open) return
     setConfigOpen(!setupDone)
     setDraftScope(storedConfig.streams.quiz.quiz_scope)
-    setDraftRange(
-      storedConfig.streams.quiz.overlay_question_range ?? storedConfig.overlay_question_range ?? 'all',
-    )
   }, [
     open,
     setupDone,
-    storedConfig.overlay_question_range,
-    storedConfig.streams.quiz.overlay_question_range,
     storedConfig.streams.quiz.quiz_scope,
   ])
 
@@ -539,7 +540,7 @@ export function FreestyleScopeQuizDialog({
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
             {showConfig ? (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">{rangeLabel}。题目范围跟当前随心配置走，不会改训练方向。</p>
+                <p className="text-sm text-muted-foreground">{rangeLabel}。只出这些宫殿的题，不会改训练方向。</p>
                 <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2">
                   {([
                     ['cross_palace_random', '跨宫殿乱序', '每道题可能来自不同宫殿'],
@@ -564,35 +565,11 @@ export function FreestyleScopeQuizDialog({
                     )
                   })}
                 </div>
-                <div role="radiogroup" aria-label="做题范围" className="grid gap-2">
-                  {([
-                    ['all', '当前配置下宫殿全部题目', '标记过的题，序号用玫瑰色标出'],
-                    ['due', '当前配置下宫殿已到期题目', '只收入题目自己的到期日已到的题'],
-                  ] as const).map(([value, label, hint]) => {
-                    const selected = draftRange === value
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        className={cn(
-                          'rounded-xl border px-3.5 py-3 text-left transition-colors',
-                          selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60',
-                        )}
-                        onClick={() => setDraftRange(value)}
-                      >
-                        <span className="block text-sm font-semibold">{label}</span>
-                        <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
-                      </button>
-                    )
-                  })}
-                </div>
                 <Button
                   type="button"
                   className="w-full"
                   onClick={() => {
-                    onConfirmSetup({ quizScope: draftScope, overlayQuestionRange: draftRange })
+                    onConfirmSetup({ quizScope: draftScope, overlayQuestionRange: 'all' })
                     setConfigOpen(false)
                   }}
                 >
@@ -658,13 +635,12 @@ export function FreestyleScopeQuizDialog({
                     onStateChange={(updater) => updateLocalState(current.id, updater)}
                     onChoiceResolve={handleChoiceResolve}
                     onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
-                    onRequestShortAnswerFeedback={() => void orchestration.handleShortAnswerFeedback(current)}
+                    mark={{
+                      marked: Boolean(current.marked),
+                      onToggle: (marked) => void handleToggleMark(marked),
+                    }}
                   />
                 </div>
-                <QuizQuestionMarkToggle
-                  marked={Boolean(current.marked)}
-                  onToggle={(marked) => void handleToggleMark(marked)}
-                />
               </>
             )}
           </div>

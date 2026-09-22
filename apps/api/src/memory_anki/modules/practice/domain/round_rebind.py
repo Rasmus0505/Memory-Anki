@@ -12,6 +12,7 @@ from .round_plan import (
     Plan,
     _day,
     _find_occurrence,
+    _insert_retry_inplace,
     _known_presented_ids,
     _match_key,
     _repair_current,
@@ -36,6 +37,86 @@ def rebind_plan_cards(
     if reorder_unstarted or drop_missing_unstarted:
         return replan_remaining(plan, cards, today=today)
     return append_today_cards(plan, cards, today=today)
+
+
+def repair_retries_parked_before_source(plan: Plan) -> None:
+    """Move an inserted retry that sits at or before its source to after it.
+
+    Inserting into an empty ``presented_ids`` parks the copy at index 0. The
+    next append then stacks the real cards behind it, so the last card cannot
+    page forward into 重练. A retry already after its source is left alone.
+    """
+    for occ in list(plan["occurrences"]):
+        if occ.get("status") != OCCURRENCE_INSERTED:
+            continue
+        occ_id = _text(occ.get("occurrence_id"))
+        source_id = _text(occ.get("source_card_id"))
+        presented = list(plan["presented_ids"])
+        if (
+            not occ_id
+            or not source_id
+            or occ_id not in presented
+            or source_id not in presented
+            or presented.index(occ_id) > presented.index(source_id)
+        ):
+            continue
+        presented = [item for item in presented if item != occ_id]
+        plan["presented_ids"] = presented
+        occ["status"] = OCCURRENCE_PENDING
+        _insert_retry_inplace(plan, occ_id, presented.index(source_id))
+
+
+def drop_vanished_unstarted(
+    plan: Mapping[str, Any],
+    live_unit_ids: set[str],
+) -> Plan:
+    """Drop unstarted cards whose review unit is no longer active.
+
+    Quiz cards (empty ``unit_id``), units that are still active even if they are
+    not due today, completed cards, excluded cards, and sources of a live retry
+    stay. Occurrences whose source was removed go with it. A vanished current
+    card moves to the next unfinished card.
+    """
+    next_plan = normalize_plan(plan)
+    live = {_text(item) for item in live_unit_ids if _text(item)}
+    completed = set(next_plan["completed_ids"])
+    excluded = set(next_plan["excluded_ids"])
+    retry_sources = live_retry_sources(next_plan)
+    kept: list[dict[str, Any]] = []
+    dropped: set[str] = set()
+    for item in next_plan["original_cards"]:
+        unit_id = _text(item.get("unit_id"))
+        card_id = item["card_id"]
+        vanished = bool(unit_id) and unit_id not in live
+        protected = (
+            not unit_id
+            or card_id in completed
+            or card_id in excluded
+            or card_id in retry_sources
+        )
+        if vanished and not protected:
+            dropped.add(card_id)
+            continue
+        kept.append(item)
+    if not dropped:
+        return next_plan
+    next_plan["original_cards"] = kept
+    next_plan["occurrences"] = [
+        occ
+        for occ in next_plan["occurrences"]
+        if _text(occ.get("source_card_id")) not in dropped
+    ]
+    next_plan["encounters"] = {
+        key: value
+        for key, value in next_plan["encounters"].items()
+        if key not in dropped
+    }
+    known = _known_presented_ids(next_plan)
+    next_plan["presented_ids"] = [
+        item for item in next_plan["presented_ids"] if item in known
+    ]
+    _repair_current(next_plan)
+    return next_plan
 
 
 def append_today_cards(
@@ -63,6 +144,10 @@ def append_today_cards(
             next_plan["presented_ids"].append(card_id)
     known = _known_presented_ids(next_plan)
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
+    # Sources must already be in the queue. Repairing before the append would
+    # miss a retry that was inserted into an empty list and then followed by
+    # the real cards.
+    repair_retries_parked_before_source(next_plan)
     _repair_current(next_plan)
     return next_plan
 

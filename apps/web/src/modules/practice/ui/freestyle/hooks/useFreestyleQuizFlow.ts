@@ -165,13 +165,6 @@ export function useFreestyleQuizFlow({
     [orchestration],
   )
 
-  const handleShortAnswerFeedback = useCallback(
-    async (card: FreestyleQuizCard) => {
-      await orchestration.handleShortAnswerFeedback(card.question)
-    },
-    [orchestration],
-  )
-
   const handleClearLocalProgress = useCallback(async () => {
     const confirmed = await appConfirm(
       mode === 'today'
@@ -286,7 +279,6 @@ export function useFreestyleQuizFlow({
     updateQuestionState,
     handleChoiceResolve,
     handleShortAnswerSubmit,
-    handleShortAnswerFeedback,
     handleClearLocalProgress,
     answeredQuestionIds,
     queuePriorityResolvedIdsRef,

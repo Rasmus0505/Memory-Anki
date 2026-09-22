@@ -684,12 +684,95 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
     return result
 
 
+def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[str]:
+    """Active review-unit ids among ``unit_ids``. Does not parse editor_doc."""
+    ids = [str(item).strip() for item in unit_ids if str(item).strip()]
+    if not ids:
+        return set()
+    found: set[str] = set()
+    chunk = 400
+    for start in range(0, len(ids), chunk):
+        part = ids[start : start + chunk]
+        rows = (
+            session.query(ReviewUnitState.id)
+            .filter(
+                ReviewUnitState.active.is_(True),
+                ReviewUnitState.id.in_(part),
+            )
+            .all()
+        )
+        found.update(str(row[0]) for row in rows)
+    return found
+
+
+def list_trusted_due_units_for_queue(
+    session: Session,
+    palace_ids: list[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Active due units for queue build, without parsing editor_doc or reconciling.
+
+    ``palace_ids is None`` means every active palace. An empty list means none.
+    Queue build trusts stored rows. Opening a unit reconciles that palace.
+    """
+    if palace_ids is not None and not palace_ids:
+        return []
+    query = (
+        session.query(
+            ReviewUnitState.id,
+            ReviewUnitState.palace_id,
+            ReviewUnitState.anchor_uid,
+            ReviewUnitState.node_uids_json,
+            ReviewUnitState.revision,
+            Palace.group_sort_order,
+            Palace.title,
+            Palace.manual_title,
+        )
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.due_date <= date.today(),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+    )
+    if palace_ids is not None:
+        query = query.filter(ReviewUnitState.palace_id.in_(list(palace_ids)))
+    rows = query.order_by(
+        Palace.group_sort_order.asc(),
+        Palace.id.asc(),
+        ReviewUnitState.due_date.asc(),
+        ReviewUnitState.id.asc(),
+    ).all()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        manual = str(row.manual_title or "").strip()
+        title = manual or str(row.title or "")
+        anchor = str(row.anchor_uid or "")
+        node_uids = [uid for uid in json_load_list(row.node_uids_json) if uid]
+        if not node_uids and anchor:
+            node_uids = [anchor]
+        result.append(
+            {
+                "id": str(row.id),
+                "palace_id": int(row.palace_id),
+                "anchor_uid": anchor,
+                "node_uids": node_uids,
+                "revision": int(row.revision or 1),
+                "title": title,
+                "group_sort_order": int(row.group_sort_order or 0),
+            }
+        )
+    return result
+
+
 __all__ = [
     "UnitDefinition",
     "adjust_unit_schedule",
     "get_palace_unit_projection",
     "json_load_list",
+    "list_active_review_unit_ids",
     "list_due_units",
+    "list_trusted_due_units_for_queue",
     "reconcile_palace_units",
     "resolve_unit_definitions",
     "undo_content_schedule_batch",

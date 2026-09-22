@@ -1,38 +1,24 @@
-import { Check, ChevronDown, ChevronUp, ChevronsUp, Waypoints } from 'lucide-react'
-import { cn } from '@/shared/lib/utils'
+import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 
 const pagerButtonClass =
   'inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10'
 
-const palaceButtonClass =
-  'h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:flex-col sm:gap-0.5 sm:px-2 sm:py-1'
-
 export function FreestyleFeedPager({
   canGoPrevious,
   canGoNext,
-  canGoPreviousPalace,
-  canGoNextPalace,
-  sequentialBlockedHint,
   canComplete,
   completeTitle,
   onPrevious,
   onNext,
   onComplete,
-  onPreviousPalace,
-  onSkipPalace,
 }: {
   canGoPrevious: boolean
   canGoNext: boolean
-  canGoPreviousPalace: boolean
-  canGoNextPalace: boolean
   canComplete: boolean
   completeTitle: string
-  sequentialBlockedHint: string | null
   onPrevious: () => void
   onNext: () => void
   onComplete: () => void
-  onPreviousPalace: () => void
-  onSkipPalace: () => void
 }) {
   return (
     <div className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2">
@@ -69,29 +55,6 @@ export function FreestyleFeedPager({
           onClick={onComplete}
         >
           <Check className="size-5 sm:size-4" />
-        </button>
-        {/* Palace skip stays desktop-only so the phone dock is prev / next / 完成. */}
-        <button
-          type="button"
-          className={cn('hidden lg:inline-flex', palaceButtonClass)}
-          title="回到上一组内容"
-          aria-label="上一组"
-          disabled={!canGoPreviousPalace}
-          onClick={onPreviousPalace}
-        >
-          <ChevronsUp className="size-4 shrink-0" />
-          <span className="leading-none">上一组</span>
-        </button>
-        <button
-          type="button"
-          className={cn('hidden lg:inline-flex', palaceButtonClass)}
-          title={sequentialBlockedHint ?? '跳过本组：剩余内容移到队尾'}
-          aria-label="跳过本组"
-          disabled={!canGoNextPalace}
-          onClick={onSkipPalace}
-        >
-          <Waypoints className="size-4 shrink-0" />
-          <span className="leading-none">跳过</span>
         </button>
       </div>
     </div>

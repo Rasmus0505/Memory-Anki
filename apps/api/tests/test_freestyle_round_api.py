@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date
+
+from memory_anki.infrastructure.db._tables.palaces import Palace
+from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.practice.presentation import router as freestyle_router
 
@@ -445,3 +449,112 @@ def test_get_restores_same_current_card(make_client):
     assert payload["plan"]["current_card_id"] == "c"
     assert payload["plan"]["current_index"] == 2
     assert payload["version"] == moved.json()["version"]
+
+
+def _review_state(palace_id: int, unit_id: str, *, active: bool = True) -> ReviewUnitState:
+    return ReviewUnitState(
+        id=unit_id,
+        palace_id=palace_id,
+        anchor_uid=unit_id,
+        unit_kind="mark",
+        node_uids_json="[]",
+        membership_hash=f"membership-{unit_id}",
+        content_hash=f"content-{unit_id}",
+        revision=1,
+        stage_index=0,
+        has_passed=False,
+        due_date=date.today(),
+        active=active,
+    )
+
+
+def _unit_card(card_id: str, unit_id: str, palace_id: int) -> dict:
+    return {
+        "id": card_id,
+        "type": "mindmap_branch",
+        "unit_id": unit_id,
+        "unit_revision": 1,
+        "palace_id": palace_id,
+        "palace_title": "Palace",
+        "label": card_id,
+    }
+
+
+def test_get_or_create_drops_vanished_unstarted_and_keeps_live_quiz(
+    session_factory, make_client
+):
+    session = session_factory()
+    palace = Palace(title="Live palace", editor_doc="{}", archived=False)
+    session.add(palace)
+    session.flush()
+    session.add(_review_state(palace.id, "live-unit"))
+    session.add(_review_state(palace.id, "inactive-unit", active=False))
+    session.commit()
+    palace_id = palace.id
+    session.close()
+
+    client = _client(make_client)
+    ghost = _unit_card("review_unit:ghost:r1", "ghost-unit", palace_id)
+    inactive = _unit_card("review_unit:inactive:r1", "inactive-unit", palace_id)
+    live = _unit_card("review_unit:live-unit:r1", "live-unit", palace_id)
+    quiz = {
+        "id": "quiz-keep",
+        "type": "quiz_question",
+        "label": "quiz",
+        "palace_id": palace_id,
+        "palace_title": "Palace",
+    }
+    created = _create(
+        client,
+        operation_id="op-ghost-create",
+        cards=[ghost, inactive, live, quiz],
+        round_id="round-ghost-drop",
+    )
+    assert created["current_card_id"] == "review_unit:ghost:r1"
+
+    again = _create(
+        client,
+        operation_id="op-ghost-drop",
+        cards=[live, quiz],
+        round_id="round-ignored",
+    )
+    assert again["round_id"] == "round-ghost-drop"
+    original_ids = [item["card_id"] for item in again["plan"]["original_cards"]]
+    assert original_ids == ["review_unit:live-unit:r1", "quiz-keep"]
+    assert again["current_card_id"] == "review_unit:live-unit:r1"
+    assert "review_unit:ghost:r1" not in again["plan"]["presented_ids"]
+    assert "review_unit:inactive:r1" not in again["plan"]["presented_ids"]
+
+
+def test_vanished_drop_that_finishes_the_round_does_not_append(session_factory, make_client):
+    session = session_factory()
+    palace = Palace(title="Empty after drop", editor_doc="{}", archived=False)
+    session.add(palace)
+    session.commit()
+    palace_id = palace.id
+    session.close()
+
+    client = _client(make_client)
+    ghost = _unit_card("review_unit:only-ghost:r1", "missing-unit", palace_id)
+    created = _create(
+        client,
+        operation_id="op-only-ghost",
+        cards=[ghost],
+        round_id="round-freeze-drop",
+    )
+    assert created["current_card_id"] == "review_unit:only-ghost:r1"
+
+    live = _unit_card("review_unit:new-due:r1", "new-due", palace_id)
+    frozen = _create(
+        client,
+        operation_id="op-should-not-append",
+        cards=[live],
+        round_id="round-should-not-append",
+    )
+    assert frozen["round_id"] == "round-freeze-drop"
+    assert frozen["plan"]["original_cards"] == []
+    assert frozen["plan"]["presented_ids"] == []
+    assert frozen["current_card_id"] in {None, ""}
+    fetched = client.get("/api/v1/freestyle/rounds/round-freeze-drop")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["plan"]["original_cards"] == []

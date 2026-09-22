@@ -73,6 +73,7 @@ def api_freestyle_queue_build(
             round_id=data.round_id,
             completed_ids=list(data.completed_ids or []),
             hidden_ids=list(data.hidden_ids or []),
+            study_window=bool(data.study_window),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

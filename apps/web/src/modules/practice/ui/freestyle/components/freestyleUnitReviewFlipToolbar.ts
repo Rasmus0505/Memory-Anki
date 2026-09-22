@@ -22,10 +22,16 @@ export function useFreestyleUnitReviewNodeQuiz({
   const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
 
   const handleOpenNodeQuiz = useCallback(
-    (nodeUid: string) => {
-      const ids = quizNodeBindings.getOpenQuestionIds(nodeUid)
+    (nodeUid: string, kind?: 'objective' | 'subjective') => {
+      const ids = quizNodeBindings.getOpenQuestionIds(nodeUid, kind)
       if (!ids.length) {
-        toast.message('该卡片没有关联题目。')
+        toast.message(
+          kind === 'subjective'
+            ? '该卡片没有关联主观题。'
+            : kind === 'objective'
+              ? '该卡片没有关联客观题。'
+              : '该卡片没有关联题目。',
+        )
         return
       }
       setNodeQuizNodeUid(nodeUid)
@@ -58,6 +64,7 @@ export function useFreestyleUnitReviewMoreActions({
   permanentMarkHighlightsLength,
   handleTogglePermanentMarkMode,
   savingEdit,
+  onTextToMindMap,
 }: {
   card: FreestyleReviewUnitCard
   sessionTitle: string
@@ -69,6 +76,7 @@ export function useFreestyleUnitReviewMoreActions({
   permanentMarkHighlightsLength: number
   handleTogglePermanentMarkMode: () => void
   savingEdit: boolean
+  onTextToMindMap: () => void
 }) {
   return useMemo(() => {
     const actions: Array<{
@@ -76,6 +84,7 @@ export function useFreestyleUnitReviewMoreActions({
       onClick: () => void
       disabled?: boolean
       separatorBefore?: boolean
+      opensOverlay?: boolean
     }> = [
       {
         label: isEditMode ? '返回学习' : '进入编辑',
@@ -96,6 +105,11 @@ export function useFreestyleUnitReviewMoreActions({
           .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
       },
       separatorBefore: true,
+    })
+    actions.push({
+      label: '文字转脑图',
+      onClick: () => { void onTextToMindMap() },
+      opensOverlay: true,
     })
     actions.push({
       label: '导出脑图',
@@ -129,6 +143,7 @@ export function useFreestyleUnitReviewMoreActions({
     handleToggleMode,
     handleTogglePermanentMarkMode,
     isEditMode,
+    onTextToMindMap,
     permanentMarkHighlightsLength,
     permanentMarkMode,
     savingEdit,

@@ -1,36 +1,50 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
-import { overlayQuizPalaceIds, overlayQuizRangeLabel } from './overlayQuizRange'
+import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
+import { overlayQuizRangeLabel, overlayReviewPalaceIds } from './overlayQuizRange'
+
+function planCard(
+  cardId: string,
+  palaceId: number,
+  kind = 'mindmap_branch',
+  occurrenceKind: 'source' | 'retry' = 'source',
+): FreestyleRoundPlanState['cardsById'][string] {
+  return {
+    cardId,
+    sourceCardId: cardId,
+    occurrenceKind,
+    retryAttempt: occurrenceKind === 'retry' ? 1 : 0,
+    palaceId,
+    palaceTitle: `宫殿 ${palaceId}`,
+    label: cardId,
+    kind,
+    status: 'pending',
+    lastRating: null,
+    retryAfterCards: 0,
+    attemptCount: 0,
+    updatedAt: 0,
+  }
+}
 
 describe('overlayQuizRange', () => {
-  it('prefers quiz stream palace ids, then memory palace ids', () => {
-    const quizFirst = overlayQuizPalaceIds({
-      ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      streams: {
-        ...DEFAULT_FREESTYLE_FEED_CONFIG.streams,
-        quiz: { ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.quiz, specific_palace_ids: [3, 4] },
-        memory_palace: {
-          ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace,
-          specific_palace_ids: [1, 2],
-        },
+  it('counts only review palaces already in this round', () => {
+    const plan: FreestyleRoundPlanState = {
+      roundId: 'round-1',
+      configSignature: 'sig',
+      createdAt: 0,
+      candidateCount: 3,
+      scheduledCount: 3,
+      queueLimit: 20,
+      limitReached: false,
+      orderIds: ['a', 'b', 'q'],
+      cardsById: {
+        a: planCard('a', 10),
+        b: planCard('b', 10),
+        retry: planCard('retry', 99, 'mindmap_branch', 'retry'),
+        q: planCard('q', 61, 'quiz_question'),
       },
-    })
-    expect(quizFirst).toEqual([3, 4])
-    expect(
-      overlayQuizPalaceIds({
-        ...DEFAULT_FREESTYLE_FEED_CONFIG,
-        streams: {
-          ...DEFAULT_FREESTYLE_FEED_CONFIG.streams,
-          memory_palace: {
-            ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace,
-            specific_palace_ids: [9],
-          },
-        },
-      }),
-    ).toEqual([9])
-  })
-
-  it('labels an empty explicit list as the whole configured range', () => {
-    expect(overlayQuizRangeLabel(DEFAULT_FREESTYLE_FEED_CONFIG)).toBe('当前配置下的全部宫殿')
+    }
+    expect(overlayReviewPalaceIds(plan)).toEqual([10])
+    expect(overlayQuizRangeLabel(1)).toBe('本轮纳入复习的 1 个宫殿')
+    expect(overlayQuizRangeLabel(0)).toBe('本轮还没有纳入复习的宫殿')
   })
 })

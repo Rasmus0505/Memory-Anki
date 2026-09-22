@@ -370,7 +370,7 @@ def test_mix_ratio_includes_bound_quizzes_when_into_mix():
     assert prefix.count("quiz_question") == 2
 
 
-def test_quiz_mastery_buckets_exclude_stable_by_default():
+def test_quiz_membership_includes_stable_questions():
     unit = _unit("a", ("a", "a1"))
     quizzes = [
         QuizCandidate(1, 1, (), 0.9, "stable", {"id": 1, "palace_id": 1}),
@@ -393,12 +393,12 @@ def test_quiz_mastery_buckets_exclude_stable_by_default():
         },
     )
     ids = [card["id"] for card in result.cards]
-    assert "quiz_question:1" not in ids
+    assert "quiz_question:1" in ids
     assert "quiz_question:2" in ids
     assert "quiz_question:3" in ids
 
 
-def test_quiz_mastery_buckets_can_include_only_unseen():
+def test_quiz_membership_ignores_mastery_bucket_filter():
     unit = _unit("a", ("a",))
     quizzes = [
         QuizCandidate(1, 1, (), 0.1, "weak", {"id": 1, "palace_id": 1}),
@@ -419,7 +419,7 @@ def test_quiz_mastery_buckets_can_include_only_unseen():
             "queue_length": 10,
         },
     )
-    assert [card["id"] for card in result.cards] == ["quiz_question:2"]
+    assert {card["id"] for card in result.cards} == {"quiz_question:1", "quiz_question:2"}
 
 
 def test_single_palace_quiz_scope_keeps_palace_blocks():

@@ -102,18 +102,14 @@ export interface ChannelAdjustment {
  * Adjustments deliberately never touch palace scope (`specific_palace_ids` /
  * `subject_scope` / `subject_ids`). An in-feed hint must not swap the palace
  * filter under the card the learner is reading. Difficulty is moved through
- * `due_policy`, quiz mastery buckets and weak-priority instead, all of which
- * a rebuild can apply to unstarted work while finished work stays put.
+ * `due_policy` for palace cards only. Question mastery is not a lever.
  */
 export function channelAdjustment(
   reading: ChannelReading,
   config: FreestyleFeedConfig,
 ): ChannelAdjustment | null {
   if (reading.state === 'anxious') {
-    const alreadyTightest =
-      config.streams.memory_palace.due_policy === 'due_only' &&
-      !config.streams.quiz.mastery_buckets.includes('unseen')
-    if (alreadyTightest) return null
+    if (config.streams.memory_palace.due_policy === 'due_only') return null
     return {
       actionLabel: '只留到期的',
       hint: `最近 ${reading.sampleCount} 张偏难`,
@@ -124,46 +120,13 @@ export function channelAdjustment(
           streams: {
             ...current.streams,
             memory_palace: { ...current.streams.memory_palace, due_policy: 'due_only' },
-            quiz: {
-              ...current.streams.quiz,
-              mastery_buckets: current.streams.quiz.mastery_buckets.filter(
-                (bucket) => bucket !== 'unseen',
-              ),
-            },
           },
         }),
     }
   }
 
   if (reading.state === 'bored') {
-    const alreadyWidest =
-      config.streams.quiz.mastery_buckets.includes('stable')
-      && config.streams.quiz.weak_priority
-    if (alreadyWidest) return null
-    return {
-      actionLabel: '加点新的',
-      hint: `最近 ${reading.sampleCount} 张偏轻`,
-      apply: (current) =>
-        sanitizeFreestyleFeedConfig({
-          ...current,
-          due_policy: 'due_only',
-          streams: {
-            ...current.streams,
-            memory_palace: {
-              ...current.streams.memory_palace,
-              due_policy: 'due_only',
-            },
-            quiz: {
-              ...current.streams.quiz,
-              weak_priority: true,
-              mastery_buckets: [
-                ...current.streams.quiz.mastery_buckets,
-                'stable',
-              ],
-            },
-          },
-        }),
-    }
+    return null
   }
 
   return null

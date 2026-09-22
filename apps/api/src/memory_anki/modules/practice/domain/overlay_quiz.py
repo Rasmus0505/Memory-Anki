@@ -46,18 +46,17 @@ def overlay_quiz_scope_signature(
     palace_ids: Sequence[int],
     quiz_scope: str,
     question_type: str,
-    mastery_buckets: Sequence[str],
-    weak_priority: bool,
+    mastery_buckets: Sequence[str] = (),
+    weak_priority: bool = False,
     overlay_question_range: str = "all",
 ) -> str:
+    # Mastery buckets, weak priority, and due/all range no longer change membership.
+    del mastery_buckets, weak_priority, overlay_question_range
     return json.dumps(
         {
             "palace_ids": sorted({int(item) for item in palace_ids if int(item) > 0}),
             "quiz_scope": str(quiz_scope or QUIZ_SCOPE_CROSS),
             "question_type": str(question_type or "all"),
-            "mastery_buckets": sorted({str(item) for item in mastery_buckets if str(item).strip()}),
-            "weak_priority": bool(weak_priority),
-            "overlay_question_range": str(overlay_question_range or "all"),
         },
         ensure_ascii=False,
         separators=(",", ":"),

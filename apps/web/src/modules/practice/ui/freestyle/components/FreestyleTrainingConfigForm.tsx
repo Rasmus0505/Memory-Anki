@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { Brain, Blend, ListChecks } from 'lucide-react'
 import {
-  DEFAULT_QUIZ_MASTERY_BUCKETS,
   FREESTYLE_UI_TRAINING_MODES,
   FREESTYLE_UI_TRAINING_STREAMS,
   sanitizeFreestyleFeedConfig,
@@ -19,7 +18,6 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import { Switch } from '@/shared/components/ui/switch'
 import { cn } from '@/shared/lib/utils'
 
 const FIELD_CLASS = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm'
@@ -39,13 +37,6 @@ const STREAM_LABELS: Record<'memory_palace' | 'quiz', string> = {
   memory_palace: '记忆宫殿',
   quiz: '刷题',
 }
-
-const MASTERY_OPTIONS = [
-  ['unseen', '没做过', '从未作答的题'],
-  ['weak', '错的 / 薄弱', '正确率低或近期容易错'],
-  ['reinforce', '需巩固', '半熟、还要再练'],
-  ['stable', '已掌握', '已经比较稳的题'],
-] as const
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -69,23 +60,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-function ToggleRow({ label, description, checked, onCheckedChange }: {
-  label: string
-  description?: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-}) {
-  return (
-    <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{label}</span>
-        {description ? <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span> : null}
-      </span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={label} />
-    </label>
-  )
-}
-
 function updateStream(config: FreestyleFeedConfig, stream: FreestyleTrainingStream, patch: Record<string, unknown>) {
   return sanitizeFreestyleFeedConfig({
     ...config,
@@ -93,14 +67,6 @@ function updateStream(config: FreestyleFeedConfig, stream: FreestyleTrainingStre
       ...config.streams,
       [stream]: { ...config.streams[stream], ...patch },
     },
-  })
-}
-
-function toggleMastery(config: FreestyleFeedConfig, bucket: FreestyleFeedConfig['streams']['quiz']['mastery_buckets'][number], checked: boolean) {
-  const current = config.streams.quiz.mastery_buckets
-  const next = checked ? [...new Set([...current, bucket])] : current.filter((item) => item !== bucket)
-  return updateStream(config, 'quiz', {
-    mastery_buckets: next.length > 0 ? next : [...DEFAULT_QUIZ_MASTERY_BUCKETS],
   })
 }
 
@@ -341,16 +307,6 @@ export function FreestyleTrainingConfigForm({
               </select>
             </Field>
           </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium">题目掌握度</div>
-            {MASTERY_OPTIONS.map(([bucket, label, description]) => (
-              <label key={bucket} className={cn('flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3', value.mastery_buckets.includes(bucket), 'border-border/60 bg-background/80')}>
-                <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={value.mastery_buckets.includes(bucket)} aria-label={label} onChange={(event) => onChange(toggleMastery(config, bucket, event.target.checked))} />
-                <span className="min-w-0"><span className="block text-sm font-medium">{label}</span><span className="block text-xs leading-5 text-muted-foreground">{description}</span></span>
-              </label>
-            ))}
-          </div>
-          <ToggleRow label="薄弱题优先" description="在已选掌握度范围内，把薄弱题排在前面。" checked={value.weak_priority} onCheckedChange={(checked) => onChange(updateStream(config, 'quiz', { weak_priority: checked }))} />
         </div>
       </Section>
     )

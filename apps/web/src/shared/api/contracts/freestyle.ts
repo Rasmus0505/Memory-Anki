@@ -457,6 +457,8 @@ export interface FreestyleQueueBuildRequest {
   config: FreestyleFeedConfig
   completed_ids?: string[]
   hidden_ids?: string[]
+  /** Cold start only: return a prefix so study can begin before the tail arrives. */
+  study_window?: boolean
 }
 
 export interface FreestyleQueueBuildResponse {
@@ -470,6 +472,8 @@ export interface FreestyleQueueBuildResponse {
     scheduled_count: number
     queue_limit: number
     limit_reached: boolean
+    /** Cold-start prefix is shorter than the full ordered queue. Not a quiz cap. */
+    tail_pending?: boolean
     /** Today's due review units left out of this round, keyed by palace id. */
     palace_leftover_due?: Record<string, number>
   }

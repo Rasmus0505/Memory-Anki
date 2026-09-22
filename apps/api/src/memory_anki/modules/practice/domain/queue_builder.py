@@ -164,16 +164,8 @@ def sort_quiz_candidates(
     *,
     weak_priority: bool,
 ) -> list[QuizCandidate]:
-    if weak_priority:
-        return sorted(
-            quizzes,
-            key=lambda item: (
-                0 if item.is_priority_mastery else 1,
-                item.mastery_score,
-                item.question_id,
-            ),
-        )
-    return sorted(quizzes, key=lambda item: (item.mastery_score, item.question_id))
+    del weak_priority
+    return sorted(quizzes, key=lambda item: item.question_id)
 
 
 def interleave_by_weights(
@@ -504,10 +496,9 @@ def assemble_queue(
                 key=lambda unit: (_stable_mix(seed + 11, "unit-fill", unit.unit_id, unit.revision), unit.unit_id),
             )
 
-    # Quiz membership is driven by quiz_mastery_buckets (not due_policy).
-    # All in-scope quizzes ride phase1 with due units so mix_ratio can fire even
-    # when due_policy is due_only (which only gates mind-map fill units).
-    scoped_quizzes = filter_quizzes_by_mastery_buckets(quizzes, quiz_mastery_buckets)
+    # Every loaded question is in the pool. Mastery buckets do not drop questions.
+    # Due policy still gates mind-map fill units only.
+    scoped_quizzes = list(quizzes)
     scoped_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
     empty_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
     for palace_id in palace_ids:

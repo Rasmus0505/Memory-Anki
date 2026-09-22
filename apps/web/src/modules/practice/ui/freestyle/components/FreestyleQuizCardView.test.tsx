@@ -54,7 +54,6 @@ function renderCard(state: Record<string, unknown> = {}, active = true) {
       onStateChange={onStateChange}
       onChoiceResolve={onChoiceResolve}
       onShortAnswerSubmit={vi.fn()}
-      onRequestShortAnswerFeedback={vi.fn()}
     />,
   )
   return { onStateChange, onChoiceResolve }
@@ -146,7 +145,6 @@ describe('FreestyleQuizCardView', () => {
         onStateChange={vi.fn()}
         onChoiceResolve={vi.fn()}
         onShortAnswerSubmit={onShortAnswerSubmit}
-        onRequestShortAnswerFeedback={vi.fn()}
       />,
     )
 
@@ -165,7 +163,6 @@ describe('FreestyleQuizCardView', () => {
       onStateChange: vi.fn(),
       onChoiceResolve,
       onShortAnswerSubmit: vi.fn(),
-      onRequestShortAnswerFeedback: vi.fn(),
     }
     const view = render(<FreestyleQuizCardView {...props} active={false} />)
     const leftover = document.createElement('button')

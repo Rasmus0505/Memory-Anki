@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
-from memory_anki.modules.memory.api import rate_palace_due_units, rate_review_unit
+from memory_anki.modules.memory.api import (
+    list_active_review_unit_ids,
+    rate_palace_due_units,
+    rate_review_unit,
+)
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
 )
@@ -42,12 +46,14 @@ from memory_anki.modules.practice.domain.round_plan import (
     plan_from_cards,
     plan_is_fully_handled,
     restore_card,
+    review_palace_ids,
     set_cursor,
     set_encounter,
     skip_card,
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
+    drop_vanished_unstarted,
     replan_remaining,
 )
 from memory_anki.modules.practice.domain.round_uncomplete import uncomplete_card
@@ -365,6 +371,14 @@ def get_active_round(
     return _payload(row) if row is not None else None
 
 
+def _without_vanished_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
+    cards = [item for item in plan.get("original_cards") or [] if isinstance(item, dict)]
+    unit_ids = [_text(item.get("unit_id")) for item in cards if _text(item.get("unit_id"))]
+    if not unit_ids:
+        return plan
+    return drop_vanished_unstarted(plan, list_active_review_unit_ids(session, unit_ids))
+
+
 def get_or_create_active_round(
     session: Session,
     *,
@@ -394,12 +408,16 @@ def get_or_create_active_round(
         )
         scope_changed = _text(row.scope_key) != key[:256]
         persist_config = reorder or scope_changed or replan
-        next_plan = _plan_of(row)
+        before_ids = [item["card_id"] for item in _plan_of(row).get("original_cards") or []]
+        next_plan = _without_vanished_units(session, _plan_of(row))
+        dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         today = _local_today()
         # Fully handled rounds freeze on get_or_create: silent post-complete
         # rebuilds must not mint or append leftover due into the live feed, or
         # the closing settlement slot disappears. /rounds/start advances.
         if plan_is_fully_handled(next_plan) and not persist_config:
+            if _apply_plan(row, next_plan, operation_id=op_id):
+                session.commit()
             return _payload(row)
         if persist_config:
             next_plan = replan_remaining(next_plan, cards, today=today)
@@ -419,7 +437,7 @@ def get_or_create_active_round(
                 round_id=row.round_id,
                 preserve_cursor=True,
             )
-        if cards or persist_config:
+        if cards or persist_config or dropped:
             changed = _apply_plan(
                 row,
                 next_plan,
@@ -707,8 +725,12 @@ def ensure_overlay_quiz(
     if early is not None:
         return early
     assert row is not None
-    pack = build_overlay_question_pack(session, config if isinstance(config, dict) else _json_load_object(row.config_json))
     plan = _plan_of(row)
+    pack = build_overlay_question_pack(
+        session,
+        config if isinstance(config, dict) else _json_load_object(row.config_json),
+        palace_ids=review_palace_ids(plan),
+    )
     plan["overlay_quiz"] = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)

@@ -1,17 +1,24 @@
-import type { FreestyleFeedConfig, FreestyleQuizScope } from '@/shared/api/contracts'
+import type { FreestyleQuizScope } from '@/shared/api/contracts'
+import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
 
-export function overlayQuizPalaceIds(config: FreestyleFeedConfig): number[] {
-  const quizIds = config.streams.quiz.specific_palace_ids
-  if (quizIds.length) return [...quizIds]
-  const memoryIds = config.streams.memory_palace.specific_palace_ids
-  if (memoryIds.length) return [...memoryIds]
-  return []
+export function overlayReviewPalaceIds(plan: FreestyleRoundPlanState | null | undefined): number[] {
+  if (!plan) return []
+  const ids: number[] = []
+  const seen = new Set<number>()
+  for (const card of Object.values(plan.cardsById)) {
+    if (card.occurrenceKind === 'retry') continue
+    if (card.kind !== 'mindmap_branch') continue
+    const palaceId = card.palaceId
+    if (!palaceId || palaceId <= 0 || seen.has(palaceId)) continue
+    seen.add(palaceId)
+    ids.push(palaceId)
+  }
+  return ids
 }
 
-export function overlayQuizRangeLabel(config: FreestyleFeedConfig): string {
-  const ids = overlayQuizPalaceIds(config)
-  if (ids.length) return `当前配置已选 ${ids.length} 个宫殿`
-  return '当前配置下的全部宫殿'
+export function overlayQuizRangeLabel(palaceCount: number): string {
+  if (palaceCount > 0) return `本轮纳入复习的 ${palaceCount} 个宫殿`
+  return '本轮还没有纳入复习的宫殿'
 }
 
 export function overlayQuizScopeLabel(scope: FreestyleQuizScope): string {
