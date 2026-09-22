@@ -5,6 +5,7 @@ import type {
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
+import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
 import type { MindMapFeedbackFxPayload, MindMapReviewFxPayload } from './hostBridgeUtils'
 import type {
@@ -93,11 +94,8 @@ export interface MindMapEditorSurfaceProps {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
-  countBadgeByNodeUid?: Record<
-    string,
-    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
-  >
-  onCountBadgeClick?: (nodeUid: string) => void
+  countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
+  onCountBadgeClick?: (nodeUid: string, kind?: MindMapCountBadge['kind']) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null

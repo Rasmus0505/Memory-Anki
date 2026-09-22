@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { PalaceListCard } from './PalaceListCard'
 import type { PalaceGroupedItem } from '@/shared/api/contracts'
@@ -86,5 +86,43 @@ describe('PalaceListCard unit review entry', () => {
 
     expect(screen.queryByRole('button', { name: /复习|标记/ })).toBeNull()
     expect(screen.queryByText(/掌握/)).toBeNull()
+  })
+
+  it('reuses the mind-map question corner badges outside the card', () => {
+    const onPalaceReview = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/palaces/list']}>
+        <Routes>
+          <Route
+            path="/palaces/list"
+            element={
+              <PalaceListCard
+                palace={buildPalace({
+                  id: 7,
+                  quiz_count_badges: [
+                    { text: '1', tone: 'info', title: '主观 1 道', kind: 'subjective' },
+                    { text: '3', tone: 'rose', title: '客观 3 道，含标记题', kind: 'objective' },
+                  ],
+                })}
+                viewSettings={viewSettings}
+                onPalaceReview={onPalaceReview}
+                onDelete={vi.fn()}
+              />
+            }
+          />
+          <Route path="/palaces/:id/quiz" element={<div>quiz-page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const subjective = screen.getByRole('button', { name: '主观 1 道' })
+    const objective = screen.getByRole('button', { name: '客观 3 道，含标记题' })
+    expect(subjective.className).toContain('bg-sky-600')
+    expect(objective.className).toContain('bg-rose-600')
+    expect(objective.getAttribute('data-quiz-count-badge')).toBe('objective')
+    expect(subjective.closest('div')?.className).toContain('-bottom-2')
+    fireEvent.click(objective)
+    expect(onPalaceReview).not.toHaveBeenCalled()
+    expect(screen.getByText('quiz-page')).toBeTruthy()
   })
 })

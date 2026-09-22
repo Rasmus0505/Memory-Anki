@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listPalaceQuizNodeBindingsApi } from '@/modules/quiz/domain/quiz-entity/api'
+import { subscribeQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
 import {
   markQuizSessionCompleted,
   readQuizSessionCompletedIds,
@@ -11,12 +12,15 @@ import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/q
 import type { MindMapDocumentInput } from '@/modules/content/public'
 import type { QuizNodeBindingEdge } from '@/shared/api/contracts'
 import {
+  applyQuizQuestionMarkToBindings,
+  buildBoundQuestionFacts,
   buildCountBadgeByNodeUid,
   buildDirectBindingMap,
   buildRemainingCountByNodeUid,
   buildSubtreeQuestionMap,
   firstIncompleteQuestionIndex,
   getQuestionIdsForNode,
+  type NodeQuizCountBadge,
 } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 
 export function usePalaceQuizNodeBindings({
@@ -67,6 +71,12 @@ export function usePalaceQuizNodeBindings({
     void refresh()
   }, [refresh])
 
+  useEffect(() => {
+    return subscribeQuizQuestionMarked((questionId, marked) => {
+      setBindings((current) => applyQuizQuestionMarkToBindings(current, questionId, marked))
+    })
+  }, [])
+
   const subtreeQuestions = useMemo(() => {
     if (!editorDoc) return new Map<string, Set<number>>()
     return buildSubtreeQuestionMap(editorDoc, buildDirectBindingMap(bindings))
@@ -77,9 +87,11 @@ export function usePalaceQuizNodeBindings({
     [completedQuestionIds, subtreeQuestions],
   )
 
+  const questionFacts = useMemo(() => buildBoundQuestionFacts(bindings), [bindings])
+
   const countBadgeByNodeUid = useMemo(
-    () => buildCountBadgeByNodeUid(subtreeQuestions, completedQuestionIds),
-    [completedQuestionIds, subtreeQuestions],
+    () => buildCountBadgeByNodeUid(subtreeQuestions, questionFacts),
+    [questionFacts, subtreeQuestions],
   )
 
   const markQuestionCompleted = useCallback((questionId: number) => {
@@ -90,13 +102,15 @@ export function usePalaceQuizNodeBindings({
     writeQuizSessionState(questionId, next, palaceId)
   }, [palaceId])
 
-  /** All bound ids for the node (including completed) so dialog can review past answers. */
+  /** Bound ids for the node, including completed ones. `kind` keeps one badge side. */
   const getOpenQuestionIds = useCallback(
-    (nodeUid: string) =>
+    (nodeUid: string, kind?: NodeQuizCountBadge['kind']) =>
       getQuestionIdsForNode(subtreeQuestions, nodeUid, completedQuestionIds, {
         includeCompleted: true,
+        kind,
+        facts: questionFacts,
       }),
-    [completedQuestionIds, subtreeQuestions],
+    [completedQuestionIds, questionFacts, subtreeQuestions],
   )
 
   const getInitialQuestionIndex = useCallback(

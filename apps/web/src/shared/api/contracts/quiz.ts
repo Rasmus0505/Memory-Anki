@@ -193,6 +193,8 @@ export interface QuizNodeBindingEdge {
   target_palace_id?: number
   target_palace_title?: string
   question_id: number
+  question_type?: string
+  marked?: boolean
   question_owner_palace_id?: number | null
   question_owner_palace_title?: string
   is_cross_palace?: boolean

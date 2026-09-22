@@ -25,11 +25,24 @@ export interface MindMapNodeVisual {
   /** Compact labels above the card; host-owned content, generic rendering only. */
   statusChips?: MindMapNodeStatusChip[] | null
   /** Numeric corner badge (e.g. bottom-right count). Host-owned; canvas only renders. */
-  countBadge?: {
-    text: string
-    tone: 'success' | 'danger' | 'warning' | 'neutral'
-    title?: string
-  } | null
+  countBadge?: MindMapCountBadge | null
+  /** Ordered corner badges. Later items sit closer to the bottom-right corner. */
+  countBadges?: MindMapCountBadge[] | null
+}
+
+export type MindMapCountBadgeTone =
+  | 'success'
+  | 'danger'
+  | 'warning'
+  | 'neutral'
+  | 'info'
+  | 'rose'
+
+export interface MindMapCountBadge {
+  text: string
+  tone: MindMapCountBadgeTone
+  title?: string
+  kind?: 'objective' | 'subjective'
 }
 
 export interface MindMapNode {

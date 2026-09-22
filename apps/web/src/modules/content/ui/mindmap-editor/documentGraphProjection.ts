@@ -47,7 +47,7 @@ import {
   type AnkiTreeNode,
 } from '@/modules/content/domain/mindmap-document-entity/model/ankiRoles'
 import { hasHighlightMarkup } from '@/shared/lib/mindmapRichText'
-import type { GraphData, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
+import type { GraphData, MindMapCountBadge, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
 import { BRANCH_COLORS } from '@/shared/ui/mindmap-canvas/branchColors'
 
 type RevealState = 'hidden' | 'placeholder' | 'revealed'
@@ -71,10 +71,7 @@ export interface EditorDocGraphOptions {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
-  countBadgeByNodeUid?: Record<
-    string,
-    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
-  >
+  countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
   /**
    * Freestyle inline-edit scope: keep the palace-root → branch spine and the
    * branch subtree. Missing uid falls back to the full document.
@@ -205,7 +202,7 @@ export function editorDocToGraph(
           highlighted: highlightedSet.has(uid),
           mastery: options.masteryByNodeUid?.[uid],
           statusChips: statusChips.length > 0 ? statusChips : null,
-          countBadge: options.countBadgeByNodeUid?.[uid] ?? null,
+          countBadges: readCountBadges(options.countBadgeByNodeUid?.[uid]),
         }),
       },
     })
@@ -313,11 +310,7 @@ function buildNodeVisual(options: {
     tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'
     style: 'filled' | 'outline'
   }> | null
-  countBadge?: {
-    text: string
-    tone: 'success' | 'danger' | 'warning' | 'neutral'
-    title?: string
-  } | null
+  countBadges?: MindMapCountBadge[] | null
 }) {
   const masteryStatus = options.mastery?.status ?? ''
   const manualLabel = options.mastery?.manualLabel ?? ''
@@ -350,6 +343,11 @@ function buildNodeVisual(options: {
     muted: options.muted,
     badge,
     statusChips: options.statusChips?.length ? options.statusChips : null,
-    countBadge: options.countBadge ?? null,
+    countBadges: options.countBadges ?? null,
   }
+}
+
+function readCountBadges(value: MindMapCountBadge[] | null | undefined): MindMapCountBadge[] | null {
+  if (!value || value.length === 0) return null
+  return value
 }

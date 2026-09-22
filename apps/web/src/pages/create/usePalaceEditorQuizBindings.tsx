@@ -38,10 +38,16 @@ export function usePalaceEditorQuizBindings({
   )
   const deleteGuardResolveRef = useRef<((proceed: boolean) => void) | null>(null)
 
-  const openNodeQuiz = (nodeUid: string) => {
-    const ids = quizNodeBindings.getOpenQuestionIds(nodeUid)
+  const openNodeQuiz = (nodeUid: string, kind?: 'objective' | 'subjective') => {
+    const ids = quizNodeBindings.getOpenQuestionIds(nodeUid, kind)
     if (!ids.length) {
-      toast.message('该卡片没有关联题目。')
+      toast.message(
+        kind === 'subjective'
+          ? '该卡片没有关联主观题。'
+          : kind === 'objective'
+            ? '该卡片没有关联客观题。'
+            : '该卡片没有关联题目。',
+      )
       return
     }
     setNodeQuizNodeUid(nodeUid)

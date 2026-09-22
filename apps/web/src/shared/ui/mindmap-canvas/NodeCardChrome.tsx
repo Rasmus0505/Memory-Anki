@@ -1,7 +1,13 @@
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
-import type { MindMapNodeVisual } from './adapter'
+import type { MindMapCountBadge, MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
-import { NodeCountBadge } from './NodeCountBadge'
+import { NodeCountBadgeCluster } from './NodeCountBadge'
+
+function cornerCountBadges(visual: MindMapNodeVisual): MindMapCountBadge[] {
+  if (visual.countBadges && visual.countBadges.length > 0) return visual.countBadges
+  if (visual.countBadge) return [visual.countBadge]
+  return []
+}
 
 export function NodeCardStatusChrome({
   visual,
@@ -12,8 +18,9 @@ export function NodeCardStatusChrome({
   visual: MindMapNodeVisual
   isRoot: boolean
   nodeId: string
-  onCountBadgeClick?: (nodeId: string) => void
+  onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
 }) {
+  const countBadges = cornerCountBadges(visual)
   return (
     <>
       {visual.statusChips && visual.statusChips.length > 0 ? (
@@ -49,12 +56,10 @@ export function NodeCardStatusChrome({
           title={visual.badge.title}
         />
       ) : null}
-      {visual.countBadge ? (
-        <NodeCountBadge
-          countBadge={visual.countBadge}
-          onClick={() => onCountBadgeClick?.(nodeId)}
-        />
-      ) : null}
+      <NodeCountBadgeCluster
+        countBadges={countBadges}
+        onBadgeClick={(kind) => onCountBadgeClick?.(nodeId, kind)}
+      />
     </>
   )
 }

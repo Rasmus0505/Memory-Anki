@@ -26,7 +26,7 @@ export type NodeCardData = MindMapNode & {
   onAddSibling?: (nodeId: string) => void
   onDelete?: (nodeId: string) => void
   onMeasure?: (nodeId: string, size: NodeSize) => void
-  onCountBadgeClick?: (nodeId: string) => void
+  onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
   onToggleCollapse?: (nodeId: string) => void
   /** Expand this node and all descendants (multi-level). */
   onExpandSubtree?: (nodeId: string) => void

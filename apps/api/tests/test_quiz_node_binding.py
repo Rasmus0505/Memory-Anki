@@ -202,6 +202,8 @@ def test_cross_palace_mutate_unique_identity_and_reverse_list(db_session) -> Non
     assert edge["question_owner_palace_id"] == int(palace_a.id)
     assert edge["is_cross_palace"] is True
     assert edge["node_uid"] == "node-b"
+    assert edge["question_type"] == "multiple_choice"
+    assert edge["marked"] is False
 
     per_question = list_question_node_bindings(db_session, int(question.id))
     assert {item["node_uid"] for item in per_question} == {"node-b", "shared-uid"}
@@ -308,6 +310,8 @@ def test_create_question_uses_explicit_node_uids(db_session) -> None:
     bindings = list_question_node_bindings(db_session, int(created["id"]))
     assert {item["node_uid"] for item in bindings} == {"leaf-a", "leaf-b"}
     assert all(item["source"] == "manual" for item in bindings)
+    assert all(item["question_type"] == "short_answer" for item in bindings)
+    assert all(item["marked"] is False for item in bindings)
     assert not any(item["node_uid"] == "root" for item in bindings)
 
 

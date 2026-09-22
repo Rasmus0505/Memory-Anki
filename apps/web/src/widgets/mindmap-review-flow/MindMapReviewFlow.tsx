@@ -1,6 +1,5 @@
-import { Bot, RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
+import { RotateCcw, Sparkles, SquareCheckBig } from "lucide-react";
 import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
-import { AiLearningWorkbench } from "./AiLearningWorkbench";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
@@ -48,7 +47,6 @@ export function MindMapReviewFlow({
   const compact = chromeDensity === "compact";
   const hostFrame = chromeFrame === "host";
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
-  const [aiWorkbenchOpen, setAiWorkbenchOpen] = React.useState(false);
   const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
   const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
@@ -75,10 +73,16 @@ export function MindMapReviewFlow({
   const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds;
   const getInitialQuestionIndex = quizNodeBindings.getInitialQuestionIndex;
   const handleOpenNodeQuiz = React.useCallback(
-    (nodeUid: string) => {
-      const ids = getOpenQuestionIds(nodeUid);
+    (nodeUid: string, kind?: "objective" | "subjective") => {
+      const ids = getOpenQuestionIds(nodeUid, kind);
       if (!ids.length) {
-        toast.message("该卡片没有关联题目。");
+        toast.message(
+          kind === "subjective"
+            ? "该卡片没有关联主观题。"
+            : kind === "objective"
+              ? "该卡片没有关联客观题。"
+              : "该卡片没有关联题目。",
+        );
         return;
       }
       setNodeQuizNodeUid(nodeUid);
@@ -130,22 +134,6 @@ export function MindMapReviewFlow({
       revealSettings={review.flow.flipCardRevealSettings}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
       onCountBadgeClick={handleOpenNodeQuiz}
-    />
-  );
-
-  const aiWorkbench = (
-    <AiLearningWorkbench
-      open={aiWorkbenchOpen}
-      onOpenChange={setAiWorkbenchOpen}
-      title={props.title}
-      palaceId={props.palaceId}
-      reviewSessionId={null}
-      editorState={review.mapEditorState ?? review.flow.visibleEditorState}
-      sourceRevision={(review.mapEditorState ?? review.flow.visibleEditorState).editor_fingerprint ?? String(modeSyncVersion)}
-      activeNodeUid={review.selectedNodeUid}
-      reviewNodeUids={review.reviewNodeUids}
-      redNodeUids={[...review.flow.redNodeIds]}
-      fullscreen={review.flow.fullscreen}
     />
   );
 
@@ -242,16 +230,6 @@ export function MindMapReviewFlow({
               <Button
                 type="button"
                 size="sm"
-                variant={aiWorkbenchOpen ? "secondary" : "ghost"}
-                className="size-9 shrink-0 p-0 sm:size-8"
-                title="AI 学习"
-                onClick={() => setAiWorkbenchOpen((value) => !value)}
-              >
-                <Bot className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
                 disabled={submitting || review.flow.feedback.completionCeremonyActive}
                 className={cn(
                   "h-9 shrink-0 px-3 text-xs sm:h-8 sm:px-2.5",
@@ -274,7 +252,6 @@ export function MindMapReviewFlow({
           >
             <div className="relative flex min-h-0 flex-1">
               <div className="min-h-0 min-w-0 flex-1">{flipPanel}</div>
-              {aiWorkbench}
             </div>
           </div>
         </div>
@@ -386,12 +363,6 @@ export function MindMapReviewFlow({
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {!review.isInlineEditMode ? (
-                  <Button type="button" size="sm" variant={aiWorkbenchOpen ? "secondary" : "outline"} onClick={() => setAiWorkbenchOpen((value) => !value)}>
-                    <Bot className="mr-2 size-4" />
-                    AI 学习
-                  </Button>
-                ) : null}
                 {props.onRestart && !review.isInlineEditMode ? (
                   <Button
                     type="button"
@@ -437,7 +408,6 @@ export function MindMapReviewFlow({
             >
               <div className="relative flex h-full min-h-0">
                 <div className="min-w-0 flex-1">{flipPanel}</div>
-                {aiWorkbench}
               </div>
             </CardContent>
           </Card>

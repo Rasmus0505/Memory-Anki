@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyQuizQuestionMarkToBindings,
+  buildBoundQuestionFacts,
   buildCountBadgeByNodeUid,
   buildDirectBindingMap,
   buildRemainingCountByNodeUid,
@@ -46,24 +48,82 @@ describe('quizNodeBindingAggregation', () => {
     ).toEqual([1, 2])
   })
 
-  it('keeps a gray total badge when every bound question is session-completed', () => {
-    const direct = buildDirectBindingMap([
-      { question_id: 1, node_uid: 'child-a' },
-      { question_id: 2, node_uid: 'child-b' },
-    ])
+  it('splits objective and subjective totals and does not shrink them when questions are completed', () => {
+    const bindings = [
+      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: true },
+      { question_id: 2, node_uid: 'child-b', question_type: 'short_answer', marked: false },
+      { question_id: 3, node_uid: 'child-a', question_type: 'true_false', marked: false },
+    ]
+    const direct = buildDirectBindingMap(bindings)
     const subtree = buildSubtreeQuestionMap(doc, direct)
-    const badges = buildCountBadgeByNodeUid(subtree, new Set([1, 2]))
-    expect(badges['parent']).toEqual({
-      text: '2',
-      tone: 'neutral',
-      title: '2 道关联题本会话已完成（点开可回顾答题）',
-    })
-    expect(badges['child-a']?.tone).toBe('neutral')
-    const partial = buildCountBadgeByNodeUid(subtree, new Set([1]))
-    expect(partial['parent']?.tone).toBe('success')
-    expect(partial['parent']?.text).toBe('1')
+    const facts = buildBoundQuestionFacts(bindings)
+    const badges = buildCountBadgeByNodeUid(subtree, facts)
+
+    expect(badges.parent).toEqual([
+      {
+        text: '1',
+        tone: 'info',
+        title: '主观 1 道（含子树）',
+        kind: 'subjective',
+      },
+      {
+        text: '2',
+        tone: 'rose',
+        title: '客观 2 道，含标记题（含子树）',
+        kind: 'objective',
+      },
+    ])
+    expect(badges['child-a']).toEqual([
+      {
+        text: '2',
+        tone: 'rose',
+        title: '客观 2 道，含标记题（含子树）',
+        kind: 'objective',
+      },
+    ])
+    expect(badges['child-b']).toEqual([
+      {
+        text: '1',
+        tone: 'info',
+        title: '主观 1 道（含子树）',
+        kind: 'subjective',
+      },
+    ])
+    expect(badges.parent.map((badge) => badge.text).join('+')).toBe('1+2')
     expect(firstIncompleteQuestionIndex([1, 2, 3], new Set([1]))).toBe(1)
     expect(firstIncompleteQuestionIndex([1, 2], new Set([1, 2]))).toBe(0)
+  })
+
+  it('turns only the subjective badge rose when a short-answer question is marked', () => {
+    const bindings = [
+      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: false },
+      { question_id: 2, node_uid: 'child-b', question_type: 'short_answer', marked: false },
+    ]
+    const marked = applyQuizQuestionMarkToBindings(bindings, 2, true)
+    expect(marked).not.toBe(bindings)
+    expect(applyQuizQuestionMarkToBindings(marked, 2, true)).toBe(marked)
+    const subtree = buildSubtreeQuestionMap(doc, buildDirectBindingMap(marked))
+    const badges = buildCountBadgeByNodeUid(subtree, buildBoundQuestionFacts(marked))
+    expect(badges.parent?.find((badge) => badge.kind === 'objective')?.tone).toBe('success')
+    expect(badges.parent?.find((badge) => badge.kind === 'subjective')).toMatchObject({
+      text: '1',
+      tone: 'rose',
+      kind: 'subjective',
+    })
+    expect(
+      getQuestionIdsForNode(subtree, 'parent', new Set(), {
+        includeCompleted: true,
+        kind: 'objective',
+        facts: buildBoundQuestionFacts(marked),
+      }),
+    ).toEqual([1])
+    expect(
+      getQuestionIdsForNode(subtree, 'parent', new Set(), {
+        includeCompleted: true,
+        kind: 'subjective',
+        facts: buildBoundQuestionFacts(marked),
+      }),
+    ).toEqual([2])
   })
 
   it('counts foreign-owner edges on a local node in subtree unions', () => {

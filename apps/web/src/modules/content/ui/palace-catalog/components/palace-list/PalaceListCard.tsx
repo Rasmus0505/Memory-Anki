@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { PalaceListViewSettings } from '@/modules/settings/public'
 import type { PalaceGroupedItem } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
+import { NodeCountBadgeCluster } from '@/shared/ui/mindmap-canvas/NodeCountBadge'
 import {
   formatCreatedAt,
   getPalaceCardClass,
@@ -85,6 +86,7 @@ export function PalaceListCard({
   onPalaceReview,
   onDelete,
 }: PalaceListCardProps) {
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -108,8 +110,11 @@ export function PalaceListCard({
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [menuOpen])
 
+  const quizCountBadges = palace.quiz_count_badges ?? []
+
   return (
-    <Card className={getPalaceCardClass(viewSettings.densityMode)}>
+    <div className="pb-3 pr-3">
+      <Card className={cn('relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}>
       <CardContent className={cn('flex items-start', getPalaceCardContentClass(viewSettings.densityMode))}>
         <div
           className={cn(
@@ -214,7 +219,7 @@ export function PalaceListCard({
               <MoreHorizontal className="size-4" />
             </Button>
             {menuOpen ? (
-              <div className="absolute right-0 top-9 z-20 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
+              <div className="absolute right-0 top-9 z-40 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
                 <button
                   type="button"
                   className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
@@ -231,6 +236,11 @@ export function PalaceListCard({
           </div>
         </div>
       </CardContent>
-    </Card>
+      <NodeCountBadgeCluster
+        countBadges={quizCountBadges}
+        onBadgeClick={() => navigate(`/palaces/${palace.id}/quiz`)}
+      />
+      </Card>
+    </div>
   )
 }

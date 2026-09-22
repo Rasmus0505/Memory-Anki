@@ -218,10 +218,39 @@ describe('NodeCard', () => {
       onCountBadgeClick,
     })
 
-    const badge = screen.getByRole('button', { name: '12' })
-    expect(badge.className).toContain('-bottom-2')
+    const badge = screen.getByRole('button', { name: '12 道题' })
+    expect(badge.closest('div')?.className).toContain('-bottom-2')
     fireEvent.click(badge)
-    expect(onCountBadgeClick).toHaveBeenCalledWith('peg-1')
+    expect(onCountBadgeClick).toHaveBeenCalledWith('peg-1', undefined)
+  })
+
+  it('renders objective and subjective corner badges and rose when marked', () => {
+    const onCountBadgeClick = vi.fn()
+    renderNodeCard({
+      metadata: {
+        depth: 1,
+        layoutRole: 'branch',
+        visual: {
+          countBadges: [
+            { text: '2', title: '主观 2 道，含标记题（含子树）', tone: 'rose', kind: 'subjective' },
+            { text: '5', title: '客观 5 道（含子树）', tone: 'success', kind: 'objective' },
+          ],
+        },
+      },
+      onCountBadgeClick,
+    })
+
+    const subjective = screen.getByRole('button', { name: '主观 2 道，含标记题（含子树）' })
+    const objective = screen.getByRole('button', { name: '客观 5 道（含子树）' })
+    expect(subjective.className).toContain('bg-rose-600')
+    expect(subjective.getAttribute('data-has-marked')).toBe('true')
+    expect(objective.className).toContain('bg-success')
+    expect(objective.getAttribute('data-has-marked')).toBe('false')
+    expect(subjective.compareDocumentPosition(objective) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(subjective)
+    fireEvent.click(objective)
+    expect(onCountBadgeClick).toHaveBeenNthCalledWith(1, 'peg-1', 'subjective')
+    expect(onCountBadgeClick).toHaveBeenNthCalledWith(2, 'peg-1', 'objective')
   })
 
   it('renders selection toolbar actions for a selected node', () => {

@@ -12,6 +12,12 @@ export interface PalaceSegmentSummary {
   is_empty: boolean
   is_virtual_default?: boolean
 }
+export interface PalaceQuizCountBadge {
+  text: string
+  tone: 'success' | 'info' | 'rose'
+  title: string
+  kind: 'objective' | 'subjective'
+}
 export interface PalaceListItem {
   id: number
   title: string
@@ -25,6 +31,8 @@ export interface PalaceListItem {
   review_unit_count: number
   due_review_unit_count: number
   permanent_mark_count: number
+  /** Mind-map style corner badges: subjective then objective. Omitted side means zero. */
+  quiz_count_badges?: PalaceQuizCountBadge[]
   next_review_date?: string | null
   segments?: PalaceSegmentSummary[]
   chapters?: Array<unknown>
@@ -102,6 +110,7 @@ export interface PalaceGroupedSummaryItem {
   due_review_unit_count: number
   permanent_mark_count: number
   next_review_date: string | null
+  quiz_count_badges?: PalaceQuizCountBadge[]
   title_mode: string
   manual_title: string
   resolved_title: string

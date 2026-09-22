@@ -29,6 +29,7 @@ from memory_anki.modules.content.application.title_sync_service import (
     get_explicit_chapter_ids_by_palace,
 )
 from memory_anki.modules.content.presentation.response_models import PalaceListResponse
+from memory_anki.modules.quiz.public.queries import project_palace_quiz_count_badges
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -114,6 +115,35 @@ def _cached_palace_serializer(serialize_fn, palaces, explicit_map, memory_map):
     return serialize
 
 
+def _iter_palace_payloads(payload: dict):
+    for group in payload.get("groups") or []:
+        yield from group.get("palaces") or []
+    yield from payload.get("ungrouped") or []
+    for subject in payload.get("subjects") or []:
+        yield from subject.get("ungrouped_palaces") or []
+        for chapter in subject.get("chapter_groups") or []:
+            yield from chapter.get("palaces") or []
+
+
+def _attach_quiz_count_badges(session: Session, payload: dict) -> dict:
+    """Stamp each catalog card with the same objective/subjective corner badges as a mind-map node."""
+    palace_ids: list[int] = []
+    seen: set[int] = set()
+    for item in _iter_palace_payloads(payload):
+        raw_id = item.get("id") if isinstance(item, dict) else None
+        if isinstance(raw_id, int) and raw_id not in seen:
+            seen.add(raw_id)
+            palace_ids.append(raw_id)
+    badges = project_palace_quiz_count_badges(session, palace_ids)
+    for item in _iter_palace_payloads(payload):
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get("id")
+        if isinstance(raw_id, int):
+            item["quiz_count_badges"] = badges.get(raw_id, [])
+    return payload
+
+
 @router.get("/palaces/grouped")
 def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
     palaces = list_catalog_palaces_by_subject(s, subject_id, search)
@@ -124,11 +154,11 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
     )
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
     model_grouped = build_grouped_palace_list(s, palaces, serialize)
-    return {
+    return _attach_quiz_count_badges(s, {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
         "subjects": chapter_grouped.get("subjects", []),
-    }
+    })
 
 
 @router.get("/palaces/grouped-summary")
@@ -141,11 +171,11 @@ def api_list_grouped_summary(search: str = "", subject_id: int | None = None, s:
     )
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
     model_grouped = build_grouped_palace_list(s, palaces, serialize)
-    return {
+    return _attach_quiz_count_badges(s, {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
         "subjects": chapter_grouped.get("subjects", []),
-    }
+    })
 
 
 @router.get("/palaces/subjects")

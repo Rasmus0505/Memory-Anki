@@ -217,6 +217,8 @@ def _serialize_binding(
         "target_palace_id": target_palace_id,
         "target_palace_title": target_title or "",
         "question_id": row.question_id,
+        "question_type": question.question_type if question is not None else "",
+        "marked": bool(question.marked) if question is not None else False,
         "question_owner_palace_id": owner_palace_id,
         "question_owner_palace_title": owner_title or "",
         "is_cross_palace": is_cross,

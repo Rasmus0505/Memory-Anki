@@ -5,6 +5,47 @@ import {
   type MindMapDocumentInput,
 } from '@/modules/content/public'
 
+export type BoundQuestionFacts = {
+  questionType: string
+  marked: boolean
+}
+
+/** Subjective corner badge counts short-answer items only. Other types stay objective. */
+export function isSubjectiveQuestionType(questionType: string | null | undefined): boolean {
+  return String(questionType || '').trim() === 'short_answer'
+}
+
+/** One fact row per question. Marked wins if any edge says the question is marked. */
+export function buildBoundQuestionFacts(
+  bindings: QuizNodeBindingEdge[],
+): Map<number, BoundQuestionFacts> {
+  const map = new Map<number, BoundQuestionFacts>()
+  for (const edge of bindings) {
+    const questionId = Number(edge.question_id)
+    if (!Number.isFinite(questionId)) continue
+    const previous = map.get(questionId)
+    map.set(questionId, {
+      questionType: String(edge.question_type || previous?.questionType || ''),
+      marked: Boolean(edge.marked) || Boolean(previous?.marked),
+    })
+  }
+  return map
+}
+
+export function applyQuizQuestionMarkToBindings(
+  bindings: QuizNodeBindingEdge[],
+  questionId: number,
+  marked: boolean,
+): QuizNodeBindingEdge[] {
+  let changed = false
+  const next = bindings.map((edge) => {
+    if (Number(edge.question_id) !== questionId || Boolean(edge.marked) === marked) return edge
+    changed = true
+    return { ...edge, marked }
+  })
+  return changed ? next : bindings
+}
+
 /** Direct bindings: nodeUid -> set of question ids */
 export function buildDirectBindingMap(bindings: QuizNodeBindingEdge[]): Map<string, Set<number>> {
   const map = new Map<string, Set<number>>()
@@ -87,40 +128,61 @@ export function buildRemainingCountByNodeUid(
 
 export type NodeQuizCountBadge = {
   text: string
-  tone: 'success' | 'neutral'
+  tone: 'success' | 'info' | 'rose'
   title: string
+  kind: 'objective' | 'subjective'
+}
+
+function countBadge(
+  kind: NodeQuizCountBadge['kind'],
+  count: number,
+  hasMarked: boolean,
+): NodeQuizCountBadge | null {
+  if (count <= 0) return null
+  const label = kind === 'objective' ? '客观' : '主观'
+  return {
+    text: String(count),
+    tone: hasMarked ? 'rose' : kind === 'objective' ? 'success' : 'info',
+    title: hasMarked
+      ? `${label} ${count} 道，含标记题（含子树）`
+      : `${label} ${count} 道（含子树）`,
+    kind,
+  }
 }
 
 /**
- * Green badge = still has unfinished bound questions this session.
- * Gray badge = all bound questions already done this session (keep visible for review).
- * Never hide a node that still has bound questions just because they were answered.
+ * Two corner badges per node: objective (green) then subjective (sky), left to right,
+ * so the objective badge stays on the bottom-right corner. Counts are full subtree
+ * totals and do not shrink when a question is completed. A badge turns rose when
+ * that side contains a marked question. A side with zero questions is omitted.
  */
 export function buildCountBadgeByNodeUid(
   subtreeQuestions: Map<string, Set<number>>,
-  completedQuestionIds: ReadonlySet<number>,
-): Record<string, NodeQuizCountBadge> {
-  const map: Record<string, NodeQuizCountBadge> = {}
+  facts: ReadonlyMap<number, BoundQuestionFacts> = new Map(),
+): Record<string, NodeQuizCountBadge[]> {
+  const map: Record<string, NodeQuizCountBadge[]> = {}
   for (const [uid, questionIds] of subtreeQuestions) {
     if (questionIds.size === 0) continue
-    let remaining = 0
-    for (const qid of questionIds) {
-      if (!completedQuestionIds.has(qid)) remaining += 1
-    }
-    const total = questionIds.size
-    if (remaining > 0) {
-      map[uid] = {
-        text: String(remaining),
-        tone: 'success',
-        title: `${remaining}/${total} 道未做关联题（含子树；点开可做题，完成变灰）`,
-      }
-    } else {
-      map[uid] = {
-        text: String(total),
-        tone: 'neutral',
-        title: `${total} 道关联题本会话已完成（点开可回顾答题）`,
+    let objectiveCount = 0
+    let subjectiveCount = 0
+    let objectiveMarked = false
+    let subjectiveMarked = false
+    for (const questionId of questionIds) {
+      const fact = facts.get(questionId)
+      const subjective = isSubjectiveQuestionType(fact?.questionType)
+      if (subjective) {
+        subjectiveCount += 1
+        if (fact?.marked) subjectiveMarked = true
+      } else {
+        objectiveCount += 1
+        if (fact?.marked) objectiveMarked = true
       }
     }
+    const badges = [
+      countBadge('subjective', subjectiveCount, subjectiveMarked),
+      countBadge('objective', objectiveCount, objectiveMarked),
+    ].filter((badge): badge is NodeQuizCountBadge => badge != null)
+    if (badges.length > 0) map[uid] = badges
   }
   return map
 }
@@ -129,7 +191,12 @@ export function getQuestionIdsForNode(
   subtreeQuestions: Map<string, Set<number>>,
   nodeUid: string,
   completedQuestionIds: ReadonlySet<number> = new Set(),
-  options?: { includeCompleted?: boolean },
+  options?: {
+    includeCompleted?: boolean
+    /** When set, keep only that corner-badge side. Unknown types stay objective. */
+    kind?: NodeQuizCountBadge['kind']
+    facts?: ReadonlyMap<number, BoundQuestionFacts>
+  },
 ): number[] {
   const all = subtreeQuestions.get(nodeUid)
   if (!all) return []
@@ -137,7 +204,14 @@ export function getQuestionIdsForNode(
   const ids = includeCompleted
     ? [...all]
     : [...all].filter((qid) => !completedQuestionIds.has(qid))
-  return ids.sort((a, b) => a - b)
+  const kind = options?.kind
+  const filtered = kind
+    ? ids.filter((questionId) => {
+        const subjective = isSubjectiveQuestionType(options?.facts?.get(questionId)?.questionType)
+        return kind === 'subjective' ? subjective : !subjective
+      })
+    : ids
+  return filtered.sort((a, b) => a - b)
 }
 
 /** First unfinished id in the ordered list, or 0 when all are done / list empty. */

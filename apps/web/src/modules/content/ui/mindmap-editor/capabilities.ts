@@ -1,7 +1,8 @@
 ﻿import { Brain, FolderTree, Sparkles } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
-import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
+import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
 import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
+import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { EditorDocGraphOptions } from './documentGraphProjection'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
 
@@ -34,10 +35,7 @@ interface CapabilityFactoryOptions {
     string,
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
-  countBadgeByNodeUid?: Record<
-    string,
-    { text: string; tone: 'success' | 'danger' | 'warning' | 'neutral'; title?: string }
-  >
+  countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   aiSplitBusy: boolean
