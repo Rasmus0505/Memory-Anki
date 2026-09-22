@@ -8,7 +8,7 @@ const getPalaceQuizQuestionsByIdsApiMock = vi.fn()
 const getPalaceQuizQuestionsApiMock = vi.fn()
 const listPalaceQuizNodeBindingsApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
-const ratePalaceQuizQuestionScheduleApiMock = vi.fn()
+const setPalaceQuizQuestionMarkedApiMock = vi.fn()
 
 vi.mock('@/modules/settings/public', () => ({
   useAiRunConfigDialog: () => ({
@@ -22,7 +22,7 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsApi: (...args: unknown[]) => getPalaceQuizQuestionsApiMock(...args),
   listPalaceQuizNodeBindingsApi: (...args: unknown[]) => listPalaceQuizNodeBindingsApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) => recordPalaceQuizChoiceAttemptApiMock(...args),
-  ratePalaceQuizQuestionScheduleApi: (...args: unknown[]) => ratePalaceQuizQuestionScheduleApiMock(...args),
+  setPalaceQuizQuestionMarkedApi: (...args: unknown[]) => setPalaceQuizQuestionMarkedApiMock(...args),
 }))
 
 vi.mock('@/shared/feedback/toast', () => ({
@@ -33,8 +33,11 @@ vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: vi.fn(),
 }))
 
-vi.mock('@/widgets/palace-memory-lookup', () => ({
-  PalaceMemoryLookupDialog: ({
+vi.mock('@/widgets/palace-memory-lookup', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/widgets/palace-memory-lookup')>()
+  return {
+    ...actual,
+    PalaceMemoryLookupDialog: ({
     open,
     onOpenChange,
     currentPalaceId,
@@ -56,7 +59,8 @@ vi.mock('@/widgets/palace-memory-lookup', () => ({
         </button>
       </div>
     ) : null,
-}))
+  }
+})
 
 const sampleQuestion = {
   id: 42,

@@ -7,6 +7,7 @@ import { QuizGenerationWorkspace } from '@/modules/quiz/ui/palace-quiz/component
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
 import {
   PalaceMemoryLookupDialog,
+  collectMemoryLookupFocusNodeUids,
   pickMemoryLookupBinding,
   resolveMemoryLookupPalaceId,
 } from '@/widgets/palace-memory-lookup'
@@ -20,7 +21,11 @@ import {
   listQuestionNodeBindingsApi,
   resetPalaceQuizQuestionAttemptsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
-import { submitQuizQuestionRating } from '@/modules/quiz/domain/quiz-entity'
+import {
+  beginQuizQuestionMarkRequest,
+  isCurrentQuizQuestionMarkRequest,
+  submitQuizQuestionMark,
+} from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizGeneration } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizGeneration'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
@@ -57,7 +62,7 @@ export default function PalaceQuizPage() {
       : null
   const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
-  const [lookupFocusNodeUid, setLookupFocusNodeUid] = useState<string | null>(null)
+  const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
   const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
@@ -225,7 +230,7 @@ export default function PalaceQuizPage() {
     const currentQuestion = browser.currentQuestion
     if (!memoryLookupOpen || !currentQuestion) {
       if (!memoryLookupOpen) {
-        setLookupFocusNodeUid(null)
+        setLookupFocusNodeUids([])
         setLookupPalaceIdOverride(null)
       }
       return
@@ -235,13 +240,14 @@ export default function PalaceQuizPage() {
     void listQuestionNodeBindingsApi(currentQuestion.id)
       .then((response) => {
         if (cancelled) return
-        const binding = pickMemoryLookupBinding(response.items || [], fallbackPalaceId)
-        setLookupFocusNodeUid(binding?.node_uid?.trim() || null)
+        const items = response.items || []
+        const binding = pickMemoryLookupBinding(items, fallbackPalaceId)
+        setLookupFocusNodeUids(collectMemoryLookupFocusNodeUids(items, fallbackPalaceId))
         setLookupPalaceIdOverride(resolveMemoryLookupPalaceId(binding, fallbackPalaceId))
       })
       .catch(() => {
         if (cancelled) return
-        setLookupFocusNodeUid(null)
+        setLookupFocusNodeUids([])
         setLookupPalaceIdOverride(fallbackPalaceId)
       })
     return () => {
@@ -336,22 +342,20 @@ export default function PalaceQuizPage() {
     )
   }
 
-  const handleRateQuestion = async (question: (typeof questions)[number], rating: number) => {
+  const handleToggleMark = async (question: (typeof questions)[number], marked: boolean) => {
+    const token = beginQuizQuestionMarkRequest(question.id)
     try {
-      const { isFirst, question: updated } = await submitQuizQuestionRating({
+      const { question: updated } = await submitQuizQuestionMark({
         questionId: question.id,
-        rating,
-        palaceId: question.palace_id ?? palaceId,
+        marked,
       })
-      practice.updateQuestionState(question.id, (state) => ({ ...state, rating }))
+      if (!isCurrentQuizQuestionMarkRequest(question.id, token)) return
       setQuestions((current) =>
         current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
       )
-      if (isFirst && browser.viewMode === 'single') {
-        handleQuestionNavigate('next')
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+      if (!isCurrentQuizQuestionMarkRequest(question.id, token)) return
+      toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
   }
 
@@ -433,7 +437,8 @@ export default function PalaceQuizPage() {
           onOpenChange={setMemoryLookupOpen}
           currentPalaceId={lookupPalaceId}
           followCurrentPalace
-          focusNodeUid={lookupFocusNodeUid}
+          focusNodeUid={lookupFocusNodeUids[0] ?? null}
+          focusNodeUids={lookupFocusNodeUids}
         />
       ) : null}
       <QuizKnowledgeEdgePicker
@@ -510,7 +515,7 @@ export default function PalaceQuizPage() {
           onStateChange={practice.updateQuestionState}
           onShortAnswerSubmit={practice.handleShortAnswerSubmit}
           onShortAnswerFeedback={practice.handleShortAnswerFeedback}
-          onRate={(question, rating) => void handleRateQuestion(question, rating)}
+          onToggleMark={(question, marked) => void handleToggleMark(question, marked)}
           onReset={practice.handleResetQuestionState}
           onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
           onEdit={handleOpenQuestionEditor}

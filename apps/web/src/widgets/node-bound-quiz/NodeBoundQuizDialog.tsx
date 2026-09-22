@@ -7,14 +7,15 @@ import {
   listPalaceQuizNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
-  isQuestionDue,
+  beginQuizQuestionMarkRequest,
+  isCurrentQuizQuestionMarkRequest,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
-  QuizQuestionRatingBar,
+  QuizQuestionMarkToggle,
   QuizQuestionStem,
-  submitQuizQuestionRating,
+  submitQuizQuestionMark,
   useQuizAnswerMode,
   useQuizAttemptOrchestration,
   type QuizRuntimeState,
@@ -35,7 +36,10 @@ import {
 } from '@/shared/components/ui/dialog'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
-import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
+import {
+  PalaceMemoryLookupDialog,
+  collectMemoryLookupFocusNodeUids,
+} from '@/widgets/palace-memory-lookup'
 
 export function NodeBoundQuizDialog({
   open,
@@ -68,6 +72,9 @@ export function NodeBoundQuizDialog({
   const [bindingByQuestion, setBindingByQuestion] = useState<Map<number, QuizNodeBindingEdge>>(
     () => new Map(),
   )
+  const [bindingsByQuestion, setBindingsByQuestion] = useState<Map<number, QuizNodeBindingEdge[]>>(
+    () => new Map(),
+  )
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
@@ -80,6 +87,7 @@ export function NodeBoundQuizDialog({
     if (!open || !palaceId || questionIds.length === 0) {
       setQuestions([])
       setBindingByQuestion(new Map())
+      setBindingsByQuestion(new Map())
       setIndex(0)
       setQuestionStates({})
       setLoadError('')
@@ -108,9 +116,13 @@ export function NodeBoundQuizDialog({
           setLoadError('绑定题目未能加载，可能已删除。')
         }
         const map = new Map<number, QuizNodeBindingEdge>()
+        const grouped = new Map<number, QuizNodeBindingEdge[]>()
         for (const edge of bindingResponse.items || []) {
           const qid = Number(edge.question_id)
           if (!Number.isFinite(qid)) continue
+          const group = grouped.get(qid) ?? []
+          group.push(edge)
+          grouped.set(qid, group)
           if (nodeUid && edge.node_uid === nodeUid) {
             map.set(qid, edge)
             continue
@@ -118,6 +130,7 @@ export function NodeBoundQuizDialog({
           if (!map.has(qid)) map.set(qid, edge)
         }
         setBindingByQuestion(map)
+        setBindingsByQuestion(grouped)
         const completedIds = new Set(
           ordered
             .filter((question) => initialQuestionStates?.[question.id]?.resolved)
@@ -209,7 +222,16 @@ export function NodeBoundQuizDialog({
 
   const currentBinding = current ? bindingByQuestion.get(current.id) : undefined
   const ownerLabel = currentBinding ? ownerPalaceLabel(currentBinding, palaceId) : null
-  const lookupFocusNodeUid = currentBinding?.node_uid ?? nodeUid
+  const lookupFocusNodeUids = useMemo(() => {
+    const edges = current ? bindingsByQuestion.get(current.id) ?? [] : []
+    const uids =
+      edges.length > 0
+        ? collectMemoryLookupFocusNodeUids(edges, palaceId)
+        : collectMemoryLookupFocusNodeUids(nodeUid ? [{ node_uid: nodeUid }] : [], palaceId)
+    if (nodeUid && !uids.includes(nodeUid)) uids.push(nodeUid)
+    return uids
+  }, [bindingsByQuestion, current, nodeUid, palaceId])
+  const lookupFocusNodeUid = lookupFocusNodeUids[0] ?? nodeUid
 
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
@@ -223,24 +245,19 @@ export function NodeBoundQuizDialog({
     [current, markCompleted, orchestration],
   )
 
-  const handleRate = useCallback(async (rating: number) => {
-    if (!current || !currentState.resolved) return
+  const handleToggleMark = useCallback(async (marked: boolean) => {
+    if (!current) return
+    const questionId = current.id
+    const token = beginQuizQuestionMarkRequest(questionId)
     try {
-      const { isFirst, question } = await submitQuizQuestionRating({
-        questionId: current.id,
-        rating,
-        palaceId: current.palace_id ?? palaceId,
-      })
-      updateLocalState(current.id, (state) => ({ ...state, rating }))
+      const { question } = await submitQuizQuestionMark({ questionId, marked })
+      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
       setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
-      markCompleted(current.id)
-      if (isFirst && index < questions.length - 1) {
-        setIndex((value) => Math.min(questions.length - 1, value + 1))
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
+      toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
-  }, [current, currentState.resolved, index, markCompleted, palaceId, questions.length, updateLocalState])
+  }, [current])
 
   useEffect(() => {
     if (!open || !current) return
@@ -400,7 +417,7 @@ export function NodeBoundQuizDialog({
                     return {
                       done: Boolean(itemState?.resolved),
                       correct: itemState?.correct,
-                      due: question?.schedule_due_kind === 'due' || isQuestionDue(question?.schedule_due_on),
+                      marked: Boolean(question?.marked),
                     }
                   }}
                   onSelect={setIndex}
@@ -412,9 +429,9 @@ export function NodeBoundQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
-                    <Badge variant={current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? 'default' : 'secondary'}>
-                      {current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? '已到期' : '其他'}
-                    </Badge>
+                    {current.marked ? (
+                      <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
+                    ) : null}
                     {currentState.resolved ? (
                       <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
                         {currentState.correct ? '已答对' : '已作答'}
@@ -440,9 +457,10 @@ export function NodeBoundQuizDialog({
                     }
                   />
                 </div>
-                {currentState.resolved ? (
-                  <QuizQuestionRatingBar rating={currentState.rating} onRate={(value) => void handleRate(value)} />
-                ) : null}
+                <QuizQuestionMarkToggle
+                  marked={Boolean(current.marked)}
+                  onToggle={(marked) => void handleToggleMark(marked)}
+                />
               </>
             )}
           </div>
@@ -512,6 +530,8 @@ export function NodeBoundQuizDialog({
         currentPalaceId={palaceId}
         followCurrentPalace
         focusNodeUid={lookupFocusNodeUid}
+        focusNodeUids={lookupFocusNodeUids}
+        focusAncestorNodeUid={nodeUid}
       />
       {aiRunConfigDialog}
     </>

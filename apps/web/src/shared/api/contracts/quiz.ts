@@ -124,6 +124,8 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   schedule_due_on?: string | null
   schedule_passed?: boolean
   schedule_due_kind?: 'due' | 'other'
+  /** Learner flag. Does not schedule review. */
+  marked?: boolean
   lifecycle_status?: PalaceQuizLifecycleStatus
   evidence?: PalaceQuizEvidenceRef[]
   knowledge_tags?: string[]

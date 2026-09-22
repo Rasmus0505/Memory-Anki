@@ -21,7 +21,7 @@ Published questions require structured evidence with source names and page, para
 
 The first mastery projection combines recent correctness, hint/retry penalties, confidence, and recency. LLM calls may assess open answers or generate follow-ups, but do not own scheduling or persisted mastery scores.
 
-Question-owned first-learning due dates (`schedule_stage`, `schedule_due_on`, `schedule_passed`) are written by 忘记/困难/记得/轻松 after an answer in node-bound, overlay, and Palace Quiz practice. This schedule is independent of palace review units and of attempt counters. Existing questions start unscheduled (`due_on` null = 其他); a passing 记得/轻松 starts the 1-day / 3-day ladder from first learning.
+Quiz practice no longer writes a 4-level rating or a review schedule. `marked` is a learner flag only: it does not change `schedule_stage`, `schedule_due_on`, `schedule_passed`, attempt counters, or palace review units. Historical due dates remain so the freestyle overlay `due` range can still read them, and they are not updated by marking. A last stored 忘记 or 困难 rating (unpassed, with a due date) migrates to `marked`; 记得/轻松 and never-rated questions stay unmarked. Only that latest schedule was stored.
 
 ## Dependency direction
 

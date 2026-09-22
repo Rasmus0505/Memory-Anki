@@ -418,6 +418,7 @@ class PalaceQuizQuestion(Base):
     schedule_stage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     schedule_due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     schedule_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    marked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,

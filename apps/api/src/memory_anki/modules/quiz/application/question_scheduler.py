@@ -1,20 +1,18 @@
-"""Question-owned first-learning schedule. Framework-free.
+"""Question due-date helpers and the legacy quiz-mark rule. Framework-free.
 
-Quiz ratings in palace / overlay / node-bound practice always write from a
-first-learning baseline: 忘记/困难 stay unpassed and due today; 记得 starts the
-one-day stage; 轻松 starts the three-day stage. This does not touch palace
-review-unit scheduling.
+Quiz practice no longer writes 忘记/困难/记得/轻松 or a review schedule. Historical
+`schedule_due_on` rows stay so the freestyle overlay "due" range can still read
+them. A new mark does not change those columns or palace review units.
+
+Only the latest schedule was stored. 忘记/困难 left the question unpassed with a
+due date; 记得/轻松 set `schedule_passed`; a never-rated question has no due date.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
-INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
-RATING_LABELS: dict[int, str] = {1: "忘记", 2: "困难", 3: "记得", 4: "轻松"}
-VALID_RATINGS = frozenset(RATING_LABELS)
 DUE_KIND_DUE = "due"
 DUE_KIND_OTHER = "other"
 OVERLAY_QUESTION_RANGE_DUE = "due"
@@ -22,44 +20,17 @@ OVERLAY_QUESTION_RANGE_ALL = "all"
 OVERLAY_QUESTION_RANGES = {OVERLAY_QUESTION_RANGE_DUE, OVERLAY_QUESTION_RANGE_ALL}
 
 
-@dataclass(frozen=True)
-class QuestionScheduleResult:
-    stage: int
-    due_on: date
-    passed: bool
-    rating: int
-
-
-def normalize_rating(value: int | str) -> int:
-    if isinstance(value, str):
-        labels = {label: rating for rating, label in RATING_LABELS.items()}
-        if value in labels:
-            return labels[value]
-    try:
-        rating = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("rating must be 1-4 or 忘记/困难/记得/轻松") from exc
-    if rating not in VALID_RATINGS:
-        raise ValueError("rating must be 1-4 or 忘记/困难/记得/轻松")
-    return rating
-
-
-def apply_first_learning_rating(
-    rating: int | str,
+def legacy_unpassed_due_counts_as_marked(
     *,
-    today: date | None = None,
-) -> QuestionScheduleResult:
-    current = today or date.today()
-    normalized = normalize_rating(rating)
-    if normalized in (1, 2):
-        return QuestionScheduleResult(stage=0, due_on=current, passed=False, rating=normalized)
-    stage = 1 if normalized == 3 else 2
-    return QuestionScheduleResult(
-        stage=stage,
-        due_on=current + timedelta(days=INTERVAL_DAYS[stage]),
-        passed=True,
-        rating=normalized,
-    )
+    schedule_passed: bool,
+    schedule_due_on: Any,
+) -> bool:
+    """True when the last stored quiz rating was 忘记 or 困难."""
+    if schedule_due_on is None:
+        return False
+    if isinstance(schedule_due_on, str) and not schedule_due_on.strip():
+        return False
+    return not bool(schedule_passed)
 
 
 def parse_due_on(value: Any) -> date | None:

@@ -41,6 +41,7 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
         ),
         "schedule_passed": bool(getattr(question, "schedule_passed", False)),
         "schedule_due_kind": schedule_due_kind(question.schedule_due_on),
+        "marked": bool(getattr(question, "marked", False)),
         "created_at": question.created_at.isoformat() if question.created_at else None,
         "updated_at": question.updated_at.isoformat() if question.updated_at else None,
     }

@@ -187,6 +187,40 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByTestId('memory-node-grandchild-1')).toBeTruthy()
   })
 
+  it('centers the deepest bound card when the question is also bound to the palace root', async () => {
+    listQuestionNodeBindingsApiMock.mockResolvedValue({
+      question_id: 11,
+      items: [
+        { question_id: 11, node_uid: 'root-1', palace_id: 1, target_palace_id: 1 },
+        { question_id: 11, node_uid: 'child-1', palace_id: 1, target_palace_id: 1 },
+        { question_id: 11, node_uid: 'grandchild-1', palace_id: 1, target_palace_id: 1 },
+      ],
+      item_count: 3,
+    })
+
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
+        'root-1',
+      )
+      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
+        'grandchild-1',
+      )
+    })
+    expect(mindMapFramePropsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focusRequestNodeUid: 'grandchild-1',
+        highlightedNodeUids: ['grandchild-1'],
+      }),
+    )
+    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-grandchild-1')).toBeTruthy()
+  })
+
   it('opens the memory palace lookup as a mobile full-screen dialog on narrow viewports', async () => {
     window.matchMedia = ((query: string) => ({
       matches: query.includes('max-width: 1023px'),

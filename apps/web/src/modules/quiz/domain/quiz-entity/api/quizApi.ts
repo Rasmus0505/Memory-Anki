@@ -132,13 +132,13 @@ export function resetPalaceQuizQuestionAttemptsApi(questionIds: number[]) {
   })
 }
 
-export function ratePalaceQuizQuestionScheduleApi(questionId: number, rating: number) {
-  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/schedule-ratings`, {
+export function setPalaceQuizQuestionMarkedApi(questionId: number, marked: boolean) {
+  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/mark`, {
     method: 'POST',
-    body: JSON.stringify({ rating }),
+    body: JSON.stringify({ marked }),
     persistence: {
-      resourceKey: `palace-quiz-question:${questionId}:schedule-rating`,
-      description: '题目评分',
+      resourceKey: `palace-quiz-question:${questionId}:mark`,
+      description: marked ? '标记题目' : '取消标记题目',
       replayMode: 'manual',
     },
   })

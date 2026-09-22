@@ -14,7 +14,6 @@ from memory_anki.modules.quiz.application.node_binding import (
     extract_payload_node_uids,
 )
 
-from ..question_scheduler import apply_first_learning_rating
 from .dedup import find_duplicate_question
 from .dedup_keys import build_question_dedup_key, question_to_dedup_payload
 from .queries import (
@@ -413,21 +412,17 @@ def record_choice_attempt(
     )
 
 
-def rate_question_first_learning(
+def set_question_marked(
     session: Session,
     question_id: int,
-    rating: int | str,
+    marked: bool,
     *,
     commit: bool = True,
 ) -> dict[str, object]:
+    if not isinstance(marked, bool):
+        raise PalaceQuizValidationError("marked must be true or false")
     question = get_question_or_raise(session, question_id)
-    try:
-        result = apply_first_learning_rating(rating)
-    except ValueError as exc:
-        raise PalaceQuizValidationError(str(exc)) from exc
-    question.schedule_stage = result.stage
-    question.schedule_due_on = result.due_on
-    question.schedule_passed = result.passed
+    question.marked = marked
     question.updated_at = utc_now_naive()
     if commit:
         session.commit()
@@ -481,9 +476,9 @@ __all__ = [
     "batch_delete_questions",
     "create_question",
     "delete_question",
-    "rate_question_first_learning",
     "record_choice_attempt",
     "reset_question_attempts",
     "restore_question",
+    "set_question_marked",
     "update_question",
 ]

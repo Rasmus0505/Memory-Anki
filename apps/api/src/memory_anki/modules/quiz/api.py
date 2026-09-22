@@ -12,7 +12,7 @@ from .application.question_scheduler import (
     question_is_due,
 )
 from .application.question_schema import serialize_question
-from .application.questions.commands import rate_question_first_learning
+from .application.questions.commands import set_question_marked
 
 __all__ = [
     "build_mastery_profile",
@@ -22,7 +22,7 @@ __all__ = [
     "normalize_overlay_question_range",
     "OVERLAY_QUESTION_RANGE_DUE",
     "question_is_due",
-    "rate_question_first_learning",
     "record_attempt_event",
     "serialize_question",
+    "set_question_marked",
 ]

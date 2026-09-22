@@ -4,7 +4,7 @@
 active — production module after FSD removal.
 
 ## Owns
-Quiz attempt + generation UI/api, question-owned first-learning schedule, shared SPA 已做 session
+Quiz attempt + generation UI/api, question mark (not a review schedule), shared SPA 已做 session
 
 ## Public entry
 `public.ts` — only cross-module import path.

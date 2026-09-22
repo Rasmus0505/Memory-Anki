@@ -11,14 +11,15 @@ import {
   listQuestionNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
-  isQuestionDue,
+  beginQuizQuestionMarkRequest,
+  isCurrentQuizQuestionMarkRequest,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
   QuizQuestionInteraction,
-  QuizQuestionRatingBar,
+  QuizQuestionMarkToggle,
   QuizQuestionStem,
-  submitQuizQuestionRating,
+  submitQuizQuestionMark,
   useQuizAnswerMode,
   useQuizAttemptOrchestration,
   writeQuizSessionState,
@@ -53,6 +54,7 @@ import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
 import {
   PalaceMemoryLookupDialog,
+  collectMemoryLookupFocusNodeUids,
   pickMemoryLookupBinding,
   resolveMemoryLookupPalaceId,
 } from '@/widgets/palace-memory-lookup'
@@ -98,7 +100,7 @@ export function FreestyleScopeQuizDialog({
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
-  const [lookupFocusNodeUid, setLookupFocusNodeUid] = useState<string | null>(null)
+  const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
   const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
   const planVersionRef = useRef(planVersion)
@@ -296,7 +298,7 @@ export function FreestyleScopeQuizDialog({
   useEffect(() => {
     if (!palaceLookupOpen || !current) {
       if (!palaceLookupOpen) {
-        setLookupFocusNodeUid(null)
+        setLookupFocusNodeUids([])
         setLookupPalaceIdOverride(null)
       }
       return
@@ -306,13 +308,14 @@ export function FreestyleScopeQuizDialog({
     void listQuestionNodeBindingsApi(current.id)
       .then((response) => {
         if (cancelled) return
-        const binding = pickMemoryLookupBinding(response.items || [], fallbackPalaceId)
-        setLookupFocusNodeUid(binding?.node_uid?.trim() || null)
+        const items = response.items || []
+        const binding = pickMemoryLookupBinding(items, fallbackPalaceId)
+        setLookupFocusNodeUids(collectMemoryLookupFocusNodeUids(items, fallbackPalaceId))
         setLookupPalaceIdOverride(resolveMemoryLookupPalaceId(binding, fallbackPalaceId))
       })
       .catch(() => {
         if (cancelled) return
-        setLookupFocusNodeUid(null)
+        setLookupFocusNodeUids([])
         setLookupPalaceIdOverride(fallbackPalaceId)
       })
     return () => {
@@ -373,23 +376,19 @@ export function FreestyleScopeQuizDialog({
     [current, orchestration],
   )
 
-  const handleRate = useCallback(async (rating: number) => {
-    if (!current || !currentState.resolved) return
+  const handleToggleMark = useCallback(async (marked: boolean) => {
+    if (!current) return
+    const questionId = current.id
+    const token = beginQuizQuestionMarkRequest(questionId)
     try {
-      const { isFirst, question } = await submitQuizQuestionRating({
-        questionId: current.id,
-        rating,
-        palaceId: current.palace_id,
-      })
-      updateLocalState(current.id, (state) => ({ ...state, rating }))
+      const { question } = await submitQuizQuestionMark({ questionId, marked })
+      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
       setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
-      if (isFirst && index < questions.length - 1) {
-        goToIndex(index + 1)
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存评分失败。')
+      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
+      toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
-  }, [current, currentState.resolved, goToIndex, index, questions.length, updateLocalState])
+  }, [current])
 
   useEffect(() => {
     setKeyboardOptionIndex(0)
@@ -567,7 +566,7 @@ export function FreestyleScopeQuizDialog({
                 </div>
                 <div role="radiogroup" aria-label="做题范围" className="grid gap-2">
                   {([
-                    ['all', '当前配置下宫殿全部题目', '新学和未到期题用默认色，已到期复习题用琥珀色'],
+                    ['all', '当前配置下宫殿全部题目', '标记过的题，序号用玫瑰色标出'],
                     ['due', '当前配置下宫殿已到期题目', '只收入题目自己的到期日已到的题'],
                   ] as const).map(([value, label, hint]) => {
                     const selected = draftRange === value
@@ -627,7 +626,7 @@ export function FreestyleScopeQuizDialog({
                     return {
                       done: Boolean(itemState?.resolved),
                       correct: itemState?.correct,
-                      due: question?.schedule_due_kind === 'due' || isQuestionDue(question?.schedule_due_on),
+                      marked: Boolean(question?.marked),
                     }
                   }}
                   onSelect={goToIndex}
@@ -639,9 +638,9 @@ export function FreestyleScopeQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
-                    <Badge variant={current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? 'default' : 'secondary'}>
-                      {current.schedule_due_kind === 'due' || isQuestionDue(current.schedule_due_on) ? '已到期' : '其他'}
-                    </Badge>
+                    {current.marked ? (
+                      <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
+                    ) : null}
                     {currentState.resolved ? (
                       <Badge variant={currentState.correct ? 'secondary' : 'destructive'}>
                         {currentState.correct ? '已答对' : '已作答'}
@@ -662,9 +661,10 @@ export function FreestyleScopeQuizDialog({
                     onRequestShortAnswerFeedback={() => void orchestration.handleShortAnswerFeedback(current)}
                   />
                 </div>
-                {currentState.resolved ? (
-                  <QuizQuestionRatingBar rating={currentState.rating} onRate={(value) => void handleRate(value)} />
-                ) : null}
+                <QuizQuestionMarkToggle
+                  marked={Boolean(current.marked)}
+                  onToggle={(marked) => void handleToggleMark(marked)}
+                />
               </>
             )}
           </div>
@@ -721,7 +721,8 @@ export function FreestyleScopeQuizDialog({
         onOpenChange={setPalaceLookupOpen}
         currentPalaceId={lookupPalaceId}
         followCurrentPalace
-        focusNodeUid={lookupFocusNodeUid}
+        focusNodeUid={lookupFocusNodeUids[0] ?? null}
+        focusNodeUids={lookupFocusNodeUids}
       />
       {aiRunConfigDialog}
     </>

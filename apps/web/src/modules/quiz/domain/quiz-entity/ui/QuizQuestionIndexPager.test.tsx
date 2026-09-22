@@ -64,15 +64,19 @@ describe('QuizQuestionIndexPager', () => {
     expect(screen.queryByRole('button', { name: '1' })).toBeNull()
   })
 
-  it('marks due questions in the title', () => {
+  it('paints marked question numbers rose, including the current one', () => {
     render(
       <QuizQuestionIndexPager
         count={2}
-        currentIndex={0}
-        getItemState={(index) => ({ done: false, due: index === 1 })}
+        currentIndex={1}
+        getItemState={(index) => ({ done: false, marked: index === 1 })}
         onSelect={vi.fn()}
       />,
     )
-    expect(screen.getByRole('button', { name: '2' }).getAttribute('title')).toContain('已到期')
+    const marked = screen.getByRole('button', { name: '2' })
+    expect(marked.getAttribute('title')).toContain('已标记')
+    expect(marked.getAttribute('data-marked')).toBe('true')
+    expect(marked.className).toContain('bg-rose-600')
+    expect(screen.getByRole('button', { name: '1' }).hasAttribute('data-marked')).toBe(false)
   })
 })

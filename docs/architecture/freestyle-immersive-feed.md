@@ -323,9 +323,10 @@ today or earlier; `all` = every published question in range). Draw order is `str
 The first open asks for palace order and due/all range, then sets `overlay_quiz_setup_done`; later
 opens skip setup. Config stays reachable from the dialog’s top-left.
 
-Answer-then-rate: 忘记 / 困难 / 记得 / 轻松 always write **first-learning** on the question
-(`schedule_stage` / `schedule_due_on`), never palace review units. The first rating auto-advances
-except on the last question; amending a rating does not advance.
+Mark / unmark replaces answer-then-rate. The toggle writes `marked` on the question and does not
+change `schedule_stage`, `schedule_due_on`, palace review units, or the current index. Marked
+numbers on the index rail are rose. Historical `overlay_question_range=due` still reads old due
+dates and is not updated by marking.
 
 Durable progress lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
 runtime states, per-question palace ids, and `parked` out-of-scope progress). PWA reload, app

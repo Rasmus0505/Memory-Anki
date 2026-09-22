@@ -1,36 +1,27 @@
 from datetime import date, timedelta
 
 from memory_anki.modules.quiz.application.question_scheduler import (
-    apply_first_learning_rating,
+    legacy_unpassed_due_counts_as_marked,
     question_is_due,
     schedule_due_kind,
 )
 
 
-def test_first_learning_remember_schedules_tomorrow() -> None:
+def test_legacy_forget_and_hard_schedules_count_as_marked() -> None:
     today = date(2026, 9, 17)
-    result = apply_first_learning_rating(3, today=today)
-    assert result.passed is True
-    assert result.stage == 1
-    assert result.due_on == today + timedelta(days=1)
+    assert legacy_unpassed_due_counts_as_marked(schedule_passed=False, schedule_due_on=today)
+    assert legacy_unpassed_due_counts_as_marked(schedule_passed=False, schedule_due_on="2026-09-17")
 
 
-def test_first_learning_easy_schedules_three_days() -> None:
+def test_legacy_pass_and_never_rated_stay_unmarked() -> None:
     today = date(2026, 9, 17)
-    result = apply_first_learning_rating("轻松", today=today)
-    assert result.passed is True
-    assert result.stage == 2
-    assert result.due_on == today + timedelta(days=3)
-
-
-def test_first_learning_fail_stays_due_today() -> None:
-    today = date(2026, 9, 17)
-    forgotten = apply_first_learning_rating(1, today=today)
-    hard = apply_first_learning_rating(2, today=today)
-    assert forgotten.passed is False
-    assert forgotten.due_on == today
-    assert hard.passed is False
-    assert hard.due_on == today
+    assert not legacy_unpassed_due_counts_as_marked(schedule_passed=True, schedule_due_on=today)
+    assert not legacy_unpassed_due_counts_as_marked(
+        schedule_passed=True,
+        schedule_due_on=today + timedelta(days=3),
+    )
+    assert not legacy_unpassed_due_counts_as_marked(schedule_passed=False, schedule_due_on=None)
+    assert not legacy_unpassed_due_counts_as_marked(schedule_passed=False, schedule_due_on="  ")
 
 
 def test_due_kind_treats_missing_due_as_other() -> None:

@@ -23,8 +23,8 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsByIdsApi: vi.fn(),
   listQuestionNodeBindingsApi: vi.fn(),
-  ratePalaceQuizQuestionScheduleApi: vi.fn(async (_id: number, rating: number) => ({
-    item: { id: 42, schedule_stage: rating === 3 ? 1 : 0, schedule_passed: rating >= 3 },
+  setPalaceQuizQuestionMarkedApi: vi.fn(async (id: number, marked: boolean) => ({
+    item: { id, marked },
   })),
 }))
 

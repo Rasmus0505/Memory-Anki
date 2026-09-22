@@ -20,7 +20,7 @@ export function PalaceQuizPracticePanel({
   onStateChange,
   onShortAnswerSubmit,
   onShortAnswerFeedback,
-  onRate,
+  onToggleMark,
   onReset,
   onResetVisibleAttempts,
   onEdit,
@@ -43,7 +43,7 @@ export function PalaceQuizPracticePanel({
   onStateChange: (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit: (questionId: number) => void
   onShortAnswerFeedback: (question: PalaceQuizQuestion) => void
-  onRate?: (question: PalaceQuizQuestion, rating: number) => void
+  onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
   onReset: (questionId: number) => void
   onResetVisibleAttempts: () => void
   onEdit: (question: PalaceQuizQuestion) => void
@@ -173,7 +173,7 @@ export function PalaceQuizPracticePanel({
             onShortAnswerFeedback={onShortAnswerFeedback}
             onReset={onReset}
             onEdit={onEdit}
-            onRate={onRate}
+            onToggleMark={onToggleMark}
           />
         </div>
       ) : (
@@ -197,7 +197,7 @@ export function PalaceQuizPracticePanel({
                 onShortAnswerFeedback={onShortAnswerFeedback}
                 onReset={onReset}
                 onEdit={onEdit}
-                onRate={onRate}
+                onToggleMark={onToggleMark}
               />
             </div>
           ))}

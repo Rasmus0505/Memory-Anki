@@ -20,7 +20,7 @@ export function QuizQuestionIndexPager({
   count: number
   currentIndex: number
   pageSize?: number
-  getItemState: (index: number) => { done: boolean; correct?: boolean; due?: boolean }
+  getItemState: (index: number) => { done: boolean; correct?: boolean; marked?: boolean }
   onSelect: (index: number) => void
 }) {
   const safeCount = Math.max(0, count)
@@ -76,24 +76,27 @@ export function QuizQuestionIndexPager({
         {indexes.map((itemIndex) => {
           const itemState = getItemState(itemIndex)
           const done = Boolean(itemState.done)
-          const due = Boolean(itemState.due)
+          const marked = Boolean(itemState.marked)
           const active = itemIndex === currentIndex
           return (
             <button
               key={itemIndex}
               type="button"
               aria-current={active ? 'true' : undefined}
-              title={`第 ${itemIndex + 1} 题${due ? '（已到期）' : ''}${done ? (itemState.correct === false ? '（已答·错）' : '（已答）') : ''}`}
+              data-marked={marked ? 'true' : undefined}
+              title={`第 ${itemIndex + 1} 题${marked ? '（已标记）' : ''}${done ? (itemState.correct === false ? '（已答·错）' : '（已答）') : ''}`}
               className={cn(
                 'flex size-7 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
-                active
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : done
-                    ? itemState.correct === false
-                      ? 'border-destructive/45 bg-destructive/10 text-destructive'
-                      : 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                    : due
-                      ? 'border-amber-500/70 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200'
+                marked
+                  ? active
+                    ? 'border-rose-700 bg-rose-600 text-white ring-2 ring-primary ring-offset-1'
+                    : 'border-rose-700 bg-rose-600 text-white shadow-sm'
+                  : active
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : done
+                      ? itemState.correct === false
+                        ? 'border-destructive/45 bg-destructive/10 text-destructive'
+                        : 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                       : 'border-border bg-background text-foreground hover:bg-muted',
               )}
               onClick={() => onSelect(itemIndex)}

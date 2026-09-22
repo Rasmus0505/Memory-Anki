@@ -14,10 +14,10 @@ from .questions.commands import (
     batch_delete_questions,
     create_question,
     delete_question,
-    rate_question_first_learning,
     record_choice_attempt,
     reset_question_attempts,
     restore_question,
+    set_question_marked,
     update_question,
 )
 from .questions.dedup import (
@@ -88,12 +88,12 @@ __all__ = [
     "next_palace_sort_order",
     "normalize_question_payload",
     "question_to_dedup_payload",
-    "rate_question_first_learning",
     "record_choice_attempt",
     "reset_question_attempts",
     "restore_question",
     "resolve_minimal_explicit_chapter_ids",
     "serialize_question",
+    "set_question_marked",
     "update_question",
     "upsert_palace_ocr_sources",
 ]

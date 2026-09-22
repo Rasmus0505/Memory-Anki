@@ -14,7 +14,7 @@ export const previewPalaceQuizGenerationFromImagesApiMock = vi.fn()
 export const previewPalaceQuizGenerationFromTextFilesApiMock = vi.fn()
 export const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
-export const ratePalaceQuizQuestionScheduleApiMock = vi.fn()
+export const setPalaceQuizQuestionMarkedApiMock = vi.fn()
 export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
 export const listQuestionNodeBindingsApiMock = vi.fn()
 export const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
@@ -136,8 +136,8 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
     classifyPalaceQuizQuestionsToMiniPalacesApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
-  ratePalaceQuizQuestionScheduleApi: (...args: unknown[]) =>
-    ratePalaceQuizQuestionScheduleApiMock(...args),
+  setPalaceQuizQuestionMarkedApi: (...args: unknown[]) =>
+    setPalaceQuizQuestionMarkedApiMock(...args),
   resetPalaceQuizQuestionAttemptsApi: (...args: unknown[]) =>
     resetPalaceQuizQuestionAttemptsApiMock(...args),
   listQuestionNodeBindingsApi: (...args: unknown[]) =>
@@ -634,7 +634,7 @@ export function setupPalaceQuizPageTest() {
     (request: { entries?: Array<{ scenarioKey: string }> }) =>
       Object.fromEntries((request.entries || []).map((entry) => [entry.scenarioKey, {}])),
   )
-  ratePalaceQuizQuestionScheduleApiMock.mockResolvedValue({
+  setPalaceQuizQuestionMarkedApiMock.mockResolvedValue({
     item: baseQuestions[0],
   })
   recordPalaceQuizChoiceAttemptApiMock.mockResolvedValue({
