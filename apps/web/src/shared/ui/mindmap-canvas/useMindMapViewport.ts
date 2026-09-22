@@ -129,6 +129,8 @@ export function useMindMapViewport({
   const previousParentByIdRef = useRef<Map<string, string | null>>(new Map())
   const handledHostRefreshEpochRef = useRef(0)
   const hasHandledFirstCanvasSizeRef = useRef(false)
+  /** Invalidates a scheduled first-size fitView when a host center command arrives. */
+  const cameraCommandEpochRef = useRef(0)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
   const isCanvasReady = canvasSize.width > 0 && canvasSize.height > 0
   const mobileGuidedActive =
@@ -577,30 +579,64 @@ export function useMindMapViewport({
 
   // First positive canvas size: fit a still-default camera so the tree is not a
   // tiny origin square. Keep a user/restored camera after remount or pan/zoom.
+  // A pending center viewCommand owns the first camera — do not fit the whole
+  // graph (that visually parks the palace root in the middle).
   useLayoutEffect(() => {
     if (!isCanvasReady || nodes.length === 0) return
     if (hasHandledFirstCanvasSizeRef.current) return
-    hasHandledFirstCanvasSizeRef.current = true
-    if (manualViewportGestureRef.current) return
+    if (manualViewportGestureRef.current) {
+      hasHandledFirstCanvasSizeRef.current = true
+      return
+    }
     if (!isPristineMindMapViewport(controlledViewportRef.current, preferredZoomInput)) {
+      hasHandledFirstCanvasSizeRef.current = true
       restorePreservedViewport()
       return
     }
+    if (viewCommand?.type === 'center' && viewCommand.nodeId) {
+      // Layout may not include the bound card yet. Do not fit the palace root,
+      // and do not consume this command until the card can actually be centered.
+      if (!nodes.some((node) => node.id === viewCommand.nodeId)) return
+      hasHandledFirstCanvasSizeRef.current = true
+      handledViewCommandNonceRef.current = viewCommand.nonce
+      cameraCommandEpochRef.current += 1
+      centerNodeInCanvas(viewCommand.nodeId, 0)
+      return
+    }
+    hasHandledFirstCanvasSizeRef.current = true
+    const epoch = cameraCommandEpochRef.current
     explicitViewportChangeRef.current = true
-    runFitView(
-      0,
-      normalizedPreferredZoom === undefined
-        ? undefined
-        : () => syncPreferredZoom(normalizedPreferredZoom),
-    )
+    requestAnimationFrame(() => {
+      // A later center command owns the camera. Do not clear its explicit-viewport
+      // lock, and do not fit the whole tree over the bound card.
+      if (cameraCommandEpochRef.current !== epoch) return
+      runExplicitViewportChange(
+        () => void fitView({
+          duration: 0,
+          padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_FIT_PADDING : focusMode ? MINDMAP_FOCUS_FIT_PADDING : MINDMAP_FIT_PADDING,
+          includeHiddenNodes: false,
+          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
+        }),
+        0,
+        normalizedPreferredZoom === undefined
+          ? undefined
+          : () => syncPreferredZoom(normalizedPreferredZoom),
+      )
+    })
   }, [
+    centerNodeInCanvas,
+    fitView,
+    focusMode,
     isCanvasReady,
-    nodes.length,
+    mobileGuidedActive,
+    nodes,
     normalizedPreferredZoom,
     preferredZoomInput,
     restorePreservedViewport,
-    runFitView,
+    runExplicitViewportChange,
     syncPreferredZoom,
+    viewCommand,
   ])
 
   useLayoutEffect(() => {
@@ -862,13 +898,17 @@ export function useMindMapViewport({
   useEffect(() => {
     if (!viewCommand || !isCanvasReady) return
     if (handledViewCommandNonceRef.current === viewCommand.nonce) return
+    if (viewCommand.type === 'center' && !nodes.some((node) => node.id === viewCommand.nodeId)) {
+      return
+    }
     handledViewCommandNonceRef.current = viewCommand.nonce
+    cameraCommandEpochRef.current += 1
     if (viewCommand.type === 'fit') {
       runFitView(220)
       return
     }
     centerNodeInCanvas(viewCommand.nodeId, 220)
-  }, [centerNodeInCanvas, isCanvasReady, runFitView, viewCommand])
+  }, [centerNodeInCanvas, isCanvasReady, nodes, runFitView, viewCommand])
 
   // Manual 刷新脑图 remounts the provider with a reset camera; fit once ready so
   // the tree is visible even when default viewport does not cover the layout.

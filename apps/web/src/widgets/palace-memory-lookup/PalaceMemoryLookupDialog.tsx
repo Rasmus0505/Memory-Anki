@@ -55,6 +55,7 @@ import {
   getPalaceContext,
   getPalaceTitle,
   getRootNodeUid,
+  normalizeMemoryLookupFocusNodeUids,
   resolveMemoryLookupFocusNodeUid,
   shouldBlockMemoryLookupClose,
   useMemoryLookupNarrowViewport,
@@ -67,6 +68,8 @@ export function PalaceMemoryLookupDialog({
   currentPalaceId = null,
   followCurrentPalace = false,
   focusNodeUid = null,
+  focusNodeUids = null,
+  focusAncestorNodeUid = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -74,6 +77,10 @@ export function PalaceMemoryLookupDialog({
   followCurrentPalace?: boolean
   /** Keep the full palace and visually center this bound node. */
   focusNodeUid?: string | null
+  /** All bound node UIDs; the deepest one in the loaded tree becomes the camera center. */
+  focusNodeUids?: readonly string[] | null
+  /** When opening from a card, prefer the deepest bound node under this ancestor. */
+  focusAncestorNodeUid?: string | null
 }) {
   const [search, setSearch] = useState('')
   const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>(createEmptyGroupedData)
@@ -126,20 +133,32 @@ export function PalaceMemoryLookupDialog({
 
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
+  const requestedFocusNodeUids = useMemo(
+    () => normalizeMemoryLookupFocusNodeUids([
+      ...(focusNodeUids ?? []),
+      focusNodeUid,
+      focusAncestorNodeUid,
+    ]),
+    [focusAncestorNodeUid, focusNodeUid, focusNodeUids],
+  )
   const focusTargetUid = useMemo(
-    () => resolveMemoryLookupFocusNodeUid(previewState, focusNodeUid),
-    [focusNodeUid, previewState],
+    () => resolveMemoryLookupFocusNodeUid(
+      previewState,
+      requestedFocusNodeUids,
+      focusAncestorNodeUid,
+    ),
+    [focusAncestorNodeUid, previewState, requestedFocusNodeUids],
   )
   const palaceRootUid = getRootNodeUid(previewState)
   const centeredOnBinding = Boolean(
-    focusNodeUid
+    requestedFocusNodeUids.length > 0
     && focusTargetUid
-    && focusTargetUid === focusNodeUid
+    && requestedFocusNodeUids.includes(focusTargetUid)
     && focusTargetUid !== palaceRootUid,
   )
   const highlightedNodeUids = useMemo(
-    () => (focusNodeUid && focusTargetUid === focusNodeUid ? [focusNodeUid] : []),
-    [focusNodeUid, focusTargetUid],
+    () => (centeredOnBinding && focusTargetUid ? [focusTargetUid] : []),
+    [centeredOnBinding, focusTargetUid],
   )
   const revealSession = useRevealSession({
     title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
@@ -563,6 +582,7 @@ export function PalaceMemoryLookupDialog({
             focusRequestNonce={rootFocusNonce}
             highlightedNodeUids={highlightedNodeUids}
             initialViewPolicy="reset"
+            sceneTransitionFallbackNodeId={focusTargetUid}
             onEditorStateChange={() => {}}
             className="h-full min-h-0 w-full border-0"
           />

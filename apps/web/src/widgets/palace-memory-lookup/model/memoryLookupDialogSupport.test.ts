@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
+  collectMemoryLookupFocusNodeUids,
   pickMemoryLookupBinding,
   resolveMemoryLookupFocusNodeUid,
   resolveMemoryLookupPalaceId,
   shouldBlockMemoryLookupClose,
 } from './memoryLookupDialogSupport'
 
-function editorStateWithTree(rootUid: string, childUid?: string): MindMapEditorState {
+function editorStateWithTree(
+  rootUid: string,
+  childUid?: string,
+  grandchildUid?: string,
+): MindMapEditorState {
   return {
     editor_doc: {
       root: {
         data: { uid: rootUid, text: 'root' },
         children: childUid
-          ? [{ data: { uid: childUid, text: 'child' }, children: [] }]
+          ? [{
+              data: { uid: childUid, text: 'child' },
+              children: grandchildUid
+                ? [{ data: { uid: grandchildUid, text: 'leaf' }, children: [] }]
+                : [],
+            }]
           : [],
       },
     },
@@ -66,6 +76,41 @@ describe('memory lookup focus node', () => {
   it('falls back to the palace root when no node was requested', () => {
     expect(resolveMemoryLookupFocusNodeUid(editorStateWithTree('root-1'), null)).toBe('root-1')
   })
+
+  it('centers on the deepest bound node when a question is also bound to the root', () => {
+    expect(
+      resolveMemoryLookupFocusNodeUid(
+        editorStateWithTree('root-1', 'child-2', 'leaf-9'),
+        ['root-1', 'leaf-9', 'child-2'],
+      ),
+    ).toBe('leaf-9')
+  })
+
+  it('prefers the deepest bound node under the opened card', () => {
+    expect(
+      resolveMemoryLookupFocusNodeUid(
+        editorStateWithTree('root-1', 'child-2', 'leaf-9'),
+        ['root-1', 'child-2', 'leaf-9'],
+        'child-2',
+      ),
+    ).toBe('leaf-9')
+  })
+
+  it('resolves memoryAnkiId when data.uid is missing', () => {
+    const state = {
+      editor_doc: {
+        root: {
+          data: { uid: 'root-1', text: 'root' },
+          children: [{ data: { memoryAnkiId: 'bound-legacy', text: 'child' }, children: [] }],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+      editor_fingerprint: 'test',
+    } as MindMapEditorState
+    expect(resolveMemoryLookupFocusNodeUid(state, 'bound-legacy')).toBe('bound-legacy')
+  })
 })
 
 describe('memory lookup bound-node center', () => {
@@ -114,5 +159,18 @@ describe('memory lookup binding pick', () => {
       ),
     ).toBe(12)
     expect(resolveMemoryLookupPalaceId(null, 3)).toBe(3)
+  })
+
+  it('collects every bound node on the current palace, not only the first edge', () => {
+    expect(
+      collectMemoryLookupFocusNodeUids(
+        [
+          { node_uid: 'root-1', palace_id: 3, target_palace_id: 3 },
+          { node_uid: 'leaf-9', palace_id: 3, target_palace_id: 3 },
+          { node_uid: 'other', palace_id: 8, target_palace_id: 8 },
+        ],
+        3,
+      ),
+    ).toEqual(['root-1', 'leaf-9'])
   })
 })

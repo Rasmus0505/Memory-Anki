@@ -75,37 +75,88 @@ function editorDocRoot(doc: unknown): unknown {
 
 function editorNodeUid(node: unknown): string | null {
   if (!node || typeof node !== 'object') return null
-  const uid = (node as { data?: { uid?: unknown } }).data?.uid
-  return typeof uid === 'string' && uid.trim() ? uid.trim() : null
-}
-
-function findEditorNodeByUid(doc: unknown, nodeUid: string): unknown | null {
-  if (!doc || typeof doc !== 'object') return null
-  const stack: unknown[] = [editorDocRoot(doc)]
-  while (stack.length > 0) {
-    const node = stack.pop()
-    if (!node || typeof node !== 'object') continue
-    if (editorNodeUid(node) === nodeUid) return node
-    const children = (node as { children?: unknown }).children
-    if (Array.isArray(children)) stack.push(...children)
+  const data = (node as { data?: { uid?: unknown; memoryAnkiId?: unknown } }).data
+  for (const value of [data?.uid, data?.memoryAnkiId]) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return String(value)
   }
   return null
 }
 
-function editorDocHasNodeUid(doc: unknown, nodeUid: string): boolean {
-  return findEditorNodeByUid(doc, nodeUid) != null
+interface EditorNodeLocation {
+  uid: string
+  depth: number
+  ancestorUids: string[]
 }
 
-/** Prefer the requested node when it exists in the loaded tree; otherwise the palace root. */
+function walkEditorNodeLocations(doc: unknown): EditorNodeLocation[] {
+  const locations: EditorNodeLocation[] = []
+  const visit = (node: unknown, depth: number, ancestorUids: string[]) => {
+    if (!node || typeof node !== 'object') return
+    const uid = editorNodeUid(node)
+    if (uid) locations.push({ uid, depth, ancestorUids })
+    const children = (node as { children?: unknown }).children
+    if (!Array.isArray(children)) return
+    const nextAncestors = uid ? [...ancestorUids, uid] : ancestorUids
+    for (const child of children) visit(child, depth + 1, nextAncestors)
+  }
+  visit(editorDocRoot(doc), 0, [])
+  return locations
+}
+
+export function normalizeMemoryLookupFocusNodeUids(
+  requested?: string | null | readonly (string | null | undefined)[],
+): string[] {
+  const values = Array.isArray(requested) ? requested : [requested]
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const uid = typeof value === 'string' ? value.trim() : ''
+    if (!uid || seen.has(uid)) continue
+    seen.add(uid)
+    result.push(uid)
+  }
+  return result
+}
+
+function pickDeepestEditorNodeUid(
+  locations: readonly EditorNodeLocation[],
+  requestedUids: readonly string[],
+  preferredAncestorUid?: string | null,
+): string | null {
+  if (requestedUids.length === 0 || locations.length === 0) return null
+  const requested = new Set(requestedUids)
+  const matches = locations.filter((location) => requested.has(location.uid))
+  if (matches.length === 0) return null
+  const ancestor = typeof preferredAncestorUid === 'string' ? preferredAncestorUid.trim() : ''
+  const scoped = ancestor
+    ? matches.filter(
+        (location) => location.uid === ancestor || location.ancestorUids.includes(ancestor),
+      )
+    : matches
+  const pool = scoped.length > 0 ? scoped : matches
+  const picked = [...pool].sort((left, right) => {
+    if (right.depth !== left.depth) return right.depth - left.depth
+    return left.uid.localeCompare(right.uid)
+  })[0]
+  return picked?.uid ?? null
+}
+
+/**
+ * Prefer the deepest requested bound node that exists in the loaded tree.
+ * Keeps the full palace; missing requests fall back to the palace root.
+ */
 export function resolveMemoryLookupFocusNodeUid(
   editorState: MindMapEditorState | null,
-  requestedNodeUid?: string | null,
+  requestedNodeUid?: string | null | readonly (string | null | undefined)[],
+  preferredAncestorUid?: string | null,
 ): string | null {
   const rootUid = getRootNodeUid(editorState)
-  const requested = typeof requestedNodeUid === 'string' ? requestedNodeUid.trim() : ''
-  if (!requested) return rootUid
-  if (!editorState?.editor_doc) return requested
-  return editorDocHasNodeUid(editorState.editor_doc, requested) ? requested : rootUid
+  const requested = normalizeMemoryLookupFocusNodeUids(requestedNodeUid)
+  if (requested.length === 0) return rootUid
+  if (!editorState?.editor_doc) return requested[requested.length - 1] ?? rootUid
+  const locations = walkEditorNodeLocations(editorState.editor_doc)
+  return pickDeepestEditorNodeUid(locations, requested, preferredAncestorUid) ?? rootUid
 }
 
 export interface MemoryLookupBindingLike {
@@ -134,6 +185,24 @@ export function pickMemoryLookupBinding<T extends MemoryLookupBindingLike>(
     if (samePalace) return samePalace
   }
   return usable[0] ?? null
+}
+
+/** All bound node UIDs on the preferred palace (else every usable edge). */
+export function collectMemoryLookupFocusNodeUids<T extends MemoryLookupBindingLike>(
+  edges: readonly T[],
+  preferredPalaceId?: number | null,
+): string[] {
+  const usable = edges.filter((edge) => typeof edge.node_uid === 'string' && edge.node_uid.trim())
+  if (usable.length === 0) return []
+  const preferred = positiveId(preferredPalaceId)
+  const scoped = preferred != null
+    ? usable.filter((edge) => {
+        const target = positiveId(edge.target_palace_id) ?? positiveId(edge.palace_id)
+        return target === preferred || positiveId(edge.palace_id) === preferred
+      })
+    : usable
+  const source = scoped.length > 0 ? scoped : usable
+  return normalizeMemoryLookupFocusNodeUids(source.map((edge) => edge.node_uid))
 }
 
 export function resolveMemoryLookupPalaceId(

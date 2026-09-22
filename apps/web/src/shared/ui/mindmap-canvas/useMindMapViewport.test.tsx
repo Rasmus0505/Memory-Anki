@@ -457,6 +457,90 @@ describe('useMindMapViewport first canvas size', () => {
     }
   })
 
+  it('cancels the pending first-size fit when a bound node should be centered', () => {
+    const queued: FrameRequestCallback[] = []
+    const originalRaf = window.requestAnimationFrame
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      queued.push(callback)
+      return queued.length
+    }) as typeof window.requestAnimationFrame
+    const originalResizeObserver = globalThis.ResizeObserver
+    let resizeCallback: ResizeObserverCallback | null = null
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: MockResizeObserver,
+    })
+    let width = 0
+    let height = 0
+    const host = document.createElement('div')
+    Object.defineProperties(host, {
+      clientWidth: { configurable: true, get: () => width },
+      clientHeight: { configurable: true, get: () => height },
+    })
+    const props = buildProps({
+      canvasRef: { current: host },
+      controlledViewport: { x: 4, y: 18, zoom: MINDMAP_DEFAULT_ZOOM },
+      graphNodes: [graphNode('root', null), graphNode('child', 'root')],
+      nodes: [flowNode('root', 0, 0), flowNode('child', 510, 676)],
+      measuredNodeSizesRef: {
+        current: new Map([
+          ['root', { width: 100, height: 40 }],
+          ['child', { width: 100, height: 40 }],
+        ]),
+      },
+      viewCommand: null,
+    })
+    reactFlowMock.fitView.mockClear()
+    reactFlowMock.setCenter.mockClear()
+    try {
+      const { rerender, result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+        initialProps: props,
+      })
+      width = 800
+      height = 600
+      act(() => {
+        resizeCallback?.([], {} as ResizeObserver)
+      })
+      expect(result.current.isCanvasReady).toBe(true)
+      expect(queued.length).toBeGreaterThan(0)
+      expect(reactFlowMock.fitView).not.toHaveBeenCalled()
+
+      act(() => {
+        rerender({
+          ...props,
+          viewCommand: { type: 'center', nodeId: 'child', nonce: 4 },
+        })
+      })
+      expect(reactFlowMock.setCenter).toHaveBeenCalledWith(
+        560,
+        696,
+        expect.objectContaining({ duration: 220 }),
+      )
+
+      const pending = queued.splice(0)
+      act(() => {
+        pending.forEach((callback) => callback(0))
+      })
+      expect(reactFlowMock.fitView).not.toHaveBeenCalled()
+    } finally {
+      window.requestAnimationFrame = originalRaf
+      Object.defineProperty(globalThis, 'ResizeObserver', {
+        configurable: true,
+        writable: true,
+        value: originalResizeObserver,
+      })
+    }
+  })
+
   it('does not steal a restored camera when canvas size becomes positive', async () => {
     const originalResizeObserver = globalThis.ResizeObserver
     let resizeCallback: ResizeObserverCallback | null = null
