@@ -1513,6 +1513,16 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must compose "
                 f"public facades via `{required}`."
             )
+    if "list_trusted_due_units_for_queue" not in source:
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: must read active due "
+            "units via `list_trusted_due_units_for_queue` without parsing editor_doc."
+        )
+    if "tail_pending" not in source or "take_study_window" not in source:
+        errors.append(
+            f"{queue_service.relative_to(REPO_ROOT).as_posix()}: cold-start "
+            "`study_window` must set `tail_pending` via `take_study_window`."
+        )
     # Prefer public/.api surfaces over private application layers.
     if not (
         "memory_anki.modules.content.api" in source
@@ -1571,6 +1581,8 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "FreestyleTrainingStreams",
             "FreestyleTrainingMix",
             "subject_ids",
+            "study_window",
+            "tail_pending",
         ):
             if marker not in contract_source:
                 errors.append(
@@ -1661,6 +1673,10 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "append_today_cards",
             "replan_remaining",
             "entered_on",
+            "drop_vanished_unstarted",
+            "list_trusted_due_units_for_queue",
+            "tail_pending",
+            "must not cover the feed once cards exist",
         ):
             if marker not in feed_source and marker != "scheduledBase":
                 errors.append(
@@ -1684,6 +1700,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "queue_construction_signature",
             "_latest_active_for_workspace",
             "plan_is_fully_handled",
+            "drop_vanished_unstarted",
         ):
             if marker not in service_source:
                 errors.append(
@@ -1719,6 +1736,7 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             "entered_on",
             "_is_viewable_current",
             "live_retry_sources",
+            "drop_vanished_unstarted",
         ):
             if marker not in domain_source:
                 target = round_rebind if marker in {"append_today_cards", "replan_remaining"} else round_domain
@@ -1776,6 +1794,13 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{page_path.relative_to(REPO_ROOT).as_posix()}: "
                 "the 重练 card badge must distinguish completed vs unfinished chrome."
             )
+        if "<FreestyleLoadingState" in page_source and "cards.length > 0 ?" not in page_source.split(
+            "<FreestyleLoadingState", 1
+        )[0]:
+            errors.append(
+                f"{page_path.relative_to(REPO_ROOT).as_posix()}: "
+                "loading must not cover the feed once cards exist."
+            )
         if "isSequentialPalaceBlocked(" in page_source:
             errors.append(
                 f"{page_path.relative_to(REPO_ROOT).as_posix()}: "
@@ -1825,6 +1850,11 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
                 "must not auto-start the next round via planHasNewDueWork on "
                 "refresh, restart, or non-silent rebuild."
+            )
+        if "studyWindow" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "a cold start must request `studyWindow`; an existing round paints first."
             )
         if "rebuildKeepingProgress" not in hook_source:
             errors.append(
@@ -1968,6 +1998,19 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
                 "new rounds must not copy overlay quiz progress."
             )
+        if "review_palace_ids" not in service_source:
+            errors.append(
+                f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay ensure must limit questions to this round's review palaces."
+            )
+    overlay_service = API_SRC / "modules" / "practice" / "application" / "overlay_quiz_service.py"
+    if overlay_service.exists():
+        overlay_pack_source = overlay_service.read_text(encoding="utf-8", errors="ignore")
+        if "list_active_palace_ids_by_subject" in overlay_pack_source:
+            errors.append(
+                f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay quiz must not expand a subject into every palace."
+            )
     canvas = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "MindMapCanvas.tsx"
     if canvas.exists():
         canvas_source = canvas.read_text(encoding="utf-8", errors="ignore")
@@ -2015,6 +2058,118 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document 英语 immediately left of 文字."
             )
+        if "not the subject union" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay quiz must document round review palaces, not the subject union."
+            )
+
+
+def check_question_practice_has_no_lifecycle_gate(errors: list[str]) -> None:
+    """Every non-deleted question is practiceable. Disabled AI entry points stay rejected."""
+    disabled = "AI 出题、讲解、纠错和自由提问已禁用"
+
+    def rel(path: Path) -> str:
+        try:
+            return path.relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    projections = (
+        API_SRC / "modules" / "quiz" / "application" / "freestyle_projection.py",
+        API_SRC / "modules" / "practice" / "application" / "quiz_cards.py",
+    )
+    for path in projections:
+        if not path.exists():
+            errors.append(f"{rel(path)}: question projection is missing.")
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if 'lifecycle_status == "published"' in source:
+            errors.append(
+                f"{rel(path)}: practice must not require lifecycle_status == \"published\"."
+            )
+
+    overlay_service = API_SRC / "modules" / "practice" / "application" / "overlay_quiz_service.py"
+    if overlay_service.exists():
+        source = overlay_service.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("filter_quizzes_by_mastery_buckets", "DEFAULT_QUIZ_CARD_LIMIT"):
+            if marker in source:
+                errors.append(
+                    f"{rel(overlay_service)}: overlay quiz must not use `{marker}`."
+                )
+
+    queue_builder = API_SRC / "modules" / "practice" / "domain" / "queue_builder.py"
+    if queue_builder.exists():
+        source = queue_builder.read_text(encoding="utf-8", errors="ignore")
+        if "scoped_quizzes = filter_quizzes_by_mastery_buckets" in source:
+            errors.append(
+                f"{rel(queue_builder)}: quiz membership must not filter mastery buckets."
+            )
+
+    overlay_domain = API_SRC / "modules" / "practice" / "domain" / "overlay_quiz.py"
+    if overlay_domain.exists():
+        source = overlay_domain.read_text(encoding="utf-8", errors="ignore")
+        for marker in ('"mastery_buckets":', '"overlay_question_range":'):
+            if marker in source:
+                errors.append(
+                    f"{rel(overlay_domain)}: overlay scope signature must not include {marker}."
+                )
+
+    writes = API_SRC / "modules" / "quiz" / "application" / "questions" / "writes.py"
+    if writes.exists():
+        source = writes.read_text(encoding="utf-8", errors="ignore")
+        if 'row.lifecycle_status = "candidate"' in source:
+            errors.append(f"{rel(writes)}: imports must not force lifecycle_status candidate.")
+
+    config_form = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleTrainingConfigForm.tsx"
+    )
+    if config_form.exists():
+        source = config_form.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("题目掌握度", "薄弱题优先"):
+            if marker in source:
+                errors.append(f"{rel(config_form)}: must not offer {marker}.")
+
+    dialog = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
+    if dialog.exists():
+        source = dialog.read_text(encoding="utf-8", errors="ignore")
+        if "已到期题目" in source:
+            errors.append(f"{rel(dialog)}: overlay setup must not offer 已到期题目.")
+
+    manage = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "ui"
+        / "palace-quiz"
+        / "components"
+        / "PalaceQuizManagePanel.tsx"
+    )
+    if manage.exists():
+        source = manage.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("审核发布", "待审核"):
+            if marker in source:
+                errors.append(f"{rel(manage)}: manage panel must not offer {marker}.")
+
+    disabled_files = (
+        API_SRC / "modules" / "quiz" / "presentation" / "router.py",
+        API_SRC / "modules" / "quiz" / "presentation" / "workspace_router.py",
+        API_SRC / "modules" / "ai_learning" / "presentation" / "router.py",
+        WEB_SRC / "pages" / "create" / "BatchGenerationWorkspacePage.tsx",
+    )
+    for path in disabled_files:
+        if not path.exists():
+            errors.append(f"{rel(path)}: disabled AI entry file is missing.")
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if disabled not in source:
+            errors.append(f"{rel(path)}: must reject with `{disabled}`.")
 
 
 def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
@@ -2410,6 +2565,44 @@ def check_freestyle_rating_last_write_wins(errors: list[str]) -> None:
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that the latest rating reopens a dead glance."
             )
+
+
+def check_freestyle_round_sheet_views(errors: list[str]) -> None:
+    """本轮安排 must switch between palace groups and the progress-rail order."""
+    sheet = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundSheet.tsx"
+    )
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if not sheet.exists():
+        errors.append(
+            f"{sheet.relative_to(REPO_ROOT).as_posix()}: round arrangement sheet is required."
+        )
+        return
+    source = sheet.read_text(encoding="utf-8", errors="ignore")
+    for marker in ("按宫殿", "按进度", "buildFreestyleProgressSummary"):
+        if marker not in source:
+            errors.append(
+                f"{sheet.relative_to(REPO_ROOT).as_posix()}: "
+                "本轮安排 must switch between palace groups and progress-rail order "
+                f"(`{marker}`)."
+            )
+    if not doc.exists():
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: freestyle feed doc is required."
+        )
+        return
+    doc_source = doc.read_text(encoding="utf-8", errors="ignore")
+    if "按宫殿" not in doc_source or "按进度" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "本轮安排 must document palace and progress-rail views."
+        )
 
 
 def check_freestyle_viewing_playhead(errors: list[str]) -> None:
@@ -3095,7 +3288,10 @@ def check_quiz_question_marks(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "must not keep the 4-level quiz rating."
             )
-        if "QuizQuestionMarkToggle" not in host_source:
+        offers_mark = "QuizQuestionMarkToggle" in host_source or (
+            "QuizQuestionInteraction" in host_source and "mark={" in host_source
+        )
+        if not offers_mark:
             errors.append(
                 f"{host.relative_to(REPO_ROOT).as_posix()}: must offer mark/unmark."
             )
@@ -3136,6 +3332,144 @@ def check_quiz_question_marks(errors: list[str]) -> None:
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must not document the removed due-index mark."
+            )
+
+
+def check_quiz_node_count_badges(errors: list[str]) -> None:
+    """Corner badges split objective/subjective totals and do not shrink when answered."""
+    aggregation = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "ui"
+        / "palace-quiz"
+        / "model"
+        / "quizNodeBindingAggregation.ts"
+    )
+    badge = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "NodeCountBadge.tsx"
+    chrome = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "NodeCardChrome.tsx"
+    binding = API_SRC / "modules" / "quiz" / "application" / "node_binding.py"
+    mark_sync = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "model"
+        / "quizQuestionMarkSync.ts"
+    )
+    mark_submit = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "model"
+        / "submitQuizQuestionMark.ts"
+    )
+    hook = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "ui"
+        / "palace-quiz"
+        / "hooks"
+        / "usePalaceQuizNodeBindings.ts"
+    )
+    boundary = REPO_ROOT / "docs" / "architecture" / "palace-quiz-boundary.md"
+    if not aggregation.exists():
+        errors.append(
+            f"{aggregation.relative_to(REPO_ROOT).as_posix()}: quiz node count badges are required."
+        )
+        return
+    source = aggregation.read_text(encoding="utf-8", errors="ignore")
+    badge_fn = source.split("export function buildCountBadgeByNodeUid", 1)[-1]
+    badge_fn = badge_fn.split("\nexport function ", 1)[0]
+    if (
+        "客观" not in source
+        or "主观" not in source
+        or "short_answer" not in source
+        or "'subjective'" not in badge_fn
+        or "'objective'" not in badge_fn
+    ):
+        errors.append(
+            f"{aggregation.relative_to(REPO_ROOT).as_posix()}: "
+            "corner badges must split 客观 and 主观 (short_answer) counts."
+        )
+    if "completedQuestionIds" in badge_fn:
+        errors.append(
+            f"{aggregation.relative_to(REPO_ROOT).as_posix()}: "
+            "corner badge counts must not shrink with session completion."
+        )
+    open_fn = source.split("export function getQuestionIdsForNode", 1)[-1]
+    open_fn = open_fn.split("\nexport function ", 1)[0]
+    if "kind" not in open_fn or "isSubjectiveQuestionType" not in open_fn:
+        errors.append(
+            f"{aggregation.relative_to(REPO_ROOT).as_posix()}: "
+            "opening a corner badge must keep only that objective or subjective side."
+        )
+    badge_source = badge.read_text(encoding="utf-8", errors="ignore") if badge.exists() else ""
+    chrome_source = chrome.read_text(encoding="utf-8", errors="ignore") if chrome.exists() else ""
+    passes_kind = "countBadge.kind" in chrome_source or (
+        "onBadgeClick?.(countBadge.kind)" in badge_source
+        and "onCountBadgeClick?.(nodeId, kind)" in chrome_source
+    )
+    if chrome.exists() and not passes_kind:
+        errors.append(
+            f"{chrome.relative_to(REPO_ROOT).as_posix()}: "
+            "corner badge clicks must pass the objective or subjective kind."
+        )
+    if not badge.exists() or "bg-rose-600" not in badge.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{badge.relative_to(REPO_ROOT).as_posix()}: "
+            "a corner badge that contains a marked question must use a rose fill."
+        )
+    if badge.exists() and "bg-sky-600" not in badge.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{badge.relative_to(REPO_ROOT).as_posix()}: "
+            "the subjective corner badge must stay sky when it has no marked question."
+        )
+    if not chrome.exists() or "countBadges" not in chrome.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{chrome.relative_to(REPO_ROOT).as_posix()}: "
+            "mindmap cards must render the objective and subjective corner badges together."
+        )
+    if not binding.exists():
+        errors.append(f"{binding.relative_to(REPO_ROOT).as_posix()}: node binding serializer is required.")
+    else:
+        binding_source = binding.read_text(encoding="utf-8", errors="ignore")
+        if '"question_type"' not in binding_source or '"marked"' not in binding_source:
+            errors.append(
+                f"{binding.relative_to(REPO_ROOT).as_posix()}: "
+                "node binding edges must include question_type and marked for corner badges."
+            )
+    if not mark_sync.exists() or "publishQuizQuestionMarked" not in mark_sync.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{mark_sync.relative_to(REPO_ROOT).as_posix()}: "
+            "question mark changes must publish so corner badges can recolor."
+        )
+    if not mark_submit.exists() or "publishQuizQuestionMarked" not in mark_submit.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{mark_submit.relative_to(REPO_ROOT).as_posix()}: "
+            "saving a question mark must publish the corner-badge update."
+        )
+    if not hook.exists() or "subscribeQuizQuestionMarked" not in hook.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{hook.relative_to(REPO_ROOT).as_posix()}: "
+            "node badge hosts must subscribe to question mark changes."
+        )
+    if boundary.exists():
+        boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
+        if "do not shrink" not in boundary_source or "主观" not in boundary_source:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document stable objective/subjective corner badge counts."
             )
 
 
@@ -3995,6 +4329,7 @@ def main() -> int:
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
     check_quiz_question_marks(errors)
+    check_quiz_node_count_badges(errors)
     check_quiz_create_requires_node_binding(errors)
     check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)
@@ -4013,6 +4348,7 @@ def main() -> int:
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
     check_freestyle_scope_quiz_overlay(errors)
+    check_question_practice_has_no_lifecycle_gate(errors)
     check_freestyle_knowledge_entry_scope(errors)
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
@@ -4020,6 +4356,7 @@ def main() -> int:
     check_freestyle_rating_retap_clears(errors)
     check_freestyle_passed_unit_reopen(errors)
     check_freestyle_rating_last_write_wins(errors)
+    check_freestyle_round_sheet_views(errors)
     check_freestyle_viewing_playhead(errors)
     check_freestyle_complete_slot_reachable(errors)
     check_knowledge_context_boundaries(errors)

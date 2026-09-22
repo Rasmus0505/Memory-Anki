@@ -96,6 +96,9 @@ def test_freestyle_facade_requires_round_plan_public_surface(
                 "streams",
                 "list_active_palace_ids_by_subject_ids",
                 "subject_ids",
+                "list_trusted_due_units_for_queue",
+                "tail_pending",
+                "take_study_window",
             ]
         ),
     )
@@ -105,7 +108,7 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     )
     write_file(
         web_src / "shared" / "api" / "contracts" / "freestyle.ts",
-        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix subject_ids\n",
+        "FreestyleTrainingMode FreestyleTrainingStreams FreestyleTrainingMix subject_ids study_window tail_pending\n",
     )
     write_file(
         web_src / "modules" / "practice" / "public.ts",
@@ -128,17 +131,18 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill faint amber fill not only the HUD rail queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport must not remount the map at the root one live retry must not mint a second copy overlapping identities append_today_cards replan_remaining entered_on\n",
+        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill faint amber fill not only the HUD rail queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport must not remount the map at the root one live retry must not mint a second copy overlapping identities append_today_cards replan_remaining entered_on drop_vanished_unstarted list_trusted_due_units_for_queue tail_pending must not cover the feed once cards exist\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
         "expected_version = 1\noperation_id = 'op'\nplan_json = '{}'\nqueue_construction_signature = ''\n"
         "_latest_active_for_workspace = True\nplan_is_fully_handled = True\n"
+        "drop_vanished_unstarted\n"
         "if plan_is_fully_handled(next_plan) and not persist_config:\n    return _payload(row)\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\ndef _collapse_retries(): pass\ndef append_today_cards(): pass\ndef replan_remaining(): pass\nentered_on = ''\n_is_viewable_current = True\nlive_retry_sources = set()\n",
+        "def leave_card(): pass\nretry_attempt = 1\ndef insert_retry_after_gap(): pass\ndef _collapse_retries(): pass\ndef append_today_cards(): pass\ndef replan_remaining(): pass\nentered_on = ''\n_is_viewable_current = True\nlive_retry_sources = set()\ndef drop_vanished_unstarted(): pass\n",
     )
     write_file(
         api_src / "modules" / "practice" / "presentation" / "router.py",
@@ -162,7 +166,8 @@ def test_freestyle_facade_requires_round_plan_public_surface(
         "syncCompletedIdsToRoundPlan\n"
         "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n"
         "startFreestyleRoundApi\n"
-        "forceStart\n",
+        "forceStart\n"
+        "studyWindow\n",
     )
     write_file(
         web_src / "modules" / "practice" / "domain" / "queueState.ts",
@@ -2822,10 +2827,46 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
         "def start_new_round():\n    return {}\n",
     )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "list_active_palace_ids_by_subject_ids(session, [5])\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "英语 is immediately left of **文字**.\n",
+    )
     errors: list[str] = []
     check_architecture.check_freestyle_scope_quiz_overlay(errors)
     assert any("park out-of-scope progress" in error for error in errors)
     assert any("empty overlay quiz progress" in error for error in errors)
+    assert any("this round's review palaces" in error for error in errors)
+    assert any("must not expand a subject" in error for error in errors)
+    assert any("not the subject union" in error for error in errors)
+
+
+def test_question_practice_has_no_lifecycle_gate(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "freestyle_projection.py",
+        'query.filter(PalaceQuizQuestion.lifecycle_status == "published")\n',
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "scoped = filter_quizzes_by_mastery_buckets(quizzes)\nlimit = DEFAULT_QUIZ_CARD_LIMIT\n",
+    )
+    write_file(
+        web_src / "pages" / "create" / "BatchGenerationWorkspacePage.tsx",
+        "export default function Page() { return null }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_question_practice_has_no_lifecycle_gate(errors)
+    assert any("lifecycle_status" in error for error in errors)
+    assert any("filter_quizzes_by_mastery_buckets" in error for error in errors)
+    assert any("AI 出题、讲解、纠错和自由提问已禁用" in error for error in errors)
 
 
 def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome(
@@ -2999,6 +3040,49 @@ def test_freestyle_viewing_playhead_accepts_independent_tick(
 
     errors: list[str] = []
     check_architecture.check_freestyle_viewing_playhead(errors)
+
+    assert errors == []
+
+
+def test_freestyle_round_sheet_views_reject_palace_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx",
+        "export function FreestyleRoundSheet() { return null }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "The sheet groups entries by palace.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_round_sheet_views(errors)
+
+    assert any("progress-rail order" in error for error in errors)
+    assert any("palace and progress-rail views" in error for error in errors)
+
+
+def test_freestyle_round_sheet_views_accept_header_toggle(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx",
+        "按宫殿\n按进度\nbuildFreestyleProgressSummary\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "A header toggle switches 「按宫殿」 and 「按进度」.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_round_sheet_views(errors)
 
     assert errors == []
 
