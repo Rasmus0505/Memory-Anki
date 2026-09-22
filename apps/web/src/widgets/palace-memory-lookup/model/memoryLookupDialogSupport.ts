@@ -15,7 +15,34 @@ export function shouldBlockMemoryLookupClose(input: {
   return !input.nextOpen && (input.pinned || input.mindMapFullscreenActive)
 }
 
-export type MemoryLookupPreviewMode = 'view' | 'flip'
+export type MemoryLookupPreviewMode = 'view' | 'flip' | 'edit'
+
+export type MemoryLookupEditSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+export function describeMemoryLookupPreview(input: {
+  mode: MemoryLookupPreviewMode
+  centeredOnBinding: boolean
+  compact?: boolean
+  saveStatus?: MemoryLookupEditSaveStatus
+  saveError?: string
+}) {
+  if (input.mode === 'flip') {
+    return input.compact
+      ? '翻卡模式'
+      : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'
+  }
+  if (input.mode === 'edit') {
+    if (input.saveStatus === 'saving') return '编辑模式：正在保存修改。'
+    if (input.saveStatus === 'error') {
+      const detail = input.saveError?.trim()
+      return detail ? `编辑模式：保存失败。${detail}` : '编辑模式：保存失败。'
+    }
+    return '编辑模式：直接修改节点，改动会自动保存。'
+  }
+  return input.centeredOnBinding
+    ? '只读脑图预览 · 绑定节点已置于中央'
+    : '只读脑图预览'
+}
 
 export function createEmptyGroupedData(): PalaceGroupedListResponse {
   return {

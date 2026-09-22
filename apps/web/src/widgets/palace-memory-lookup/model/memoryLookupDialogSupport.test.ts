@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
   collectMemoryLookupFocusNodeUids,
+  describeMemoryLookupPreview,
   pickMemoryLookupBinding,
   resolveMemoryLookupFocusNodeUid,
   resolveMemoryLookupPalaceId,
@@ -33,6 +34,31 @@ function editorStateWithTree(
     editor_fingerprint: 'test',
   } as MindMapEditorState
 }
+
+describe('memory lookup preview caption', () => {
+  it('describes view, flip, and edit without clipping the palace', () => {
+    expect(describeMemoryLookupPreview({
+      mode: 'view',
+      centeredOnBinding: true,
+    })).toBe('只读脑图预览 · 绑定节点已置于中央')
+    expect(describeMemoryLookupPreview({
+      mode: 'flip',
+      centeredOnBinding: false,
+      compact: true,
+    })).toBe('翻卡模式')
+    expect(describeMemoryLookupPreview({
+      mode: 'edit',
+      centeredOnBinding: false,
+      saveStatus: 'saving',
+    })).toBe('编辑模式：正在保存修改。')
+    expect(describeMemoryLookupPreview({
+      mode: 'edit',
+      centeredOnBinding: false,
+      saveStatus: 'error',
+      saveError: '版本冲突',
+    })).toBe('编辑模式：保存失败。版本冲突')
+  })
+})
 
 describe('memory lookup dialog lifecycle', () => {
   it('blocks dialog close while the embedded mind map is fullscreen', () => {

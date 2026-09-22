@@ -26,6 +26,8 @@ import type {
   MindMapEditorState,
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
+
+function ignoreLookupEditorChange(_nextState: MindMapEditorState) {}
 import {
   calculateResizedMemoryLookupLayout,
   clampMemoryLookupLayoutToViewport,
@@ -38,6 +40,7 @@ import {
   type MemoryLookupResizeState,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupLayout'
 import { MindMapEditorSurface } from '@/modules/content/public'
+import { useDwellFragmentOverride } from '@/modules/session/public'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -51,6 +54,7 @@ import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayou
 import {
   buildEditorState,
   createEmptyGroupedData,
+  describeMemoryLookupPreview,
   flattenPalaces,
   getPalaceContext,
   getPalaceTitle,
@@ -61,6 +65,7 @@ import {
   useMemoryLookupNarrowViewport,
   type MemoryLookupPreviewMode,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupDialogSupport'
+import { useMemoryLookupEditDocument } from '@/widgets/palace-memory-lookup/model/memoryLookupEditSession'
 
 export function PalaceMemoryLookupDialog({
   open,
@@ -87,8 +92,18 @@ export function PalaceMemoryLookupDialog({
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
   const [selectedPalaceId, setSelectedPalaceId] = useState<number | null>(currentPalaceId ?? null)
+  const dwellPalaceId = selectedPalaceId ?? currentPalaceId ?? null
+  useDwellFragmentOverride(open, {
+    scene: 'practice',
+    kind: 'practice',
+    title: '查看宫殿',
+    palaceId: dwellPalaceId,
+    sourceKind: dwellPalaceId != null ? 'palace' : null,
+    priority: 2,
+  })
   const [previewTitle, setPreviewTitle] = useState('')
   const [previewState, setPreviewState] = useState<MindMapEditorState | null>(null)
+  const [loadedPalaceId, setLoadedPalaceId] = useState<number | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [layout, setLayout] = useState<MemoryLookupLayout>(() => readMemoryLookupLayout())
@@ -160,9 +175,16 @@ export function PalaceMemoryLookupDialog({
     () => (centeredOnBinding && focusTargetUid ? [focusTargetUid] : []),
     [centeredOnBinding, focusTargetUid],
   )
+  const editSource = loadedPalaceId === selectedPalaceId ? previewState : null
+  const editDocument = useMemoryLookupEditDocument(selectedPalaceId, editSource)
+  const browsingEditorState = editDocument.editorState ?? previewState
+  useEffect(() => {
+    if (open && previewMode === 'edit') return
+    void editDocument.flush()
+  }, [editDocument.flush, open, previewMode])
   const revealSession = useRevealSession({
     title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
-    editorState: previewState,
+    editorState: browsingEditorState,
   })
   const revealRoot = revealSession.root
   const setRevealMap = revealSession.setRevealMap
@@ -276,22 +298,26 @@ export function PalaceMemoryLookupDialog({
   useEffect(() => {
     if (!open || selectedPalaceId == null) {
       setPreviewState(null)
+      setLoadedPalaceId(null)
       return
     }
     let cancelled = false
     const loadPreview = async () => {
       setPreviewLoading(true)
       setPreviewError('')
+      setLoadedPalaceId(null)
       try {
         const response = await getPalaceEditorApi(selectedPalaceId)
         if (cancelled) return
         setPreviewTitle(response.palace?.title || '记忆宫殿')
         const nextState = buildEditorState(response)
+        setLoadedPalaceId(selectedPalaceId)
         setPreviewState(nextState)
       } catch (error) {
         if (cancelled) return
         setPreviewTitle('记忆宫殿')
         setPreviewState(null)
+        setLoadedPalaceId(null)
         setPreviewError(error instanceof Error ? error.message : '加载宫殿脑图失败。')
       } finally {
         if (!cancelled) setPreviewLoading(false)
@@ -418,6 +444,19 @@ export function PalaceMemoryLookupDialog({
   }
 
   const previewHeading = selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'
+  const previewCaption = describeMemoryLookupPreview({
+    mode: previewMode,
+    centeredOnBinding,
+    saveStatus: editDocument.saveStatus,
+    saveError: editDocument.saveError,
+  })
+  const compactPreviewCaption = describeMemoryLookupPreview({
+    mode: previewMode,
+    centeredOnBinding,
+    compact: true,
+    saveStatus: editDocument.saveStatus,
+    saveError: editDocument.saveError,
+  })
   const renderSearchInput = (inputClassName?: string) => (
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -516,6 +555,15 @@ export function PalaceMemoryLookupDialog({
         >
           翻卡模式
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={previewMode === 'edit' ? 'default' : 'ghost'}
+          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
+          onClick={() => setPreviewMode('edit')}
+        >
+          编辑模式
+        </Button>
       </div>
       {previewMode === 'flip' ? (
         <Button
@@ -572,18 +620,25 @@ export function PalaceMemoryLookupDialog({
         ) : (
           <MindMapEditorSurface
             key={`quiz-memory-lookup-${selectedPalaceId}-view-${palaceRootUid || 'root'}`}
-            editorState={previewState}
-            readonly
+            editorState={browsingEditorState}
+            readonly={previewMode !== 'edit'}
             forceExpanded
             presentationStrategy={'viewport-only'}
             mobileViewPolicy="map"
+            sceneChrome={previewMode === 'edit' ? 'edit' : 'default'}
+            sceneTransitionKey={`memory-lookup-browse:${selectedPalaceId ?? 'none'}`}
             onFullscreenChange={handleMindMapFullscreenChange}
             focusRequestNodeUid={focusTargetUid}
             focusRequestNonce={rootFocusNonce}
             highlightedNodeUids={highlightedNodeUids}
             initialViewPolicy="reset"
+            preserveViewOnSync
             sceneTransitionFallbackNodeId={focusTargetUid}
-            onEditorStateChange={() => {}}
+            onEditorStateChange={
+              previewMode === 'edit'
+                ? editDocument.handleEditorStateChange
+                : ignoreLookupEditorChange
+            }
             className="h-full min-h-0 w-full border-0"
           />
         )
@@ -633,10 +688,11 @@ export function PalaceMemoryLookupDialog({
             <div className="mb-3 flex min-h-10 shrink-0 items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">{previewHeading}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {previewMode === 'view'
-                    ? (centeredOnBinding ? '只读脑图预览 · 绑定节点已置于中央' : '只读脑图预览')
-                    : '翻卡模式'}
+                <div className={cn(
+                  'truncate text-xs text-muted-foreground',
+                  previewMode === 'edit' && editDocument.saveStatus === 'error' && 'text-destructive',
+                )}>
+                  {compactPreviewCaption}
                 </div>
               </div>
               {renderPreviewControls(true)}
@@ -783,10 +839,11 @@ export function PalaceMemoryLookupDialog({
                   <div className="truncate text-sm font-semibold">
                     {previewHeading}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {previewMode === 'view'
-                      ? (centeredOnBinding ? '只读脑图预览 · 绑定节点已置于中央' : '只读脑图预览')
-                      : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'}
+                  <div className={cn(
+                    'text-xs text-muted-foreground',
+                    previewMode === 'edit' && editDocument.saveStatus === 'error' && 'text-destructive',
+                  )}>
+                    {previewCaption}
                   </div>
                 </div>
                 {renderPreviewControls()}
