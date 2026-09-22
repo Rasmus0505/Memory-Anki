@@ -280,6 +280,11 @@ REQUIRED_STORAGE_KEYS = {
     "runtime_active_instances",
     "migration_state",
 }
+REQUIRED_STORAGE_ROOTS = {
+    "learning": "学习数据",
+    "attachments": "学科附件",
+    "cache": "日志缓存",
+}
 PERSONAL_ABSOLUTE_PATH_PATTERNS = (
     re.compile(r"[A-Za-z]:\\Users\\"),
     re.compile(r"D:\\"),
@@ -1152,6 +1157,16 @@ def check_mypy_typed_boundary_modules(errors: list[str]) -> None:
 
 def check_storage_layout_contract(errors: list[str]) -> None:
     payload = json.loads(STORAGE_LAYOUT_PATH.read_text(encoding="utf-8", errors="ignore"))
+    roots = payload.get("roots")
+    if not isinstance(roots, dict):
+        errors.append("apps/api/storage-layout.json: roots must declare learning/attachments/cache folders.")
+    else:
+        for key, expected in REQUIRED_STORAGE_ROOTS.items():
+            actual = str(roots.get(key) or "")
+            if actual != expected:
+                errors.append(
+                    f"apps/api/storage-layout.json: roots.{key} must be `{expected}`."
+                )
     items = payload.get("managed_items", [])
     if not isinstance(items, list):
         errors.append("apps/api/storage-layout.json: managed_items must be a list.")
@@ -1179,6 +1194,19 @@ def check_storage_layout_contract(errors: list[str]) -> None:
             errors.append(
                 f"apps/api/storage-layout.json: `{key}` must explicitly declare backup true/false."
             )
+        if key == "database" and not relative_path.startswith("学习数据/"):
+            errors.append(
+                "apps/api/storage-layout.json: database must live under the 学习数据 root."
+            )
+        if key == "attachments" and relative_path != "学科附件":
+            errors.append(
+                "apps/api/storage-layout.json: attachments must be the 学科附件 root."
+            )
+        if key in {"ai_call_logs", "import_jobs", "quiz_generation", "backups_full", "backups_rescue", "runtime_active_instances"}:
+            if not relative_path.startswith("日志缓存/"):
+                errors.append(
+                    f"apps/api/storage-layout.json: `{key}` must live under the 日志缓存 root."
+                )
     missing = sorted(REQUIRED_STORAGE_KEYS - keys)
     for key in missing:
         errors.append(
@@ -2810,6 +2838,16 @@ def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
             f"{support.relative_to(REPO_ROOT).as_posix()}: "
             "must define `resolveMemoryLookupFocusNodeUid` so bound nodes can be focused in the full palace."
         )
+    if "collectMemoryLookupFocusNodeUids" not in support_source:
+        errors.append(
+            f"{support.relative_to(REPO_ROOT).as_posix()}: "
+            "must collect every bound node uid with `collectMemoryLookupFocusNodeUids`."
+        )
+    if "pickDeepestEditorNodeUid" not in support_source:
+        errors.append(
+            f"{support.relative_to(REPO_ROOT).as_posix()}: "
+            "must center the deepest bound node, not the first or root binding."
+        )
     if "centerMemoryLookupEditorDocAtNode" in support_source:
         errors.append(
             f"{support.relative_to(REPO_ROOT).as_posix()}: "
@@ -2830,6 +2868,11 @@ def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
             errors.append(
                 f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
                 "must resolve the bound node with `resolveMemoryLookupFocusNodeUid`."
+            )
+        if "focusNodeUids" not in dialog_source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "must accept every bound node uid via `focusNodeUids`."
             )
         if "centerMemoryLookupEditorDocAtNode" in dialog_source:
             errors.append(
@@ -2983,6 +3026,119 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
             )
 
 
+def check_quiz_question_marks(errors: list[str]) -> None:
+    """Quiz practice is marked or unmarked, and no longer writes a 4-level rating schedule."""
+    rating_bar = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "ui"
+        / "QuizQuestionRatingBar.tsx"
+    )
+    if rating_bar.exists():
+        errors.append(
+            f"{rating_bar.relative_to(REPO_ROOT).as_posix()}: "
+            "the 4-level quiz rating bar must stay deleted."
+        )
+    pager = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "ui"
+        / "QuizQuestionIndexPager.tsx"
+    )
+    if not pager.exists():
+        errors.append(
+            f"{pager.relative_to(REPO_ROOT).as_posix()}: question index pager is required."
+        )
+    else:
+        pager_source = pager.read_text(encoding="utf-8", errors="ignore")
+        if "bg-rose-600" not in pager_source or "marked" not in pager_source:
+            errors.append(
+                f"{pager.relative_to(REPO_ROOT).as_posix()}: "
+                "marked question numbers must use a rose fill."
+            )
+        if "已到期" in pager_source:
+            errors.append(
+                f"{pager.relative_to(REPO_ROOT).as_posix()}: "
+                "question numbers must not present the removed due schedule."
+            )
+    toggle = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "ui"
+        / "QuizQuestionMarkToggle.tsx"
+    )
+    if not toggle.exists() or "取消标记" not in toggle.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{toggle.relative_to(REPO_ROOT).as_posix()}: mark/unmark toggle is required."
+        )
+    hosts = (
+        WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        WEB_SRC / "modules" / "quiz" / "ui" / "palace-quiz" / "components" / "palaceQuizCards.tsx",
+    )
+    for host in hosts:
+        if not host.exists():
+            errors.append(f"{host.relative_to(REPO_ROOT).as_posix()}: quiz mark host is required.")
+            continue
+        host_source = host.read_text(encoding="utf-8", errors="ignore")
+        if "QuizQuestionRatingBar" in host_source or "submitQuizQuestionRating" in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "must not keep the 4-level quiz rating."
+            )
+        if "QuizQuestionMarkToggle" not in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: must offer mark/unmark."
+            )
+    router = API_SRC / "modules" / "quiz" / "presentation" / "router.py"
+    if router.exists():
+        router_source = router.read_text(encoding="utf-8", errors="ignore")
+        if "schedule-ratings" in router_source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: "
+                "the quiz schedule-ratings route must stay removed."
+            )
+        if "set_question_marked" not in router_source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: the quiz mark route is required."
+            )
+    scheduler = API_SRC / "modules" / "quiz" / "application" / "question_scheduler.py"
+    if scheduler.exists():
+        scheduler_source = scheduler.read_text(encoding="utf-8", errors="ignore")
+        if "legacy_unpassed_due_counts_as_marked" not in scheduler_source:
+            errors.append(
+                f"{scheduler.relative_to(REPO_ROOT).as_posix()}: "
+                "legacy 忘记/困难 mark migration rule is required."
+            )
+        if "apply_first_learning_rating" in scheduler_source:
+            errors.append(
+                f"{scheduler.relative_to(REPO_ROOT).as_posix()}: "
+                "quiz ratings must not write a first-learning schedule."
+            )
+    boundary = REPO_ROOT / "docs" / "architecture" / "palace-quiz-boundary.md"
+    if boundary.exists():
+        boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
+        if "rose fill" not in boundary_source:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must document the marked question-number style."
+            )
+        if "Due questions use an amber index mark" in boundary_source:
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+                "must not document the removed due-index mark."
+            )
+
+
 def check_quiz_create_requires_node_binding(errors: list[str]) -> None:
     """Palace-owned question create must ensure ≥1 mindmap node binding (root default)."""
     node_binding = PALACE_QUIZ_APPLICATION / "node_binding.py"
@@ -3100,6 +3256,38 @@ def check_settings_module_boundaries(errors: list[str]) -> None:
             relative = path.relative_to(REPO_ROOT)
             errors.append(
                 f"{relative}: settings modules must not import content modules; move shared prompt/config helpers to settings or core."
+            )
+
+
+def check_backup_snapshot_policy(errors: list[str]) -> None:
+    lifecycle = API_SRC / "modules" / "backups" / "application" / "backup_lifecycle.py"
+    router = API_SRC / "modules" / "backups" / "presentation" / "router.py"
+    startup = API_SRC / "app" / "startup_runtime.py"
+    if lifecycle.exists():
+        source = lifecycle.read_text(encoding="utf-8", errors="ignore")
+        if "return create_full_backup(" in source:
+            errors.append(
+                f"{lifecycle.relative_to(REPO_ROOT).as_posix()}: automatic backup helpers must not create media-copying full snapshots."
+            )
+        if "def ensure_daily_backup" in source and "create_rolling_backup(\"startup\")" not in source:
+            errors.append(
+                f"{lifecycle.relative_to(REPO_ROOT).as_posix()}: daily startup backup must write a rolling database snapshot."
+            )
+    if router.exists():
+        source = router.read_text(encoding="utf-8", errors="ignore")
+        if "create_full_backup(" in source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: POST /backups/create must write rolling DB snapshots, not full media copies."
+            )
+        if "create_rolling_backup(" not in source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: POST /backups/create must call create_rolling_backup."
+            )
+    if startup.exists():
+        source = startup.read_text(encoding="utf-8", errors="ignore")
+        if "create_full_backup(" in source:
+            errors.append(
+                f"{startup.relative_to(REPO_ROOT).as_posix()}: startup must not create full media-copying backups."
             )
 
 
@@ -3783,6 +3971,7 @@ def main() -> int:
     check_retired_palace_knowledge_binding(errors)
     check_context_dependency_map(errors)
     check_forbidden_imports(errors)
+    check_backup_snapshot_policy(errors)
     check_mindmap_architecture(errors)
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
@@ -3805,6 +3994,7 @@ def main() -> int:
     check_palace_quiz_application_facades(errors)
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
+    check_quiz_question_marks(errors)
     check_quiz_create_requires_node_binding(errors)
     check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)

@@ -1812,6 +1812,9 @@ def test_palace_memory_lookup_must_keep_full_palace_and_center_bound_node(
     check_architecture.check_palace_memory_lookup_binding_center(errors)
 
     assert any("resolveMemoryLookupFocusNodeUid" in item for item in errors)
+    assert any("collectMemoryLookupFocusNodeUids" in item for item in errors)
+    assert any("deepest bound node" in item for item in errors)
+    assert any("focusNodeUids" in item for item in errors)
     assert any("focusRequestNodeUid" in item for item in errors)
     assert any("must not re-root or clip editor_doc" in item for item in errors)
     assert any("must not clip the preview with `centerMemoryLookupEditorDocAtNode`" in item for item in errors)
@@ -1958,6 +1961,73 @@ def test_quiz_answer_mode_primitive_forbids_marked_options_on_converted_mcq(
 
     assert any("must not mark options as the correct choice" in item for item in errors)
     assert any("first line of analysis" in item for item in errors)
+
+
+def test_quiz_question_marks_reject_the_removed_rating_schedule(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionRatingBar.tsx",
+        "export function QuizQuestionRatingBar() { return '忘记' }\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionIndexPager.tsx",
+        "export function QuizQuestionIndexPager() { return '已到期' }\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionMarkToggle.tsx",
+        "export function QuizQuestionMarkToggle() { return '标记' }\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "export function NodeBoundQuizDialog() { return 'QuizQuestionRatingBar' }\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return null }\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "ui" / "palace-quiz" / "components" / "palaceQuizCards.tsx",
+        "export function QuizQuestionCard() { return 'submitQuizQuestionRating' }\n",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "presentation" / "router.py",
+        "@router.post('/palace-quiz-questions/{question_id}/schedule-ratings')\n",
+    )
+    write_file(
+        api_src / "modules" / "quiz" / "application" / "question_scheduler.py",
+        "def apply_first_learning_rating():\n    return None\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "palace-quiz-boundary.md",
+        "Due questions use an amber index mark.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_question_marks(errors)
+
+    assert any("4-level quiz rating bar must stay deleted" in item for item in errors)
+    assert any("rose fill" in item for item in errors)
+    assert any("removed due schedule" in item for item in errors)
+    assert any("mark/unmark toggle is required" in item for item in errors)
+    assert any("must not keep the 4-level quiz rating" in item for item in errors)
+    assert any("must offer mark/unmark" in item for item in errors)
+    assert any("schedule-ratings route must stay removed" in item for item in errors)
+    assert any("quiz mark route is required" in item for item in errors)
+    assert any("legacy 忘记/困难 mark migration rule" in item for item in errors)
+    assert any("must not write a first-learning schedule" in item for item in errors)
+    assert any("removed due-index mark" in item for item in errors)
+
+
+def test_quiz_question_marks_accept_the_current_tree() -> None:
+    errors: list[str] = []
+    check_architecture.check_quiz_question_marks(errors)
+    assert errors == []
 
 
 def test_palace_quiz_must_use_palace_public_facade(tmp_path: Path, monkeypatch) -> None:
@@ -2931,4 +3001,29 @@ def test_freestyle_viewing_playhead_accepts_independent_tick(
     check_architecture.check_freestyle_viewing_playhead(errors)
 
     assert errors == []
+
+
+def test_backup_snapshot_policy_blocks_full_create_on_router(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "backups" / "application" / "backup_lifecycle.py",
+        "def ensure_daily_backup():\n    return create_rolling_backup(\"startup\")\n",
+    )
+    write_file(
+        api_src / "modules" / "backups" / "presentation" / "router.py",
+        "def api_create_backup():\n    create_rolling_backup()\n    return create_full_backup('manual')\n",
+    )
+    write_file(api_src / "app" / "startup_runtime.py", "ensure_daily_backup()\n")
+
+    errors: list[str] = []
+    check_architecture.check_backup_snapshot_policy(errors)
+
+    assert errors == [
+        "apps/api/src/memory_anki/modules/backups/presentation/router.py: "
+        "POST /backups/create must write rolling DB snapshots, not full media copies."
+    ]
 
