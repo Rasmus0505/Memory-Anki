@@ -144,6 +144,23 @@ describe('PalaceEditorPage mind-map file transfer', () => {
     }))
   })
 
+  it('opens a manual mind-map preview from clipboard text', async () => {
+    const readText = vi.fn().mockResolvedValue(JSON.stringify({
+      title: '外部片段',
+      children: [{ text: '新知识点', children: [] }],
+    }))
+    Object.assign(navigator, { clipboard: { readText } })
+
+    renderPalaceEditPage()
+    await screen.findByText(/^root-/)
+
+    expect(screen.queryByRole('button', { name: '复制文字附脑图' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '文字转脑图' }))
+
+    expect(await screen.findByText(/drawer-/)).toBeTruthy()
+    expect(readText).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the current document after an import save failure and accepts the same file again', async () => {
     const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
     const save = vi.spyOn(palaceApi, 'savePalaceEditorApi').mockRejectedValue(new Error('保存失败'))

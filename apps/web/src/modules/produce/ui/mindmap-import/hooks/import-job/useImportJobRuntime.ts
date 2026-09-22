@@ -40,6 +40,7 @@ export interface ImportJobRuntimeController {
   startPollingJob: (jobId: string) => void
   stopPollingJob: () => void
   resumeJob: (jobId: string) => Promise<void>
+  openPreservingPreview: () => void
   handleOpenChange: (nextOpen: boolean) => Promise<void>
   handleResumeJob: () => Promise<void>
   handlePauseJob: () => Promise<void>
@@ -54,6 +55,8 @@ export function useImportJobRuntime({
   state,
 }: UseImportJobRuntimeOptions): ImportJobRuntimeController {
   const pollTokenRef = useRef(0)
+  // Bumped when a clipboard/manual preview opens, so an in-flight history hydrate cannot replace it.
+  const openEpochRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -189,7 +192,13 @@ export function useImportJobRuntime({
     startPollingJob(job.id)
   }
 
+  const openPreservingPreview = () => {
+    openEpochRef.current += 1
+    state.setImportOpenState(true)
+  }
+
   const handleOpenChange = async (nextOpen: boolean) => {
+    const epoch = openEpochRef.current
     state.setImportOpenState(nextOpen)
     if (!nextOpen) {
       stopPollingJob()
@@ -198,6 +207,7 @@ export function useImportJobRuntime({
     if (!entityKey) return
     try {
       const result = await listImportJobsApi(entityKey)
+      if (openEpochRef.current !== epoch) return
       const nextHistory = (result.items || [])
         .map(buildHistoryItemFromJob)
         .filter((item): item is ImportHistoryItem => Boolean(item))
@@ -334,6 +344,7 @@ export function useImportJobRuntime({
     startPollingJob,
     stopPollingJob,
     resumeJob,
+    openPreservingPreview,
     handleOpenChange,
     handleResumeJob,
     handlePauseJob,

@@ -68,7 +68,7 @@ export const MANUAL_MINDMAP_JSON_PROMPT = `你是一个严格输出 JSON 的助�
 }
 `
 
-const MAX_NODE_COUNT = 400
+const MAX_NODE_COUNT = 450
 const TRANSFER_FORMAT = 'memory-anki-mindmap'
 
 export type ManualImportFormat =

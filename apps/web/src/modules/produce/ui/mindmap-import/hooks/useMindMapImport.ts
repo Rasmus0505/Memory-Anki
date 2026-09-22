@@ -40,6 +40,17 @@ export type {
   MindMapImportWorkflow,
 } from '@/modules/produce/ui/mindmap-import/model/mindmap-import-types'
 
+/** Clipboard read for 文字转脑图. Empty string means the user can still paste in the drawer. */
+export async function readClipboardTextForMindMapImport(): Promise<string> {
+  try {
+    const readText = navigator.clipboard?.readText
+    if (!readText) return ''
+    return await readText.call(navigator.clipboard)
+  } catch {
+    return ''
+  }
+}
+
 export function useMindMapImport({
   entityKey,
   editorState,
@@ -189,6 +200,23 @@ export function useMindMapImport({
     applyParsedManualImport(parseManualMindMapImport(manualImportText))
   }
 
+  const openManualJsonPreview = (text: string) => {
+    const content = String(text ?? '')
+    setManualImportText(content)
+    setManualImportFileName('')
+    setSourceKindState('manual-json')
+    setModeState('mindmap')
+    jobs.openPreservingPreview()
+    const parsed = parseManualMindMapImport(content)
+    if (parsed.ok === false) {
+      jobs.clearPreviewState()
+      setControllerError(parsed.error)
+      jobs.setImportError(parsed.error)
+      return
+    }
+    applyParsedManualImport(parsed)
+  }
+
   const handleManualImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -233,6 +261,7 @@ export function useMindMapImport({
     manualImportFileName,
     manualImportFormatPrompt: MANUAL_MINDMAP_JSON_PROMPT,
     handleManualImportParse,
+    openManualJsonPreview,
     handleManualImportFileChange,
     importOpen: jobs.importOpen,
     setImportOpen: jobs.setImportOpen,

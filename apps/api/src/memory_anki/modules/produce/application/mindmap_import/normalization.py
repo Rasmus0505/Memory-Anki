@@ -122,7 +122,7 @@ __all__ = [
     "html_to_plain_text",
 ]
 
-MAX_NODE_COUNT = 400
+MAX_NODE_COUNT = 450
 
 
 def coerce_model_payload_to_source_tree(value: Any) -> dict[str, Any]:

@@ -239,7 +239,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
       const previewSection = previewSectionRef.current
       if (!previewSection) return
       lastAutoScrollKeyRef.current = autoScrollKey
-      previewSection.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      previewSection.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
     }, 0)
     return () => window.clearTimeout(timer)
   }, [open, view, loading, mode, sourceKind, sourceTree, extractedText, nodeCount])

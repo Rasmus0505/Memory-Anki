@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, FileStack, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
+import { AlertCircle, CheckCircle2, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
@@ -18,7 +18,7 @@ import { PalaceMetaPanel } from '@/modules/content/public'
 import { PalaceTemplateDialog } from '@/modules/content/public'
 import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/modules/content/public'
-import { MindMapImportDrawer, useMindMapImport } from '@/modules/produce/public'
+import { MindMapImportDrawer, readClipboardTextForMindMapImport, useMindMapImport } from '@/modules/produce/public'
 import { usePalaceEditPage } from '@/modules/content/public'
 import { PalaceCreateSetup } from './PalaceCreateSetup'
 import {
@@ -290,6 +290,18 @@ export default function PalaceEdit() {
     palaceTitle: page.palace?.title || page.title || '未命名宫殿',
     applyEditorState: page.applyImportedPalaceEditorState,
   })
+  const textToMindMapAction = {
+    label: '文字转脑图',
+    onClick: () => {
+      void readClipboardTextForMindMapImport().then((text) => {
+        mindMapImport.openManualJsonPreview(text)
+      })
+    },
+    opensOverlay: true,
+  }
+  const fileTransferActions = mindMapFileTransfer.toolbarActions.flatMap((action) =>
+    action.label === '复制导图' ? [action, textToMindMapAction] : [action],
+  )
   const handleOpenQuizPage = () => {
     if (!page.palaceId) return
     openQuizLauncher({
@@ -389,7 +401,7 @@ export default function PalaceEdit() {
           toast.warning(issue.message)
         },
       },
-      ...mindMapFileTransfer.toolbarActions,
+      ...fileTransferActions,
       quizBindingsHost.moreAction,
     ],
     importMindMapAction: {
@@ -449,14 +461,6 @@ export default function PalaceEdit() {
           title={page.palace?.title || '宫殿编辑器'}
           actions={
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/batch-generation')}
-              >
-                <FileStack className="mr-2 size-4" />
-                整书批量生成
-              </Button>
               {page.palace ? (
                 <>
                   {showTemplateCreateAction ? (

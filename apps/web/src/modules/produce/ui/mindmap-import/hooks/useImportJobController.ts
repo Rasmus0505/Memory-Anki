@@ -44,6 +44,7 @@ export function useImportJobController(options: UseImportJobControllerOptions) {
     importReusedExistingResult: state.importReusedExistingResult,
     applyManualImportResult: state.applyManualImportResult,
     clearPreviewState: state.clearPreviewState,
+    openPreservingPreview: runtime.openPreservingPreview,
     ...actions,
     handleResumeJob: runtime.handleResumeJob,
     handlePauseJob: runtime.handlePauseJob,
