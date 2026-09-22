@@ -34,6 +34,8 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain("setConfigIntent('nextRound')")
     expect(source).toContain('startNextRound')
     expect(source).toContain("mode={configIntent}")
+    expect(source).toContain('onClearQuizProgress={clearConfiguredOverlayQuiz}')
+    expect(source).not.toContain('promptOverlayPalaceClear')
   })
 
   it('pages cards with the dock arrows regardless of palace rating scope', () => {

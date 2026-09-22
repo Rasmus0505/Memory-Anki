@@ -2,9 +2,9 @@
 
 Progress is not wiped when the learner changes subject/palace scope. A new round
 starts overlay 已做 empty. Out-of-scope answered questions stay in `parked` and
-return when that palace is in scope again. A palace's overlay progress is dropped
-only after the learner explicitly confirms clear once that palace's review units
-in the current round are all scored.
+return when that palace is in scope again. Overlay progress for the round's review
+palaces is dropped only after the learner confirms clear on the settlement page,
+once the configured queue is fully handled. Scoring one palace does not ask.
 """
 
 from __future__ import annotations

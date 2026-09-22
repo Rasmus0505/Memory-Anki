@@ -331,6 +331,22 @@ describe('freestyle feed complete slot', () => {
 })
 
 describe('findEarliestUnhandledIndex', () => {
+  it('seeks the unfinished retry instead of the weak-rated source', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    expect(findEarliestUnhandledIndex(
+      [card('one'), card('two'), retry],
+      {
+        one: encounter(),
+        two: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(2)
+  })
+
   it('finds a weak-rated source when its retry copy is still missing', () => {
     const cards = [card('one'), card('two')]
     expect(findEarliestUnhandledIndex(cards, {
@@ -417,6 +433,8 @@ describe('gap-0 restudy insert and canGoNext', () => {
   })
 
   it('keeps 下一张 enabled on the last card while a pending restudy is uninserted', () => {
+    // Fallback only. A successful 忘记/困难 already grew the feed, so this latch
+    // covers the moment before that insert lands — not the steady state.
     expect(freestyleCanPageNext(2, 3, false, false)).toBe(false)
     expect(freestyleCanPageNext(2, 3, false, true)).toBe(true)
     expect(freestyleCanPageNext(3, 3, true, true)).toBe(false)

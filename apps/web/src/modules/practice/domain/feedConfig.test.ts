@@ -323,6 +323,48 @@ describe('freestyle queue skip rules', () => {
     ).toBe(2)
   })
 
+  it('resolveRebuildIndex follows a renamed retry instead of its source', () => {
+    const nextCards = [
+      { id: 'review_unit:u1:r1', unit_id: 'u1' },
+      { id: 'retry:round-1:u1:1', unit_id: 'u1', occurrence_kind: 'retry' as const, source_card_id: 'review_unit:u1:r1' },
+      { id: 'review_unit:u2:r1', unit_id: 'u2' },
+    ]
+    expect(
+      resolveRebuildIndex({
+        nextCards,
+        preferCardId: 'retry:local-temp',
+        userCardId: 'retry:local-temp',
+        fallbackIndex: 0,
+        previousCards: [{
+          id: 'retry:local-temp',
+          unit_id: 'u1',
+          occurrence_kind: 'retry' as const,
+          source_card_id: 'review_unit:u1:r1',
+        }],
+      }),
+    ).toBe(1)
+  })
+
+  it('resolveRebuildIndex does not fall back onto the source after the retry is gone', () => {
+    expect(
+      resolveRebuildIndex({
+        nextCards: [
+          { id: 'review_unit:u1:r1', unit_id: 'u1' },
+          { id: 'review_unit:u2:r1', unit_id: 'u2' },
+        ],
+        preferCardId: 'retry:local-temp',
+        userCardId: 'retry:local-temp',
+        fallbackIndex: 0,
+        previousCards: [{
+          id: 'retry:local-temp',
+          unit_id: 'u1',
+          occurrence_kind: 'retry' as const,
+          source_card_id: 'review_unit:u1:r1',
+        }],
+      }),
+    ).toBe(1)
+  })
+
   it('resolveRebuildIndex does not land on a retry copy of the same unit', () => {
     const nextCards = [
       { id: 'retry:round-1:u1:1', unit_id: 'u1', occurrence_kind: 'retry' as const, source_card_id: 'review_unit:u1:r1' },

@@ -784,7 +784,7 @@ def drop_overlay_quiz_for_palaces(
     expected_version: int,
     palace_ids: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Explicit confirm path: drop overlay progress for scored palaces."""
+    """Settlement confirm path: drop overlay progress for the palaces the learner clears."""
     row, early = _begin_round_write(
         session,
         round_id=round_id,

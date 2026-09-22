@@ -400,6 +400,63 @@ export function reorderRoundPlan(plan: FreestyleRoundPlanState, orderIds: string
   return { ...plan, orderIds: next }
 }
 
+export interface RestudyPlanStamp {
+  cardId: string
+  rating?: number | null
+  retryAfterCards: number
+  attempt: number
+}
+
+/**
+ * A 忘记/困难 rating already inserted its retry into ``cards``.
+ * Stamp that order onto the round plan so the progress rail shows the amber
+ * node immediately, instead of appending it after ``orderIds``.
+ */
+export function stampRestudyPlan(
+  plan: FreestyleRoundPlanState | null,
+  cards: FreestyleCard[],
+  roundId: string,
+  config: FreestyleFeedConfig,
+  entries: RestudyPlanStamp[],
+  now = Date.now(),
+): FreestyleRoundPlanState | null {
+  if (!plan && cards.length === 0) return plan
+  let next = createRoundPlan(roundId || plan?.roundId || '', cards, config, undefined, plan, now)
+  for (const entry of entries) {
+    const cardId = String(entry.cardId || '').trim()
+    if (!cardId) continue
+    const rated = cards.find((card) => card.id === cardId)
+    const sourceId = String(rated?.source_card_id || cardId).trim() || cardId
+    const lastRating = entry.rating ?? next.cardsById[cardId]?.lastRating ?? null
+    const sourcePatch = {
+      status: 'retry' as const,
+      lastRating,
+      retryAfterCards: entry.retryAfterCards,
+      attemptCount: entry.attempt,
+    }
+    if (next.cardsById[cardId]) next = updateRoundPlanCard(next, cardId, sourcePatch, now)
+    if (sourceId !== cardId && next.cardsById[sourceId]) {
+      next = updateRoundPlanCard(next, sourceId, {
+        ...sourcePatch,
+        lastRating: entry.rating ?? next.cardsById[sourceId]?.lastRating ?? null,
+      }, now)
+    }
+    const retry = cards.find((card) => (
+      card.occurrence_kind === 'retry' && String(card.source_card_id || '') === sourceId
+    ))
+    if (!retry || !next.cardsById[retry.id]) continue
+    next = updateRoundPlanCard(next, retry.id, {
+      status: 'retry',
+      occurrenceKind: 'retry',
+      sourceCardId: sourceId,
+      retryAttempt: Math.max(1, Math.round(Number(retry.retry_attempt) || entry.attempt || 1)),
+      retryAfterCards: entry.retryAfterCards,
+      lastRating: entry.rating ?? null,
+    }, now)
+  }
+  return next
+}
+
 export function updateRoundPlanCard(
   plan: FreestyleRoundPlanState,
   cardId: string,

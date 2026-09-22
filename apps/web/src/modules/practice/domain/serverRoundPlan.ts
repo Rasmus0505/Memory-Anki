@@ -154,6 +154,18 @@ export function cardsForServerPlan(
       || cardFromOriginalSnapshot(sourceId ? originalById.get(sourceId) : undefined)
     if (!source) continue
     const attempt = occurrence?.retry_attempt || parseRetryAttempt(id)
+    const sourceKey = sourceCardId(source) || source.id
+    // Keep the open 重练's id. Swapping in the server occurrence id remounts the
+    // map and fitView parks the palace root in the center.
+    const localRetry = cards.find((card) => (
+      isRetryOccurrence(card)
+      && (sourceCardId(card) || card.id) === sourceKey
+      && Number(card.retry_attempt || 1) === Number(attempt || 1)
+    ))
+    if (localRetry) {
+      push(localRetry)
+      continue
+    }
     push(createRetryOccurrence(source, roundId, attempt, 3, occurrence?.occurrence_id || id))
   }
 

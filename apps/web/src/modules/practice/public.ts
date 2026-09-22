@@ -115,6 +115,7 @@ export {
   reorderRoundPlan,
   roundPlanConfigSignature,
   sanitizeRoundPlan,
+  stampRestudyPlan,
   updateRoundPlanCard,
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,

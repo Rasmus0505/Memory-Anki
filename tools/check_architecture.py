@@ -1974,7 +1974,7 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
         if "/overlay-quiz/drop-palaces" not in router_source:
             errors.append(
                 f"{router_path.relative_to(REPO_ROOT).as_posix()}: "
-                "must expose overlay-quiz drop-palaces for confirmed palace clear."
+                "must expose overlay-quiz drop-palaces for the settlement clear choice."
             )
     overlay_domain = API_SRC / "modules" / "practice" / "domain" / "overlay_quiz.py"
     if overlay_domain.exists():
@@ -2062,6 +2062,52 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz must document round review palaces, not the subject union."
+            )
+        if "Finishing one palace's ratings does not ask to clear overlay" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay clear must happen on the settlement page, not when one palace finishes scoring."
+            )
+    queue_hook = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts"
+    )
+    if queue_hook.exists():
+        hook_source = queue_hook.read_text(encoding="utf-8", errors="ignore")
+        if "promptOverlayPalaceClear" in hook_source or "overlayClearConfirmLabel" in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "must not prompt to clear overlay progress when one palace finishes scoring."
+            )
+        if "clearConfiguredOverlayQuiz" not in hook_source:
+            errors.append(
+                f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+                "settlement must be able to clear overlay progress for the configured round."
+            )
+    complete_card = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundCompleteCard.tsx"
+    )
+    if complete_card.exists():
+        complete_source = complete_card.read_text(encoding="utf-8", errors="ignore")
+        if "freestyle-round-quiz-clear" not in complete_source:
+            errors.append(
+                f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
+                "settlement page must ask whether to clear quiz progress for every configured palace."
+            )
+    immersive_page = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    )
+    if immersive_page.exists():
+        page_source = immersive_page.read_text(encoding="utf-8", errors="ignore")
+        if "onClearQuizProgress={clearConfiguredOverlayQuiz}" not in page_source:
+            errors.append(
+                f"{immersive_page.relative_to(REPO_ROOT).as_posix()}: "
+                "settlement 完成 slot must wire the configured-round quiz clear."
             )
 
 

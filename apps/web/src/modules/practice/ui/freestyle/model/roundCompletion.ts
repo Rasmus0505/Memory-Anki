@@ -273,9 +273,51 @@ export function isFreestyleRoundComplete(
   return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards, roundPlan))
 }
 
+function isPassedOccurrence(
+  card: FreestyleCard,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completed: ReadonlySet<string>,
+  roundPlan: FreestyleRoundPlanState | null,
+) {
+  if (completed.has(card.id)) return true
+  if (encounterPassed(encountersByCardId[card.id])) return true
+  const last = planLastRating(roundPlan, card.id)
+  return last != null && last >= 3
+}
+
+/** 忘记/困难 already scored this copy. A later 重练 is the remaining work. */
+function isWeakScored(
+  card: FreestyleCard,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completed: ReadonlySet<string>,
+  roundPlan: FreestyleRoundPlanState | null,
+) {
+  if (isPassedOccurrence(card, encountersByCardId, completed, roundPlan)) return false
+  const rating = encountersByCardId[card.id]?.selectedRating ?? planLastRating(roundPlan, card.id)
+  return rating != null && rating < 3
+}
+
+function hasUnfinishedRetry(
+  cards: ReadonlyArray<FreestyleCard>,
+  card: FreestyleCard,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completed: ReadonlySet<string>,
+  roundPlan: FreestyleRoundPlanState | null,
+) {
+  const sourceId = sourceIdOf(card)
+  return cards.some((candidate) => {
+    if (candidate.id === card.id) return false
+    if (sourceIdOf(candidate) !== sourceId || !isRetryOccurrence(candidate)) return false
+    return !isPassedOccurrence(candidate, encountersByCardId, completed, roundPlan)
+  })
+}
+
 /**
- * First card that still blocks round completion: unrated, or weak-rated while its
- * retry copy is missing / unfinished. Skipped-ahead units stay seekable.
+ * First card the 完成 button should open.
+ * Unrated units stay seekable, including ones skipped ahead.
+ * A 忘记/困难 source is not the target once its 重练 is in the feed —
+ * seek that retry. The source is still the target when the retry has not
+ * been inserted yet. Round completion is stricter and still waits for the retry.
  */
 export function findEarliestUnhandledIndex(
   cards: ReadonlyArray<FreestyleCard>,
@@ -283,10 +325,16 @@ export function findEarliestUnhandledIndex(
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
 ): number | null {
+  const completed = new Set(Array.from(completedIds, String))
   const index = cards.findIndex((card) => {
     const id = String(card.id || '').trim()
     if (!id) return false
-    return !isHandled(card, encountersByCardId, completedIds, cards, roundPlan)
+    if (isHandled(card, encountersByCardId, completedIds, cards, roundPlan)) return false
+    if (isWeakScored(card, encountersByCardId, completed, roundPlan)
+      && hasUnfinishedRetry(cards, card, encountersByCardId, completed, roundPlan)) {
+      return false
+    }
+    return true
   })
   return index >= 0 ? index : null
 }

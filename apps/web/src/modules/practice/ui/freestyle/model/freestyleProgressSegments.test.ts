@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
-import { applyCompletedIdsToRoundPlan, createRoundPlan, updateRoundPlanCard } from '@/modules/practice/domain/roundPlan'
+import { applyCompletedIdsToRoundPlan, createRoundPlan, stampRestudyPlan, updateRoundPlanCard } from '@/modules/practice/domain/roundPlan'
+import { createRetryOccurrence, insertRetryOccurrenceAfterGap } from '@/modules/practice/domain/queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
@@ -147,6 +148,38 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.retryInserted).toBe(1)
     expect(progressHudText(summary)).toBe('3/3')
     expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
+  })
+
+  it('shows the faint amber retry node in the gap as soon as the rating stamps the plan', () => {
+    const sources = [card('a'), card('b'), card('c'), card('d'), card('e')]
+    const prior = plan(sources)
+    const retry = createRetryOccurrence(sources[0], 'round-1', 1, 3)
+    const inserted = insertRetryOccurrenceAfterGap(sources, retry, 0)
+    const unstamped = buildFreestyleProgressSummary(inserted, prior, [], [], 'a')
+    // The occurrence is in the feed but not in orderIds, so the rail dumps it at the tail.
+    expect(unstamped.segments.map((segment) => segment.cardId)).toEqual(['a', 'b', 'c', 'd', 'e', retry.id])
+
+    const stamped = stampRestudyPlan(prior, inserted, 'round-1', DEFAULT_FREESTYLE_FEED_CONFIG, [{
+      cardId: 'a',
+      rating: 1,
+      retryAfterCards: 3,
+      attempt: 1,
+    }])
+    const summary = buildFreestyleProgressSummary(inserted, stamped, [], [], 'a')
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
+    expect(summary.segments.map((segment) => segment.kind)).toEqual([
+      'source', 'source', 'source', 'source', 'retry', 'source',
+    ])
+    expect(summary.segments[0]).toMatchObject({ waitingRetry: true, tone: 'retry', viewing: true })
+    expect(summary.segments[4]).toMatchObject({
+      kind: 'retry',
+      tone: 'retry',
+      retryAttempt: 1,
+      sourceCardId: 'a',
+    })
+    expect(retryNodeToneClass('retry')).toContain('bg-amber-400/25')
+    expect(summary.retryInserted).toBe(1)
+    expect(progressHudText(summary)).toBe('1/6')
   })
 
   it('marks a palace group done only when every rendered segment of it is done', () => {

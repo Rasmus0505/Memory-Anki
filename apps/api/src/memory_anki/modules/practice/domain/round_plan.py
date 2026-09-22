@@ -517,6 +517,7 @@ def _fail_source(
             item["rating"] = rating
             _revive_occurrence(plan, item)
         _collapse_retries(plan)
+        _publish_pending_retries(plan, source_id)
         return
     live = [item for item in rows if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}]
     completed = [item for item in rows if item["status"] == OCCURRENCE_COMPLETED]
@@ -534,6 +535,7 @@ def _fail_source(
         elif keep["status"] != OCCURRENCE_INSERTED:
             keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
         _collapse_retries(plan)
+        _publish_pending_retries(plan, source_id)
         return
     attempt = _max_attempt(plan, source_id) + 1
     source_key = source_unit_id or source_id
@@ -549,6 +551,30 @@ def _fail_source(
         "entered_on": _cohort_of(plan, source_id),
     })
     _collapse_retries(plan)
+    _publish_pending_retries(plan, source_id)
+
+
+def _publish_pending_retries(plan: Plan, source_id: str) -> None:
+    """Put a weak rating's retry on the rail now. Do not move ``current_card_id``."""
+    source_id = _text(source_id)
+    if not source_id:
+        return
+    held_current = plan.get("current_card_id")
+    presented = plan["presented_ids"]
+    if source_id in presented:
+        anchor = presented.index(source_id)
+    else:
+        current = _text(plan.get("current_card_id"))
+        anchor = presented.index(current) if current and current in presented else int(plan.get("current_index") or 0)
+    for item in list(plan["occurrences"]):
+        if _text(item.get("source_card_id")) != source_id:
+            continue
+        if item.get("status") != OCCURRENCE_PENDING:
+            continue
+        _insert_retry_inplace(plan, _text(item.get("occurrence_id")), anchor)
+    if held_current and _text(held_current) in plan["presented_ids"]:
+        plan["current_card_id"] = held_current
+    _sync_index(plan)
 
 
 def _settle_source(plan: Plan, source_id: str) -> None:

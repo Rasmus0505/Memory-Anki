@@ -42,6 +42,9 @@ describe('FreestyleRoundCompleteCard', () => {
     render(
       <FreestyleRoundCompleteCard
         completion={completion}
+        roundKey="round-1"
+        quizPalaceCount={2}
+        onClearQuizProgress={vi.fn(async () => undefined)}
         onAnotherRound={onAnotherRound}
       />,
     )
@@ -58,5 +61,36 @@ describe('FreestyleRoundCompleteCard', () => {
 
     fireEvent.click(screen.getByTestId('freestyle-round-another'))
     expect(onAnotherRound).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps or clears quiz progress for every palace in the configured round', async () => {
+    const onClear = vi.fn(async () => undefined)
+    const { rerender } = render(
+      <FreestyleRoundCompleteCard
+        completion={completion}
+        roundKey="round-1"
+        quizPalaceCount={2}
+        onClearQuizProgress={onClear}
+        onAnotherRound={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('freestyle-round-quiz-clear').textContent).toContain('全部 2 个宫殿')
+    fireEvent.click(screen.getByTestId('freestyle-round-quiz-keep'))
+    expect(screen.getByText('已保留做题进度，之后仍可查看。')).toBeTruthy()
+    expect(onClear).not.toHaveBeenCalled()
+
+    rerender(
+      <FreestyleRoundCompleteCard
+        completion={completion}
+        roundKey="round-2"
+        quizPalaceCount={2}
+        onClearQuizProgress={onClear}
+        onAnotherRound={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))
+    expect(await screen.findByText('已清除本次随心配置中所有宫殿的做题进度。')).toBeTruthy()
+    expect(onClear).toHaveBeenCalledTimes(1)
   })
 })

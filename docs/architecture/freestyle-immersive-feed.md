@@ -96,14 +96,16 @@ never the underlying review schedule. `palace_order` only controls **queue const
 (finish one palace’s cards before listing the next, or interleave). 上一张 / 下一张 / finger
 paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished
 so the learner can skip ahead and come back. Retry work still cannot mark a palace “cleared”.
-The leftover `isSequentialPalaceBlocked` helper is not a navigation latch. Retry placement
-usually inserts a copy after the learner leaves the source card, after exactly three other
+The leftover `isSequentialPalaceBlocked` helper is not a navigation latch. A 忘记/困难
+rating inserts its retry immediately, after exactly three other
 already-presented cards in **the same leftover/today segment** (palace cards, quiz cards, and
 other retry occurrences all count). If fewer than three remain in that segment, the occurrence
 is appended to the **segment tail**. It must not borrow cards from the other segment to fill
-the gap. Gap-0 (last card / nothing left after the source) inserts immediately after the weak
-rating so 下一张 / 定位 / settlement cannot deadlock, still via the leave/insert path, without
-auto-advancing off the source. A later due-list rebuild appends newly seen identities as the
+the gap. The top progress rail grows a faint amber retry node at that slot in the same
+update, and the HUD denominator includes it. The viewport stays on the source — no
+auto-advance — including when nothing remains after the source, so 下一张 / 定位 /
+settlement cannot deadlock. Failing the retry card itself does not move that card until
+leave. A later due-list rebuild appends newly seen identities as the
 today segment and must not move an already-inserted leftover retry. `leave_card` confirmation
 pins the card now under the viewport and must not yank back to the source. The source card
 stays in place so swipe-back is geometric. Looking back at history cards does not move the
@@ -147,9 +149,11 @@ keep the last rating until they change or cancel it. An empty amend glance is no
 The viewing playhead is independent of that fill: the card on screen grows taller even after
 it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
 right-side pager has 完成, not 定位. When every presented card is handled it opens the
-closing settlement slot; otherwise it seeks the earliest unfinished unit in round order
-(same rules as round completion: unrated, or weak-rated while its retry is missing /
-unfinished). It does not bulk-complete leftover work.
+closing settlement slot; otherwise it seeks the earliest unfinished unit in round order.
+An unrated unit, including one skipped ahead, is that target. A 忘记/困难 source is
+not: once its 重练 is in the feed, 完成 opens the retry, and it opens the source only
+while that retry has not been inserted. Rating the retry must not move the viewport
+onto the source or refit the map to the palace root. It does not bulk-complete leftover work.
 
 ## Training Directions and Subject Chips
 
@@ -205,18 +209,20 @@ construction settings must not reshuffle.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
 - Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review. Tapping the currently selected rating again undoes until the card is unrated; it must not post the same score. The transient 撤销 chip still undoes one step. Clearing the rating also uncompletes that card in the round plan so the HUD tick goes back to pending.
 - The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units` for the current card plus still-due units that have already passed first review. First-learning siblings stay one-by-one and are not batch-scored, so 「记得」 cannot mark unseen sections as passed. Fill cards are `schedule_locked`. Units already rated in this round are not overwritten except the current card. Each mature unit keeps its own ladder. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
-- `忘记` and every `困难` create a retry occurrence. Insertion usually happens after the learner
-  leaves the source card: the frontend inserts an optimistic copy first, then the backend
-  confirms the plan via `leave_card`. The gap is exactly three already-presented cards in the
+- `忘记` and every `困难` create a retry occurrence. Insertion happens on the rating
+  itself: `apply_rating` puts the occurrence into `presented_ids` immediately, and the
+  frontend inserts the same optimistic copy into the feed and round-plan order before the
+  silent rebuild returns, so the progress rail shows the faint amber node without waiting
+  for `leave_card`. The gap is exactly three already-presented cards in the
   source's leftover/today segment (palace, quiz, and other occurrences); if fewer remain in that
   segment, the copy appends at the segment tail and must not pull cards from the other
   segment. When the gap is 0 (no cards remain after the weak-rated source), the retry is
-  inserted immediately after rating — still through the same leave/insert path — while the
+  still inserted on the rating, directly after the source, while the
   viewport stays on the source so pager / locate / settlement cannot deadlock on the last card.
-  Until that insert lands, the pending fail keeps the source unfinished, so a silent rebuild
-  must not freeze the round as fully handled and drop the optimistic 重练. An inserted retry
-  parked at or before its source is moved back behind the source on `leave_card` and on
-  silent append. A round whose sources and retries are actually finished still freezes, and
+  `current_card_id` does not move. `leave_card` on an already-inserted source is a no-op
+  for placement. An inserted retry must not freeze the round as fully handled and drop the
+  optimistic 重练. An inserted retry parked at or before its source is moved back behind
+  the source on `leave_card` and on silent append. A round whose sources and retries are actually finished still freezes, and
   a silent rebuild still does not append leftover due onto it.
   Confirmation pins the live viewport card, never the source just left.
   There is no per-round cap. A unit keeps one live retry at a time; the amber node
@@ -359,5 +365,8 @@ re-seeds it from `overlay_quiz` on ensure/hydrate so node-bound badges stay in s
 lifetime. Starting a new round (`「再来一轮」` → config confirm → `/rounds/start`) starts overlay
 已做 empty and clears the SPA mirror. Changing subject or palace scope parks answered questions
 that left the filter instead of deleting them; they return when the palace is in scope again.
-When a palace's review units in the current round are all scored, the UI asks whether to clear
-that palace's overlay 已做; cancel keeps it, confirm calls `/overlay-quiz/drop-palaces`.
+Finishing one palace's ratings does not ask to clear overlay 已做. After the configured queue
+is fully handled, the right-side 完成 control opens the settlement slot. That page asks once
+whether to clear overlay 已做 for every review palace this 随心配置 round scheduled. 保留 keeps
+the answered records so 做题 can still be reviewed. 清除 calls `/overlay-quiz/drop-palaces`
+with those palace ids and clears the SPA mirror for them.

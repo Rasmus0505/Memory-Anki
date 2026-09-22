@@ -375,4 +375,33 @@ describe('server round plan hydrate', () => {
     ])
     expect(hydrated.filter((card) => card.occurrence_kind === 'retry')).toHaveLength(1)
   })
+
+  it('keeps the local retry id when the server occurrence id differs', () => {
+    const source = branch('review_unit:u1:r1')
+    source.unit_id = 'u1'
+    const localRetry = createRetryOccurrence(source, 'round-1', 1, 0, 'retry:local-open')
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [
+        { card_id: 'review_unit:u1:r1', unit_id: 'u1', unit_revision: 1, kind: 'mindmap_branch', palace_id: 1, palace_title: 'Palace 1', label: 'u1' },
+      ],
+      presented_ids: ['review_unit:u1:r1', 'retry:round-1:u1:1'],
+      current_card_id: 'retry:local-open',
+      current_index: 1,
+      completed_ids: [],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: 'retry:round-1:u1:1',
+        source_card_id: 'review_unit:u1:r1',
+        source_unit_id: 'u1',
+        retry_attempt: 1,
+        rating: 2,
+        insert_target_index: 1,
+        status: 'inserted',
+        encounter_id: '',
+      }],
+      encounters: {},
+    }
+    const hydrated = cardsForServerPlan([source, localRetry], plan, 'round-1')
+    expect(hydrated.map((card) => card.id)).toEqual(['review_unit:u1:r1', 'retry:local-open'])
+  })
 })

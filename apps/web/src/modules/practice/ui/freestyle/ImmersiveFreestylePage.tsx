@@ -309,6 +309,7 @@ export default function ImmersiveFreestylePage({
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    clearConfiguredOverlayQuiz,
     queueFrozen,
   } = useImmersiveQueue(entryPalaceId, slot)
   const queueStateRef = useRef(queueState)
@@ -1785,6 +1786,9 @@ export default function ImmersiveFreestylePage({
             <div className="relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]">
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
+                roundKey={queueState.roundId}
+                quizPalaceCount={overlayReviewPalaceIds(roundPlan).length}
+                onClearQuizProgress={clearConfiguredOverlayQuiz}
                 onAnotherRound={() => {
                   setConfigIntent('nextRound')
                   setConfigOpen(true)

@@ -365,8 +365,11 @@ def test_rating_then_leave_inserts_at_plus_three(make_client):
     assert "round" in rated_payload
     plan = rated_payload["round"]["plan"]
     assert plan["occurrences"]
-    assert plan["occurrences"][0]["status"] == "pending"
-    assert plan["presented_ids"] == ["a", "quiz-1", "b", "c", "d"]
+    occ_id = plan["occurrences"][0]["occurrence_id"]
+    assert plan["occurrences"][0]["status"] == "inserted"
+    assert plan["presented_ids"] == ["a", "quiz-1", "b", "c", occ_id, "d"]
+    assert plan["presented_ids"].index(occ_id) == 4
+    assert plan["current_card_id"] == "a"
 
     left = client.post(
         f"/api/v1/freestyle/rounds/{round_id}/actions",
@@ -379,10 +382,10 @@ def test_rating_then_leave_inserts_at_plus_three(make_client):
     )
     assert left.status_code == 200, left.text
     after = left.json()
-    occ_id = after["plan"]["occurrences"][0]["occurrence_id"]
+    assert after["plan"]["occurrences"][0]["occurrence_id"] == occ_id
     assert after["plan"]["occurrences"][0]["status"] == "inserted"
     assert after["plan"]["presented_ids"] == ["a", "quiz-1", "b", "c", occ_id, "d"]
-    assert after["plan"]["presented_ids"].index(occ_id) == 4
+    assert after["plan"]["current_card_id"] == "a"
 
 
 def test_stale_rating_overwrites_instead_of_conflict(make_client):

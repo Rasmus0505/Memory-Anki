@@ -10,6 +10,7 @@ import {
   planCardStatus,
   reorderRoundPlan,
   sanitizeRoundPlan,
+  stampRestudyPlan,
   updateRoundPlanCard,
 } from './roundPlan'
 import {
@@ -61,6 +62,35 @@ describe('round plan reducer', () => {
     const retryPlan = createRoundPlan('round-1', next, config, undefined, plan)
     expect(retryPlan.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
     expect(retryPlan.cardsById[retry.id].retryAfterCards).toBe(3)
+  })
+
+  it('stamps a weak rating onto the source and the inserted retry without waiting for leave', () => {
+    const cards = [card('a', 1), card('b', 1), card('c', 1), card('d', 1), card('e', 1)]
+    const prior = createRoundPlan('round-1', cards, config)
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const next = insertRetryOccurrenceAfterGap(cards, retry, 0)
+    const stamped = stampRestudyPlan(prior, next, 'round-1', config, [{
+      cardId: 'a',
+      rating: 1,
+      retryAfterCards: 3,
+      attempt: 1,
+    }])
+    expect(stamped).not.toBeNull()
+    expect(stamped!.orderIds).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
+    expect(stamped!.cardsById.a).toMatchObject({
+      status: 'retry',
+      lastRating: 1,
+      retryAfterCards: 3,
+      attemptCount: 1,
+    })
+    expect(stamped!.cardsById[retry.id]).toMatchObject({
+      status: 'retry',
+      occurrenceKind: 'retry',
+      sourceCardId: 'a',
+      retryAttempt: 1,
+      retryAfterCards: 3,
+      lastRating: 1,
+    })
   })
 
   it('replaces an existing retry for the same source instead of stacking a second copy', () => {

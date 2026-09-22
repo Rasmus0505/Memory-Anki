@@ -74,24 +74,36 @@ def _pending(plan, source_card_id: str) -> dict:
     return matches[-1]
 
 
-def test_forget_and_hard_both_create_pending_occurrence():
+def _inserted(plan, source_card_id: str) -> dict:
+    matches = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == source_card_id and item["status"] == "inserted"
+    ]
+    assert matches, f"expected inserted occurrence for {source_card_id}"
+    return matches[-1]
+
+
+def test_forget_and_hard_insert_retry_immediately():
     cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]
     forgotten = _rate(plan_from_cards(cards), "a", 1, "enc-forget")
     hard = _rate(plan_from_cards(cards), "a", 2, "enc-hard")
 
-    forget_occ = _pending(forgotten, "a")
-    hard_occ = _pending(hard, "a")
+    forget_occ = _inserted(forgotten, "a")
+    hard_occ = _inserted(hard, "a")
     assert forget_occ["retry_attempt"] == 1
     assert hard_occ["retry_attempt"] == 1
     assert forget_occ["rating"] == 1
     assert hard_occ["rating"] == 2
     assert forget_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
     assert hard_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
-    assert forgotten["presented_ids"] == ["a", "b"]
-    assert hard["presented_ids"] == ["a", "b"]
+    assert forgotten["presented_ids"] == ["a", "b", forget_occ["occurrence_id"]]
+    assert hard["presented_ids"] == ["a", "b", hard_occ["occurrence_id"]]
+    assert forgotten["current_card_id"] == "a"
+    assert hard["current_card_id"] == "a"
 
 
-def test_leave_inserts_after_exactly_three_presented_cards_including_quiz_and_retries():
+def test_rating_inserts_after_exactly_three_presented_cards_including_quiz_and_retries():
     cards = [
         _card("x", unit_id="unit-x"),
         _card("y", unit_id="unit-y"),
@@ -101,11 +113,13 @@ def test_leave_inserts_after_exactly_three_presented_cards_including_quiz_and_re
         _card("b", unit_id="unit-b"),
     ]
     plan = plan_from_cards(cards)
-    plan = leave_card(_rate(plan, "x", 1, "enc-x"), "x")
+    plan = _rate(plan, "x", 1, "enc-x")
     retry_x = [item["occurrence_id"] for item in plan["occurrences"] if item["source_card_id"] == "x"][0]
     assert plan["presented_ids"] == ["x", "y", "z", "a", retry_x, "quiz-1", "b"]
+    assert plan["current_card_id"] == "x"
+    assert leave_card(plan, "x")["presented_ids"] == plan["presented_ids"]
 
-    plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
+    plan = _rate(plan, "a", 2, "enc-a")
     retry_a = [item["occurrence_id"] for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     presented = plan["presented_ids"]
     gap = presented[presented.index("a") + 1 : presented.index(retry_a)]
@@ -116,29 +130,37 @@ def test_leave_inserts_after_exactly_three_presented_cards_including_quiz_and_re
 
 def test_not_enough_cards_appends_retry_to_end():
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")])
-    plan = leave_card(_rate(plan, "a", 1, "enc-a"), "a")
+    plan = _rate(plan, "a", 1, "enc-a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
     assert plan["presented_ids"] == ["a", "b", retry_a]
     assert plan["occurrences"][0]["status"] == "inserted"
     assert plan["occurrences"][0]["insert_target_index"] == 2
+    assert plan["current_card_id"] == "a"
+    assert leave_card(plan, "a")["presented_ids"] == plan["presented_ids"]
 
 
-def test_consecutive_failures_increment_retry_attempt():
+def test_consecutive_source_failures_do_not_bump_attempt_before_the_retry_is_left():
     plan = plan_from_cards(
         [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d"), _card("e")]
     )
     plan = _rate(plan, "a", 1, "enc-1")
-    assert _pending(plan, "a")["retry_attempt"] == 1
+    inserted = _inserted(plan, "a")
+    assert inserted["retry_attempt"] == 1
+    assert plan["presented_ids"] == ["a", "b", "c", "d", inserted["occurrence_id"], "e"]
     plan = _rate(plan, "a", 1, "enc-2")
-    pending = _pending(plan, "a")
-    assert pending["retry_attempt"] == 2
-    assert pending["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 2)
-    assert [item["status"] for item in plan["occurrences"] if item["source_card_id"] == "a"] == [
-        "pending"
+    live = [
+        item
+        for item in plan["occurrences"]
+        if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
     ]
+    assert len(live) == 1
+    assert live[0]["retry_attempt"] == 1
+    assert live[0]["status"] == "inserted"
+    assert live[0]["occurrence_id"] == inserted["occurrence_id"]
+    assert leave_card(plan, "a")["presented_ids"] == plan["presented_ids"]
 
-    plan = leave_card(plan, "a")
-    inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
+    plan = set_cursor(plan, inserted["occurrence_id"])
+    held = list(plan["presented_ids"])
     plan = _rate(plan, inserted["occurrence_id"], 2, "enc-3", occurrence_id=inserted["occurrence_id"])
     live = [
         item
@@ -146,9 +168,10 @@ def test_consecutive_failures_increment_retry_attempt():
         if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
     ]
     assert len(live) == 1
-    assert live[0]["retry_attempt"] == 2
+    assert live[0]["retry_attempt"] == 1
     assert live[0]["status"] == "inserted"
     assert live[0]["occurrence_id"] == inserted["occurrence_id"]
+    assert plan["presented_ids"] == held
     plan = leave_card(plan, inserted["occurrence_id"])
     live = [
         item
@@ -156,7 +179,7 @@ def test_consecutive_failures_increment_retry_attempt():
         if item["source_card_id"] == "a" and item["status"] in {"pending", "inserted"}
     ]
     assert len(live) == 1
-    assert live[0]["retry_attempt"] == 3
+    assert live[0]["retry_attempt"] == 2
     assert live[0]["occurrence_id"] == inserted["occurrence_id"]
     assert plan["presented_ids"].count(inserted["occurrence_id"]) == 1
 
@@ -401,15 +424,19 @@ def test_rebind_completed_unit_keeps_parent_rating():
 def test_history_lookback_does_not_move_cursor_or_insert():
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d")])
     plan = _rate(plan, "a", 1, "enc-a")
+    occ_id = plan["occurrences"][0]["occurrence_id"]
+    assert plan["occurrences"][0]["status"] == "inserted"
+    assert plan["presented_ids"] == ["a", "b", "c", "d", occ_id]
+    assert plan["current_card_id"] == "a"
     looked = set_cursor(plan, "c", commit=False)
     assert looked["current_card_id"] == "a"
     assert looked["current_index"] == 0
-    assert looked["presented_ids"] == ["a", "b", "c", "d"]
-    assert looked["occurrences"][0]["status"] == "pending"
+    assert looked["presented_ids"] == ["a", "b", "c", "d", occ_id]
+    assert looked["occurrences"][0]["status"] == "inserted"
     committed = set_cursor(plan, "c", commit=True)
     assert committed["current_card_id"] == "c"
-    assert committed["occurrences"][0]["status"] == "pending"
-    assert committed["presented_ids"] == ["a", "b", "c", "d"]
+    assert committed["occurrences"][0]["status"] == "inserted"
+    assert committed["presented_ids"] == ["a", "b", "c", "d", occ_id]
 
 
 def test_rebind_reattaches_retries_when_source_card_was_dropped():
@@ -491,7 +518,7 @@ def test_rebind_after_fail_keeps_current_on_source():
     plan = _rate(plan_from_cards(cards), "a", 1, "enc-fail")
     rebound = rebind_plan_cards(plan, cards)
     assert rebound["current_card_id"] == "a"
-    assert _pending(rebound, "a")["status"] == "pending"
+    assert _inserted(rebound, "a")["status"] == "inserted"
 
 
 def test_rebind_keeps_failed_sources_missing_from_new_due_list():
@@ -786,16 +813,19 @@ def test_last_card_forget_or_hard_stays_unfinished_until_retry_follows_source():
         plan = plan_from_cards(cards, today="2026-09-22")
         for card_id in ids[:-1]:
             plan = _rate(plan, card_id, 3, f"pass-{card_id}-{encounter}")
+        plan = set_cursor(plan, "source")
         plan = _rate(plan, "source", rating, encounter)
-        assert plan["presented_ids"] == ids
-        assert plan["occurrences"][0]["status"] == "pending"
+        retry_id = plan["occurrences"][0]["occurrence_id"]
+        assert plan["occurrences"][0]["status"] == "inserted"
+        assert plan["presented_ids"] == [*ids, retry_id]
+        assert plan["current_card_id"] == "source"
         assert "source" not in plan["completed_ids"]
         assert plan_is_fully_handled(plan) is False
-        assert next_unfinished_id(plan) == "source"
+        assert next_unfinished_id(plan) == retry_id
         left = leave_card(plan, "source")
-        retry_id = left["occurrences"][0]["occurrence_id"]
         assert left["occurrences"][0]["status"] == "inserted"
         assert left["presented_ids"] == [*ids, retry_id]
+        assert left["current_card_id"] == "source"
         assert plan_is_fully_handled(left) is False
         assert next_unfinished_id(left) == retry_id
 

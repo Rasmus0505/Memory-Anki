@@ -2844,6 +2844,72 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     assert any("not the subject union" in error for error in errors)
 
 
+def test_freestyle_overlay_clear_is_settlement_not_per_palace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return null }\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "export type FreestyleOverlayQuizState = { overlay_quiz_setup_done: boolean }\n"
+        "export const overlay_quiz_setup_done = true\n"
+        "export type FreestyleOverlayQuestionRange = 'due' | 'all'\n"
+        "export const overlay_question_range = 'all'\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "presentation" / "router.py",
+        "@router.post('/overlay-quiz/ensure')\n@router.post('/overlay-quiz/drop-palaces')\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "overlay_quiz.py",
+        "def drop_overlay_for_palaces():\n    parked = {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "empty_overlay_quiz()\nreview_palace_ids(plan)\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "def build_overlay_question_pack():\n    return {}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "英语 is immediately left of **文字**.\nnot the subject union\n"
+        "When a palace's review units in the current round are all scored, the UI asks\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "function promptOverlayPalaceClear() { overlayClearConfirmLabel() }\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundCompleteCard.tsx",
+        "export function FreestyleRoundCompleteCard() { return null }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "export default function Page() { return null }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("when one palace finishes scoring" in error for error in errors)
+    assert any("settlement page must ask" in error for error in errors)
+    assert any("settlement 完成 slot" in error for error in errors)
+    assert any("settlement page, not when one palace" in error for error in errors)
+
+
 def test_question_practice_has_no_lifecycle_gate(tmp_path: Path, monkeypatch) -> None:
     web_src = tmp_path / "apps" / "web" / "src"
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"

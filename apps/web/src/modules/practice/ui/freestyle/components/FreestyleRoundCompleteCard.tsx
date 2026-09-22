@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, RotateCcw } from 'lucide-react'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
+import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
 import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { cn } from '@/shared/lib/utils'
+
+type QuizClearChoice = 'pending' | 'kept' | 'clearing' | 'cleared'
 
 function subjectKey(subjectId: number | null, subjectName: string) {
   return subjectId == null ? `name:${subjectName}` : `id:${subjectId}`
@@ -10,16 +13,29 @@ function subjectKey(subjectId: number | null, subjectName: string) {
 
 /**
  * Closing slot of a round: overview stats, subject/palace time breakdown,
+ * one choice to clear 做题 progress for every palace in this 随心配置,
  * and 「再来一轮」 to reopen config for a fresh server round.
  */
 export function FreestyleRoundCompleteCard({
   completion,
+  roundKey,
+  quizPalaceCount,
+  onClearQuizProgress,
   onAnotherRound,
 }: {
   completion: FreestyleRoundCompletion
+  roundKey: string
+  quizPalaceCount: number
+  onClearQuizProgress: () => Promise<void>
   onAnotherRound: () => void
 }) {
   const subjects = useMemo(() => completion.bySubject ?? [], [completion.bySubject])
+  const [quizChoice, setQuizChoice] = useState<QuizClearChoice>('pending')
+  const [quizClearError, setQuizClearError] = useState('')
+  useEffect(() => {
+    setQuizChoice('pending')
+    setQuizClearError('')
+  }, [roundKey])
   const firstKey = subjects[0]
     ? subjectKey(subjects[0].subjectId, subjects[0].subjectName)
     : null
@@ -130,6 +146,61 @@ export function FreestyleRoundCompleteCard({
                 </div>
               )
             })}
+          </div>
+        ) : null}
+
+        {quizPalaceCount > 0 ? (
+          <div
+            data-testid="freestyle-round-quiz-clear"
+            className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
+          >
+            <div className="text-sm font-medium text-zinc-50">做题进度</div>
+            {quizChoice === 'kept' ? (
+              <p className="mt-1 text-xs leading-5 text-zinc-400">已保留做题进度，之后仍可查看。</p>
+            ) : quizChoice === 'cleared' ? (
+              <p className="mt-1 text-xs leading-5 text-zinc-400">已清除本次随心配置中所有宫殿的做题进度。</p>
+            ) : (
+              <>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">
+                  {settlementQuizClearCopy(quizPalaceCount)}
+                </p>
+                {quizClearError ? (
+                  <p className="mt-1 text-xs leading-5 text-rose-300">{quizClearError}</p>
+                ) : null}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    data-testid="freestyle-round-quiz-keep"
+                    className="rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-zinc-100 transition-colors hover:bg-white/10 disabled:opacity-60"
+                    disabled={quizChoice === 'clearing'}
+                    onClick={() => {
+                      setQuizClearError('')
+                      setQuizChoice('kept')
+                    }}
+                  >
+                    保留
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="freestyle-round-quiz-clear-confirm"
+                    className="rounded-xl bg-rose-400/90 px-3 py-2 text-sm font-semibold text-zinc-950 transition-colors hover:bg-rose-300 disabled:opacity-60"
+                    disabled={quizChoice === 'clearing'}
+                    onClick={() => {
+                      setQuizClearError('')
+                      setQuizChoice('clearing')
+                      void onClearQuizProgress()
+                        .then(() => setQuizChoice('cleared'))
+                        .catch((error: unknown) => {
+                          setQuizChoice('pending')
+                          setQuizClearError(error instanceof Error ? error.message : '清除做题进度失败。')
+                        })
+                    }}
+                  >
+                    {quizChoice === 'clearing' ? '正在清除…' : '清除'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 

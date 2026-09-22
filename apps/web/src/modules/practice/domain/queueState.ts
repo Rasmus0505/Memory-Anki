@@ -1245,10 +1245,43 @@ export function resolveRebuildIndex(args: {
     return reviewUnitIdFromCardId(id)
   }
 
+  const previousById = new Map((previousCards ?? []).map((card) => [card.id, card]))
+
+  const isRetryIdentity = (id: string | null | undefined) => {
+    const text = String(id || '').trim()
+    if (!text) return false
+    if (text.startsWith('retry:')) return true
+    const previous = previousById.get(text)
+    return previous ? isRetryCard(previous) : false
+  }
+
+  const sameSource = (
+    id: string,
+    card: { id?: string; unit_id?: string; source_card_id?: string; occurrence_kind?: string },
+  ) => {
+    const previous = previousById.get(id)
+    const sourceId = previous && 'source_card_id' in previous
+      ? String(previous.source_card_id || '')
+      : ''
+    if (sourceId && String(card.source_card_id || '') === sourceId) return true
+    if (sourceId && String(card.id || '') === sourceId) return true
+    const unitId = unitIdFor(id)
+    if (!unitId) return false
+    const cardUnit = 'unit_id' in card ? String(card.unit_id || '') : ''
+    return cardUnit === unitId || reviewUnitIdFromCardId(card.id) === unitId
+  }
+
+  const findRetryIndex = (id: string) => nextCards.findIndex((card) => (
+    isRetryCard(card) && sameSource(id, card)
+  ))
+
   const findIndex = (id: string | null | undefined) => {
     if (!id) return -1
     const byId = nextCards.findIndex((card) => card.id === id)
     if (byId >= 0) return byId
+    // A vanished 重练 id must land on its retry copy, never the scored source.
+    // Falling through to the source remounts that map and recenters on the root.
+    if (isRetryIdentity(id)) return findRetryIndex(id)
     const unitId = unitIdFor(id)
     if (!unitId) return -1
     return nextCards.findIndex((card) => {
@@ -1258,23 +1291,39 @@ export function resolveRebuildIndex(args: {
     })
   }
 
+  const avoidSourceJump = (index: number, anchorId: string | null | undefined) => {
+    if (!anchorId || !isRetryIdentity(anchorId)) return index
+    const card = nextCards[index]
+    if (!card || isRetryCard(card) || !sameSource(anchorId, card)) return index
+    const retryIdx = findRetryIndex(anchorId)
+    if (retryIdx >= 0) return retryIdx
+    const fallback = Math.min(Math.max(0, fallbackIndex), nextCards.length - 1)
+    const fallbackCard = nextCards[fallback]
+    if (fallbackCard && !sameSource(anchorId, fallbackCard)) return fallback
+    const other = nextCards.findIndex((item) => !sameSource(anchorId, item))
+    return other >= 0 ? other : index
+  }
+
   // User already left the preferred card — follow them, never yank back.
   if (preferCardId && userCardId && userCardId !== preferCardId) {
     const userIdx = findIndex(userCardId)
-    if (userIdx >= 0) return userIdx
+    if (userIdx >= 0) return avoidSourceJump(userIdx, userCardId)
   }
 
   if (preferCardId) {
     const preferIdx = findIndex(preferCardId)
-    if (preferIdx >= 0) return preferIdx
+    if (preferIdx >= 0) return avoidSourceJump(preferIdx, preferCardId)
   }
 
   if (userCardId) {
     const userIdx = findIndex(userCardId)
-    if (userIdx >= 0) return userIdx
+    if (userIdx >= 0) return avoidSourceJump(userIdx, userCardId)
   }
 
-  return Math.min(Math.max(0, fallbackIndex), nextCards.length - 1)
+  return avoidSourceJump(
+    Math.min(Math.max(0, fallbackIndex), nextCards.length - 1),
+    preferCardId || userCardId,
+  )
 }
 
 function isRetryCard(card: { id?: string; occurrence_kind?: string; source_card_id?: string }) {
