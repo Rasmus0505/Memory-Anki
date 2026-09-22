@@ -327,3 +327,107 @@ def test_time_records_endpoint_accepts_today_range(session_factory, make_client)
     payload = response.json()
     assert payload["range"]["mode"] == "today"
     assert payload["summary"]["total_effective_seconds"] == 3_600
+
+
+def test_read_model_includes_only_the_newest_active_dwell_checkpoint(db_session):
+    day = date(2026, 7, 3)
+    latest_update = _local_time(day, 16)
+
+    def _row(
+        record_id: str,
+        *,
+        status: str,
+        session_key: str | None,
+        completion_method: str,
+        seconds: int,
+        updated_at: datetime,
+        ended_at: datetime | None,
+    ) -> StudySession:
+        return StudySession(
+            id=record_id,
+            status=status,
+            scene="quiz",
+            target_type="none",
+            title=record_id,
+            session_key=session_key,
+            started_at=_local_time(day, 8),
+            ended_at=ended_at,
+            updated_at=updated_at,
+            effective_seconds=seconds,
+            completion_method=completion_method,
+            progress_json="{}",
+            events_json="[]",
+            summary_json="{}",
+        )
+
+    db_session.add_all(
+        [
+            _row(
+                "dwell-completed",
+                status="completed",
+                session_key="dwell:completed",
+                completion_method="left_page",
+                seconds=100,
+                updated_at=_local_time(day, 7),
+                ended_at=_local_time(day, 12),
+            ),
+            _row(
+                "dwell-old",
+                status="active",
+                session_key="dwell:old",
+                completion_method="saved",
+                seconds=40,
+                updated_at=_local_time(day, 9),
+                ended_at=None,
+            ),
+            _row(
+                "dwell-new",
+                status="active",
+                session_key="dwell:new",
+                completion_method="saved",
+                seconds=70,
+                updated_at=_local_time(day, 11),
+                ended_at=None,
+            ),
+            _row(
+                "dwell-zero",
+                status="active",
+                session_key="dwell:zero",
+                completion_method="saved",
+                seconds=0,
+                updated_at=_local_time(day, 13),
+                ended_at=None,
+            ),
+            _row(
+                "active-non-dwell",
+                status="active",
+                session_key=None,
+                completion_method="saved",
+                seconds=5_000,
+                updated_at=latest_update,
+                ended_at=None,
+            ),
+            _row(
+                "dwell-unsaved",
+                status="active",
+                session_key="dwell:unsaved",
+                completion_method="",
+                seconds=90,
+                updated_at=latest_update,
+                ended_at=None,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = build_time_record_read_model(
+        db_session,
+        range_mode="today",
+        reference_date=day,
+    )
+
+    assert {item["id"] for item in payload["items"]} == {"dwell-completed", "dwell-new"}
+    assert payload["summary"]["total_effective_seconds"] == 170
+    assert sum(item["seconds"] for item in payload["trend"]) == 170
+    active = next(item for item in payload["items"] if item["id"] == "dwell-new")
+    assert active["status"] == "active"

@@ -156,9 +156,31 @@ def valid_time_records_query(
     kind: str | None = None,
 ) -> Query:
     attributed_at = time_record_attributed_at()
+    # One global in-progress dwell row. NULL (no checkpoint) matches nothing via id = NULL.
+    newest_active_dwell_id = (
+        session.query(StudySession.id)
+        .filter(
+            StudySession.deleted_at.is_(None),
+            StudySession.status == "active",
+            StudySession.completion_method == "saved",
+            StudySession.session_key.like("dwell:%"),
+            StudySession.effective_seconds > 0,
+        )
+        .order_by(
+            StudySession.updated_at.desc(),
+            StudySession.started_at.desc(),
+            StudySession.id.desc(),
+        )
+        .limit(1)
+        .correlate(None)
+        .scalar_subquery()
+    )
     query = session.query(StudySession).filter(
         StudySession.deleted_at.is_(None),
-        StudySession.status == "completed",
+        or_(
+            StudySession.status == "completed",
+            StudySession.id == newest_active_dwell_id,
+        ),
         StudySession.effective_seconds > 0,
     )
     if start is not None:

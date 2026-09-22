@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import { fireAndQueueTimeRecordOnUnload } from '@/shared/hooks/timedSessionRecovery'
 import {
   buildTimedSessionStorageKey,
@@ -8,6 +9,7 @@ import {
   writeDwellLocalSnapshot,
 } from '@/shared/hooks/timedSessionStorage'
 import {
+  DWELL_CHECKPOINT_INTERVAL_MS,
   DWELL_LIVE_SESSION_KEY,
   DWELL_RESUME_WINDOW_MS,
   dwellKindToSessionKind,
@@ -104,10 +106,14 @@ interface TimerStore {
   unloadFinalized: boolean
   hiddenAtMs: number | null
   clientRevision: number
+  lastCheckpointAtMs: number | null
+  lastCheckpointSignature: string | null
 }
 
 const stores = new Map<string, TimerStore>()
 let browserListenersInstalled = false
+// Match the encounter clock: one thawed callback must not backfill a hang.
+const MAX_FOREGROUND_GAP_MS = 5_000
 
 function stableSessionKey(options: TimedSessionOptions) {
   const sessionKey = options.sessionKey.trim()
@@ -133,7 +139,19 @@ function notify(store: TimerStore) {
 
 function currentEffectiveMs(store: TimerStore, currentMs = Date.now()) {
   if (store.runningSinceMs == null) return store.effectiveMs
-  return store.effectiveMs + Math.max(0, currentMs - store.runningSinceMs)
+  const elapsed = currentMs - store.runningSinceMs
+  if (elapsed <= 0) return store.effectiveMs
+  // Commit each observed slice. A thawed callback can arrive many seconds
+  // late; drop that one gap, but keep the seconds earlier ticks already
+  // stored. Measuring from the original start instead would wipe a real
+  // foreground run the moment it passed five seconds.
+  if (elapsed > MAX_FOREGROUND_GAP_MS) {
+    store.runningSinceMs = currentMs
+    return store.effectiveMs
+  }
+  store.effectiveMs += elapsed
+  store.runningSinceMs = currentMs
+  return store.effectiveMs
 }
 
 function updateEffectiveSnapshot(store: TimerStore, currentMs = Date.now()) {
@@ -224,12 +242,16 @@ function startTicker(store: TimerStore) {
       pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
       return
     }
-    if (updateEffectiveSnapshot(store)) {
-      // SessionStorage is the crash-safe checkpoint. The ticker only refreshes
-      // this local snapshot once per displayed second; it never writes the API.
+    const secondsChanged = updateEffectiveSnapshot(store)
+    if (secondsChanged) {
+      // SessionStorage remains the crash-safe local snapshot, refreshed once
+      // per displayed second.
       persistSnapshot(store)
       notify(store)
     }
+    // The 30-second API checkpoint is wall-clock based, so it cannot wait for
+    // the next displayed second.
+    maybeWriteDwellCheckpoint(store)
   }, 250)
 }
 
@@ -299,6 +321,7 @@ function switchSegment(store: TimerStore, attachment?: TimerAttachment) {
   if (wasRunning) {
     store.runningSinceMs = Date.now()
   }
+  maybeWriteDwellCheckpoint(store)
 }
 
 function activeAttachments(store: TimerStore) {
@@ -324,6 +347,7 @@ function pauseStore(store: TimerStore, reason: Exclude<TimedSessionPauseReason, 
   pushEvent(store, 'pause', { reason, ...(meta ?? {}) })
   persistSnapshot(store)
   notify(store)
+  maybeWriteDwellCheckpoint(store, { force: true })
 }
 
 function attachmentIsExcluded(attachment: TimerAttachment) {
@@ -339,6 +363,7 @@ function holdExcludedRoute(store: TimerStore, meta?: TimedSessionMeta) {
     closeActiveSegment(store)
     persistSnapshot(store)
     notify(store)
+    maybeWriteDwellCheckpoint(store, { force: true })
   }
 }
 
@@ -362,6 +387,7 @@ function startStore(store: TimerStore, meta?: TimedSessionMeta) {
   }
   openSegment(store, Array.from(store.attachments.values()).find((item) => item.active))
   pushEvent(store, 'start', meta)
+  rememberDwellCheckpoint(store)
   startTicker(store)
   persistSnapshot(store)
   notify(store)
@@ -378,6 +404,7 @@ function resumeStore(store: TimerStore, meta?: TimedSessionMeta) {
   startTicker(store)
   persistSnapshot(store)
   notify(store)
+  maybeWriteDwellCheckpoint(store)
 }
 
 function nextClientRevision(store: TimerStore) {
@@ -432,6 +459,7 @@ function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt
     pauseCount: store.snapshot.pauseCount,
     completionMethod: method,
     durationEdited: false,
+    clientSource: detectClientSource(),
     activityTag: dominantKind,
     events: [...store.events],
     sceneSegments: [...store.sceneSegments],
@@ -467,10 +495,47 @@ function buildCheckpointRecord(store: TimerStore) {
     pauseCount: store.snapshot.pauseCount,
     completionMethod: 'saved' as const,
     durationEdited: false,
+    clientSource: detectClientSource(),
     activityTag: dominantKind,
     events: [...store.events],
     sceneSegments: collectSegments(store, endedAt),
   } satisfies TimeSessionRecord
+}
+
+function dwellCheckpointSignature(store: TimerStore) {
+  const active = store.activeSegment
+  return `${active?.scene ?? ''}|${active?.title ?? ''}|${active?.routePath ?? ''}`
+}
+
+function rememberDwellCheckpoint(store: TimerStore, atMs = Date.now()) {
+  store.lastCheckpointAtMs = atMs
+  store.lastCheckpointSignature = dwellCheckpointSignature(store)
+}
+
+function maybeWriteDwellCheckpoint(store: TimerStore, options?: { force?: boolean }) {
+  if (!isDwellSessionKey(store.key) || !store.persistCompletionRecord) return
+  if (store.snapshot.status !== 'running' && store.snapshot.status !== 'paused') return
+  if (!store.recordId || !store.snapshot.startedAt) return
+  updateEffectiveSnapshot(store)
+  if (store.snapshot.effectiveSeconds <= 0) return
+  const signature = dwellCheckpointSignature(store)
+  const now = Date.now()
+  const due = store.lastCheckpointAtMs == null
+    || now - store.lastCheckpointAtMs >= DWELL_CHECKPOINT_INTERVAL_MS
+  const changed = signature !== store.lastCheckpointSignature
+  if (!options?.force && !due && !changed) return
+  const keepRunning = store.snapshot.status === 'running'
+    && store.runningSinceMs != null
+    && activeAttachments(store).some((item) => item.active)
+    && canRunForegroundClock()
+  const record = buildCheckpointRecord(store)
+  if (keepRunning) {
+    store.runningSinceMs = Date.now()
+    if (store.tickTimer == null) startTicker(store)
+  }
+  if (!record || record.effectiveSeconds <= 0) return
+  rememberDwellCheckpoint(store, now)
+  void persistTimedSessionRecord(record)
 }
 
 async function completeStore(
@@ -532,6 +597,8 @@ function resetStore(store: TimerStore) {
   store.unloadFinalized = false
   store.hiddenAtMs = null
   store.clientRevision = 0
+  store.lastCheckpointAtMs = null
+  store.lastCheckpointSignature = null
   store.snapshot = {
     ...store.snapshot,
     effectiveSeconds: 0,
@@ -724,6 +791,7 @@ function hydrateStore(store: TimerStore) {
     pauseReason: snapshot.suspended ? 'document_hidden' : 'restored',
     startedAt: snapshot.startedAt,
   }
+  rememberDwellCheckpoint(store)
 }
 
 function createStore(key: string, options: TimedSessionOptions): TimerStore {
@@ -766,6 +834,8 @@ function createStore(key: string, options: TimedSessionOptions): TimerStore {
     unloadFinalized: false,
     hiddenAtMs: null,
     clientRevision: 0,
+    lastCheckpointAtMs: null,
+    lastCheckpointSignature: null,
   }
   hydrateStore(store)
   return store
@@ -845,6 +915,26 @@ export function adoptLiveTimerSnapshot(input: {
   notify(store)
 }
 
+function reviveForegroundClock(store: TimerStore) {
+  if (store.snapshot.status !== 'running') return
+  if (!canRunForegroundClock()) return
+  if (!activeAttachments(store).some((item) => item.active)) return
+  store.hiddenAtMs = null
+  if (store.runningSinceMs == null) store.runningSinceMs = Date.now()
+  if (store.tickTimer == null) startTicker(store)
+  notify(store)
+}
+
+function markVisiblePageAlive() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  for (const store of stores.values()) {
+    // The document is still here, so a later real leave must be allowed to
+    // checkpoint the seconds accumulated after this speculative unload.
+    store.unloadFinalized = false
+    reviveForegroundClock(store)
+  }
+}
+
 function markStoresHidden() {
   const hiddenAtMs = Date.now()
   for (const store of stores.values()) {
@@ -863,12 +953,14 @@ function resolveStoresVisible() {
   for (const store of stores.values()) {
     const hiddenAtMs = store.hiddenAtMs
     store.hiddenAtMs = null
+    store.unloadFinalized = false
     if (store.snapshot.status === 'idle' || store.snapshot.status === 'completed') continue
     if (!shouldResumeDwell(hiddenAtMs, nowMs)) {
       void completeStore(store, 'left_page', { source: 'resume_expired' })
       continue
     }
     systemResume(store, 'document_visible')
+    reviveForegroundClock(store)
   }
 }
 
@@ -892,11 +984,13 @@ function installBrowserListeners() {
       store.unloadFinalized = true
       stopTicker(store)
       settleRunning(store)
-      store.hiddenAtMs = Date.now()
-      persistSnapshot(store, { suspended: true })
+      const documentHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      if (documentHidden) store.hiddenAtMs = Date.now()
+      persistSnapshot(store, { suspended: documentHidden })
       const record = isDwellSessionKey(store.key)
         ? buildCheckpointRecord(store)
         : buildRecord(store, 'left_page')
+      if (isDwellSessionKey(store.key)) rememberDwellCheckpoint(store)
       store.finalRecord = record
       if (record && store.persistCompletionRecord) void fireAndQueueTimeRecordOnUnload(record)
       if (!isDwellSessionKey(store.key)) {
@@ -904,9 +998,14 @@ function installBrowserListeners() {
         store.snapshot = { ...store.snapshot, status: 'completed', pauseReason: null }
       }
     }
+    // pagehide/beforeunload also fire when the page stays open (PWA handoff,
+    // cancelled navigation). Stopping the ticker there used to freeze 随心 at
+    // the first couple of seconds while card review kept going.
+    markVisiblePageAlive()
   }
   window.addEventListener('pagehide', finalizeOnUnload)
   window.addEventListener('beforeunload', finalizeOnUnload)
+  window.addEventListener('pageshow', markVisiblePageAlive)
   subscribeLiveForegroundClock(syncStoresToLiveClockGate)
 }
 

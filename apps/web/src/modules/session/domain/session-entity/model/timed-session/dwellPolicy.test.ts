@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DWELL_LIVE_SESSION_KEY,
   DWELL_RESUME_WINDOW_MS,
+  applyDwellFragmentOverride,
   dwellSessionKeyForRecord,
   formatDwellRecordTitle,
   isDwellExcludedPath,
@@ -56,6 +57,50 @@ describe('dwellPolicy', () => {
   it('formats the list title from the local start clock', () => {
     const startedAt = new Date(2026, 8, 17, 9, 12, 0)
     expect(formatDwellRecordTitle(startedAt)).toBe('09:12 学习时段')
+  })
+
+  it('lets an open overlay replace the countable fragment without changing the route', () => {
+    const freestyle = resolveDwellFragment('/freestyle')
+    expect(applyDwellFragmentOverride(freestyle, {
+      scene: 'quiz',
+      kind: 'quiz',
+      title: '做题',
+      palaceId: 27,
+      sourceKind: 'palace',
+    })).toMatchObject({
+      countable: true,
+      scene: 'quiz',
+      title: '做题',
+      palaceId: 27,
+      sourceKind: 'palace',
+      routePath: '/freestyle',
+    })
+    expect(applyDwellFragmentOverride(freestyle, null)).toBe(freestyle)
+
+    const palaceQuiz = resolveDwellFragment('/palaces/12/quiz')
+    expect(applyDwellFragmentOverride(palaceQuiz, {
+      scene: 'practice',
+      kind: 'practice',
+      title: '查看宫殿',
+      palaceId: null,
+      sourceKind: null,
+    })).toMatchObject({
+      title: '查看宫殿',
+      palaceId: 12,
+      sourceKind: 'palace',
+      routePath: '/palaces/12/quiz',
+    })
+
+    const settings = resolveDwellFragment('/profile/timer')
+    const overridden = applyDwellFragmentOverride(settings, {
+      scene: 'quiz',
+      kind: 'quiz',
+      title: '做题',
+      palaceId: 1,
+      sourceKind: 'palace',
+    })
+    expect(overridden).toBe(settings)
+    expect(overridden.countable).toBe(false)
   })
 
   it('identifies dwell keys and picks the longest fragment kind', () => {

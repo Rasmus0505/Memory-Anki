@@ -82,6 +82,8 @@ export interface TimeSessionRecord {
   effectiveSeconds: number
   pauseCount: number
   completionMethod: SessionCompletionMethod
+  /** Server row status. In-progress dwell checkpoints stay `active`. */
+  status?: 'active' | 'paused' | 'completed' | 'abandoned' | 'recovered'
   durationEdited: boolean
   clientSource?: TimeRecordClientSource | null
   /** Stable tag id: builtin kind or custom tag id. */

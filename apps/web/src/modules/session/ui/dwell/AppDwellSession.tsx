@@ -4,7 +4,12 @@ import { useGlobalTimerRegistration } from '@/shared/components/session/globalTi
 import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import { useTimedSession } from '@/modules/session/domain/session-entity/model/timed-session/timedSessionStateMachine'
 import {
+  peekDwellFragmentOverride,
+  subscribeDwellFragmentOverrides,
+} from '@/modules/session/domain/session-entity/model/timed-session/dwellFragmentOverride'
+import {
   DWELL_LIVE_SESSION_KEY,
+  applyDwellFragmentOverride,
   dwellKindToSessionKind,
   resolveDwellFragment,
 } from '@/modules/session/domain/session-entity/model/timed-session/dwellPolicy'
@@ -15,9 +20,18 @@ function toFocusScene(scene: string): TimerFocusScene {
 
 export function AppDwellSession() {
   const location = useLocation()
-  const fragment = React.useMemo(
+  const routeFragment = React.useMemo(
     () => resolveDwellFragment(`${location.pathname}${location.search}`),
     [location.pathname, location.search],
+  )
+  const override = React.useSyncExternalStore(
+    subscribeDwellFragmentOverrides,
+    peekDwellFragmentOverride,
+    peekDwellFragmentOverride,
+  )
+  const fragment = React.useMemo(
+    () => applyDwellFragmentOverride(routeFragment, override),
+    [override, routeFragment],
   )
   const options = React.useMemo(() => ({
     sessionKey: DWELL_LIVE_SESSION_KEY,

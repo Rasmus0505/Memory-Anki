@@ -12,11 +12,15 @@ export {
 } from './domain/session-entity/model/timed-session/timedSessionStateMachine'
 export { AppDwellSession } from './ui/dwell/AppDwellSession'
 export {
+  DWELL_CHECKPOINT_INTERVAL_MS,
   DWELL_LIVE_SESSION_KEY,
   DWELL_RESUME_WINDOW_MS,
+  applyDwellFragmentOverride,
   dwellKindToSessionKind,
   resolveDwellFragment,
+  type DwellFragmentOverride,
 } from './domain/session-entity/model/timed-session/dwellPolicy'
+export { useDwellFragmentOverride } from './ui/dwell/useDwellFragmentOverride'
 export {
   interpolateTimerSeconds,
   isFollowableStudyPath,

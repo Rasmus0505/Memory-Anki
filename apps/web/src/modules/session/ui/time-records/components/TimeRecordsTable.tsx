@@ -300,7 +300,7 @@ export function TimeRecordsTable({
                       <td className="px-4 py-4 whitespace-nowrap"><span className="rounded-md border border-border/70 bg-secondary/70 px-2 py-1 text-xs">{formatClientSource(record.clientSource)}</span></td>
                       <td className="px-4 py-4 whitespace-nowrap">{formatTableDateTime(record.startedAt)}</td>
                       <td className="px-4 py-4 whitespace-nowrap font-medium">{formatDuration(record.effectiveSeconds)}</td>
-                      <td className="px-4 py-4">{formatCompletionMethod(record.completionMethod)}</td>
+                      <td className="px-4 py-4">{record.status === 'active' ? '进行中' : formatCompletionMethod(record.completionMethod)}</td>
                       <td className="px-4 py-4"><div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => onEditRecord(record)} disabled={actionInProgress}><Pencil className="mr-2 size-4" />编辑</Button>
                         <Button size="sm" variant="outline" onClick={() => void onDeleteRecord(record)} disabled={actionInProgress}><Trash2 className="mr-2 size-4" />{isDeleting ? '删除中...' : '删除'}</Button>

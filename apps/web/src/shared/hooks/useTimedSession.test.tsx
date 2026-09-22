@@ -113,6 +113,70 @@ describe('useTimedSession foreground clock', () => {
     expect(result.current.effectiveSeconds).toBe(3)
   })
 
+  it('keeps counting after pagehide when the document is still visible', async () => {
+    const { result } = renderHook(() => useTimedSession({
+      sessionKey: 'dwell:live',
+      kind: 'quiz',
+      title: '随心',
+      palaceId: null,
+      persistCompletionRecord: true,
+    }))
+
+    act(() => {
+      result.current.start({ source: 'dwell_autostart' })
+      vi.advanceTimersByTime(2_100)
+      window.dispatchEvent(new Event('pagehide'))
+      vi.advanceTimersByTime(3_100)
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(5)
+
+    let record: Awaited<ReturnType<typeof result.current.complete>>
+    await act(async () => {
+      record = await result.current.complete('manual_complete')
+    })
+    expect(record!).toMatchObject({
+      effectiveSeconds: 5,
+      clientSource: 'desktop',
+    })
+  })
+
+  it('does not accrue time when pagehide happens while the document is hidden', () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    const { result } = renderHook(() => useTimedSession({
+      sessionKey: 'dwell:live',
+      kind: 'quiz',
+      title: '随心',
+      palaceId: null,
+      persistCompletionRecord: true,
+    }))
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(2_100)
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('pagehide'))
+      vi.advanceTimersByTime(20_000)
+    })
+
+    const hiddenSeconds = result.current.effectiveSeconds
+    expect(result.current.status).toBe('paused')
+    expect(hiddenSeconds).toBe(2)
+
+    act(() => {
+      visibility.mockReturnValue('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(1_100)
+      window.dispatchEvent(new Event('pagehide'))
+    })
+
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(hiddenSeconds + 1)
+    visibility.mockRestore()
+  })
+
   it('pauses immediately on visibility hidden and resumes when visible', () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get')
     const { result } = renderHook(() => useTestTimedSession())
@@ -312,6 +376,34 @@ describe('useTimedSession foreground clock', () => {
     visibility.mockRestore()
   })
 
+  it('keeps foreground seconds already counted when one later gap exceeds five seconds', () => {
+    const { result } = renderHook(() => useTimedSession({
+      sessionKey: 'dwell:live',
+      kind: 'quiz',
+      title: '随心',
+      palaceId: null,
+      persistCompletionRecord: true,
+    }))
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(8_100)
+    })
+    expect(result.current.effectiveSeconds).toBe(8)
+
+    act(() => {
+      vi.setSystemTime(Date.now() + 30_000)
+      result.current.getEffectiveSeconds()
+    })
+    expect(result.current.effectiveSeconds).toBe(8)
+
+    act(() => {
+      result.current.pause()
+    })
+    expect(result.current.status).toBe('paused')
+    expect(result.current.effectiveSeconds).toBe(8)
+  })
+
   it('pauses on settings without splitting or writing a settings fragment', async () => {
     const { result, rerender } = renderHook(
       ({ path }: { path: string }) => {
@@ -370,5 +462,85 @@ describe('useTimedSession foreground clock', () => {
       segment.title === '设置' || segment.routePath?.startsWith('/profile')
     ))).toBe(false)
     expect(record?.sceneSegments?.some((segment) => segment.title === '随心')).toBe(true)
+  })
+
+  it('writes a saved dwell checkpoint when the fragment changes and again after 30 seconds', async () => {
+    const { result, rerender } = renderHook(
+      ({ title, scene }: { title: string; scene: 'freestyle' | 'quiz' }) => useTimedSession({
+        sessionKey: 'dwell:live',
+        kind: 'quiz',
+        title,
+        palaceId: null,
+        automationScene: scene,
+        persistCompletionRecord: true,
+        routePath: '/freestyle',
+      }),
+      { initialProps: { title: '随心', scene: 'freestyle' as const } },
+    )
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(5_100)
+    })
+    expect(persistSpy).not.toHaveBeenCalled()
+    const idBefore = result.current.effectiveSeconds
+    expect(idBefore).toBeGreaterThan(0)
+
+    act(() => {
+      rerender({ title: '做题', scene: 'quiz' })
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const firstSaved = persistSpy.mock.calls
+      .map(([record]) => record)
+      .filter((record) => record.completionMethod === 'saved')
+    expect(firstSaved).toHaveLength(1)
+    expect(firstSaved[0]?.sceneSegments?.some((segment) => segment.title === '随心')).toBe(true)
+    const recordId = firstSaved[0]?.id
+
+    act(() => {
+      vi.advanceTimersByTime(31_000)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const saved = persistSpy.mock.calls
+      .map(([record]) => record)
+      .filter((record) => record.completionMethod === 'saved')
+    expect(saved.length).toBeGreaterThan(1)
+    expect(saved.at(-1)?.id).toBe(recordId)
+    expect(saved.at(-1)?.effectiveSeconds).toBeGreaterThan(firstSaved[0]?.effectiveSeconds ?? 0)
+    expect(result.current.status).toBe('running')
+  })
+
+  it('does not checkpoint a page timer that must not persist', () => {
+    const { result, rerender } = renderHook(
+      ({ title }: { title: string }) => useTimedSession({
+        sessionKey: 'freestyle',
+        kind: 'quiz',
+        title,
+        palaceId: null,
+        automationScene: title === '做题' ? 'quiz' : 'freestyle',
+        persistCompletionRecord: false,
+        routePath: '/freestyle',
+      }),
+      { initialProps: { title: '随心' } },
+    )
+
+    act(() => {
+      result.current.start()
+      vi.advanceTimersByTime(5_100)
+      rerender({ title: '做题' })
+      vi.advanceTimersByTime(31_000)
+    })
+
+    expect(persistSpy).not.toHaveBeenCalled()
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBeGreaterThan(30)
   })
 })

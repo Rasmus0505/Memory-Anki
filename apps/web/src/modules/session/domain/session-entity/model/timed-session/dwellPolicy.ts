@@ -7,6 +7,9 @@ export const DWELL_LIVE_SESSION_KEY = 'dwell:live'
 /** Leave the app (hidden / closed) longer than this and the next visit starts a new record. */
 export const DWELL_RESUME_WINDOW_MS = 15 * 60 * 1000
 
+/** How often a running dwell clock writes a non-terminal saved checkpoint. */
+export const DWELL_CHECKPOINT_INTERVAL_MS = 30_000
+
 export const DWELL_SNAPSHOT_STORAGE_KEY = 'memory-anki-dwell-session'
 
 export type DwellFragmentKind = SessionKind | 'english' | 'english_reading'
@@ -66,6 +69,31 @@ function courseIdFrom(path: string) {
   if (!match) return null
   const id = Number(match[1])
   return Number.isFinite(id) ? id : null
+}
+
+export interface DwellFragmentOverride {
+  scene: SessionScene
+  kind: DwellFragmentKind
+  title: string
+  palaceId: number | null
+  sourceKind: TimedSessionSourceKind
+  /** Higher priority wins. 查看宫殿 stays above 做题 even if the quiz re-renders. */
+  priority?: number
+}
+
+export function applyDwellFragmentOverride(
+  fragment: DwellFragment,
+  override: DwellFragmentOverride | null,
+): DwellFragment {
+  if (!override || !fragment.countable) return fragment
+  return {
+    ...fragment,
+    scene: override.scene,
+    kind: override.kind,
+    title: override.title,
+    palaceId: override.palaceId ?? fragment.palaceId,
+    sourceKind: override.sourceKind ?? fragment.sourceKind,
+  }
 }
 
 export function resolveDwellFragment(path: string): DwellFragment {

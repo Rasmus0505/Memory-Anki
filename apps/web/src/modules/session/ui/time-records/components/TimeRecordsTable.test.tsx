@@ -61,4 +61,25 @@ describe('TimeRecordsTable range controls', () => {
     fireEvent.click(todayButton)
     expect(props.onRangeModeChange).toHaveBeenCalledWith('today')
   })
+
+  it('labels an in-progress dwell checkpoint as 进行中', () => {
+    const props = buildProps()
+    render(<TimeRecordsTable {...props} totalRecords={1} hasSelectableRecords visibleRecords={[{
+      id: 'dwell-live',
+      kind: 'quiz',
+      palaceId: null,
+      title: '09:12 学习时段',
+      startedAt: '2026-09-22T01:12:00.000Z',
+      endedAt: '2026-09-22T01:12:00.000Z',
+      effectiveSeconds: 90,
+      pauseCount: 0,
+      completionMethod: 'saved',
+      status: 'active',
+      durationEdited: false,
+      events: [],
+    }]} />)
+
+    expect(screen.getByText('进行中')).toBeTruthy()
+    expect(screen.queryByText('保存结束')).toBeNull()
+  })
 })

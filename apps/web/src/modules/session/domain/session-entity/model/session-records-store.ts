@@ -184,6 +184,7 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
     effectiveSeconds: item.effective_seconds,
     pauseCount: item.pause_count,
     completionMethod: (item.completion_method || 'manual_complete') as TimeSessionRecord['completionMethod'],
+    status: item.status,
     durationEdited: Boolean(summary.duration_edited),
     clientSource: normalizeClientSource(summary.client_source),
     activityTag,
