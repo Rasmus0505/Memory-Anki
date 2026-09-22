@@ -3,7 +3,7 @@
 > Current ownership map. Historical target notes remain in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). Frontend `features/` and `entities/` have been migrated into `modules/*`; backend public imports go through each context's declared `public` / `api` entry.
 
 
-This directory is the current architectural source of truth. Product and runtime context lives in `AI_PROJECT_CONTEXT.md`; historical plans in `fable/` are not authoritative for current module ownership.
+This directory is the current architectural source of truth. Product and runtime context lives in `AI_PROJECT_CONTEXT.md`; historical plans in `fable/` are not authoritative for current module ownership. Runtime files under `local_app_home` use three roots documented in [storage-roots.md](./storage-roots.md): `学习数据`, `学科附件`, `日志缓存`.
 
 ## System Shape
 

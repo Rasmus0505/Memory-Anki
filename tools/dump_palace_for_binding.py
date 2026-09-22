@@ -39,7 +39,10 @@ def resolve_app_home() -> Path:
     raise SystemExit(f"volume {vol_name} not found")
 
 
-DB = resolve_app_home() / "data" / "memory_palace.db"
+sys.path.insert(0, str(ROOT / "apps" / "api" / "src"))
+from memory_anki.core.runtime_paths import resolve_existing_database_file  # noqa: E402
+
+DB = resolve_existing_database_file(resolve_app_home())
 
 
 def connect() -> sqlite3.Connection:

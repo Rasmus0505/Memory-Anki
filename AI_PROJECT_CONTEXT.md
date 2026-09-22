@@ -464,16 +464,11 @@ AI 相关功能分布较广：
 
 关键原则：源码仓库和运行数据分离。
 
-常见运行时内容：
+运行时 `local_app_home` 拆成三个文件夹：
 
-- SQLite 数据库
-- 附件
-- 学科文档
-- 导入任务产物
-- AI 调用日志
-- 英语媒体/任务文件
-- 英语阅读词典/CEFR 数据
-- 备份
+- `学习数据`：SQLite、英语媒体、英语阅读词表、voice coach
+- `学科附件`：学科 PDF、`pdf_library`
+- `日志缓存`：备份、AI 日志、OCR 缓存、导入/生成工作区、runtime 锁（不影响日常打开学习）
 
 这些路径通常由 `memory_anki.core.config` 派生，根目录来自 `MEMORY_ANKI_HOME` 或默认 `%LOCALAPPDATA%\MemoryAnki`。涉及新增路径时要考虑：
 

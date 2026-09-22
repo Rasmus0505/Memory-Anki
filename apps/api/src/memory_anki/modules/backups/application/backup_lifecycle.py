@@ -11,6 +11,7 @@ from memory_anki.core.config import (
     FULL_BACKUPS_DIR,
     RESCUE_BACKUPS_DIR,
     ROLLING_BACKUPS_DIR,
+    STORAGE_ROOT_LEARNING,
 )
 from memory_anki.core.runtime_activity import (
     assert_exclusive_runtime_operation,
@@ -25,14 +26,14 @@ from memory_anki.modules.backups.application.storage_backup import (
 
 logger = logging.getLogger(__name__)
 
-# 周期/关机/编辑均走轻量 rolling；全量仅每日启动与手动创建。
+# 自动/手动/关机均走轻量 rolling（仅数据库）。全量媒体拷贝不再作为产品路径。
 AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
 ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
 
 # 保留策略：每次新建备份后自动清理超出上限的旧备份，避免磁盘无限增长。
-MAX_FULL_BACKUPS = 3
-MAX_ROLLING_BACKUPS = 6
-MAX_RESCUE_BACKUPS = 3
+MAX_FULL_BACKUPS = 1
+MAX_ROLLING_BACKUPS = 3
+MAX_RESCUE_BACKUPS = 2
 
 _BACKUP_LOCK = threading.Lock()
 _BACKUP_LOOP_THREAD: threading.Thread | None = None
@@ -54,9 +55,10 @@ def create_rescue_snapshot(reason: str) -> Path:
 
 
 def ensure_daily_backup() -> Path | None:
-    if _daily_full_backup_exists():
+    """每天至多一份轻量数据库快照，不复制 PDF/视频。"""
+    if _daily_rolling_backup_exists():
         return None
-    return create_full_backup("startup")
+    return create_rolling_backup("startup")
 
 
 def create_full_backup(reason: str) -> Path:
@@ -140,11 +142,11 @@ def restore_database_backup(backup_folder: str) -> Path:
 
 
 def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Path | None:
-    """兼容旧调用：按全量目录最近一份的年龄决定是否再打全量。"""
-    latest = _latest_backup_in(FULL_BACKUPS_DIR)
+    """兼容旧调用：按 rolling 目录最近一份的年龄决定是否再打轻量备份。"""
+    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
     if latest and _backup_age(latest) < minimum_interval:
         return None
-    return create_full_backup(reason)
+    return create_rolling_backup(reason)
 
 
 def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
@@ -241,6 +243,7 @@ def _backup_database_candidates(folder: Path, manifest: dict) -> list[Path]:
 
     candidates.extend(
         [
+            folder / STORAGE_ROOT_LEARNING / DB_PATH.name,
             folder / "data" / DB_PATH.name,
             folder / DB_PATH.name,
         ]
@@ -264,6 +267,16 @@ def _daily_full_backup_exists() -> bool:
         if bool(is_full):
             return True
     return False
+
+
+def _daily_rolling_backup_exists() -> bool:
+    prefix = datetime.now().strftime("%Y%m%d")
+    if not ROLLING_BACKUPS_DIR.exists():
+        return False
+    return any(
+        child.is_dir() and child.name.startswith(prefix)
+        for child in ROLLING_BACKUPS_DIR.iterdir()
+    )
 
 
 # 兼容旧测试/调用方名称

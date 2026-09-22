@@ -144,7 +144,9 @@ def _database_at_alembic_head() -> bool:
         from memory_anki.infrastructure.db.migrations import build_alembic_config
 
         expected_heads = set(ScriptDirectory.from_config(build_alembic_config()).get_heads())
-        database_path = dev_server._resolve_configured_app_home() / "data" / "memory_palace.db"
+        from memory_anki.core.runtime_paths import resolve_existing_database_file
+
+        database_path = resolve_existing_database_file(dev_server._resolve_configured_app_home())
         if not database_path.exists():
             return False
         with sqlite3.connect(database_path) as connection:
@@ -459,7 +461,9 @@ def _prepare_runtime() -> bool:
     try:
         local_env = _backend_env()
         app_home = local_env.get("MEMORY_ANKI_HOME", "")
-        db_path = Path(app_home) / "data" / "memory_palace.db" if app_home else None
+        from memory_anki.core.runtime_paths import resolve_existing_database_file
+
+        db_path = resolve_existing_database_file(Path(app_home)) if app_home else None
         print(f"[i] MEMORY_ANKI_HOME={app_home}")
         if db_path is not None:
             print(f"[i] Database={db_path} ({'exists' if db_path.exists() else 'missing'})")

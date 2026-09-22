@@ -12,7 +12,7 @@ from typing import Any
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import APP_HOME
+from memory_anki.core.config import APP_HOME, BATCH_GENERATION_DIR
 from memory_anki.infrastructure.db._tables.batch_generation import (
     BatchGenerationAsset,
     BatchGenerationBook,
@@ -24,7 +24,7 @@ from memory_anki.infrastructure.db._tables.batch_generation import (
     BatchGenerationWorkspace,
 )
 
-ASSET_ROOT = APP_HOME / "batch_generation"
+ASSET_ROOT = BATCH_GENERATION_DIR
 TITLE_PATTERN = re.compile(r"^(第[一二三四五六七八九十百零0-9]+[章节篇部]|\d+(?:\.\d+)+)\s*.+")
 
 

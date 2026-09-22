@@ -251,7 +251,10 @@ def main() -> int:
     args = parser.parse_args()
 
     app_home = _resolve_app_home(args.app_home)
-    database_path = app_home / "data" / "memory_palace.db"
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api" / "src"))
+    from memory_anki.core.runtime_paths import resolve_existing_database_file
+
+    database_path = resolve_existing_database_file(app_home)
     report = repair(
         database_path=database_path,
         session_id=args.session_id,

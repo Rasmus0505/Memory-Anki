@@ -21,7 +21,7 @@ export interface BackupKindDescription {
 
 export function describeBackupKind(backup: BackupSummary): BackupKindDescription {
   const kindLabel =
-    backup.kind === 'full' ? '整库备份' : backup.kind === 'rolling' ? '轻量自动备份' : '事故快照'
+    backup.kind === 'full' ? '整库备份' : backup.kind === 'rolling' ? '数据库备份' : '事故快照'
   const isFullScope = backup.full ?? backup.scope === 'full'
   return {
     kindLabel,

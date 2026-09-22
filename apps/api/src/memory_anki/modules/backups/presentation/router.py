@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.backups.application.backup_lifecycle import (
-    create_full_backup,
+    create_rolling_backup,
     list_backups,
     restore_database_backup,
 )
@@ -35,7 +35,7 @@ def api_list_backups():
 @router.post("/backups/create")
 def api_create_backup(data: dict | None = None):
     reason = (data or {}).get("reason") or "manual"
-    folder = create_full_backup(str(reason))
+    folder = create_rolling_backup(str(reason))
     return {"ok": True, "path": str(folder)}
 
 

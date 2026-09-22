@@ -11,12 +11,14 @@ from memory_anki.modules.backups.presentation import router as backups_router
 
 @pytest.fixture()
 def backup_env(tmp_path, monkeypatch):
+    from memory_anki.core.config import STORAGE_ROOT_CACHE, STORAGE_ROOT_LEARNING
+
     app_home = tmp_path / "home"
-    backups = app_home / "data" / "backups"
+    backups = app_home / STORAGE_ROOT_CACHE / "backups"
     full_dir = backups / "full"
     rolling_dir = backups / "rolling"
     rescue_dir = backups / "rescue"
-    db_path = app_home / "data" / "memory_palace.db"
+    db_path = app_home / STORAGE_ROOT_LEARNING / "memory_palace.db"
     for folder in (full_dir, rolling_dir, rescue_dir, db_path.parent):
         folder.mkdir(parents=True, exist_ok=True)
     db_path.write_bytes(b"fake-sqlite-content")
@@ -31,8 +33,8 @@ def backup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(backups_router, "list_backups", backup_lifecycle.list_backups)
     monkeypatch.setattr(
         backups_router,
-        "create_full_backup",
-        backup_lifecycle.create_full_backup,
+        "create_rolling_backup",
+        backup_lifecycle.create_rolling_backup,
     )
     monkeypatch.setattr(
         backups_router,
@@ -56,7 +58,7 @@ def test_create_full_backup_writes_manifest_and_db(backup_env):
 
     assert folder.parent == backup_env["full"]
     assert (folder / "manifest.json").exists()
-    assert (folder / "data" / "memory_palace.db").read_bytes() == b"fake-sqlite-content"
+    assert (folder / "学习数据" / "memory_palace.db").read_bytes() == b"fake-sqlite-content"
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("full") is True
     assert manifest.get("scope") == "full"
@@ -69,7 +71,7 @@ def test_create_rolling_backup_uses_rolling_dir_and_light_scope(backup_env):
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("full") is False
     assert manifest.get("scope") == "rolling"
-    assert (folder / "data" / "memory_palace.db").exists()
+    assert (folder / "学习数据" / "memory_palace.db").exists()
 
 
 def test_create_rescue_snapshot_is_light(backup_env):
@@ -212,3 +214,25 @@ def test_backups_route_lists_tmp_backups(backup_env, make_client):
 
     assert response.status_code == 200
     assert response.json()["items"][0]["reason"] == "unit-test"
+
+
+def test_ensure_daily_backup_writes_rolling_not_full(backup_env):
+    folder = backup_lifecycle.ensure_daily_backup()
+
+    assert folder is not None
+    assert folder.parent == backup_env["rolling"]
+    assert not any(backup_env["full"].iterdir())
+    assert backup_lifecycle.ensure_daily_backup() is None
+
+
+def test_create_backup_route_writes_rolling(backup_env, make_client):
+    client = make_client(backups_router)
+
+    response = client.post("/api/v1/backups/create", json={"reason": "manual"})
+
+    assert response.status_code == 200
+    items = backup_lifecycle.list_backups()
+    assert len(items) == 1
+    assert items[0]["kind"] == "rolling"
+    assert items[0]["reason"] == "manual"
+    assert not any(backup_env["full"].iterdir())

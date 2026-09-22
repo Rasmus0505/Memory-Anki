@@ -28,6 +28,7 @@ class ManagedStorageItem:
 @dataclass(frozen=True, slots=True)
 class StorageLayout:
     storage_mode: str
+    roots: dict[str, str]
     managed_items: tuple[ManagedStorageItem, ...]
     source_path: str
 
@@ -50,8 +51,15 @@ def load_storage_layout(path: Path | None = None) -> StorageLayout:
         for item in payload.get("managed_items", [])
         if isinstance(item, dict)
     )
+    raw_roots = payload.get("roots") if isinstance(payload.get("roots"), dict) else {}
+    roots = {
+        str(key): str(value)
+        for key, value in raw_roots.items()
+        if str(key).strip() and str(value).strip()
+    }
     return StorageLayout(
         storage_mode=str(payload.get("storage_mode") or "user_app_home"),
+        roots=roots,
         managed_items=items,
         source_path=str(layout_path),
     )

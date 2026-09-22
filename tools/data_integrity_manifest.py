@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
-DB_RELATIVE_PATH = Path("data") / "memory_palace.db"
+DB_RELATIVE_PATH = Path("学习数据") / "memory_palace.db"
 
 
 def default_app_home() -> Path:

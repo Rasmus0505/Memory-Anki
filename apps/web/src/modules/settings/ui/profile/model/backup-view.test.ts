@@ -28,7 +28,7 @@ describe('backup-view', () => {
     // list_backups emits three kinds; the contract only declared two, so
     // rolling entries fell through to the rescue label.
     expect(describeBackupKind(makeBackup({ kind: 'rolling', full: false })).kindLabel).toBe(
-      '轻量自动备份',
+      '数据库备份',
     )
     expect(describeBackupKind(makeBackup({ kind: 'rescue', full: false })).kindLabel).toBe('事故快照')
     expect(describeBackupKind(makeBackup()).kindLabel).toBe('整库备份')

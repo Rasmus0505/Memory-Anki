@@ -327,7 +327,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             app_home = root / "app-home"
-            data_dir = app_home / "data"
+            data_dir = app_home / "学习数据"
             data_dir.mkdir(parents=True)
             db_path = data_dir / "memory_palace.db"
             wal_path = data_dir / "memory_palace.db-wal"
@@ -337,7 +337,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             shm_path.write_bytes(b"shm")
             destination = root / "backup"
             item = _BackupItem()
-            item.relative_path = "data/memory_palace.db"
+            item.relative_path = "学习数据/memory_palace.db"
             item.kind = "file"
             item.required = True
 
@@ -349,7 +349,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 "included_items": [
                     {
                         **result,
-                        "relative_path": "data/memory_palace.db",
+                        "relative_path": "学习数据/memory_palace.db",
                     }
                 ]
             }
@@ -362,9 +362,9 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 "ensure_runtime_dirs",
             ):
                 restored = storage_backup.restore_storage_backup(destination)
-            backup_wal = (destination / "data" / "memory_palace.db-wal").read_bytes()
-            restored_wal = (restored_home / "data" / "memory_palace.db-wal").read_bytes()
-            restored_shm = (restored_home / "data" / "memory_palace.db-shm").read_bytes()
+            backup_wal = (destination / "学习数据" / "memory_palace.db-wal").read_bytes()
+            restored_wal = (restored_home / "学习数据" / "memory_palace.db-wal").read_bytes()
+            restored_shm = (restored_home / "学习数据" / "memory_palace.db-shm").read_bytes()
 
         self.assertIn("database", restored)
         self.assertEqual(backup_wal, b"wal")

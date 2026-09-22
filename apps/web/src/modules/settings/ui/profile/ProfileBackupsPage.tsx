@@ -96,7 +96,7 @@ export default function ProfileBackupsPage() {
 
   const handleCreateBackup = async () => {
     const result = await createBackupApi('manual')
-    toast.success(`已创建整库备份：${result.path}`)
+    toast.success(`已创建数据库备份：${result.path}`)
     await loadBackups()
   }
 
@@ -175,7 +175,7 @@ export default function ProfileBackupsPage() {
   return (
     <ProfileLayout
       title="数据与备份"
-      description="整库快照、设备迁移和宫殿导入导出都在这里。会清空本机数据的操作单独放在危险区。"
+      description="数据库快照、设备迁移和宫殿导入导出都在这里。会清空本机数据的操作单独放在危险区。"
     >
       <Tabs value={tab} onValueChange={(value) => setTab(normalizeTab(value))} className="space-y-4">
         <TabsList className="h-auto flex-wrap rounded-lg border border-border/70 bg-background/90 p-1">
@@ -190,11 +190,11 @@ export default function ProfileBackupsPage() {
         <TabsContent value="backups" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">整库备份</CardTitle>
+              <CardTitle className="text-base">数据库备份</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="text-sm text-muted-foreground">
-                主库是 SQLite。编辑时会自动生成仅含数据库的轻量备份；恢复、导入等高风险操作前会自动创建事故快照。三类快照只要含数据库就都能恢复。
+                自动和手动备份都只保存 SQLite 进度库，不重复拷贝 PDF 或英语视频。附件和媒体留在学习数据目录里，换设备时和数据包一起带走。恢复、导入前会自动创建事故快照。
               </div>
               {runtimeInfo ? (
                 <div className="rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
@@ -223,7 +223,7 @@ export default function ProfileBackupsPage() {
                 >
                   <option value="all">全部类型</option>
                   <option value="full">整库备份</option>
-                  <option value="rolling">轻量自动备份</option>
+                  <option value="rolling">数据库备份</option>
                   <option value="rescue">事故快照</option>
                 </select>
                 <Input

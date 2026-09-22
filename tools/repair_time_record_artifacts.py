@@ -78,8 +78,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    from memory_anki.core.runtime_paths import resolve_existing_database_file
+
     app_home = _ensure_app_home()
-    db_path = app_home / "data" / "memory_palace.db"
+    db_path = resolve_existing_database_file(app_home)
     print(f"MEMORY_ANKI_HOME={app_home}")
     print(f"db={db_path}")
 

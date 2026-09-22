@@ -16,14 +16,22 @@ from pathlib import Path
 from memory_anki.core.config import (
     APP_HOME,
     ATTACHMENTS_DIR,
+    CACHE_DIR,
     DB_PATH,
     FULL_BACKUPS_DIR,
+    LEARNING_DIR,
     LEGACY_DATA_DIR,
     MIGRATION_STATE_PATH,
     RESCUE_BACKUPS_DIR,
+    STORAGE_ROOT_ATTACHMENTS,
+    STORAGE_ROOT_CACHE,
+    STORAGE_ROOT_LEARNING,
+    SUBJECT_ATTACHMENTS_DIR,
     ensure_runtime_dirs,
 )
 from memory_anki.core.time import iso_utc_now
+
+THREE_ROOT_LAYOUT_MIGRATION_KEY = "split_three_storage_roots"
 
 
 def _write_state(payload: dict) -> None:
@@ -94,7 +102,89 @@ def _should_replace_runtime_db(legacy_db: Path) -> bool:
     return legacy_size > runtime_size and legacy_tables >= runtime_tables
 
 
+def _relocate_path(src: Path, dest: Path) -> str | None:
+    if not src.exists():
+        return None
+    try:
+        if src.resolve() == dest.resolve():
+            return None
+    except OSError:
+        pass
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        if dest.is_dir() and not any(dest.iterdir()):
+            dest.rmdir()
+        elif dest.is_file() and dest.stat().st_size == 0:
+            dest.unlink()
+        else:
+            return None
+    shutil.move(str(src), str(dest))
+    return f"{src.as_posix()} -> {dest.as_posix()}"
+
+
+def _three_root_relocations() -> tuple[tuple[Path, Path], ...]:
+    old_data = APP_HOME / "data"
+    return (
+        (old_data / "memory_palace.db", LEARNING_DIR / "memory_palace.db"),
+        (old_data / "memory_palace.db-wal", LEARNING_DIR / "memory_palace.db-wal"),
+        (old_data / "memory_palace.db-shm", LEARNING_DIR / "memory_palace.db-shm"),
+        (APP_HOME / "english", LEARNING_DIR / "english"),
+        (APP_HOME / "english_reading", LEARNING_DIR / "english_reading"),
+        (APP_HOME / "voice_coach", LEARNING_DIR / "voice_coach"),
+        (old_data / "attachments", SUBJECT_ATTACHMENTS_DIR),
+        (APP_HOME / "pdf_library", SUBJECT_ATTACHMENTS_DIR / "pdf_library"),
+        (old_data / "backups", CACHE_DIR / "backups"),
+        (old_data / "migration-backups", CACHE_DIR / "migration-backups"),
+        (APP_HOME / "import_jobs", CACHE_DIR / "import_jobs"),
+        (APP_HOME / "quiz_generation", CACHE_DIR / "quiz_generation"),
+        (APP_HOME / "batch_generation", CACHE_DIR / "batch_generation"),
+        (APP_HOME / "ai_call_logs", CACHE_DIR / "ai_call_logs"),
+        (APP_HOME / "pdf_ocr_cache", CACHE_DIR / "pdf_ocr_cache"),
+        (APP_HOME / "runtime", CACHE_DIR / "runtime"),
+        (APP_HOME / "binding-audits", CACHE_DIR / "binding-audits"),
+        (APP_HOME / "backup-verify-reports", CACHE_DIR / "backup-verify-reports"),
+    )
+
+
+def _remove_empty_dir(path: Path) -> None:
+    if not path.exists() or not path.is_dir():
+        return
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        path.rmdir()
+    except OSError:
+        return
+
+
+def ensure_three_root_layout_migrated() -> None:
+    """Move a flat APP_HOME into 学习数据 / 学科附件 / 日志缓存 without overwriting."""
+    pending = [
+        (src, dest) for src, dest in _three_root_relocations() if src.exists()
+    ]
+    if not pending and is_app_migration_completed(THREE_ROOT_LAYOUT_MIGRATION_KEY):
+        return
+    moved: list[str] = []
+    for src, dest in pending:
+        result = _relocate_path(src, dest)
+        if result:
+            moved.append(result)
+    _remove_empty_dir(APP_HOME / "data")
+    mark_app_migration_completed(
+        THREE_ROOT_LAYOUT_MIGRATION_KEY,
+        {
+            "roots": {
+                "learning": STORAGE_ROOT_LEARNING,
+                "attachments": STORAGE_ROOT_ATTACHMENTS,
+                "cache": STORAGE_ROOT_CACHE,
+            },
+            "moved": moved,
+        },
+    )
+
+
 def ensure_legacy_repo_data_migrated() -> None:
+    ensure_three_root_layout_migrated()
     ensure_runtime_dirs()
     state = _read_state()
     if state and state.get("completed"):

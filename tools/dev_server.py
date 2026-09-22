@@ -350,7 +350,9 @@ def wait_for_frontend(timeout_seconds: int = 40) -> bool:
 def ensure_backend_runtime_prepared(env: dict | None = None) -> None:
     """确保数据库已初始化。若库不存在则跑一次 runtime_prepare。"""
     api_home = _resolve_configured_app_home()
-    db_path = api_home / "data" / "memory_palace.db"
+    from memory_anki.core.runtime_paths import resolve_existing_database_file
+
+    db_path = resolve_existing_database_file(api_home)
     if db_path.exists() and db_path.stat().st_size > 0:
         return
     print("[i] 数据库未初始化，执行 runtime_prepare（建库 + seed）...")

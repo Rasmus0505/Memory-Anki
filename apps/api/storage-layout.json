@@ -1,79 +1,84 @@
 {
   "storage_mode": "user_app_home",
+  "roots": {
+    "learning": "学习数据",
+    "attachments": "学科附件",
+    "cache": "日志缓存"
+  },
   "managed_items": [
     {
       "key": "database",
-      "relative_path": "data/memory_palace.db",
+      "relative_path": "学习数据/memory_palace.db",
       "kind": "file",
       "required": true,
       "backup": true
     },
     {
-      "key": "attachments",
-      "relative_path": "data/attachments",
-      "kind": "directory",
-      "required": true,
-      "backup": true
-    },
-    {
       "key": "english",
-      "relative_path": "english",
+      "relative_path": "学习数据/english",
       "kind": "directory",
       "required": true,
       "backup": true
     },
     {
       "key": "english_reading",
-      "relative_path": "english_reading",
+      "relative_path": "学习数据/english_reading",
       "kind": "directory",
       "required": true,
       "backup": true
     },
     {
       "key": "voice_coach",
-      "relative_path": "voice_coach",
+      "relative_path": "学习数据/voice_coach",
       "kind": "directory",
       "required": true,
       "backup": true
+    },
+    {
+      "key": "attachments",
+      "relative_path": "学科附件",
+      "kind": "directory",
+      "required": true,
+      "backup": false
     },
     {
       "key": "import_jobs",
-      "relative_path": "import_jobs",
+      "relative_path": "日志缓存/import_jobs",
       "kind": "directory",
       "required": true,
-      "backup": true
+      "backup": false
     },
     {
       "key": "quiz_generation",
-      "relative_path": "quiz_generation",
+      "relative_path": "日志缓存/quiz_generation",
       "kind": "directory",
       "required": true,
-      "backup": true
+      "backup": false
     },
     {
       "key": "ai_call_logs",
-      "relative_path": "ai_call_logs",
+      "relative_path": "日志缓存/ai_call_logs",
       "kind": "directory",
       "required": true,
       "backup": false
     },
     {
       "key": "backups_full",
-      "relative_path": "data/backups/full",
+      "relative_path": "日志缓存/backups/full",
       "kind": "directory",
       "required": true,
       "backup": false
     },
     {
       "key": "backups_rescue",
-      "relative_path": "data/backups/rescue",
+      "relative_path": "日志缓存/backups/rescue",
       "kind": "directory",
       "required": true,
       "backup": false
     },
     {
       "key": "runtime_active_instances",
-      "relative_path": "runtime/active-instances",
+      "relative_path": "日志缓存/runtime/active-instances",
       "kind": "directory",
       "required": true,
       "backup": false

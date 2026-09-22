@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, REPO_ROOT
+from memory_anki.core.config import APP_HOME, CACHE_DIR, REPO_ROOT
 from memory_anki.core.time import iso_utc_now
 
-ACTIVE_RUNTIME_INSTANCES_DIR = APP_HOME / "runtime" / "active-instances"
+ACTIVE_RUNTIME_INSTANCES_DIR = CACHE_DIR / "runtime" / "active-instances"
 INSTANCE_HEARTBEAT_INTERVAL_SECONDS = 5.0
 INSTANCE_STALE_AFTER_SECONDS = 20.0
 

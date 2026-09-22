@@ -6,7 +6,14 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 from memory_anki.core.dotenv_compat import load_dotenv
-from memory_anki.core.runtime_paths import REPO_ROOT, resolve_app_home
+from memory_anki.core.runtime_paths import (
+    DATABASE_FILE_NAME,
+    REPO_ROOT,
+    STORAGE_ROOT_ATTACHMENTS,
+    STORAGE_ROOT_CACHE,
+    STORAGE_ROOT_LEARNING,
+    resolve_app_home,
+)
 from memory_anki.core.storage_layout import get_managed_storage_items
 
 load_dotenv()
@@ -95,28 +102,42 @@ def _resolve_app_home() -> tuple[Path, str]:
 
 LEGACY_DATA_DIR = REPO_ROOT / "data"
 APP_HOME, APP_HOME_SOURCE = _resolve_app_home()
-DATA_DIR = APP_HOME / "data"
-ATTACHMENTS_DIR = DATA_DIR / "attachments"
-SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
-IMPORT_JOBS_DIR = APP_HOME / "import_jobs"
-PDF_LIBRARY_DIR = APP_HOME / "pdf_library"
-PDF_OCR_CACHE_DIR = APP_HOME / "pdf_ocr_cache"
-AI_CALL_LOGS_DIR = APP_HOME / "ai_call_logs"
-ENGLISH_DIR = APP_HOME / "english"
+
+# APP_HOME 下三个稳定根目录：学习数据 / 学科附件 / 日志缓存。
+LEARNING_DIR = APP_HOME / STORAGE_ROOT_LEARNING
+SUBJECT_ATTACHMENTS_DIR = APP_HOME / STORAGE_ROOT_ATTACHMENTS
+CACHE_DIR = APP_HOME / STORAGE_ROOT_CACHE
+
+DATA_DIR = LEARNING_DIR
+DB_PATH = LEARNING_DIR / DATABASE_FILE_NAME
+ENGLISH_DIR = LEARNING_DIR / "english"
 ENGLISH_MEDIA_DIR = ENGLISH_DIR / "media"
 ENGLISH_TASKS_DIR = ENGLISH_DIR / "tasks"
-ENGLISH_READING_DIR = APP_HOME / "english_reading"
+ENGLISH_READING_DIR = LEARNING_DIR / "english_reading"
 ENGLISH_READING_LEXICON_DIR = ENGLISH_READING_DIR / "lexicon"
 ENGLISH_READING_CEFR_PATH = ENGLISH_READING_LEXICON_DIR / "cefr.json"
 REPO_ENGLISH_READING_CEFR_SOURCE = REPO_ROOT / "apps" / "shared" / "english-reading-cefr.json"
 ENGLISH_READING_DEFAULT_CEFR_SOURCE = Path(
     os.environ.get("MEMORY_ANKI_CEFR_SOURCE") or REPO_ENGLISH_READING_CEFR_SOURCE
 )
-BACKUPS_DIR = DATA_DIR / "backups"
+VOICE_COACH_DIR = LEARNING_DIR / "voice_coach"
+
+ATTACHMENTS_DIR = SUBJECT_ATTACHMENTS_DIR
+SUBJECT_DOCUMENTS_DIR = ATTACHMENTS_DIR / "subjects"
+PDF_LIBRARY_DIR = ATTACHMENTS_DIR / "pdf_library"
+
+IMPORT_JOBS_DIR = CACHE_DIR / "import_jobs"
+PDF_OCR_CACHE_DIR = CACHE_DIR / "pdf_ocr_cache"
+AI_CALL_LOGS_DIR = CACHE_DIR / "ai_call_logs"
+QUIZ_GENERATION_DIR = CACHE_DIR / "quiz_generation"
+BATCH_GENERATION_DIR = CACHE_DIR / "batch_generation"
+RUNTIME_DIR = CACHE_DIR / "runtime"
+BACKUPS_DIR = CACHE_DIR / "backups"
 FULL_BACKUPS_DIR = BACKUPS_DIR / "full"
 ROLLING_BACKUPS_DIR = BACKUPS_DIR / "rolling"
 RESCUE_BACKUPS_DIR = BACKUPS_DIR / "rescue"
-DB_PATH = DATA_DIR / "memory_palace.db"
+BACKUP_VERIFY_REPORTS_DIR = CACHE_DIR / "backup-verify-reports"
+
 MIGRATION_STATE_PATH = APP_HOME / "migration-state.json"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 WEB_DIST_DIR = Path(os.environ["MEMORY_ANKI_WEB_DIST"]) if os.environ.get("MEMORY_ANKI_WEB_DIST") else None
@@ -193,6 +214,9 @@ DEFAULTS = {
 def ensure_runtime_dirs() -> None:
     directories = {
         APP_HOME,
+        LEARNING_DIR,
+        SUBJECT_ATTACHMENTS_DIR,
+        CACHE_DIR,
         DATA_DIR,
         ATTACHMENTS_DIR,
         SUBJECT_DOCUMENTS_DIR,
@@ -200,6 +224,10 @@ def ensure_runtime_dirs() -> None:
         PDF_LIBRARY_DIR,
         PDF_OCR_CACHE_DIR,
         AI_CALL_LOGS_DIR,
+        QUIZ_GENERATION_DIR,
+        BATCH_GENERATION_DIR,
+        RUNTIME_DIR,
+        VOICE_COACH_DIR,
         ENGLISH_DIR,
         ENGLISH_MEDIA_DIR,
         ENGLISH_TASKS_DIR,
@@ -208,6 +236,7 @@ def ensure_runtime_dirs() -> None:
         FULL_BACKUPS_DIR,
         ROLLING_BACKUPS_DIR,
         RESCUE_BACKUPS_DIR,
+        BACKUP_VERIFY_REPORTS_DIR,
     }
     for item in get_managed_storage_items():
         if item.kind == "directory":

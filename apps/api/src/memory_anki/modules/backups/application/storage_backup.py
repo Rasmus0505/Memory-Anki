@@ -6,7 +6,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, BACKUPS_DIR, DB_PATH, ensure_runtime_dirs
+from memory_anki.core.config import (
+    APP_HOME,
+    BACKUPS_DIR,
+    DB_PATH,
+    STORAGE_ROOT_CACHE,
+    STORAGE_ROOT_LEARNING,
+    ensure_runtime_dirs,
+)
 from memory_anki.core.runtime import build_runtime_info
 from memory_anki.core.storage_layout import (
     ManagedStorageItem,
@@ -107,7 +114,7 @@ def _ignore_nested_backups(current_dir: str, names: list[str]) -> set[str]:
         return set(names)
     if current_path == backups_path.parent and backups_path.name in names:
         return {backups_path.name}
-    if current_path.name == "data" and backups_path.name in names:
+    if current_path.name in {"data", STORAGE_ROOT_CACHE, STORAGE_ROOT_LEARNING} and backups_path.name in names:
         return {backups_path.name}
     return set()
 

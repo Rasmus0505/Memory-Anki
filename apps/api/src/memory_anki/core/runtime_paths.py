@@ -7,6 +7,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[5]
 APP_HOME_ENV = "MEMORY_ANKI_HOME"
 APP_HOME_DIR_NAME = "MemoryAnki"
+STORAGE_ROOT_LEARNING = "学习数据"
+STORAGE_ROOT_ATTACHMENTS = "学科附件"
+STORAGE_ROOT_CACHE = "日志缓存"
+DATABASE_FILE_NAME = "memory_palace.db"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,11 +46,31 @@ def get_app_home() -> Path:
     return resolve_app_home().app_home
 
 
+def database_file_path(app_home: Path) -> Path:
+    return Path(app_home) / STORAGE_ROOT_LEARNING / DATABASE_FILE_NAME
+
+
+def resolve_existing_database_file(app_home: Path) -> Path:
+    preferred = database_file_path(app_home)
+    if preferred.exists():
+        return preferred
+    legacy = Path(app_home) / "data" / DATABASE_FILE_NAME
+    if legacy.exists():
+        return legacy
+    return preferred
+
+
 __all__ = [
     "APP_HOME_ENV",
     "AppHomeResolution",
+    "DATABASE_FILE_NAME",
     "REPO_ROOT",
+    "STORAGE_ROOT_ATTACHMENTS",
+    "STORAGE_ROOT_CACHE",
+    "STORAGE_ROOT_LEARNING",
+    "database_file_path",
     "default_app_home",
     "get_app_home",
     "resolve_app_home",
+    "resolve_existing_database_file",
 ]

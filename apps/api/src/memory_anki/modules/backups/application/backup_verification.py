@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from memory_anki.core.config import APP_HOME, DB_PATH, FULL_BACKUPS_DIR
+from memory_anki.core.config import APP_HOME, BACKUP_VERIFY_REPORTS_DIR, DB_PATH
 from memory_anki.modules.backups.application.backup_lifecycle import list_backups
 from memory_anki.modules.backups.application.storage_backup import read_storage_backup_manifest
 
@@ -25,24 +25,18 @@ KEY_TABLES = [
     "config",
 ]
 
-REPORTS_DIR = APP_HOME / "backup-verify-reports"
+REPORTS_DIR = BACKUP_VERIFY_REPORTS_DIR
 
 
 def find_latest_backup_with_database() -> Path | None:
-    """Return the newest full backup directory that contains a database snapshot."""
-    if not FULL_BACKUPS_DIR.exists():
-        return None
-
+    """Return the newest snapshot directory that contains a database."""
     candidates: list[Path] = []
-    known_paths = {Path(item["path"]) for item in list_backups() if item.get("kind") == "full"}
-    if known_paths:
-        search_paths = [path for path in known_paths if path.exists() and path.is_dir()]
-    else:
-        search_paths = [child for child in FULL_BACKUPS_DIR.iterdir() if child.is_dir()]
-
-    for folder in search_paths:
-        if resolve_backup_database_path(folder).exists():
-            candidates.append(folder)
+    for item in list_backups():
+        if not item.get("has_database"):
+            continue
+        path = Path(str(item.get("path") or ""))
+        if path.exists() and path.is_dir() and resolve_backup_database_path(path).exists():
+            candidates.append(path)
     if not candidates:
         return None
     return max(candidates, key=lambda item: item.stat().st_mtime)

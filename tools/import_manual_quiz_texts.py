@@ -16,10 +16,14 @@ API_SRC = REPO_ROOT / "apps" / "api" / "src"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
-from memory_anki.core.runtime_paths import APP_HOME_ENV, default_app_home  # noqa: E402
+from memory_anki.core.runtime_paths import (  # noqa: E402
+    APP_HOME_ENV,
+    default_app_home,
+    resolve_existing_database_file,
+)
 
 DEFAULT_RUNTIME_HOME = default_app_home()
-if (DEFAULT_RUNTIME_HOME / "data" / "memory_palace.db").exists():
+if resolve_existing_database_file(DEFAULT_RUNTIME_HOME).exists():
     os.environ[APP_HOME_ENV] = str(DEFAULT_RUNTIME_HOME)
 
 from memory_anki.core.config import DB_PATH  # noqa: E402

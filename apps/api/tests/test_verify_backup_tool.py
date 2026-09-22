@@ -9,8 +9,8 @@ SCRIPT = REPO_ROOT / "tools" / "verify_backup.py"
 
 
 def _make_fake_backup(tmp_path: Path) -> Path:
-    backup_dir = tmp_path / "home" / "data" / "backups" / "full" / "20260101-000000-test"
-    backup_data_dir = backup_dir / "data"
+    backup_dir = tmp_path / "home" / "日志缓存" / "backups" / "full" / "20260101-000000-test"
+    backup_data_dir = backup_dir / "学习数据"
     backup_data_dir.mkdir(parents=True)
     db_file = backup_data_dir / "memory_palace.db"
     with sqlite3.connect(db_file) as conn:
@@ -23,7 +23,7 @@ def _make_fake_backup(tmp_path: Path) -> Path:
         "included_items": [
             {
                 "key": "database",
-                "relative_path": "data/memory_palace.db",
+                "relative_path": "学习数据/memory_palace.db",
                 "kind": "file",
                 "included": True,
             }
@@ -46,7 +46,7 @@ def test_verify_backup_pass_on_valid_backup(tmp_path, monkeypatch):
         text=True,
         check=False,
     )
-    reports = list((app_home / "backup-verify-reports").glob("verify-*.json"))
+    reports = list((app_home / "日志缓存" / "backup-verify-reports").glob("verify-*.json"))
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "[PASS]" in result.stdout
@@ -96,7 +96,7 @@ def test_verify_backup_reports_corrupt_database(tmp_path, monkeypatch):
         text=True,
         check=False,
     )
-    reports = list((app_home / "backup-verify-reports").glob("verify-*.json"))
+    reports = list((app_home / "日志缓存" / "backup-verify-reports").glob("verify-*.json"))
 
     assert result.returncode == 1
     assert "[FAIL]" in result.stdout
@@ -116,4 +116,4 @@ def test_verify_backup_auto_selects_latest_manifest_database(tmp_path, monkeypat
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert backup_dir.name in result.stdout
-    assert str(backup_dir / "data" / "memory_palace.db") in result.stdout
+    assert str(backup_dir / "学习数据" / "memory_palace.db") in result.stdout

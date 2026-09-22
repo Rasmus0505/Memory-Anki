@@ -201,18 +201,20 @@ def _detect_alternate_data_home_warnings(
     warnings: list[dict[str, Any]] = []
     candidates: list[tuple[str, Path]] = []
     # Default Windows local app data home.
-    local_app = Path(os.environ.get("LOCALAPPDATA") or "") / "MemoryAnki" / "data" / "memory_palace.db"
-    if local_app.name:
-        candidates.append(("localappdata", local_app))
+    from memory_anki.core.runtime_paths import resolve_existing_database_file
+
+    local_home = Path(os.environ.get("LOCALAPPDATA") or "") / "MemoryAnki"
+    if local_home.name:
+        candidates.append(("localappdata", resolve_existing_database_file(local_home)))
     # USB volume label layout from project convention.
     try:
         from memory_anki.core.local_config import _windows_volume_root_by_label
 
         root = _windows_volume_root_by_label("MemoryAnki")
         if root is not None:
-            candidates.append(
-                ("usb_vol_MemoryAnki", root / "memory anki data" / "data" / "memory_palace.db")
-            )
+            usb_home = root / "memory anki data"
+            candidates.append(("usb_vol_MemoryAnki", resolve_existing_database_file(usb_home)))
+            candidates.append(("usb_vol_MemoryAnki_legacy", usb_home / "data" / "memory_palace.db"))
     except Exception:
         pass
 
