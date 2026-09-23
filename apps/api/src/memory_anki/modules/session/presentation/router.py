@@ -118,9 +118,10 @@ def api_time_record_analytics(
 
 @router.get("/study-sessions/time-records")
 def api_time_records(
-    range_mode: Literal["today", "month", "rolling", "custom", "all"] = "month",
+    range_mode: Literal["today", "yesterday", "month", "rolling", "custom", "all"] = "month",
     month: str | None = Query(default=None, max_length=7),
-    rolling_days: Literal[7, 30, 90] | None = None,
+    # Query values arrive as strings. Literal[7, 30, 90] rejects "7" on Pydantic 2.12.
+    rolling_days: Literal["7", "30", "90"] | None = None,
     start_date: str | None = Query(default=None, max_length=10),
     end_date: str | None = Query(default=None, max_length=10),
     keyword: str | None = Query(default=None, max_length=300),
@@ -145,7 +146,7 @@ def api_time_records(
             session,
             range_mode=range_mode,
             month=month,
-            rolling_days=rolling_days,
+            rolling_days=int(rolling_days) if rolling_days is not None else None,
             start_date=start_date,
             end_date=end_date,
             keyword=keyword,

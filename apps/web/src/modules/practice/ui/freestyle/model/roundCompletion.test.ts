@@ -379,6 +379,89 @@ describe('findEarliestUnhandledIndex', () => {
       },
     )).toBeNull()
   })
+
+  it('seeks the retry when the hard rating is missing from the source card', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const roundPlan = {
+      cardsById: {
+        one: { lastRating: 3, status: 'completed' },
+        two: { status: 'retry', lastRating: null },
+        [retry.id]: { status: 'retry', lastRating: null, occurrenceKind: 'retry', sourceCardId: 'two' },
+      },
+    } as never
+    expect(findEarliestUnhandledIndex(
+      [card('one'), card('two'), retry],
+      { two: encounter({ selectedRating: null, passed: null, status: 'open' }) },
+      [],
+      roundPlan,
+    )).toBe(2)
+  })
+
+  it('seeks the retry when the source card id was rewritten to a new revision', () => {
+    const source = card('review_unit:u1:r2', { unit_id: 'u1' })
+    const retry = {
+      ...card('retry:round-1:u1:1', { unit_id: 'u1' }),
+      source_card_id: 'review_unit:u1:r1',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    expect(findEarliestUnhandledIndex(
+      [card('one'), source, retry],
+      {
+        one: encounter(),
+        [source.id]: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(2)
+  })
+
+  it('seeks the retry even when the plan copied the weak rating onto it', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const roundPlan = {
+      cardsById: {
+        two: { lastRating: 2, status: 'retry', sourceCardId: 'two' },
+        [retry.id]: { lastRating: 2, status: 'retry', occurrenceKind: 'retry', sourceCardId: 'two' },
+      },
+    } as never
+    expect(findEarliestUnhandledIndex(
+      [card('one'), card('two'), retry],
+      { one: encounter(), two: encounter({ selectedRating: 2, passed: false }) },
+      [],
+      roundPlan,
+    )).toBe(2)
+  })
+
+  it('seeks the later retry after an earlier retry was also rated hard', () => {
+    const first = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    const second = {
+      ...card('retry:round-1:two:2'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 2,
+    }
+    expect(findEarliestUnhandledIndex(
+      [card('one'), card('two'), first, second],
+      {
+        one: encounter(),
+        two: encounter({ selectedRating: 2, passed: false }),
+        [first.id]: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(3)
+  })
 })
 
 describe('resolveFreestyleCompleteSeek', () => {

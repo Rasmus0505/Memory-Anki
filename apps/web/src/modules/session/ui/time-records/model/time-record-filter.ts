@@ -28,6 +28,7 @@ export type TimeRecordFilterPersistenceState = TimeRecordFilterState
 
 const RANGE_MODES: TimeRecordRangeMode[] = [
   'today',
+  'yesterday',
   'month',
   'rolling',
   'custom',
@@ -133,6 +134,7 @@ export function isTimeRecordCustomRangeValid(
 
 export function formatTimeRecordRangeLabel(filter: TimeRecordFilterState) {
   if (filter.rangeMode === 'today') return '今天'
+  if (filter.rangeMode === 'yesterday') return '昨天'
   if (filter.rangeMode === 'month') return filter.month || '当前月份'
   if (filter.rangeMode === 'rolling') return `最近 ${filter.rollingDays} 天`
   if (filter.rangeMode === 'all') return '全部历史'

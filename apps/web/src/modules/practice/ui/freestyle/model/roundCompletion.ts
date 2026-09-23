@@ -1,6 +1,8 @@
 import {
   cardPalaceId,
+  cardUnitId,
   isRetryOccurrence,
+  reviewUnitIdFromCardId,
   sourceCardId,
   type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
@@ -88,17 +90,10 @@ function isHandled(
   if (encounterPassed(encounter) || (ownLast != null && ownLast >= 3) || (sourceLast != null && sourceLast >= 3)) {
     return true
   }
-  // A weak rating is an acknowledged attempt, but not completion: its retry
-  // occurrence must still be rated before the round can close.
-  const weak = encounter?.selectedRating != null || (ownLast != null && ownLast < 3) || (sourceLast != null && sourceLast < 3)
-  if (!weak) return false
-  return cards.some((candidate) => {
-    if (sourceIdOf(candidate) !== sourceId) return false
-    const last = planLastRating(roundPlan, candidate.id)
-    return encounterPassed(encountersByCardId[candidate.id])
-      || (last != null && last >= 3)
-      || completed.has(candidate.id)
-  })
+  // A weak or still-unrated source is not done while its 重练 is unfinished.
+  // A passed retry of the same unit closes the source even when the live card
+  // id no longer matches the retry's source_card_id.
+  return familyHasPass(card, cards, encountersByCardId, completed, roundPlan)
 }
 
 /**
@@ -285,29 +280,82 @@ function isPassedOccurrence(
   return last != null && last >= 3
 }
 
-/** 忘记/困难 already scored this copy. A later 重练 is the remaining work. */
-function isWeakScored(
+function parseRetrySourceId(occurrenceId: string) {
+  const parts = String(occurrenceId || '').split(':')
+  if (parts[0] !== 'retry' || parts.length < 4) return ''
+  return parts.slice(2, -1).join(':')
+}
+
+function addCardKey(keys: Set<string>, raw: string) {
+  const id = String(raw || '').trim()
+  if (!id) return
+  keys.add(`card:${id}`)
+  const unit = reviewUnitIdFromCardId(id)
+  if (unit) keys.add(`unit:${unit}`)
+}
+
+/**
+ * Same learning unit across a rewritten review card id and its 重练.
+ * `card:` and `unit:` never compare equal, so a unit id cannot match a card id.
+ */
+function familyKeys(
   card: FreestyleCard,
+  roundPlan: FreestyleRoundPlanState | null,
+) {
+  const keys = new Set<string>()
+  const unitId = cardUnitId(card)
+  if (unitId) keys.add(`unit:${unitId}`)
+  const ownId = String(card.id || '').trim()
+  if (ownId && !ownId.startsWith('retry:')) addCardKey(keys, ownId)
+  if ('source_card_id' in card) addCardKey(keys, String(card.source_card_id || ''))
+  addCardKey(keys, String(roundPlan?.cardsById[ownId]?.sourceCardId || ''))
+  addCardKey(keys, parseRetrySourceId(ownId))
+  return keys
+}
+
+function sharesFamily(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  if (left.size === 0 || right.size === 0) return false
+  for (const key of left) {
+    if (right.has(key)) return true
+  }
+  return false
+}
+
+function isLiveRetry(
+  card: FreestyleCard,
+  roundPlan: FreestyleRoundPlanState | null,
+) {
+  if (isRetryOccurrence(card)) return true
+  if (String(card.id || '').startsWith('retry:')) return true
+  return roundPlan?.cardsById[card.id]?.occurrenceKind === 'retry'
+}
+
+function familyHasPass(
+  card: FreestyleCard,
+  cards: ReadonlyArray<FreestyleCard>,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completed: ReadonlySet<string>,
   roundPlan: FreestyleRoundPlanState | null,
 ) {
-  if (isPassedOccurrence(card, encountersByCardId, completed, roundPlan)) return false
-  const rating = encountersByCardId[card.id]?.selectedRating ?? planLastRating(roundPlan, card.id)
-  return rating != null && rating < 3
+  const keys = familyKeys(card, roundPlan)
+  return cards.some((candidate) => (
+    sharesFamily(keys, familyKeys(candidate, roundPlan))
+    && isPassedOccurrence(candidate, encountersByCardId, completed, roundPlan)
+  ))
 }
 
-function hasUnfinishedRetry(
+function hasUnfinishedFamilyRetry(
   cards: ReadonlyArray<FreestyleCard>,
   card: FreestyleCard,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completed: ReadonlySet<string>,
   roundPlan: FreestyleRoundPlanState | null,
 ) {
-  const sourceId = sourceIdOf(card)
-  return cards.some((candidate) => {
-    if (candidate.id === card.id) return false
-    if (sourceIdOf(candidate) !== sourceId || !isRetryOccurrence(candidate)) return false
+  const keys = familyKeys(card, roundPlan)
+  const origin = cards.findIndex((item) => item === card || item.id === card.id)
+  return cards.some((candidate, index) => {
+    if (index <= origin || !isLiveRetry(candidate, roundPlan)) return false
+    if (!sharesFamily(keys, familyKeys(candidate, roundPlan))) return false
     return !isPassedOccurrence(candidate, encountersByCardId, completed, roundPlan)
   })
 }
@@ -315,9 +363,11 @@ function hasUnfinishedRetry(
 /**
  * First card the 完成 button should open.
  * Unrated units stay seekable, including ones skipped ahead.
- * A 忘记/困难 source is not the target once its 重练 is in the feed —
- * seek that retry. The source is still the target when the retry has not
- * been inserted yet. Round completion is stricter and still waits for the retry.
+ * A source is not the target once a later 重练 of the same unit is in the
+ * feed — seek that retry, even when the 困难 rating is not on this card id.
+ * The source is still the target when the retry has not been inserted yet.
+ * A copied weak lastRating on the retry is not a pass. Round completion
+ * still waits for the retry.
  */
 export function findEarliestUnhandledIndex(
   cards: ReadonlyArray<FreestyleCard>,
@@ -330,10 +380,7 @@ export function findEarliestUnhandledIndex(
     const id = String(card.id || '').trim()
     if (!id) return false
     if (isHandled(card, encountersByCardId, completedIds, cards, roundPlan)) return false
-    if (isWeakScored(card, encountersByCardId, completed, roundPlan)
-      && hasUnfinishedRetry(cards, card, encountersByCardId, completed, roundPlan)) {
-      return false
-    }
+    if (hasUnfinishedFamilyRetry(cards, card, encountersByCardId, completed, roundPlan)) return false
     return true
   })
   return index >= 0 ? index : null

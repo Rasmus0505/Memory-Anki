@@ -55,11 +55,15 @@ describe('TimeRecordsTable range controls', () => {
     render(<TimeRecordsTable {...props} />)
 
     const todayButton = screen.getByRole('button', { name: '今天' })
+    const yesterdayButton = screen.getByRole('button', { name: '昨天' })
     const monthButton = screen.getByRole('button', { name: '月份' })
-    expect(todayButton.compareDocumentPosition(monthButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(todayButton.compareDocumentPosition(yesterdayButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(yesterdayButton.compareDocumentPosition(monthButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(todayButton)
     expect(props.onRangeModeChange).toHaveBeenCalledWith('today')
+    fireEvent.click(yesterdayButton)
+    expect(props.onRangeModeChange).toHaveBeenCalledWith('yesterday')
   })
 
   it('labels an in-progress dwell checkpoint as 进行中', () => {

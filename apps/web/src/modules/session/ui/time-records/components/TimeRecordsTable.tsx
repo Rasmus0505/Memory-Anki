@@ -147,6 +147,9 @@ export function TimeRecordsTable({
             <RangeButton active={filter.rangeMode === 'today'} onClick={() => onRangeModeChange('today')}>
               今天
             </RangeButton>
+            <RangeButton active={filter.rangeMode === 'yesterday'} onClick={() => onRangeModeChange('yesterday')}>
+              昨天
+            </RangeButton>
             <RangeButton active={filter.rangeMode === 'month'} onClick={() => onRangeModeChange('month')}>
               月份
             </RangeButton>

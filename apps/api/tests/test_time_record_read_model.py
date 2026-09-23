@@ -269,6 +269,21 @@ def test_today_range_uses_local_calendar_day_and_shared_summary(db_session):
     assert payload["summary"]["total_effective_seconds"] == 300
     assert {item["id"] for item in payload["items"]} == {"today-one", "today-two"}
 
+    yesterday = build_time_record_read_model(
+        db_session,
+        range_mode="yesterday",
+        reference_date=today,
+    )
+    assert yesterday["range"] == {
+        "mode": "yesterday",
+        "month": None,
+        "rolling_days": None,
+        "start_date": "2026-07-29",
+        "end_date": "2026-07-29",
+    }
+    assert yesterday["summary"]["total_effective_seconds"] == 400
+    assert {item["id"] for item in yesterday["items"]} == {"yesterday"}
+
 
 def test_time_records_endpoint_returns_paginated_items_and_unpaged_reconciliation(
     session_factory,
@@ -327,6 +342,50 @@ def test_time_records_endpoint_accepts_today_range(session_factory, make_client)
     payload = response.json()
     assert payload["range"]["mode"] == "today"
     assert payload["summary"]["total_effective_seconds"] == 3_600
+
+
+def test_time_records_endpoint_accepts_rolling_day_query_strings(
+    session_factory,
+    make_client,
+):
+    client = make_client(sessions_router)
+    for days in (7, 30, 90):
+        response = client.get(
+            "/api/v1/study-sessions/time-records",
+            params={"range_mode": "rolling", "rolling_days": days},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["range"]["rolling_days"] == days
+
+
+def test_time_records_endpoint_accepts_yesterday_range(session_factory, make_client):
+    today_start, _ = today_bounds()
+    yesterday_start = today_start - timedelta(days=1)
+    with session_factory() as session:
+        session.add(
+            StudySession(
+                id="yesterday-endpoint-record",
+                status="completed",
+                scene="practice",
+                target_type="none",
+                title="yesterday endpoint record",
+                started_at=yesterday_start + timedelta(hours=8),
+                ended_at=yesterday_start + timedelta(hours=9),
+                effective_seconds=1_200,
+            )
+        )
+        session.commit()
+
+    client = make_client(sessions_router)
+    response = client.get(
+        "/api/v1/study-sessions/time-records",
+        params={"range_mode": "yesterday"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["range"]["mode"] == "yesterday"
+    assert payload["summary"]["total_effective_seconds"] == 1_200
 
 
 def test_read_model_includes_only_the_newest_active_dwell_checkpoint(db_session):

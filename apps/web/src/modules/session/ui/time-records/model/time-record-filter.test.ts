@@ -33,12 +33,18 @@ describe('time-record-filter', () => {
     ).toMatchObject({ rangeMode: 'month', month: '2026-06' })
   })
 
-  it('labels today explicitly', () => {
+  it('labels today and yesterday explicitly', () => {
     expect(
       formatTimeRecordRangeLabel({
         ...createDefaultTimeRecordFilter(),
         rangeMode: 'today',
       }),
     ).toBe('今天')
+    expect(
+      formatTimeRecordRangeLabel({
+        ...createDefaultTimeRecordFilter(),
+        rangeMode: 'yesterday',
+      }),
+    ).toBe('昨天')
   })
 })

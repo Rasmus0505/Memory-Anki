@@ -161,7 +161,13 @@ export interface StudySessionAnalyticsResult {
   }>
 }
 
-export type TimeRecordRangeMode = 'today' | 'month' | 'rolling' | 'custom' | 'all'
+export type TimeRecordRangeMode =
+  | 'today'
+  | 'yesterday'
+  | 'month'
+  | 'rolling'
+  | 'custom'
+  | 'all'
 export type TimeRecordKind =
   | 'review'
   | 'practice'
