@@ -2778,8 +2778,10 @@ def test_unit_review_boundary_requires_scheduler_service_and_topology(
     check_architecture.check_unit_review_boundary(errors)
 
     assert any("reconcile_palace_units" in error for error in errors)
+    assert any("_active_unit_key" in error for error in errors)
     assert any("INTERVAL_DAYS" in error for error in errors)
     assert any("split_scheduling_units" in error for error in errors)
+    assert any("UNIT_KIND_COHORT" in error for error in errors)
 
 
 def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
@@ -2790,7 +2792,8 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     write_file(api_src / "modules/memory/presentation/router.py", "")
     write_file(
         api_src / "modules/memory/application/unit_review_projection.py",
-        "def reconcile_palace_units(): pass\n",
+        "def reconcile_palace_units(): pass\n"
+        "def _active_unit_key(): pass\n",
     )
     write_file(
         api_src / "modules/memory/application/unit_review_service.py",
@@ -2807,7 +2810,8 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     )
     write_file(
         api_src / "modules/mindmap_document/split_units.py",
-        "def split_scheduling_units(): pass\n",
+        "def split_scheduling_units(): pass\n"
+        "UNIT_KIND_COHORT = 'cohort'\n",
     )
     write_file(
         api_src / "modules/practice/domain/review_units.py",
@@ -3261,8 +3265,8 @@ def test_freestyle_viewing_playhead_rejects_rating_owned_tick(
     check_architecture.check_freestyle_viewing_playhead(errors)
 
     assert any("viewing playhead must be independent" in error for error in errors)
-    assert any("settle the round or seek the earliest unfinished unit" in error for error in errors)
-    assert any("settles the round or seeks the earliest unfinished unit" in error for error in errors)
+    assert any("settle the round or seek the earliest unrated unit" in error for error in errors)
+    assert any("settles the round or seeks the earliest unrated unit" in error for error in errors)
     assert any("uncomplete the round-plan tick" in error for error in errors)
     assert any("cancelled rating from completed_ids" in error for error in errors)
     assert any("viewing playhead and rating-cancel un-light" in error for error in errors)

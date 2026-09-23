@@ -111,6 +111,7 @@ def build_freestyle_queue(
                 node_uids=node_uids,
                 unit_id=str(row["id"]),
                 revision=int(row.get("revision") or 1),
+                unit_kind=str(row.get("unit_kind") or ""),
             )
         )
         due_by_palace.setdefault(palace_id, set()).update(node_uids)

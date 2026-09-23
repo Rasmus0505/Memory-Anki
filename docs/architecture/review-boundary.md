@@ -26,7 +26,10 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Water flows from the root through unmarked nodes. A permanent mark starts an isolated downstream unit; a deeper mark cuts another unit from it.
 - Nodes outside marked regions form one residual root-flow unit.
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
-- Every non-root node belongs to exactly one active unit.
+- Isolation units still partition every non-root node: each belongs to exactly one palace, mark, or residual unit.
+- Directly marked children of the same parent also form one cohort unit (`cohort`). A cohort contains only those marked nodes, so a marked node may also sit in its isolation unit. Different parents and different depths are never mixed. A cohort of one mark is omitted when that mark's isolation unit is already exactly the mark.
+- Cohort order is depth-first: the parent's cohort, then each marked child's isolation unit, then that child's walk. The root isolation unit stays before its children's cohorts. The residual unit stays last. Structured review keeps that order after the due date; random order still shuffles.
+- A new or resized cohort inherits the lowest stage and earliest due date among units whose current membership overlaps it, including itself. It does not start a separate ladder rule. Content edits still demote each unit that contains the edited node.
 - Permanent mark / membership changes reconcile at an edit-session boundary, not on every content save. Freestyle inline edit uses one same-document `editor_leave` after the edited card becomes inactive or unmounts; it never reconciles or rebuilds the queue while that card remains active. Other editor hosts may still use finished-mark, idle, or explicit return boundaries. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
 - Deleting the final mark deactivates every unit. A later first mark starts a new schedule.
 

@@ -17,6 +17,7 @@ class ReviewUnitCandidate:
     node_uids: tuple[str, ...]
     unit_id: str
     revision: int
+    unit_kind: str = ""
 
     @property
     def node_count(self) -> int:
@@ -37,6 +38,7 @@ def candidate_from_projection(
         node_uids=tuple(str(uid) for uid in projection.get("node_uids") or []),
         unit_id=str(projection["id"]),
         revision=int(projection["revision"]),
+        unit_kind=str(projection.get("unit_kind") or ""),
     )
 
 

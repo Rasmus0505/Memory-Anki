@@ -24,7 +24,7 @@ import type {
   ReviewUnitDto,
   UnitReviewSessionDto,
 } from '@/modules/practice/public'
-import { countUnitFlipProgress } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
+import { countUnitFlipProgress, unitFlipTargetUids } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import {
@@ -101,11 +101,15 @@ export function FreestyleUnitReviewFlipPanel({
   editEditorStateRef.current = editEditorState
   displayModeRef.current = displayMode
 
+  const flipTargetUids = useMemo(
+    () => unitFlipTargetUids(unit.node_uids, unit.anchor_uid, unit.unit_kind),
+    [unit.anchor_uid, unit.node_uids, unit.unit_kind],
+  )
   const allowedRevealNodeIds = useMemo(() => {
     if (freestyleFlipMode !== 'focused') return undefined
     const parentByUid = buildEditorParentMap(editorState.editor_doc as EditorDoc)
     const allowed = new Set<string>()
-    const seeds = new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))
+    const seeds = new Set(flipTargetUids)
     for (const seed of seeds) {
       let current: string | null = String(seed)
       while (current) {
@@ -115,7 +119,7 @@ export function FreestyleUnitReviewFlipPanel({
       }
     }
     return [...allowed]
-  }, [editorState.editor_doc, freestyleFlipMode, unit.anchor_uid, unit.node_uids])
+  }, [editorState.editor_doc, flipTargetUids, freestyleFlipMode])
   const reveal = useRevealSession({
     title: card.palace_title || session.title || `宫殿 ${card.palace_id}`,
     editorState: editEditorState,
@@ -140,7 +144,7 @@ export function FreestyleUnitReviewFlipPanel({
   // Header chip: this unit's membership only (not whole-palace node count).
   useEffect(() => {
     onRevealProgressChange?.(
-      countUnitFlipProgress(reveal.revealMap, unit.node_uids, unit.anchor_uid),
+      countUnitFlipProgress(reveal.revealMap, flipTargetUids),
     )
     const key = JSON.stringify(reveal.revealMap)
     if (key === lastNotifiedRevealKeyRef.current) return
@@ -154,12 +158,11 @@ export function FreestyleUnitReviewFlipPanel({
     lastNotifiedRevealKeyRef.current = key
     onRevealMapChange?.(reveal.revealMap)
   }, [
+    flipTargetUids,
     onRevealMapChange,
     onRevealProgressChange,
     reveal.revealMap,
     syncedRevealMap,
-    unit.anchor_uid,
-    unit.node_uids,
   ])
 
   /**
@@ -526,7 +529,7 @@ export function FreestyleUnitReviewFlipPanel({
 
   const handleToggleMode = useCallback(() => {
     const currentReveal = revealApiRef.current.revealMap
-    const flipProgress = countUnitFlipProgress(currentReveal, unit.node_uids, unit.anchor_uid)
+    const flipProgress = countUnitFlipProgress(currentReveal, flipTargetUids)
     const flipDetail = `翻卡 ${flipProgress.revealed}/${flipProgress.total}`
     if (!isEditMode) {
       editRevealSnapshotRef.current = { ...currentReveal }
@@ -555,12 +558,11 @@ export function FreestyleUnitReviewFlipPanel({
     setDisplayMode('review')
     setModeSyncVersion((value) => value + 1)
   }, [
+    flipTargetUids,
     isEditMode,
     onEditorStateSaved,
     onRevealMapChange,
     restoreRevealSnapshot,
-    unit.anchor_uid,
-    unit.node_uids,
   ])
 
   const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
@@ -665,7 +667,7 @@ export function FreestyleUnitReviewFlipPanel({
             : reveal.visibleEditorSyncKey
         }
         unitScopeEditorState={editorState}
-        activeUnitNodeUids={[...new Set([...(unit.node_uids || []), unit.anchor_uid].filter(Boolean))]}
+        activeUnitNodeUids={flipTargetUids}
         scopeBranchUid={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace' ? (unit.anchor_uid || null) : null}
         forceExpanded={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace'}
         revealCollapsedNodeIds={editRevealCollapsedNodeIds}

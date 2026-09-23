@@ -408,6 +408,55 @@ def _due_row(palace_id: int, unit_id: str) -> ReviewUnitState:
     )
 
 
+def test_same_day_due_units_follow_topology_order(session_factory):
+    from memory_anki.modules.memory.api import list_trusted_due_units_for_queue
+
+    session = session_factory()
+    palace = Palace(title="顺序宫殿", editor_doc="{}", archived=False, group_sort_order=0)
+    session.add(palace)
+    session.flush()
+    session.add(
+        ReviewUnitState(
+            id="unit-branch",
+            palace_id=palace.id,
+            anchor_uid="B1",
+            unit_kind="mark",
+            node_uids_json='["B1","C1"]',
+            membership_hash="branch",
+            content_hash="branch",
+            revision=1,
+            stage_index=2,
+            has_passed=True,
+            due_date=date.today(),
+            topology_order=1,
+            active=True,
+        )
+    )
+    session.add(
+        ReviewUnitState(
+            id="unit-cohort",
+            palace_id=palace.id,
+            anchor_uid="A",
+            unit_kind="cohort",
+            node_uids_json='["B1","B2"]',
+            membership_hash="cohort",
+            content_hash="cohort",
+            revision=1,
+            stage_index=2,
+            has_passed=True,
+            due_date=date.today(),
+            topology_order=0,
+            active=True,
+        )
+    )
+    session.commit()
+    palace_id = palace.id
+    rows = list_trusted_due_units_for_queue(session, [palace_id])
+    session.close()
+    assert [row["id"] for row in rows] == ["unit-cohort", "unit-branch"]
+    assert rows[0]["unit_kind"] == "cohort"
+
+
 def test_queue_study_window_is_a_prefix_of_the_full_order(session_factory, make_client):
     session = session_factory()
     first = Palace(

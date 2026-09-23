@@ -32,6 +32,7 @@ class ReviewUnitState(Base):
             "uq_review_unit_states_active_anchor",
             "palace_id",
             "anchor_uid",
+            "unit_kind",
             unique=True,
             sqlite_where=text("active = 1"),
         ),
@@ -50,6 +51,9 @@ class ReviewUnitState(Base):
     stage_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     has_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    topology_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     last_passed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

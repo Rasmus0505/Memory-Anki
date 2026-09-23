@@ -17,6 +17,8 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 
 from .unit_review_projection import (
     UnitDefinition,
+    _active_unit_key,
+    _states_in_topology_order,
     _unit_hashes_lag,
     get_palace_unit_projection,
     reconcile_palace_units,
@@ -184,7 +186,10 @@ def _build_projection(
             "has_due_review": False,
             "next_review_at": None,
         }
-    definition_by_anchor = {item.anchor_uid: item for item in definitions}
+    definition_by_key = {
+        _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
+    }
+    states = _states_in_topology_order(states, definitions)
     due = [row for row in states if row.due_date <= date.today()]
     next_due = min((row.due_date for row in states), default=None)
     next_review_date = next_due.isoformat() if next_due else None
@@ -198,7 +203,11 @@ def _build_projection(
         "next_review_date": next_review_date,
         "review_status": "due" if due else "scheduled",
         "units": [
-            unit_payload(row, definition_by_anchor.get(row.anchor_uid)) for row in states
+            unit_payload(
+                row,
+                definition_by_key.get(_active_unit_key(row.anchor_uid, row.unit_kind)),
+            )
+            for row in states
         ],
         "has_due_review": bool(due),
         "next_review_at": _due_datetime(next_review_date),

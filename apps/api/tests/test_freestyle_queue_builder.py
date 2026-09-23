@@ -10,7 +10,9 @@ from memory_anki.modules.practice.domain.leftover_due import (
 from memory_anki.modules.practice.domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
+    attach_questions_to_units,
     merge_content_streams,
+    unit_key,
 )
 from memory_anki.modules.practice.domain.review_units import ReviewUnitCandidate
 
@@ -65,6 +67,31 @@ def _assemble(
         nodes_by_palace={1: nodes or {}},
         completed_ids=completed_ids or [],
     )
+
+
+def test_bound_question_stays_on_the_isolation_unit_when_a_cohort_overlaps():
+    cohort = ReviewUnitCandidate(
+        palace_id=1,
+        anchor_uid="A",
+        context_path=(),
+        node_uids=("B1", "B2"),
+        unit_id="cohort",
+        revision=1,
+        unit_kind="cohort",
+    )
+    branch = _unit("B1", ("B1", "C1"), unit_id="branch")
+    quiz = QuizCandidate(
+        question_id=7,
+        palace_id=1,
+        bound_node_uids=("B1",),
+        mastery_score=0,
+        mastery_label="unseen",
+        question={"id": 7},
+    )
+    attached, unbound = attach_questions_to_units([cohort, branch], [quiz])
+    assert unbound == []
+    assert attached[unit_key(cohort)] == []
+    assert [item.question_id for item in attached[unit_key(branch)]] == [7]
 
 
 def test_queue_emits_only_due_review_units_with_stable_identity():

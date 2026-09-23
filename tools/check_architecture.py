@@ -2836,12 +2836,12 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
         ):
             errors.append(
                 f"{page.relative_to(WEB_SRC).as_posix()}: "
-                "完成 must settle the round or seek the earliest unfinished unit."
+                "完成 must settle the round or seek the earliest unrated unit."
             )
     if 'aria-label="完成"' not in pager_source or "onComplete" not in pager_source:
         errors.append(
             f"{pager.relative_to(WEB_SRC).as_posix()}: "
-            "must expose 完成 that settles the round or seeks the earliest unfinished unit."
+            "must expose 完成 that settles the round or seeks the earliest unrated unit."
         )
     if 'aria-label="最早未评"' in pager_source or "LocateFixed" in pager_source:
         errors.append(
@@ -4374,6 +4374,7 @@ def check_unit_review_boundary(errors: list[str]) -> None:
     required = {
         API_SRC / "modules/memory/application/unit_review_projection.py": (
             "def reconcile_palace_units",
+            "def _active_unit_key",
         ),
         API_SRC / "modules/memory/application/unit_review_service.py": (
             "def open_unit_review_encounter",
@@ -4385,7 +4386,10 @@ def check_unit_review_boundary(errors: list[str]) -> None:
         API_SRC / "modules/memory/application/unit_scheduler.py": (
             "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)",
         ),
-        API_SRC / "modules/mindmap_document/split_units.py": ("def split_scheduling_units",),
+        API_SRC / "modules/mindmap_document/split_units.py": (
+            "def split_scheduling_units",
+            "UNIT_KIND_COHORT",
+        ),
         API_SRC / "modules/practice/domain/review_units.py": (
             "class ReviewUnitCandidate",
             "def candidate_from_projection",

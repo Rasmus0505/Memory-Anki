@@ -9,7 +9,11 @@
 标记节点及其下游被隔离成独立单元，直到下一个更深的永久标记。所有没有落入
 标记区域的节点共同组成根部剩余水流单元。永久标记只负责隔离，不负责选择
 复习范围；宫殿只要存在至少一个永久标记，所有非根节点都必须且只属于一个
-复习单元。
+隔离单元。
+
+隔离单元之外，同一个父节点的直接子永久标记再组成一张「自身」卡
+（``cohort``）。自身卡只含这些标记节点，可以和隔离单元重叠。这一级若只有
+一个标记，且它的隔离单元恰好就是它自己，则不再复制自身卡。
 
 `split_scheduling_units` 是唯一单元拓扑函数。Reviews 持久化并调和它的结果；
 正式复习与随心队列都只消费 Reviews 的公共单元投影，不自行再次切分。
@@ -24,6 +28,7 @@ from typing import Any
 UNIT_KIND_PALACE = "palace"
 UNIT_KIND_MARK = "mark"
 UNIT_KIND_RESIDUAL = "residual"
+UNIT_KIND_COHORT = "cohort"
 
 
 @dataclass(frozen=True)
@@ -220,13 +225,20 @@ def split_scheduling_units(
     root_uid: str | None,
     permanent_mark_uids: Sequence[str] | set[str] | None = None,
 ) -> list[SplitUnit]:
-    """Split one palace into permanent-mark isolation units.
+    """Split one palace into isolation units plus same-parent mark cohorts.
 
     No permanent mark means no review units. A root mark makes the root water
     flow itself a unit; deeper marks are carved out from it. Without a root
     mark, every marked region is carved out and all remaining nodes form one
     residual root unit. Unmarked ancestors never fold into an arbitrary marked
     unit.
+
+    After those isolation units, each parent's directly marked children form
+    one cohort unit. A one-mark cohort is omitted when that mark's isolation
+    unit is already exactly the mark. Output order is: the root isolation unit
+    when the root itself is marked, then a depth-first walk that emits a
+    parent's cohort before each marked child's isolation unit and that child's
+    own walk. The residual unit stays last.
     """
     if not root_uid or root_uid not in nodes:
         return []
@@ -250,22 +262,65 @@ def split_scheduling_units(
         ),
     )
     claimed: set[str] = set()
-    units: list[SplitUnit] = []
+    isolation: dict[str, SplitUnit] = {}
     for mark_uid in ordered_marks:
         members = tuple(
             uid for uid in mark_region_uids(nodes, mark_uid, marks) if uid != root
         )
         if not members:
             continue
-        units.append(
-            SplitUnit(
-                unit_root_uid=mark_uid,
-                kind=UNIT_KIND_PALACE if mark_uid == root else UNIT_KIND_MARK,
-                title=_title(mark_uid),
-                node_uids=members,
-            )
+        isolation[mark_uid] = SplitUnit(
+            unit_root_uid=mark_uid,
+            kind=UNIT_KIND_PALACE if mark_uid == root else UNIT_KIND_MARK,
+            title=_title(mark_uid),
+            node_uids=members,
         )
         claimed.update(members)
+
+    def _children(uid: str) -> list[str]:
+        return [
+            str(child)
+            for child in (nodes.get(uid, {}).get("children") or [])
+            if str(child) in nodes
+        ]
+
+    units: list[SplitUnit] = []
+    emitted_marks: set[str] = set()
+
+    def _emit_isolation(mark_uid: str) -> None:
+        unit = isolation.get(mark_uid)
+        if unit is None or mark_uid in emitted_marks:
+            return
+        units.append(unit)
+        emitted_marks.add(mark_uid)
+
+    def _walk(parent: str) -> None:
+        marked_children = [child for child in _children(parent) if child in marks]
+        if marked_children:
+            sole = marked_children[0]
+            duplicates_isolation = (
+                len(marked_children) == 1
+                and sole in isolation
+                and isolation[sole].node_uids == (sole,)
+            )
+            if not duplicates_isolation:
+                units.append(
+                    SplitUnit(
+                        unit_root_uid=parent,
+                        kind=UNIT_KIND_COHORT,
+                        title=_title(parent),
+                        node_uids=tuple(marked_children),
+                    )
+                )
+        for child in _children(parent):
+            if child in isolation:
+                _emit_isolation(child)
+            _walk(child)
+
+    _emit_isolation(root)
+    _walk(root)
+    for mark_uid in ordered_marks:
+        _emit_isolation(mark_uid)
 
     residual = tuple(uid for uid in all_non_root if uid not in claimed)
     if residual:

@@ -22,6 +22,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 from memory_anki.modules.mindmap_document.api import deserialize_editor_payload
 
 from .unit_review_projection import (
+    _active_unit_key,
     adjust_unit_schedule,
     get_palace_unit_projection,
     json_load_list,
@@ -282,10 +283,15 @@ def get_unit_review_session(session: Session, study_session_id: str) -> dict[str
     if study.palace_id is None:
         raise ValueError("unit review session has no palace")
     _, definitions = resolve_unit_definitions(session, study.palace_id)
-    definition_by_anchor = {item.anchor_uid: item for item in definitions}
+    definition_by_key = {
+        _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
+    }
     units = []
     for item, state in rows:
-        payload = unit_payload(state, definition_by_anchor.get(state.anchor_uid))
+        payload = unit_payload(
+            state,
+            definition_by_key.get(_active_unit_key(state.anchor_uid, state.unit_kind)),
+        )
         encounter = (
             session.query(ReviewUnitEncounter)
             .filter_by(study_session_id=study.id, unit_id=state.id)

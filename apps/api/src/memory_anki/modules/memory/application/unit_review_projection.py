@@ -38,6 +38,32 @@ class UnitDefinition:
     content_hash: str
 
 
+def _active_unit_key(anchor_uid: str, unit_kind: str) -> tuple[str, str]:
+    """Active units are unique per palace on this pair, not on the anchor alone.
+
+    A parent node is both the anchor of its own isolation unit and the anchor of
+    the cohort of its marked children.
+    """
+    return (str(anchor_uid), str(unit_kind))
+
+
+def _states_in_topology_order(
+    states: list[ReviewUnitState],
+    definitions: list[UnitDefinition],
+) -> list[ReviewUnitState]:
+    order = {
+        _active_unit_key(item.anchor_uid, item.unit_kind): index
+        for index, item in enumerate(definitions)
+    }
+    return sorted(
+        states,
+        key=lambda row: (
+            order.get(_active_unit_key(row.anchor_uid, row.unit_kind), 10**9),
+            row.id,
+        ),
+    )
+
+
 def json_load_list(raw: str | None) -> list[str]:
     try:
         value = json.loads(raw or "[]")
@@ -240,7 +266,12 @@ def adjust_unit_schedule(
     try:
         _tree, definitions = resolve_unit_definitions(session, row.palace_id)
         definition = next(
-            (item for item in definitions if item.anchor_uid == row.anchor_uid),
+            (
+                item
+                for item in definitions
+                if _active_unit_key(item.anchor_uid, item.unit_kind)
+                == _active_unit_key(row.anchor_uid, row.unit_kind)
+            ),
             None,
         )
     except ValueError:
@@ -334,7 +365,9 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
     tree, definitions = resolve_unit_definitions(session, palace_id)
     today = date.today()
     old_states = _active_states(session, palace_id)
-    old_by_anchor = {row.anchor_uid: row for row in old_states}
+    old_by_key = {
+        _active_unit_key(row.anchor_uid, row.unit_kind): row for row in old_states
+    }
     old_members = {row.id: set(json_load_list(row.node_uids_json)) for row in old_states}
     changes: list[dict[str, Any]] = []
     demotion_entries: list[dict[str, Any]] = []
@@ -369,10 +402,12 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
 
     used_ids: set[str] = set()
     changed = False
-    for definition in definitions:
+    for index, definition in enumerate(definitions):
         members = set(definition.node_uids)
         overlapping = [row for row in old_states if old_members[row.id] & members]
-        current = old_by_anchor.get(definition.anchor_uid)
+        current = old_by_key.get(
+            _active_unit_key(definition.anchor_uid, definition.unit_kind)
+        )
         sources = overlapping or ([current] if current is not None else [])
         inherited_stage = min((row.stage_index for row in sources), default=0)
         inherited_due = min((row.due_date for row in sources), default=today)
@@ -391,6 +426,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 stage_index=inherited_stage,
                 has_passed=inherited_passed,
                 due_date=inherited_due,
+                topology_order=index,
                 active=True,
             )
             session.add(current)
@@ -427,6 +463,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             current.node_uids_json = json.dumps(definition.node_uids, ensure_ascii=False)
             current.membership_hash = definition.membership_hash
             current.content_hash = definition.content_hash
+            current.topology_order = index
             current.active = True
             if action is not None:
                 after = _schedule_snapshot_from_row(current)
@@ -521,11 +558,13 @@ def _unit_hashes_lag(
     Covers mid-edit process kill: editor_doc advanced without leave reconcile, so
     ReviewUnitState membership/content hashes (and schedule) lag the live tree.
     """
-    by_anchor = {item.anchor_uid: item for item in definitions}
-    if {row.anchor_uid for row in states} != set(by_anchor):
+    by_key = {
+        _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
+    }
+    if {_active_unit_key(row.anchor_uid, row.unit_kind) for row in states} != set(by_key):
         return True
     for row in states:
-        definition = by_anchor.get(row.anchor_uid)
+        definition = by_key.get(_active_unit_key(row.anchor_uid, row.unit_kind))
         if definition is None:
             return True
         if (
@@ -557,7 +596,10 @@ def get_palace_unit_projection(session: Session, palace_id: int) -> dict[str, An
         reconcile_palace_units(session, palace_id)
         tree, definitions = resolve_unit_definitions(session, palace_id)
         states = _active_states(session, palace_id)
-    definition_by_anchor = {item.anchor_uid: item for item in definitions}
+    definition_by_key = {
+        _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
+    }
+    states = _states_in_topology_order(states, definitions)
     due = [row for row in states if row.due_date <= date.today()]
     next_due = min((row.due_date for row in states), default=None)
     return {
@@ -576,7 +618,11 @@ def get_palace_unit_projection(session: Session, palace_id: int) -> dict[str, An
             "marking_required" if not definitions else ("due" if due else "scheduled")
         ),
         "units": [
-            unit_payload(row, definition_by_anchor.get(row.anchor_uid)) for row in states
+            unit_payload(
+                row,
+                definition_by_key.get(_active_unit_key(row.anchor_uid, row.unit_kind)),
+            )
+            for row in states
         ],
     }
 
@@ -594,6 +640,8 @@ def _query_due_unit_rows(
     return query.order_by(
         ReviewUnitState.due_date.asc(),
         ReviewUnitState.palace_id.asc(),
+        ReviewUnitState.topology_order.asc(),
+        ReviewUnitState.id.asc(),
     ).all()
 
 
@@ -662,13 +710,16 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
 
     definitions_by_palace = {
         palace.id: {
-            item.anchor_uid: item for item in _definitions_for_palace(palace)[1]
+            _active_unit_key(item.anchor_uid, item.unit_kind): item
+            for item in _definitions_for_palace(palace)[1]
         }
         for palace in palaces
     }
     result: list[dict[str, Any]] = []
     for row in rows:
-        definition = definitions_by_palace.get(row.palace_id, {}).get(row.anchor_uid)
+        definition = definitions_by_palace.get(row.palace_id, {}).get(
+            _active_unit_key(row.anchor_uid, row.unit_kind)
+        )
         if definition is None:
             continue
         if (
@@ -705,66 +756,6 @@ def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[st
     return found
 
 
-def list_trusted_due_units_for_queue(
-    session: Session,
-    palace_ids: list[int] | None = None,
-) -> list[dict[str, Any]]:
-    """Active due units for queue build, without parsing editor_doc or reconciling.
-
-    ``palace_ids is None`` means every active palace. An empty list means none.
-    Queue build trusts stored rows. Opening a unit reconciles that palace.
-    """
-    if palace_ids is not None and not palace_ids:
-        return []
-    query = (
-        session.query(
-            ReviewUnitState.id,
-            ReviewUnitState.palace_id,
-            ReviewUnitState.anchor_uid,
-            ReviewUnitState.node_uids_json,
-            ReviewUnitState.revision,
-            Palace.group_sort_order,
-            Palace.title,
-            Palace.manual_title,
-        )
-        .join(Palace, Palace.id == ReviewUnitState.palace_id)
-        .filter(
-            ReviewUnitState.active.is_(True),
-            ReviewUnitState.due_date <= date.today(),
-            Palace.deleted_at.is_(None),
-            Palace.archived.is_(False),
-        )
-    )
-    if palace_ids is not None:
-        query = query.filter(ReviewUnitState.palace_id.in_(list(palace_ids)))
-    rows = query.order_by(
-        Palace.group_sort_order.asc(),
-        Palace.id.asc(),
-        ReviewUnitState.due_date.asc(),
-        ReviewUnitState.id.asc(),
-    ).all()
-    result: list[dict[str, Any]] = []
-    for row in rows:
-        manual = str(row.manual_title or "").strip()
-        title = manual or str(row.title or "")
-        anchor = str(row.anchor_uid or "")
-        node_uids = [uid for uid in json_load_list(row.node_uids_json) if uid]
-        if not node_uids and anchor:
-            node_uids = [anchor]
-        result.append(
-            {
-                "id": str(row.id),
-                "palace_id": int(row.palace_id),
-                "anchor_uid": anchor,
-                "node_uids": node_uids,
-                "revision": int(row.revision or 1),
-                "title": title,
-                "group_sort_order": int(row.group_sort_order or 0),
-            }
-        )
-    return result
-
-
 __all__ = [
     "UnitDefinition",
     "adjust_unit_schedule",
@@ -772,7 +763,6 @@ __all__ = [
     "json_load_list",
     "list_active_review_unit_ids",
     "list_due_units",
-    "list_trusted_due_units_for_queue",
     "reconcile_palace_units",
     "resolve_unit_definitions",
     "undo_content_schedule_batch",

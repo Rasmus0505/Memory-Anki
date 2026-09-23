@@ -127,6 +127,8 @@ def attach_questions_to_units(
             continue
         matched = False
         for unit in palace_units.get(quiz.palace_id, []):
+            if unit.unit_kind == "cohort":
+                continue
             ratable = set(unit.node_uids)
             if any(uid in ratable for uid in quiz.bound_node_uids):
                 unit_questions[unit_key(unit)].append(quiz)

@@ -1,10 +1,8 @@
 """Public facade for permanent-mark review units."""
 
 from .application.unit_ladder_progress import get_palace_ladder_progress
-from .application.unit_review_projection import (
-    list_active_review_unit_ids,
-    list_trusted_due_units_for_queue,
-)
+from .application.unit_review_projection import list_active_review_unit_ids
+from .application.unit_review_queue_read import list_trusted_due_units_for_queue
 from .application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,

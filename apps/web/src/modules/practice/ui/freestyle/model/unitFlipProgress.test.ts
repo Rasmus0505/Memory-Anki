@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countUnitFlipProgress } from './unitFlipProgress'
+import { countUnitFlipProgress, unitFlipTargetUids } from './unitFlipProgress'
 
 describe('countUnitFlipProgress', () => {
   it('counts only unit membership, not palace-wide nodes', () => {
@@ -22,5 +22,10 @@ describe('countUnitFlipProgress', () => {
 
   it('returns 0/0 for empty unit', () => {
     expect(countUnitFlipProgress({}, [], null)).toEqual({ revealed: 0, total: 0 })
+  })
+
+  it('does not flip the parent anchor of a cohort card', () => {
+    expect(unitFlipTargetUids(['B1', 'B2'], 'A', 'cohort')).toEqual(['B1', 'B2'])
+    expect(unitFlipTargetUids(['B1', 'C1'], 'B1', 'mark')).toEqual(['B1', 'C1'])
   })
 })

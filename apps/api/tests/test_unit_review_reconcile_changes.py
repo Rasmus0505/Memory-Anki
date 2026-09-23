@@ -172,6 +172,138 @@ def test_membership_change_reports_membership_updated(db_session):
     )
 
 
+def _sibling_doc() -> str:
+    return json.dumps(
+        {
+            "root": {
+                "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {
+                        "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
+                        "children": [
+                            {"data": {"uid": "C1", "text": "C1"}, "children": []},
+                        ],
+                    },
+                    {
+                        "data": {"uid": "B2", "text": "B2", "permanentSplitMark": True},
+                        "children": [
+                            {"data": {"uid": "C2", "text": "C2"}, "children": []},
+                        ],
+                    },
+                ],
+            }
+        },
+        ensure_ascii=False,
+    )
+
+
+def test_new_cohort_inherits_lowest_overlapping_branch_schedule(db_session):
+    palace = Palace(title="自身卡", archived=False, editor_doc=_sibling_doc())
+    db_session.add(palace)
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    rows = (
+        db_session.query(ReviewUnitState)
+        .filter_by(palace_id=palace.id, active=True)
+        .all()
+    )
+    cohort = next(row for row in rows if row.unit_kind == "cohort")
+    marks = {row.anchor_uid: row for row in rows if row.unit_kind == "mark"}
+    assert set(marks) == {"B1", "B2"}
+    assert json.loads(cohort.node_uids_json) == ["B1", "B2"]
+    early = date.today() + timedelta(days=10)
+    late = date.today() + timedelta(days=40)
+    marks["B1"].stage_index = 4
+    marks["B1"].has_passed = True
+    marks["B1"].due_date = late
+    marks["B2"].stage_index = 2
+    marks["B2"].has_passed = True
+    marks["B2"].due_date = early
+    retired_id = cohort.id
+    cohort.active = False
+    db_session.commit()
+
+    result = reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+    created = [item for item in result["changes"] if item["action"] == "created"]
+    assert len(created) == 1
+    fresh = db_session.get(ReviewUnitState, created[0]["unit_id"])
+    assert fresh is not None
+    assert fresh.id != retired_id
+    assert fresh.unit_kind == "cohort"
+    assert fresh.anchor_uid == "A"
+    assert json.loads(fresh.node_uids_json) == ["B1", "B2"]
+    assert (fresh.stage_index, fresh.due_date, fresh.has_passed) == (2, early, True)
+    assert fresh.topology_order == 0
+    b1 = db_session.get(ReviewUnitState, marks["B1"].id)
+    b2 = db_session.get(ReviewUnitState, marks["B2"].id)
+    assert b1 is not None and b2 is not None
+    assert (b1.stage_index, b1.due_date) == (4, late)
+    assert (b2.stage_index, b2.due_date) == (2, early)
+    assert [row.topology_order for row in (fresh, b1, b2)] == [0, 1, 2]
+
+
+def test_cohort_deactivates_when_it_duplicates_the_isolation_unit(db_session):
+    palace = Palace(
+        title="单独标记",
+        archived=False,
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
+                    "children": [
+                        {
+                            "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
+                            "children": [
+                                {"data": {"uid": "C1", "text": "C1"}, "children": []},
+                            ],
+                        }
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db_session.add(palace)
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+    cohort = (
+        db_session.query(ReviewUnitState)
+        .filter_by(palace_id=palace.id, unit_kind="cohort", active=True)
+        .one()
+    )
+    palace.editor_doc = json.dumps(
+        {
+            "root": {
+                "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {
+                        "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
+                        "children": [],
+                    }
+                ],
+            }
+        },
+        ensure_ascii=False,
+    )
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+    db_session.refresh(cohort)
+    assert cohort.active is False
+    active = (
+        db_session.query(ReviewUnitState)
+        .filter_by(palace_id=palace.id, active=True)
+        .all()
+    )
+    assert [(row.unit_kind, json.loads(row.node_uids_json)) for row in active] == [
+        ("mark", ["B1"]),
+    ]
+
+
 def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
     """Mid-edit kill: editor_doc advanced, unit hashes lag, unit still due → demote."""
     from memory_anki.modules.memory.api import list_due_units
