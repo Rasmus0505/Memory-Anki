@@ -5,6 +5,8 @@ import {
   AUTO_COLLAPSE_MIN_NODES,
   collectHiddenNodeIds,
   computeDefaultCollapsedNodeIds,
+  computeRevealCollapsedNodeIds,
+  computeRevealCollapsedNodeIdsFromParentMap,
   expandAncestorsForNode,
   expandSubtreeCollapsedIds,
   reconcileCollapsedNodeIds,
@@ -90,8 +92,68 @@ describe('mindMapCollapse', () => {
     expect(next.size).toBe(0)
   })
 
-  it('expand-all empty previous keeps surviving parents expanded on reconcile', () => {
-    const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 10)
+  it('collapses every unflipped branch when a flip session has not started', () => {
+    const collapsed = computeRevealCollapsedNodeIds(
+      sampleTree(),
+      { root: 'revealed' },
+      { rootId: 'root' },
+    )
+    // Nothing below root has been flipped out, so every branch parent stays folded.
+    expect([...collapsed].sort()).toEqual(['l1a', 'l1b', 'l2a'])
+  })
+
+  it('opens a branch once its own children were flipped out', () => {
+    const collapsed = computeRevealCollapsedNodeIds(sampleTree(), {
+      root: 'revealed',
+      l1a: 'revealed',
+      l2a: 'placeholder',
+    })
+    // l1a's child l2a appeared → l1a opens; l2a's own child l3a never appeared → l2a folds.
+    expect(collapsed.has('l1a')).toBe(false)
+    expect(collapsed.has('l2a')).toBe(true)
+    // l1b never appeared → still folded.
+    expect(collapsed.has('l1b')).toBe(true)
+  })
+
+  it('keeps the ancestor chain open for a deep flipped card', () => {
+    const collapsed = computeRevealCollapsedNodeIds(sampleTree(), {
+      root: 'revealed',
+      l1a: 'placeholder',
+      l2a: 'placeholder',
+      l3a: 'revealed',
+    })
+    expect(collapsed.has('root')).toBe(false)
+    expect(collapsed.has('l1a')).toBe(false)
+    expect(collapsed.has('l2a')).toBe(false)
+    // l1b is a parent whose child l2b never appeared.
+    expect(collapsed.has('l1b')).toBe(true)
+  })
+
+  it('never folds leaves and derives the same fold set from a parent map', () => {
+    const nodes = sampleTree()
+    expect(computeRevealCollapsedNodeIds(nodes, { root: 'revealed' }).has('l3a')).toBe(false)
+
+    const parentByUid = new Map<string, string | null>([
+      ['root', null],
+      ['l1a', 'root'],
+      ['l1b', 'root'],
+      ['l2a', 'l1a'],
+      ['l2b', 'l1b'],
+    ])
+    const fromMap = computeRevealCollapsedNodeIdsFromParentMap(parentByUid, {
+      root: 'revealed',
+      l2a: 'placeholder',
+    }, { rootId: 'root' })
+    // l1a's child l2a appeared → l1a opens; l1b's child never appeared → l1b folds.
+    expect(fromMap.has('l1a')).toBe(false)
+    expect(fromMap.has('l1b')).toBe(true)
+    // l2a / l2b are leaves, so they never fold.
+    expect(fromMap.has('l2a')).toBe(false)
+    expect(fromMap.has('l2b')).toBe(false)
+    expect(fromMap.has('root')).toBe(false)
+  })
+
+  it('expand-all empty previous keeps surviving parents expanded on reconcile', () => {    const nodes = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 10)
     const defaults = computeDefaultCollapsedNodeIds(nodes)
     expect(defaults.size).toBeGreaterThan(0)
 

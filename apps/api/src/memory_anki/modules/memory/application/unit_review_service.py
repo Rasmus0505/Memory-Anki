@@ -587,6 +587,39 @@ def _finish_stale_passed_freestyle_session(
     return None
 
 
+def _release_failing_glance_for_new_encounter(
+    session: Session,
+    *,
+    study: StudySession,
+    unit_id: str,
+    requested_encounter_id: str,
+) -> None:
+    """Close a still-open 忘记/困难 glance when a new encounter id arrives.
+
+    The parent score already downgraded the unit and scheduled the 重练.
+    Returning that open glance would make the retry card start on 困难.
+    """
+    requested = str(requested_encounter_id or "").strip()
+    if not requested:
+        return
+    existing = (
+        session.query(ReviewUnitEncounter)
+        .filter_by(
+            study_session_id=study.id,
+            unit_id=unit_id,
+            status=ENCOUNTER_OPEN,
+        )
+        .one_or_none()
+    )
+    if existing is None or existing.id == requested or existing.selected_rating not in (1, 2):
+        return
+    existing.status = ENCOUNTER_CLOSED
+    existing.closed_at = utc_now_naive()
+    if not existing.close_operation_id:
+        existing.close_operation_id = f"retry-handoff:{existing.id}"[:64]
+    session.commit()
+
+
 def start_freestyle_unit_review_session(
     session: Session,
     *,
@@ -714,6 +747,12 @@ def start_freestyle_unit_review_session(
             elif requested.study_session_id != study.id:
                 raise ValueError("encounter_id belongs to another review unit")
 
+    _release_failing_glance_for_new_encounter(
+        session,
+        study=study,
+        unit_id=state.id,
+        requested_encounter_id=requested_encounter_id,
+    )
     return open_unit_review_encounter(
         session,
         study_session_id=study.id,
@@ -1513,6 +1552,18 @@ def close_unit_review_encounter(
     if round_id and encounter.round_id != str(round_id).strip():
         raise ValueError("round_id does not match the active encounter")
     if encounter.status == ENCOUNTER_CLOSED:
+        # A 重练 handoff may close the parent glance before the client reports
+        # focus time. Fill that gap once; do not overwrite a reported value.
+        if effective_seconds is not None and encounter.effective_seconds is None:
+            normalized_seconds = int(effective_seconds)
+            if normalized_seconds < 0:
+                raise ValueError("effective_seconds must be non-negative")
+            if encounter.created_at is not None:
+                wall_seconds = max(0, round((utc_now_naive() - encounter.created_at).total_seconds()))
+                if normalized_seconds > wall_seconds:
+                    normalized_seconds = wall_seconds
+            encounter.effective_seconds = normalized_seconds
+            session.commit()
         completion = (
             json.loads(study.summary_json or "{}")
             if study.status == SESSION_COMPLETED

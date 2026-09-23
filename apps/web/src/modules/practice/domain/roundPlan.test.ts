@@ -89,8 +89,32 @@ describe('round plan reducer', () => {
       sourceCardId: 'a',
       retryAttempt: 1,
       retryAfterCards: 3,
-      lastRating: 1,
+      lastRating: null,
     })
+  })
+
+  it('keeps a retry glance blank until that glance is rated', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const prior = createRoundPlan('round-1', cards, config)
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const inserted = insertRetryOccurrenceAfterGap(cards, retry, 0)
+    const scheduled = stampRestudyPlan(prior, inserted, 'round-1', config, [{
+      cardId: 'a',
+      rating: 2,
+      retryAfterCards: 3,
+      attempt: 1,
+    }])
+    expect(scheduled!.cardsById.a.lastRating).toBe(2)
+    expect(scheduled!.cardsById[retry.id].lastRating).toBeNull()
+
+    const ratedRetry = stampRestudyPlan(scheduled, inserted, 'round-1', config, [{
+      cardId: retry.id,
+      rating: 3,
+      retryAfterCards: 0,
+      attempt: 1,
+    }])
+    expect(ratedRetry!.cardsById.a.lastRating).toBe(2)
+    expect(ratedRetry!.cardsById[retry.id].lastRating).toBe(3)
   })
 
   it('replaces an existing retry for the same source instead of stacking a second copy', () => {

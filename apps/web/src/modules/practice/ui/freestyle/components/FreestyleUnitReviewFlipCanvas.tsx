@@ -1,4 +1,4 @@
-import { LoaderCircle } from 'lucide-react'
+import { CheckCircle2, CircleAlert, LoaderCircle, RotateCcw } from 'lucide-react'
 import {
   PalaceReviewUnitsPanel,
   type PalaceReviewUnitChangeHighlight,
@@ -6,23 +6,59 @@ import {
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 import { NodeBoundQuizDialog } from './freestyleBranchCardSupport'
 
+export type FreestyleEditorSaveState = 'idle' | 'saving' | 'saved' | 'error'
+
 export function FreestyleUnitReviewStatusBanner({
-  returnSaveState,
+  saveState,
+  onRetry,
   quietStatus,
 }: {
-  returnSaveState: string
+  saveState: FreestyleEditorSaveState
+  onRetry: () => void
   quietStatus: string
 }) {
-  if (returnSaveState === 'saving') {
+  if (saveState === 'saving' || saveState === 'saved' || saveState === 'error') {
+    const isSaving = saveState === 'saving'
+    const isError = saveState === 'error'
     return (
       <div
-        data-testid="freestyle-return-saving"
-        role="status"
-        className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center sm:bottom-6"
+        data-testid={
+          isSaving
+            ? 'freestyle-return-saving'
+            : isError
+              ? 'freestyle-save-error'
+              : 'freestyle-save-saved'
+        }
+        role={isError ? 'alert' : 'status'}
+        className={`fixed inset-x-0 bottom-24 z-40 flex justify-center sm:bottom-6 ${
+          isError ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
       >
         <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300/80 bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur-sm dark:border-white/20 dark:bg-zinc-900/92 dark:text-zinc-100">
-          <LoaderCircle className="size-3.5 animate-spin" />
-          正在保存宫殿…
+          {isSaving ? (
+            <>
+              <LoaderCircle className="size-3.5 animate-spin" />
+              保存中…
+            </>
+          ) : isError ? (
+            <>
+              <CircleAlert className="size-3.5 text-rose-600 dark:text-rose-300" />
+              保存失败
+              <button
+                type="button"
+                onClick={onRetry}
+                className="ml-1 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-400/40 dark:bg-rose-950/70 dark:text-rose-200"
+              >
+                <RotateCcw className="size-3" />
+                重试
+              </button>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-300" />
+              已保存
+            </>
+          )}
         </span>
       </div>
     )

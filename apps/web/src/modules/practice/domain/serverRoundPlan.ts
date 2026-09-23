@@ -406,6 +406,19 @@ function asUnitRating(value: unknown): 1 | 2 | 3 | 4 | null {
 }
 
 /**
+ * Occurrence `rating` is the parent score that scheduled the 重练 until this
+ * glance has its own encounter. That score must not prefill the retry rating.
+ */
+export function retryGlanceOwnsRating(
+  plan: FreestyleRoundPlanPayload | null | undefined,
+  occurrenceId: string,
+): boolean {
+  const id = String(occurrenceId || '').trim()
+  if (!id || !plan?.encounters) return false
+  return Boolean(plan.encounters[id])
+}
+
+/**
  * Fill local draft ratings from the server plan after refresh.
  * Keeps any richer local selectedRating; only fills gaps so cards do not look unanswered.
  */
@@ -449,10 +462,21 @@ export function mergeServerPlanIntoLocalEncounters(
   for (const occ of plan.occurrences || []) {
     const rating = asUnitRating(occ.rating)
     if (rating == null) continue
-    const targets = [occ.occurrence_id, occ.source_card_id]
-    for (const target of targets) {
-      writeGap(String(target || ''), {
-        encounterId: String(occ.encounter_id || '').trim() || undefined,
+    const occId = String(occ.occurrence_id || '').trim()
+    const sourceId = String(occ.source_card_id || '').trim()
+    const encounterId = String(occ.encounter_id || '').trim() || undefined
+    if (sourceId) {
+      writeGap(sourceId, {
+        encounterId,
+        selectedRating: rating,
+        passed: rating >= 3,
+      })
+    }
+    // Parent 忘记/困难 must not prefill the retry rating. Only this glance's
+    // own encounter is a score on the 重练 card.
+    if (occId && retryGlanceOwnsRating(plan, occId)) {
+      writeGap(occId, {
+        encounterId,
         selectedRating: rating,
         passed: rating >= 3,
       })
@@ -476,6 +500,18 @@ export function mergeServerPlanIntoLocalEncounters(
       passed: true,
     })
   }
+  for (const occ of plan.occurrences || []) {
+    const occId = String(occ.occurrence_id || '').trim()
+    if (!occId || retryGlanceOwnsRating(plan, occId)) continue
+    const existing = next[occId]
+    if (existing?.selectedRating == null || existing.sessionId) continue
+    next[occId] = {
+      ...existing,
+      selectedRating: null,
+      passed: null,
+      status: 'pending',
+    }
+  }
   return next
 }
 
@@ -487,13 +523,15 @@ export function applyServerRatingsToRoundPlan(
   if (!server) return plan
   let next = plan
   const ratings = new Map<string, 1 | 2 | 3 | 4>()
+  const unratedRetries = new Set<string>()
   for (const occ of server.occurrences || []) {
     const rating = asUnitRating(occ.rating)
-    if (rating == null) continue
     const occId = String(occ.occurrence_id || '').trim()
     const sourceId = String(occ.source_card_id || '').trim()
-    if (occId) ratings.set(occId, rating)
-    if (sourceId && !ratings.has(sourceId)) ratings.set(sourceId, rating)
+    const ownsGlance = Boolean(occId) && retryGlanceOwnsRating(server, occId)
+    if (ownsGlance && occId && rating != null) ratings.set(occId, rating)
+    if (!ownsGlance && occId) unratedRetries.add(occId)
+    if (sourceId && rating != null && !ratings.has(sourceId)) ratings.set(sourceId, rating)
   }
   for (const [cardId, enc] of Object.entries(server.encounters || {})) {
     if (ratings.has(cardId)) continue
@@ -509,6 +547,11 @@ export function applyServerRatingsToRoundPlan(
     const current = next.cardsById[cardId]
     if (!current || current.lastRating != null) continue
     next = updateRoundPlanCard(next, cardId, { lastRating: rating })
+  }
+  for (const occId of unratedRetries) {
+    const current = next.cardsById[occId]
+    if (!current || current.lastRating == null || current.occurrenceKind !== 'retry') continue
+    next = updateRoundPlanCard(next, occId, { lastRating: null })
   }
   return next
 }

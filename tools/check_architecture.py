@@ -2304,7 +2304,7 @@ def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
 
 
 def check_freestyle_return_save_ux(errors: list[str]) -> None:
-    """Return-to-review must not block on in-flight saves; autosave debounce is 2s."""
+    """Freestyle edits save immediately, return locally, and reconcile only on leave."""
     panel = (
         WEB_SRC
         / "modules"
@@ -2314,29 +2314,91 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
         / "components"
         / "FreestyleUnitReviewFlipPanel.tsx"
     )
+    status = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipCanvas.tsx"
+    )
     if not panel.exists():
         errors.append(
             f"{panel.relative_to(REPO_ROOT).as_posix()}: freestyle flip panel is required."
         )
         return
     source = panel.read_text(encoding="utf-8", errors="ignore")
-    # Only the permanent-mark action may stay disabled while a save runs; the
-    # mode toggle must stay clickable so a click explains/queues the return.
-    if "disabled: savingEdit," in source:
+
+    required = (
+        ("void persistEdit(nextState)", "complete edits must save immediately"),
+        ("onEditorStateSaved?.(localState)", "return must adopt the local document first"),
+        ("setDisplayMode('review')", "return must switch to review locally"),
+        ("syncReason: 'editor_leave'", "schedule reconcile must use editor_leave"),
+        ("if (!editedSinceReconcileRef.current) return", "inactive/no-edit cards must skip reconcile"),
+        ("setSaveState('saving')", "saving status must be visible"),
+        ("setSaveState('error')", "failed saves must expose retry state"),
+    )
+    for marker, message in required:
+        if marker not in source:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: {message} ({marker!r})."
+            )
+
+    forbidden = (
+        ("schedulePersist", "typing autosave must not use a debounce scheduler"),
+        ("saveTimerRef", "typing autosave must not use a delayed save timer"),
+        ("syncReason: 'return_to_review'", "active-card return must not reconcile"),
+        ("syncReason: 'mark_change'", "active-card mark exit must not reconcile"),
+    )
+    for marker, message in forbidden:
+        if marker in source:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: {message} ({marker!r})."
+            )
+
+    toggle_start = source.find("const handleToggleMode")
+    change_start = source.find("const handleEditorStateChange", toggle_start)
+    if toggle_start < 0 or change_start < 0:
         errors.append(
-            f"{panel.relative_to(REPO_ROOT).as_posix()}: the mode-toggle action must not be "
-            "disabled by in-flight saves; only permanent-mark may stay disabled."
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: toggle/edit handlers are required."
         )
-    if "}, 700)" in source:
+    else:
+        toggle_source = source[toggle_start:change_start]
+        local_return_start = toggle_source.find("onEditorStateSaved?.(localState)")
+        if local_return_start < 0:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: toggle return must adopt local state."
+            )
+        else:
+            return_source = toggle_source[local_return_start:]
+            if "setDisplayMode('edit')" in return_source:
+                errors.append(
+                    f"{panel.relative_to(REPO_ROOT).as_posix()}: a failed save must not force "
+                    "return-to-review back into edit mode."
+                )
+            if "flushPersistWithReconcile" in return_source:
+                errors.append(
+                    f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must not wait "
+                    "for or trigger a reconcile save."
+                )
+
+    if not status.exists():
         errors.append(
-            f"{panel.relative_to(REPO_ROOT).as_posix()}: typing autosave debounce must be "
-            "2000ms, not 700ms."
+            f"{status.relative_to(REPO_ROOT).as_posix()}: unified save status component is required."
         )
-    if "setDisplayMode('review')" not in source:
-        errors.append(
-            f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must switch "
-            "optimistically instead of waiting for the save."
-        )
+        return
+    status_source = status.read_text(encoding="utf-8", errors="ignore")
+    for marker, message in (
+        ("'idle' | 'saving' | 'saved' | 'error'", "unified save-state type is required"),
+        ("onRetry", "failed save status must expose retry"),
+        ("保存失败", "failed save status must be visible"),
+        ("重试", "failed save status must include a retry action"),
+    ):
+        if marker not in status_source:
+            errors.append(
+                f"{status.relative_to(REPO_ROOT).as_posix()}: {message} ({marker!r})."
+            )
 
 
 def check_freestyle_inline_edit_scope(errors: list[str]) -> None:
@@ -2365,6 +2427,18 @@ def check_freestyle_inline_edit_scope(errors: list[str]) -> None:
         if "editScope !== 'palace'" not in source:
             errors.append(
                 f"{panel.relative_to(REPO_ROOT).as_posix()}: inline edit must honor `editScope`."
+            )
+        if "revealCollapsedNodeIds" not in source:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: inline edit expansion must follow flip progress."
+            )
+
+    collapse = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "mindMapCollapse.ts"
+    if collapse.exists():
+        collapse_source = collapse.read_text(encoding="utf-8", errors="ignore")
+        if "computeRevealCollapsedNodeIds" not in collapse_source:
+            errors.append(
+                f"{collapse.relative_to(REPO_ROOT).as_posix()}: must expose flip-progress fold derivation."
             )
 
     dialog = (
@@ -2469,6 +2543,38 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must not yield one-finger "
                 "map pan to the snap scroller."
+            )
+
+
+def check_freestyle_retry_starts_unrated(errors: list[str]) -> None:
+    """A 重练 card starts blank. 困难 on the parent only schedules it."""
+    plan = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
+    server_plan = WEB_SRC / "modules" / "practice" / "domain" / "serverRoundPlan.ts"
+    service = API_SRC / "modules" / "memory" / "application" / "unit_review_service.py"
+    feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    for path in (plan, server_plan):
+        if not path.exists():
+            errors.append(f"{path.relative_to(REPO_ROOT).as_posix()}: round plan is required.")
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if "must not prefill the retry rating" not in source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: "
+                "a parent 忘记/困难 must not prefill the retry rating."
+            )
+    if service.exists():
+        service_source = service.read_text(encoding="utf-8", errors="ignore")
+        if "would make the retry card start on 困难" not in service_source:
+            errors.append(
+                f"{service.relative_to(REPO_ROOT).as_posix()}: "
+                "an open parent 困难 glance must not become the retry card's initial score."
+            )
+    if feed_doc.exists():
+        feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
+        if "starts with a blank rating" not in feed_source or "must not prefill the retry rating bar" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document that a retry card starts with a blank rating."
             )
 
 
@@ -4399,6 +4505,7 @@ def main() -> int:
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
+    check_freestyle_retry_starts_unrated(errors)
     check_freestyle_rating_retap_clears(errors)
     check_freestyle_passed_unit_reopen(errors)
     check_freestyle_rating_last_write_wins(errors)

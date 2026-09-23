@@ -197,6 +197,35 @@ def test_freestyle_start_reopens_after_content_invalidation(db_session):
     assert unit["encounter"]["status"] == "open"
 
 
+def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
+    state = _seed_review_unit(db_session)
+    first = _start(db_session, state, "encounter-source")
+    _rate(db_session, first, state, "encounter-source", "rating-hard", 2)
+
+    retry = _start(db_session, state, "encounter-retry")
+    encounter = retry["units"][0]["encounter"]
+    assert encounter["id"] == "encounter-retry"
+    assert encounter["status"] == "open"
+    assert encounter["selected_rating"] is None
+
+    parent = db_session.get(ReviewUnitEncounter, "encounter-source")
+    assert parent.status == "closed"
+    assert parent.selected_rating == 2
+    assert parent.effective_seconds is None
+    parent.created_at = utc_now_naive() - timedelta(seconds=30)
+    db_session.commit()
+
+    closed = close_unit_review_encounter(
+        db_session,
+        study_session_id=first["id"],
+        unit_id=state.id,
+        encounter_id="encounter-source",
+        operation_id="close-hard",
+        effective_seconds=4,
+    )
+    assert closed["encounter"]["effective_seconds"] == 4
+
+
 def test_retry_glance_same_rating_keeps_this_encounter(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-source")

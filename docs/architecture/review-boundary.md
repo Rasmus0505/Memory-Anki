@@ -27,15 +27,15 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Nodes outside marked regions form one residual root-flow unit.
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
 - Every non-root node belongs to exactly one active unit.
-- Permanent mark / membership changes reconcile when the mark pass finishes (exit permanent-mark mode), on editor leave/idle (including keep-alive hide), or on return-to-review — not on every mid-pass toggle autosave. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
+- Permanent mark / membership changes reconcile at an edit-session boundary, not on every content save. Freestyle inline edit uses one same-document `editor_leave` after the edited card becomes inactive or unmounts; it never reconciles or rebuilds the queue while that card remains active. Other editor hosts may still use finished-mark, idle, or explicit return boundaries. Unchanged membership keeps its plan; split units inherit source progress; merges use the lowest level and earliest due date.
 - Deleting the final mark deactivates every unit. A later first mark starts a new schedule.
 
 ## Content Save vs Schedule Reconcile
 
 - Content autosave may persist `editor_doc` without reconciling schedule — including mid-pass permanent-mark toggles. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/level updates between continuous mark clicks.
-- Permanent mark / membership reconcile runs on finished mark pass (`mark_change`), leave, idle, return-to-review, or explicit `reconcile_units` — one batch for the whole pass. A finished pass or leave must still send that reconcile save when the document was already autosaved (same-doc short-circuit). Keep-alive navigation is leave.
+- Complete freestyle edit actions save immediately through one serialized, latest-wins request chain; there is no debounce. Freestyle sends reconcile only through same-document `editor_leave` after the active card leaves the editing session. Other hosts may run one batch on finished mark pass (`mark_change`), idle, return-to-review, or explicit `reconcile_units`. A boundary save must still run when the document was already autosaved (same-doc short-circuit). Keep-alive navigation is leave.
 - Content-only edits that demote affected units may batch demotion to leave / idle / explicit reconcile. At most one content demotion is applied per edit session for a unit, even across many interim autosaves. Due/projection paths still heal lagging unit hashes if a session dies mid-edit.
-- Return-to-review is optimistic on the client: the card switches to review immediately while the reconcile save runs in the background; a failed save falls back to edit mode with local content intact.
+- Freestyle return-to-review is local-first: the card adopts the local document and switches to review before HTTP, without a reconcile request. Save failures stay non-blocking in review with local content and an explicit retry. A stale 409 refreshes the revision token once and retries the local document automatically.
 - Reconcile returns unit-level before/after changes (identity, membership, revision, due, ladder level). Content demotions create an undoable schedule batch while keeping document content as saved.
 - Manual schedule adjust and undo of a content-demote batch are Reviews write commands. Content must not invent a parallel schedule-write API.
 

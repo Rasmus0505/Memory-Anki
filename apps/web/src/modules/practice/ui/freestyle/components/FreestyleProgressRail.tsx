@@ -1,8 +1,10 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import {
+  freestyleProgressRailFits,
   palaceAccentToneClass,
   progressHudText,
   progressRailLabel,
+  progressRailRetryCountVisible,
   progressSegmentHoverLabel,
   progressSegmentShapeClass,
   retryNodeToneClass,
@@ -16,28 +18,40 @@ import {
 } from '@/shared/components/ui/tooltip'
 import { cn } from '@/shared/lib/utils'
 
+/** Circle text is this card's retry attempt in the current round, not its place in the rail. */
+function retryAttemptGlyph(segment: FreestyleProgressSegment): string {
+  return String(Math.max(1, Math.round(segment.retryAttempt || 1)))
+}
+
 function ProgressRailItem({
   segment,
   palaceGap,
   hoverLabel,
+  showRetryCount,
+  compact,
 }: {
   segment: FreestyleProgressSegment
   palaceGap: boolean
   hoverLabel: string
+  showRetryCount: boolean
+  compact: boolean
 }) {
   const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
   const viewing = Boolean(segment.viewing || segment.tone === 'current')
-  const gapClass = segment.cohortBoundary
-    ? 'ml-1.5 border-l border-white/45 pl-1'
-    : palaceGap
-      ? 'ml-0.5'
-      : null
-  if (segment.kind === 'retry') {
+  const gapClass = compact
+    ? null
+    : segment.cohortBoundary
+      ? 'ml-1.5 border-l border-white/45 pl-1'
+      : palaceGap
+        ? 'ml-0.5'
+        : null
+  if (segment.kind === 'retry' && showRetryCount) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span
             data-testid="freestyle-progress-retry-node"
+            data-count-visible="true"
             data-tone={segment.tone}
             data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
@@ -51,7 +65,35 @@ function ProgressRailItem({
               retryNodeToneClass(segment.tone),
             )}
           >
-            {Math.max(1, Math.round(segment.retryAttempt || 1))}
+            {retryAttemptGlyph(segment)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{hoverLabel}</TooltipContent>
+      </Tooltip>
+    )
+  }
+  if (segment.kind === 'retry') {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            aria-label={hoverLabel}
+            className={cn('flex h-full min-w-0 flex-1 items-end', gapClass)}
+          >
+            <span
+              data-testid="freestyle-progress-retry-node"
+              data-count-visible="false"
+              data-tone={segment.tone}
+              data-viewing={viewing ? 'true' : 'false'}
+              data-palace-id={palaceId}
+              data-palace-done={segment.palaceDone ? 'true' : 'false'}
+              data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
+              className={cn(
+                'w-full rounded-[1px]',
+                progressSegmentShapeClass(segment.tone, false),
+                retryNodeToneClass(segment.tone),
+              )}
+            />
           </span>
         </TooltipTrigger>
         <TooltipContent side="bottom">{hoverLabel}</TooltipContent>
@@ -64,7 +106,8 @@ function ProgressRailItem({
         <span
           aria-label={hoverLabel}
           className={cn(
-            'flex h-full min-w-px items-end',
+            'flex h-full items-end',
+            compact ? 'min-w-0' : 'min-w-px',
             viewing ? 'flex-[1.8]' : 'flex-1',
             gapClass,
           )}
@@ -103,6 +146,19 @@ export function FreestyleProgressRail({
 }) {
   const railLabel = progressRailLabel(summary)
   const hudText = progressHudText(summary)
+  const railRef = useRef<HTMLDivElement>(null)
+  const [railWidth, setRailWidth] = useState(0)
+  useLayoutEffect(() => {
+    const node = railRef.current
+    if (!node) return
+    const update = () => setRailWidth(node.clientWidth)
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  const compact = railWidth > 0 && !freestyleProgressRailFits(summary.segments, railWidth)
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
@@ -110,10 +166,15 @@ export function FreestyleProgressRail({
           TooltipProvider lives on ImmersiveFreestylePage — nesting another here
           loops Radix DropdownMenuTrigger refs under Vite. */}
       <div
+        ref={railRef}
         data-testid="freestyle-progress-rail"
+        data-compact={compact ? 'true' : 'false'}
         role="img"
         aria-label={railLabel}
-        className="pointer-events-auto flex h-7 w-full cursor-pointer items-end gap-px bg-zinc-950/55 px-0 pb-1 pt-[max(0px,env(safe-area-inset-top,0px))]"
+        className={cn(
+          'pointer-events-auto flex h-7 w-full min-w-0 cursor-pointer items-end overflow-hidden bg-zinc-950/55 px-0 pb-1 pt-[max(0px,env(safe-area-inset-top,0px))]',
+          compact ? 'gap-0' : 'gap-px',
+        )}
         onClick={onOpenPlan}
       >
         {summary.segments.length === 0 ? (
@@ -127,6 +188,8 @@ export function FreestyleProgressRail({
               palaceGap={
                 index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
               }
+              showRetryCount={progressRailRetryCountVisible(summary.segments, index, railWidth)}
+              compact={compact}
             />
           ))
         )}

@@ -1,9 +1,10 @@
-import { readMindMapEditorState } from '@/modules/content/public'
 import {
   getPalaceEditorApi,
+  readMindMapEditorState,
   savePalaceEditorApi,
   savePalaceEditorWithOptionsApi,
 } from '@/modules/content/public'
+import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   FreestyleMindMapBranchCard,
   MindMapEditorState,
@@ -44,9 +45,9 @@ export function loadPalaceEditor(palaceId: number) {
 }
 
 export type PersistPalaceEditorOptions = {
-  /** Force unit reconcile (also set for mark/leave reasons). */
+  /** Freestyle sets this only for same-document editor_leave reconciliation. */
   reconcileUnits?: boolean
-  /** Backend reconcile triggers: mark_change | return_to_review | editor_leave | editor_idle */
+  /** Supported backend triggers remain available to non-freestyle editor hosts. */
   syncReason?: string
   editorSource?: PalaceEditorSource | string
 }
@@ -92,13 +93,38 @@ export function editorStateFromLocalSave(
   }
 }
 
+function adoptPersistedState(
+  sent: MindMapEditorState,
+  response: unknown,
+): PersistPalaceEditorResult {
+  return {
+    state: editorStateFromLocalSave(sent, response),
+    unitReconcile: readUnitReconcile(response),
+  }
+}
+
+function isEditorSaveConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const status = (error as Error & { status?: number }).status
+  return status === 409 || /脑图保存冲突|服务端已有更新|mindmap_conflict/.test(error.message)
+}
+
+function isDangerousStructureError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('危险结构变更')
+}
+
+function errorRequestId(error: unknown): string {
+  return error instanceof Error
+    ? String((error as Error & { requestId?: string }).requestId || '')
+    : ''
+}
+
 /**
  * Persist freestyle inline palace edits.
- * - No options → plain autosave (`savePalaceEditorApi` ack, no force reconcile),
- *   including mid-pass permanent-mark toggles.
- * - With options → `savePalaceEditorWithOptionsApi` so finished mark pass /
- *   leave / return-to-review can set `sync_reason` / `reconcile_units`.
- * Never rebuilds `editor_doc` from the save response.
+ * - Every complete edit action is sent immediately; callers serialize requests.
+ * - A stale expected fingerprint caused by this device's previous successful save
+ *   is refreshed once and the latest local document wins automatically.
+ * - The remote document is never adopted here; only its revision token is used.
  */
 export async function persistPalaceEditor(
   palaceId: number,
@@ -113,46 +139,87 @@ export async function persistPalaceEditor(
       || (options.editorSource != null && options.editorSource !== '')
     ),
   )
-  const expectedFingerprint = expectedFingerprintFromState(state)
-  const buildOptionsPayload = (extra?: Record<string, unknown>) => ({
-    ...state,
-    editor_source: (options?.editorSource as PalaceEditorSource | undefined) ?? 'palace_edit_autosave',
-    expected_editor_fingerprint: expectedFingerprint,
-    response_mode: 'ack' as const,
-    ...(options?.syncReason ? { sync_reason: options.syncReason } : {}),
-    ...(options?.reconcileUnits ? { reconcile_units: true } : {}),
-    ...extra,
-  })
-  const adopt = (response: unknown): PersistPalaceEditorResult => ({
-    state: editorStateFromLocalSave(state, response),
-    unitReconcile: readUnitReconcile(response),
-  })
 
-  try {
-    const response = hasOptions
-      ? await savePalaceEditorWithOptionsApi(palaceId, buildOptionsPayload())
-      : await savePalaceEditorApi(
+  const send = async (expectedFingerprint: string | null): Promise<unknown> => {
+    const buildOptionsPayload = (extra?: Record<string, unknown>) => ({
+      ...state,
+      editor_fingerprint: expectedFingerprint || state.editor_fingerprint,
+      editor_source: (options?.editorSource as PalaceEditorSource | undefined) ?? 'palace_edit_autosave',
+      expected_editor_fingerprint: expectedFingerprint,
+      response_mode: 'ack' as const,
+      ...(options?.syncReason ? { sync_reason: options.syncReason } : {}),
+      ...(options?.reconcileUnits ? { reconcile_units: true } : {}),
+      ...extra,
+    })
+    const requestOnce = async (confirmDangerousChange = false): Promise<unknown> => {
+      if (!hasOptions) {
+        return savePalaceEditorApi(
+          palaceId,
+          {
+            ...state,
+            editor_fingerprint: expectedFingerprint || state.editor_fingerprint,
+            expected_editor_fingerprint: expectedFingerprint,
+            ...(confirmDangerousChange
+              ? {
+                  editor_source: 'palace_edit' as const,
+                  confirm_dangerous_change: true,
+                }
+              : {}),
+          },
+          'ack',
+        )
+      }
+      return savePalaceEditorWithOptionsApi(
         palaceId,
-        {
-          ...state,
-          expected_editor_fingerprint: expectedFingerprint,
-        },
-        'ack',
+        buildOptionsPayload(
+          confirmDangerousChange
+            ? { confirm_dangerous_change: true, editor_source: 'palace_edit' }
+            : undefined,
+        ),
       )
-    return adopt(response)
+    }
+
+    try {
+      return await requestOnce()
+    } catch (error) {
+      if (!isDangerousStructureError(error)) throw error
+      const confirmed = await appConfirm(
+        '这次保存会让宫殿知识点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
+        { title: '确认危险保存', tone: 'danger' },
+      )
+      if (!confirmed) throw error
+      return requestOnce(true)
+    }
+  }
+
+  const initialFingerprint = expectedFingerprintFromState(state)
+  try {
+    return adoptPersistedState(state, await send(initialFingerprint))
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error || '')
-    if (!message.includes('危险结构变更')) throw error
-    const confirmed = await appConfirm(
-      '这次保存会让宫殿知识点数量骤减。只有在你确实要大幅删除宫殿结构时才继续。确定继续保存吗？',
-      { title: '确认危险保存', tone: 'danger' },
-    )
-    if (!confirmed) throw error
-    const response = await savePalaceEditorWithOptionsApi(palaceId, buildOptionsPayload({
-      confirm_dangerous_change: true,
-      editor_source: 'palace_edit',
-    }))
-    return adopt(response)
+    if (!isEditorSaveConflict(error)) throw error
+
+    logAppError({
+      feature: '随心脑图保存',
+      stage: 'stale_fingerprint_rebased',
+      error,
+      requestSummary: `PUT /palaces/${palaceId}/editor`,
+      requestId: errorRequestId(error),
+      meta: {
+        palaceId,
+        resolution: 'refresh_fingerprint_and_retry_local_document',
+      },
+    })
+
+    let remoteState: MindMapEditorState
+    try {
+      remoteState = readMindMapEditorState(await getPalaceEditorApi(palaceId))
+    } catch {
+      throw error
+    }
+    const remoteFingerprint = expectedFingerprintFromState(remoteState)
+    if (!remoteFingerprint) throw error
+
+    return adoptPersistedState(state, await send(remoteFingerprint))
   }
 }
 

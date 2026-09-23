@@ -576,12 +576,14 @@ class PalaceEditorReturnToReviewTests(PalaceEditorReconcileGateTests):
             palace, unit = self._seed_unit(session, stage_index=3)
             stage_before = unit.stage_index
 
+            stale_fingerprint = get_palace_editor_state(palace)["editor_fingerprint"]
             saved = save_palace_editor_state(
                 session,
                 palace,
                 {
                     "editor_doc": self._marked_doc("节点 A 返回前已改"),
                     "editor_source": "palace_edit_autosave",
+                    "expected_editor_fingerprint": stale_fingerprint,
                 },
             )
             session.expire_all()
@@ -592,6 +594,8 @@ class PalaceEditorReturnToReviewTests(PalaceEditorReconcileGateTests):
             version_count = session.query(PalaceVersion).filter_by(palace_id=palace.id).count()
             stored_before = palace.editor_doc
 
+            # The token predates the successful text save, but the replayed document
+            # is byte-for-byte identical to the stored document.
             result = save_palace_editor_state(
                 session,
                 palace,
@@ -599,6 +603,7 @@ class PalaceEditorReturnToReviewTests(PalaceEditorReconcileGateTests):
                     "editor_doc": saved["editor_doc"],
                     "editor_source": "palace_edit_autosave",
                     "sync_reason": "return_to_review",
+                    "expected_editor_fingerprint": stale_fingerprint,
                 },
             )
             session.expire_all()

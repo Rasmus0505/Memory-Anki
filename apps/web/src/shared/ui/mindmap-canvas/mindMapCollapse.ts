@@ -142,6 +142,67 @@ export function reconcileCollapsedNodeIds(
   return next
 }
 
+/**
+ * Collapse state that mirrors a reveal/flip session: a branch parent stays open
+ * only when the learner has already flipped something inside it. Parents whose
+ * children are all still hidden stay folded, so entering edit with an
+ * unflipped branch does not dump the whole subtree open.
+ *
+ * A child counts as flipped-out when its own state is revealed/placeholder.
+ * Subtree expansion is implied: flipping a deep card keeps its whole ancestor
+ * chain open. Parents without children are never collapsed.
+ */
+export function computeRevealCollapsedNodeIds(
+  nodes: readonly MindMapNode[],
+  revealMap: Readonly<Record<string, string>>,
+  options?: { rootId?: string | null },
+): Set<string> {
+  const { childrenByParent } = buildCollapseTreeIndex(nodes)
+  return computeRevealCollapsedFromChildren(childrenByParent, revealMap, options)
+}
+
+/**
+ * Parent-map variant for hosts that already hold `child → parent` (e.g. the
+ * palace editor document) and must not rebuild a full graph just to fold.
+ */
+export function computeRevealCollapsedNodeIdsFromParentMap(
+  parentByUid: ReadonlyMap<string, string | null>,
+  revealMap: Readonly<Record<string, string>>,
+  options?: { rootId?: string | null },
+): Set<string> {
+  const childrenByParent = new Map<string, string[]>()
+  for (const [uid, parent] of parentByUid) {
+    // Register every uid so leaves resolve to an empty child list rather than
+    // being skipped as unknown parents.
+    if (!childrenByParent.has(uid)) childrenByParent.set(uid, [])
+    if (!parent) continue
+    const list = childrenByParent.get(parent) ?? []
+    list.push(uid)
+    childrenByParent.set(parent, list)
+  }
+  return computeRevealCollapsedFromChildren(childrenByParent, revealMap, options)
+}
+
+function computeRevealCollapsedFromChildren(
+  childrenByParent: ReadonlyMap<string, readonly string[]>,
+  revealMap: Readonly<Record<string, string>>,
+  options?: { rootId?: string | null },
+): Set<string> {
+  const collapsed = new Set<string>()
+  for (const [uid, children] of childrenByParent) {
+    if (children.length === 0) continue
+    if (children.some((childId) => cardSlotHasAppeared(revealMap[childId]))) continue
+    collapsed.add(uid)
+  }
+  const rootId = options?.rootId
+  if (rootId) collapsed.delete(rootId)
+  return collapsed
+}
+
+function cardSlotHasAppeared(state: string | undefined) {
+  return state === 'placeholder' || state === 'revealed'
+}
+
 /** Hide every descendant under a collapsed ancestor (not the collapsed node itself). */
 export function collectHiddenNodeIds(
   nodes: readonly MindMapNode[],

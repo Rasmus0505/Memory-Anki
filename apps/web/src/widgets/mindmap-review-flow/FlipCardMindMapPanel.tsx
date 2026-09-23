@@ -148,6 +148,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   scopeBranchUid?: string | null
   /** Freestyle inline edit: do not auto-collapse the scoped branch. */
   forceExpanded?: boolean
+  /**
+   * Edit-mode fold seed from flip progress. Takes precedence over `forceExpanded`
+   * so entering edit shows only the branches already flipped out.
+   */
+  revealCollapsedNodeIds?: ReadonlySet<string> | null
 }
 
 export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
@@ -222,6 +227,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   mutedNodeUids: mutedNodeUidsProp,
   scopeBranchUid = null,
   forceExpanded = false,
+  revealCollapsedNodeIds = null,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
@@ -538,6 +544,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         readonly={!isEditMode}
         practiceModeActive={!isEditMode}
         forceExpanded={isEditMode && forceExpanded}
+        revealCollapsedNodeIds={isEditMode ? revealCollapsedNodeIds : null}
         scopeBranchUid={isEditMode ? scopeBranchUid : null}
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}

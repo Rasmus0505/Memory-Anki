@@ -150,35 +150,44 @@ def save_palace_editor_state(
             "已拒绝普通编辑器保存绕过版本校验；请重新加载当前宫殿后再保存。"
         )
     current_state = get_palace_editor_state(palace)
-    try:
-        assert_expected_fingerprint(
-            current_fingerprint=current_state.get(EDITOR_FINGERPRINT_KEY),
-            expected_fingerprint=str(payload.get("expected_editor_fingerprint") or "").strip(),
-            allow_stale_overwrite=allow_stale_overwrite,
-        )
-    except EditorStateConflictError as exc:
-        exc.current_snapshot = current_state.get("snapshot")
-        raise
-
     local_config = resolve_local_config(palace.editor_local_config, local_input, lang_input)
+    incoming_config = (
+        ensure_editor_dict(config_input)
+        if config_input is not None
+        else current_state["editor_config"]
+    )
+    incoming_lang = extract_editor_lang(local_config)
     saved_editor_doc = current_state["editor_doc"]
     saved_editor_config = current_state["editor_config"]
     saved_editor_local_config = local_config
-    saved_lang = extract_editor_lang(local_config)
+    saved_lang = incoming_lang
+
+    # An exact replay of the current document is idempotent even when the client
+    # still carries the previous revision token. This heals a stale fingerprint
+    # after this device's own successful autosave without weakening conflict
+    # protection for genuinely different content.
+    identical_editor_doc = (
+        doc_input is not None
+        and incoming_config == current_state["editor_config"]
+        and local_config == current_state["editor_local_config"]
+        and incoming_lang == current_state["lang"]
+        and _editor_doc_matches_stored(palace, doc_input)
+    )
+    if not identical_editor_doc:
+        try:
+            assert_expected_fingerprint(
+                current_fingerprint=current_state.get(EDITOR_FINGERPRINT_KEY),
+                expected_fingerprint=str(payload.get("expected_editor_fingerprint") or "").strip(),
+                allow_stale_overwrite=allow_stale_overwrite,
+            )
+        except EditorStateConflictError as exc:
+            exc.current_snapshot = current_state.get("snapshot")
+            raise
 
     unit_reconcile: dict[str, Any] | None = None
 
-    # Idempotent short-circuit: an identical doc (with no config/local changes)
-    # needs no tree sync, version snapshot, or commit. This makes a
-    # return-to-review flush after a same-doc autosave nearly free; schedule
-    # reconcile still runs when the caller asks for it.
-    identical_editor_doc = (
-        doc_input is not None
-        and config_input is None
-        and local_input is None
-        and lang_input is None
-        and _editor_doc_matches_stored(palace, doc_input)
-    )
+    # Identical input needs no tree sync, version snapshot, or commit. Schedule
+    # reconcile still runs when the caller explicitly asks for it.
     if identical_editor_doc:
         if _should_reconcile_units(
             payload=payload,

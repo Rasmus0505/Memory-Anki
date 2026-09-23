@@ -407,6 +407,66 @@ def test_freestyle_rating_retap_clears_requires_clickable_selected(
     assert any("tapping the selected rating again clears it" in error for error in errors)
 
 
+def test_freestyle_retry_starts_unrated_requires_blank_glance(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
+        "export function stampRestudyPlan() { return null }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
+        "export function mergeServerPlanIntoLocalEncounters() { return {} }\n",
+    )
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "def start_freestyle_unit_review_session():\n    return None\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "A retry occurrence has its own encounter.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_retry_starts_unrated(errors)
+
+    assert any("must not prefill the retry rating" in error for error in errors)
+    assert any("must not become the retry card's initial score" in error for error in errors)
+    assert any("starts with a blank rating" in error for error in errors)
+
+
+def test_freestyle_retry_starts_unrated_accepts_blank_glance(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "roundPlan.ts",
+        "It must not prefill the retry rating.\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "serverRoundPlan.ts",
+        "Parent score must not prefill the retry rating.\n",
+    )
+    write_file(
+        api_src / "modules" / "memory" / "application" / "unit_review_service.py",
+        "Returning that open glance would make the retry card start on 困难.\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "A retry card starts with a blank rating. It must not prefill the retry rating bar.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_retry_starts_unrated(errors)
+
+    assert errors == []
+
+
 def test_freestyle_rating_retap_clears_accepts_clear_all(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -741,13 +801,15 @@ def test_freestyle_inline_edit_scope_requires_config_and_settings(
 
     assert any("editScope" in error for error in errors)
     assert any("honor `editScope`" in error for error in errors)
+    assert any("follow flip progress" in error for error in errors)
     assert any("expose edit scope" in error for error in errors)
     assert any("configurable `editScope`" in error for error in errors)
 
 
-def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
+def test_freestyle_inline_edit_expansion_requires_flip_progress_fold(
     tmp_path: Path, monkeypatch
 ) -> None:
+    """Edit expansion must be derived from flip progress, not force-expanded."""
     web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -769,6 +831,52 @@ def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
         web_src / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx",
         "进入编辑 当前专线 整座宫殿\n",
     )
+    # Collapse module exists but no longer derives folds from flip progress.
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "mindMapCollapse.ts",
+        "export function reconcileCollapsedNodeIds() {}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "configured in 翻卡设置 (`editScope`).\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_inline_edit_scope(errors)
+
+    assert any("follow flip progress" in error for error in errors)
+    assert any("expose flip-progress fold derivation" in error for error in errors)
+
+
+def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "shared" / "preferences" / "flipCardRevealConfig.ts",
+        "export type FlipCardEditScope = 'unit' | 'palace'\neditScope: 'unit'\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "scopeBranchUid={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace' ? unit.anchor_uid : null}\n"
+        "revealCollapsedNodeIds={editRevealCollapsedNodeIds}\n",
+    )
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "mindMapCollapse.ts",
+        "export function computeRevealCollapsedNodeIds() {}\n",
+    )
+    write_file(
+        web_src / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx",
+        "进入编辑 当前专线 整座宫殿\n",
+    )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
         "configured in 翻卡设置 (`editScope`).\n",
@@ -778,6 +886,99 @@ def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
     check_architecture.check_freestyle_inline_edit_scope(errors)
 
     assert errors == []
+
+
+def _write_freestyle_return_sources(
+    tmp_path: Path,
+    panel_source: str,
+    status_source: str,
+) -> Path:
+    web_src = tmp_path / "apps" / "web" / "src"
+    panel = (
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    status = (
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipCanvas.tsx"
+    )
+    write_file(panel, panel_source)
+    write_file(status, status_source)
+    return web_src
+
+
+def test_freestyle_return_save_ux_requires_immediate_local_first_save(
+    tmp_path: Path, monkeypatch
+) -> None:
+    panel_source = """const handleToggleMode = () => {
+  onEditorStateSaved?.(localState)
+  setDisplayMode('review')
+}
+const handleEditorStateChange = () => {
+  void persistEdit(nextState)
+}
+void persistEdit(nextState)
+onEditorStateSaved?.(localState)
+setDisplayMode('review')
+syncReason: 'editor_leave'
+if (!editedSinceReconcileRef.current) return
+setSaveState('saving')
+setSaveState('error')
+"""
+    status_source = """type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+onRetry
+保存失败
+重试
+"""
+    web_src = _write_freestyle_return_sources(tmp_path, panel_source, status_source)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_return_save_ux(errors)
+
+    assert errors == []
+
+
+def test_freestyle_return_save_ux_rejects_debounce_and_active_reconcile(
+    tmp_path: Path, monkeypatch
+) -> None:
+    panel_source = """const schedulePersist = () => {}
+const saveTimerRef = null
+const handleToggleMode = () => {
+  onEditorStateSaved?.(localState)
+  flushPersistWithReconcile('return_to_review')
+  setDisplayMode('edit')
+}
+const handleEditorStateChange = () => {}
+syncReason: 'return_to_review'
+syncReason: 'mark_change'
+"""
+    status_source = "保存中\n"
+    web_src = _write_freestyle_return_sources(tmp_path, panel_source, status_source)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_return_save_ux(errors)
+
+    assert any("save immediately" in error for error in errors)
+    assert any("switch to review locally" in error for error in errors)
+    assert any("typing autosave must not use a debounce scheduler" in error for error in errors)
+    assert any("active-card return must not reconcile" in error for error in errors)
+    assert any("active-card mark exit must not reconcile" in error for error in errors)
+    assert any("must not force" in error for error in errors)
+    assert any("unified save-state type" in error for error in errors)
 
 
 def test_freestyle_knowledge_entry_scope_rejects_saved_selection_override(

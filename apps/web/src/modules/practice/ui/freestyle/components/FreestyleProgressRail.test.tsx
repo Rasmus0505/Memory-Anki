@@ -172,6 +172,49 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('2/3')
   })
 
+  it('collapses distant retry counts into ticks when the round no longer fits', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(96)
+    try {
+      const segments = Array.from({ length: 12 }, (_, index) => ({
+        cardId: `retry-${index}`,
+        tone: index === 5 ? 'current' as const : 'retry' as const,
+        palaceId: 1,
+        palaceDone: false,
+        kind: 'retry' as const,
+        retryAttempt: index === 5 ? 7 : index + 1,
+        viewing: index === 5,
+        sourceLabel: '卡',
+      }))
+      renderRail({
+        summary: summary({
+          segments,
+          position: 6,
+          total: 12,
+          retryInserted: 12,
+          scheduledBase: 1,
+        }),
+      })
+
+      const rail = screen.getByTestId('freestyle-progress-rail')
+      expect(rail.getAttribute('data-compact')).toBe('true')
+      expect(rail.className).toContain('overflow-hidden')
+      const nodes = screen.getAllByTestId('freestyle-progress-retry-node')
+      expect(nodes).toHaveLength(12)
+      expect(nodes.map((node) => node.getAttribute('data-count-visible'))).toEqual([
+        'false', 'false', 'false', 'true', 'true', 'true', 'true', 'true', 'false', 'false', 'false', 'false',
+      ])
+      expect(nodes[5].textContent).toBe('7')
+      expect(nodes[3].textContent).toBe('4')
+      expect(nodes[0].textContent).toBe('')
+      expect(nodes[0].className).not.toContain('rounded-full')
+      expect(nodes[0].className).toContain(retryNodeToneClass('retry'))
+      expect(screen.getByLabelText('1/12 · 重练《卡》第 1 次 · 待重练')).toBeTruthy()
+      expect(screen.getByLabelText('6/12 · 重练《卡》第 7 次 · 当前')).toBeTruthy()
+    } finally {
+      width.mockRestore()
+    }
+  })
+
   it('fills a completed retry node solid and leaves an unfinished retry faint', () => {
     renderRail({
       summary: summary({

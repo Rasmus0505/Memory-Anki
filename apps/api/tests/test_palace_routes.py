@@ -290,6 +290,35 @@ class TestPalaceEditor:
 
         assert response.status_code == 400
 
+    def test_put_editor_accepts_identical_document_with_stale_fingerprint(
+        self, client, palace_id
+    ):
+        initial = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
+        stale_fingerprint = initial[EDITOR_FINGERPRINT_KEY]
+
+        changed = client.put(
+            f"/api/v1/palaces/{palace_id}/editor",
+            json={"editor_source": "palace_edit", "editor_doc": editor_doc("Changed")},
+        )
+        assert changed.status_code == 200
+        current = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
+
+        replay = client.put(
+            f"/api/v1/palaces/{palace_id}/editor",
+            json={
+                "editor_source": "palace_edit_autosave",
+                "response_mode": "ack",
+                "expected_editor_fingerprint": stale_fingerprint,
+                "editor_doc": current["editor_doc"],
+                "editor_config": current["editor_config"],
+                "editor_local_config": current["editor_local_config"],
+                "lang": current["lang"],
+            },
+        )
+
+        assert replay.status_code == 200
+        assert replay.json()["editor_fingerprint"] == current[EDITOR_FINGERPRINT_KEY]
+
     def test_put_editor_conflict_returns_409(self, client, palace_id):
         current = client.get(f"/api/v1/palaces/{palace_id}/editor").json()
         stale_fingerprint = current[EDITOR_FINGERPRINT_KEY]

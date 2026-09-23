@@ -427,23 +427,32 @@ export function stampRestudyPlan(
     if (!cardId) continue
     const rated = cards.find((card) => card.id === cardId)
     const sourceId = String(rated?.source_card_id || cardId).trim() || cardId
-    const lastRating = entry.rating ?? next.cardsById[cardId]?.lastRating ?? null
-    const sourcePatch = {
-      status: 'retry' as const,
-      lastRating,
-      retryAfterCards: entry.retryAfterCards,
-      attemptCount: entry.attempt,
-    }
-    if (next.cardsById[cardId]) next = updateRoundPlanCard(next, cardId, sourcePatch, now)
-    if (sourceId !== cardId && next.cardsById[sourceId]) {
-      next = updateRoundPlanCard(next, sourceId, {
-        ...sourcePatch,
-        lastRating: entry.rating ?? next.cardsById[sourceId]?.lastRating ?? null,
-      }, now)
-    }
     const retry = cards.find((card) => (
       card.occurrence_kind === 'retry' && String(card.source_card_id || '') === sourceId
     ))
+    const ratingTheRetry = Boolean(retry && cardId === retry.id)
+    const schedulePatch = {
+      status: 'retry' as const,
+      retryAfterCards: entry.retryAfterCards,
+      attemptCount: entry.attempt,
+    }
+    if (next.cardsById[cardId]) {
+      next = updateRoundPlanCard(next, cardId, {
+        ...schedulePatch,
+        lastRating: entry.rating ?? next.cardsById[cardId]?.lastRating ?? null,
+      }, now)
+    }
+    // The parent's 忘记/困难 downgrades that card and schedules this glance.
+    // It must not prefill the retry rating. A later score on the 重练 stays there.
+    if (!ratingTheRetry && sourceId !== cardId && next.cardsById[sourceId]) {
+      next = updateRoundPlanCard(next, sourceId, {
+        ...schedulePatch,
+        lastRating: entry.rating ?? next.cardsById[sourceId]?.lastRating ?? null,
+      }, now)
+    }
+    if (ratingTheRetry && sourceId !== cardId && next.cardsById[sourceId]) {
+      next = updateRoundPlanCard(next, sourceId, schedulePatch, now)
+    }
     if (!retry || !next.cardsById[retry.id]) continue
     next = updateRoundPlanCard(next, retry.id, {
       status: 'retry',
@@ -451,7 +460,9 @@ export function stampRestudyPlan(
       sourceCardId: sourceId,
       retryAttempt: Math.max(1, Math.round(Number(retry.retry_attempt) || entry.attempt || 1)),
       retryAfterCards: entry.retryAfterCards,
-      lastRating: entry.rating ?? null,
+      lastRating: ratingTheRetry
+        ? (entry.rating ?? next.cardsById[retry.id]?.lastRating ?? null)
+        : null,
     }, now)
   }
   return next

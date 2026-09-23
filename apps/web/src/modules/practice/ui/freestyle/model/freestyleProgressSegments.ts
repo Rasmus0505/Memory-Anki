@@ -240,6 +240,60 @@ export function progressSegmentShapeClass(
   return 'h-1.5'
 }
 
+/** Preferred width of a non-viewing retry circle (`size-3.5`). */
+export const PROGRESS_RAIL_RETRY_SLOT_PX = 14
+/** Preferred width of the retry circle on the card currently on screen (`size-5`). */
+export const PROGRESS_RAIL_RETRY_VIEWING_SLOT_PX = 20
+export const PROGRESS_RAIL_GAP_PX = 1
+export const PROGRESS_RAIL_TICK_MIN_PX = 2
+export const PROGRESS_RAIL_VIEWING_TICK_MIN_PX = 6
+/** When the rail is too narrow, only this many cards on each side of the playhead keep a retry count. */
+export const PROGRESS_RAIL_NEARBY_RADIUS = 2
+
+export function progressRailAnchorIndex(segments: readonly FreestyleProgressSegment[]): number {
+  const viewing = segments.findIndex((segment) => segment.viewing || segment.tone === 'current')
+  return viewing >= 0 ? viewing : 0
+}
+
+/**
+ * True when every retry circle can keep its count without pushing the round past the rail.
+ * A non-positive width means the rail has not been measured yet.
+ */
+export function freestyleProgressRailFits(
+  segments: readonly FreestyleProgressSegment[],
+  railWidthPx: number,
+): boolean {
+  if (!(railWidthPx > 0) || segments.length === 0) return true
+  let fixed = 0
+  let flexMin = 0
+  for (const segment of segments) {
+    const viewing = Boolean(segment.viewing || segment.tone === 'current')
+    if (segment.kind === 'retry') {
+      fixed += viewing ? PROGRESS_RAIL_RETRY_VIEWING_SLOT_PX : PROGRESS_RAIL_RETRY_SLOT_PX
+    } else {
+      flexMin += viewing ? PROGRESS_RAIL_VIEWING_TICK_MIN_PX : PROGRESS_RAIL_TICK_MIN_PX
+    }
+  }
+  const gaps = Math.max(0, segments.length - 1) * PROGRESS_RAIL_GAP_PX
+  return fixed + flexMin + gaps <= railWidthPx
+}
+
+/**
+ * The circle glyph is this card's retry attempt in the current round.
+ * Far from the playhead it is dropped once the circles no longer fit, and the tick stays.
+ */
+export function progressRailRetryCountVisible(
+  segments: readonly FreestyleProgressSegment[],
+  index: number,
+  railWidthPx: number,
+): boolean {
+  const segment = segments[index]
+  if (segment?.kind !== 'retry') return false
+  if (!(railWidthPx > 0) || freestyleProgressRailFits(segments, railWidthPx)) return true
+  const anchor = progressRailAnchorIndex(segments)
+  return Math.abs(index - anchor) <= PROGRESS_RAIL_NEARBY_RADIUS
+}
+
 function progressCardLabel(
   card: FreestyleCard,
   cards: FreestyleCard[],

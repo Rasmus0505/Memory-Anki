@@ -7,8 +7,10 @@ import {
   buildFreestyleProgressSummary,
   palaceAccent,
   palaceAccentToneClass,
+  freestyleProgressRailFits,
   progressHudText,
   progressRailLabel,
+  progressRailRetryCountVisible,
   progressSegmentHoverLabel,
   progressSegmentShapeClass,
   liveEncounterFillDone,
@@ -421,6 +423,40 @@ describe('progressSegmentHoverLabel', () => {
         4,
       ),
     ).toBe('2/4 · 重练《锚点》第 2 次 · 已过')
+  })
+})
+
+describe('progressRailRetryCountVisible', () => {
+  function retrySegment(id: string, attempt: number, viewing = false) {
+    return {
+      cardId: id,
+      tone: viewing ? 'current' as const : 'retry' as const,
+      palaceId: 1,
+      palaceDone: false,
+      kind: 'retry' as const,
+      retryAttempt: attempt,
+      viewing,
+      sourceLabel: '卡',
+    }
+  }
+
+  it('keeps every retry count when the circles fit', () => {
+    const segments = [retrySegment('a', 1), retrySegment('b', 7, true), retrySegment('c', 2)]
+    expect(freestyleProgressRailFits(segments, 400)).toBe(true)
+    expect(segments.map((_, index) => progressRailRetryCountVisible(segments, index, 400)))
+      .toEqual([true, true, true])
+  })
+
+  it('keeps counts only within two cards of the playhead when the rail is narrow', () => {
+    const segments = Array.from({ length: 12 }, (_, index) => (
+      retrySegment(`retry-${index}`, index === 5 ? 7 : index + 1, index === 5)
+    ))
+    expect(freestyleProgressRailFits(segments, 96)).toBe(false)
+    const visible = segments.map((_, index) => progressRailRetryCountVisible(segments, index, 96))
+    expect(visible).toEqual([
+      false, false, false, true, true, true, true, true, false, false, false, false,
+    ])
+    expect(progressRailRetryCountVisible(segments, 5, 0)).toBe(true)
   })
 })
 

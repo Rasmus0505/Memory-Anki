@@ -40,6 +40,11 @@ export interface MindMapEditorSurfaceProps {
   practiceModeActive?: boolean
   /** Expand all branches without locking editing. */
   forceExpanded?: boolean
+  /**
+   * Edit-mode fold seed derived from flip progress. When set it wins over
+   * `forceExpanded`, so editing shows the branches the learner already flipped out.
+   */
+  revealCollapsedNodeIds?: ReadonlySet<string> | null
   /** Keep palace-root → branch spine + subtree in the canvas; persist still uses the full doc. */
   scopeBranchUid?: string | null
   /** Host English interaction mode: clickable words + long-press selection (no flip). */

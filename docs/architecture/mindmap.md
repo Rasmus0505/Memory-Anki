@@ -148,8 +148,8 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` applies the water-pour topology and returns complete unit memberships; it contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions.
 
-- Content autosave may write `editor_doc` without reconciling schedule; editing must not block on unit arrangement.
-- Permanent mark / membership changes reconcile when the mark pass finishes (exit permanent-mark mode / `mark_change`), on leave/idle, or on return-to-review — not on every mid-pass toggle autosave.
+- Complete edit actions may save `editor_doc` immediately without reconciling schedule; editing must not block on unit arrangement. Freestyle uses a serialized latest-wins request chain and has no typing debounce.
+- Freestyle permanent mark / membership changes reconcile only on same-document `editor_leave` after the edited card becomes inactive or unmounts — never during active-card edits, mark toggles, or return-to-review. Other editor hosts may still use finished-mark, idle, return-to-review, or explicit reconcile boundaries.
 - Content demotion (affected unit immediately due, one fixed-ladder step down) may batch to leave / idle / explicit reconcile — at most one demotion per unit per edit session.
 - Reconcile exposes unit-level before/after; content demotions form an undoable schedule batch (document content stays as saved). Manual adjust and undo demote-batch are Reviews write commands.
 

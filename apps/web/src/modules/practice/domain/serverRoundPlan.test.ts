@@ -241,6 +241,7 @@ describe('server round plan hydrate', () => {
     const merged = mergeServerPlanIntoLocalEncounters({}, plan, 'round-1')
     expect(merged.a).toMatchObject({ selectedRating: 3, passed: true, status: 'closed' })
     expect(merged.b).toMatchObject({ selectedRating: 2, passed: false, status: 'closed' })
+    expect(merged['retry:round-1:b-unit:1']).toBeUndefined()
     // Local draft wins when it already has a rating.
     expect(mergeServerPlanIntoLocalEncounters({
       a: {
@@ -266,6 +267,75 @@ describe('server round plan hydrate', () => {
     )
     expect(hud.cardsById.a.lastRating).toBe(3)
     expect(hud.cardsById.b.lastRating).toBe(2)
+  })
+
+  it('does not prefill a retry card with the parent scheduling rating', () => {
+    const source = branch('b')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3, 'retry:round-1:b-unit:1')
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['b', retry.id],
+      current_card_id: retry.id,
+      current_index: 1,
+      completed_ids: [],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: retry.id,
+        source_card_id: 'b',
+        source_unit_id: 'b-unit',
+        retry_attempt: 1,
+        rating: 2,
+        insert_target_index: 1,
+        status: 'inserted',
+        encounter_id: 'enc-b',
+      }],
+      encounters: {
+        b: { encounter_id: 'enc-b', status: 'failed', unit_revision: 1 },
+      },
+    }
+    const local = createRoundPlan('round-1', [source, retry], DEFAULT_FREESTYLE_FEED_CONFIG)
+    const inherited = applyServerRatingsToRoundPlan(
+      {
+        ...local,
+        cardsById: {
+          ...local.cardsById,
+          [retry.id]: { ...local.cardsById[retry.id], lastRating: 2 },
+        },
+      },
+      plan,
+    )
+    expect(inherited.cardsById.b.lastRating).toBe(2)
+    expect(inherited.cardsById[retry.id].lastRating).toBeNull()
+    expect(mergeServerPlanIntoLocalEncounters({
+      [retry.id]: {
+        encounterId: 'enc-b',
+        roundId: 'round-1',
+        unitRevision: 1,
+        status: 'closed',
+        sessionId: null,
+        selectedRating: 2,
+        passed: false,
+        retryAfterCards: 3,
+      },
+    }, plan, 'round-1')[retry.id]).toMatchObject({
+      selectedRating: null,
+      status: 'pending',
+    })
+
+    const ratedPlan: FreestyleRoundPlanPayload = {
+      ...plan,
+      occurrences: [{ ...plan.occurrences![0], rating: 3, encounter_id: 'enc-retry' }],
+      encounters: {
+        b: { encounter_id: 'enc-b', status: 'failed', unit_revision: 1 },
+        [retry.id]: { encounter_id: 'enc-retry', status: 'passed', unit_revision: 1 },
+      },
+    }
+    const owned = applyServerRatingsToRoundPlan(local, ratedPlan)
+    expect(owned.cardsById[retry.id].lastRating).toBe(3)
+    expect(mergeServerPlanIntoLocalEncounters({}, ratedPlan, 'round-1')[retry.id]).toMatchObject({
+      selectedRating: 3,
+      passed: true,
+    })
   })
 
   it('keeps an optimistic last-card retry while the server occurrence is still pending', () => {
