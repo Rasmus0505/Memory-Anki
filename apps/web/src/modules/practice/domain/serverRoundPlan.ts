@@ -531,7 +531,10 @@ export function applyServerRatingsToRoundPlan(
     const ownsGlance = Boolean(occId) && retryGlanceOwnsRating(server, occId)
     if (ownsGlance && occId && rating != null) ratings.set(occId, rating)
     if (!ownsGlance && occId) unratedRetries.add(occId)
-    if (sourceId && rating != null && !ratings.has(sourceId)) ratings.set(sourceId, rating)
+    // Occurrence-local only: a 重练 glance must never stamp the source id.
+    if (!ownsGlance && sourceId && rating != null && !ratings.has(sourceId)) {
+      ratings.set(sourceId, rating)
+    }
   }
   for (const [cardId, enc] of Object.entries(server.encounters || {})) {
     if (ratings.has(cardId)) continue

@@ -13,6 +13,7 @@ import {
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
+  isOccurrenceScored,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
@@ -334,6 +335,11 @@ export function FreestyleRoundSheet({
       planStatus,
       queueState.unitEncountersByCardId[entry.cardId],
       entry.status,
+      isOccurrenceScored(entry.cardId, {
+        completedIds: queueState.completedIds,
+        encounters: queueState.unitEncountersByCardId,
+        roundPlan,
+      }),
     )
   }, [
     currentCardId,

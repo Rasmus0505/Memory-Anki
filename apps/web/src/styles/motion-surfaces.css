@@ -1,4 +1,4 @@
-﻿@keyframes streak-pop {
+@keyframes streak-pop {
   0% {
     transform: scale(1.4);
     opacity: 0.6;
@@ -100,6 +100,152 @@
   animation: english-caret-blink 1s steps(1, end) infinite;
 }
 
+/* --- 进度条动画 ---
+   6px 量级的 tick 上，仅靠 filter 的亮度变化不可感知；可感知性必须建立在
+   几何变化（高度/缩放/光晕半径）上，亮度只作为叠加高光。
+   transform-origin 统一为 bottom：tick 靠 items-end 对齐，向上生长才不脱轨。
+
+   注意：`progress-rail-breath`（无限循环）与所有一次性脉冲 class 都写
+   transform + filter，同一元素同时挂两者时后声明者整条属性生效，前者会变成
+   死动画。因此播放头用「入场 → 呼吸」的时间顺序，而不是 class 互斥。 */
+
+/* 播放头呼吸：高度 ×1 ↔ ×1.3 并扩张光晕。周期 1.6s：2.5s 会被读成静止。 */
+@keyframes progress-rail-breath {
+  0%,
+  100% {
+    transform: scaleY(1);
+    filter: brightness(0.92) drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+  }
+  50% {
+    transform: scaleY(1.3);
+    filter: brightness(1.35) drop-shadow(0 0 14px rgba(255, 255, 255, 0.95));
+  }
+}
+
+/* 播放头入场：横向展开 + 光晕扩张，强调"接管"。
+   必须自带 scaleY，否则与呼吸交接时会从 1.3 突跳回 1。 */
+@keyframes progress-rail-enter {
+  0% {
+    transform: scaleX(0.86) scaleY(1);
+    filter: brightness(1.5) drop-shadow(0 0 16px rgba(255, 255, 255, 1));
+  }
+  100% {
+    transform: scaleX(1) scaleY(1);
+    filter: brightness(0.92) drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+  }
+}
+
+/* pending/retry → done：高度脉冲到 ×1.9 并闪亮。420ms 保证视线离开卡片时也已看见。 */
+@keyframes progress-tick-done {
+  0% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  35% {
+    transform: scaleY(1.9);
+    filter: brightness(1.9);
+  }
+  100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+/* 宫殿全清：逐个错开的高亮脉冲（延迟由内联 animation-delay 提供）。 */
+@keyframes progress-palace-done {
+  0% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  35% {
+    transform: scaleY(1.7);
+    filter: brightness(2.2);
+  }
+  100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+/* 新节点挂载：淡入 + 下落 + 缩放，比纯淡入更有"插入"感。 */
+@keyframes progress-tick-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 欠账/今天分界线：竖向展开。 */
+@keyframes progress-boundary-enter {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* 切卡入场：内容淡入上浮。只作用于卡片内容，不遮住 rail。 */
+@keyframes freestyle-card-enter-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.progress-rail-breath,
+.progress-rail-enter,
+.progress-tick-done,
+.progress-palace-done,
+.progress-tick-enter,
+.progress-boundary-enter {
+  transform-origin: bottom;
+  will-change: transform, filter;
+}
+
+/* 入场同时含 scaleX/scaleY，水平缩放绕中心线更自然。 */
+.progress-rail-enter {
+  transform-origin: center bottom;
+}
+
+.progress-rail-breath {
+  animation: progress-rail-breath 1.6s ease-in-out infinite;
+}
+
+.progress-rail-enter {
+  animation: progress-rail-enter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.progress-tick-done {
+  animation: progress-tick-done 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.progress-palace-done {
+  animation: progress-palace-done 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.progress-tick-enter {
+  animation: progress-tick-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.progress-boundary-enter {
+  animation: progress-boundary-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.freestyle-card-enter {
+  animation: freestyle-card-enter-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* 尊重 prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .memory-anki-combo-burst-particle,
@@ -116,9 +262,23 @@
   .english-letter-pop,
   .english-word-shake,
   .english-word-correct-flash,
-  .english-caret {
+  .english-caret,
+  .progress-tick-done,
+  .progress-tick-enter,
+  .progress-boundary-enter,
+  .progress-rail-enter,
+  .progress-rail-breath,
+  .progress-palace-done {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
+  }
+
+  /* 无限循环若只压到 1ms 会变成高频闪烁，必须彻底停掉。 */
+  .progress-rail-breath,
+  .progress-palace-done {
+    animation: none !important;
+    filter: none !important;
+    transform: none !important;
   }
 
   .english-caret {

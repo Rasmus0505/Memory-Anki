@@ -105,6 +105,17 @@ export {
   type FreestyleUnitEncounterState,
 } from './domain/queueState'
 export {
+  areAllOccurrencesPassed,
+  findEarliestUnscoredIndex,
+  isOccurrencePassed,
+  isOccurrenceScored,
+  occurrenceScore,
+  passedOccurrenceIds,
+  scoredOccurrenceIds,
+  unscoredOccurrenceIds,
+  type UnitProgressInput,
+} from './domain/unitProgressState'
+export {
   applyCompletedIdsToRoundPlan,
   syncCompletedIdsToRoundPlan,
   applyRoundPlanOrder,

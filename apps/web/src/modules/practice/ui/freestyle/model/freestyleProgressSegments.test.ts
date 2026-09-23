@@ -172,7 +172,7 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments.map((segment) => segment.kind)).toEqual([
       'source', 'source', 'source', 'source', 'retry', 'source',
     ])
-    expect(summary.segments[0]).toMatchObject({ waitingRetry: true, tone: 'retry', viewing: true })
+    expect(summary.segments[0]).toMatchObject({ waitingRetry: true, tone: 'done', viewing: true })
     expect(summary.segments[4]).toMatchObject({
       kind: 'retry',
       tone: 'retry',
@@ -503,6 +503,24 @@ describe('retryNodeLabel', () => {
     }
     expect(visualPlanStatus('completed', emptyGlance)).toBe('completed')
     expect(visualPlanStatus('active', emptyGlance, 'retry')).toBe('retry')
+    expect(visualPlanStatus('pending', {
+      encounterId: 'enc',
+      unitRevision: 1,
+      status: 'closed',
+      sessionId: 'session',
+      selectedRating: 1,
+      passed: false,
+      retryAfterCards: 0,
+    })).toBe('completed')
+    expect(liveEncounterFillDone({
+      encounterId: 'enc',
+      unitRevision: 1,
+      status: 'closed',
+      sessionId: 'session',
+      selectedRating: 1,
+      passed: false,
+      retryAfterCards: 0,
+    }, false)).toBe(true)
     expect(liveEncounterFillDone({
       encounterId: 'enc',
       unitRevision: 1,

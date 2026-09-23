@@ -59,7 +59,7 @@ describe('FreestyleFeedPager', () => {
   it('disables 完成 when there is nothing to seek', () => {
     renderPager({
       canComplete: false,
-      completeTitle: '定位到最早还没完成的单元',
+      completeTitle: '定位到最早还没评分的单元',
     })
 
     expect((screen.getByRole('button', { name: '完成' }) as HTMLButtonElement).disabled).toBe(true)

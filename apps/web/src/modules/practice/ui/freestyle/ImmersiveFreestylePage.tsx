@@ -24,7 +24,7 @@ import {
 import {
   buildFreestyleRoundCompletion,
   clampFreestyleFeedIndex,
-  findEarliestUnhandledIndex,
+  findEarliestCompleteSeekIndex,
   freestyleCanPageNext,
   freestyleFeedSlotCount,
   isFreestyleCompleteSlot,
@@ -1053,7 +1053,7 @@ export default function ImmersiveFreestylePage({
     ],
   )
   const earliestUnhandledIndex = useMemo(
-    () => findEarliestUnhandledIndex(
+    () => findEarliestCompleteSeekIndex(
       cards,
       queueState.unitEncountersByCardId,
       queueState.completedIds,
@@ -1073,7 +1073,7 @@ export default function ImmersiveFreestylePage({
   const canCompleteRound = completeSeekIndex != null
   const completeTitle = roundComplete
     ? '进入本轮结算'
-    : '定位到最早还没完成的单元'
+    : '定位到最早还没评分的单元'
   const handleCompleteRound = useCallback(() => {
     if (completeSeekIndex == null) return
     navigateToIndex(completeSeekIndex, { skipHistory: true })
@@ -1648,97 +1648,106 @@ export default function ImmersiveFreestylePage({
                     'p-0 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]',
                   )}
                 >
-                  {isMindMapBranchCard(card) ? (
-                    card.type === 'mindmap_branch' ? (
-                      card.unit_id && card.unit_revision != null ? (
-                        <FreestyleUnitReviewCardView
+                  {/* 切卡入场：内容淡入上浮。仅当此卡是当前可视卡时挂 class，
+                      所以每次导航到这张卡都会重新触发，且不遮挡顶部进度条。 */}
+                  <div
+                    className={cn(
+                      'flex min-h-0 flex-1 flex-col',
+                      index === visualIndex && 'freestyle-card-enter',
+                    )}
+                  >
+                    {isMindMapBranchCard(card) ? (
+                      card.type === 'mindmap_branch' ? (
+                        card.unit_id && card.unit_revision != null ? (
+                          <FreestyleUnitReviewCardView
+                            card={card}
+                            active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                            readOnly={readOnlyHistoryCardId === card.id}
+                            roundId={queueState.roundId}
+                            planVersion={planVersion}
+                            encounter={queueState.unitEncountersByCardId[card.id]}
+                            lastRating={roundPlan?.cardsById[card.id]?.lastRating ?? null}
+                            retryAfterCards={RESTUDY_MAX_INTERVENING}
+                            fullscreen={freestyleFullscreen && index === currentIndex}
+                            onToggleFullscreen={(next) => {
+                              setFreestyleFullscreen(next ?? !freestyleFullscreen)
+                            }}
+                            freestyleFlipMode={flipMode}
+                            onFreestyleFlipModeChange={updateFlipMode}
+                            autoAdvance={false}
+                            preferredZoom={mindmapZoom}
+                            onUserZoomChange={updateMindmapZoom}
+                            blockedHint={index === currentIndex ? sequentialBlockedHint : null}
+                            onRatingSettled={handleRatingSettled}
+                            onRoundSync={adoptRoundVersion}
+                            onEnsureEncounter={ensureUnitEncounter}
+                            onEncounterChange={updateUnitEncounter}
+                            onBranchComplete={handleBranchComplete}
+                            onStaleDrop={handleStaleDrop}
+                            onRebuildRound={reshuffleQueue}
+                            onRevisionAdopted={adoptLiveUnitRevision}
+                            onSaveFailed={handleCardSaveFailed}
+                            onEditingChange={index === currentIndex ? setInlineEditing : undefined}
+                            onUnitsReconciled={() => {
+                              void buildQueue(config, {
+                                preserveCompleted: true,
+                                silent: true,
+                                preferCardId: card.id,
+                              })
+                            }}
+                            liveRevealMap={index === currentIndex ? liveRevealMap : null}
+                            onLiveRevealMapChange={applyLiveRevealMap}
+                            onOpenScopeQuiz={() => setScopeQuizOpen(true)}
+                          />
+                        ) : (
+                          <StaleUnitReviewCard
+                            cardId={card.id}
+                            onStaleDrop={handleStaleDrop}
+                          />
+                        )
+                      ) : (
+                        <FreestyleMindMapBranchCardView
                           card={card}
                           active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
-                          readOnly={readOnlyHistoryCardId === card.id}
-                          roundId={queueState.roundId}
-                          planVersion={planVersion}
-                          encounter={queueState.unitEncountersByCardId[card.id]}
-                          lastRating={roundPlan?.cardsById[card.id]?.lastRating ?? null}
-                          retryAfterCards={RESTUDY_MAX_INTERVENING}
-                          fullscreen={freestyleFullscreen && index === currentIndex}
-                          onToggleFullscreen={(next) => {
-                            setFreestyleFullscreen(next ?? !freestyleFullscreen)
-                          }}
-                          freestyleFlipMode={flipMode}
-                          onFreestyleFlipModeChange={updateFlipMode}
-                          autoAdvance={false}
-                          preferredZoom={mindmapZoom}
-                          onUserZoomChange={updateMindmapZoom}
-                          blockedHint={index === currentIndex ? sequentialBlockedHint : null}
-                          onRatingSettled={handleRatingSettled}
-                          onRoundSync={adoptRoundVersion}
-                          onEnsureEncounter={ensureUnitEncounter}
-                          onEncounterChange={updateUnitEncounter}
                           onBranchComplete={handleBranchComplete}
-                          onStaleDrop={handleStaleDrop}
-                          onRebuildRound={reshuffleQueue}
-                          onRevisionAdopted={adoptLiveUnitRevision}
-                          onSaveFailed={handleCardSaveFailed}
-                          onEditingChange={index === currentIndex ? setInlineEditing : undefined}
-                          onUnitsReconciled={() => {
-                            void buildQueue(config, {
-                              preserveCompleted: true,
-                              silent: true,
-                              preferCardId: card.id,
-                            })
+                          reducedMotion={reducedMotion}
+                          flipState={
+                            liveAnkiFlip?.cardId === card.id
+                              ? {
+                                  flipped: liveAnkiFlip.flipped,
+                                  revealedBacks: liveAnkiFlip.revealedBacks,
+                                  focusUid: liveAnkiFlip.focusUid,
+                                }
+                              : undefined
+                          }
+                          onFlipStateChange={(next) => {
+                            setLiveAnkiFlip({ cardId: card.id, ...next })
                           }}
-                          liveRevealMap={index === currentIndex ? liveRevealMap : null}
-                          onLiveRevealMapChange={applyLiveRevealMap}
-                          onOpenScopeQuiz={() => setScopeQuizOpen(true)}
-                        />
-                      ) : (
-                        <StaleUnitReviewCard
-                          cardId={card.id}
-                          onStaleDrop={handleStaleDrop}
                         />
                       )
-                    ) : (
-                      <FreestyleMindMapBranchCardView
+                    ) : isQuizCard(card) ? (
+                      <FreestyleQuizCardView
                         card={card}
                         active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
-                        onBranchComplete={handleBranchComplete}
-                        reducedMotion={reducedMotion}
-                        flipState={
-                          liveAnkiFlip?.cardId === card.id
-                            ? {
-                                flipped: liveAnkiFlip.flipped,
-                                revealedBacks: liveAnkiFlip.revealedBacks,
-                                focusUid: liveAnkiFlip.focusUid,
-                              }
-                            : undefined
+                        state={progress.questionStates[card.question.id]}
+                        answeredBefore={answeredQuestionIds.has(card.question.id)}
+                        onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
+                        onChoiceResolve={(optionId, isCorrect) =>
+                          onChoiceResolve(card, optionId, isCorrect)
                         }
-                        onFlipStateChange={(next) => {
-                          setLiveAnkiFlip({ cardId: card.id, ...next })
+                        onShortAnswerSubmit={() => {
+                          onShortAnswerSubmit(card)
+                        }}
+                        onRequestNext={() => {
+                          navigateToIndex(index + 1)
                         }}
                       />
-                    )
-                  ) : isQuizCard(card) ? (
-                    <FreestyleQuizCardView
-                      card={card}
-                      active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
-                      state={progress.questionStates[card.question.id]}
-                      answeredBefore={answeredQuestionIds.has(card.question.id)}
-                      onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
-                      onChoiceResolve={(optionId, isCorrect) =>
-                        onChoiceResolve(card, optionId, isCorrect)
-                      }
-                      onShortAnswerSubmit={() => {
-                        onShortAnswerSubmit(card)
-                      }}
-                      onRequestNext={() => {
-                        navigateToIndex(index + 1)
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-zinc-400">
-                      暂不支持的卡片类型
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+                        暂不支持的卡片类型
+                      </div>
+                    )}
+                  </div>
                   <FreestyleRetryCornerBadge
                     card={card}
                     retryAfterCards={planEntry?.status === 'retry' ? planEntry.retryAfterCards : undefined}

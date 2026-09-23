@@ -216,6 +216,9 @@ def test_failing_a_retry_keeps_one_slot_and_leave_repositions_it():
     presented = plan["presented_ids"]
     assert presented.count(retry_id) == 1
     assert plan["occurrences"][0]["retry_attempt"] == 2
+    # Next attempt is a blank glance — score must not stick to the bumped slot.
+    assert plan["occurrences"][0]["rating"] is None
+    assert retry_id not in plan["encounters"]
     assert presented == ["a", "b", "c", "d", "e", "f", retry_id]
 
 

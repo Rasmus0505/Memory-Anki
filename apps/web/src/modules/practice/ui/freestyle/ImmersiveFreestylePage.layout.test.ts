@@ -22,8 +22,8 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('viewingCompleteSlot')
   })
 
-  it('uses the right-side 完成 button to settle or seek unfinished work', () => {
-    expect(source).toContain('findEarliestUnhandledIndex')
+  it('uses the right-side 完成 button to settle or seek the earliest unrated unit', () => {
+    expect(source).toContain('findEarliestCompleteSeekIndex')
     expect(source).toContain('resolveFreestyleCompleteSeek')
     expect(source).toContain('onComplete={handleCompleteRound}')
     expect(source).toContain('viewingCardId')

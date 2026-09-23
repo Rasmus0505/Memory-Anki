@@ -1,5 +1,10 @@
-﻿import type { FreestyleCard } from '@/shared/api/contracts'
+import type { FreestyleCard } from '@/shared/api/contracts'
 
+import {
+  findEarliestUnscoredIndex,
+  passedOccurrenceIds,
+  scoredOccurrenceIds,
+} from './unitProgressState'
 import { sanitizeRoundPlan, type FreestyleRoundPlanState } from './roundPlan'
 
 export type FreestyleUnitEncounterState = {
@@ -396,25 +401,11 @@ export function sourceCardId(card: FreestyleCard | null | undefined): string {
   return String(card?.source_card_id || card?.id || '').trim()
 }
 
-function isRecordedUnitRating(value: unknown): value is 1 | 2 | 3 | 4 {
-  return value === 1 || value === 2 || value === 3 || value === 4
-}
-
-function planRecordedRating(
-  roundPlan: FreestyleRoundPlanState | null | undefined,
-  id: string,
-  sourceId: string,
-): number | null {
-  const value = roundPlan?.cardsById[id]?.lastRating ?? roundPlan?.cardsById[sourceId]?.lastRating ?? null
-  return isRecordedUnitRating(value) ? value : null
-}
-
 /**
  * Cards that have already received a rating in the current freestyle round.
- * Weak ratings intentionally remain in this set for local "already attempted"
- * navigation, while {@link getFreestylePassedCardIds} is used by completion
- * and palace gates. Retry occurrences are folded back onto their source card
- * so one unit is never counted twice.
+ * Weak ratings count as scored (进度条实心 / 完成跳过). Occurrence-local only:
+ * a 重练 never inherits the source score. Prefer `unitProgressState` directly
+ * in new code — this wrapper keeps older call sites compiling.
  *
  * An empty amend glance keeps this-round rating: swipe-back must not treat a
  * scored unit as unrated just because the new encounter has no selectedRating.
@@ -425,54 +416,12 @@ export function getFreestyleRatedCardIds(
   encounters: Record<string, FreestyleUnitEncounterState> = {},
   roundPlan: FreestyleRoundPlanState | null = null,
 ): string[] {
-  const completed = new Set(Array.from(completedIds, String).map((id) => id.trim()).filter(Boolean))
-  const ratedSources = new Set<string>()
-  Object.entries(encounters).forEach(([cardId, encounter]) => {
-    if (encounter?.selectedRating == null) return
-    const card = cards.find((item) => item.id === cardId)
-    ratedSources.add(sourceCardId(card) || String(cardId).trim())
-  })
-  const rated = new Set<string>()
-  const sourcePassed = (sourceId: string) => {
-    const recorded = planRecordedRating(roundPlan, sourceId, sourceId)
-    const encounter = encounters[sourceId]
-    const rating = Number(encounter?.selectedRating)
-    const passed = encounter?.passed === true || (encounter?.passed == null && rating >= 3)
-    return completed.has(sourceId) || passed || (recorded != null && recorded >= 3)
-  }
-  cards.forEach((card) => {
-    const id = String(card.id || '').trim()
-    const sourceId = sourceCardId(card)
-    if (isRetryOccurrence(card)) {
-      const recorded = planRecordedRating(roundPlan, id, id)
-      if (
-        completed.has(id)
-        || ratedSources.has(id)
-        || recorded != null
-        || sourcePassed(sourceId)
-      ) {
-        if (id) rated.add(id)
-      }
-      return
-    }
-    const recorded = planRecordedRating(roundPlan, id, sourceId)
-    if (
-      completed.has(id)
-      || completed.has(sourceId)
-      || ratedSources.has(id)
-      || ratedSources.has(sourceId)
-      || recorded != null
-    ) {
-      if (id) rated.add(id)
-      if (sourceId) rated.add(sourceId)
-    }
-  })
-  return [...rated]
+  return scoredOccurrenceIds({ cards, completedIds, encounters, roundPlan })
 }
 
 /**
- * First unfinished card in round order: no rating yet, including skipped-ahead
- * units the learner can return to. Weak ratings count as already scored.
+ * Queue-order first card with no this-round score (谁最早看谁).
+ * Weak ratings count as already scored.
  */
 export function findEarliestUnratedIndex(
   cards: ReadonlyArray<FreestyleCard>,
@@ -480,46 +429,20 @@ export function findEarliestUnratedIndex(
   encounters: Record<string, FreestyleUnitEncounterState> = {},
   roundPlan: FreestyleRoundPlanState | null = null,
 ): number | null {
-  const rated = new Set(getFreestyleRatedCardIds(cards, completedIds, encounters, roundPlan))
-  const index = cards.findIndex((card) => {
-    const id = String(card.id || '').trim()
-    return Boolean(id) && !rated.has(id)
-  })
-  return index >= 0 ? index : null
+  return findEarliestUnscoredIndex({ cards, completedIds, encounters, roundPlan })
 }
 
 /**
- * Cards that have actually passed in the current freestyle round.
- *
- * This is deliberately separate from {@link getFreestyleRatedCardIds}: a
- * weak rating has an encounter and is therefore "rated", but it remains work
- * in progress until a later retry passes. Palace navigation and completion
- * gates must use this set so a 忘记/困难 score cannot unlock the next palace.
- * Explicit completed ids are included for quiz acknowledgements and for unit
- * settlements whose local encounter state has already been compacted.
- *
- * An empty amend glance does not drop a this-round pass. Cancel / uncomplete
- * already removes the id from completedIds.
+ * Cards that have actually passed this round (score >= 3 or completed ack).
+ * Deliberately separate from rated ids: 忘记/困难 stays work in progress.
  */
 export function getFreestylePassedCardIds(
   cards: ReadonlyArray<FreestyleCard>,
   completedIds: Iterable<string>,
   encounters: Record<string, FreestyleUnitEncounterState> = {},
+  roundPlan: FreestyleRoundPlanState | null = null,
 ): string[] {
-  const passedIds = new Set(
-    Array.from(completedIds, (id) => String(id || '').trim()).filter(Boolean),
-  )
-  Object.entries(encounters).forEach(([cardId, encounter]) => {
-    const rating = Number(encounter?.selectedRating)
-    const isPassed = encounter?.passed === true || (encounter?.passed == null && rating >= 3)
-    if (!isPassed) return
-    const card = cards.find((item) => item.id === cardId)
-    const id = String(card?.id || cardId).trim()
-    if (id) passedIds.add(id)
-    const sourceId = sourceCardId(card)
-    if (sourceId) passedIds.add(sourceId)
-  })
-  return [...passedIds]
+  return passedOccurrenceIds({ cards, completedIds, encounters, roundPlan })
 }
 
 export function isRetryOccurrence(card: FreestyleCard | null | undefined): boolean {

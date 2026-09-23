@@ -149,11 +149,23 @@ keep the last rating until they change or cancel it. An empty amend glance is no
 The viewing playhead is independent of that fill: the card on screen grows taller even after
 it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
 right-side pager has 完成, not 定位. When every presented card is handled it opens the
-closing settlement slot; otherwise it seeks the earliest unfinished unit in round order.
-An unrated unit, including one skipped ahead, is that target. A 忘记/困难 source is
-not: once its 重练 is in the feed, 完成 opens the retry, and it opens the source only
-while that retry has not been inserted. Rating the retry must not move the viewport
-onto the source or refit the map to the palace root. It does not bulk-complete leftover work.
+closing settlement slot; otherwise it seeks the queue-order first **unscored** unit
+(谁最早看谁). Scored means this occurrence has a this-round score (忘记/困难/记得/轻松
+alike — the rail fills solid). A scored 重练 is never the target; leave_card bumps
+`retry_attempt` and clears that occurrence's score so the next blank attempt is seekable.
+A weak source is scored, so 完成 does not reopen it — the blank 重练 is the work.
+Rating the retry must not move the viewport onto the source or refit the map to the palace
+root. It does not bulk-complete leftover work.
+
+### unitProgressState is the only score kernel
+
+`apps/web/src/modules/practice/domain/unitProgressState.ts` owns occurrence-local
+this-round score (`occurrenceScore` / `isOccurrenceScored` / `isOccurrencePassed` /
+`findEarliestUnscoredIndex`). Progress-rail fill, the 完成 seek target, palace
+clearance, and round completion must read this module. Do not reassemble
+`selectedRating` / `lastRating` / `completedIds` / source-fallback conditions at
+call sites — that is how seek and the rail forked. `lastRating` never inherits
+across source ↔ 重练 ids.
 
 ## Training Directions and Subject Chips
 

@@ -230,6 +230,10 @@ function insertPendingRetryCopy(
         ...existing,
         retry_attempt: Math.max(1, Number(existing.retry_attempt) || 1, attempt),
         retry_after_cards: gap,
+        // Next attempt is a blank glance: never keep the previous score on the
+        // same occurrence id (已评分就填实心 would otherwise pin it solid).
+        source_card_id: existing.source_card_id ?? sourceCardId(source),
+        occurrence_kind: 'retry' as const,
       }
     : createRetryOccurrence(source, roundId, attempt, gap)
   if (!existing && cards.some((card) => card.id === occurrence.id)) return cards
@@ -1450,7 +1454,14 @@ export function useImmersiveQueue(
       cardsRef.current = optimistic
       setCards(optimistic)
       if (pending) {
-        const plan = stampRestudyPlan(
+        // A bumped 重练 attempt is a blank glance: drop the previous score so
+        // 完成 can seek it again and the rail shows it unscored.
+        const leftCard = cardsRef.current.find((card) => card.id === leftId)
+        const isRetryLeave = isRetryOccurrence(leftCard)
+        const clearId = isRetryLeave
+          ? (optimistic.find((card) => isRetryOccurrence(card) && sourceCardId(card) === sourceCardId(leftCard))?.id ?? leftId)
+          : leftId
+        let plan = stampRestudyPlan(
           queueStateRef.current.roundPlan,
           optimistic,
           roundId,
@@ -1462,7 +1473,28 @@ export function useImmersiveQueue(
             attempt: pending.attempt,
           }],
         )
-        persistQueueState({ ...queueStateRef.current, roundPlan: plan })
+        if (isRetryLeave && plan?.cardsById[clearId]) {
+          plan = updateRoundPlanCard(plan, clearId, { lastRating: null })
+          persistQueueState({
+            ...queueStateRef.current,
+            roundPlan: plan,
+            unitEncountersByCardId: {
+              ...queueStateRef.current.unitEncountersByCardId,
+              [clearId]: {
+                encounterId: createOperationId(),
+                roundId,
+                unitRevision: queueStateRef.current.unitEncountersByCardId[clearId]?.unitRevision ?? 0,
+                status: 'pending',
+                sessionId: null,
+                selectedRating: null,
+                passed: null,
+                retryAfterCards: pending.retryAfterCards,
+              },
+            },
+          })
+        } else {
+          persistQueueState({ ...queueStateRef.current, roundPlan: plan })
+        }
       }
     }
 

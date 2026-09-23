@@ -1,6 +1,7 @@
 import {
   cardPalaceId,
   cardUnitId,
+  findEarliestUnratedIndex,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
   sourceCardId,
@@ -387,9 +388,23 @@ export function findEarliestUnhandledIndex(
 }
 
 /**
+ * Right-side 完成 while the round is still open: queue-order first unscored
+ * card (谁最早看谁). A scored 重练 is never the target — the next blank
+ * attempt is, once leave clears its score.
+ */
+export function findEarliestCompleteSeekIndex(
+  cards: ReadonlyArray<FreestyleCard>,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
+  roundPlan: FreestyleRoundPlanState | null = null,
+): number | null {
+  return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan)
+}
+
+/**
  * Right-side 完成: open the settlement slot when the round is handled,
- * otherwise seek the earliest unfinished unit. Null means the viewport
- * is already on that target (or the feed is empty).
+ * otherwise seek the earliest unrated (then unfinished) unit. Null means the
+ * viewport is already on that target (or the feed is empty).
  */
 export function resolveFreestyleCompleteSeek(options: {
   roundComplete: boolean

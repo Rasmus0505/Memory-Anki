@@ -1,5 +1,6 @@
 import {
   cardPalaceId,
+  isOccurrenceScored,
   isRetryOccurrence,
   planCardStatus,
   sourceCardId,
@@ -48,22 +49,19 @@ export function retryChromeClass(done: boolean): string {
 }
 
 /**
- * Fill follows this-round recorded rating. A live selectedRating can upgrade
- * pending → completed/retry immediately; an empty amend glance keeps the plan
- * status so swipe-back does not look unrated.
+ * Fill is binary and occurrence-local: scored this round → solid, else faint.
+ * Weak and pass look the same on the rail (产品：已评分就填实心). An empty
+ * amend glance keeps the this-round score via `unitProgressState`.
  */
 export function visualPlanStatus(
   status: FreestyleRoundPlanCardStatus,
   encounter?: FreestyleUnitEncounterState,
   entryStatus?: FreestyleRoundPlanCardStatus,
+  scored?: boolean,
 ): FreestyleRoundPlanCardStatus {
   if (status === 'excluded') return status
-  if (encounter?.selectedRating != null) {
-    if (encounter.passed === true) return 'completed'
-    if (encounter.passed === false) return 'retry'
-  }
-  // `planCardStatus` uses `active` as the playhead. Fill should keep this-round
-  // completed/retry instead of looking unrated just because the card is on screen.
+  const isScored = scored ?? (encounter?.selectedRating != null || status === 'completed')
+  if (isScored) return 'completed'
   if (
     status === 'active'
     && entryStatus
@@ -79,7 +77,7 @@ export function liveEncounterFillDone(
   encounter: FreestyleUnitEncounterState | undefined,
   completed: boolean,
 ): boolean {
-  if (encounter?.selectedRating != null) return encounter.passed === true
+  if (encounter?.selectedRating != null) return true
   return completed
 }
 
@@ -229,13 +227,17 @@ export function palaceAccentToneClass(
 /**
  * Viewing playhead is independent of rating fill: a rated card still grows when
  * it is on screen, and cancelling a rating only changes fill, not the playhead.
+ *
+ * The static `shadow-[...]` glow is deliberately absent: `progress-rail-breath`
+ * animates `filter`/`transform` to own the glow radius, and a static box-shadow
+ * cannot breathe with it.
  */
 export function progressSegmentShapeClass(
   tone: FreestyleSegmentTone,
   viewing = false,
 ): string {
   if (viewing || tone === 'current') {
-    return 'h-3.5 min-w-[6px] ring-2 ring-white shadow-[0_0_8px_rgba(255,255,255,0.45)]'
+    return 'h-3.5 min-w-[6px] ring-2 ring-white'
   }
   return 'h-1.5'
 }
@@ -436,11 +438,12 @@ export function buildFreestyleProgressSummary(
     const card = liveById.get(id)
     if (card) {
       const sourceId = sourceCardId(card)
-      const encounter = encounters[card.id] ?? (sourceId !== card.id ? encounters[sourceId] : undefined)
+      const encounter = encounters[card.id]
       const status = visualPlanStatus(
         planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
         encounter,
         planEntry?.status,
+        isOccurrenceScored(card.id, { completedIds, encounters, roundPlan }),
       )
       const tone = segmentTone(status)
       if (!tone) continue

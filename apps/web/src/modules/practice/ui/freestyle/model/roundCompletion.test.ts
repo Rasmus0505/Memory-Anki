@@ -4,6 +4,7 @@ import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleRoundCompletion,
   clampFreestyleFeedIndex,
+  findEarliestCompleteSeekIndex,
   findEarliestUnhandledIndex,
   freestyleCanPageNext,
   freestyleFeedSlotCount,
@@ -461,6 +462,80 @@ describe('findEarliestUnhandledIndex', () => {
         [first.id]: encounter({ selectedRating: 2, passed: false }),
       },
     )).toBe(3)
+  })
+})
+
+describe('findEarliestCompleteSeekIndex', () => {
+  it('prefers an unrated unit over an earlier weak-rated retry', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    // Regression: 完成 used to land on the already-困难 retry at index 2.
+    expect(findEarliestCompleteSeekIndex(
+      [card('one'), card('two'), retry, card('four')],
+      {
+        one: encounter({ selectedRating: 3, passed: true }),
+        two: encounter({ selectedRating: 2, passed: false }),
+        [retry.id]: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(3)
+  })
+
+  it('does not re-target an already-scored retry when nothing is unrated', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    expect(findEarliestCompleteSeekIndex(
+      [card('one'), card('two'), retry],
+      {
+        one: encounter({ selectedRating: 3, passed: true }),
+        two: encounter({ selectedRating: 3, passed: true }),
+        [retry.id]: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBeNull()
+  })
+
+  it('does not seek an already-scored weak source (已评分就填实心)', () => {
+    // 产品：完成只跳「还没评分」；弱源已评分，等 leave 插入空白重练后再跳。
+    expect(findEarliestCompleteSeekIndex(
+      [card('one'), card('two')],
+      {
+        one: encounter({ selectedRating: 3, passed: true }),
+        two: encounter({ selectedRating: 1, passed: false }),
+      },
+    )).toBeNull()
+  })
+
+  it('seeks the unrated retry after a weak source when the copy is in the feed', () => {
+    const retry = {
+      ...card('retry:round-1:two:1'),
+      source_card_id: 'two',
+      occurrence_kind: 'retry' as const,
+      retry_attempt: 1,
+    }
+    expect(findEarliestCompleteSeekIndex(
+      [card('one'), card('two'), retry],
+      {
+        one: encounter({ selectedRating: 3, passed: true }),
+        two: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(2)
+  })
+
+  it('finds a skipped-ahead unrated card before later rated work', () => {
+    expect(findEarliestCompleteSeekIndex(
+      [card('one'), card('two'), card('three')],
+      {
+        one: encounter({ selectedRating: 4, passed: true }),
+        three: encounter({ selectedRating: 3, passed: true }),
+      },
+    )).toBe(1)
   })
 })
 

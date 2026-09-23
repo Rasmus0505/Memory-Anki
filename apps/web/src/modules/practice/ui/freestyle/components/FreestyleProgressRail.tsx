@@ -1,4 +1,4 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   freestyleProgressRailFits,
   palaceAccentToneClass,
@@ -23,28 +23,130 @@ function retryAttemptGlyph(segment: FreestyleProgressSegment): string {
   return String(Math.max(1, Math.round(segment.retryAttempt || 1)))
 }
 
+/** Gap between neighbouring ticks lighting up when a palace finishes clearing. */
+const PALACE_STAGGER_MS = 40
+/** Must stay in sync with the `progress-palace-done` animation duration in CSS. */
+const PALACE_DONE_MS = 520
+/** Must stay in sync with the `progress-rail-enter` animation duration in CSS. */
+const RAIL_ENTER_MS = 320
+/** Must stay in sync with the `progress-tick-done` animation duration in CSS. */
+const TICK_DONE_MS = 420
+
+/**
+ * Ordinal of this index within its palace's contiguous run, so a palace-cleared
+ * pulse sweeps left to right instead of every tick firing at once.
+ */
+function palaceStaggerIndex(
+  segments: readonly FreestyleProgressSegment[],
+  index: number,
+): number {
+  const palaceId = segments[index]?.palaceId
+  let ordinal = 0
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (segments[i]?.palaceId !== palaceId) break
+    ordinal += 1
+  }
+  return ordinal
+}
+
 function ProgressRailItem({
   segment,
   palaceGap,
+  palaceStaggerIndex,
   hoverLabel,
   showRetryCount,
   compact,
 }: {
   segment: FreestyleProgressSegment
   palaceGap: boolean
+  /** Ordinal within this palace's run of segments, used to stagger the clear pulse. */
+  palaceStaggerIndex: number
   hoverLabel: string
   showRetryCount: boolean
   compact: boolean
 }) {
-  const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
+  const prevToneRef = useRef(segment.tone)
+  const prevPalaceDoneRef = useRef(segment.palaceDone)
+  const prevViewingRef = useRef(segment.viewing || segment.tone === 'current')
+  const [tickBounce, setTickBounce] = useState(false)
+  const [palaceFlash, setPalaceFlash] = useState(false)
+  const [playheadEnter, setPlayheadEnter] = useState(false)
+
+  useEffect(() => {
+    if (prevToneRef.current !== 'done' && segment.tone === 'done') {
+      setTickBounce(true)
+      const id = setTimeout(() => setTickBounce(false), TICK_DONE_MS)
+      prevToneRef.current = segment.tone
+      return () => clearTimeout(id)
+    }
+    prevToneRef.current = segment.tone
+  }, [segment.tone])
+
+  useEffect(() => {
+    if (!prevPalaceDoneRef.current && segment.palaceDone) {
+      setPalaceFlash(true)
+      const id = setTimeout(
+        () => setPalaceFlash(false),
+        PALACE_DONE_MS + palaceStaggerIndex * PALACE_STAGGER_MS,
+      )
+      prevPalaceDoneRef.current = segment.palaceDone
+      return () => clearTimeout(id)
+    }
+    prevPalaceDoneRef.current = segment.palaceDone
+  }, [segment.palaceDone, palaceStaggerIndex])
+
   const viewing = Boolean(segment.viewing || segment.tone === 'current')
+
+  // The playhead entry plays first, then the breath takes over. Both animate
+  // `transform`+`filter`, so both must never be attached at the same time:
+  // whichever class is declared later would otherwise win outright and leave
+  // the other as a dead animation.
+  useEffect(() => {
+    if (prevViewingRef.current === viewing) return
+    prevViewingRef.current = viewing
+    if (!viewing) return
+    setPlayheadEnter(true)
+    const id = setTimeout(() => setPlayheadEnter(false), RAIL_ENTER_MS)
+    return () => clearTimeout(id)
+  }, [viewing])
+
+  const playheadClass = playheadEnter
+    ? 'progress-rail-enter'
+    : viewing
+      ? 'progress-rail-breath'
+      : null
+
+  /**
+   * One-shot pulse for a tick that is not the playhead. Playhead, mount-enter and
+   * the pulses all write `transform`+`filter`, so exactly one may own the element;
+   * whichever class is declared later would otherwise win and kill the others.
+   *
+   * `palace-done` outranks `tick-done`: clearing the palace is the rarer, more
+   * meaningful event, and a card that both completes and closes its palace fires
+   * both effects in the same render.
+   */
+  const pulseClass = palaceFlash
+    ? 'progress-palace-done'
+    : tickBounce
+      ? 'progress-tick-done'
+      : null
+  /** Pulse is suppressed while this node is the playhead (see above). */
+  const oneShotClass = viewing ? null : pulseClass
+  /**
+   * A node that mounts as the playhead takes the playhead entry; otherwise the
+   * mount fade. Never both, and never on top of a one-shot pulse.
+   */
+  const nodeEnterClass = viewing ? playheadClass : oneShotClass ? null : 'progress-tick-enter'
+
+  const palaceId = segment.palaceId == null ? '' : String(segment.palaceId)
   const gapClass = compact
     ? null
     : segment.cohortBoundary
-      ? 'ml-1.5 border-l border-white/45 pl-1'
+      ? 'ml-1.5 border-l border-white/45 pl-1 progress-boundary-enter'
       : palaceGap
         ? 'ml-0.5'
         : null
+
   if (segment.kind === 'retry' && showRetryCount) {
     return (
       <Tooltip>
@@ -60,10 +162,17 @@ function ProgressRailItem({
             aria-label={hoverLabel}
             className={cn(
               'inline-flex shrink-0 items-center justify-center rounded-full font-semibold tabular-nums leading-none',
+              nodeEnterClass,
               viewing ? 'size-5 text-[10px] ring-2 ring-white' : 'size-3.5 text-[9px]',
+              oneShotClass,
               gapClass,
               retryNodeToneClass(segment.tone),
             )}
+            style={
+              palaceFlash
+                ? { animationDelay: `${palaceStaggerIndex * PALACE_STAGGER_MS}ms` }
+                : undefined
+            }
           >
             {retryAttemptGlyph(segment)}
           </span>
@@ -89,10 +198,16 @@ function ProgressRailItem({
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
               data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
               className={cn(
-                'w-full rounded-[1px]',
-                progressSegmentShapeClass(segment.tone, false),
+                nodeEnterClass,
+                progressSegmentShapeClass(segment.tone, viewing),
+                oneShotClass,
                 retryNodeToneClass(segment.tone),
               )}
+              style={
+                palaceFlash
+                  ? { animationDelay: `${palaceStaggerIndex * PALACE_STAGGER_MS}ms` }
+                  : undefined
+              }
             />
           </span>
         </TooltipTrigger>
@@ -120,10 +235,18 @@ function ProgressRailItem({
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
             data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
             className={cn(
-              'w-full rounded-[1px] transition-[colors,height,box-shadow,min-width]',
+              'w-full rounded-[1px] transition-[colors,height,min-width] duration-200 ease-out',
               progressSegmentShapeClass(segment.tone, viewing),
               palaceAccentToneClass(segment.palaceId, segment.tone),
+              // Playhead 走「入场 -> 呼吸」两段，同时只挂一个。
+              playheadClass,
+              oneShotClass,
             )}
+            style={
+              palaceFlash && !viewing
+                ? { animationDelay: `${palaceStaggerIndex * PALACE_STAGGER_MS}ms` }
+                : undefined
+            }
           />
         </span>
       </TooltipTrigger>
@@ -185,6 +308,7 @@ export function FreestyleProgressRail({
               key={segment.cardId}
               segment={segment}
               hoverLabel={progressSegmentHoverLabel(segment, index, summary.segments.length)}
+              palaceStaggerIndex={palaceStaggerIndex(summary.segments, index)}
               palaceGap={
                 index > 0 && summary.segments[index - 1]?.palaceId !== segment.palaceId
               }

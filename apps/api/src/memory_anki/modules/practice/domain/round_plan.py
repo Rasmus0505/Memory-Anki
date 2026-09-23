@@ -231,8 +231,8 @@ def apply_rating(
     )
     revision = _int(unit_revision) if unit_revision is not None else _int((original or {}).get("unit_revision"))
     _set_encounter(next_plan, rated_id or source_id, encounter, revision, rating_value)
-    if rated_id and rated_id != source_id:
-        _set_encounter(next_plan, source_id, encounter, revision, rating_value)
+    # Score stays on the rated occurrence. Do not copy a 重练 glance onto the
+    # source id — each occurrence keeps its own this-round score.
 
     if rating_value in PASS_RATINGS:
         if occ is not None:
@@ -277,6 +277,10 @@ def leave_card(plan: Mapping[str, Any], card_id: str) -> Plan:
         and left_occ.get("rating") in FAIL_RATINGS
     ):
         left_occ["retry_attempt"] = int(left_occ["retry_attempt"] or 0) + 1
+        # Next attempt is a blank glance: keep the occurrence, drop the score.
+        left_occ["rating"] = None
+        left_occ["encounter_id"] = ""
+        next_plan["encounters"].pop(left_occ["occurrence_id"], None)
         _reposition_retry_inplace(next_plan, left_occ["occurrence_id"], anchor_index)
         _sync_index(next_plan)
         return next_plan

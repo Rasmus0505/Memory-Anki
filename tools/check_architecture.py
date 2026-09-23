@@ -2546,6 +2546,31 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_unit_progress_kernel(errors: list[str]) -> None:
+    """Scored/passed must come from unitProgressState, not call-site assembly."""
+    kernel = WEB_SRC / "modules" / "practice" / "domain" / "unitProgressState.ts"
+    if not kernel.exists():
+        errors.append(
+            f"{kernel.relative_to(REPO_ROOT).as_posix()}: "
+            "unit progress score kernel is required."
+        )
+        return
+    kernel_source = kernel.read_text(encoding="utf-8", errors="ignore")
+    for marker in ("occurrenceScore", "isOccurrenceScored", "findEarliestUnscoredIndex"):
+        if marker not in kernel_source:
+            errors.append(
+                f"{kernel.relative_to(WEB_SRC).as_posix()}: must define `{marker}`."
+            )
+    queue = WEB_SRC / "modules" / "practice" / "domain" / "queueState.ts"
+    if queue.exists():
+        queue_source = queue.read_text(encoding="utf-8", errors="ignore")
+        if "sourceId]?.lastRating" in queue_source or "cardsById[sourceId]" in queue_source:
+            errors.append(
+                f"{queue.relative_to(WEB_SRC).as_posix()}: "
+                "lastRating must not inherit source↔重练; use unitProgressState."
+            )
+
+
 def check_freestyle_retry_starts_unrated(errors: list[str]) -> None:
     """A 重练 card starts blank. 困难 on the parent only schedules it."""
     plan = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
@@ -4510,6 +4535,7 @@ def main() -> int:
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
     check_freestyle_retry_starts_unrated(errors)
+    check_freestyle_unit_progress_kernel(errors)
     check_freestyle_rating_retap_clears(errors)
     check_freestyle_passed_unit_reopen(errors)
     check_freestyle_rating_last_write_wins(errors)
