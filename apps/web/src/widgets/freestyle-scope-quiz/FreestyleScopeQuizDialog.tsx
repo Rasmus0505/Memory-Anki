@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, Settings2 } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import {
   ensureFreestyleOverlayQuizApi,
@@ -29,6 +29,7 @@ import {
   overlayFromRound,
   resolveOverlayResumeIndex,
 } from './overlayQuizHydrate'
+import { useFreestyleQuestionTrash } from './useFreestyleQuestionTrash'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
@@ -391,6 +392,24 @@ export function FreestyleScopeQuizDialog({
     }
   }, [current])
 
+  const { confirmDialog: trashConfirmDialog, openDeleteConfirm } = useFreestyleQuestionTrash({
+    current,
+    questions,
+    setQuestions,
+    questionStates,
+    setQuestionStates,
+    questionStatesRef,
+    index,
+    setIndex,
+    indexRef,
+    persistProgress,
+    roundIdRef,
+    planVersionRef,
+    storedConfigRef,
+    onRoundSync,
+    setOverlay,
+  })
+
   useEffect(() => {
     setKeyboardOptionIndex(0)
   }, [current?.id])
@@ -623,6 +642,17 @@ export function FreestyleScopeQuizDialog({
                         {currentState.correct ? '已答对' : '已作答'}
                       </Badge>
                     ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-label="删除本题"
+                      title="移入回收站"
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      onClick={openDeleteConfirm}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                   <div className="text-base font-semibold leading-7 text-foreground">
                     <QuizQuestionStem question={current} />
@@ -692,6 +722,7 @@ export function FreestyleScopeQuizDialog({
           ) : null}
         </DialogContent>
       </Dialog>
+      {trashConfirmDialog}
       <PalaceMemoryLookupDialog
         open={palaceLookupOpen}
         onOpenChange={setPalaceLookupOpen}

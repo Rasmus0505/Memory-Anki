@@ -172,33 +172,75 @@ describe('areAllOccurrencesPassed', () => {
   })
 })
 
+describe('yellow boundary hint is never outstanding work', () => {
+  const hint = {
+    id: 'review_hint:formal_review',
+    type: 'review_hint',
+    content_type: 'review_hint',
+    text: '下一张：正式复习',
+  } as FreestyleCard
+
+  it('seek skips the hint even though it is never scored', () => {
+    const input = {
+      cards: [card('a'), hint, card('b')],
+      completedIds: ['a', 'b'],
+      encounters: { a: enc(3), b: enc(4) },
+      roundPlan: null,
+    }
+    expect(findEarliestUnscoredIndex(input)).toBeNull()
+    expect(unscoredOccurrenceIds(input)).toEqual([])
+  })
+
+  it('seek still finds real unscored work behind the hint', () => {
+    const input = {
+      cards: [card('a'), hint, card('b')],
+      completedIds: ['a'],
+      encounters: { a: enc(3) },
+      roundPlan: null,
+    }
+    expect(findEarliestUnscoredIndex(input)).toBe(2)
+  })
+
+  it('does not block round completion with its own family', () => {
+    expect(areAllOccurrencesPassed({
+      cards: [card('a'), hint],
+      completedIds: ['a'],
+      encounters: {},
+      roundPlan: null,
+    })).toBe(true)
+  })
+})
+
 describe('rail fill == isScored (契约 5)', () => {
-  it('keeps progress-rail solid and isOccurrenceScored identical on one fixture', () => {
+  it('keeps progress-rail solid and isOccurrenceScored identical on one fixture', async () => {
     const retry = card('retry:round-1:a:1', 'a')
     const cards = [card('a'), card('b'), retry, card('z')]
-    const input = {
-      cards,
-      completedIds: [] as string[],
-      encounters: {
-        a: enc(2),
-        [retry.id]: enc(null),
-        z: enc(4),
-      } as Record<string, FreestyleUnitEncounterState>,
-      roundPlan: plan({
-        a: { lastRating: 2 },
-        b: { lastRating: null },
-        [retry.id]: { lastRating: null },
-        z: { lastRating: 4 },
-      }),
-    }
+    const encounters = {
+      a: enc(2),
+      [retry.id]: enc(null),
+      z: enc(4),
+    } as Record<string, FreestyleUnitEncounterState>
+    const roundPlan = plan({
+      a: { lastRating: 2 },
+      b: { lastRating: null },
+      [retry.id]: { lastRating: null },
+      z: { lastRating: 4 },
+    })
+    const completedIds = [] as string[]
+    const input = { cards, completedIds, encounters, roundPlan }
+    // Must exercise the real rail fill helpers, not a reimplemented condition.
+    const { liveEncounterFillDone, visualPlanStatus } = await import(
+      '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+    )
     for (const card of cards) {
       const scored = isOccurrenceScored(card.id, input)
-      // visualPlanStatus / liveEncounterFillDone must agree with the kernel.
-      expect(scored).toBe(
-        input.encounters[card.id]?.selectedRating != null
-          || input.roundPlan?.cardsById[card.id]?.lastRating != null
-          || false,
-      )
+      expect(liveEncounterFillDone(encounters[card.id], false)).toBe(scored)
+      expect(visualPlanStatus(
+        'pending',
+        encounters[card.id],
+        undefined,
+        scored,
+      ) === 'completed').toBe(scored)
     }
     expect(scoredOccurrenceIds(input).sort()).toEqual(['a', 'z'].sort())
     expect(unscoredOccurrenceIds(input).sort()).toEqual(['b', retry.id].sort())

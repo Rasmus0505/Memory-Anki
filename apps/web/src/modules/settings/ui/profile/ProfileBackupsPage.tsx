@@ -31,6 +31,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
+import { QuizTrashPanel } from '@/modules/settings/ui/profile/components/QuizTrashPanel'
 import {
   buildRestoreConfirm,
   canRestoreBackup,
@@ -43,6 +44,7 @@ import {
 const DATA_TABS = [
   { key: 'backups', label: '备份与恢复' },
   { key: 'transfer', label: '迁移与导入导出' },
+  { key: 'trash', label: '回收站' },
   { key: 'danger', label: '危险区' },
 ] as const
 
@@ -363,6 +365,10 @@ export default function ProfileBackupsPage() {
               </form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="trash" className="space-y-4">
+          <QuizTrashPanel />
         </TabsContent>
 
         <TabsContent value="danger" className="space-y-4">

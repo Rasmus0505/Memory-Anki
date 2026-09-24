@@ -1,4 +1,4 @@
-import type { FreestyleCard } from '@/shared/api/contracts'
+import { isReviewHintId, type FreestyleCard } from '@/shared/api/contracts'
 import type { FreestyleRoundPlanState } from './roundPlan'
 import type { FreestyleUnitEncounterState } from './queueState'
 
@@ -78,6 +78,8 @@ export function unscoredOccurrenceIds(input: UnitProgressInput): string[] {
   for (const card of input.cards) {
     const id = idOf(card.id)
     if (!id) continue
+    // The yellow boundary hint is never scored; it is not outstanding work.
+    if (isReviewHintId(id)) continue
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') continue
     if (!isOccurrenceScored(id, input)) ids.push(id)
   }
@@ -92,6 +94,7 @@ export function findEarliestUnscoredIndex(input: UnitProgressInput): number | nu
   const index = input.cards.findIndex((card) => {
     const id = idOf(card.id)
     if (!id) return false
+    if (isReviewHintId(id)) return false
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') return false
     return !isOccurrenceScored(id, input)
   })
@@ -106,7 +109,8 @@ export function passedOccurrenceIds(input: UnitProgressInput): string[] {
   const ids = new Set<string>()
   for (const card of input.cards) {
     const id = idOf(card.id)
-    if (!id || !isOccurrencePassed(id, input)) continue
+    if (!id || isReviewHintId(id)) continue
+    if (!isOccurrencePassed(id, input)) continue
     ids.add(id)
     const sourceId = idOf((card as { source_card_id?: string }).source_card_id) || id
     if (sourceId) ids.add(sourceId)
@@ -125,6 +129,7 @@ export function areAllOccurrencesPassed(input: UnitProgressInput): boolean {
   for (const card of input.cards) {
     const id = idOf(card.id)
     if (!id) continue
+    if (isReviewHintId(id)) continue
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') continue
     const sourceId = idOf((card as { source_card_id?: string }).source_card_id) || id
     families.add(sourceId)

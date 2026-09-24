@@ -235,3 +235,22 @@ describe('FreestyleRatingBar', () => {
     })
   })
 })
+
+describe('hintMode', () => {
+  it('labels the buttons 继续 instead of schedule copy', () => {
+    renderBar({ ratingEffects: [], hintMode: true, reviewReady: true })
+
+    for (const value of [1, 2, 3, 4]) {
+      const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
+      expect(button.disabled).toBe(false)
+      expect(button.getAttribute('aria-label')).toContain('继续')
+      expect(button.getAttribute('aria-label')).not.toContain('计划不可用')
+    }
+  })
+
+  it('still routes the tap through onRate so the parent can advance', () => {
+    const { onRate } = renderBar({ ratingEffects: [], hintMode: true })
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    expect(onRate).toHaveBeenCalledWith(3)
+  })
+})

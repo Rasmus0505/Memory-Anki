@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
+import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { FreestyleRoundCompleteCard } from './FreestyleRoundCompleteCard'
 
 const completion: FreestyleRoundCompletion = {
@@ -46,10 +47,13 @@ describe('FreestyleRoundCompleteCard', () => {
         quizPalaceCount={2}
         onClearQuizProgress={vi.fn(async () => undefined)}
         onAnotherRound={onAnotherRound}
+        onCancelSettlement={vi.fn()}
       />,
     )
 
     expect(screen.getByTestId('freestyle-round-complete-total-time').textContent).toContain('23:40')
+    expect(screen.getByTestId('freestyle-round-complete-quiz-time').textContent).toContain('做题时间')
+    expect(screen.getByTestId('freestyle-round-complete-quiz-time').textContent).toContain('0:00')
     const subjects = screen.getAllByTestId('freestyle-round-complete-subject')
     expect(subjects[0]?.getAttribute('data-open')).toBe('true')
     expect(subjects[1]?.getAttribute('data-open')).toBe('false')
@@ -63,6 +67,47 @@ describe('FreestyleRoundCompleteCard', () => {
     expect(onAnotherRound).toHaveBeenCalledTimes(1)
   })
 
+  it('cancels settlement without starting another round', () => {
+    const onCancelSettlement = vi.fn()
+    const onAnotherRound = vi.fn()
+    render(
+      <FreestyleRoundCompleteCard
+        completion={completion}
+        roundKey="round-1"
+        quizPalaceCount={0}
+        onClearQuizProgress={vi.fn(async () => undefined)}
+        onAnotherRound={onAnotherRound}
+        onCancelSettlement={onCancelSettlement}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '取消结算' }))
+    expect(onCancelSettlement).toHaveBeenCalledTimes(1)
+    expect(onAnotherRound).not.toHaveBeenCalled()
+  })
+
+  it('shows hours once the duration reaches one hour', () => {
+    expect(formatTimer(37 * 60 + 53)).toBe('37:53')
+    expect(formatTimer(22 * 3600 + 54 * 60 + 16)).toBe('22:54:16')
+    expect(formatTimer(3600)).toBe('1:00:00')
+    render(
+      <FreestyleRoundCompleteCard
+        completion={{
+          ...completion,
+          totalEffectiveSeconds: 22 * 3600 + 54 * 60 + 16,
+          quizSeconds: 37 * 60 + 53,
+        }}
+        roundKey="round-hours"
+        quizPalaceCount={0}
+        onClearQuizProgress={vi.fn(async () => undefined)}
+        onAnotherRound={vi.fn()}
+        onCancelSettlement={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('freestyle-round-complete-total-time').textContent).toContain('22:54:16')
+    expect(screen.getByTestId('freestyle-round-complete-quiz-time').textContent).toContain('37:53')
+  })
+
   it('keeps or clears quiz progress for every palace in the configured round', async () => {
     const onClear = vi.fn(async () => undefined)
     const { rerender } = render(
@@ -72,6 +117,7 @@ describe('FreestyleRoundCompleteCard', () => {
         quizPalaceCount={2}
         onClearQuizProgress={onClear}
         onAnotherRound={vi.fn()}
+        onCancelSettlement={vi.fn()}
       />,
     )
 
@@ -87,6 +133,7 @@ describe('FreestyleRoundCompleteCard', () => {
         quizPalaceCount={2}
         onClearQuizProgress={onClear}
         onAnotherRound={vi.fn()}
+        onCancelSettlement={vi.fn()}
       />,
     )
     fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))

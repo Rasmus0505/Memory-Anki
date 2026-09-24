@@ -69,10 +69,14 @@ export function flattenPalaceOptions(
   }))
 }
 
+/** M:SS below one hour; H:MM:SS once the duration reaches an hour. */
 export function formatTimer(seconds: number) {
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${minutes}:${String(rest).padStart(2, '0')}`
+  const total = Math.max(0, Math.floor(Number(seconds) || 0))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = total % 60
+  const clock = `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
+  return hours > 0 ? `${hours}:${clock}` : `${minutes}:${String(rest).padStart(2, '0')}`
 }
 
 export function buildFreestyleLoadDiagnosticText({

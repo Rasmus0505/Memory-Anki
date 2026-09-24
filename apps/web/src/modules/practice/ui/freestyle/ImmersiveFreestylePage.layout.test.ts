@@ -29,6 +29,13 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('viewingCardId')
   })
 
+  it('cancels settlement by leaving the slot so later dwell still counts', () => {
+    expect(source).toContain('onCancelSettlement={navigatePrevious}')
+    expect(source).toContain('viewingCard: !viewingCompleteSlot && currentCard != null')
+    expect(source).not.toContain('viewingCard: !roundComplete')
+    expect(source).toContain('取消结算，返回上一张')
+  })
+
   it('wires settlement 再来一轮 through nextRound config then startNextRound', () => {
     expect(source).toContain('onAnotherRound=')
     expect(source).toContain("setConfigIntent('nextRound')")

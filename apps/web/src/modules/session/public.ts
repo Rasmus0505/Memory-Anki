@@ -22,6 +22,10 @@ export {
 } from './domain/session-entity/model/timed-session/dwellPolicy'
 export { useDwellFragmentOverride } from './ui/dwell/useDwellFragmentOverride'
 export {
+  peekDwellFragmentOverride,
+  subscribeDwellFragmentOverrides,
+} from './domain/session-entity/model/timed-session/dwellFragmentOverride'
+export {
   interpolateTimerSeconds,
   isFollowableStudyPath,
   liveStudySurfaceFromPath,

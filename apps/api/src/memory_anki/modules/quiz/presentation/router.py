@@ -47,6 +47,9 @@ from memory_anki.modules.quiz.application.service import (
     list_chapter_questions,
     list_palace_ocr_sources,
     list_questions,
+    list_trash_questions,
+    permanent_delete_question,
+    purge_trash_questions,
     reset_question_attempts,
     restore_question,
     set_question_marked,
@@ -314,6 +317,26 @@ def api_restore_palace_quiz_question(question_id: int, s: Session = Depends(sess
         _raise_http_error(exc)
 
 
+@router.delete("/palace-quiz-questions/{question_id}/permanent")
+def api_permanently_delete_palace_quiz_question(question_id: int, s: Session = Depends(session_dep)):
+    try:
+        permanent_delete_question(s, question_id)
+        maybe_create_rolling_backup("rolling-permanent-delete-palace-quiz-question")
+        return {"ok": True}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-questions/trash/purge")
+def api_purge_palace_quiz_trash(s: Session = Depends(session_dep)):
+    try:
+        purged_count = purge_trash_questions(s)
+        maybe_create_rolling_backup("rolling-purge-palace-quiz-trash")
+        return {"ok": True, "purged_count": purged_count}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
 @router.post("/palace-quiz-questions/batch-delete")
 def api_batch_delete_palace_quiz_questions(data: dict, s: Session = Depends(session_dep)):
     try:
@@ -348,6 +371,15 @@ def api_wrong_questions(
     s: Session = Depends(session_dep),
 ):
     return get_wrong_questions(s, limit)
+
+
+@router.get("/palace-quiz-questions/trash")
+def api_palace_quiz_trash(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    s: Session = Depends(session_dep),
+):
+    return list_trash_questions(s, limit=limit, offset=offset)
 
 
 @router.get("/palace-quiz-questions/review-queue")

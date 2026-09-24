@@ -335,6 +335,9 @@ describe('server round plan hydrate', () => {
     // Occurrence-local: a scored 重练 glance must not stamp the source id.
     // Source keeps only its own encounter result (failed → 1), never the retry's 3.
     expect(owned.cardsById.b.lastRating).toBe(1)
+    const merged = mergeServerPlanIntoLocalEncounters({}, ratedPlan, 'round-1')
+    expect(merged[retry.id]?.selectedRating).toBe(3)
+    expect(merged.b?.selectedRating ?? null).not.toBe(3)
     expect(mergeServerPlanIntoLocalEncounters({}, ratedPlan, 'round-1')[retry.id]).toMatchObject({
       selectedRating: 3,
       passed: true,

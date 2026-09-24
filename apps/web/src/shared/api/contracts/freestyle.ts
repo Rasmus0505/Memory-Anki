@@ -294,7 +294,45 @@ export interface FreestyleActionCard {
   retry_after_cards?: number
 }
 
-export type FreestyleCard = FreestyleQuizCard | FreestyleActionCard | FreestyleMindMapBranchCard
+/**
+ * Frontend-only yellow boundary hint: sits immediately before the queue's
+ * first formal review unit (never at index 0) and is stripped before any
+ * server round-plan write.
+ *
+ * The optional palace/retry fields exist only so the shared feed-card union
+ * keeps its cross-member property set; they are always absent at runtime.
+ */
+export interface FreestyleReviewHintCard {
+  id: string
+  type: 'review_hint'
+  content_type: 'review_hint'
+  text: string
+  palace_context?: FreestylePalaceContext | null
+  source_card_id?: string
+  occurrence_kind?: 'source' | 'retry'
+  retry_attempt?: number
+  retry_after_cards?: number
+  anchor_uid?: string
+  anki_front_uid?: string
+  anki_back_uids?: string[]
+}
+
+export type FreestyleCard =
+  | FreestyleQuizCard
+  | FreestyleActionCard
+  | FreestyleMindMapBranchCard
+  | FreestyleReviewHintCard
+
+export const FREESTYLE_REVIEW_HINT_ID = 'review_hint:formal_review'
+export const FREESTYLE_REVIEW_HINT_TEXT = '下一张：正式复习'
+
+export function isReviewHintCard(card: Pick<FreestyleCard, 'type'> | null | undefined): card is FreestyleReviewHintCard {
+  return card?.type === 'review_hint'
+}
+
+export function isReviewHintId(id: string | null | undefined): boolean {
+  return String(id || '').trim() === FREESTYLE_REVIEW_HINT_ID
+}
 
 export interface FreestyleFeedResponse {
   cards: FreestyleCard[]
@@ -342,6 +380,36 @@ export interface FreestyleRoundPlanPayload {
     unit_revision: number
   }>
   overlay_quiz?: FreestyleOverlayQuizState
+  learning_time?: FreestyleRoundLearningTimePayload
+}
+
+export interface FreestyleRoundLearningTimePayload {
+  unit_seconds: number
+  quiz_seconds: number
+  lookup_seconds: number
+  backfilled?: boolean
+  by_palace?: Record<string, {
+    unit_seconds: number
+    quiz_seconds: number
+    lookup_seconds: number
+  }>
+}
+
+export interface FreestyleLearningTimeAdd {
+  bucket: 'unit' | 'quiz' | 'lookup'
+  seconds: number
+  palace_id?: number | null
+}
+
+export interface FreestyleLearningTimeRequest {
+  operation_id: string
+  expected_version: number
+  adds: FreestyleLearningTimeAdd[]
+}
+
+export interface FreestyleLearningTimeBackfillRequest {
+  operation_id: string
+  expected_version: number
 }
 
 export interface FreestyleOverlayQuizState {
@@ -377,6 +445,7 @@ export interface FreestyleRoundStatePayload {
   duplicate: boolean
   workspace?: 'primary' | 'secondary'
   cleared_review_palace_ids?: number[]
+  learning_backfill_applied?: boolean
 }
 
 export interface FreestyleRoundActiveRequest {

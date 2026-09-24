@@ -370,6 +370,33 @@ def restore_question(session: Session, question_id: int) -> dict[str, object]:
     return commit_restored_question(session, question)
 
 
+def permanent_delete_question(session: Session, question_id: int) -> None:
+    question = (
+        session.query(PalaceQuizQuestion)
+        .filter(
+            PalaceQuizQuestion.id == question_id,
+            PalaceQuizQuestion.deleted_at.isnot(None),
+        )
+        .first()
+    )
+    if question is None:
+        raise PalaceQuizValidationError("题目不在回收站中。")
+    session.delete(question)
+    session.commit()
+
+
+def purge_trash_questions(session: Session) -> int:
+    rows = (
+        session.query(PalaceQuizQuestion)
+        .filter(PalaceQuizQuestion.deleted_at.isnot(None))
+        .all()
+    )
+    for row in rows:
+        session.delete(row)
+    session.commit()
+    return len(rows)
+
+
 def record_choice_attempt(
     session: Session,
     question_id: int,
@@ -476,6 +503,8 @@ __all__ = [
     "batch_delete_questions",
     "create_question",
     "delete_question",
+    "permanent_delete_question",
+    "purge_trash_questions",
     "record_choice_attempt",
     "reset_question_attempts",
     "restore_question",

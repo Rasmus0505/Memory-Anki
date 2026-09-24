@@ -18,6 +18,8 @@ from memory_anki.modules.practice.application.history_service import (
 from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
+    accumulate_round_learning_time,
+    backfill_round_learning_time,
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     get_or_create_active_round,
@@ -27,6 +29,8 @@ from memory_anki.modules.practice.application.round_state_service import (
     start_new_round,
 )
 from memory_anki.modules.practice.domain.schemas import (
+    FreestyleLearningTimeBackfillRequest,
+    FreestyleLearningTimeRequest,
     FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
@@ -127,6 +131,41 @@ def api_get_freestyle_round(
     if payload is None:
         raise HTTPException(status_code=400, detail="freestyle round not found")
     return payload
+
+
+@router.post("/freestyle/rounds/{round_id}/learning-time")
+def api_freestyle_learning_time(
+    round_id: str,
+    data: FreestyleLearningTimeRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return accumulate_round_learning_time(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            adds=[item.model_dump() for item in data.adds],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/learning-time/backfill")
+def api_freestyle_learning_time_backfill(
+    round_id: str,
+    data: FreestyleLearningTimeBackfillRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return backfill_round_learning_time(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/freestyle/rounds/{round_id}/overlay-quiz/ensure")

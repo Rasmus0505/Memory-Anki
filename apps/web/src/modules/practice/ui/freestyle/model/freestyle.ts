@@ -278,6 +278,8 @@ export function buildFreestyleQueue(
   const resolvedQuestionIds = new Set(options.resolvedQuestionIds ?? [])
   const enabled = new Set(enabledContentTypes(config))
   const filtered = cards.filter((card) => {
+    // Presentation-only boundary hint — never a configurable feed item.
+    if (card.type === 'review_hint') return false
     if (isMindMapBranchCard(card)) return false
     if (!enabled.has(card.content_type)) return false
     if (isQuizCard(card) && config.questionType !== 'all') {

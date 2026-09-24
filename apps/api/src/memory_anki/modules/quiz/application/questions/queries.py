@@ -8,6 +8,7 @@ from sqlalchemy.orm import Query, Session
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.modules.content.api import get_palace_explicit_chapter_ids
+from memory_anki.modules.content.public.queries import resolve_palace_title
 
 from ..question_contracts import (
     QUESTION_TYPE_DISPLAY_RANKS,
@@ -16,6 +17,7 @@ from ..question_contracts import (
 )
 from ..question_schema import (
     get_chapter_or_raise,
+    serialize_question,
     serialize_question_rows,
 )
 
@@ -291,6 +293,38 @@ def list_chapter_questions(session: Session, chapter_id: int) -> list[dict[str, 
     return serialize_question_rows(list_chapter_question_rows(session, chapter_id=chapter_id))
 
 
+def list_trash_questions(
+    session: Session,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    base = (
+        session.query(PalaceQuizQuestion)
+        .outerjoin(Palace, Palace.id == PalaceQuizQuestion.palace_id)
+        .filter(PalaceQuizQuestion.deleted_at.isnot(None))
+    )
+    total = base.count()
+    rows = (
+        base.order_by(PalaceQuizQuestion.deleted_at.desc(), PalaceQuizQuestion.id.desc())
+        .offset(max(0, offset))
+        .limit(max(1, limit))
+        .all()
+    )
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        palace: Palace | None = row.palace
+        items.append(
+            {
+                **serialize_question(row),
+                "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None,
+                "palace_title": resolve_palace_title(palace) if palace else "",
+                "palace_deleted": palace is not None and palace.deleted_at is not None,
+            }
+        )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
 __all__ = [
     "apply_chapter_dedup_order",
     "apply_palace_dedup_order",
@@ -307,6 +341,7 @@ __all__ = [
     "list_questions",
     "list_root_question_rows",
     "list_root_questions",
+    "list_trash_questions",
     "next_chapter_sort_order",
     "next_palace_sort_order",
     "query_aggregated_chapter_question_rows",

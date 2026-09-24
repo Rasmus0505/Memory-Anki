@@ -11,6 +11,8 @@ import type {
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
+  FreestyleLearningTimeBackfillRequest,
+  FreestyleLearningTimeRequest,
   FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
@@ -167,6 +169,38 @@ export function startFreestyleRoundApi(payload: FreestyleRoundActiveRequest) {
       replayMode: 'manual',
     },
   })
+}
+
+export function accumulateFreestyleLearningTimeApi(
+  roundId: string,
+  payload: FreestyleLearningTimeRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/learning-time`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-learning-time:${payload.operation_id}`,
+        description: '保存随心学习时间',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function backfillFreestyleLearningTimeApi(
+  roundId: string,
+  payload: FreestyleLearningTimeBackfillRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/learning-time/backfill`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: false,
+    },
+  )
 }
 
 export function ensureFreestyleOverlayQuizApi(

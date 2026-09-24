@@ -42,6 +42,30 @@ ITEM_RETRY = "retry"
 ITEM_PASSED = "passed"
 ENCOUNTER_OPEN = "open"
 ENCOUNTER_CLOSED = "closed"
+
+
+def encounter_focus_seconds_by_palace(session: Session, round_id: str) -> dict[int, int]:
+    """Closed-glance focus seconds for one freestyle round, grouped by palace."""
+    rid = str(round_id or "").strip()
+    if not rid:
+        return {}
+    rows = (
+        session.query(ReviewUnitState.palace_id, ReviewUnitEncounter.effective_seconds)
+        .join(ReviewUnitEncounter, ReviewUnitEncounter.unit_id == ReviewUnitState.id)
+        .filter(ReviewUnitEncounter.round_id == rid)
+        .all()
+    )
+    weights: dict[int, int] = {}
+    for palace_id, seconds in rows:
+        try:
+            pid = int(palace_id)
+            sec = int(seconds or 0)
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0 or sec <= 0:
+            continue
+        weights[pid] = weights.get(pid, 0) + sec
+    return weights
 # Freestyle used to keep one StudySession.started_at from the first card glance
 # until eventual pass, so scrolling past three cards in 7s then finishing later
 # minted three overlapping wall-clock rows. Rated closed encounters are the only

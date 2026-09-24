@@ -85,6 +85,11 @@ import type {
   FreestyleFeedConfig,
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
+import { isReviewHintId } from '@/shared/api/contracts'
+import {
+  insertReviewHintCards,
+  stripReviewHintCards,
+} from '@/modules/practice/domain/reviewHintCard'
 import { overlayReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import {
   applyFreestyleEntryScopeUnlessSaved,
@@ -383,6 +388,8 @@ export function useImmersiveQueue(
   const commitRoundCursor = useCallback((cardId: string | null | undefined) => {
     const target = cardId ? String(cardId).trim() : ''
     if (!target) return
+    // The yellow hint lives only in the presented feed — never a server cursor.
+    if (isReviewHintId(target)) return
     const roundId = queueStateRef.current.roundId
     if (!roundId) return
     void applyFreestyleRoundActionApi(roundId, {
@@ -625,6 +632,9 @@ export function useImmersiveQueue(
                   queueStateRef.current.completedIds,
                 )
               : mergeRefreshQueue(previousCards, deferred)
+        // The yellow hint may ride in from previousCards via merge; strip it
+        // before builtCards fans out into createRoundPlan / getOrCreate.
+        nextCards = stripReviewHintCards(nextCards)
         const restudyCardId = options?.restudyCardId
           ? String(options.restudyCardId).trim()
           : ''
@@ -774,6 +784,9 @@ export function useImmersiveQueue(
         } catch {
           // Offline draft keeps the local plan until the server is reachable.
         }
+        // Plan hydration is done — only now the presented feed may carry the
+        // yellow boundary hint (kept out of every server round-plan write).
+        nextCards = insertReviewHintCards(nextCards)
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
         // Cold start prefers the local draft cursor when it still exists in-feed.
@@ -1509,10 +1522,12 @@ export function useImmersiveQueue(
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       notifyPeerRound()
-      const confirmed = cardsForServerPlan(
-        cardsRef.current,
-        round.plan,
-        round.round_id || roundId,
+      const confirmed = insertReviewHintCards(
+        cardsForServerPlan(
+          cardsRef.current,
+          round.plan,
+          round.round_id || roundId,
+        ),
       )
       const liveId = resolveLeaveConfirmViewportId({
         leavingCardId: leftId,
@@ -1526,13 +1541,13 @@ export function useImmersiveQueue(
       const resolved = confirmed.findIndex((card) => card.id === liveId)
       if (resolved >= 0) applyCurrentIndex(resolved, confirmed)
     }).catch(() => {
-      const fallback = insertPendingRetryCopy(
+      const fallback = insertReviewHintCards(insertPendingRetryCopy(
         cardsRef.current,
         leftId,
         pending,
         roundId,
         queueStateRef.current.roundPlan,
-      )
+      ))
       if (fallback !== cardsRef.current) {
         cardsRef.current = fallback
         setCards(fallback)
@@ -1630,7 +1645,9 @@ export function useImmersiveQueue(
       // Hidden: drop restudy pending so a reshuffle/rebuild can surface it again.
       pendingRestudyByIdRef.current.delete(card.id)
       syncPendingRestudyIds()
-      const filtered = cardsRef.current.filter((item) => item.id !== card.id)
+      const filtered = insertReviewHintCards(
+        cardsRef.current.filter((item) => item.id !== card.id),
+      )
       cardsRef.current = filtered
       setCards(filtered)
       applyCurrentIndex(
@@ -1644,7 +1661,9 @@ export function useImmersiveQueue(
       persistCurrentCardId(cardsRef.current[currentIndexRef.current]?.id)
       return
     }
-    const nextCards = moveCardToTail(cardsRef.current, card.id)
+    // Re-seat the yellow hint: skipping must never strand it away from the
+    // first formal review unit (skipping the hint itself becomes a no-op).
+    const nextCards = insertReviewHintCards(moveCardToTail(cardsRef.current, card.id))
     cardsRef.current = nextCards
     setCards(nextCards)
     // Stay at same index so next item slides into place after tail move.
@@ -1686,7 +1705,9 @@ export function useImmersiveQueue(
     if (!currentPlan) return
     const currentCardId = queueStateRef.current.currentCardId
     const nextPlan = reorderRoundPlan(currentPlan, orderIds)
-    const nextCards = applyRoundPlanOrder(cardsRef.current, nextPlan)
+    // applyRoundPlanOrder pushes plan-external ids (the yellow hint) to the
+    // tail — re-seat it before the first formal review unit.
+    const nextCards = insertReviewHintCards(applyRoundPlanOrder(cardsRef.current, nextPlan))
     persistQueueState({ ...queueStateRef.current, roundPlan: nextPlan })
     cardsRef.current = nextCards
     setCards(nextCards)
@@ -1916,7 +1937,7 @@ export function useImmersiveQueue(
           operation_id: createOperationId(),
           scope_key: freestylePalaceScopeSignature(configRef.current),
           config: configRef.current,
-          cards: cardsRef.current,
+          cards: stripReviewHintCards(cardsRef.current),
           round_id: roundId,
           workspace: slot,
         })
@@ -1925,7 +1946,14 @@ export function useImmersiveQueue(
       const adoptedRoundId = round.round_id || roundId
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
-      const nextCards = cardsForServerPlan(cardsRef.current, round.plan, adoptedRoundId)
+      // The yellow hint never enters createRoundPlan — plan math stays on the
+      // server-known feed; only the presented cards below carry it.
+      const plannedCards = cardsForServerPlan(
+        stripReviewHintCards(cardsRef.current),
+        round.plan,
+        adoptedRoundId,
+      )
+      const nextCards = insertReviewHintCards(plannedCards)
       const serverCompleted = Array.isArray(round.plan.completed_ids)
         ? round.plan.completed_ids.map(String)
         : queueStateRef.current.completedIds
@@ -1947,11 +1975,11 @@ export function useImmersiveQueue(
             syncCompletedIdsToRoundPlan(
               createRoundPlan(
                 adoptedRoundId,
-                nextCards,
+                plannedCards,
                 configRef.current,
                 {
-                  candidate_count: nextCards.length,
-                  scheduled_count: nextCards.length,
+                  candidate_count: plannedCards.length,
+                  scheduled_count: plannedCards.length,
                   queue_limit: configRef.current.queue_length,
                   limit_reached: false,
                   palace_leftover_due: {},

@@ -465,7 +465,9 @@ export function mergeServerPlanIntoLocalEncounters(
     const occId = String(occ.occurrence_id || '').trim()
     const sourceId = String(occ.source_card_id || '').trim()
     const encounterId = String(occ.encounter_id || '').trim() || undefined
-    if (sourceId) {
+    const ownsGlance = Boolean(occId) && retryGlanceOwnsRating(plan, occId)
+    // Occurrence-local only: a 重练 glance must never stamp the source id.
+    if (!ownsGlance && sourceId) {
       writeGap(sourceId, {
         encounterId,
         selectedRating: rating,

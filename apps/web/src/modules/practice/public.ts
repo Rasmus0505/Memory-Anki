@@ -1,3 +1,13 @@
+export {
+  addFreestyleLearningSeconds,
+  classifyFreestyleLearningSurface,
+  emptyFreestyleLearningTime,
+  freestyleLearningTotals,
+  mergeFreestyleLearningTime,
+  parseFreestyleLearningTime,
+  type FreestyleLearningBucket,
+  type FreestyleRoundLearningTime,
+} from './domain/freestyleLearningTime'
 export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {

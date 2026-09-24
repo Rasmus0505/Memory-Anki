@@ -148,10 +148,11 @@ opens an empty amend glance so the learner can change it, but the HUD tick and r
 keep the last rating until they change or cancel it. An empty amend glance is not unrated.
 The viewing playhead is independent of that fill: the card on screen grows taller even after
 it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
-right-side pager has 完成, not 定位. When every presented card is handled it opens the
+right-side pager has 完成, not 定位. When every presented card is scored it opens the
 closing settlement slot; otherwise it seeks the queue-order first **unscored** unit
 (谁最早看谁). Scored means this occurrence has a this-round score (忘记/困难/记得/轻松
-alike — the rail fills solid). A scored 重练 is never the target; leave_card bumps
+alike — the rail fills solid). A weak score still opens settlement once nothing
+unscored remains — 完成 must not disable in that state. A scored 重练 is never the target; leave_card bumps
 `retry_attempt` and clears that occurrence's score so the next blank attempt is seekable.
 A weak source is scored, so 完成 does not reopen it — the blank 重练 is the work.
 Rating the retry must not move the viewport onto the source or refit the map to the palace
@@ -387,3 +388,7 @@ is fully handled, the right-side 完成 control opens the settlement slot. That 
 whether to clear overlay 已做 for every review palace this 随心配置 round scheduled. 保留 keeps
 the answered records so 做题 can still be reviewed. 清除 calls `/overlay-quiz/drop-palaces`
 with those palace ids and clears the SPA mirror for them.
+
+Settlement time is round-scoped and survives a restart or the next day. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
+
+Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses only while the settlement slot is on screen. After that leave, later card dwell and 做题 still accumulate on the same `learning_time`.

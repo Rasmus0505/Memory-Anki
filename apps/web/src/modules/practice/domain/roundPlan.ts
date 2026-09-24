@@ -445,9 +445,11 @@ export function stampRestudyPlan(
     // The parent's 忘记/困难 downgrades that card and schedules this glance.
     // It must not prefill the retry rating. A later score on the 重练 stays there.
     if (!ratingTheRetry && sourceId !== cardId && next.cardsById[sourceId]) {
+      const priorSource = next.cardsById[sourceId]
       next = updateRoundPlanCard(next, sourceId, {
         ...schedulePatch,
-        lastRating: entry.rating ?? next.cardsById[sourceId]?.lastRating ?? null,
+        // Keep the source's own score only; never read a 重练 glance here.
+        lastRating: entry.rating ?? priorSource?.lastRating ?? null,
       }, now)
     }
     if (ratingTheRetry && sourceId !== cardId && next.cardsById[sourceId]) {

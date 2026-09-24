@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, Trash2 } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
+  deletePalaceQuizQuestionApi,
   getPalaceQuizQuestionsApi,
   getPalaceQuizQuestionsByIdsApi,
   listPalaceQuizNodeBindingsApi,
@@ -26,6 +27,7 @@ import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/mode
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -79,6 +81,7 @@ export function NodeBoundQuizDialog({
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
   useDwellFragmentOverride(open, {
     scene: 'quiz',
@@ -267,6 +270,30 @@ export function NodeBoundQuizDialog({
     }
   }, [current])
 
+  const handleDeleteCurrent = useCallback(async () => {
+    if (!current) return
+    const removedId = current.id
+    try {
+      await deletePalaceQuizQuestionApi(removedId)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除失败。')
+      return
+    }
+    const nextQuestions = questions.filter((item) => item.id !== removedId)
+    setQuestions(nextQuestions)
+    setQuestionStates((prev) => {
+      const next = { ...prev }
+      delete next[removedId]
+      return next
+    })
+    toast.success('题目已移入回收站。')
+    if (nextQuestions.length === 0) {
+      onOpenChange(false)
+      return
+    }
+    setIndex((value) => Math.min(value, nextQuestions.length - 1))
+  }, [current, onOpenChange, questions])
+
   useEffect(() => {
     if (!open || !current) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -445,6 +472,17 @@ export function NodeBoundQuizDialog({
                         {currentState.correct ? '已答对' : '已作答'}
                       </Badge>
                     ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      aria-label="删除本题"
+                      title="移入回收站"
+                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                   <div className="text-base font-semibold leading-7 text-foreground">
                     <QuizQuestionStem question={current} />
@@ -529,6 +567,15 @@ export function NodeBoundQuizDialog({
           ) : null}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="移入回收站"
+        description="题目将从做题队列和统计中移除，作答记录保留，可在设置页回收站恢复。"
+        tone="danger"
+        confirmText="移入回收站"
+        onConfirm={() => void handleDeleteCurrent()}
+      />
       <PalaceMemoryLookupDialog
         open={palaceLookupOpen}
         onOpenChange={setPalaceLookupOpen}

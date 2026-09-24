@@ -40,6 +40,7 @@ import { FreestyleRoundSheet } from '@/modules/practice/ui/freestyle/components/
 import { FreestyleMindMapBranchCardView } from '@/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView'
 import { FreestyleUnitReviewCardView } from '@/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView'
 import { FreestyleQuizCardView } from '@/modules/practice/ui/freestyle/components/FreestyleQuizCardView'
+import { FreestyleReviewHintCardView } from '@/modules/practice/ui/freestyle/components/FreestyleReviewHintCardView'
 import {
   FreestyleEmptyState,
   FreestyleFeedErrorState,
@@ -80,6 +81,7 @@ import {
   type PalaceClearance,
 } from '@/modules/practice/ui/freestyle/model/freestylePalaceClearance'
 import { useFreestyleChromeTheme } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChromeTheme'
+import { useFreestyleRoundLearningClock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRoundLearningClock'
 import { useFreestyleWakeLock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWakeLock'
 import {
   CHANNEL_HINT_COOLDOWN_MS,
@@ -116,6 +118,7 @@ import {
   saveFreestyleDisplaySettings,
 } from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleFeedConfig, FreestyleQuizCard } from '@/shared/api/contracts'
+import { isReviewHintCard } from '@/shared/api/contracts'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
@@ -442,6 +445,17 @@ export default function ImmersiveFreestylePage({
   )
   roundCompleteRef.current = roundComplete
   const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)
+  const learningClock = useFreestyleRoundLearningClock({
+    roundId: queueState.roundId,
+    planVersion,
+    adoptRoundVersion,
+    isActive,
+    // Pause only while the settlement slot is on screen. 上一张 / 取消结算
+    // leaves that slot; later card dwell and 做题 still accumulate.
+    viewingCard: !viewingCompleteSlot && currentCard != null,
+    cardPalaceId: currentCard ? cardPalaceId(currentCard) : null,
+    publishLive: viewingCompleteSlot,
+  })
   const currentCardId = currentCard?.id ?? null
   const revealCacheKey = currentCardId
   if (seededRevealCardIdRef.current !== revealCacheKey) {
@@ -677,7 +691,7 @@ export default function ImmersiveFreestylePage({
       currentId && pendingRestudyCardIds.includes(currentId),
     )
     // Last card still holding an uninserted retry: leave/insert then land on it.
-    if (!roundComplete && from >= cards.length - 1 && pendingOnCurrent) {
+    if (from >= cards.length - 1 && pendingOnCurrent) {
       if (currentId) {
         viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, currentId)
       }
@@ -1190,6 +1204,7 @@ export default function ImmersiveFreestylePage({
         scheduledCount: roundMeta.scheduled_count || roundPlan?.scheduledCount,
         roundPlan,
         subjectByPalaceId,
+        learningTime: learningClock.ready ? learningClock.learningTime : null,
         quizCount: new Set([
           ...cards.flatMap((card) => (
             isQuizCard(card) && (
@@ -1210,6 +1225,8 @@ export default function ImmersiveFreestylePage({
       queueState.unitEncountersByCardId,
       roundMeta.candidate_count,
       roundMeta.scheduled_count,
+      learningClock.learningTime,
+      learningClock.ready,
       roundPlan,
       subjectByPalaceId,
     ],
@@ -1742,6 +1759,14 @@ export default function ImmersiveFreestylePage({
                           navigateToIndex(index + 1)
                         }}
                       />
+                    ) : isReviewHintCard(card) ? (
+                      <FreestyleReviewHintCardView
+                        card={card}
+                        active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                        onAdvance={() => {
+                          navigateToIndex(index + 1)
+                        }}
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-sm text-zinc-400">
                         暂不支持的卡片类型
@@ -1802,6 +1827,7 @@ export default function ImmersiveFreestylePage({
                   setConfigIntent('nextRound')
                   setConfigOpen(true)
                 }}
+                onCancelSettlement={navigatePrevious}
               />
             </div>
           ) : null}
@@ -1825,6 +1851,11 @@ export default function ImmersiveFreestylePage({
           }
           canComplete={canCompleteRound}
           completeTitle={completeTitle}
+          previousTitle={
+            viewingCompleteSlot
+              ? '取消结算，返回上一张'
+              : '上一张：返回上一个单元'
+          }
           onPrevious={navigatePrevious}
           onNext={navigateNext}
           onComplete={handleCompleteRound}

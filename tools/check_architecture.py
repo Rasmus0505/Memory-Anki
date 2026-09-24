@@ -2562,12 +2562,21 @@ def check_freestyle_unit_progress_kernel(errors: list[str]) -> None:
                 f"{kernel.relative_to(WEB_SRC).as_posix()}: must define `{marker}`."
             )
     queue = WEB_SRC / "modules" / "practice" / "domain" / "queueState.ts"
-    if queue.exists():
-        queue_source = queue.read_text(encoding="utf-8", errors="ignore")
-        if "sourceId]?.lastRating" in queue_source or "cardsById[sourceId]" in queue_source:
+    server_plan = WEB_SRC / "modules" / "practice" / "domain" / "serverRoundPlan.ts"
+    round_plan = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
+    for path in (queue, server_plan, round_plan):
+        if not path.exists():
+            continue
+        path_source = path.read_text(encoding="utf-8", errors="ignore")
+        if "cardsById[sourceId]?.lastRating" in path_source or "cardsById[sourceId]?.lastRating" in path_source:
             errors.append(
-                f"{queue.relative_to(WEB_SRC).as_posix()}: "
+                f"{path.relative_to(WEB_SRC).as_posix()}: "
                 "lastRating must not inherit source↔重练; use unitProgressState."
+            )
+        if "writeGap(sourceId" in path_source and "ownsGlance" not in path_source:
+            errors.append(
+                f"{path.relative_to(WEB_SRC).as_posix()}: "
+                "source gap writes must be gated on ownsGlance."
             )
 
 
@@ -2898,6 +2907,57 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_round_learning_time(errors: list[str]) -> None:
+    """Settlement shows this round's learning time, with quiz time on its own line."""
+    round_plan = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
+    router = API_SRC / "modules" / "practice" / "presentation" / "router.py"
+    card = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundCompleteCard.tsx"
+    )
+    page = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "ImmersiveFreestylePage.tsx"
+    )
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if not round_plan.exists() or "learning_time" not in round_plan.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "apps/api/src/memory_anki/modules/practice/domain/round_plan.py: "
+            "normalize_plan must keep learning_time."
+        )
+    if not router.exists() or "/learning-time" not in router.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "apps/api/src/memory_anki/modules/practice/presentation/router.py: "
+            "must expose /learning-time for the round clock."
+        )
+    if not card.exists() or "做题时间" not in card.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard.tsx: "
+            "settlement card must show 做题时间."
+        )
+    if not page.exists() or "useFreestyleRoundLearningClock" not in page.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx: "
+            "must run useFreestyleRoundLearningClock."
+        )
+    if doc.exists():
+        doc_source = doc.read_text(encoding="utf-8", errors="ignore")
+        if "learning_time" not in doc_source or "做题时间" not in doc_source:
+            errors.append(
+                f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document round learning_time and the separate 做题时间 line."
+            )
+
+
 def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
     """The last handled unit must still page into the closing card."""
     page = (
@@ -2978,6 +3038,42 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
                 "settlement card must show totalEffectiveSeconds and bySubject breakdown."
             )
+        if "取消结算" not in complete_source or "onCancelSettlement" not in complete_source:
+            errors.append(
+                f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
+                "settlement card must expose 取消结算 via onCancelSettlement."
+            )
+    if "onCancelSettlement={navigatePrevious}" not in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "取消结算 and 上一张 must leave the settlement slot via navigatePrevious."
+        )
+    if "viewingCard: !viewingCompleteSlot" not in page_source or "viewingCard: !roundComplete" in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "leaving settlement must resume the learning clock; do not gate viewingCard on roundComplete."
+        )
+    timer = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "freestyle-cards.ts"
+    )
+    if timer.exists():
+        timer_source = timer.read_text(encoding="utf-8", errors="ignore")
+        if "3600" not in timer_source or "formatTimer" not in timer_source:
+            errors.append(
+                f"{timer.relative_to(REPO_ROOT).as_posix()}: "
+                "formatTimer must roll minutes into hours once the duration reaches 3600 seconds."
+            )
+    if feed_doc.exists() and "取消结算" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document that 取消结算 leaves the slot and later dwell still counts."
+        )
     queue_hook = (
         WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts"
     )
@@ -4542,6 +4638,7 @@ def main() -> int:
     check_freestyle_round_sheet_views(errors)
     check_freestyle_viewing_playhead(errors)
     check_freestyle_complete_slot_reachable(errors)
+    check_freestyle_round_learning_time(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
     check_backend_module_boundaries(errors)

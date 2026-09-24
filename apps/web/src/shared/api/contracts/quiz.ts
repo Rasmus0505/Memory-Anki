@@ -139,6 +139,12 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   updated_at: string | null
 }
 
+export interface QuizTrashItem extends PalaceQuizQuestion {
+  deleted_at: string | null
+  palace_title: string
+  palace_deleted: boolean
+}
+
 export interface PalaceQuizSegmentGroupPreview {
   segment_id: number
   segment_name: string

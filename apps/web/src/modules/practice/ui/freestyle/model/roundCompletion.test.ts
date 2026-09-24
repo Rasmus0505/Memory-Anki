@@ -237,17 +237,55 @@ describe('buildFreestyleRoundCompletion', () => {
       },
     ])
   })
+
+  it('uses the round clock for the headline and palace rows, and does not add encounter seconds again', () => {
+    const cards = [
+      card('one', { palace_id: 11, palace_title: '卢梭' }),
+      card('two', { palace_id: 12, palace_title: '康德' }),
+    ]
+    const completion = buildFreestyleRoundCompletion(
+      cards,
+      {
+        one: encounter({ effectiveSeconds: 999 }),
+        two: encounter({ effectiveSeconds: 999 }),
+      },
+      2,
+      {
+        subjectByPalaceId: new Map([[11, { id: 1, name: '教育学' }]]),
+        learningTime: {
+          unitSeconds: 100,
+          quizSeconds: 40,
+          lookupSeconds: 10,
+          backfilled: true,
+          byPalace: {
+            '11': { unitSeconds: 80, quizSeconds: 0, lookupSeconds: 0 },
+            '12': { unitSeconds: 0, quizSeconds: 25, lookupSeconds: 10 },
+          },
+        },
+      },
+    )
+
+    expect(completion.totalEffectiveSeconds).toBe(150)
+    expect(completion.quizSeconds).toBe(40)
+    const education = completion.bySubject.find((subject) => subject.subjectName === '教育学')
+    const uncategorized = completion.bySubject.find((subject) => subject.subjectName === '未分类')
+    expect(education?.palaces.find((palace) => palace.palaceId === 11)?.effectiveSeconds).toBe(80)
+    expect(uncategorized?.palaces.find((palace) => palace.palaceId === 12)?.effectiveSeconds).toBe(35)
+    expect(education?.effectiveSeconds).toBe(80)
+  })
 })
 
 describe('isFreestyleRoundComplete', () => {
-  it('is complete only once every unit passes, including a weak-rating retry', () => {
+  it('opens settlement once every presented card is scored, including a weak rating', () => {
     const cards = [card('one'), card('two')]
 
     expect(isFreestyleRoundComplete(cards, { one: encounter() })).toBe(false)
+    // 忘记/困难 is scored. Nothing unscored remains, so 完成 must enter settlement
+    // instead of disabling.
     expect(isFreestyleRoundComplete(cards, {
       one: encounter(),
       two: encounter({ selectedRating: 2, passed: false }),
-    })).toBe(false)
+    })).toBe(true)
 
     const retry = {
       ...card('retry:round-1:two:1'),
@@ -255,6 +293,10 @@ describe('isFreestyleRoundComplete', () => {
       occurrence_kind: 'retry' as const,
       retry_attempt: 1,
     }
+    expect(isFreestyleRoundComplete([cards[0], cards[1], retry], {
+      one: encounter(),
+      two: encounter({ selectedRating: 2, passed: false }),
+    })).toBe(false)
     expect(isFreestyleRoundComplete([cards[0], cards[1], retry], {
       one: encounter(),
       two: encounter({ selectedRating: 2, passed: false }),
@@ -575,6 +617,15 @@ describe('resolveFreestyleCompleteSeek', () => {
       visualIndex: 1,
     })).toBeNull()
   })
+
+  it('opens settlement after the last unscored card is rated, even on a weak score', () => {
+    expect(resolveFreestyleCompleteSeek({
+      roundComplete: true,
+      cardCount: 2,
+      earliestUnhandledIndex: null,
+      visualIndex: 1,
+    })).toBe(2)
+  })
 })
 
 describe('gap-0 restudy insert and canGoNext', () => {
@@ -596,5 +647,38 @@ describe('gap-0 restudy insert and canGoNext', () => {
     expect(freestyleCanPageNext(2, 3, false, false)).toBe(false)
     expect(freestyleCanPageNext(2, 3, false, true)).toBe(true)
     expect(freestyleCanPageNext(3, 3, true, true)).toBe(false)
+  })
+})
+
+describe('yellow boundary hint never blocks completion', () => {
+  const hint = {
+    id: 'review_hint:formal_review',
+    type: 'review_hint',
+    content_type: 'review_hint',
+    text: '下一张：正式复习',
+  } as FreestyleCard
+
+  it('round is complete once every real card is scored', () => {
+    const cards = [card('one'), hint, card('two')]
+    expect(isFreestyleRoundComplete(cards, {
+      one: encounter(),
+      two: encounter(),
+    }, [], null)).toBe(true)
+    expect(isFreestyleRoundComplete(cards, {
+      one: encounter(),
+      two: encounter({ selectedRating: 1, passed: false }),
+    }, [], null)).toBe(true)
+  })
+
+  it('round stays open while a real card is still unscored', () => {
+    const cards = [card('one'), hint, card('two')]
+    expect(isFreestyleRoundComplete(cards, { one: encounter() }, [], null)).toBe(false)
+  })
+
+  it('完成 seek targets the earliest real unscored card, never the hint', () => {
+    const cards = [card('one'), hint, card('two')]
+    expect(findEarliestCompleteSeekIndex(cards, {}, ['one'], null)).toBe(2)
+    expect(findEarliestCompleteSeekIndex(cards, {}, ['one', 'two'], null)).toBeNull()
+    expect(findEarliestUnhandledIndex(cards, {}, ['one', 'two'], null)).toBeNull()
   })
 })

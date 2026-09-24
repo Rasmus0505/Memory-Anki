@@ -6,6 +6,7 @@ import {
   progressFreestyleOverlayQuizApi,
 } from '@/modules/practice/ui/freestyle/api'
 import {
+  deletePalaceQuizQuestionApi,
   getPalaceQuizQuestionsByIdsApi,
   listQuestionNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
@@ -23,6 +24,7 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsByIdsApi: vi.fn(),
   listQuestionNodeBindingsApi: vi.fn(),
+  deletePalaceQuizQuestionApi: vi.fn(async () => ({ ok: true })),
   setPalaceQuizQuestionMarkedApi: vi.fn(async (id: number, marked: boolean) => ({
     item: { id, marked },
   })),
@@ -73,11 +75,13 @@ const ensureFreestyleOverlayQuizApiMock = vi.mocked(ensureFreestyleOverlayQuizAp
 const progressFreestyleOverlayQuizApiMock = vi.mocked(progressFreestyleOverlayQuizApi)
 const getPalaceQuizQuestionsByIdsApiMock = vi.mocked(getPalaceQuizQuestionsByIdsApi)
 const listQuestionNodeBindingsApiMock = vi.mocked(listQuestionNodeBindingsApi)
+const deletePalaceQuizQuestionApiMock = vi.mocked(deletePalaceQuizQuestionApi)
 
 describe('FreestyleScopeQuizDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     progressFreestyleOverlayQuizApiMock.mockResolvedValue({} as never)
+    deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
   })
 
   it('asks for palace order before the first session', () => {
@@ -358,5 +362,74 @@ describe('FreestyleScopeQuizDialog', () => {
 
     expect(await screen.findByText(/第 3 \/ 3 题/)).toBeTruthy()
     expect(screen.getByText(/已答 2 \/ 3/)).toBeTruthy()
+  })
+
+  it('deletes the current question and re-ensures the overlay to drop the dead id', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 1,
+      version: 1,
+      plan: {
+        overlay_quiz: {
+          question_ids: [42, 43],
+          current_index: 0,
+          completed_ids: [],
+          states: {},
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 2,
+        },
+      },
+    } as never)
+    getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
+      items: [42, 43].map((id) => ({
+        id,
+        palace_id: 7,
+        sort_order: id,
+        correct_count: 0,
+        incorrect_count: 0,
+        attempt_count: 0,
+        question_type: 'multiple_choice',
+        stem: `第 ${id} 题干`,
+        options: [{ id: 'A', text: 'A' }],
+        answer_payload: { correct_option_id: 'A' },
+        analysis: '',
+        source_meta: {},
+        created_at: null,
+        updated_at: null,
+      })),
+      item_count: 2,
+    } as never)
+
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="当前配置下的全部宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('第 42 题干')).toBeTruthy()
+    ensureFreestyleOverlayQuizApiMock.mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
+    fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+
+    await waitFor(() => {
+      expect(deletePalaceQuizQuestionApiMock).toHaveBeenCalledWith(42)
+      expect(screen.getByText('第 43 题干')).toBeTruthy()
+      expect(screen.queryByText('第 42 题干')).toBeNull()
+      // progress_overlay_quiz never rewrites question_ids, so the round must be
+      // re-ensured to drop the deleted id.
+      expect(ensureFreestyleOverlayQuizApiMock).toHaveBeenCalled()
+    })
   })
 })

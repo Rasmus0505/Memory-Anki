@@ -571,3 +571,77 @@ describe('progressRailLabel', () => {
       .toBe('本轮暂无安排。点击查看本轮安排')
   })
 })
+
+describe('yellow boundary hint segment', () => {
+  const hint: FreestyleCard = {
+    id: 'review_hint:formal_review',
+    type: 'review_hint',
+    content_type: 'review_hint',
+    text: '下一张：正式复习',
+  }
+  const pathCard: FreestyleCard = {
+    id: 'path',
+    type: 'anki_card',
+    content_type: 'anki_card',
+    presentation: 'anki',
+    palace_id: 1,
+    palace_title: '宫殿 A',
+    anchor_uid: 'path-anchor',
+    context_path: [{ uid: 'path-anchor', text: 'path' }],
+    node_uids: ['path-node'],
+    node_count: 1,
+  }
+
+  it('seats the plan-external hint before the first formal review unit', () => {
+    const cards = [pathCard, hint, card('one'), card('two')]
+    // The plan only knows server cards — the hint is feed presentation.
+    const summary = buildFreestyleProgressSummary(
+      cards,
+      plan([pathCard, card('one'), card('two')]),
+      [],
+      [],
+      'path',
+    )
+
+    expect(summary.segments.map((segment) => segment.cardId))
+      .toEqual(['path', 'review_hint:formal_review', 'one', 'two'])
+    expect(summary.total).toBe(4)
+    expect(progressHudText(summary)).toBe('1/4')
+  })
+
+  it('keeps the hint out of scheduledBase and labels it 提示 with a neutral accent', () => {
+    const cards = [pathCard, hint, card('one')]
+    const summary = buildFreestyleProgressSummary(
+      cards,
+      plan([pathCard, card('one')]),
+      [],
+      [],
+      'review_hint:formal_review',
+    )
+
+    const hintSegment = summary.segments.find(
+      (segment) => segment.cardId === 'review_hint:formal_review',
+    )
+    expect(hintSegment).toMatchObject({
+      tone: 'pending',
+      palaceId: null,
+      viewing: true,
+      sourceLabel: '提示',
+    })
+    expect(summary.scheduledBase).toBe(2)
+    expect(summary.position).toBe(2)
+  })
+
+  it('keeps plan-first ordering intact when the hint is already before the review unit', () => {
+    const cards = [pathCard, hint, card('one')]
+    const summary = buildFreestyleProgressSummary(
+      cards,
+      plan([pathCard, card('one')]),
+      [],
+      [],
+      null,
+    )
+    expect(summary.segments.map((segment) => segment.cardId))
+      .toEqual(['path', 'review_hint:formal_review', 'one'])
+  })
+})

@@ -22,12 +22,15 @@ export function FreestyleRoundCompleteCard({
   quizPalaceCount,
   onClearQuizProgress,
   onAnotherRound,
+  onCancelSettlement,
 }: {
   completion: FreestyleRoundCompletion
   roundKey: string
   quizPalaceCount: number
   onClearQuizProgress: () => Promise<void>
   onAnotherRound: () => void
+  /** Leave this slot. Later card dwell and 做题 stay on this round's learning clock. */
+  onCancelSettlement: () => void
 }) {
   const subjects = useMemo(() => completion.bySubject ?? [], [completion.bySubject])
   const [quizChoice, setQuizChoice] = useState<QuizClearChoice>('pending')
@@ -90,6 +93,15 @@ export function FreestyleRoundCompleteCard({
           <div className="text-[11px] font-medium tracking-wide text-emerald-200/80">本次随心</div>
           <div className="mt-0.5 text-2xl font-semibold tabular-nums text-emerald-100 sm:text-3xl">
             {formatTimer(completion.totalEffectiveSeconds ?? 0)}
+          </div>
+          <div
+            data-testid="freestyle-round-complete-quiz-time"
+            className="mt-2 border-t border-emerald-200/15 pt-2 text-sm text-emerald-100/90"
+          >
+            <span className="text-[11px] font-medium tracking-wide text-emerald-200/70">做题时间</span>
+            <span className="ml-2 font-semibold tabular-nums">
+              {formatTimer(completion.quizSeconds ?? 0)}
+            </span>
           </div>
         </div>
 
@@ -206,8 +218,16 @@ export function FreestyleRoundCompleteCard({
 
         <button
           type="button"
+          data-testid="freestyle-round-cancel-settlement"
+          className="mt-5 flex w-full items-center justify-center rounded-2xl border border-white/15 px-4 py-3 text-sm font-medium text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15"
+          onClick={onCancelSettlement}
+        >
+          取消结算
+        </button>
+        <button
+          type="button"
           data-testid="freestyle-round-another"
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400/90 px-4 py-3 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-300 active:bg-emerald-200"
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400/90 px-4 py-3 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-300 active:bg-emerald-200"
           onClick={onAnotherRound}
         >
           <RotateCcw className="size-4" />

@@ -88,6 +88,29 @@ class FreestyleOverlayQuizProgressRequest(BaseModel):
     states: dict[str, Any] = Field(default_factory=dict)
 
 
+class FreestyleLearningTimeAdd(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bucket: str
+    seconds: int = 0
+    palace_id: int | None = None
+
+
+class FreestyleLearningTimeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    adds: list[FreestyleLearningTimeAdd] = Field(default_factory=list)
+
+
+class FreestyleLearningTimeBackfillRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+
+
 class FreestyleOverlayQuizDropPalacesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -2,13 +2,16 @@ import {
   cardPalaceId,
   cardUnitId,
   findEarliestUnratedIndex,
+  freestyleLearningTotals,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
   sourceCardId,
+  type FreestyleRoundLearningTime,
   type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
+import { isReviewHintId } from '@/shared/api/contracts'
 
 export interface FreestyleRoundSubjectPalaceStat {
   palaceId: number
@@ -37,8 +40,13 @@ export interface FreestyleRoundCompletion {
   remainingCandidates: number
   /** Quiz cards handled in the feed plus overlay 做题. */
   quizCount: number
-  /** Sum of closed+rated encounter focus seconds this round. */
+  /**
+   * Round learning seconds. Encounter focus when no learning clock is supplied;
+   * otherwise unit dwell + quiz + palace lookup for the whole round.
+   */
   totalEffectiveSeconds: number
+  /** Quiz-overlay seconds only. Absent on older callers; settlement treats that as 0. */
+  quizSeconds?: number
   /** Attempted sources grouped by subject → palace for settlement. */
   bySubject: FreestyleRoundSubjectStat[]
 }
@@ -116,6 +124,11 @@ export function buildFreestyleRoundCompletion(
     quizCount?: number
     roundPlan?: FreestyleRoundPlanState | null
     subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
+    /**
+     * Round clock. When present, headline and palace rows use it instead of
+     * encounter focus seconds, so quiz time is not added twice.
+     */
+    learningTime?: FreestyleRoundLearningTime | null
   },
 ): FreestyleRoundCompletion {
   const completedIds = options?.completedIds ?? []
@@ -219,7 +232,7 @@ export function buildFreestyleRoundCompletion(
     subject.palaces.set(palaceId, palace)
   })
 
-  const bySubject = Array.from(subjectBuckets.values()).map((subject) => {
+  let bySubject = Array.from(subjectBuckets.values()).map((subject) => {
     const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
       right.effectiveSeconds - left.effectiveSeconds
       || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
@@ -237,9 +250,18 @@ export function buildFreestyleRoundCompletion(
     || left.subjectName.localeCompare(right.subjectName, 'zh')
   ))
 
+  const learningTime = options?.learningTime
   let totalEffectiveSeconds = 0
-  for (const encounter of Object.values(encountersByCardId)) {
-    totalEffectiveSeconds += billableSeconds(encounter)
+  let quizSeconds = 0
+  if (learningTime) {
+    const totals = freestyleLearningTotals(learningTime)
+    totalEffectiveSeconds = totals.totalSeconds
+    quizSeconds = totals.quizSeconds
+    bySubject = applyAttributedLearningTime(bySubject, learningTime, subjectByPalaceId)
+  } else {
+    for (const encounter of Object.values(encountersByCardId)) {
+      totalEffectiveSeconds += billableSeconds(encounter)
+    }
   }
 
   return {
@@ -250,14 +272,100 @@ export function buildFreestyleRoundCompletion(
     remainingCandidates: Math.max(0, candidateCount - scheduledCount),
     quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
     totalEffectiveSeconds,
+    quizSeconds,
     bySubject,
   }
 }
 
+function sortPalaces(palaces: FreestyleRoundSubjectPalaceStat[]) {
+  return [...palaces].sort((left, right) => (
+    right.effectiveSeconds - left.effectiveSeconds
+    || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
+  ))
+}
+
+function sortSubjects(subjects: FreestyleRoundSubjectStat[]) {
+  return [...subjects].sort((left, right) => (
+    right.effectiveSeconds - left.effectiveSeconds
+    || left.subjectName.localeCompare(right.subjectName, 'zh')
+  ))
+}
+
 /**
- * True when every card in the feed has been handled: a unit rating, or a quiz
- * acknowledge written to completedIds. Retry occurrences still need their own
- * rating before the summary slot can appear.
+ * Palace rows show this round's attributed clock. Unassigned historical unit
+ * seconds stay on the headline and are not invented as an equal split here.
+ */
+function applyAttributedLearningTime(
+  bySubject: FreestyleRoundSubjectStat[],
+  learningTime: FreestyleRoundLearningTime,
+  subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>,
+): FreestyleRoundSubjectStat[] {
+  const subjects = bySubject.map((subject) => ({
+    ...subject,
+    effectiveSeconds: 0,
+    palaces: subject.palaces.map((palace) => ({ ...palace, effectiveSeconds: 0 })),
+  }))
+  const located = new Map<number, { subjectIndex: number; palaceIndex: number }>()
+  subjects.forEach((subject, subjectIndex) => {
+    subject.palaces.forEach((palace, palaceIndex) => {
+      if (palace.palaceId > 0) located.set(palace.palaceId, { subjectIndex, palaceIndex })
+    })
+  })
+  for (const [key, palaceTime] of Object.entries(learningTime.byPalace || {})) {
+    const palaceId = Number(key)
+    if (!Number.isInteger(palaceId) || palaceId <= 0) continue
+    const seconds = Math.max(
+      0,
+      (palaceTime.unitSeconds || 0) + (palaceTime.quizSeconds || 0) + (palaceTime.lookupSeconds || 0),
+    )
+    if (seconds <= 0) continue
+    const found = located.get(palaceId)
+    if (found) {
+      subjects[found.subjectIndex].palaces[found.palaceIndex].effectiveSeconds = seconds
+      continue
+    }
+    const subjectInfo = subjectByPalaceId?.get(palaceId)
+    const subjectId = subjectInfo?.id ?? null
+    const subjectName = subjectInfo?.name ?? '未分类'
+    let subject = subjects.find((item) => (
+      item.subjectId === subjectId && item.subjectName === subjectName
+    ))
+    if (!subject) {
+      subject = {
+        subjectId,
+        subjectName,
+        palaceCount: 0,
+        cardCount: 0,
+        effectiveSeconds: 0,
+        palaces: [],
+      }
+      subjects.push(subject)
+    }
+    subject.palaces.push({
+      palaceId,
+      palaceTitle: `宫殿 ${palaceId}`,
+      cardCount: 0,
+      effectiveSeconds: seconds,
+    })
+    located.set(palaceId, { subjectIndex: subjects.indexOf(subject), palaceIndex: subject.palaces.length - 1 })
+  }
+  return sortSubjects(subjects.map((subject) => {
+    const palaces = sortPalaces(subject.palaces)
+    return {
+      ...subject,
+      palaceCount: palaces.length,
+      cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
+      effectiveSeconds: palaces.reduce((sum, palace) => sum + palace.effectiveSeconds, 0),
+      palaces,
+    }
+  }))
+}
+
+/**
+ * True when every presented card has a this-round score, so the closing slot
+ * can open. 忘记/困难 count: once nothing unscored remains, 完成 must enter
+ * settlement instead of disabling. A blank 重练 still in the feed keeps the
+ * round open. An empty feed is not a finished round.
  */
 export function isFreestyleRoundComplete(
   cards: FreestyleCard[],
@@ -266,7 +374,7 @@ export function isFreestyleRoundComplete(
   roundPlan: FreestyleRoundPlanState | null = null,
 ): boolean {
   if (cards.length === 0) return false
-  return cards.every((card) => isHandled(card, encountersByCardId, completedIds, cards, roundPlan))
+  return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan) == null
 }
 
 function isPassedOccurrence(
@@ -380,6 +488,8 @@ export function findEarliestUnhandledIndex(
   const index = cards.findIndex((card) => {
     const id = String(card.id || '').trim()
     if (!id) return false
+    // The yellow boundary hint is never handled work — never a seek target.
+    if (isReviewHintId(id)) return false
     if (isHandled(card, encountersByCardId, completedIds, cards, roundPlan)) return false
     if (hasUnfinishedFamilyRetry(cards, card, encountersByCardId, completed, roundPlan)) return false
     return true
@@ -402,9 +512,10 @@ export function findEarliestCompleteSeekIndex(
 }
 
 /**
- * Right-side 完成: open the settlement slot when the round is handled,
- * otherwise seek the earliest unrated (then unfinished) unit. Null means the
- * viewport is already on that target (or the feed is empty).
+ * Right-side 完成: open the settlement slot once every presented card is
+ * scored, otherwise seek the earliest unrated unit. Null means the viewport
+ * is already on that target (or the feed is empty). A weak score is scored,
+ * so it must not leave the button disabled with nowhere to go.
  */
 export function resolveFreestyleCompleteSeek(options: {
   roundComplete: boolean

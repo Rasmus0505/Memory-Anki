@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .learning_time import empty_learning_time, normalize_learning_time
 from .overlay_quiz import normalize_overlay_quiz
 
 RETRY_GAP = 3
@@ -28,6 +29,7 @@ def empty_plan() -> Plan:
         "occurrences": [],
         "encounters": {},
         "today": "",
+        "learning_time": empty_learning_time(),
     }
 
 
@@ -154,6 +156,9 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(
             raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None
+        ),
+        "learning_time": normalize_learning_time(
+            raw.get("learning_time") if isinstance(raw.get("learning_time"), Mapping) else None
         ),
     }
     _collapse_retries(normalized)

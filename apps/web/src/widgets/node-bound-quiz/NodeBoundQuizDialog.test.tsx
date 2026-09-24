@@ -9,6 +9,7 @@ const getPalaceQuizQuestionsApiMock = vi.fn()
 const listPalaceQuizNodeBindingsApiMock = vi.fn()
 const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 const setPalaceQuizQuestionMarkedApiMock = vi.fn()
+const deletePalaceQuizQuestionApiMock = vi.fn()
 
 vi.mock('@/modules/settings/public', () => ({
   useAiRunConfigDialog: () => ({
@@ -23,6 +24,7 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   listPalaceQuizNodeBindingsApi: (...args: unknown[]) => listPalaceQuizNodeBindingsApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) => recordPalaceQuizChoiceAttemptApiMock(...args),
   setPalaceQuizQuestionMarkedApi: (...args: unknown[]) => setPalaceQuizQuestionMarkedApiMock(...args),
+  deletePalaceQuizQuestionApi: (...args: unknown[]) => deletePalaceQuizQuestionApiMock(...args),
 }))
 
 vi.mock('@/shared/feedback/toast', () => ({
@@ -122,6 +124,7 @@ describe('NodeBoundQuizDialog', () => {
     recordPalaceQuizChoiceAttemptApiMock.mockImplementation(async (questionId: number) => ({
       question: questionId === secondQuestion.id ? secondQuestion : sampleQuestion,
     }))
+    deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
     listPalaceQuizNodeBindingsApiMock.mockResolvedValue({
       items: [
         {
@@ -520,5 +523,80 @@ describe('NodeBoundQuizDialog', () => {
 
     expect(screen.queryByText('回答错误')).toBeNull()
     expect(onQuestionCompleted).not.toHaveBeenCalled()
+  })
+
+  describe('move to trash', () => {
+    it('removes the question from the queue after confirming', async () => {
+      const toastMock = await import('@/shared/feedback/toast')
+      render(
+        <NodeBoundQuizDialog
+          open
+          onOpenChange={() => {}}
+          palaceId={1}
+          nodeUid="node-1"
+          questionIds={[42, 43]}
+          onQuestionCompleted={() => {}}
+        />,
+      )
+
+      await screen.findByText('下列哪一项是细胞膜的主要成分？')
+      expect(screen.getByText('已答 0 / 2')).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
+      fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+
+      await vi.waitFor(() => {
+        expect(deletePalaceQuizQuestionApiMock).toHaveBeenCalledWith(42)
+        expect(screen.getByText('第二道关联题目')).toBeTruthy()
+      })
+      expect(screen.queryByText('下列哪一项是细胞膜的主要成分？')).toBeNull()
+      expect(toastMock.toast.success).toHaveBeenCalledWith('题目已移入回收站。')
+    })
+
+    it('keeps the question and reports when the delete fails', async () => {
+      const toastMock = await import('@/shared/feedback/toast')
+      deletePalaceQuizQuestionApiMock.mockRejectedValue(new Error('网络错误。'))
+      render(
+        <NodeBoundQuizDialog
+          open
+          onOpenChange={() => {}}
+          palaceId={1}
+          nodeUid="node-1"
+          questionIds={[42]}
+          onQuestionCompleted={() => {}}
+        />,
+      )
+
+      await screen.findByText('下列哪一项是细胞膜的主要成分？')
+      fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
+      fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+
+      await vi.waitFor(() => {
+        expect(toastMock.toast.error).toHaveBeenCalledWith('网络错误。')
+      })
+      expect(screen.getByText('下列哪一项是细胞膜的主要成分？')).toBeTruthy()
+    })
+
+    it('closes the dialog when the last question is deleted', async () => {
+      const onOpenChange = vi.fn()
+      render(
+        <NodeBoundQuizDialog
+          open
+          onOpenChange={onOpenChange}
+          palaceId={1}
+          nodeUid="node-1"
+          questionIds={[42]}
+          onQuestionCompleted={() => {}}
+        />,
+      )
+
+      await screen.findByText('下列哪一项是细胞膜的主要成分？')
+      fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
+      fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+
+      await vi.waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false)
+      })
+    })
   })
 })

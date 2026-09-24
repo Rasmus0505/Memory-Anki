@@ -10,6 +10,7 @@ import {
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
+import { FREESTYLE_REVIEW_HINT_ID, isReviewHintCard } from '@/shared/api/contracts'
 
 export type FreestyleSegmentTone = 'done' | 'retry' | 'current' | 'pending'
 
@@ -301,6 +302,7 @@ function progressCardLabel(
   cards: FreestyleCard[],
   roundPlan: FreestyleRoundPlanState | null,
 ): string {
+  if (isReviewHintCard(card)) return '提示'
   const sourceId = sourceCardId(card)
   const fromPlan = roundPlan?.cardsById[sourceId]?.label || roundPlan?.cardsById[card.id]?.label
   if (fromPlan) return fromPlan
@@ -330,6 +332,19 @@ function progressIds(
     if (!id || seen.has(id)) continue
     seen.add(id)
     ids.push(id)
+  }
+  // Plan-first ordering parks the plan-external yellow hint at the tail —
+  // seat it immediately before the first formal review unit instead.
+  const hintIndex = ids.indexOf(FREESTYLE_REVIEW_HINT_ID)
+  if (hintIndex >= 0) {
+    const firstReview = cards.find(
+      (card) => card.type === 'mindmap_branch' && 'unit_id' in card && Boolean(card.unit_id),
+    )
+    const reviewIndex = firstReview ? ids.indexOf(String(firstReview.id)) : -1
+    if (reviewIndex >= 0 && hintIndex > reviewIndex) {
+      ids.splice(hintIndex, 1)
+      ids.splice(ids.indexOf(String(firstReview?.id || '')), 0, FREESTYLE_REVIEW_HINT_ID)
+    }
   }
   return ids
 }
@@ -472,7 +487,8 @@ export function buildFreestyleProgressSummary(
       })
       if (retryKind) {
         retryInserted += 1
-      } else {
+      } else if (!isReviewHintCard(card)) {
+        // The hint counts on the HUD rail but never in scheduledBase plan math.
         baseItems.push({ id: card.id, sourceId })
       }
       if (

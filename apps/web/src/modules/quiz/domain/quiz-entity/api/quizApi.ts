@@ -120,6 +120,48 @@ export function batchDeletePalaceQuizQuestionsApi(questionIds: number[]) {
   })
 }
 
+export function getQuizTrashApi(limit = 50, offset = 0) {
+  return request<{
+    items: import('@/shared/api/contracts').QuizTrashItem[]
+    total: number
+    limit: number
+    offset: number
+  }>(`/palace-quiz-questions/trash?limit=${limit}&offset=${offset}`)
+}
+
+export function restorePalaceQuizQuestionApi(questionId: number) {
+  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/restore`, {
+    method: 'POST',
+    persistence: {
+      resourceKey: `palace-quiz-question:${questionId}:restore`,
+      description: '从回收站恢复题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function permanentDeletePalaceQuizQuestionApi(questionId: number) {
+  return request<{ ok: boolean }>(`/palace-quiz-questions/${questionId}/permanent`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `palace-quiz-question:${questionId}:permanent-delete`,
+      description: '永久删除题目',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function purgeQuizTrashApi() {
+  return request<{ ok: boolean; purged_count: number }>(`/palace-quiz-questions/trash/purge`, {
+    method: 'POST',
+    persistence: {
+      resourceKey: `palace-quiz-question:trash-purge`,
+      description: '清空题目回收站',
+      replayMode: 'manual',
+    },
+  })
+}
+
 export function resetPalaceQuizQuestionAttemptsApi(questionIds: number[]) {
   return request<{ ok: boolean; reset_count: number }>(`/palace-quiz-questions/reset-attempts`, {
     method: 'POST',

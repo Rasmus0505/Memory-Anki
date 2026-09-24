@@ -64,6 +64,7 @@ export function FreestyleRatingBar({
   shortcutsActive,
   ratingScope = 'unit',
   palaceDueCount = 1,
+  hintMode = false,
   onRatingScopeChange,
   onRate,
   onDismissError,
@@ -86,6 +87,8 @@ export function FreestyleRatingBar({
   shortcutsActive: boolean
   ratingScope?: FreestyleRatingScope
   palaceDueCount?: number
+  /** Yellow hint card: buttons only advance, so never show schedule copy. */
+  hintMode?: boolean
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   onRate: (rating: UnitRating) => void
   onDismissError?: () => void
@@ -226,7 +229,11 @@ export function FreestyleRatingBar({
               ? palaceMode && palaceKind
                 ? palaceRatingEffectLine(effect.label, palaceDueCount)
                 : ratingEffectLabel(effect, retryAfterCards)
-              : reviewReady ? '计划不可用' : '加载中'
+              : hintMode
+                ? '继续'
+                : reviewReady
+                  ? '计划不可用'
+                  : '加载中'
             const preview = effect
               ? palaceMode && palaceKind
                 ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)

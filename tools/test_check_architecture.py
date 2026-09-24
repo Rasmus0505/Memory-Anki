@@ -650,7 +650,65 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
         "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
-        "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n",
+        "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n"
+        "viewingCard: !viewingCompleteSlot && currentCard != null\n"
+        "onCancelSettlement={navigatePrevious}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "roundCompletion.ts",
+        "export function freestyleFeedSlotCount(cardCount: number, roundComplete: boolean) {\n"
+        "  return cardCount + (roundComplete ? 1 : 0)\n"
+        "}\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n"
+        "settlement 再来一轮 mints via startFreestyleRoundApi.\n"
+        "取消结算 leaves the slot and later dwell still counts.\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundCompleteCard.tsx",
+        "onAnotherRound()\n再来一轮\ntotalEffectiveSeconds\nbySubject\n"
+        "取消结算\nonCancelSettlement\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "hooks"
+        / "useImmersiveQueue.ts",
+        "forceStart\nstartNextRound\nstartFreestyleRoundApi\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyle-cards.ts",
+        "export function formatTimer(seconds: number) {\n  const hours = Math.floor(seconds / 3600)\n  return String(hours)\n}\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_complete_slot_reachable(errors)
+
+    assert errors == []
+
+
+def test_freestyle_settlement_cancel_keeps_later_learning_time(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
+        "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n"
+        "viewingCard: !roundComplete\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "roundCompletion.ts",
@@ -664,30 +722,63 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
         "settlement 再来一轮 mints via startFreestyleRoundApi.\n",
     )
     write_file(
-        web_src
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "components"
-        / "FreestyleRoundCompleteCard.tsx",
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
         "onAnotherRound()\n再来一轮\ntotalEffectiveSeconds\nbySubject\n",
     )
     write_file(
-        web_src
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "hooks"
-        / "useImmersiveQueue.ts",
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
         "forceStart\nstartNextRound\nstartFreestyleRoundApi\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyle-cards.ts",
+        "export function formatTimer(seconds: number) { return String(seconds) }\n",
     )
 
     errors: list[str] = []
     check_architecture.check_freestyle_complete_slot_reachable(errors)
 
-    assert errors == []
+    assert any("取消结算" in error for error in errors)
+    assert any("navigatePrevious" in error for error in errors)
+    assert any("roundComplete" in error for error in errors)
+    assert any("3600" in error for error in errors)
+
+
+def test_freestyle_round_learning_time_requires_plan_clock_and_settlement_line(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "normalized = {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "presentation" / "router.py",
+        "@router.post('/overlay-quiz/ensure')\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
+        "本次随心\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "export default function Page() { return null }\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "closing slot\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_round_learning_time(errors)
+
+    assert any("learning_time" in error for error in errors)
+    assert any("/learning-time" in error for error in errors)
+    assert any("做题时间" in error for error in errors)
+    assert any("useFreestyleRoundLearningClock" in error for error in errors)
 
 
 def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(

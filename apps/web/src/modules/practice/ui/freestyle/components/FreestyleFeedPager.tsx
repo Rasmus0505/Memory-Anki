@@ -8,6 +8,7 @@ export function FreestyleFeedPager({
   canGoNext,
   canComplete,
   completeTitle,
+  previousTitle = '上一张：返回上一个单元',
   onPrevious,
   onNext,
   onComplete,
@@ -16,6 +17,7 @@ export function FreestyleFeedPager({
   canGoNext: boolean
   canComplete: boolean
   completeTitle: string
+  previousTitle?: string
   onPrevious: () => void
   onNext: () => void
   onComplete: () => void
@@ -29,7 +31,7 @@ export function FreestyleFeedPager({
         <button
           type="button"
           className={pagerButtonClass}
-          title="上一张：返回上一个单元"
+          title={previousTitle}
           aria-label="上一张"
           disabled={!canGoPrevious}
           onClick={onPrevious}
