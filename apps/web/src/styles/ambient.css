@@ -1,0 +1,98 @@
+/*
+ * Paper-room atmosphere. The shell root is `isolate`, so the back layer
+ * (z-index -1) sits above the page ground but under every card, and the
+ * front wash stays below portaled dialogs (z-50 on body).
+ */
+.ma-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ma-ambient--back {
+  z-index: -1;
+}
+
+.ma-ambient--front {
+  z-index: 45;
+}
+
+.ma-ambient__window {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 90%;
+  background:
+    radial-gradient(60% 55% at 72% 0%, hsl(40 100% 70% / calc(var(--ma-ambient-light, 0.05) * 2.2)), transparent 70%),
+    radial-gradient(45% 40% at 18% 8%, hsl(30 100% 72% / var(--ma-ambient-light, 0.05)), transparent 72%);
+  transition: background 1.2s var(--ease-in-out-soft);
+}
+
+.ma-ambient__motes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ma-ambient__tint {
+  position: absolute;
+  inset: 0;
+  background: var(--ma-ambient-tint, transparent);
+  mix-blend-mode: multiply;
+  transition: background 4s linear;
+}
+
+.dark .ma-ambient__tint {
+  mix-blend-mode: soft-light;
+}
+
+.ma-ambient__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.32 0 0 0 0 0.18 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+.dark .ma-ambient__grain {
+  opacity: 0.07;
+  mix-blend-mode: screen;
+}
+
+.ma-ambient__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 50% 40%, transparent 62%, hsl(28 40% 30% / 0.07) 100%);
+}
+
+.dark .ma-ambient__vignette {
+  background: radial-gradient(120% 100% at 50% 40%, transparent 58%, hsl(24 30% 4% / 0.35) 100%);
+}
+
+/* Exam within two weeks: the vignette edge breathes a faint ember. */
+.ma-ambient--front[data-exam-pulse='on'] .ma-ambient__vignette {
+  animation: ma-exam-breath var(--ma-exam-pulse, 5s) ease-in-out infinite;
+}
+
+@keyframes ma-exam-breath {
+  0%, 100% { opacity: 1; }
+  50% {
+    opacity: 1;
+    box-shadow: inset 0 0 120px hsl(12 80% 55% / 0.07);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ma-ambient--front[data-exam-pulse='on'] .ma-ambient__vignette {
+    animation: none;
+    box-shadow: inset 0 0 120px hsl(12 80% 55% / 0.05);
+  }
+}
+
+@media print {
+  .ma-ambient {
+    display: none;
+  }
+}
