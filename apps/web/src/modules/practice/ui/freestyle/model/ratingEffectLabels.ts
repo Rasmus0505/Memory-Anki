@@ -48,6 +48,14 @@ export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: 
  * consequence has to be readable before the tap — the full sentence is too long
  * for a quarter-width button, so this keeps only the timing.
  */
+/** Floating "where it went" tag shown for a moment after a rating lands. */
+export function ratingDestinationLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
+  if (effect.passed && effect.schedule_changed === false) return '已记下'
+  if (effect.passed) return `${passedGapDays(effect)}天后见`
+  const count = clampRetryGap(retryAfterCards)
+  return count === 0 ? '马上再来' : `${count}张后再见`
+}
+
 export function compactRatingEffectLabel(
   effect: UnitRatingEffectDto,
   retryAfterCards: number,
