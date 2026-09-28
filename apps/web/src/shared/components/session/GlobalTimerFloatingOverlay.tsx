@@ -24,7 +24,10 @@ import {
   readTimerOverlayLayout,
   saveTimerOverlayLayout,
   type TimerOverlayLayout,
+  type TimerOverlayRemember,
 } from '@/shared/components/session/timer-overlay-layout'
+import { CLIENT_PREFERENCES_UPDATED_EVENT } from '@/shared/preferences/clientPreferences'
+import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 import { useTimerOverlayDrag } from '@/shared/components/session/useTimerOverlayDrag'
 
 export function GlobalTimerFloatingOverlay({
@@ -47,18 +50,37 @@ export function GlobalTimerFloatingOverlay({
   )
   const [idlePanelExpanded, setIdlePanelExpanded] = React.useState(false)
   const activeEntry = React.useMemo(() => selectActiveTimerEntry(entries), [entries])
+  const pointerInteractionRef = React.useRef(false)
 
   const persistLayout = React.useCallback(
-    (nextLayout: TimerOverlayLayout | ((current: TimerOverlayLayout) => TimerOverlayLayout)) => {
+    (
+      nextLayout: TimerOverlayLayout | ((current: TimerOverlayLayout) => TimerOverlayLayout),
+      remember: TimerOverlayRemember = { size: false, position: false },
+    ) => {
       setLayout((current) => {
         const resolved = typeof nextLayout === 'function' ? nextLayout(current) : nextLayout
         const normalized = resolveFloatingTimerLayout(resolved)
-        saveTimerOverlayLayout(normalized)
+        saveTimerOverlayLayout(normalized, remember)
         return normalized
       })
     },
     [],
   )
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (pointerInteractionRef.current) return
+      setLayout(resolveFloatingTimerLayout(readTimerOverlayLayout()))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  React.useEffect(() => onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (detail) => {
+    if (!detail || !Object.prototype.hasOwnProperty.call(detail, 'window_layouts')) return
+    if (pointerInteractionRef.current) return
+    setLayout(resolveFloatingTimerLayout(readTimerOverlayLayout()))
+  }), [])
 
   React.useEffect(() => {
     const unsubscribe = onAppEvent(TIMER_AUTOMATION_UPDATED_EVENT, (detail) => {
@@ -78,15 +100,17 @@ export function GlobalTimerFloatingOverlay({
     stopPointerInteraction,
     toggleCollapsed,
     suppressCapsuleClickRef,
-  } = useTimerOverlayDrag(layout, persistLayout)
+  } = useTimerOverlayDrag(layout, persistLayout, pointerInteractionRef)
 
   const hideOverlay = React.useCallback(() => {
     onCommand({ type: 'closeOverlay' })
-    persistLayout((current) => ({ ...current, hidden: true }))
+    persistLayout((current) => ({ ...current, hidden: true }), { size: false, position: false })
+    flushWindowLayoutRemotePersist()
   }, [onCommand, persistLayout])
 
   const restoreOverlay = React.useCallback(() => {
-    persistLayout((current) => ({ ...current, hidden: false, collapsed: false }))
+    persistLayout((current) => ({ ...current, hidden: false, collapsed: false }), { size: false, position: false })
+    flushWindowLayoutRemotePersist()
     setIdlePanelExpanded(true)
   }, [persistLayout])
 

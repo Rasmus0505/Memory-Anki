@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { CircleDot } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -10,6 +12,7 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Textarea } from '@/shared/components/ui/textarea'
+import { cn } from '@/shared/lib/utils'
 import { formatSessionRecorderClock } from './sessionRecorderFormat'
 import {
   closeSessionRecorderDialog,
@@ -25,6 +28,35 @@ import {
   updateSelectedSessionRecorderReport,
 } from './sessionRecorderStore'
 import { useSessionRecorderState } from './useSessionRecorderState'
+
+export const SESSION_RECORDER_ANCHOR_ATTR = 'data-session-recorder-anchor'
+export const SESSION_RECORDER_LAYER_ZCLASS = 'z-[20000]'
+const DRAG_CLICK_THRESHOLD_PX = 4
+
+function readAnchorPosition() {
+  const anchor = document.querySelector(`[${SESSION_RECORDER_ANCHOR_ATTR}="true"]`)
+  if (!(anchor instanceof HTMLElement)) return null
+  const rect = anchor.getBoundingClientRect()
+  if (rect.width === 0 && rect.height === 0) return null
+  return { x: rect.left, y: rect.top }
+}
+
+function fallbackPosition(width: number) {
+  const inset = 12
+  return {
+    x: Math.max(inset, window.innerWidth - width - inset),
+    y: inset,
+  }
+}
+
+function clampPosition(x: number, y: number, width: number, height: number) {
+  const maxX = Math.max(0, window.innerWidth - width)
+  const maxY = Math.max(0, window.innerHeight - height)
+  return {
+    x: Math.min(maxX, Math.max(0, x)),
+    y: Math.min(maxY, Math.max(0, y)),
+  }
+}
 
 async function copyText(value: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -130,6 +162,19 @@ function SessionRecorderDialog() {
 function SessionRecorderFloatingControl() {
   const state = useSessionRecorderState()
   const [now, setNow] = useState(() => Date.now())
+  const [position, setPosition] = useState(() => fallbackPosition(36))
+  const [dragged, setDragged] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const positionRef = useRef(position)
+  const draggedRef = useRef(false)
+  const suppressClickRef = useRef(false)
+  positionRef.current = position
+  const dragRef = useRef<{
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+  } | null>(null)
 
   useEffect(() => {
     if (!state.recording) return
@@ -137,24 +182,134 @@ function SessionRecorderFloatingControl() {
     return () => window.clearInterval(timer)
   }, [state.recording])
 
-  if (!state.recording || !state.current) return null
+  useLayoutEffect(() => {
+    if (dragged) return
+    const sync = () => {
+      if (draggedRef.current) return
+      const width = rootRef.current?.offsetWidth ?? (state.recording ? 180 : 36)
+      const height = rootRef.current?.offsetHeight ?? 36
+      const anchored = readAnchorPosition() ?? fallbackPosition(width)
+      const next = clampPosition(anchored.x, anchored.y, width, height)
+      setPosition((current) => (current.x === next.x && current.y === next.y ? current : next))
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    const anchor = document.querySelector(`[${SESSION_RECORDER_ANCHOR_ATTR}="true"]`)
+    const observed = anchor instanceof Element ? anchor.closest('aside') ?? anchor : null
+    const observer = observed ? new ResizeObserver(sync) : null
+    if (observed) observer?.observe(observed)
+    return () => {
+      window.removeEventListener('resize', sync)
+      observer?.disconnect()
+    }
+  }, [dragged, state.recording])
 
-  const elapsed = formatSessionRecorderClock(now - Date.parse(state.current.startedAt))
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      const node = rootRef.current
+      const target = event.target instanceof Element ? event.target : null
+      if (!node || !target || !node.contains(target)) return
+      if (target.closest('[data-session-recorder-control="true"]')) return
+      suppressClickRef.current = false
+      dragRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: positionRef.current.x,
+        originY: positionRef.current.y,
+      }
+    }
+    const handleMove = (event: PointerEvent) => {
+      const drag = dragRef.current
+      const node = rootRef.current
+      if (!drag || !node || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return
+      if (
+        Math.abs(event.clientX - drag.startX) > DRAG_CLICK_THRESHOLD_PX ||
+        Math.abs(event.clientY - drag.startY) > DRAG_CLICK_THRESHOLD_PX
+      ) {
+        suppressClickRef.current = true
+        draggedRef.current = true
+        setDragged(true)
+      }
+      setPosition(
+        clampPosition(
+          drag.originX + event.clientX - drag.startX,
+          drag.originY + event.clientY - drag.startY,
+          node.offsetWidth,
+          node.offsetHeight,
+        ),
+      )
+    }
+    const handleUp = () => {
+      dragRef.current = null
+    }
+    window.addEventListener('pointerdown', handleDown)
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
+    return () => {
+      window.removeEventListener('pointerdown', handleDown)
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+    }
+  }, [])
 
-  return (
+  const elapsed = state.current
+    ? formatSessionRecorderClock(now - Date.parse(state.current.startedAt))
+    : '00:00'
+
+  const openRecorder = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    openSessionRecorderDialog()
+  }
+
+  const layer = (
     <div
-      className="pointer-events-none fixed right-[max(env(safe-area-inset-right),0.75rem)] top-[max(env(safe-area-inset-top),0.75rem)] z-[120]"
+      ref={rootRef}
+      className={cn(
+        'pointer-events-auto fixed cursor-grab touch-none select-none active:cursor-grabbing',
+        SESSION_RECORDER_LAYER_ZCLASS,
+      )}
+      style={{ left: position.x, top: position.y }}
       data-session-recorder="true"
+      data-session-recorder-hud="true"
+      title="拖动可移动"
     >
-      <div className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-soft">
-        <span className="size-2.5 shrink-0 rounded-full bg-destructive" aria-hidden />
-        <span className="text-xs tabular-nums text-muted-foreground">录制中 {elapsed}</span>
-        <Button type="button" size="sm" variant="destructive" onClick={() => stopSessionRecording()}>
-          停止
+      {state.recording && state.current ? (
+        <div className="flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-soft">
+          <span className="size-2.5 shrink-0 rounded-full bg-destructive" aria-hidden />
+          <span className="text-xs tabular-nums text-muted-foreground">录制中 {elapsed}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            data-session-recorder-control="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => stopSessionRecording()}
+          >
+            停止
+          </Button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="录制"
+          title="操作记录"
+          onClick={openRecorder}
+        >
+          <CircleDot />
         </Button>
-      </div>
+      )}
     </div>
   )
+
+  if (typeof document === 'undefined') return layer
+  return createPortal(layer, document.body)
 }
 
 export function SessionRecorderHost() {

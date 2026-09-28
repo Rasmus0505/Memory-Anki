@@ -1,19 +1,26 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetWindowLayoutMemoryForTest } from '@/shared/preferences/windowLayoutMemory'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+
+function setViewport(width: number, height: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
+  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height })
+}
 
 describe('Dialog', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    resetWindowLayoutMemoryForTest()
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      writable: true,
-      value: 1024,
-    })
+    resetClientPreferenceCacheForTest()
+    resetWindowLayoutMemoryForTest()
+    setViewport(1024, 768)
   })
 
   it('renders above immersive fullscreen shells', () => {
@@ -213,6 +220,46 @@ describe('Dialog', () => {
     expect(stored.x).not.toBe(beforeDrag.x)
     expect(stored.x).toBeGreaterThan(16)
     expect(stored.y).toBeGreaterThan(16)
+  })
+
+  it('restores a remembered floating width ratio after the viewport shrinks', () => {
+    setViewport(1200, 800)
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent floatingId="ratio-test">
+          <DialogHeader>
+            <div>
+              <DialogTitle>ratio dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    const wideWidth = dialog.style.width
+    const stored = () => JSON.parse(window.localStorage.getItem('memory-anki-floating-dialog:ratio-test') || '{}')
+    const ratio = stored().widthRatio
+    expect(typeof ratio).toBe('number')
+    expect(ratio).toBeGreaterThan(0)
+
+    act(() => {
+      setViewport(640, 480)
+      window.dispatchEvent(new Event('resize'))
+    })
+
+    expect(stored().widthRatio).toBe(ratio)
+    expect(dialog.style.width).not.toBe(wideWidth)
+
+    act(() => {
+      setViewport(1200, 800)
+      window.dispatchEvent(new Event('resize'))
+    })
+
+    expect(dialog.style.width).toBe(wideWidth)
+    expect(stored().widthRatio).toBe(ratio)
   })
 
   it('prevents outside dismissal while pinned', () => {

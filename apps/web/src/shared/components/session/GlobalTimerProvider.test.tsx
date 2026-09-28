@@ -22,6 +22,7 @@ import {
 import { TIMER_OVERLAY_LAYOUT_STORAGE_KEY } from '@/shared/components/session/timer-overlay-layout'
 import { resetTimedSessionStoresForTests } from '@/modules/session/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetWindowLayoutMemoryForTest } from '@/shared/preferences/windowLayoutMemory'
 import type { TimerFocusScene } from '@/shared/components/session/timer-scenes'
 import type {
   DesktopTimerBridge,
@@ -89,6 +90,7 @@ describe('GlobalTimerProvider', () => {
   beforeEach(() => {
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
+    resetWindowLayoutMemoryForTest()
     resetTimedSessionStoresForTests()
     delete window.memoryAnkiDesktopTimer
   })

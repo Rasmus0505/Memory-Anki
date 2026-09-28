@@ -8,7 +8,6 @@ export type PageHistorySectionKey =
   | 'freestyleSecondary'
   | 'palaces'
   | 'english'
-  | 'englishReading'
   | 'knowledge'
   | 'review'
   | 'profile'

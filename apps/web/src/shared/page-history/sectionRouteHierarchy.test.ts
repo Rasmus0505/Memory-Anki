@@ -18,16 +18,12 @@ describe('sectionRouteHierarchy', () => {
     ])
   })
 
-  it('walks english listening and reading levels', () => {
-    expect(resolveSectionHierarchicalParent('/english/listening')).toBe('/english')
+  it('walks english listening levels with listening as the section home', () => {
+    expect(resolveSectionHierarchicalParent('/english/listening')).toBeNull()
     expect(resolveSectionHierarchicalParent('/english/listening/courses/7')).toBe(
       '/english/listening',
     )
-    expect(resolveSectionHierarchicalParent('/english/reading/materials/9')).toBe(
-      '/english/reading',
-    )
     expect(getSectionHierarchyChain('/english/listening/courses/7')).toEqual([
-      '/english',
       '/english/listening',
       '/english/listening/courses/7',
     ])

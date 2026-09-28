@@ -24,9 +24,10 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', asChild = false, loading = false, loadingText, children, ...props }, ref) => {
     const base =
-      'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0'
+      'ma-pressable inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0'
     const variants: Record<string, string> = {
-      default: 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90',
+      default:
+        'bg-primary text-primary-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.22),0_1px_2px_hsl(24_60%_20%/0.18),0_4px_14px_-4px_hsl(28_90%_50%/0.45)] hover:bg-primary/92 hover:shadow-glow',
       destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
       // Always pin text color: freestyle immersive chrome inherits light text from a dark shell,
       // and outline/ghost sit on light surfaces — missing text-* makes labels/icons invisible.

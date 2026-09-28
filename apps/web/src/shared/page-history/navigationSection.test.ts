@@ -18,12 +18,11 @@ describe('resolveNavigationSection', () => {
     expect(resolveNavigationSection('/palaces/new')).toBe('knowledge')
     expect(resolveNavigationSection('/palaces/42/edit')).toBe('knowledge')
     expect(resolveNavigationSection('/palaces/42/quiz')).toBe('knowledge')
-    expect(resolveNavigationSection('/batch-generation')).toBe('knowledge')
   })
 
   it('maps english and review/insight hubs', () => {
     expect(resolveNavigationSection('/english')).toBe('english')
-    expect(resolveNavigationSection('/english/reading')).toBe('english')
+    expect(resolveNavigationSection('/english/listening')).toBe('english')
     expect(resolveNavigationSection('/dashboard')).toBe('review')
     expect(resolveNavigationSection('/freestyle')).toBe('freestyle')
     expect(resolveNavigationSection('/review')).toBeNull()

@@ -82,7 +82,7 @@ describe('useNavigationHistory', () => {
     expect(screen.getByTestId('section').textContent).toBe('palaces')
   })
 
-  it('steps english course → listening library → english hub via section back', () => {
+  it('steps english course → listening library via section back', () => {
     render(
       <MemoryRouter initialEntries={['/english/listening/courses/7']}>
         <Routes>
@@ -96,9 +96,6 @@ describe('useNavigationHistory', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'back' }))
     expect(screen.getByTestId('path').textContent).toBe('/english/listening')
-
-    fireEvent.click(screen.getByRole('button', { name: 'back' }))
-    expect(screen.getByTestId('path').textContent).toBe('/english')
     expect((screen.getByRole('button', { name: 'back' }) as HTMLButtonElement).disabled).toBe(true)
   })
 

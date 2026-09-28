@@ -1,27 +1,47 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import {
-  createCenteredFloatingLayout,
-  inferWidthFromClassName,
-} from './dialogFloatingLayout'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetWindowLayoutMemoryForTest, readFloatingDialogMemory } from '@/shared/preferences/windowLayoutMemory'
+import { applyRememberedFloatingSize, writeStoredFloatingLayout } from './dialogFloatingLayout'
 
-describe('dialogFloatingLayout', () => {
+function setViewport(width: number, height: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
+  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height })
+}
+
+describe('dialog floating layout ratios', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetWindowLayoutMemoryForTest()
+    setViewport(1200, 800)
+  })
+
   afterEach(() => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
-    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 768 })
+    window.localStorage.clear()
+    resetWindowLayoutMemoryForTest()
+    setViewport(1024, 768)
   })
 
-  it('reads compact width from max-w-* class names', () => {
-    expect(inferWidthFromClassName('max-w-md')).toBe(448)
-    expect(inferWidthFromClassName('foo max-w-lg bar')).toBe(512)
-    expect(inferWidthFromClassName('no-max')).toBeNull()
-  })
+  it('keeps a manual width ratio when a smaller viewport is applied', () => {
+    const storageKey = 'memory-anki-floating-dialog:ratio'
+    writeStoredFloatingLayout(
+      storageKey,
+      { x: 80, y: 40, width: 900, height: 500, collapsed: false, pinned: false },
+      { size: true, position: true },
+    )
 
-  it('centers a compact dialog using its inferred width, not the 820 default', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1400 })
-    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 900 })
-    const layout = createCenteredFloatingLayout({ width: 448 })
-    expect(layout.width).toBe(448)
-    expect(layout.x).toBe(476)
-    expect(layout.y).toBeGreaterThan(200)
+    setViewport(500, 400)
+    const applied = applyRememberedFloatingSize(storageKey, {
+      x: 40,
+      y: 40,
+      width: 200,
+      height: 180,
+      collapsed: false,
+      pinned: true,
+    })
+
+    expect(applied.width).toBeLessThan(900)
+    expect(applied.pinned).toBe(true)
+    expect(readFloatingDialogMemory('ratio')?.widthRatio).toBe(0.75)
+    setViewport(1200, 800)
+    expect(applyRememberedFloatingSize(storageKey, applied).width).toBe(900)
   })
 })

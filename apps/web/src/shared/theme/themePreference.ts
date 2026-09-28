@@ -3,8 +3,8 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 export const THEME_STORAGE_KEY = 'memory-anki-theme'
 export const THEME_UPDATED_EVENT = 'memory-anki-theme-updated'
 
-export const LIGHT_THEME_COLOR = '#f9f7f3'
-export const DARK_THEME_COLOR = '#1a1614'
+export const LIGHT_THEME_COLOR = '#fbf6ef'
+export const DARK_THEME_COLOR = '#181411'
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return value === 'light' || value === 'dark' || value === 'system'

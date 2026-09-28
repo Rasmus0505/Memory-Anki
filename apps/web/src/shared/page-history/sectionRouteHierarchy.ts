@@ -22,19 +22,13 @@
  *      └─ /knowledge[?subjectId]       ← 知识树编辑
  *
  *  英语 english
- *    /english
- *      ├─ /english/listening
- *      │    └─ /english/listening/courses/:id
- *      ├─ /english/reading
- *      │    └─ /english/reading/materials/:id
- *      ├─ /english/patterns
- *      └─ /english/vocab
+ *    /english/listening
+ *      └─ /english/listening/courses/:id
  *
  *  创建 knowledge
  *    /palaces/new
- *      ├─ /palaces/:id/edit
- *      │    └─ /palaces/:id/quiz
- *      └─ /batch-generation
+ *      └─ /palaces/:id/edit
+ *           └─ /palaces/:id/quiz
  *
  *  洞察 review
  *    /dashboard
@@ -124,16 +118,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
 
   // ── 英语 ──────────────────────────────────────────────
   if (section === 'english') {
-    if (/^\/english\/listening\/courses\/\d+$/.test(pathname)) return '/english/listening'
-    if (/^\/english\/reading\/materials\/\d+$/.test(pathname)) return '/english/reading'
-    if (
-      pathname === '/english/listening' ||
-      pathname === '/english/reading' ||
-      pathname === '/english/patterns' ||
-      pathname === '/english/vocab'
-    ) {
-      return root
-    }
     return root
   }
 
@@ -144,7 +128,6 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
       return id ? `/palaces/${id}/edit` : root
     }
     if (/^\/palaces\/\d+\/edit$/.test(pathname)) return root
-    if (pathname === '/batch-generation') return root
     if (pathname === '/palaces/new') return null
     return root
   }
@@ -205,10 +188,6 @@ export function describeNavigationPath(fullPath: string): string {
   if (/^\/english\/listening\/courses\/\d+$/.test(pathname)) {
     return '听力课程'
   }
-  if (pathname === '/english/reading') return '阅读库'
-  if (/^\/english\/reading\/materials\/\d+$/.test(pathname)) return '阅读文章'
-  if (pathname === '/english/patterns') return '句模'
-  if (pathname === '/english/vocab') return '生词本'
   if (pathname === '/freestyle') return '随心首页'
   if (pathname === '/freestyle-2') return '随心 2'
   if (pathname === '/palaces/new') return '创建入口'
@@ -216,7 +195,6 @@ export function describeNavigationPath(fullPath: string): string {
   if (/^\/palaces\/\d+\/quiz$/.test(pathname)) return '宫殿测验'
   if (/^\/palaces\/\d+$/.test(pathname)) return '宫殿详情'
   if (pathname === '/dashboard' || pathname === '/') return '洞察首页'
-  if (pathname === '/batch-generation') return '批量生成'
   return pathname
 }
 

@@ -71,7 +71,7 @@ export function GlobalTimerProvider({
       if (!previousShowFloatingTimerRef.current && nextConfig.showFloatingTimer) {
         const layout = readTimerOverlayLayout()
         if (layout.hidden) {
-          saveTimerOverlayLayout({ ...layout, hidden: false })
+          saveTimerOverlayLayout({ ...layout, hidden: false }, { size: false, position: false })
         }
       }
       previousShowFloatingTimerRef.current = nextConfig.showFloatingTimer

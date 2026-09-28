@@ -5,7 +5,6 @@ describe('pageHistoryRoute', () => {
   it('builds stable object keys for dynamic learning pages', () => {
     expect(resolvePageHistoryKey('/palaces/42')).toBe('palace:view:42')
     expect(resolvePageHistoryKey('/english/listening/courses/7')).toBe('english:course:7')
-    expect(resolvePageHistoryKey('/english/reading/materials/3')).toBe('english:material:3')
     expect(resolvePageHistoryKey('/freestyle')).toBe('freestyle')
   })
 

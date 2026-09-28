@@ -5,11 +5,19 @@ import {
   type ResizeHandleDirection,
   type TimerResizeState,
 } from '@/shared/components/session/globalTimerModel'
-import type { TimerOverlayLayout } from '@/shared/components/session/timer-overlay-layout'
+import type { TimerOverlayLayout, TimerOverlayRemember } from '@/shared/components/session/timer-overlay-layout'
+import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 
-type PersistLayout = (nextLayout: TimerOverlayLayout | ((current: TimerOverlayLayout) => TimerOverlayLayout)) => void
+type PersistLayout = (
+  nextLayout: TimerOverlayLayout | ((current: TimerOverlayLayout) => TimerOverlayLayout),
+  remember?: TimerOverlayRemember,
+) => void
 
-export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: PersistLayout) {
+export function useTimerOverlayDrag(
+  layout: TimerOverlayLayout,
+  persistLayout: PersistLayout,
+  interactionActiveRef?: React.MutableRefObject<boolean>,
+) {
   const dragStateRef = React.useRef<{
     startX: number
     startY: number
@@ -27,6 +35,7 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
     ) {
       return
     }
+    if (interactionActiveRef) interactionActiveRef.current = true
     dragStateRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -37,9 +46,10 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
     if ('setPointerCapture' in event.currentTarget) {
       event.currentTarget.setPointerCapture(event.pointerId)
     }
-  }, [layout.x, layout.y])
+  }, [interactionActiveRef, layout.x, layout.y])
 
   const beginResize = React.useCallback((direction: ResizeHandleDirection, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (interactionActiveRef) interactionActiveRef.current = true
     resizeStateRef.current = {
       direction,
       startX: event.clientX,
@@ -53,7 +63,7 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
       event.currentTarget.setPointerCapture(event.pointerId)
     }
     event.stopPropagation()
-  }, [layout.height, layout.width, layout.x, layout.y])
+  }, [interactionActiveRef, layout.height, layout.width, layout.x, layout.y])
 
   const handlePointerMove = React.useCallback((clientX: number, clientY: number) => {
     if (dragStateRef.current) {
@@ -67,7 +77,7 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
         ...current,
         x: (dragState?.originX ?? current.x) + deltaX,
         y: (dragState?.originY ?? current.y) + deltaY,
-      }))
+      }), { position: true, size: false })
     }
 
     if (resizeStateRef.current) {
@@ -82,7 +92,7 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
       persistLayout((current) => ({
         ...current,
         ...nextLayout,
-      }))
+      }), { position: true, size: true })
     }
   }, [persistLayout])
 
@@ -91,9 +101,12 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
   }, [handlePointerMove])
 
   const stopPointerInteraction = React.useCallback(() => {
+    const wasInteracting = dragStateRef.current != null || resizeStateRef.current != null
     dragStateRef.current = null
     resizeStateRef.current = null
-  }, [])
+    if (interactionActiveRef) interactionActiveRef.current = false
+    if (wasInteracting) flushWindowLayoutRemotePersist()
+  }, [interactionActiveRef])
 
   React.useEffect(() => {
     const handleWindowPointerMove = (event: PointerEvent) => {
@@ -117,7 +130,8 @@ export function useTimerOverlayDrag(layout: TimerOverlayLayout, persistLayout: P
     persistLayout((current) => ({
       ...current,
       collapsed: !current.collapsed,
-    }))
+    }), { position: false, size: false })
+    flushWindowLayoutRemotePersist()
   }, [persistLayout])
 
 

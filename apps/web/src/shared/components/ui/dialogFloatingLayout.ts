@@ -1,3 +1,12 @@
+import {
+  currentViewportSize,
+  pixelsFromRatio,
+  readFloatingDialogMemory,
+  viewportRatio,
+  writeFloatingDialogMemory,
+  type FloatingDialogWindowMemory,
+} from '@/shared/preferences/windowLayoutMemory'
+
 export interface FloatingDialogLayout {
   x: number
   y: number
@@ -5,6 +14,11 @@ export interface FloatingDialogLayout {
   height: number | null
   collapsed: boolean
   pinned: boolean
+}
+
+export interface FloatingDialogRemember {
+  size?: boolean
+  position?: boolean
 }
 
 export const FLOATING_DIALOG_STORAGE_PREFIX = 'memory-anki-floating-dialog:'
@@ -38,10 +52,48 @@ export function inferWidthFromClassName(className?: string): number | null {
 }
 
 function getViewportSize() {
-  if (typeof window === 'undefined') {
-    return { width: 1024, height: 768 }
+  return currentViewportSize()
+}
+
+function floatingDialogId(storageKey: string) {
+  return storageKey.startsWith(FLOATING_DIALOG_STORAGE_PREFIX)
+    ? storageKey.slice(FLOATING_DIALOG_STORAGE_PREFIX.length)
+    : storageKey
+}
+
+function memoryFromLegacyLocal(storageKey: string): FloatingDialogWindowMemory | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<FloatingDialogLayout & FloatingDialogWindowMemory>
+    const viewport = getViewportSize()
+    const widthRatio = typeof parsed.widthRatio === 'number'
+      ? parsed.widthRatio
+      : typeof parsed.width === 'number'
+        ? viewportRatio(parsed.width, viewport.width, 0.05, 1.5)
+        : null
+    if (widthRatio == null) return null
+    const heightRatio = parsed.heightRatio === null || parsed.height == null
+      ? (typeof parsed.heightRatio === 'number' ? parsed.heightRatio : null)
+      : typeof parsed.heightRatio === 'number'
+        ? parsed.heightRatio
+        : viewportRatio(parsed.height, viewport.height, 0.05, 1.5)
+    return {
+      xRatio: typeof parsed.xRatio === 'number' ? parsed.xRatio : viewportRatio(parsed.x ?? 0, viewport.width, -1.5, 1.5),
+      yRatio: typeof parsed.yRatio === 'number' ? parsed.yRatio : viewportRatio(parsed.y ?? 0, viewport.height, -1.5, 1.5),
+      widthRatio,
+      heightRatio,
+      collapsed: Boolean(parsed.collapsed),
+      pinned: Boolean(parsed.pinned),
+    }
+  } catch {
+    return null
   }
-  return { width: window.innerWidth, height: window.innerHeight }
+}
+
+function rememberedFloatingMemory(storageKey: string) {
+  return readFloatingDialogMemory(floatingDialogId(storageKey)) ?? memoryFromLegacyLocal(storageKey)
 }
 
 export function clampLayout(layout: FloatingDialogLayout): FloatingDialogLayout {
@@ -104,37 +156,77 @@ function createDefaultFloatingLayout(defaultWidth = FLOATING_DIALOG_LEGACY_DEFAU
 /**
  * Restore size/pin/collapsed from storage, but always re-center x/y on open
  * so dialogs do not reappear skewed from a previous drag.
+ * Width and height come from the remembered viewport ratios.
  */
 export function readStoredFloatingLayout(
   storageKey: string,
   defaultWidth = FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH,
 ): FloatingDialogLayout {
   if (typeof window === 'undefined') return createDefaultFloatingLayout(defaultWidth)
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return createDefaultFloatingLayout(defaultWidth)
-    const parsed = JSON.parse(raw) as Partial<FloatingDialogLayout>
-    if (typeof parsed.width !== 'number') {
-      return createDefaultFloatingLayout(defaultWidth)
-    }
-    const storedWidth = parsed.width === FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH && defaultWidth !== FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH
-      ? defaultWidth
-      : parsed.width
-    return createCenteredFloatingLayout({
-      width: storedWidth,
-      height: typeof parsed.height === 'number' ? parsed.height : null,
-      collapsed: Boolean(parsed.collapsed),
-      pinned: Boolean(parsed.pinned),
-    })
-  } catch {
-    return createDefaultFloatingLayout(defaultWidth)
-  }
+  const remembered = rememberedFloatingMemory(storageKey)
+  if (!remembered) return createDefaultFloatingLayout(defaultWidth)
+  const viewport = getViewportSize()
+  const width = pixelsFromRatio(remembered.widthRatio, viewport.width)
+  const storedWidth = width === FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH && defaultWidth !== FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH
+    ? defaultWidth
+    : width
+  return createCenteredFloatingLayout({
+    width: storedWidth,
+    height: remembered.heightRatio == null ? null : pixelsFromRatio(remembered.heightRatio, viewport.height),
+    collapsed: remembered.collapsed,
+    pinned: remembered.pinned,
+  })
 }
 
-export function writeStoredFloatingLayout(storageKey: string, layout: FloatingDialogLayout) {
+export function hasRememberedFloatingSize(storageKey: string) {
+  return rememberedFloatingMemory(storageKey) != null
+}
+
+/** Reapply the remembered size ratios after the viewport changes without rewriting them. */
+export function applyRememberedFloatingSize(storageKey: string, layout: FloatingDialogLayout) {
+  const remembered = rememberedFloatingMemory(storageKey)
+  if (!remembered) return clampLayout(layout)
+  const viewport = getViewportSize()
+  return clampLayout({
+    ...layout,
+    width: pixelsFromRatio(remembered.widthRatio, viewport.width),
+    height: remembered.heightRatio == null ? layout.height : pixelsFromRatio(remembered.heightRatio, viewport.height),
+  })
+}
+
+export function writeStoredFloatingLayout(
+  storageKey: string,
+  layout: FloatingDialogLayout,
+  remember: FloatingDialogRemember = {},
+) {
   if (typeof window === 'undefined') return
+  const id = floatingDialogId(storageKey)
+  const previous = rememberedFloatingMemory(storageKey)
+  const viewport = getViewportSize()
+  const rememberSize = remember.size === true
+  const rememberPosition = remember.position === true
+  const seeded = !previous
+  const next: FloatingDialogWindowMemory = {
+    xRatio: rememberPosition || seeded
+      ? viewportRatio(layout.x, viewport.width, -1.5, 1.5)
+      : previous.xRatio,
+    yRatio: rememberPosition || seeded
+      ? viewportRatio(layout.y, viewport.height, -1.5, 1.5)
+      : previous.yRatio,
+    widthRatio: rememberSize || seeded
+      ? viewportRatio(layout.width, viewport.width, 0.05, 1.5)
+      : previous.widthRatio,
+    heightRatio: layout.height == null
+      ? (rememberSize || seeded ? null : previous.heightRatio)
+      : (rememberSize || seeded || previous.heightRatio == null
+        ? viewportRatio(layout.height, viewport.height, 0.05, 1.5)
+        : previous.heightRatio),
+    collapsed: layout.collapsed,
+    pinned: layout.pinned,
+  }
+  writeFloatingDialogMemory(id, next)
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(layout))
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...layout, ...next }))
   } catch {
     // 本地偏好写入失败不应影响弹窗使用。
   }

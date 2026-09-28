@@ -20,7 +20,6 @@ describe('sectionNavigationHistory', () => {
     )
     expect(canSectionNavigateBack(state)).toBe(true)
     expect(state.stacks.english?.entries.map((item) => item.fullPath)).toEqual([
-      '/english',
       '/english/listening',
       '/english/listening/courses/7',
     ])

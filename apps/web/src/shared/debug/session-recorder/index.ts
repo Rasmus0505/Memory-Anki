@@ -6,7 +6,11 @@ export {
   formatSessionRecorderReport,
   truncateRecorderText,
 } from './sessionRecorderFormat'
-export { SessionRecorderHost } from './SessionRecorderHost'
+export {
+  SESSION_RECORDER_ANCHOR_ATTR,
+  SESSION_RECORDER_LAYER_ZCLASS,
+  SessionRecorderHost,
+} from './SessionRecorderHost'
 export {
   closeSessionRecorderDialog,
   deleteSelectedSessionRecorderHistory,

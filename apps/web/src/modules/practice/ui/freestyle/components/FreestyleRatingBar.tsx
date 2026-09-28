@@ -11,6 +11,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import {
   compactRatingEffectLabel,
+  ratingDestinationLabel,
   ratingEffectLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
@@ -108,6 +109,24 @@ export function FreestyleRatingBar({
     (effect) => effect.rating === (pendingRating ?? shownRating),
   )
   const palaceMode = ratingScope === 'palace'
+
+  // Adjust-state-during-render: a new pick (not a restored one on mount) floats a destination tag.
+  const activeRating = pendingRating ?? selectedRating
+  const [prevActiveRating, setPrevActiveRating] = useState(activeRating)
+  const [flyTag, setFlyTag] = useState<{ rating: UnitRating; text: string; seq: number } | null>(null)
+  if (prevActiveRating !== activeRating) {
+    setPrevActiveRating(activeRating)
+    const effect = activeRating != null && !hintMode
+      ? ratingEffects.find((value) => value.rating === activeRating)
+      : undefined
+    if (effect && activeRating != null) {
+      setFlyTag((current) => ({
+        rating: activeRating,
+        text: ratingDestinationLabel(effect, retryAfterCards),
+        seq: (current?.seq ?? 0) + 1,
+      }))
+    }
+  }
 
   useEffect(() => {
     if (pendingRating != null) disarmRemove()
@@ -330,6 +349,7 @@ export function FreestyleRatingBar({
                     aria-hidden
                   />
                 ) : null}
+                <kbd className="freestyle-rate-kbd" aria-hidden>{item.value}</kbd>
                 <span className="freestyle-rate-label inline-flex items-center gap-1 text-xs font-semibold leading-none sm:text-sm">
                   <span className="freestyle-rate-pip" aria-hidden />
                   {item.label}
@@ -338,6 +358,16 @@ export function FreestyleRatingBar({
                 {preview ? (
                   <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
                     {preview}
+                  </span>
+                ) : null}
+                {flyTag?.rating === item.value ? (
+                  <span
+                    key={flyTag.seq}
+                    className="freestyle-rate-fly"
+                    aria-hidden
+                    onAnimationEnd={() => setFlyTag(null)}
+                  >
+                    {flyTag.text}
                   </span>
                 ) : null}
               </button>

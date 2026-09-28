@@ -4,6 +4,7 @@
 export * from './mindmap'
 export * from './imports'
 export * from './dashboard'
+export * from './exam'
 export * from './freestyle'
 export * from './english'
 export * from './englishReading'

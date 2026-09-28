@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetWindowLayoutMemoryForTest } from '@/shared/preferences/windowLayoutMemory'
 import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
 import { GlobalTimerFloatingOverlay } from '@/shared/components/session/GlobalTimerFloatingOverlay'
 import type { GlobalTimerRegistration } from '@/shared/components/session/globalTimerModel'
@@ -70,6 +72,8 @@ function entry(timer: TimedSessionController): GlobalTimerRegistration {
 describe('GlobalTimerFloatingOverlay', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
+    resetWindowLayoutMemoryForTest()
   })
 
   it('hides to a restore control and restores the full panel without pausing', () => {

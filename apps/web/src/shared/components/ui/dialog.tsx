@@ -19,17 +19,23 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Maximize2, Minimize2, Pin, PinOff, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import {
+  applyRememberedFloatingSize,
   clampLayout,
   createCenteredFloatingLayout,
   FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH,
   FLOATING_DIALOG_MIN_WIDTH,
   FLOATING_DIALOG_STORAGE_PREFIX,
   FLOATING_DIALOG_VIEWPORT_PADDING,
+  hasRememberedFloatingSize,
   inferWidthFromClassName,
   readStoredFloatingLayout,
   writeStoredFloatingLayout,
   type FloatingDialogLayout,
+  type FloatingDialogRemember,
 } from './dialogFloatingLayout'
+import { CLIENT_PREFERENCES_UPDATED_EVENT } from '@/shared/preferences/clientPreferences'
+import { onAppEvent } from '@/shared/events/appEvents'
+import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 
 type DialogLayout = 'centered' | 'unstyled'
 type ResizeDirection = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'se' | 'sw'
@@ -184,10 +190,13 @@ const DialogContent = forwardRef<
   >(null)
 
   const persistFloatingLayout = useCallback(
-    (next: FloatingDialogLayout | ((current: FloatingDialogLayout) => FloatingDialogLayout)) => {
+    (
+      next: FloatingDialogLayout | ((current: FloatingDialogLayout) => FloatingDialogLayout),
+      remember: FloatingDialogRemember = {},
+    ) => {
       setFloatingLayout((current) => {
         const resolved = clampLayout(typeof next === 'function' ? next(current) : next)
-        writeStoredFloatingLayout(storageKey, resolved)
+        writeStoredFloatingLayout(storageKey, resolved, remember)
         return resolved
       })
     },
@@ -207,18 +216,23 @@ const DialogContent = forwardRef<
     const measuredWidth = rect ? Math.round(rect.width) : 0
     const measuredHeight = rect ? Math.round(rect.height) : 0
     setFloatingLayout((current) => {
-      const width = measuredWidth >= FLOATING_DIALOG_MIN_WIDTH ? measuredWidth : current.width
+      const remembered = hasRememberedFloatingSize(storageKey)
+        ? readStoredFloatingLayout(storageKey, inferredDefaultWidth)
+        : null
+      const width = remembered
+        ? remembered.width
+        : (measuredWidth >= FLOATING_DIALOG_MIN_WIDTH ? measuredWidth : current.width)
       const next = createCenteredFloatingLayout({
         width,
-        height: current.height,
+        height: remembered ? remembered.height : current.height,
         measuredHeight,
-        collapsed: expandOnOpen ? false : current.collapsed,
-        pinned: current.pinned,
+        collapsed: expandOnOpen ? false : (remembered?.collapsed ?? current.collapsed),
+        pinned: remembered?.pinned ?? current.pinned,
       })
-      writeStoredFloatingLayout(storageKey, next)
+      writeStoredFloatingLayout(storageKey, next, { size: !remembered, position: true })
       return next
     })
-  }, [expandOnOpen, floatingEnabled, open, storageKey])
+  }, [expandOnOpen, floatingEnabled, inferredDefaultWidth, open, storageKey])
 
   useEffect(() => {
     if (!open || !floatingEnabled || !expandOnOpen) return
@@ -229,10 +243,24 @@ const DialogContent = forwardRef<
 
   useEffect(() => {
     if (!floatingEnabled) return
-    const handleResize = () => persistFloatingLayout((current) => current)
+    const handleResize = () => {
+      if (interactionRef.current) return
+      setFloatingLayout((current) => applyRememberedFloatingSize(storageKey, current))
+    }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [floatingEnabled, persistFloatingLayout])
+  }, [floatingEnabled, storageKey])
+
+  useEffect(() => {
+    if (!floatingEnabled) return
+    return onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (detail) => {
+      if (!detail || !Object.prototype.hasOwnProperty.call(detail, 'window_layouts')) return
+      if (interactionRef.current) return
+      setFloatingLayout((current) => (
+        open ? applyRememberedFloatingSize(storageKey, current) : readStoredFloatingLayout(storageKey, inferredDefaultWidth)
+      ))
+    })
+  }, [floatingEnabled, inferredDefaultWidth, open, storageKey])
 
   useEffect(() => {
     if (!floatingEnabled) return
@@ -244,7 +272,7 @@ const DialogContent = forwardRef<
           ...current,
           x: interaction.originX + event.clientX - interaction.startX,
           y: interaction.originY + event.clientY - interaction.startY,
-        }))
+        }), { position: true })
         return
       }
 
@@ -272,10 +300,11 @@ const DialogContent = forwardRef<
         y: nextY,
         width: nextWidth,
         height: nextHeight,
-      }))
+      }), { position: true, size: true })
     }
 
     const handlePointerUp = () => {
+      if (interactionRef.current) flushWindowLayoutRemotePersist()
       interactionRef.current = null
     }
 
@@ -391,7 +420,10 @@ const DialogContent = forwardRef<
             className="inline-flex max-w-[min(360px,calc(100vw-32px))] cursor-grab items-center gap-2 rounded-full border border-border/80 bg-background/96 px-4 py-2 text-sm font-medium shadow-popover backdrop-blur active:cursor-grabbing"
             data-dialog-capsule-drag="true"
             onPointerDown={beginDrag}
-            onClick={() => persistFloatingLayout((current) => ({ ...current, collapsed: false }))}
+            onClick={() => {
+              persistFloatingLayout((current) => ({ ...current, collapsed: false }))
+              flushWindowLayoutRemotePersist()
+            }}
             aria-label={`恢复${derivedCapsuleLabel}`}
           >
             <Maximize2 className="size-4 text-primary" />
@@ -462,7 +494,10 @@ const DialogContent = forwardRef<
             )}
             aria-label={floatingLayout.pinned ? '取消置顶弹窗' : '置顶弹窗'}
             title={floatingLayout.pinned ? '取消置顶' : '置顶'}
-            onClick={() => persistFloatingLayout((current) => ({ ...current, pinned: !current.pinned }))}
+            onClick={() => {
+              persistFloatingLayout((current) => ({ ...current, pinned: !current.pinned }))
+              flushWindowLayoutRemotePersist()
+            }}
           >
             {floatingLayout.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </button>
@@ -471,7 +506,10 @@ const DialogContent = forwardRef<
             className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             aria-label="缩小为胶囊"
             title="缩小为胶囊"
-            onClick={() => persistFloatingLayout((current) => ({ ...current, collapsed: true }))}
+            onClick={() => {
+              persistFloatingLayout((current) => ({ ...current, collapsed: true }))
+              flushWindowLayoutRemotePersist()
+            }}
           >
             <Minimize2 className="size-4" />
           </button>
