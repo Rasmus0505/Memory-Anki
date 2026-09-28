@@ -19,6 +19,8 @@ class Subject(Base):
     editor_doc: Mapped[str] = mapped_column(Text, default="")
     editor_config: Mapped[str] = mapped_column(Text, default="")
     editor_local_config: Mapped[str] = mapped_column(Text, default="")
+    # Syllabus score share in percent; None means "split evenly".
+    exam_share: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     palaces: Mapped[list[Palace]] = relationship(
         "Palace",
@@ -53,6 +55,8 @@ class Chapter(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str] = mapped_column(Text, default="")
+    exam_stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exam_stars_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     subject: Mapped[Subject] = relationship("Subject", back_populates="chapters")
     children: Mapped[list[Chapter]] = relationship(
