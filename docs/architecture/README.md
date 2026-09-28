@@ -29,6 +29,9 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
+| Particle rendering | `shared/feedback/particles` (`particleModel` physics; WebGL2 renderer with bloom, Canvas2D fallback on missing/lost context; effect API unchanged for callers) | — |
+| Ambient room layer (tint, grain, dust motes, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
+| Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`) | — |
 
 ## Hard Invariants
 

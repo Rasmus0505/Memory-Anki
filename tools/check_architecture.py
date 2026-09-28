@@ -733,6 +733,28 @@ def check_removed_shared_api_modules(errors: list[str]) -> None:
             errors.append(f"{relative}: {message}")
 
 
+VISUAL_LAYER_DIRS = ("shared/ambient", "shared/feedback/particles")
+
+
+def check_visual_layer_purity(errors: list[str]) -> None:
+    """Ambient and particle layers render whatever they are handed; data wiring stays in app/shell."""
+    for relative_dir in VISUAL_LAYER_DIRS:
+        root = WEB_SRC / relative_dir
+        if not root.exists():
+            continue
+        for path in iter_files(root, (".ts", ".tsx")):
+            relative = path.relative_to(WEB_SRC).as_posix()
+            if is_frontend_test_file(relative):
+                continue
+            content = path.read_text(encoding="utf-8")
+            for specifier in iter_frontend_import_specifiers(content):
+                if specifier.startswith(("@/modules/", "@/app/", "@/pages/", "@/widgets/")):
+                    errors.append(
+                        f"{relative}: visual layer must not import {specifier}; "
+                        "feed data from app/shell instead"
+                    )
+
+
 def is_frontend_test_file(relative: str) -> bool:
     name = Path(relative).name
     return (
@@ -5104,6 +5126,7 @@ def main() -> int:
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
     check_removed_shared_api_modules(errors)
+    check_visual_layer_purity(errors)
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
     check_retired_placeholder_modules(errors)

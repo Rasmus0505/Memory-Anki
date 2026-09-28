@@ -3634,3 +3634,35 @@ def test_exam_domain_accepts_pure_read_only_code(tmp_path: Path, monkeypatch) ->
     errors: list[str] = []
     check_architecture.check_exam_context_boundaries(errors)
     assert errors == []
+
+
+def _write_visual_layer(tmp_path: Path, content: str) -> Path:
+    web_src = tmp_path / "apps" / "web" / "src"
+    target = web_src / "shared" / "ambient" / "AmbientLayer.tsx"
+    target.parent.mkdir(parents=True)
+    target.write_text(content, encoding="utf-8")
+    return web_src
+
+
+def test_visual_layer_accepts_shared_only_imports(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_visual_layer(
+        tmp_path, "import { cn } from '@/shared/lib/utils'\nimport { x } from './dustMotes'\n"
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_visual_layer_purity(errors)
+
+    assert errors == []
+
+
+def test_visual_layer_rejects_business_module_imports(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_visual_layer(
+        tmp_path, "import { getDashboardApi } from '@/modules/dashboard/public'\n"
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_visual_layer_purity(errors)
+
+    assert any("visual layer must not import @/modules/dashboard/public" in error for error in errors)
