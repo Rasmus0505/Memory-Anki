@@ -121,6 +121,8 @@ export interface ReviewFeedbackSettings {
   schemaVersion: 4
   preset: FeedbackPreset
   soundEnabled: boolean
+  /** Paper/wood interface sounds outside review scenes; still gated by `soundEnabled`. */
+  uiSoundEnabled: boolean
   volume: number
   animationEnabled: boolean
   reducedCelebrationMotion: boolean
@@ -207,6 +209,7 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   schemaVersion: 4,
   preset: 'balanced',
   soundEnabled: true,
+  uiSoundEnabled: true,
   volume: 1.15,
   animationEnabled: true,
   reducedCelebrationMotion: false,
@@ -441,6 +444,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     schemaVersion: 4,
     preset,
     soundEnabled,
+    uiSoundEnabled: sanitizeBoolean(raw.uiSoundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.uiSoundEnabled),
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
     animationEnabled,
     reducedCelebrationMotion: sanitizeBoolean(raw.reducedCelebrationMotion, false),

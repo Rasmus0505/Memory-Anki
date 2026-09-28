@@ -18,6 +18,7 @@ import {
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Maximize2, Minimize2, Pin, PinOff, X } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
+import { playUiSound } from '@/shared/feedback/uiSounds'
 import {
   applyRememberedFloatingSize,
   clampLayout,
@@ -145,6 +146,11 @@ const DialogContent = forwardRef<
   ref,
 ) {
   const { modal, open } = useContext(DialogModalContext)
+  useEffect(() => {
+    // Content mounts on open; wait out the opening button's tap.
+    const id = window.setTimeout(() => playUiSound('swish'), 60)
+    return () => window.clearTimeout(id)
+  }, [])
   const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
   const floatingEnabled = (floating ?? resolvedLayout === 'centered') && !isCoarsePointerViewport()
   const stableFloatingId = useMemo(

@@ -285,6 +285,14 @@ export default function ProfileFeedbackPage() {
                   updateDraft((current) => ({ ...current, soundEnabled }))
                 }
               />
+              <SettingRow
+                title="界面音效"
+                description="导航翻纸声、按钮木质轻敲、保存成功风铃。随心模式保留自己的声音设计。"
+                checked={draftSettings.uiSoundEnabled}
+                onCheckedChange={(uiSoundEnabled) =>
+                  updateDraft((current) => ({ ...current, uiSoundEnabled }))
+                }
+              />
               <div className="border-b border-border/55 py-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>

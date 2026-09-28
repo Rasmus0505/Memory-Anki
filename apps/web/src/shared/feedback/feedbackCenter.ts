@@ -15,6 +15,7 @@ import {
   resolveFeedbackChannels,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { dispatchGlobalFeedback } from './globalFeedbackModel'
+import { playUiSound } from './uiSounds'
 import {
   launchCelebrationPreset,
   type CelebrationScenario,
@@ -120,8 +121,14 @@ export function showToast(
   message: string,
   options?: ExternalToast,
 ) {
-  if (kind === 'success') return sonnerToast.success(message, options)
-  if (kind === 'error') return sonnerToast.error(message, options)
+  if (kind === 'success') {
+    playUiSound('chime')
+    return sonnerToast.success(message, options)
+  }
+  if (kind === 'error') {
+    playUiSound('thud')
+    return sonnerToast.error(message, options)
+  }
   if (kind === 'info') return sonnerToast.info(message, options)
   if (kind === 'warning') return sonnerToast.warning(message, options)
   return sonnerToast.message(message, options)
