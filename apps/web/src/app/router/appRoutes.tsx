@@ -16,15 +16,11 @@ export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreesty
 /** Second immersive freestyle workspace — route /freestyle-2. */
 export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
-export const preloadEnglishHubPage = () => import('@/pages/library/EnglishHubPage')
+export const preloadExamPage = () => import('@/pages/exam/ExamWarRoomPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
-export const preloadEnglishReadingPage = () => import('@/pages/library/EnglishReadingPage')
-export const preloadEnglishPatternsPage = () => import('@/pages/library/EnglishPatternsPage')
-export const preloadEnglishVocabPage = () => import('@/pages/library/EnglishVocabPage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
-export const preloadBatchGenerationPage = () => import('@/pages/create/BatchGenerationWorkspacePage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
 
 export function preloadPracticeRoutes() {
@@ -39,17 +35,13 @@ const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
 const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
-const EnglishHubPage = lazyWithRetry(preloadEnglishHubPage)
+const ExamPage = lazyWithRetry(preloadExamPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
-const EnglishReadingPage = lazyWithRetry(preloadEnglishReadingPage)
-const EnglishPatternsPage = lazyWithRetry(preloadEnglishPatternsPage)
-const EnglishVocabPage = lazyWithRetry(preloadEnglishVocabPage)
 
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
-const BatchGenerationPage = lazyWithRetry(preloadBatchGenerationPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
 const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
 const ProfileTimerPage = lazyWithRetry(() => import('@/pages/settings/TimerSettingsPage'))
@@ -91,21 +83,17 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Routes location={location}>
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/exam" element={<ExamPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
           {/* Retired 今日工作台: keep bookmarks on the insight hub, not /freestyle. */}
           <Route path="/today" element={<Navigate to="/dashboard" replace />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />
-          <Route path="/english" element={<EnglishHubPage />} />
+          <Route path="/english" element={<Navigate to="/english/listening" replace />} />
           <Route path="/english/listening" element={<EnglishWorkspacePage />} />
           <Route path="/english/listening/courses/:id" element={<EnglishCoursePage />} />
-          <Route path="/english/reading" element={<EnglishReadingPage />} />
-          <Route path="/english/reading/materials/:materialId" element={<EnglishReadingPage />} />
-          <Route path="/english/patterns" element={<EnglishPatternsPage />} />
-          <Route path="/english/vocab" element={<EnglishVocabPage />} />
           <Route path="/palaces/list" element={<PalaceListPage />} />
           <Route path="/palaces/new" element={<PalaceEditPage />} />
-          <Route path="/batch-generation" element={<BatchGenerationPage />} />
           {/* 保留：若删除此行，/palaces/quiz 会被下面的 /palaces/:id 捕获并落到 NaN 坏页。 */}
           <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
           <Route path="/palaces/:id" element={<PalaceViewPage />} />

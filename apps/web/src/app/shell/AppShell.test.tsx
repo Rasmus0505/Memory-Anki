@@ -17,7 +17,6 @@ const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
 const preloadPracticeRoutes = vi.fn()
 const preloadEnglishWorkspacePage = vi.fn()
-const preloadEnglishReadingPage = vi.fn()
 const preloadFreestylePage = vi.fn()
 const preloadKnowledgePage = vi.fn()
 const preloadPalaceEditPage = vi.fn()
@@ -45,7 +44,6 @@ vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
 vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: () => preloadPracticeRoutes(),
   preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
-  preloadEnglishReadingPage: () => preloadEnglishReadingPage(),
   preloadFreestylePage: () => preloadFreestylePage(),
   preloadKnowledgePage: () => preloadKnowledgePage(),
   preloadPalaceEditPage: () => preloadPalaceEditPage(),
@@ -75,7 +73,6 @@ describe('AppShell', () => {
     prefetchDashboardApi.mockClear()
     preloadPracticeRoutes.mockClear()
     preloadEnglishWorkspacePage.mockClear()
-    preloadEnglishReadingPage.mockClear()
     preloadFreestylePage.mockClear()
     preloadKnowledgePage.mockClear()
     preloadPalaceEditPage.mockClear()
@@ -169,7 +166,7 @@ describe('AppShell', () => {
     expect(await screen.findByText('调用与错误日志')).toBeTruthy()
   })
 
-  it('highlights unified english section for listening and reading routes', async () => {
+  it('highlights unified english section for listening routes', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -180,7 +177,7 @@ describe('AppShell', () => {
     })
 
     const { unmount } = render(
-      <MemoryRouter initialEntries={['/english/reading']}>
+      <MemoryRouter initialEntries={['/english/listening']}>
         <AppShell>
           <div>content</div>
         </AppShell>
@@ -240,7 +237,7 @@ describe('AppShell', () => {
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeNull()
-    expect(mobileNav.querySelector('a[href="/english"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/english/listening"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
   })
 
@@ -511,6 +508,12 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
+    const aside = document.querySelector('aside')
+    const anchor = aside?.querySelector('[data-session-recorder-anchor="true"]')
+    expect(anchor).toBeTruthy()
+    expect(aside?.firstElementChild?.contains(anchor ?? null)).toBe(true)
+    const launch = screen.getByRole('button', { name: '录制' })
+    expect(launch.closest('[data-session-recorder-hud="true"]')?.className).toContain('z-[20000]')
     act(() => startSessionRecording())
     expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
   })

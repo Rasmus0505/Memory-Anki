@@ -20,7 +20,6 @@ vi.mock('@/modules/search/public', () => ({
 vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: vi.fn(),
   preloadEnglishWorkspacePage: vi.fn(),
-  preloadEnglishReadingPage: vi.fn(),
   preloadFreestylePage: vi.fn(),
   preloadFreestyleSecondaryPage: vi.fn(),
   preloadKnowledgePage: vi.fn(),

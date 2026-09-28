@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type PropsWithChildren } from 'react'
+import { memo, useEffect, useRef, useState, type PropsWithChildren } from 'react'
 import {
   ChevronRight,
   ClipboardList,
@@ -28,12 +28,12 @@ import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenc
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
-import { SessionRecorderHost } from '@/shared/debug/session-recorder'
+import { SESSION_RECORDER_ANCHOR_ATTR, SessionRecorderHost } from '@/shared/debug/session-recorder'
 import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
-import { QuizGenerationBubbleLayer } from '@/shared/background-tasks/QuizGenerationBubbleLayer'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
+import { useRouteEnterAnimation } from '@/app/shell/useRouteEnterAnimation'
 import { GlobalBackButton, isImmersiveFeedPath, isMindMapHostPath } from '@/app/shell/GlobalBackButton'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 import {
@@ -93,6 +93,9 @@ function warmNavSection(section: NavSectionDefinition) {
   warmedNavSections.add(section.key)
   section.warmup?.()
 }
+
+/** On the immersive feed, shell warmups wait for the first card instead of racing it. */
+const FEED_WARMUP_DELAY_MS = 4_000
 
 function scheduleIdleWarmup(callback: () => void) {
   if (typeof window === 'undefined') return () => {}
@@ -173,9 +176,9 @@ function NavSectionLink({
       to={target}
       end={to === '/'}
       className={cn(
-        'group relative flex items-center rounded-lg text-sm font-medium transition-all',
+        'group relative flex items-center rounded-xl text-sm font-medium transition-[background-color,color,box-shadow] duration-200',
         isActive
-          ? 'bg-primary/10 text-primary ring-1 ring-primary/15'
+          ? 'ma-nav-active bg-primary-soft text-primary-strong shadow-[inset_0_0_0_1px_hsl(28_80%_51%/0.18)]'
           : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
         compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
       )}
@@ -230,20 +233,32 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
     // Do not wait for requestIdleCallback: freestyle keeps the main thread busy,
     // so idle warmup often has not fetched the insights chunk before the user
     // clicks 洞察 and the route falls back to an empty-looking page.
-    prefetchDashboardApi()
-    void preloadDashboardPage()
+    // On the feed itself, wait until the first card is up: these requests shared
+    // the backend with the first card's session and slowed it.
+    const timer = window.setTimeout(() => {
+      prefetchDashboardApi()
+      void preloadDashboardPage()
+    }, isImmersiveFeedPath(window.location.pathname) ? FEED_WARMUP_DELAY_MS : 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    return scheduleIdleWarmup(() => {
-      preloadPracticeRoutes()
-      prefetchPalaceSubjectShelfApi()
-      prefetchPalacesGroupedSummaryApi()
-      void preloadFreestylePage()
-      void preloadDashboardPage()
-      void preloadPalaceShelfPage()
-      void preloadPalaceListPage()
-    })
+    let cancelIdle: (() => void) | undefined
+    const timer = window.setTimeout(() => {
+      cancelIdle = scheduleIdleWarmup(() => {
+        preloadPracticeRoutes()
+        prefetchPalaceSubjectShelfApi()
+        prefetchPalacesGroupedSummaryApi()
+        void preloadFreestylePage()
+        void preloadDashboardPage()
+        void preloadPalaceShelfPage()
+        void preloadPalaceListPage()
+      })
+    }, isImmersiveFeedPath(window.location.pathname) ? FEED_WARMUP_DELAY_MS : 0)
+    return () => {
+      window.clearTimeout(timer)
+      cancelIdle?.()
+    }
   }, [])
 
   useEffect(() => {
@@ -332,7 +347,7 @@ function MobileBottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_rgba(15,23,42,0.12)] backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_hsl(24_50%_20%/0.12)] backdrop-blur-md lg:hidden"
       aria-label="移动端主导航"
     >
       {mobileSections.map((section) => {
@@ -344,9 +359,9 @@ function MobileBottomNav() {
             key={section.key}
             to={target}
             className={cn(
-              'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-medium transition-colors',
+              'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors',
               isActive
-                ? 'bg-primary/10 text-primary'
+                ? 'ma-tab-active bg-primary-soft text-primary-strong'
                 : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
             )}
             onFocus={() => warmNavSection(section)}
@@ -368,8 +383,10 @@ function ShellFrame({ children }: PropsWithChildren) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   useClientPreferenceBootstrap()
+  useRouteEnterAnimation(contentRef, pathname, !immersiveFeed && !mindMapHost)
 
   useEffect(() => {
     let cancelled = false
@@ -401,9 +418,16 @@ function ShellFrame({ children }: PropsWithChildren) {
             sidebarCollapsed ? 'w-[76px]' : 'w-[236px]',
           )}
         >
+          <div className={cn('flex px-3 pt-3', sidebarCollapsed ? 'justify-center' : 'justify-start')}>
+            <div
+              {...{ [SESSION_RECORDER_ANCHOR_ATTR]: 'true' }}
+              className="size-9 shrink-0"
+              aria-hidden
+            />
+          </div>
           <div
             className={cn(
-              'flex px-3 pt-3',
+              'flex px-3 pt-2',
               sidebarCollapsed
                 ? 'flex-col items-center gap-2 pb-1'
                 : 'items-center justify-between gap-2 pb-0',
@@ -452,6 +476,7 @@ function ShellFrame({ children }: PropsWithChildren) {
           )}
         >
           <div
+            ref={contentRef}
             className={cn(
               mindMapHost
                 ? 'flex min-h-0 w-full max-w-none flex-1 flex-col p-0'
@@ -467,7 +492,6 @@ function ShellFrame({ children }: PropsWithChildren) {
         </main>
         <MobileBottomNav />
         <GlobalBackButton placement="mobile" />
-        <QuizGenerationBubbleLayer />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <SessionRecorderHost />
         <GlobalCommandPalette />

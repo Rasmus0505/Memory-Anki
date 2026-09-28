@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import DashboardPage from "@/pages/insights/InsightsPage";
 import { buildDashboardResponse } from "@/pages/insights/InsightsPage.test-utils";
@@ -40,6 +40,7 @@ export const getRecentReviewNotesApi = vi.fn();
 export const getStudyGoalsApi = vi.fn();
 export const getWeeklyReportApi = vi.fn();
 export const saveStudyGoalsApi = vi.fn();
+export const examOverviewState: { data: unknown; error: string | null } = { data: null, error: null };
 
 export const timeRecordsDashboardMock = {
   filter: {
@@ -152,6 +153,10 @@ vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   },
 }));
 
+vi.mock("@/modules/exam/model/useExamOverview", () => ({
+  useExamOverview: () => ({ ...examOverviewState, reload: vi.fn(), setData: vi.fn() }),
+}));
+
 vi.mock("@/modules/session/ui/time-records/hooks/useTimeRecordsDashboard", () => ({
   useTimeRecordsDashboard: () => ({
     ...timeRecordsDashboardMock,
@@ -224,6 +229,8 @@ export function setupDashboardPageTest() {
     new_palace_count: 0,
   }));
   saveStudyGoalsApi.mockResolvedValue({ items: {} });
+  examOverviewState.data = null;
+  examOverviewState.error = null;
   resetClientPreferenceCacheForTest();
   window.localStorage.clear();
   vi.clearAllMocks();
@@ -231,4 +238,9 @@ export function setupDashboardPageTest() {
 
 export function renderDashboardPage() {
   return render(<DashboardPage />);
+}
+
+export async function openRecordsTab() {
+  // Radix Tabs 在 mousedown 时切换页签。
+  fireEvent.mouseDown(await screen.findByRole("tab", { name: "记录" }), { button: 0 });
 }

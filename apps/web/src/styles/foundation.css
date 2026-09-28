@@ -1,124 +1,201 @@
-﻿@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", monospace;
 
-  --color-background: hsl(40 24% 98%);
-  --color-foreground: hsl(221 28% 13%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(221 28% 13%);
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(221 28% 13%);
-  --color-primary: hsl(214 58% 42%);
+  /* Warm light: cream ground, amber primary, grass success, coral weak. */
+  --color-background: hsl(38 56% 96%);
+  --color-foreground: hsl(24 26% 14%);
+  --color-card: hsl(43 100% 99%);
+  --color-card-foreground: hsl(24 26% 14%);
+  --color-popover: hsl(43 100% 99%);
+  --color-popover-foreground: hsl(24 26% 14%);
+  --color-primary: hsl(28 80% 51%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(216 20% 95%);
-  --color-secondary-foreground: hsl(221 24% 19%);
-  --color-muted: hsl(216 18% 95%);
-  --color-muted-foreground: hsl(218 10% 43%);
-  --color-accent: hsl(39 68% 92%);
-  --color-accent-foreground: hsl(221 24% 19%);
-  --color-destructive: hsl(0 84.2% 60.2%);
-  --color-destructive-foreground: hsl(0 0% 98%);
-  --color-success: hsl(145 55% 42%);
+  --color-primary-soft: hsl(33 90% 92%);
+  --color-primary-strong: hsl(24 78% 40%);
+  --color-secondary: hsl(36 36% 92%);
+  --color-secondary-foreground: hsl(24 22% 20%);
+  --color-muted: hsl(36 30% 93%);
+  --color-muted-foreground: hsl(26 12% 40%);
+  --color-accent: hsl(36 78% 90%);
+  --color-accent-foreground: hsl(24 26% 18%);
+  --color-destructive: hsl(8 76% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-success: hsl(104 44% 46%);
   --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(34 92% 52%);
-  --color-warning-foreground: hsl(0 0% 100%);
-  --color-error: hsl(0 84.2% 60.2%);
-  --color-error-foreground: hsl(0 0% 98%);
-  --color-info: hsl(210 72% 56%);
+  --color-warning: hsl(38 92% 52%);
+  --color-warning-foreground: hsl(28 50% 10%);
+  --color-error: hsl(8 76% 60%);
+  --color-error-foreground: hsl(0 0% 100%);
+  --color-info: hsl(198 58% 46%);
   --color-info-foreground: hsl(0 0% 100%);
-  --color-memory-strong: hsl(160 68% 34%);
-  --color-memory-medium: hsl(34 92% 52%);
-  --color-memory-weak: hsl(0 84.2% 60.2%);
-  --color-border: hsl(216 18% 88%);
-  --color-input: hsl(216 16% 84%);
-  --color-ring: hsl(214 58% 42%);
-  --color-radius: 0.625rem;
+  --color-memory-strong: hsl(104 44% 42%);
+  --color-memory-medium: hsl(38 92% 52%);
+  --color-memory-weak: hsl(8 76% 60%);
+  --color-border: hsl(34 30% 86%);
+  --color-input: hsl(34 26% 82%);
+  --color-ring: hsl(28 80% 51%);
+  --color-radius: 0.75rem;
+
+  /* Rating tones shared by every review surface. */
+  --color-rate-again: hsl(8 76% 60%);
+  --color-rate-hard: hsl(38 92% 52%);
+  --color-rate-good: hsl(104 44% 46%);
+  --color-rate-easy: hsl(190 56% 44%);
+
+  /* Freestyle immersive stage: warm charcoal "reading lamp" surface, theme independent. */
+  --color-stage: hsl(24 16% 8%);
+  --color-stage-raised: hsl(24 14% 12%);
+  --color-stage-overlay: hsl(24 16% 10% / 0.86);
+  --color-stage-line: hsl(34 30% 80% / 0.12);
+  --color-stage-line-strong: hsl(34 40% 80% / 0.22);
+  --color-stage-ink: hsl(38 40% 93%);
+  --color-stage-muted: hsl(32 14% 64%);
+  --color-stage-faint: hsl(30 10% 44%);
+  --color-stage-glow: hsl(32 94% 60%);
+
+  /* Paper surface for mind maps and card content; stays light in dark mode. */
+  --color-paper: hsl(38 56% 96%);
+  --color-paper-card: hsl(43 100% 99%);
+  --color-paper-line: hsl(34 28% 84%);
+  --color-paper-line-strong: hsl(30 22% 70%);
+  --color-paper-ink: hsl(24 28% 14%);
+  --color-paper-ink-soft: hsl(24 16% 30%);
+  --color-paper-muted: hsl(28 12% 46%);
 
   --radius-sm: calc(var(--color-radius) - 4px);
   --radius-md: calc(var(--color-radius) - 2px);
   --radius-lg: var(--color-radius);
   --radius-xl: calc(var(--color-radius) + 4px);
+  --radius-2xl: calc(var(--color-radius) + 10px);
 
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
-  --shadow-popover: 0 18px 44px rgba(15, 23, 42, 0.12);
-  --shadow-floating: 0 24px 72px rgba(15, 23, 42, 0.14);
+  --shadow-soft: 0 1px 2px hsl(24 40% 20% / 0.05);
+  --shadow-card: 0 1px 2px hsl(24 40% 20% / 0.06), 0 10px 28px -6px hsl(24 50% 24% / 0.10);
+  --shadow-popover: 0 20px 48px -10px hsl(24 50% 18% / 0.20), 0 2px 6px hsl(24 40% 20% / 0.06);
+  --shadow-floating: 0 28px 80px -12px hsl(24 50% 16% / 0.24);
+  --shadow-lift: 0 2px 4px hsl(24 40% 20% / 0.06), 0 18px 40px -12px hsl(24 60% 26% / 0.22);
+  --shadow-glow: 0 0 0 1px hsl(28 80% 51% / 0.35), 0 8px 30px -6px hsl(28 90% 52% / 0.45);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
+
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
+}
+
+/* Real spring curves where the engine supports linear() easing. */
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1.004 83.8%, 1);
+    --ease-spring-soft: linear(0, 0.013 0.6%, 0.05 1.2%, 0.2 2.5%, 0.43 4%, 0.72 6.2%, 0.87 7.9%, 0.97 9.9%, 1.03 12.1%, 1.06 14.6%, 1.065 17%, 1.05 21%, 1.02 26%, 1.004 32%, 0.998 40%, 1);
+  }
 }
 
 :root {
-  --memory-anki-mindmap-canvas: #fafafa;
-  --memory-anki-mindmap-dot: rgba(24, 24, 27, 0.10);
+  --memory-anki-mindmap-canvas: var(--color-paper);
+  --memory-anki-mindmap-dot: hsl(28 30% 30% / 0.12);
 }
 
 .dark {
-  /* Canvas stays paper-white like PWA review; chrome can remain dark. */
-  --memory-anki-mindmap-canvas: #fafafa;
-  --memory-anki-mindmap-dot: rgba(24, 24, 27, 0.10);
-  --color-background: hsl(24 12% 9%);
-  --color-foreground: hsl(36 20% 92%);
-  --color-card: hsl(24 10% 12%);
-  --color-card-foreground: hsl(36 20% 92%);
-  --color-popover: hsl(24 10% 13%);
-  --color-popover-foreground: hsl(36 20% 92%);
-  --color-primary: hsl(211 74% 66%);
-  --color-primary-foreground: hsl(220 30% 9%);
-  --color-secondary: hsl(24 8% 18%);
-  --color-secondary-foreground: hsl(36 16% 88%);
-  --color-muted: hsl(24 8% 16%);
-  --color-muted-foreground: hsl(30 8% 62%);
-  --color-accent: hsl(28 20% 20%);
-  --color-accent-foreground: hsl(36 16% 88%);
-  --color-destructive: hsl(0 72% 58%);
-  --color-destructive-foreground: hsl(0 0% 98%);
-  --color-success: hsl(145 48% 48%);
-  --color-success-foreground: hsl(150 40% 8%);
-  --color-warning: hsl(34 90% 58%);
+  --memory-anki-mindmap-canvas: var(--color-paper);
+  --memory-anki-mindmap-dot: hsl(28 30% 30% / 0.12);
+  --color-background: hsl(24 16% 8%);
+  --color-foreground: hsl(38 32% 92%);
+  --color-card: hsl(24 14% 11.5%);
+  --color-card-foreground: hsl(38 32% 92%);
+  --color-popover: hsl(24 14% 13%);
+  --color-popover-foreground: hsl(38 32% 92%);
+  --color-primary: hsl(32 92% 60%);
+  --color-primary-foreground: hsl(24 50% 9%);
+  --color-primary-soft: hsl(30 50% 18%);
+  --color-primary-strong: hsl(34 96% 70%);
+  --color-secondary: hsl(24 10% 17%);
+  --color-secondary-foreground: hsl(38 24% 88%);
+  --color-muted: hsl(24 10% 15%);
+  --color-muted-foreground: hsl(32 12% 62%);
+  --color-accent: hsl(28 30% 19%);
+  --color-accent-foreground: hsl(38 24% 88%);
+  --color-destructive: hsl(8 74% 62%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-success: hsl(104 42% 54%);
+  --color-success-foreground: hsl(104 40% 8%);
+  --color-warning: hsl(38 92% 58%);
   --color-warning-foreground: hsl(30 40% 8%);
-  --color-error: hsl(0 72% 58%);
-  --color-error-foreground: hsl(0 0% 98%);
-  --color-info: hsl(210 80% 62%);
-  --color-info-foreground: hsl(215 40% 8%);
-  --color-memory-strong: hsl(160 55% 45%);
-  --color-memory-medium: hsl(34 90% 58%);
-  --color-memory-weak: hsl(0 72% 62%);
-  --color-border: hsl(24 8% 24%);
-  --color-input: hsl(24 8% 26%);
-  --color-ring: hsl(211 74% 66%);
+  --color-error: hsl(8 74% 62%);
+  --color-error-foreground: hsl(0 0% 100%);
+  --color-info: hsl(194 60% 58%);
+  --color-info-foreground: hsl(200 40% 8%);
+  --color-memory-strong: hsl(104 42% 54%);
+  --color-memory-medium: hsl(38 92% 58%);
+  --color-memory-weak: hsl(8 74% 64%);
+  --color-border: hsl(28 12% 21%);
+  --color-input: hsl(28 12% 24%);
+  --color-ring: hsl(32 92% 60%);
 
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-popover: 0 18px 44px rgba(0, 0, 0, 0.6);
-  --shadow-floating: 0 24px 72px rgba(0, 0, 0, 0.65);
+  --color-rate-again: hsl(8 78% 64%);
+  --color-rate-hard: hsl(38 94% 60%);
+  --color-rate-good: hsl(104 46% 56%);
+  --color-rate-easy: hsl(190 60% 56%);
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 10px 28px -6px rgb(0 0 0 / 0.5);
+  --shadow-popover: 0 20px 48px -10px rgb(0 0 0 / 0.65), 0 0 0 1px hsl(34 30% 80% / 0.06);
+  --shadow-floating: 0 28px 80px -12px rgb(0 0 0 / 0.7);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -12px rgb(0 0 0 / 0.6);
+  --shadow-glow: 0 0 0 1px hsl(32 92% 60% / 0.4), 0 8px 30px -6px hsl(32 92% 56% / 0.5);
 }
 
 .dark body {
   background:
-    radial-gradient(circle at top left, rgba(217, 119, 6, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(20, 16, 13, 0.98), rgba(24, 19, 16, 0.96)),
+    radial-gradient(120% 60% at 0% 0%, hsl(30 90% 50% / 0.08), transparent 55%),
+    radial-gradient(90% 50% at 100% 100%, hsl(12 80% 50% / 0.05), transparent 60%),
     var(--color-background);
+  background-attachment: fixed;
 }
 
 .dark .memory-anki-mindmap-frame {
-  border-color: #e4e4e7;
+  border-color: var(--color-paper-line);
   background: var(--memory-anki-mindmap-canvas);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    0 18px 44px rgba(24, 24, 27, 0.08);
+    inset 0 1px 0 hsl(43 100% 100% / 0.8),
+    0 18px 44px -10px rgb(0 0 0 / 0.5);
 }
 
 * { border-color: var(--color-border); }
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
 
 body {
   margin: 0;
   font-family: var(--font-sans);
   background:
-    linear-gradient(180deg, hsl(40 28% 99%), hsl(216 22% 97%)),
+    radial-gradient(110% 55% at 0% 0%, hsl(36 100% 88% / 0.55), transparent 60%),
+    radial-gradient(80% 50% at 100% 0%, hsl(18 100% 90% / 0.35), transparent 60%),
     var(--color-background);
+  background-attachment: fixed;
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "tnum" 0, "cv11" 1;
+}
+
+::selection {
+  background: hsl(33 95% 72% / 0.45);
+  color: inherit;
+}
+
+:focus-visible {
+  outline-color: var(--color-ring);
 }
 
 .memory-anki-timer-overlay-page,
@@ -139,12 +216,12 @@ body.memory-anki-timer-overlay-page #root {
 }
 
 .memory-anki-mindmap-frame {
-  border: 1px solid #e4e4e7;
-  border-radius: 0.875rem;
+  border: 1px solid var(--color-paper-line);
+  border-radius: 1rem;
   background: var(--memory-anki-mindmap-canvas);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    0 18px 44px rgba(24, 24, 27, 0.08);
+    inset 0 1px 0 hsl(43 100% 100% / 0.9),
+    0 18px 44px -12px hsl(24 50% 24% / 0.16);
 }
 
 /* flashcard flip */
@@ -155,7 +232,7 @@ body.memory-anki-timer-overlay-page #root {
 
 /* star rating */
 .star-rating input { display: none; }
-.star-rating label { font-size: 1.5rem; color: #d1d5db; cursor: pointer; transition: color 0.15s; }
+.star-rating label { font-size: 1.5rem; color: var(--color-border); cursor: pointer; transition: color 0.15s; }
 .star-rating input:checked ~ label,
 .star-rating label:hover ~ label,
-.star-rating label:hover { color: #f59e0b; }
+.star-rating label:hover { color: var(--color-warning); }

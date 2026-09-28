@@ -1,0 +1,19 @@
+/* 仪表盘一屏布局：高度 = 视口 − 外壳内边距（与 AppShell 的 py-2 / sm:py-5 / lg:py-6 及移动底栏保持一致）。 */
+
+.dashboard-fit {
+  height: calc(100dvh - 1rem - 4.5rem - env(safe-area-inset-bottom, 0px));
+  min-height: 480px;
+}
+
+@media (min-width: 640px) {
+  .dashboard-fit {
+    height: calc(100dvh - 2.5rem - 4.5rem - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-fit {
+    height: calc(100dvh - 3rem);
+    min-height: 560px;
+  }
+}

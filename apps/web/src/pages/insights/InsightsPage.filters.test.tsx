@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getDashboardApi,
   invalidateDashboardApi,
+  openRecordsTab,
   renderDashboardPage,
   setupDashboardPageTest,
 } from '@/pages/insights/InsightsPage.test-support'
@@ -37,10 +38,11 @@ describe('DashboardPage unified time-record filters', () => {
   it('uses the same persisted range label for the top card, charts, and list', async () => {
     renderDashboardPage()
 
+    expect(await screen.findByText('2026-07')).toBeTruthy()
+    await openRecordsTab()
     expect(await screen.findByText('时长趋势 · 2026-07')).toBeTruthy()
     expect(screen.getByText('标签时长分布 · 2026-07')).toBeTruthy()
     expect(screen.getByTestId('records-table').textContent).toBe('month:2026-07')
-    expect(screen.getByText('2026-07')).toBeTruthy()
   })
 
   it('loads the dashboard overview once without issuing selected-duration wrapper requests', async () => {

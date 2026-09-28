@@ -11,11 +11,8 @@ import {
   prefetchPalaceSubjectShelfApi,
 } from '@/modules/content/public'
 import {
-  preloadEnglishHubPage,
-  preloadEnglishReadingPage,
-  preloadEnglishPatternsPage,
-  preloadEnglishVocabPage,
   preloadEnglishWorkspacePage,
+  preloadExamPage,
   preloadFreestylePage,
   preloadKnowledgePage,
   preloadDashboardPage,
@@ -72,17 +69,13 @@ export const navSections: NavSectionDefinition[] = [
   },
   {
     key: 'english',
-    to: '/english',
+    to: '/english/listening',
     label: '英语',
     icon: Languages,
     rememberLastVisited: true,
     matches: createNavSectionMatcher('english'),
     warmup: () => {
-      void preloadEnglishHubPage()
       void preloadEnglishWorkspacePage()
-      void preloadEnglishReadingPage()
-      void preloadEnglishPatternsPage()
-      void preloadEnglishVocabPage()
     },
   },
   {
@@ -110,6 +103,7 @@ export const navSections: NavSectionDefinition[] = [
     warmup: () => {
       prefetchDashboardApi()
       void preloadDashboardPage()
+      void preloadExamPage()
     },
   },
 ]

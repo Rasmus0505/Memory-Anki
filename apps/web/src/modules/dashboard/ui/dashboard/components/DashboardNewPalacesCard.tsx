@@ -4,9 +4,13 @@ import { Plus, Sparkles } from 'lucide-react'
 import type { DashboardResponse } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Pagination } from '@/shared/components/ui/pagination'
+import { cn } from '@/shared/lib/utils'
+import { useFitPageSize } from '@/modules/dashboard/ui/dashboard/model/useFitPageSize'
+import { CompactPager } from './CompactPager'
 
-const PAGE_SIZE = 5
+const ITEM_HEIGHT = 50
+const ITEM_GAP = 6
+const FALLBACK_PAGE_SIZE = 5
 
 interface FlatNewPalaceItem {
   key: string
@@ -49,80 +53,72 @@ function flattenNewPalaces(
 
 interface DashboardNewPalacesCardProps {
   data: Pick<DashboardResponse, 'today_new_palace_count' | 'today_new_palaces'>
+  className?: string
 }
 
-export function DashboardNewPalacesCard({ data }: DashboardNewPalacesCardProps) {
+export function DashboardNewPalacesCard({ data, className }: DashboardNewPalacesCardProps) {
   const flatItems = useMemo(() => flattenNewPalaces(data), [data])
   const [page, setPage] = useState(1)
-  const totalPages = Math.max(1, Math.ceil(flatItems.length / PAGE_SIZE))
+  const { ref: listRef, pageSize } = useFitPageSize<HTMLDivElement>(ITEM_HEIGHT, ITEM_GAP, FALLBACK_PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(flatItems.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const pageItems = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE
-    return flatItems.slice(start, start + PAGE_SIZE)
-  }, [flatItems, safePage])
-  const showSubjectTitle =
-    data.today_new_palaces.filter((item) => item.subject).length > 1
+    const start = (safePage - 1) * pageSize
+    return flatItems.slice(start, start + pageSize)
+  }, [flatItems, safePage, pageSize])
+  const showSubjectTitle = data.today_new_palaces.filter((item) => item.subject).length > 1
 
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader className="flex flex-row items-center justify-between">
+    <Card className={cn('flex min-h-0 flex-col', className)}>
+      <CardHeader className="flex shrink-0 flex-row items-center justify-between space-y-0 p-4 pb-2">
         <CardTitle className="text-base">{`新增章节数量：${data.today_new_palace_count}`}</CardTitle>
-        <Link to="/palaces/new">
-          <Button size="sm" variant="outline" className="h-8">
+        <Button asChild size="sm" variant="outline" className="h-7">
+          <Link to="/palaces/new">
             <Plus data-icon="inline-start" />
             新建
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col">
-        {flatItems.length > 0 ? (
-          <>
-            <div className="flex min-h-[240px] flex-col gap-2">
-              {pageItems.map((item) => (
-                <div key={item.key} className="rounded-lg border border-border/50 px-2 py-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-1">
+        <div ref={listRef} className="flex min-h-0 flex-1 flex-col gap-1.5">
+          {flatItems.length > 0 ? (
+            pageItems.map((item) => (
+              <Link
+                key={item.key}
+                to={`/palaces/${item.palaceId}/edit`}
+                className="block shrink-0 rounded-lg border border-border/50 px-2.5 py-1.5 transition-colors hover:bg-secondary active:scale-[0.98]"
+              >
+                <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                   {showSubjectTitle && item.subjectName ? (
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      {item.subjectName}
-                    </div>
+                    <span className="shrink-0 font-medium">{item.subjectName}</span>
                   ) : null}
-                  <div className="text-xs text-muted-foreground">{item.chapterName}</div>
-                  <Link
-                    to={`/palaces/${item.palaceId}/edit`}
-                    className="mt-0.5 block truncate rounded-md px-1 py-1 text-sm transition-colors hover:bg-secondary active:scale-[0.98]"
-                  >
-                    {item.palaceTitle}
-                  </Link>
+                  <span className="truncate">{item.chapterName}</span>
                 </div>
-              ))}
-            </div>
-            {totalPages > 1 ? (
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-                <div className="text-xs text-muted-foreground">
-                  第 {safePage} / {totalPages} 页 · 共 {flatItems.length} 项
-                </div>
-                <Pagination
-                  page={safePage}
-                  totalPages={totalPages}
-                  onPageChange={setPage}
-                  className="justify-end"
-                  aria-label="新增章节分页"
-                />
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            今天还没有新增记忆宫殿。
-            <div className="mt-3">
-              <Link to="/palaces/new">
-                <Button variant="outline" size="sm">
-                  <Sparkles data-icon="inline-start" />
-                  创建一个
-                </Button>
+                <div className="truncate text-sm">{item.palaceTitle}</div>
               </Link>
+            ))
+          ) : (
+            <div className="m-auto text-center text-sm text-muted-foreground">
+              今天还没有新增记忆宫殿。
+              <div className="mt-3">
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/palaces/new">
+                    <Sparkles data-icon="inline-start" />
+                    创建一个
+                  </Link>
+                </Button>
+              </div>
             </div>
+          )}
+        </div>
+        {flatItems.length > 0 ? (
+          <div className="mt-2 flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border/60 pt-1">
+            <div className="text-xs text-muted-foreground">共 {flatItems.length} 项</div>
+            {totalPages > 1 ? (
+              <CompactPager page={safePage} totalPages={totalPages} onPageChange={setPage} aria-label="新增章节分页" />
+            ) : null}
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   )

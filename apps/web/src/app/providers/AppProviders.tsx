@@ -67,7 +67,7 @@ export function AppProviders({ children }: PropsWithChildren) {
                   <QuizLauncherProvider>
                     {children}
                     <NativeDialogProvider />
-                    <Toaster position="bottom-right" richColors />
+                    <Toaster position="bottom-right" richColors closeButton={false} gap={10} offset={20} />
                   </QuizLauncherProvider>
                 </GlobalTimerProvider>
               </GlobalFeedbackProvider>

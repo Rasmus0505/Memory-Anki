@@ -6,6 +6,7 @@ import type {
 } from '@/shared/api/contracts'
 import { formatDuration } from '@/modules/session/public'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { cn } from '@/shared/lib/utils'
 import { getDashboardHeatmapApi, getWeeklyReportApi } from '../api'
 
 type HeatmapCell = HeatmapDayItem | null
@@ -38,7 +39,7 @@ function formatMinutes(seconds: number) {
   return Math.round(seconds / 60)
 }
 
-export function StudyHeatmap() {
+export function StudyHeatmap({ className }: { className?: string }) {
   const [data, setData] = useState<DashboardHeatmapResponse | null>(null)
   const [report, setReport] = useState<WeeklyReport>(EMPTY_WEEKLY_REPORT)
   const [reportLoading, setReportLoading] = useState(true)
@@ -89,6 +90,8 @@ export function StudyHeatmap() {
     ]
   }, [data])
 
+  const weekCount = Math.max(1, Math.ceil(cells.length / 7))
+
   const hasActivity =
     report.study_seconds > 0 ||
     report.review_count > 0 ||
@@ -106,56 +109,51 @@ export function StudyHeatmap() {
   ]
 
   return (
-    <Card className="min-w-0 border-border/70">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
+    <Card className={cn('flex min-h-0 min-w-0 flex-col border-border/70', className)}>
+      <CardHeader className="flex shrink-0 flex-row flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 space-y-0 p-4 pb-2">
         <CardTitle className="text-base">学习热力图</CardTitle>
-        <div className="text-right text-xs leading-5 text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           {data
             ? `连续 ${data.current_streak} 天 · 最长 ${data.longest_streak} 天 · 近半年学习 ${data.active_day_count} 天`
             : '加载中...'}
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 space-y-5 pt-1">
+      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 p-4 pt-1">
         {data ? (
-          <div className="overflow-x-auto">
-            <div className="grid w-max grid-flow-col grid-rows-7 gap-1">
-              {cells.map((item, index) =>
-                item ? (
-                  <div
-                    key={item.date}
-                    title={`${item.date}：复习 ${item.review_count} 次，学习 ${formatMinutes(item.study_seconds)} 分钟`}
-                    className={`size-2.5 rounded-sm ${intensityClass(item)}`}
-                  />
-                ) : (
-                  <div key={`empty-${index}`} className="size-2.5" />
-                ),
-              )}
-            </div>
+          // 格子随栏宽缩放，任何宽度都完整显示半年。
+          <div
+            className="grid w-full shrink-0 grid-flow-col grid-rows-7 gap-[3px]"
+            style={{ gridTemplateColumns: `repeat(${weekCount}, minmax(0, 1fr))` }}
+          >
+            {cells.map((item, index) =>
+              item ? (
+                <div
+                  key={item.date}
+                  title={`${item.date}：复习 ${item.review_count} 次，学习 ${formatMinutes(item.study_seconds)} 分钟`}
+                  className={`aspect-square w-full rounded-sm ${intensityClass(item)}`}
+                />
+              ) : (
+                <div key={`empty-${index}`} className="aspect-square w-full" />
+              ),
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">正在加载热力图...</p>
         )}
 
-        <div className="space-y-3 border-t border-border/60 pt-4">
-          <div>
+        <div className="space-y-1.5 border-t border-border/60 pt-2.5">
+          <div className="flex flex-wrap items-baseline gap-x-2">
             <h3 className="text-sm font-medium">上周摘要{titleRange}</h3>
             {reportLoading ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                正在生成上周摘要...
-              </p>
+              <p className="text-xs text-muted-foreground">正在生成上周摘要...</p>
             ) : null}
           </div>
           {!reportLoading && hasActivity ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1.5">
               {metrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-lg border bg-secondary/35 px-3 py-2"
-                >
-                  <div className="text-xs text-muted-foreground">
-                    {metric.label}
-                  </div>
-                  <div className="mt-1 text-lg font-semibold">{metric.value}</div>
+                <div key={metric.label} className="flex min-w-0 items-baseline justify-between gap-1.5 rounded-lg border bg-secondary/35 px-2 py-1">
+                  <span className="min-w-0 truncate text-[11px] text-muted-foreground">{metric.label}</span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums">{metric.value}</span>
                 </div>
               ))}
             </div>

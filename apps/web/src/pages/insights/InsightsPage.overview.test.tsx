@@ -1,6 +1,7 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  examOverviewState,
   getDashboardApi,
   getDashboardHeatmapApi,
   getWeeklyReportApi,
@@ -39,7 +40,7 @@ describe("DashboardPage overview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
 
-    expect(await screen.findByText("今日待处理")).toBeTruthy();
+    expect(await screen.findByText("学习时长")).toBeTruthy();
     expect(getDashboardApi).toHaveBeenCalledTimes(2);
   });
 
@@ -121,26 +122,10 @@ describe("DashboardPage overview", () => {
     expect(screen.getByText("本周时长")).toBeTruthy();
   });
 
-  it("renders dashboard triage counts and review link gating", async () => {
+  it("renders exam blocks and compact duration stats in the overview", async () => {
     getDashboardApi.mockResolvedValue({
       due_count: 3,
-      due_later_today_count: 1,
-      reviews: [
-        {
-          id: 1,
-          palace_id: 1,
-          scheduled_date: "2026-07-05",
-          interval_days: 1,
-          algorithm_used: "anki",
-          completed: false,
-          review_number: 0,
-          review_type: "1d",
-          schedule_count: 3,
-          overdue_schedule_count: 2,
-          next_due_date: "2026-07-05",
-          palace: null,
-        },
-      ],
+      reviews: [],
       stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
       today_review_duration_seconds: 0,
       weekly_review_duration_seconds: 0,
@@ -153,17 +138,58 @@ describe("DashboardPage overview", () => {
       today_new_palace_count: 0,
       today_new_palaces: [],
     });
+    const weakPalace = { id: 7, title: "第三章 薄弱宫殿", stars: 3, unit_count: 4, learned_count: 1, recall: 0.4 };
+    examOverviewState.data = {
+      days_left: 42,
+      totals: {
+        due_today: 23,
+        mastery_ratio: 0.38,
+        predicted_ratio: 0.61,
+        pace_per_day: 5,
+        needed_per_day: 8,
+        study_days: 30,
+        reviewed_today: 12,
+      },
+      palaces: [{ ...weakPalace, id: 8, title: "第一章 今日优先" }],
+      weak: [weakPalace],
+      retention: { projected: [], observed: [{ date: "2026-07-08", reviews: 10, pass_rate: 0.8 }] },
+    };
 
     renderDashboardPage();
 
-    expect(await screen.findByText("今日待处理")).toBeTruthy();
-    expect(screen.getByLabelText("今日待处理优先级")).toBeTruthy();
-    expect(screen.getByText("逾期/立即")).toBeTruthy();
-    expect(screen.getByText("今日")).toBeTruthy();
-    expect(screen.getByText("优先清理")).toBeTruthy();
-    expect(screen.getByText("按时推进")).toBeTruthy();
+    expect(await screen.findByText("学习时长")).toBeTruthy();
+    expect(screen.getByText("今日时长")).toBeTruthy();
+    expect(screen.getByText("1小时 30分")).toBeTruthy();
+    expect(screen.getByText("离考试还差多少")).toBeTruthy();
+    expect(screen.getByText("23")).toBeTruthy();
+    expect(screen.getByText("第一章 今日优先")).toBeTruthy();
+    expect(screen.getByText("第三章 薄弱宫殿")).toBeTruthy();
+    expect(screen.getByText("今天已评分 12 次")).toBeTruthy();
+    expect(screen.queryByText("今日待处理")).toBeNull();
     expect(screen.queryByText("快速操作")).toBeNull();
     expect(screen.queryByText("最近复盘")).toBeNull();
+  });
+
+  it("shows an exam placeholder until the exam overview arrives", async () => {
+    getDashboardApi.mockResolvedValue({
+      due_count: 0,
+      reviews: [],
+      stats: { total: 0, review_count: 0, review_duration_seconds: 0 },
+      today_review_duration_seconds: 0,
+      weekly_review_duration_seconds: 0,
+      today_total_review_duration_seconds: 0,
+      monthly_total_review_duration_seconds: 0,
+      weekly_total_review_duration_seconds: 0,
+      weekly_formal_review_duration_seconds: 0,
+      recent_palaces: [],
+      today_learning_palaces: [],
+      today_new_palace_count: 0,
+      today_new_palaces: [],
+    });
+
+    renderDashboardPage();
+
+    expect(await screen.findByText("正在加载考试概览…")).toBeTruthy();
   });
 
   it("renders last-week summary inside the study heatmap card", async () => {

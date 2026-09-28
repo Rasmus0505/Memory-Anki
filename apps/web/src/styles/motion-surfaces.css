@@ -1,32 +1,3 @@
-@keyframes streak-pop {
-  0% {
-    transform: scale(1.4);
-    opacity: 0.6;
-  }
-  60% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.freestyle-card-enter {
-  animation: card-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 @keyframes english-letter-pop {
   0% {
     transform: scale(0.72);
@@ -109,41 +80,54 @@
    transform + filter，同一元素同时挂两者时后声明者整条属性生效，前者会变成
    死动画。因此播放头用「入场 → 呼吸」的时间顺序，而不是 class 互斥。 */
 
-/* 播放头呼吸：高度 ×1 ↔ ×1.3 并扩张光晕。周期 1.6s：2.5s 会被读成静止。 */
+/* 播放头呼吸：高度 ×1 ↔ ×1.3 并扩张光晕。周期 1.6s：2.5s 会被读成静止。
+   吸气 40% / 呼气 60%，比对称正弦更像真实呼吸。 */
 @keyframes progress-rail-breath {
   0%,
   100% {
     transform: scaleY(1);
-    filter: brightness(0.92) drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+    filter: brightness(0.92) drop-shadow(0 0 6px hsl(34 100% 68% / 0.55));
   }
-  50% {
+  40% {
     transform: scaleY(1.3);
-    filter: brightness(1.35) drop-shadow(0 0 14px rgba(255, 255, 255, 0.95));
+    filter: brightness(1.35) drop-shadow(0 0 14px hsl(36 100% 72% / 0.95));
   }
 }
 
-/* 播放头入场：横向展开 + 光晕扩张，强调"接管"。
+/* 播放头入场：横向展开，在切卡彗星抵达时（~70%）光晕炸开，再落到呼吸起点。
    必须自带 scaleY，否则与呼吸交接时会从 1.3 突跳回 1。 */
 @keyframes progress-rail-enter {
   0% {
     transform: scaleX(0.86) scaleY(1);
-    filter: brightness(1.5) drop-shadow(0 0 16px rgba(255, 255, 255, 1));
+    filter: brightness(0.92) drop-shadow(0 0 4px hsl(34 100% 68% / 0.4));
+  }
+  70% {
+    transform: scaleX(1.04) scaleY(1);
+    filter: brightness(1.6) drop-shadow(0 0 16px hsl(38 100% 80% / 1));
   }
   100% {
     transform: scaleX(1) scaleY(1);
-    filter: brightness(0.92) drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
+    filter: brightness(0.92) drop-shadow(0 0 6px hsl(34 100% 68% / 0.55));
   }
 }
 
-/* pending/retry → done：高度脉冲到 ×1.9 并闪亮。420ms 保证视线离开卡片时也已看见。 */
+/* pending/retry → done：灌满扫到末端时（~70%）顶起并闪亮，再带一点过冲回落。 */
 @keyframes progress-tick-done {
   0% {
     transform: scaleY(1);
     filter: brightness(1);
   }
-  35% {
-    transform: scaleY(1.9);
-    filter: brightness(1.9);
+  55% {
+    transform: scaleY(1.08);
+    filter: brightness(1.2);
+  }
+  72% {
+    transform: scaleY(1.6);
+    filter: brightness(1.8);
+  }
+  88% {
+    transform: scaleY(0.92);
+    filter: brightness(1.1);
   }
   100% {
     transform: scaleY(1);
@@ -151,19 +135,124 @@
   }
 }
 
-/* 宫殿全清：逐个错开的高亮脉冲（延迟由内联 animation-delay 提供）。 */
+/* 宫殿全清：逐个错开的波浪（延迟由内联 animation-delay 提供），比单张完成更高、更亮。 */
 @keyframes progress-palace-done {
   0% {
     transform: scaleY(1);
     filter: brightness(1);
   }
-  35% {
-    transform: scaleY(1.7);
-    filter: brightness(2.2);
+  30% {
+    transform: scaleY(2.1);
+    filter: brightness(2.3);
+  }
+  60% {
+    transform: scaleY(0.85);
+    filter: brightness(1.3);
   }
   100% {
     transform: scaleY(1);
     filter: brightness(1);
+  }
+}
+
+/* 完成灌满：宫殿色从左向右推进，末端带一道亮边。 */
+@keyframes progress-fill-sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* 亮边固定在末端，被 clip-path 揭开的那一刻闪一下（与 tick-done 顶点同步）。 */
+@keyframes progress-fill-sweep-edge {
+  0%,
+  68% {
+    opacity: 0;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 切卡彗星：从旧播放头滑向新播放头，飞行中最亮，落点处淡出。 */
+@keyframes progress-glider-trail {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 宫殿/整轮扫光：一道高光带从范围左端扫到右端。 */
+@keyframes progress-sheen-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* 整轮完成：整条 rail 底色一次柔和提亮。 */
+@keyframes progress-round-glow {
+  0%,
+  100% {
+    box-shadow: inset 0 -2px 0 hsl(36 100% 70% / 0);
+    background-color: rgb(9 9 11 / 0.55);
+  }
+  35% {
+    box-shadow: inset 0 -2px 0 hsl(38 100% 76% / 0.6), 0 0 26px hsl(32 100% 58% / 0.32);
+    background-color: rgb(39 39 42 / 0.7);
+  }
+}
+
+/* 重练插入：槽位从 0 宽撑开，两侧 tick 让位。 */
+@keyframes progress-slot-open-fixed {
+  from {
+    max-width: 0;
+    opacity: 0;
+  }
+  to {
+    max-width: 24px;
+    opacity: 1;
+  }
+}
+
+@keyframes progress-slot-open-flex {
+  from {
+    flex-grow: 0;
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 重练圆点落位：弹性放大 + 琥珀色涟漪扩散。 */
+@keyframes progress-retry-insert {
+  0% {
+    transform: scale(0);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8);
+  }
+  55% {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.45);
+  }
+  80% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 7px rgba(251, 191, 36, 0);
   }
 }
 
@@ -191,15 +280,15 @@
   }
 }
 
-/* 切卡入场：内容淡入上浮。只作用于卡片内容，不遮住 rail。 */
+/* 切卡入场：内容带一点弹性浮起、轻微放大落位。只作用于卡片内容，不遮住 rail。 */
 @keyframes freestyle-card-enter-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translate3d(0, 14px, 0) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
@@ -223,15 +312,157 @@
 }
 
 .progress-rail-enter {
-  animation: progress-rail-enter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: progress-rail-enter 0.42s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .progress-tick-done {
-  animation: progress-tick-done 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: progress-tick-done 0.46s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .progress-palace-done {
-  animation: progress-palace-done 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: progress-palace-done 0.56s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 播放头宽度（flex-grow）过渡，切卡时旧宽收、新宽放，而不是跳变。
+ * flex-grow 每帧都会重排整条 rail，触屏设备上只保留彗星(transform)过渡。 */
+@media (hover: hover) and (pointer: fine) {
+  .progress-slot {
+    transition: flex-grow 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+.progress-bar {
+  transition-property: background-color, height, min-width, box-shadow;
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.progress-fill-sweep {
+  animation: progress-fill-sweep 0.32s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.progress-fill-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 3px;
+  border-radius: inherit;
+  background: hsl(40 100% 92% / 0.95);
+  box-shadow: 0 0 6px hsl(34 100% 70% / 0.9);
+  animation: progress-fill-sweep-edge 0.42s linear both;
+}
+
+.progress-glider {
+  position: absolute;
+  left: 0;
+  bottom: 4px;
+  height: 14px;
+  border-radius: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, hsl(36 100% 70% / 0), hsl(40 100% 86% / 0.92));
+  box-shadow: 0 0 12px hsl(32 100% 60% / 0.65);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.progress-glider-run {
+  animation: progress-glider-trail 380ms ease-out both;
+}
+
+.progress-glider[data-direction='backward'] {
+  background: linear-gradient(270deg, hsl(36 100% 70% / 0), hsl(40 100% 86% / 0.92));
+}
+
+/* Finger-follow: transform-only per frame (translateX + scaleX from a fixed base width). */
+.progress-glider-follow,
+.progress-glider-release {
+  transform-origin: 0 50%;
+}
+
+.progress-glider-follow {
+  opacity: 1;
+}
+
+@keyframes progress-glider-release {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.progress-glider-release {
+  animation: progress-glider-release 220ms ease-out both;
+}
+
+/* Hand-over: the leaving tick's glow fades as the entering tick's rises. */
+[data-rail-slot][data-follow] {
+  position: relative;
+}
+
+[data-rail-slot][data-follow]::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 100%;
+  border-radius: 2px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 30%, hsl(40 100% 80% / 0.28));
+  box-shadow: 0 0 10px hsl(34 100% 62% / 0.45);
+  opacity: var(--fs-follow, 0);
+}
+
+.progress-sheen {
+  position: absolute;
+  bottom: 2px;
+  height: 18px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+.progress-sheen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    hsl(38 100% 80% / 0) 0%,
+    hsl(40 100% 88% / 0.8) 50%,
+    hsl(38 100% 80% / 0) 100%
+  );
+  mix-blend-mode: plus-lighter;
+  animation: progress-sheen-sweep 0.7s cubic-bezier(0.45, 0, 0.25, 1) both;
+  animation-delay: inherit;
+}
+
+.progress-sheen[data-kind='round']::before {
+  width: 30%;
+  background: linear-gradient(
+    90deg,
+    hsl(36 100% 70% / 0) 0%,
+    hsl(38 100% 78% / 0.9) 45%,
+    hsl(44 100% 96% / 1) 50%,
+    hsl(38 100% 78% / 0.9) 55%,
+    hsl(36 100% 70% / 0) 100%
+  );
+  animation-duration: 1.05s;
+}
+
+.progress-round-glow {
+  animation: progress-round-glow 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-slot-open-fixed {
+  animation: progress-slot-open-fixed 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-slot-open-flex {
+  animation: progress-slot-open-flex 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-retry-insert {
+  transform-origin: center;
+  animation: progress-retry-insert 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.12s;
 }
 
 .progress-tick-enter {
@@ -243,7 +474,214 @@
 }
 
 .freestyle-card-enter {
-  animation: freestyle-card-enter-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: freestyle-card-enter-in 0.42s var(--ease-spring-soft) both;
+}
+
+/* --- 随心：结算 / 揭示 / 卡片质感 --- */
+@keyframes fs-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.fs-rise {
+  animation: fs-rise 0.62s var(--ease-spring-soft) both;
+  animation-delay: calc(var(--fs-i, 0) * 70ms + 60ms);
+}
+
+@keyframes fs-ring-draw {
+  from { stroke-dashoffset: var(--fs-ring-from); }
+}
+
+.fs-ring-draw {
+  animation: fs-ring-draw 1.2s var(--ease-out-expo) 0.25s both;
+}
+
+@keyframes fs-trophy-pop {
+  0% { opacity: 0; transform: scale(0.2) rotate(-24deg); }
+  60% { opacity: 1; transform: scale(1.14) rotate(6deg); }
+  80% { transform: scale(0.96) rotate(-2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.fs-trophy-pop {
+  animation: fs-trophy-pop 0.9s var(--ease-out-back) 0.55s both;
+}
+
+@keyframes fs-halo-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+.fs-halo {
+  background: radial-gradient(circle, hsl(32 100% 58% / 0.34), hsl(32 100% 58% / 0) 68%);
+  animation: fs-halo-breathe 3.2s ease-in-out 1.2s infinite;
+}
+
+@keyframes fs-sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  45% { opacity: 1; transform: scale(1) rotate(90deg); }
+}
+
+.fs-sparkle {
+  opacity: 0;
+  animation: fs-sparkle 2.4s ease-in-out infinite;
+}
+.fs-sparkle-0 { top: 4%; left: 8%; animation-delay: 1.1s; }
+.fs-sparkle-1 { top: 10%; right: 2%; animation-delay: 1.7s; }
+.fs-sparkle-2 { bottom: 8%; left: 0; animation-delay: 2.2s; }
+.fs-sparkle-3 { bottom: 2%; right: 10%; animation-delay: 1.4s; }
+
+.fs-complete-panel::before {
+  content: '';
+  position: absolute;
+  inset: -40% -20% auto;
+  height: 70%;
+  pointer-events: none;
+  background: radial-gradient(60% 60% at 50% 40%, hsl(32 100% 56% / 0.18), transparent 70%);
+}
+
+@keyframes fs-cta-shine {
+  0%, 62% { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(260%) skewX(-18deg); }
+}
+
+.fs-cta-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 36%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, hsl(44 100% 96% / 0.5), transparent);
+  animation: fs-cta-shine 3.4s var(--ease-in-out-soft) 1.6s infinite;
+}
+
+@keyframes fs-expand {
+  from { opacity: 0; transform: translate3d(0, -6px, 0); }
+}
+
+.fs-expand {
+  animation: fs-expand 0.32s var(--ease-spring-soft) both;
+}
+
+/* 揭示：答案逐行弹入（延迟由 --fs-i 决定）。 */
+@keyframes fs-reveal-line {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.98);
+    filter: blur(3px);
+  }
+}
+
+.fs-reveal-line {
+  animation: fs-reveal-line 0.46s var(--ease-spring-soft) both;
+  animation-delay: calc(var(--fs-i, 0) * 55ms);
+}
+
+/* 纸面卡片：暖色层次 + 上沿高光。 */
+.fs-paper-card {
+  /* Light island: shared token-based components render on paper even in dark mode. */
+  color-scheme: light;
+  --color-foreground: var(--color-paper-ink);
+  --color-card: var(--color-paper-card);
+  --color-card-foreground: var(--color-paper-ink);
+  --color-background: var(--color-paper-card);
+  --color-popover: var(--color-paper-card);
+  --color-popover-foreground: var(--color-paper-ink);
+  --color-muted: hsl(36 36% 92%);
+  --color-muted-foreground: var(--color-paper-muted);
+  --color-secondary: hsl(36 36% 92%);
+  --color-secondary-foreground: var(--color-paper-ink-soft);
+  --color-accent: hsl(36 78% 90%);
+  --color-accent-foreground: var(--color-paper-ink);
+  --color-border: var(--color-paper-line);
+  --color-input: var(--color-paper-line-strong);
+  --color-primary: hsl(28 80% 51%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-primary-soft: hsl(33 90% 92%);
+  --color-primary-strong: hsl(24 78% 40%);
+  --color-ring: hsl(28 80% 51%);
+  --color-success: hsl(104 46% 38%);
+  --color-destructive: hsl(8 70% 52%);
+  --color-warning: hsl(34 90% 44%);
+  --color-rate-again: hsl(8 70% 54%);
+  --color-rate-hard: hsl(34 90% 46%);
+  --color-rate-good: hsl(104 46% 38%);
+  --color-rate-easy: hsl(190 60% 36%);
+  background:
+    linear-gradient(180deg, hsl(43 100% 100% / 0.9), hsl(43 100% 100% / 0) 26%),
+    var(--color-paper-card);
+  color: var(--color-paper-ink);
+  border: 1px solid var(--color-paper-line);
+  box-shadow:
+    inset 0 1px 0 hsl(43 100% 100% / 0.95),
+    0 1px 2px hsl(24 50% 20% / 0.18),
+    0 22px 50px -18px rgb(0 0 0 / 0.6);
+}
+
+/* 选择题：正确 = 绿色光晕 + 对勾描绘；错误 = 温和珊瑚色，不抖动。 */
+@keyframes fs-correct-glow {
+  0% { box-shadow: 0 0 0 0 hsl(104 50% 50% / 0.55); }
+  100% { box-shadow: 0 0 0 10px hsl(104 50% 50% / 0); }
+}
+
+.fs-option-correct {
+  animation: fs-correct-glow 0.7s var(--ease-out-expo) both;
+}
+
+@keyframes fs-check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.fs-check-draw path,
+.fs-check-draw polyline {
+  stroke-dasharray: 24;
+  animation: fs-check-draw 0.42s var(--ease-out-expo) 0.08s both;
+}
+
+@keyframes fs-soft-miss {
+  0% { background-color: hsl(8 76% 60% / 0.32); }
+  100% { background-color: hsl(8 76% 60% / 0.12); }
+}
+
+.fs-option-miss {
+  animation: fs-soft-miss 0.6s ease-out both;
+}
+
+/* 随心题卡里的选项：按压回弹 + 结果反馈（挂在 quiz 模块已有的状态类上）。 */
+.fs-quiz-options [data-quiz-option-index] {
+  border-radius: 0.9rem;
+  transition:
+    transform var(--duration-fast) var(--ease-spring),
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-base) var(--ease-out-expo);
+}
+
+.fs-quiz-options [data-quiz-option-index]:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 6px 18px -10px hsl(24 50% 24% / 0.35);
+}
+
+.fs-quiz-options [data-quiz-option-index]:active:not(:disabled) {
+  transform: scale(0.975);
+  transition-duration: var(--duration-instant);
+}
+
+.fs-quiz-options [data-quiz-option-index].border-success\/30 {
+  animation: fs-correct-glow 0.7s var(--ease-out-expo) both;
+}
+
+.fs-quiz-options [data-quiz-option-index].border-destructive\/30 {
+  animation: fs-soft-miss 0.6s ease-out both;
 }
 
 /* 尊重 prefers-reduced-motion */
@@ -268,9 +706,37 @@
   .progress-boundary-enter,
   .progress-rail-enter,
   .progress-rail-breath,
-  .progress-palace-done {
+  .progress-palace-done,
+  .progress-fill-sweep,
+  .progress-fill-sweep::after,
+  .progress-slot-open-fixed,
+  .progress-slot-open-flex,
+  .progress-retry-insert,
+  .fs-rise,
+  .fs-ring-draw,
+  .fs-trophy-pop,
+  .fs-expand,
+  .fs-reveal-line,
+  .fs-option-correct,
+  .fs-option-miss,
+  .fs-check-draw path,
+  .fs-check-draw polyline {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
+    filter: none !important;
+  }
+
+  .fs-halo,
+  .fs-sparkle,
+  .fs-cta-shine::after {
+    animation: none !important;
+    display: none !important;
+  }
+
+  .fs-quiz-options [data-quiz-option-index] {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
   }
 
   /* 无限循环若只压到 1ms 会变成高频闪烁，必须彻底停掉。 */
@@ -279,6 +745,28 @@
     animation: none !important;
     filter: none !important;
     transform: none !important;
+  }
+
+  /* 纯装饰的光效直接不显示。 */
+  .progress-glider,
+  .progress-sheen {
+    display: none !important;
+    animation: none !important;
+  }
+
+  /* Finger-follow is direct manipulation, so it stays; only its release fade goes. */
+  .progress-glider.progress-glider-follow {
+    display: block !important;
+    opacity: 1;
+  }
+
+  .progress-round-glow {
+    animation: none !important;
+  }
+
+  .progress-slot,
+  .progress-bar {
+    transition: none !important;
   }
 
   .english-caret {

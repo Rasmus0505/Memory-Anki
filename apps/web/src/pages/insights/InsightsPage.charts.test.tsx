@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   getDashboardApi,
+  openRecordsTab,
   renderDashboardPage,
   setupDashboardPageTest,
 } from '@/pages/insights/InsightsPage.test-support'
@@ -28,6 +29,7 @@ describe('DashboardPage unified charts', () => {
 
   it('renders trend and breakdown from the same unified response and range', async () => {
     renderDashboardPage()
+    await openRecordsTab()
 
     expect((await screen.findByTestId('trend-chart')).textContent).toBe('7/1')
     expect(screen.getByTestId('breakdown-chart').textContent).toBe('复习')
@@ -37,8 +39,17 @@ describe('DashboardPage unified charts', () => {
 
   it('does not expose independent chart-range controls', async () => {
     renderDashboardPage()
+    await openRecordsTab()
     await screen.findByTestId('trend-chart')
     expect(screen.queryByRole('button', { name: '30 天' })).toBeNull()
     expect(screen.queryByRole('button', { name: '90 天' })).toBeNull()
+  })
+
+  it('keeps charts and the records list off the overview tab', async () => {
+    renderDashboardPage()
+
+    expect(await screen.findByText('学习时长')).toBeTruthy()
+    expect(screen.queryByTestId('trend-chart')).toBeNull()
+    expect(screen.queryByTestId('records-table')).toBeNull()
   })
 })
