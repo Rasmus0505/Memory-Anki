@@ -15,7 +15,8 @@ function node(id: string, x: number, y: number, width = 100, height = 40): Node 
   return {
     id,
     position: { x, y },
-    data: {},
+    // Short label keeps the typographic size estimate below the measured card size.
+    data: { label: id },
     width,
     height,
   }

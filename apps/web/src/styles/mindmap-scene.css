@@ -26,8 +26,78 @@
 }
 
 .mindmap-node-text {
+  position: relative;
   overflow-wrap: break-word;
   word-break: normal;
+}
+
+/* Shared card typography: identical in display / edit / english / text / concealed. */
+.mindmap-node-type {
+  font-family: var(--font-sans);
+  font-kerning: normal;
+  text-wrap: pretty;
+  text-autospace: normal;
+  line-break: strict;
+  letter-spacing: 0.005em;
+}
+
+/* English words: underline + inset glow only — zero width change, zero re-wrap. */
+.mindmap-reading-word {
+  cursor: pointer;
+  border-radius: 3px;
+  color: inherit;
+  text-decoration: underline dotted 1.5px hsl(28 60% 50% / 0.55);
+  text-underline-offset: 0.24em;
+  transition: background-color 150ms ease, box-shadow 150ms ease, text-decoration-color 200ms ease;
+  animation: mindmap-reading-word-in 350ms ease both;
+}
+
+.mindmap-reading-word:hover,
+.mindmap-reading-word:focus-visible {
+  outline: none;
+  background-color: hsl(33 90% 88% / 0.8);
+  box-shadow: 0 0 0 2px hsl(33 90% 88% / 0.8);
+  text-decoration-color: var(--color-primary);
+}
+
+@keyframes mindmap-reading-word-in {
+  from { text-decoration-color: transparent; }
+}
+
+/* Text-select mode: faint letter-paper rules aligned to the line box. */
+[data-text-mode='true'] .mindmap-node-text::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(1lh - 1px),
+    hsl(28 70% 55% / 0.2) calc(1lh - 1px) 1lh
+  );
+  animation: mindmap-rules-in 300ms ease both;
+}
+
+[data-text-mode='true'] .mindmap-node-text::selection,
+[data-text-mode='true'] .mindmap-node-text *::selection {
+  background: hsl(28 90% 60% / 0.3);
+}
+
+@keyframes mindmap-rules-in {
+  from { opacity: 0; }
+}
+
+/* Concealed: real label keeps the box size, placeholder sits on top. */
+.mindmap-node-concealed-sizer {
+  visibility: hidden;
+}
+
+.mindmap-node-text > .mindmap-node-concealed {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: max-content;
+  height: max-content;
 }
 
 /*
@@ -36,17 +106,30 @@
  * Markup may include inline styles; these rules are a mode-independent fallback
  * so highlights never disappear when a host omits Tailwind utilities.
  */
+/*
+ * Highlighter stroke: soft-edged marker band across the lower ~60% of the line.
+ * No padding, so highlighted text wraps exactly like plain text in every mode.
+ * `background` (not background-color) with !important beats stored inline styles.
+ */
 [data-emphasis='highlight'],
 .mindmap-node-text [data-emphasis='highlight'],
 .mindmap-rich-text [data-emphasis='highlight'],
 .mindmap-import-richtext [data-emphasis='highlight'] {
-  background-color: #fef08c !important;
+  background:
+    linear-gradient(
+      104deg,
+      hsl(50 100% 70% / 0) 0.4%,
+      hsl(50 100% 66% / 0.85) 2.2%,
+      hsl(48 100% 68% / 0.55) 60%,
+      hsl(46 100% 66% / 0.8) 96%,
+      hsl(46 100% 70% / 0) 99.6%
+    ) 0 64% / 100% 60% no-repeat !important;
   color: inherit;
-  border-radius: 0.125rem;
-  /* Each wrapped line keeps its own rounded highlight box (not a sliced strip). */
+  border-radius: 0.2em 0.35em 0.25em 0.4em;
+  /* Each wrapped line keeps its own stroke (not a sliced strip). */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  padding: 0 0.1em;
+  padding: 0;
 }
 
 .memory-anki-mindmap-scene {
@@ -280,7 +363,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected) {
+  .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected):not(.mindmap-node-card--editing) {
     transform: translateY(-1px);
     box-shadow:
       0 1px 0 hsl(43 100% 100% / 0.9) inset,
@@ -288,18 +371,43 @@
   }
 }
 
-.mindmap-node-shell:active > .mindmap-node-card {
+.mindmap-node-shell:active > .mindmap-node-card:not(.mindmap-node-card--editing) {
   transform: scale(0.985);
   transition-duration: var(--duration-instant);
 }
 
-.mindmap-node-editor {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 30%, transparent), var(--shadow-lift);
-  animation: mindmap-editor-in var(--duration-base) var(--ease-spring-soft) both;
+/*
+ * In-place editing: the same paper card lights up. Border stays 1px and padding is
+ * the display padding, so the card box is pixel-identical to display mode; the ring
+ * is box-shadow only (no layout).
+ */
+.mindmap-node-card.mindmap-node-card--editing {
+  background: hsl(40 100% 97.5%);
+  border-color: var(--color-primary);
+  box-shadow:
+    0 0 0 1px var(--color-primary),
+    0 0 0 5px color-mix(in oklab, var(--color-primary) 16%, transparent),
+    0 14px 30px -12px color-mix(in oklab, var(--color-primary) 45%, transparent);
+  animation: mindmap-editor-glow var(--duration-base) var(--ease-out-expo) both;
 }
 
-@keyframes mindmap-editor-in {
-  from { transform: scale(0.97); }
+.mindmap-node-editor {
+  caret-color: var(--color-primary);
+  cursor: text;
+}
+
+.mindmap-node-editor::selection,
+.mindmap-node-editor *::selection {
+  background: hsl(28 90% 60% / 0.3);
+}
+
+@keyframes mindmap-editor-glow {
+  from {
+    box-shadow:
+      0 0 0 0 var(--color-primary),
+      0 0 0 0 transparent,
+      0 6px 16px -8px hsl(24 50% 26% / 0.16);
+  }
 }
 
 /* Concealed (待回忆): frosted paper shimmer instead of plain blur. */
@@ -369,18 +477,6 @@
   pointer-events: none;
 }
 
-.mindmap-flip-spark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 7;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: radial-gradient(circle, hsl(48 100% 88%), hsl(32 96% 58%) 60%, transparent 72%);
-  box-shadow: 0 0 8px hsl(36 100% 60% / 0.8);
-  pointer-events: none;
-}
 
 /* Long-press pending: warm amber ring that breathes outward. */
 .mindmap-node-longpress-ring {
@@ -435,7 +531,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .memory-anki-mindmap-scene-rating,
-  .mindmap-node-editor,
+  .mindmap-node-card--editing,
+  .mindmap-reading-word,
+  [data-text-mode='true'] .mindmap-node-text::before,
   .mindmap-node-concealed,
   .mindmap-node-longpress-ring,
   .mindmap-pop-in,
@@ -443,8 +541,7 @@
     animation: none !important;
   }
   .mindmap-flip-cover,
-  .mindmap-flip-sheen,
-  .mindmap-flip-spark {
+  .mindmap-flip-sheen {
     display: none;
   }
   .memory-anki-mindmap-viewport .react-flow__node,

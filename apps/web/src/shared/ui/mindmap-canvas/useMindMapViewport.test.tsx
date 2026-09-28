@@ -174,7 +174,8 @@ function canvasHost() {
 }
 
 function flowNode(id: string, x: number, y: number) {
-  return { id, position: { x, y }, data: {}, type: 'mindmap', width: 100, height: 40 }
+  // Short label keeps the typographic size estimate below the measured 100×40 card.
+  return { id, position: { x, y }, data: { label: id }, type: 'mindmap', width: 100, height: 40 }
 }
 
 function graphNode(id: string, parentId: string | null): MindMapNode {

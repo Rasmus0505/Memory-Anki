@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
+import { readRevealPhase } from './useMindMapRevealMotion'
 
 const SETTLE_DELAY_MS = 650
 const MAX_ANIMATED_PER_BATCH = 40
@@ -43,8 +44,15 @@ export function useMindMapEnterMotion(
     const root = container.current
     if (!root || prefersReducedMotion()) return
 
-    const freshNodes = nodeIds.filter((id) => !previousNodes.has(id)).slice(0, MAX_ANIMATED_PER_BATCH)
-    const freshEdges = edgeIds.filter((id) => !previousEdges.has(id)).slice(0, MAX_ANIMATED_PER_BATCH)
+    // Review/practice cards (and their incoming edges) are owned by useMindMapRevealMotion.
+    const revealOwned = new Set(nodes.filter((node) => readRevealPhase(node) !== 'other').map((node) => node.id))
+    const freshNodes = nodeIds
+      .filter((id) => !previousNodes.has(id) && !revealOwned.has(id))
+      .slice(0, MAX_ANIMATED_PER_BATCH)
+    const freshEdges = edges
+      .filter((edge) => !previousEdges.has(edge.id) && !revealOwned.has(edge.target))
+      .map((edge) => edge.id)
+      .slice(0, MAX_ANIMATED_PER_BATCH)
     if (freshNodes.length === 0 && freshEdges.length === 0) return
 
     const frame = requestAnimationFrame(() => {

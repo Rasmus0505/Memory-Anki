@@ -160,13 +160,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     return () => observer.disconnect()
   }, [reportMeasuredSize])
 
-  const resizeEditor = useCallback(() => {
-    const input = inputRef.current
-    if (!input) return
-    input.style.height = 'auto'
-    input.style.height = `${Math.max(input.scrollHeight, nodeSize.height)}px`
-  }, [nodeSize.height])
-
   const restoreEditSnapshot = useCallback((snapshot: EditSnapshot) => {
     setEditText(snapshot.value)
     nodeData.onEditTextChange?.(id, snapshot.value)
@@ -178,10 +171,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       } else {
         input.textContent = snapshot.value
       }
-      resizeEditor()
       placeContentEditableCaret(input, { selectAll: false })
     })
-  }, [id, nodeData, resizeEditor])
+  }, [id, nodeData])
 
   const focusEditorCaret = useCallback(
     (options?: { selectAll?: boolean; value?: string; seedContent?: boolean }) => {
@@ -197,10 +189,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         }
       }
       placeContentEditableCaret(input, { selectAll })
-      resizeEditor()
       return document.activeElement === input
     },
-    [nodeData.selectEditText, resizeEditor],
+    [nodeData.selectEditText],
   )
   const focusEditorCaretRef = useRef(focusEditorCaret)
   focusEditorCaretRef.current = focusEditorCaret
@@ -209,7 +200,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   // toolbar teardown / React Flow layout can steal focus right after the first attempt.
   // Must NOT re-run placement when draft text / node height changes mid-session —
   // that used to force the caret to the end and cause accidental end deletes.
-  // Depends only on isEditing so resizeEditor/focusEditorCaret identity churn never
+  // Depends only on isEditing so focusEditorCaret identity churn never
   // cancels enter-edit focus retries or re-places the caret while typing.
   useLayoutEffect(() => {
     if (!isEditing) {
@@ -421,10 +412,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       editHistoryRef.current.past.push({ value: before, selectionStart: 0, selectionEnd: 0 })
       editHistoryRef.current.future = []
       updateEditValue(after)
-      requestAnimationFrame(resizeEditor)
-    }
+      }
     extract.syncTextSelection(input)
-  }, [extract, resizeEditor, updateEditValue])
+  }, [extract, updateEditValue])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -518,9 +508,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       pendingInputSnapshotRef.current = null
     }
     updateEditValue(nextValue)
-    requestAnimationFrame(resizeEditor)
     extract.syncTextSelection(input)
-  }, [editValue, extract, resizeEditor, updateEditValue])
+  }, [editValue, extract, updateEditValue])
 
   const handleCompositionStart = useCallback(() => {
     isComposingRef.current = true
@@ -539,8 +528,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       editHistoryRef.current.future = []
     }
     updateEditValue(nextValue)
-    requestAnimationFrame(resizeEditor)
-  }, [resizeEditor, updateEditValue])
+  }, [updateEditValue])
 
   const effectiveDropMode = extract.localHoverMode ?? dropMode
   const showDropChrome = Boolean(extract.localHoverMode || nodeData.dropHighlight)
@@ -579,8 +567,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     ...(markFill ? { backgroundColor: markFill } : {}),
   }
   const borderStyle = Object.keys(shellStyle).length > 0 ? shellStyle : undefined
-  // Edit border is thicker; keep content width equal to display getNodeSize.
-  const shellWidth = isEditing ? nodeSize.width + 3 : nodeSize.width
+  // Editing reuses the display card box (same border/padding), so width never changes.
+  const shellWidth = nodeSize.width
 
   return (
     <div
@@ -643,7 +631,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       />
 
       {isEditing ? (
-        <div className={`relative ${showDropChrome ? dropHighlightCls : ''}`}>
+        <div
+          className={`relative ${containerCls} mindmap-node-card--editing ${paddingCls}`}
+          style={{ minHeight: nodeSize.height, ...borderStyle }}
+        >
           <ExtractDropPlaceholders mode={effectiveDropMode} visible={showDropChrome} />
           {extract.textSelection ? (
             // w-max + nowrap: absolute shrink-to-fit on a narrow card would otherwise
@@ -687,18 +678,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             aria-label="编辑节点文本"
             data-node-mode="editing"
             className={[
-              'nodrag nopan nowheel box-border block w-full overflow-hidden mindmap-node-editor rounded-[14px] border-[2.5px] border-primary bg-primary-soft/70 text-paper-ink outline-none ring-4 ring-primary/25',
-              '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]',
-              paddingCls,
+              'nodrag nopan nowheel mindmap-node-editor block w-full min-w-0 outline-none',
               editorTextCls,
             ].join(' ')}
-            style={{
-              height: nodeSize.height,
-              minHeight: nodeSize.height,
-              width: '100%',
-              maxWidth: '100%',
-              scrollbarWidth: 'none',
-            }}
           />
           <NodeCardStatusChrome
             visual={visual}

@@ -4,11 +4,11 @@ import { BRANCH_COLORS } from './branchColors'
 
 const ROOT_X = 52
 const ROOT_Y = 280
-const ROOT_NODE_MIN_HEIGHT = 40
-const BRANCH_NODE_MIN_HEIGHT = 34
-const LEAF_NODE_MIN_HEIGHT = 30
+const ROOT_NODE_MIN_HEIGHT = 47
+const BRANCH_NODE_MIN_HEIGHT = 40
+const LEAF_NODE_MIN_HEIGHT = 35
 /** Soft wrap budget: cards grow with text until this many full-width characters. */
-export const NODE_MAX_VISUAL_CHARACTERS = 20
+export const NODE_MAX_VISUAL_CHARACTERS = 18
 /**
  * Extra shell width so real CJK/font metrics never wrap earlier than the character
  * budget (formula uses average char width; YaHei/subpixel/zoom can run slightly wider).
@@ -111,6 +111,15 @@ function getNodeId(source: NodeSizeSource): string | null {
   return typeof directId === 'string' ? directId : null
 }
 
+/**
+ * Typography follows depth, not child count: adding a first child must not change
+ * a card's font size (and therefore its wrap) mid-edit.
+ */
+export function getTypographicRole(depth: number): LayoutRole {
+  if (depth <= 0) return 'root'
+  return depth === 1 ? 'branch' : 'leaf'
+}
+
 export function getNodeRole(node?: NodeSizeSource): LayoutRole {
   if (isLayoutRole(node)) return node
 
@@ -120,10 +129,12 @@ export function getNodeRole(node?: NodeSizeSource): LayoutRole {
       : node && typeof node === 'object' && 'metadata' in node
         ? node.metadata
         : undefined
+  if (typeof metadata?.depth === 'number') return getTypographicRole(metadata.depth)
   const role = metadata?.layoutRole
   return isLayoutRole(role) ? role : 'branch'
 }
 
+/** Must mirror buildNodeCardTextClassNames + NodeCard padding (px, 1px border included). */
 function getBaseNodeSize(role: LayoutRole): {
   minHeight: number
   horizontalChrome: number
@@ -138,8 +149,8 @@ function getBaseNodeSize(role: LayoutRole): {
         minHeight: ROOT_NODE_MIN_HEIGHT,
         horizontalChrome: 34,
         verticalChrome: 22,
-        lineHeight: 20,
-        averageCharWidth: 14,
+        lineHeight: 25,
+        averageCharWidth: 16,
         metaHeight: 0,
       }
     case 'branch':
@@ -147,8 +158,8 @@ function getBaseNodeSize(role: LayoutRole): {
         minHeight: BRANCH_NODE_MIN_HEIGHT,
         horizontalChrome: 26,
         verticalChrome: 18,
-        lineHeight: 17,
-        averageCharWidth: 13,
+        lineHeight: 22,
+        averageCharWidth: 14.5,
         metaHeight: 0,
       }
     default:
@@ -156,8 +167,8 @@ function getBaseNodeSize(role: LayoutRole): {
         minHeight: LEAF_NODE_MIN_HEIGHT,
         horizontalChrome: 22,
         verticalChrome: 14,
-        lineHeight: 17,
-        averageCharWidth: 12.5,
+        lineHeight: 21,
+        averageCharWidth: 13.5,
         metaHeight: 0,
       }
   }
@@ -209,10 +220,14 @@ export function getNodeSize(source?: NodeSizeSource, labelOverride?: string): No
     Math.max(base.horizontalChrome + base.averageCharWidth + NODE_WIDTH_SAFETY_PX, naturalWidth, tokenMinWidth),
   )
   const contentWidth = Math.max(width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX, base.averageCharWidth)
-  const charsPerLine = Math.max(1, Math.floor(contentWidth / base.averageCharWidth))
+  // Compare pixel widths, not whole "chars per line": flooring made short Latin
+  // labels (e.g. "child") predict a phantom second line and inflate min-height.
   const textLineCount = label
     .split(/\r?\n/)
-    .reduce((total, line) => total + Math.max(1, Math.ceil(getWeightedTextLength(line) / charsPerLine)), 0)
+    .reduce((total, line) => {
+      const linePx = getWeightedTextLength(line) * base.averageCharWidth
+      return total + Math.max(1, Math.ceil(linePx / contentWidth - 1e-6))
+    }, 0)
   const height = Math.max(base.minHeight, Math.ceil(base.verticalChrome + textLineCount * base.lineHeight + base.metaHeight))
   return { width, height }
 }
@@ -238,7 +253,7 @@ export function getResolvedNodeSize(
 
 function getTreeNodeSize(node: LayoutTreeNode, measuredSizes?: NodeSizeMap): NodeSize {
   const measured = measuredSizes?.get(node.node.id)
-  const fallback = getNodeSize(node.layoutRole, node.node.label)
+  const fallback = getNodeSize(getTypographicRole(node.depth), node.node.label)
 
   if (!measured || measured.width <= 0 || measured.height <= 0) {
     return fallback

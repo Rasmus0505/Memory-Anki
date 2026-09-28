@@ -18,28 +18,35 @@ describe('mind map layout sizing', () => {
     )
 
     expect(longSize.width).toBeGreaterThan(shortSize.width)
-    expect(shortSize.width).toBe(73)
-    expect(longSize.width).toBeLessThanOrEqual(294)
+    expect(shortSize.width).toBe(78)
+    expect(longSize.width).toBeLessThanOrEqual(295)
     expect(longSize.height).toBeGreaterThan(shortSize.height)
   })
 
-  it('uses intrinsic width until the shared twenty-character visual limit', () => {
+  it('uses intrinsic width until the shared eighteen-character visual limit', () => {
     const oneCharacter = getNodeSize('branch', '一')
     const fourCharacters = getNodeSize('branch', '一二三四')
     const fiveCharacters = getNodeSize('branch', '一二三四五')
-    const twentyCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八九十')
-    const twentyOneCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八九十一')
+    const eighteenCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八')
+    const nineteenCharacters = getNodeSize('branch', '一二三四五六七八九十一二三四五六七八九')
     const mixedText = getNodeSize('branch', 'Memory Anki 记忆卡片')
 
-    expect(oneCharacter.width).toBe(47)
+    expect(oneCharacter.width).toBe(49)
     // Short CJK labels keep a single-line shell (content box >= 4 full-width chars).
-    expect(fourCharacters.width).toBe(86)
+    expect(fourCharacters.width).toBe(92)
     expect(fourCharacters.height).toBe(oneCharacter.height)
-    expect(fiveCharacters.width).toBe(99)
-    expect(twentyCharacters.width).toBe(294)
-    expect(twentyOneCharacters.width).toBe(294)
-    expect(twentyOneCharacters.height).toBeGreaterThan(twentyCharacters.height)
-    expect(mixedText.width).toBeLessThan(twentyCharacters.width)
+    expect(fiveCharacters.width).toBe(107)
+    expect(eighteenCharacters.width).toBe(295)
+    expect(eighteenCharacters.height).toBe(oneCharacter.height)
+    expect(nineteenCharacters.width).toBe(295)
+    expect(nineteenCharacters.height).toBeGreaterThan(eighteenCharacters.height)
+    expect(mixedText.width).toBeLessThan(eighteenCharacters.width)
+  })
+
+  it('sizes by depth so a card keeps its typography when it gains a first child', () => {
+    const asLeaf = getNodeSize({ label: '三羧酸循环', metadata: { depth: 2, layoutRole: 'leaf' } })
+    const asBranch = getNodeSize({ label: '三羧酸循环', metadata: { depth: 2, layoutRole: 'branch' } })
+    expect(asBranch).toEqual(asLeaf)
   })
 
   it('widens cards so long English words are not forced mid-word', () => {

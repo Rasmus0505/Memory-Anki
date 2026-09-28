@@ -122,7 +122,7 @@ describe('NodeCard', () => {
     expect(onReadonlyDoubleClick).not.toHaveBeenCalled()
   })
 
-  it('widens the edit shell so thicker edit borders do not wrap earlier than display', () => {
+  it('keeps the edit shell pixel-identical to display so entering edit never re-wraps', () => {
     const label = '一二三四五六'
     const displaySize = getNodeSize('branch', label)
     const display = renderNodeCard({
@@ -141,7 +141,10 @@ describe('NodeCard', () => {
     })
     const editShell = edit.container.querySelector('[data-mindmap-node-id]') as HTMLElement
     const editor = screen.getByRole('textbox')
-    expect(Number.parseFloat(editShell.style.width)).toBeGreaterThan(displaySize.width)
+    expect(editShell.style.width).toBe(`${displaySize.width}px`)
+    // Editor text uses the exact display typography classes.
+    const displayTypography = ['text-[14.5px]', 'leading-[22px]', 'font-bold', 'text-left']
+    for (const cls of displayTypography) expect(editor.className).toContain(cls)
     expect(editor.className).toContain('break-words')
     expect(editor.className).toContain('whitespace-pre-wrap')
   })
@@ -157,7 +160,7 @@ describe('NodeCard', () => {
     const shell = document.querySelector('[data-mindmap-node-id]') as HTMLElement
     expect(shell.style.width).toBe(`${size.width}px`)
     // Content box (minus chrome) must fit 4 full-width characters without forced wrap.
-    expect(size.width - 26 - 8).toBeGreaterThanOrEqual(4 * 13)
+    expect(size.width - 26 - 8).toBeGreaterThanOrEqual(4 * 14.5)
     expect(size.height).toBe(getNodeSize('branch', '一').height)
     expect(screen.getByRole('button', { name: label }).className).toContain('whitespace-pre-wrap')
   })
@@ -199,8 +202,10 @@ describe('NodeCard', () => {
 
     const editor = screen.getByRole('textbox')
     expect(editor.getAttribute('data-node-mode')).toBe('editing')
-    expect(editor.className).toContain('border-primary')
-    expect(editor.className).toContain('bg-primary-soft')
+    // The same paper card lights up; selection ring styling is not reused.
+    const card = editor.closest('.mindmap-node-card') as HTMLElement
+    expect(card.className).toContain('mindmap-node-card--editing')
+    expect(card.className).not.toContain('mindmap-node-card--selected')
     expect(document.querySelector('[data-node-mode="editing"]')).toBeTruthy()
   })
 
@@ -441,14 +446,15 @@ describe('NodeCard', () => {
     expect(screen.queryByRole('button', { name: '原始内容' })).toBeNull()
   })
 
-  it('shows a distinct editor without an internal scrollbar', () => {
+  it('shows a distinct editor that grows in flow instead of scrolling', () => {
     renderNodeCard({ label: '编辑视觉' })
     fireEvent.doubleClick(screen.getByRole('button', { name: '编辑视觉' }))
     const textarea = screen.getByRole('textbox')
 
-    expect(textarea.className).toContain('border-primary')
-    expect(textarea.className).toContain('overflow-hidden')
-    expect(textarea.style.scrollbarWidth).toBe('none')
+    expect(textarea.closest('.mindmap-node-card')?.className).toContain('mindmap-node-card--editing')
+    // No fixed height means no internal scroll box; the card itself grows.
+    expect(textarea.style.height).toBe('')
+    expect(textarea.className).not.toMatch(/\bborder-\[/)
   })
 
   it('maps readonly double click to the recall cancel handler', () => {
@@ -690,6 +696,7 @@ describe('NodeCard', () => {
 
   it('reads hidden recall state from metadata', () => {
     renderNodeCard({
+      label: '线粒体内膜',
       metadata: {
         depth: 1,
         layoutRole: 'branch',
@@ -699,6 +706,27 @@ describe('NodeCard', () => {
     })
 
     const button = screen.getByRole('button', { name: '待回忆' })
-    expect(button.className).toContain('blur-[3px]')
+    // The real label stays laid out (invisible) so revealing never resizes the card.
+    const sizer = button.querySelector('.mindmap-node-concealed-sizer') as HTMLElement
+    expect(sizer.textContent).toBe('线粒体内膜')
+    expect(sizer.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('keeps yellow highlights and adds no word padding in english mode', () => {
+    const onEnglishWordClick = vi.fn()
+    renderNodeCard({
+      label: '<div>the <span data-emphasis="highlight" style="background-color:#fef08c">powerhouse</span> cell</div>',
+      englishInteractionActive: true,
+      onEnglishWordClick,
+      metadata: { depth: 2, layoutRole: 'leaf', richText: true },
+    })
+
+    const highlight = document.querySelector('[data-emphasis="highlight"]') as HTMLElement
+    expect(highlight).not.toBeNull()
+    const word = highlight.querySelector('[data-reading-word="true"]') as HTMLElement
+    expect(word.textContent).toBe('powerhouse')
+    expect(word.className).not.toMatch(/\bpx-/)
+    fireEvent.click(word)
+    expect(onEnglishWordClick).toHaveBeenCalledWith('powerhouse', expect.anything())
   })
 })

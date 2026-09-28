@@ -115,25 +115,23 @@ export function buildNodeCardTextClassNames(options: {
   textSelectionModeActive?: boolean
   mode: 'display' | 'edit'
 }): string {
+  // Font size / line-height / weight / alignment are identical in every mode
+  // (display, edit, english, text-select, concealed) so switching never re-wraps.
+  // Keep in sync with getBaseNodeSize in layout.ts.
   const wrap = 'break-words whitespace-pre-wrap'
   const nativeTextSelect = options.englishInteractionActive || Boolean(options.textSelectionModeActive)
-  const size = options.isRoot
-    ? 'text-[14px] font-semibold leading-5'
+  const typography = options.isRoot
+    ? 'text-[16px] font-extrabold leading-[25px] text-center text-paper-ink'
     : options.depth === 1
-      ? 'text-[13px] font-medium leading-[17px]'
-      : 'text-[12.5px] font-normal leading-[17px]'
-  if (options.mode === 'edit') {
-    return [options.isRoot ? 'text-center' : 'text-left', size, wrap].join(' ')
-  }
+      ? 'text-[14.5px] font-bold leading-[22px] text-left text-paper-ink'
+      : 'text-[13.5px] font-medium leading-[21px] text-left text-paper-ink-soft'
+  const shared = ['mindmap-node-type', typography, wrap]
+  if (options.mode === 'edit') return shared.join(' ')
   return [
     'w-full appearance-none border-0 bg-transparent p-0',
-    wrap,
+    ...shared,
     nativeTextSelect ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
-    options.concealed ? 'blur-[3px]' : '',
     !nativeTextSelect && (options.concealed || !options.readonly) ? 'select-none' : '',
-    options.isRoot ? `${size} text-paper-ink text-center tracking-[0.01em]` : `text-left ${size}`,
-    !options.isRoot && options.depth === 1 ? 'text-paper-ink' : '',
-    !options.isRoot && options.depth !== 1 ? 'text-paper-ink-soft' : '',
   ].filter(Boolean).join(' ')
 }
 

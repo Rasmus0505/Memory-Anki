@@ -2,6 +2,7 @@ import { REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX } from '@/shared/feedback/reviewFe
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/feedback/feedbackEvents'
 import {
   getComboMilestoneTone,
+  getLandingChimeTone,
   getFireworkAccentTones,
   getToneSpec,
   type ToneSpec,
@@ -46,7 +47,7 @@ if (typeof document !== 'undefined') {
   })
 }
 
-function getSharedAudioContext() {
+export function getSharedAudioContext() {
   const AudioContextCtor = resolveAudioContextConstructor()
   if (!AudioContextCtor) return null
   if (!sharedAudioContext) {
@@ -250,6 +251,12 @@ export function playWebAudioPageTurn(args: { volume?: number; direction?: 'forwa
     q: 2.4,
     gain: 0.022 * feedbackVolume,
   })
+}
+
+export function playWebAudioLandingChime(args: { combo: number; volume?: number }) {
+  const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
+  if (feedbackVolume <= 0) return
+  playToneSequence(getLandingChimeTone(args.combo), feedbackVolume)
 }
 
 export function __resetWebAudioContextForTests() {

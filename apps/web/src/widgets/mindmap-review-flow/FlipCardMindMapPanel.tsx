@@ -456,7 +456,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
     >
       {/* compact freestyle: no second guided rail — tap nodes to reveal; map toolbar is enough.
           default density keeps the mobile guided path + 上级/下一个/揭示/全局 rail. */}
-      {!isEditMode && !textModeActive && !compactChrome ? (
+      {/* Stays mounted in text mode: removing it would resize the canvas on toggle. */}
+      {!isEditMode && !compactChrome ? (
         <div
           className={cn(
             // text-foreground: avoid inheriting light shell text onto light chrome (PWA freestyle).

@@ -363,3 +363,16 @@ export function getFireworkAccentTones(
     { frequency: 1396, durationMs: 280, gain: 0.012, type: 'sine' as const, offsetMs: 206, pan: 0.3 },
   ]
 }
+
+const LANDING_BASE_HZ = 660
+const LANDING_MAX_STEPS = 12
+
+/** Particles landing on the progress rail: a light two-note chime, a semitone higher per combo step. */
+export function getLandingChimeTone(combo: number): ToneSpec[] {
+  const steps = Math.max(0, Math.min(LANDING_MAX_STEPS, Math.round(combo)))
+  const base = LANDING_BASE_HZ * 2 ** (steps / 12)
+  return [
+    { frequency: base, durationMs: 120, gain: 0.022, type: 'sine', offsetMs: 0, pan: 0.1, attackMs: 4 },
+    { frequency: base * 1.5, durationMs: 160, gain: 0.012, type: 'triangle', offsetMs: 45, pan: 0.2, attackMs: 4 },
+  ]
+}

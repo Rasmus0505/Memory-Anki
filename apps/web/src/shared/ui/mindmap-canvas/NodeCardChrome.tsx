@@ -1,4 +1,5 @@
-import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import type { MindMapCountBadge, MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
 import { NodeCountBadgeCluster } from './NodeCountBadge'
@@ -66,21 +67,22 @@ export function NodeCardStatusChrome({
 
 const ENGLISH_WORD_SPLIT = /(\b[A-Za-z][A-Za-z'-]*\b)/g
 
-function renderEnglishInteractiveLabel(
-  label: string,
-  onEnglishWordClick: (word: string, event: MouseEvent<HTMLElement>) => void,
-) {
+type EnglishWordClick = (word: string, event: MouseEvent<HTMLElement>) => void
+
+// Word spans carry no padding/border: underline + inset glow only, so english
+// mode never widens a line and never re-wraps the card (see mindmap-scene.css).
+function renderEnglishInteractiveLabel(label: string, onEnglishWordClick: EnglishWordClick, keyPrefix = '') {
   const parts = String(label || '').split(ENGLISH_WORD_SPLIT)
   return parts.map((part, index) => {
     if (!part) return null
     if (/^[A-Za-z][A-Za-z'-]*$/.test(part)) {
       return (
         <span
-          key={`${part}-${index}`}
+          key={`${keyPrefix}${part}-${index}`}
           role="button"
           tabIndex={0}
           data-reading-word="true"
-          className="cursor-pointer rounded-sm px-0.5 text-inherit underline decoration-dotted decoration-paper-line-strong underline-offset-2 transition hover:bg-primary/10 hover:decoration-primary"
+          className="mindmap-reading-word"
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -97,8 +99,37 @@ function renderEnglishInteractiveLabel(
         </span>
       )
     }
-    return <span key={`t-${index}`}>{part}</span>
+    return <span key={`${keyPrefix}t-${index}`}>{part}</span>
   })
+}
+
+/**
+ * English mode over rich (highlighted) markup: keep the highlight structure,
+ * split only text nodes into clickable words. Input is already sanitized; only
+ * the emphasis attribute is carried over, inline styles are dropped for CSS.
+ */
+function renderEnglishInteractiveRich(html: string, onEnglishWordClick: EnglishWordClick): ReactNode[] {
+  if (typeof DOMParser === 'undefined') {
+    return renderEnglishInteractiveLabel(stripMindMapHtml(html), onEnglishWordClick)
+  }
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  const walk = (nodes: NodeListOf<ChildNode>, path: string): ReactNode[] =>
+    Array.from(nodes).map((node, index) => {
+      const key = `${path}${index}`
+      if (node.nodeType === Node.TEXT_NODE) {
+        return renderEnglishInteractiveLabel(node.textContent ?? '', onEnglishWordClick, `${key}-`)
+      }
+      if (!(node instanceof Element)) return null
+      const tag = node.tagName.toLowerCase()
+      if (tag === 'br') return <br key={key} />
+      const children = walk(node.childNodes, `${key}.`)
+      const emphasis = node.getAttribute('data-emphasis') ?? undefined
+      if (tag === 'div') return <div key={key} data-emphasis={emphasis}>{children}</div>
+      if (tag === 'u') return <u key={key}>{children}</u>
+      if (tag === 'mark') return <mark key={key} data-emphasis={emphasis}>{children}</mark>
+      return <span key={key} data-emphasis={emphasis}>{children}</span>
+    })
+  return walk(doc.body.childNodes, 'n')
 }
 
 export function NodeCardTextFace({
@@ -163,22 +194,26 @@ export function NodeCardTextFace({
       onKeyDown={nativeCopySurface ? undefined : (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Enter' || event.key === ' ') event.preventDefault()
       }}
-      className={[
-        'mindmap-node-text nodrag',
-        blockPanePan ? 'nopan' : '',
-        textCls,
-        displayHtml && !showEnglishInteraction
-          ? '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]'
-          : '',
-      ]
+      className={['mindmap-node-text nodrag', blockPanePan ? 'nopan' : '', textCls]
         .filter(Boolean)
         .join(' ')}
     >
       {concealed ? (
-        <span className="mindmap-node-concealed">待回忆</span>
+        // The real label stays in flow (invisible) so the card keeps its revealed
+        // size; flipping it open never resizes the card or re-lays out the map.
+        <>
+          <span aria-hidden="true" className="mindmap-node-concealed-sizer block w-full">
+            {displayHtml ? stripMindMapHtml(displayHtml) : plainLabel}
+          </span>
+          <span className="mindmap-node-concealed">待回忆</span>
+        </>
       ) : showEnglishInteraction ? (
-        // Plain interactive words: long-press drag can select across spans for AI translate.
-        <span className="block w-full">{renderEnglishInteractiveLabel(plainLabel, onEnglishWordClick)}</span>
+        // Interactive words keep highlight markup; long-press drag can still select across spans.
+        <span className="block w-full">
+          {displayHtml
+            ? renderEnglishInteractiveRich(displayHtml, onEnglishWordClick)
+            : renderEnglishInteractiveLabel(plainLabel, onEnglishWordClick)}
+        </span>
       ) : displayHtml ? (
         // div (not span): stored markup is often <div>…</div>; span>div is invalid
         // and browsers may reparent highlight nodes outside the double-click target.
