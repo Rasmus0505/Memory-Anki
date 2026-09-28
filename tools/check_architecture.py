@@ -11,6 +11,32 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_SRC = REPO_ROOT / "apps" / "web" / "src"
+
+# The immersive page and unit card were split into cohesive files; source-level
+# guards read the whole composition so moving code between them stays legal.
+FREESTYLE_UI: Path | None = None
+FREESTYLE_PAGE_COMPOSITION = (
+    "ImmersiveFreestylePage.tsx",
+    "hooks/useFreestyleFeedNavigation.ts",
+    "hooks/useFreestyleLiveSync.ts",
+    "components/FreestyleHudChrome.tsx",
+)
+FREESTYLE_UNIT_CARD_COMPOSITION = (
+    "components/FreestyleUnitReviewCardView.tsx",
+    "components/FreestyleUnitReviewChrome.tsx",
+    "model/freestyleUnitReviewSession.ts",
+)
+
+
+def read_freestyle_composition(parts: tuple[str, ...]) -> str:
+    # Resolved per call so tests that monkeypatch WEB_SRC see their fixture tree.
+    root = FREESTYLE_UI or WEB_SRC / "modules" / "practice" / "ui" / "freestyle"
+    sources = []
+    for rel in parts:
+        path = root / rel
+        if path.exists():
+            sources.append(path.read_text(encoding="utf-8", errors="ignore"))
+    return "\n".join(sources)
 WEB_ROOT = REPO_ROOT / "apps" / "web"
 API_SRC = REPO_ROOT / "apps" / "api" / "src" / "memory_anki"
 ALEMBIC_VERSIONS = REPO_ROOT / "apps" / "api" / "alembic" / "versions"
@@ -21,7 +47,6 @@ BOUNDARY_EXCEPTIONS_PATH = (
 )
 CONTEXT_MAP_PATH = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
 PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "quiz" / "application"
-BATCH_GENERATION_APPLICATION = API_SRC / "modules" / "batch_generation" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
 WEB_LAYER_DIRS = ("app", "pages", "widgets", "modules", "shared", "platform", "pwa", "styles", "test")
 WEB_API_PORT = "8012"
@@ -29,16 +54,22 @@ WEB_API_BASE_URL = f"http://127.0.0.1:{WEB_API_PORT}"
 
 AI_RUNTIME_PORT_MANAGED_FILES = {
     "modules/content/application/peg_association_service.py",
-    "modules/produce/application/mindmap_ai_split/config_loader.py",
-    "modules/produce/application/mindmap_ai_split/contracts.py",
-    "modules/produce/application/mindmap_ai_split/gateway.py",
-    "modules/produce/application/mindmap_ai_split_service.py",
-    "modules/produce/application/mindmap_import/runtime.py",
-    "modules/produce/application/mindmap_import_job_api.py",
-    "modules/produce/application/mindmap_import_job_execution.py",
-    "modules/produce/application/mindmap_import_job_runtime.py",
-    "modules/produce/application/mindmap_import_job_service.py",
 }
+REMOVED_AI_ENTRY_FILES = (
+    "apps/api/src/memory_anki/modules/ai_learning",
+    "apps/api/src/memory_anki/modules/batch_generation",
+    "apps/api/src/memory_anki/modules/english_reading",
+    "apps/api/src/memory_anki/modules/pdf_library",
+    "apps/api/src/memory_anki/modules/produce/application/mindmap_ai_split",
+    "apps/api/src/memory_anki/modules/produce/application/mindmap_ai_split_service.py",
+    "apps/api/src/memory_anki/modules/produce/application/mindmap_import",
+    "apps/api/src/memory_anki/modules/quiz/application/ai_service.py",
+    "apps/api/src/memory_anki/modules/quiz/application/generation",
+    "apps/api/src/memory_anki/modules/quiz/presentation/workspace_router.py",
+    "apps/api/src/memory_anki/infrastructure/llm/gateway.py",
+    "apps/web/src/modules/english-reading",
+    "apps/web/src/pages/create/BatchGenerationWorkspacePage.tsx",
+)
 
 FORBIDDEN_WEB_IMPORTS = {
     "@/shared/api/client": "Pages and features must import scoped API wrappers or contracts instead of the legacy shared/api/client aggregator.",
@@ -163,7 +194,6 @@ BASELINE_SHARED_ENTITY_IMPORTS = {
 BASELINE_PRESENTATION_SESSION_FILES = {
     "apps/api/src/memory_anki/modules/dashboard/presentation/router.py",
     "apps/api/src/memory_anki/modules/english/presentation/router.py",
-    "apps/api/src/memory_anki/modules/english_reading/presentation/router.py",
     "apps/api/src/memory_anki/modules/practice/presentation/router.py",
     "apps/api/src/memory_anki/modules/knowledge/presentation/bilink_router.py",
     "apps/api/src/memory_anki/modules/knowledge/presentation/router.py",
@@ -977,7 +1007,7 @@ def check_live_study_presence(errors: list[str]) -> None:
         errors.append("apps/web/src/app/providers/AppProviders.tsx: LiveStudyPresenceProvider must wrap the app.")
 
     freestyle_page = web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
-    freestyle_source = freestyle_page.read_text(encoding="utf-8", errors="ignore") if freestyle_page.exists() else ""
+    freestyle_source = read_freestyle_composition(FREESTYLE_PAGE_COMPOSITION) if freestyle_page.exists() else ""
     if "useFreestyleLiveMirror" not in freestyle_source:
         errors.append(
             "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx: useFreestyleLiveMirror is a permanent wiring."
@@ -1293,8 +1323,6 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
     )
     managed_paths = {API_SRC / relative for relative in AI_RUNTIME_PORT_MANAGED_FILES}
     managed_application_roots = (
-        API_SRC / "modules" / "quiz" / "application",
-        API_SRC / "modules" / "english_reading" / "application",
         API_SRC / "modules" / "english" / "application",
     )
     for application_root in managed_application_roots:
@@ -1317,9 +1345,6 @@ def check_ai_runtime_port_boundaries(errors: list[str]) -> None:
 def check_ai_credential_tombstones(errors: list[str]) -> None:
     legacy_consumers = (
         API_SRC / "modules" / "english" / "infrastructure" / "dashscope_gateway.py",
-        API_SRC / "modules" / "english_reading" / "application" / "dictionary_service.py",
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "config_loader.py",
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split_service.py",
     )
     forbidden_runtime_names = {
         "DASHSCOPE_API_KEY",
@@ -1343,13 +1368,21 @@ def check_ai_credential_tombstones(errors: list[str]) -> None:
                 f"credentials through AiRuntimeProvider, not environment names {leaked_names}."
             )
 
-    split_loader = API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "config_loader.py"
-    if split_loader.exists():
-        source = split_loader.read_text(encoding="utf-8", errors="ignore")
-        required_marker = 'has_legacy_api_key_override = "mindmap_ai_split_api_key" in values'
-        if required_marker not in source:
+def check_removed_ai_entries_stay_deleted(errors: list[str]) -> None:
+    """In-app AI features and the PDF library stay deleted. Listening ASR/translation stays."""
+    for relative in REMOVED_AI_ENTRY_FILES:
+        path = REPO_ROOT / relative
+        if path.exists():
+            errors.append(f"{relative}: removed AI/PDF entry must stay deleted.")
+    listening = (
+        API_SRC / "modules" / "english" / "infrastructure" / "dashscope_gateway.py",
+        API_SRC / "infrastructure" / "llm" / "openai_compatible.py",
+        API_SRC / "infrastructure" / "llm" / "external_ai_call_logs.py",
+    )
+    for path in listening:
+        if not path.exists():
             errors.append(
-                "mind-map AI split must preserve an explicit empty legacy key as a credential tombstone."
+                f"{path.relative_to(REPO_ROOT).as_posix()}: English listening AI pipeline must stay."
             )
 
 def check_review_application_boundary(errors: list[str]) -> None:
@@ -1761,7 +1794,11 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 errors.append(
                     f"{progress_path.relative_to(REPO_ROOT).as_posix()}: HUD must keep `{marker}`."
                 )
-        if "bg-sky-400/25" not in progress_source:
+        # Palace-colored pending ticks only; the neutral (no palace) fallback has its own opacity.
+        pending_fills = re.findall(r"pending:\s*'(bg-\[hsl\([^']+)'", progress_source)
+        if "bg-sky-400/25" not in progress_source and (
+            not pending_fills or not all(fill.endswith("/25") for fill in pending_fills)
+        ):
             errors.append(
                 f"{progress_path.relative_to(REPO_ROOT).as_posix()}: "
                 "pending rail ticks must stay a faint palace fill."
@@ -1771,7 +1808,9 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{progress_path.relative_to(REPO_ROOT).as_posix()}: "
                 "pending vs done rail ticks must not use near-identical opacities."
             )
-        if "retryNodeToneClass" not in progress_source or "bg-amber-400/25" not in progress_source:
+        if "retryNodeToneClass" not in progress_source or (
+            "bg-amber-400/25" not in progress_source and "bg-rate-hard/25" not in progress_source
+        ):
             errors.append(
                 f"{progress_path.relative_to(REPO_ROOT).as_posix()}: "
                 "unfinished retry ticks must stay a faint amber fill."
@@ -1958,6 +1997,9 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
             "FreestyleOverlayQuizState",
             "FreestyleOverlayQuestionRange",
             "overlay_question_range",
+            "overlay_question_kinds",
+            "overlay_type_order",
+            "overlay_type_palace_nesting",
         ):
             if marker not in contract_source:
                 errors.append(
@@ -2011,6 +2053,11 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz must not expand a subject into every palace."
             )
+        if "order_overlay_questions" not in overlay_pack_source or "overlay_question_kind" not in overlay_pack_source:
+            errors.append(
+                f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay quiz must filter 客观/主观 and order them with order_overlay_questions."
+            )
     canvas = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "MindMapCanvas.tsx"
     if canvas.exists():
         canvas_source = canvas.read_text(encoding="utf-8", errors="ignore")
@@ -2063,6 +2110,11 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz must document round review palaces, not the subject union."
             )
+        if "客观" not in feed_source or "主观" not in feed_source or "混合插入" not in feed_source:
+            errors.append(
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay quiz config must document 客观/主观 selection and 混合插入."
+            )
         if "Finishing one palace's ratings does not ask to clear overlay" not in feed_source:
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
@@ -2112,8 +2164,7 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
 
 
 def check_question_practice_has_no_lifecycle_gate(errors: list[str]) -> None:
-    """Every non-deleted question is practiceable. Disabled AI entry points stay rejected."""
-    disabled = "AI 出题、讲解、纠错和自由提问已禁用"
+    """Every non-deleted question is practiceable. Removed AI entry points stay absent."""
 
     def rel(path: Path) -> str:
         try:
@@ -2203,19 +2254,20 @@ def check_question_practice_has_no_lifecycle_gate(errors: list[str]) -> None:
             if marker in source:
                 errors.append(f"{rel(manage)}: manage panel must not offer {marker}.")
 
-    disabled_files = (
-        API_SRC / "modules" / "quiz" / "presentation" / "router.py",
+    quiz_router = API_SRC / "modules" / "quiz" / "presentation" / "router.py"
+    if quiz_router.exists():
+        source = quiz_router.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("/quiz-generation/", "/short-answer-feedback", "/quiz-classification/"):
+            if marker in source:
+                errors.append(f"{rel(quiz_router)}: removed AI quiz route `{marker}` must stay deleted.")
+    removed_entries = (
         API_SRC / "modules" / "quiz" / "presentation" / "workspace_router.py",
         API_SRC / "modules" / "ai_learning" / "presentation" / "router.py",
         WEB_SRC / "pages" / "create" / "BatchGenerationWorkspacePage.tsx",
     )
-    for path in disabled_files:
-        if not path.exists():
-            errors.append(f"{rel(path)}: disabled AI entry file is missing.")
-            continue
-        source = path.read_text(encoding="utf-8", errors="ignore")
-        if disabled not in source:
-            errors.append(f"{rel(path)}: must reject with `{disabled}`.")
+    for path in removed_entries:
+        if path.exists():
+            errors.append(f"{rel(path)}: removed AI entry must stay deleted.")
 
 
 def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
@@ -2465,6 +2517,67 @@ def check_freestyle_inline_edit_scope(errors: list[str]) -> None:
             )
 
 
+def check_enter_reveal_viewport_follow(errors: list[str]) -> None:
+    """Enter flip follow is a minimal pan. Clicks still keep the camera."""
+    panel = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    viewport = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "useMindMapViewport.ts"
+    flip_panel = WEB_SRC / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx"
+    doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+    follow = panel.parent / "useFreestyleEnterRevealFollow.ts"
+    if panel.exists():
+        source = panel.read_text(encoding="utf-8", errors="ignore")
+        relative = panel.relative_to(REPO_ROOT).as_posix()
+        if "useFreestyleEnterRevealFollow" not in source or "revealFollowNodeIds" not in source:
+            errors.append(
+                f"{relative}: Enter reveal follow must plan the flipped cards and request a reveal pan."
+            )
+        if "handleTargetNodeClick([targetSelection])" in source:
+            errors.append(
+                f"{relative}: Enter must not bypass the reveal-follow plan."
+            )
+    if follow.exists():
+        follow_source = follow.read_text(encoding="utf-8", errors="ignore")
+        if "applyTargetRevealFrom" not in follow_source:
+            errors.append(
+                f"{follow.relative_to(REPO_ROOT).as_posix()}: Enter reveal follow must plan the flipped cards and request a reveal pan."
+            )
+    elif panel.exists():
+        errors.append(
+            f"{follow.relative_to(REPO_ROOT).as_posix()}: Enter reveal follow must plan the flipped cards and request a reveal pan."
+        )
+    if viewport.exists():
+        source = viewport.read_text(encoding="utf-8", errors="ignore")
+        if "viewCommand.type !== 'reveal'" not in source or "pickMostOutOfViewNodeId" not in source:
+            errors.append(
+                "apps/web/src/shared/ui/mindmap-canvas/useMindMapViewport.ts: "
+                "reveal commands must pan the most clipped card into view."
+            )
+    if flip_panel.exists():
+        source = flip_panel.read_text(encoding="utf-8", errors="ignore")
+        if "revealFollowNodeIds={revealFollowNodeIds}" not in source:
+            errors.append(
+                "apps/web/src/widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx: "
+                "Enter reveal follow must stay a host request, not a click recenter."
+            )
+        if "nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}" not in source:
+            errors.append(
+                "apps/web/src/widgets/mindmap-review-flow/FlipCardMindMapPanel.tsx: "
+                "card clicks must keep the preserve camera policy."
+            )
+    if doc.exists() and "Enter reveal follow" not in doc.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "docs/architecture/mindmap.md: document Enter reveal follow."
+        )
+
+
 def check_freestyle_canvas_pan(errors: list[str]) -> None:
     """Review maps stay pannable; the feed pager changes cards, not one-finger yield."""
     panel = (
@@ -2693,7 +2806,7 @@ def check_freestyle_passed_unit_reopen(errors: list[str]) -> None:
             f"{card.relative_to(WEB_SRC).as_posix()}: freestyle unit card is required."
         )
     else:
-        card_source = card.read_text(encoding="utf-8", errors="ignore")
+        card_source = read_freestyle_composition(FREESTYLE_UNIT_CARD_COMPOSITION)
         for label in ("重试", "跳过这张", "重建本轮", "只看不评"):
             if label not in card_source:
                 errors.append(
@@ -2791,6 +2904,91 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
         )
 
 
+def check_freestyle_queue_removal_rail(errors: list[str]) -> None:
+    """A confirmed 移除队列 stays a solid rail tick and survives a conflicting cursor write."""
+    segments = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "freestyleProgressSegments.ts"
+    )
+    round_plan = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
+    public = WEB_SRC / "modules" / "practice" / "public.ts"
+    queue_hook = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "hooks"
+        / "useImmersiveQueue.ts"
+    )
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    segment_source = segments.read_text(encoding="utf-8", errors="ignore") if segments.exists() else ""
+    plan_source = round_plan.read_text(encoding="utf-8", errors="ignore") if round_plan.exists() else ""
+    public_source = public.read_text(encoding="utf-8", errors="ignore") if public.exists() else ""
+    hook_source = queue_hook.read_text(encoding="utf-8", errors="ignore") if queue_hook.exists() else ""
+    doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
+    tone_at = segment_source.find("export function segmentTone")
+    tone_body = segment_source[tone_at:tone_at + 500] if tone_at >= 0 else ""
+    if "case 'excluded':" not in tone_body or "return 'done'" not in tone_body:
+        errors.append(
+            f"{segments.relative_to(REPO_ROOT).as_posix()}: "
+            "移除队列 must stay on the rail as a solid done tick."
+        )
+    status_at = plan_source.find("export function planCardStatus")
+    status_body = plan_source[status_at:status_at + 1400] if status_at >= 0 else ""
+    excluded_at = status_body.find("status === 'excluded'")
+    active_at = status_body.find("currentCardId === card.id")
+    if excluded_at < 0 or active_at < 0 or excluded_at > active_at:
+        errors.append(
+            f"{round_plan.relative_to(REPO_ROOT).as_posix()}: "
+            "plan status excluded must win over the current-card active shortcut."
+        )
+    if "export function mergeRetainedHiddenIds" not in plan_source or "mergeRetainedHiddenIds" not in public_source:
+        errors.append(
+            f"{public.relative_to(REPO_ROOT).as_posix()}: "
+            "mergeRetainedHiddenIds must be exported for queue hydration."
+        )
+    if "round.conflict" not in hook_source or "action: 'exclude'" not in hook_source:
+        errors.append(
+            f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+            "exclude must retry when the round version conflicts."
+        )
+    ledger = WEB_SRC / "modules" / "practice" / "domain" / "hydrateRoundLedger.ts"
+    ledger_source = ledger.read_text(encoding="utf-8", errors="ignore") if ledger.exists() else ""
+    if "commitHydratedRoundLedger" not in hook_source or "retainLocalRoundLedger" not in ledger_source:
+        errors.append(
+            f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+            "queue hydration must retain this-round scores and removals across a silent rebuild."
+        )
+    if "coalesceHydrationLedger" not in hook_source or "forceExcludedIds" not in hook_source:
+        errors.append(
+            f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+            "a silent rebuild must keep a confirmed 移除队列 when the live ledger was wiped or stale."
+        )
+    if "persistQueueState(plannedState)" in hook_source:
+        errors.append(
+            f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
+            "do not persist the pre-hydrate draft plan; retain would treat it as a cancelled rating."
+        )
+    apply_at = plan_source.find("export function applyCompletedIdsToRoundPlan")
+    apply_body = plan_source[apply_at:apply_at + 700] if apply_at >= 0 else ""
+    if "status === 'excluded'" not in apply_body:
+        errors.append(
+            f"{round_plan.relative_to(REPO_ROOT).as_posix()}: "
+            "applyCompletedIdsToRoundPlan must not overwrite status === 'excluded'."
+        )
+    if "已移出队列" not in doc_source or "solid removal tick" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "the rail must document a solid 已移出队列 tick that survives a silent rebuild."
+        )
+
+
 def check_freestyle_viewing_playhead(errors: list[str]) -> None:
     """The HUD tick on screen must stay a playhead, and cancelling a rating must un-light it."""
     segments = (
@@ -2863,7 +3061,7 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
             f"{page.relative_to(REPO_ROOT).as_posix()}: immersive freestyle page is required."
         )
     else:
-        page_source = page.read_text(encoding="utf-8", errors="ignore")
+        page_source = read_freestyle_composition(FREESTYLE_PAGE_COMPOSITION)
         if (
             "resolveFreestyleCompleteSeek" not in page_source
             or "onComplete={handleCompleteRound}" not in page_source
@@ -2987,7 +3185,7 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
             f"{completion.relative_to(WEB_SRC).as_posix()}: round completion model is required."
         )
         return
-    page_source = page.read_text(encoding="utf-8", errors="ignore")
+    page_source = read_freestyle_composition(FREESTYLE_PAGE_COMPOSITION)
     completion_source = completion.read_text(encoding="utf-8", errors="ignore")
     if "function freestyleFeedSlotCount" not in completion_source:
         errors.append(
@@ -3086,10 +3284,63 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_config_overlap_choice(errors: list[str]) -> None:
+    """「保存配置并重排」 must ask before keeping overlapping progress or minting a round."""
+    dialog = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundConfigDialog.tsx"
+    )
+    copy_path = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlapProgressChoice.ts"
+    )
+    page = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if dialog.exists():
+        source = dialog.read_text(encoding="utf-8", errors="ignore")
+        if "start-fresh" not in source or "keep-overlap" not in source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "保存配置并重排 must ask whether to keep overlapping progress "
+                "or start a fresh round."
+            )
+        if "不保留，开启新一轮" not in source:
+            errors.append(
+                f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "the overlap reminder must offer 不保留，开启新一轮."
+            )
+    if not copy_path.exists() or "保留重复的进度" not in copy_path.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{copy_path.relative_to(REPO_ROOT).as_posix()}: "
+            "the overlap reminder title must ask 保留重复的进度."
+        )
+    if page.exists():
+        source = page.read_text(encoding="utf-8", errors="ignore")
+        if "choice === 'start-fresh'" not in source or "startNextRound" not in source:
+            errors.append(
+                f"{page.relative_to(REPO_ROOT).as_posix()}: "
+                "不保留 must mint the next round via startNextRound, not replan_remaining."
+            )
+    if doc.exists() and "startNextRound" not in doc.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document that 不保留 on 保存配置并重排 starts a new round."
+        )
+
+
 def check_consumer_context_public_facades(errors: list[str]) -> None:
     protected_by_consumer = {
         "english": {"session"},
-        "english_reading": {"english", "memory", "session"},
         "quiz": {"backups"},
         "content": {"backups", "session"},
         "memory": {"session"},
@@ -3097,7 +3348,6 @@ def check_consumer_context_public_facades(errors: list[str]) -> None:
         "settings": {"backups", "memory"},
         "practice": {
             "english",
-            "english_reading",
             "quiz",
             "content",
             "memory",
@@ -3105,7 +3355,6 @@ def check_consumer_context_public_facades(errors: list[str]) -> None:
         "produce": {
             "content",
             "backups",
-            "settings",
         },
     }
     for consumer, protected_owners in protected_by_consumer.items():
@@ -3167,6 +3416,35 @@ def check_contexts_without_persistence_dependency(errors: list[str]) -> None:
                 "platform mutation and persistence contracts instead of the "
                 "transitional persistence context."
             )
+
+
+EXAM_DOMAIN_FORBIDDEN_IMPORTS = ("sqlalchemy", "fastapi", "memory_anki.infrastructure", "memory_anki.modules.")
+EXAM_SCHEDULE_WRITE_PATTERNS = (".due_date =", ".stage_index =", ".has_passed =", ".last_passed_at =")
+
+
+def check_exam_context_boundaries(errors: list[str]) -> None:
+    """exam is a read-only estimate layer: pure domain, never rewrites review scheduling."""
+    exam_root = API_SRC / "modules" / "exam"
+    for path in iter_files(exam_root / "domain", (".py",)):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore").lstrip("﻿"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            imported = imported_module_from_node(node)
+            if imported and imported.startswith(EXAM_DOMAIN_FORBIDDEN_IMPORTS):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: exam domain must stay framework-free "
+                    f"(imports `{imported}`)."
+                )
+    for path in iter_files(exam_root, (".py",)):
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        for pattern in EXAM_SCHEDULE_WRITE_PATTERNS:
+            if pattern in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: exam must not write review scheduling "
+                    f"state (`{pattern.strip()}`); the forgetting estimate is read-only."
+                )
 
 
 def check_backend_presentation_orm_usage(errors: list[str]) -> None:
@@ -3378,6 +3656,7 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
         "mcqRevealOptions",
         "quizInteractionRestoreKey",
         "isQuizChoiceShortcutActive",
+        "isQuizChoiceAttemptClosed",
         "quizDisplayStem",
         "mcqSubjectiveReferenceAnswer",
         "formatMcqSubjectiveAnalysis",
@@ -3490,6 +3769,115 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "must render stems through QuizQuestionStem."
             )
+        if "isQuizChoiceAttemptClosed" not in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "choice shortcuts must stay open until an option is selected, via isQuizChoiceAttemptClosed."
+            )
+    freestyle_card = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleQuizCardView.tsx"
+    )
+    if freestyle_card.exists() and "isQuizChoiceAttemptClosed" not in freestyle_card.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    ):
+        errors.append(
+            f"{freestyle_card.relative_to(REPO_ROOT).as_posix()}: "
+            "choice shortcuts must stay open until an option is selected, via isQuizChoiceAttemptClosed."
+        )
+
+
+def check_quiz_font_scale_primitive(errors: list[str]) -> None:
+    """Ctrl+wheel question-body font scale is one quiz preference shared by both answer dialogs."""
+    model = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizFontScale.ts"
+    hook = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "useQuizDialogFontScale.ts"
+    body = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizFontScaleBody.tsx"
+    hint = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizFontScaleHint.tsx"
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    router = (
+        REPO_ROOT
+        / "apps"
+        / "api"
+        / "src"
+        / "memory_anki"
+        / "modules"
+        / "settings"
+        / "presentation"
+        / "router.py"
+    )
+    contract = WEB_SRC / "shared" / "api" / "contracts" / "profile.ts"
+
+    if not model.exists():
+        errors.append(
+            f"{model.relative_to(REPO_ROOT).as_posix()}: quiz font-scale primitive is required."
+        )
+    else:
+        model_source = model.read_text(encoding="utf-8", errors="ignore")
+        for token in ("snapQuizFontPercent", "consumeWheelNotches", "70", "180", "10"):
+            if token not in model_source:
+                errors.append(
+                    f"{model.relative_to(REPO_ROOT).as_posix()}: must define `{token}`."
+                )
+    hook_source = hook.read_text(encoding="utf-8", errors="ignore") if hook.exists() else ""
+    if "passive: false" not in hook_source:
+        errors.append(
+            f"{hook.relative_to(REPO_ROOT).as_posix()}: "
+            "answer-dialog font zoom must cancel browser zoom with a non-passive wheel listener."
+        )
+    if "event.key !== '0'" not in hook_source:
+        errors.append(
+            f"{hook.relative_to(REPO_ROOT).as_posix()}: Ctrl+0 must restore the question font to 100%."
+        )
+    for path, label in ((body, "QuizFontScaleBody"), (hint, "QuizFontScaleHint")):
+        if not path.exists():
+            errors.append(f"{path.relative_to(REPO_ROOT).as_posix()}: {label} is required.")
+    if body.exists() and "zoom" not in body.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{body.relative_to(REPO_ROOT).as_posix()}: question body must scale with CSS zoom."
+        )
+    boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
+    if "quiz_font_scale" not in boundary_text or "题目正文" not in boundary_text:
+        errors.append(
+            f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+            "must document the shared answer-dialog font scale."
+        )
+    router_source = router.read_text(encoding="utf-8", errors="ignore") if router.exists() else ""
+    if '"quiz_font_scale"' not in router_source:
+        errors.append(
+            f"{router.relative_to(REPO_ROOT).as_posix()}: "
+            "client preferences must persist quiz_font_scale."
+        )
+    contract_source = contract.read_text(encoding="utf-8", errors="ignore") if contract.exists() else ""
+    if "quiz_font_scale" not in contract_source:
+        errors.append(
+            f"{contract.relative_to(REPO_ROOT).as_posix()}: "
+            "client preference contract must include quiz_font_scale."
+        )
+    for rel in (
+        Path("widgets") / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        Path("widgets") / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+    ):
+        host = WEB_SRC / rel
+        if not host.exists():
+            errors.append(f"{host.relative_to(REPO_ROOT).as_posix()}: quiz overlay host is required.")
+            continue
+        host_source = host.read_text(encoding="utf-8", errors="ignore")
+        for token in ("useQuizDialogFontScale", "QuizFontScaleBody", "QuizFontScaleHint"):
+            if token not in host_source:
+                errors.append(
+                    f"{host.relative_to(REPO_ROOT).as_posix()}: must use shared `{token}`."
+                )
+        if "addEventListener('wheel'" in host_source or 'addEventListener("wheel"' in host_source:
+            errors.append(
+                f"{host.relative_to(REPO_ROOT).as_posix()}: "
+                "must not own a separate wheel zoom listener."
+            )
 
 
 def check_quiz_question_marks(errors: list[str]) -> None:
@@ -3527,6 +3915,11 @@ def check_quiz_question_marks(errors: list[str]) -> None:
             errors.append(
                 f"{pager.relative_to(REPO_ROOT).as_posix()}: "
                 "marked question numbers must use a rose fill."
+            )
+        if "quizIndexPageCapacity" not in pager_source or "flex-nowrap" not in pager_source:
+            errors.append(
+                f"{pager.relative_to(REPO_ROOT).as_posix()}: "
+                "question numbers must stay on one measured row."
             )
         if "已到期" in pager_source:
             errors.append(
@@ -3697,7 +4090,8 @@ def check_quiz_node_count_badges(errors: list[str]) -> None:
             f"{badge.relative_to(REPO_ROOT).as_posix()}: "
             "a corner badge that contains a marked question must use a rose fill."
         )
-    if badge.exists() and "bg-sky-600" not in badge.read_text(encoding="utf-8", errors="ignore"):
+    badge_text = badge.read_text(encoding="utf-8", errors="ignore") if badge.exists() else ""
+    if badge.exists() and "bg-sky-600" not in badge_text and "bg-info" not in badge_text:
         errors.append(
             f"{badge.relative_to(REPO_ROOT).as_posix()}: "
             "the subjective corner badge must stay sky when it has no marked question."
@@ -4070,63 +4464,6 @@ def check_mindmap_architecture(errors: list[str]) -> None:
                     f"{path.relative_to(REPO_ROOT).as_posix()}: mind-map import pipeline must retain `{token}`."
                 )
 
-    ai_split_contracts = {
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split_service.py": (
-            "AI_SPLIT_REPLACEMENT_MODES",
-            "AI_SPLIT_ADD_CHILDREN",
-            "add_children",
-            "find_target_location",
-            "operation_id",
-            "replacement_nodes",
-            "coerce_add_children_from_replacement_nodes",
-        ),
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "contracts.py": (
-            "AI_SPLIT_ADD_CHILDREN_MODE",
-            "add_children",
-        ),
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "add_children_prompt.py": (
-            "new_children",
-            "child_assignments",
-            "骑士学院",
-        ),
-        API_SRC / "modules" / "produce" / "application" / "mindmap_ai_split" / "gateway.py": (
-            "ADD_CHILDREN_SYSTEM_PROMPT",
-            "add_children",
-        ),
-        API_SRC / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py": (
-            "content.split_source_fidelity",
-            "boundary.split_in_place",
-            "output.mindmap_split_json",
-            "task.split_structure_judgment",
-            "task.split_examples",
-            "ai_split",
-        ),
-        WEB_SRC / "modules" / "content" / "ui" / "mindmap-editor" / "capabilities.ts": (
-            "AI 分卡",
-            "split_mode",
-            "auto",
-        ),
-        WEB_SRC / "features" / "palace-edit" / "hooks" / "useAiSplitWorkbench.ts": (
-            "add_children",
-            "taskMode",
-            "replaceChildrenUnderUid",
-        ),
-        WEB_SRC / "features" / "palace-edit" / "model" / "aiSplitPreview.ts": (
-            "replaceChildrenUnderUid",
-            "shouldPreservePreviewUid",
-        ),
-    }
-    for path, required_tokens in ai_split_contracts.items():
-        if not path.exists():
-            continue
-        content = path.read_text(encoding="utf-8", errors="ignore")
-        for token in required_tokens:
-            if token not in content:
-                errors.append(
-                    f"{path.relative_to(REPO_ROOT).as_posix()}: replacement AI split must retain `{token}`."
-                )
-
-
 def check_prompt_catalog_boundaries(errors: list[str]) -> None:
     forbidden_batch_prompts = (
         "将本节教材转换为结构清晰、可编辑的记忆宫殿草稿。",
@@ -4332,24 +4669,9 @@ def check_frontend_runtime_module_boundaries(errors: list[str]) -> None:
 
 
 def check_ai_run_workspace(errors: list[str]) -> None:
-    architecture_doc = REPO_ROOT / "docs" / "architecture" / "ai-run-workspace.md"
-    if not architecture_doc.exists():
-        errors.append("docs/architecture/ai-run-workspace.md: unified AI run lifecycle is missing.")
-
     router = API_SRC / "modules" / "ai_learning" / "presentation" / "router.py"
-    if not router.exists():
-        errors.append("ai_learning presentation router is required for the AI run workspace.")
-    else:
-        source = router.read_text(encoding="utf-8", errors="ignore")
-        for endpoint in (
-            '/preview',
-            '/runs',
-            '/runs/{run_id}/application',
-            '/runs/{run_id}/restore',
-            '/runs/{run_id}/purge',
-        ):
-            if endpoint not in source:
-                errors.append(f"{router.relative_to(REPO_ROOT)}: missing AI run lifecycle endpoint `{endpoint}`.")
+    if router.exists():
+        errors.append("ai_learning presentation router was removed with the in-app AI run workspace.")
 
     forbidden_call = "autoGenerateAndSavePalaceQuiz("
     allowed = {
@@ -4554,27 +4876,220 @@ def check_unit_review_boundary(errors: list[str]) -> None:
 
 def check_english_reading_gap_loop(errors: list[str]) -> None:
     page_path = WEB_SRC / "modules/english-reading/ui/english-reading/EnglishReadingPage.tsx"
-    if not page_path.exists():
-        errors.append("English Reading gap-loop page is missing")
+    if page_path.exists():
+        errors.append("English Reading gap-loop page was removed and must stay deleted.")
+    listening = WEB_SRC / "modules/english/ui/english/components/EnglishCoursePageView.tsx"
+    if listening.exists():
+        source = listening.read_text(encoding="utf-8", errors="ignore")
+        if "english-reading" in source:
+            errors.append(
+                f"{listening.relative_to(REPO_ROOT).as_posix()}: listening course page must use english-lookup, not english-reading."
+            )
+
+
+def check_quiz_shortcut_primitive(errors: list[str]) -> None:
+    """Shared do-question shortcuts, with ArrowUp toggling mark once per press."""
+    model = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizShortcuts.ts"
+    hook = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "useQuizAnsweringShortcuts.ts"
+    section = (
+        WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizShortcutSettingsSection.tsx"
+    )
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    router = (
+        REPO_ROOT
+        / "apps"
+        / "api"
+        / "src"
+        / "memory_anki"
+        / "modules"
+        / "settings"
+        / "presentation"
+        / "router.py"
+    )
+    contract = WEB_SRC / "shared" / "api" / "contracts" / "profile.ts"
+    if not model.exists():
+        errors.append(f"{model.relative_to(REPO_ROOT).as_posix()}: quiz shortcut primitive is required.")
         return
-    source = page_path.read_text(encoding="utf-8", errors="ignore")
-    retired_markers = (
-        "ReadingVersion",
-        "completeEnglishReadingMaterialApi",
-        "createEnglishReadingVocabularyNoteApi",
-        "ReadingDifficultyDelta",
+    model_source = model.read_text(encoding="utf-8", errors="ignore")
+    for token in ("toggle_mark", "ArrowUp", "resolveQuizShortcutAction", "run: !context.repeat"):
+        if token not in model_source:
+            errors.append(f"{model.relative_to(REPO_ROOT).as_posix()}: must define `{token}`.")
+    if not hook.exists() or "stopPropagation" not in hook.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{hook.relative_to(REPO_ROOT).as_posix()}: "
+            "quiz shortcuts must stop keys from reaching the feed underneath."
+        )
+    if not section.exists() or "快捷键" not in section.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(f"{section.relative_to(REPO_ROOT).as_posix()}: quiz shortcut settings section is required.")
+    node_bound = (WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx").read_text(
+        encoding="utf-8",
+        errors="ignore",
+    ) if (WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx").exists() else ""
+    for rel, token in (
+        ("widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx", "useQuizAnsweringShortcuts"),
+        ("widgets/node-bound-quiz/NodeBoundQuizDialog.tsx", "QuizShortcutSettingsSection"),
+        ("widgets/freestyle-scope-quiz/OverlayQuizSetupPanel.tsx", "QuizShortcutSettingsSection"),
+    ):
+        path = WEB_SRC / Path(rel)
+        source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+        if token not in source:
+            errors.append(f"{rel}: must use `{token}`.")
+    if "useQuizAnsweringShortcuts" not in node_bound:
+        errors.append("widgets/node-bound-quiz/NodeBoundQuizDialog.tsx: must use `useQuizAnsweringShortcuts`.")
+    feed = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
     )
-    for marker in retired_markers:
-        if marker in source:
-            errors.append(f"English Reading gap loop must not restore retired flow marker: {marker}")
-    required_markers = (
-        "createEnglishReadingTargetApi",
-        "explainEnglishReadingTargetApi",
-        "generateTargetedEnglishReadingArticleApi",
+    feed_source = read_freestyle_composition(FREESTYLE_PAGE_COMPOSITION) if feed.exists() else ""
+    if "isFreestyleShortcutBlocked(event.target)" not in feed_source or "getFreestyleFeedPageDirection" not in feed_source:
+        errors.append(
+            f"{feed.relative_to(REPO_ROOT).as_posix()}: "
+            "vertical feed paging must stay quiet while a quiz dialog owns the keyboard."
+        )
+    boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
+    if "quiz_shortcuts" not in boundary_text or "ArrowUp" not in boundary_text:
+        errors.append(
+            f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+            "must document shared quiz shortcuts and the ArrowUp mark toggle."
+        )
+    router_source = router.read_text(encoding="utf-8", errors="ignore") if router.exists() else ""
+    if '"quiz_shortcuts"' not in router_source:
+        errors.append(
+            f"{router.relative_to(REPO_ROOT).as_posix()}: client preferences must persist quiz_shortcuts."
+        )
+    contract_source = contract.read_text(encoding="utf-8", errors="ignore") if contract.exists() else ""
+    if "quiz_shortcuts" not in contract_source:
+        errors.append(
+            f"{contract.relative_to(REPO_ROOT).as_posix()}: client preference contract must include quiz_shortcuts."
+        )
+
+
+def _resize_handler_source(source: str, marker: str, listener: str) -> str:
+    start = source.find(marker)
+    if start < 0:
+        return ""
+    end = source.find(listener, start)
+    if end < 0:
+        return ""
+    return source[start:end]
+
+
+def check_window_layout_memory(errors: list[str]) -> None:
+    """Manual floating-window size is a viewport ratio and must survive a smaller window."""
+    memory = WEB_SRC / "shared" / "preferences" / "windowLayoutMemory.ts"
+    lookup = WEB_SRC / "widgets" / "palace-memory-lookup" / "model" / "memoryLookupLayout.ts"
+    dialog_layout = WEB_SRC / "shared" / "components" / "ui" / "dialogFloatingLayout.ts"
+    palace = WEB_SRC / "widgets" / "palace-memory-lookup" / "PalaceMemoryLookupDialog.tsx"
+    dialog = WEB_SRC / "shared" / "components" / "ui" / "dialog.tsx"
+    timer = WEB_SRC / "shared" / "components" / "session" / "GlobalTimerFloatingOverlay.tsx"
+    english = WEB_SRC / "modules" / "english-lookup" / "useEnglishLookup.ts"
+    mindmap = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+    router = (
+        REPO_ROOT
+        / "apps"
+        / "api"
+        / "src"
+        / "memory_anki"
+        / "modules"
+        / "settings"
+        / "presentation"
+        / "router.py"
     )
-    for marker in required_markers:
-        if marker not in source:
-            errors.append(f"English Reading gap loop must compose {marker}")
+    contract = WEB_SRC / "shared" / "api" / "contracts" / "profile.ts"
+
+    if not memory.exists():
+        errors.append(
+            f"{memory.relative_to(REPO_ROOT).as_posix()}: window layout memory is required."
+        )
+        return
+
+    lookup_source = lookup.read_text(encoding="utf-8", errors="ignore") if lookup.exists() else ""
+    if "widthRatio" not in lookup_source:
+        errors.append(
+            f"{lookup.relative_to(REPO_ROOT).as_posix()}: palace lookup must store widthRatio."
+        )
+    dialog_layout_source = (
+        dialog_layout.read_text(encoding="utf-8", errors="ignore") if dialog_layout.exists() else ""
+    )
+    if "widthRatio" not in dialog_layout_source or "applyRememberedFloatingSize" not in dialog_layout_source:
+        errors.append(
+            f"{dialog_layout.relative_to(REPO_ROOT).as_posix()}: "
+            "floating dialogs must restore widthRatio without rewriting it."
+        )
+
+    palace_source = palace.read_text(encoding="utf-8", errors="ignore") if palace.exists() else ""
+    palace_resize = _resize_handler_source(
+        palace_source,
+        "const handleResize = () => {",
+        "window.addEventListener('resize'",
+    )
+    if "readMemoryLookupLayout" not in palace_resize:
+        errors.append(
+            f"{palace.relative_to(REPO_ROOT).as_posix()}: "
+            "viewport resize must re-read the remembered palace layout."
+        )
+    if any(
+        token in palace_resize
+        for token in ("saveMemoryLookupLayout", "persistLayout", "clampMemoryLookupLayoutToViewport")
+    ):
+        errors.append(
+            f"{palace.relative_to(REPO_ROOT).as_posix()}: "
+            "viewport resize must not write clamped palace pixels."
+        )
+
+    dialog_source = dialog.read_text(encoding="utf-8", errors="ignore") if dialog.exists() else ""
+    dialog_resize = _resize_handler_source(
+        dialog_source,
+        "const handleResize = () => {",
+        "window.addEventListener('resize'",
+    )
+    if "applyRememberedFloatingSize" not in dialog_resize or "writeStoredFloatingLayout" in dialog_resize:
+        errors.append(
+            f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
+            "viewport resize must reapply floating dialog ratios without saving them."
+        )
+
+    timer_source = timer.read_text(encoding="utf-8", errors="ignore") if timer.exists() else ""
+    timer_resize = _resize_handler_source(
+        timer_source,
+        "const handleResize = () => {",
+        "window.addEventListener('resize'",
+    )
+    if "readTimerOverlayLayout" not in timer_resize or "saveTimerOverlayLayout" in timer_resize:
+        errors.append(
+            f"{timer.relative_to(REPO_ROOT).as_posix()}: "
+            "viewport resize must re-read the timer overlay without saving clamped pixels."
+        )
+
+    english_source = english.read_text(encoding="utf-8", errors="ignore") if english.exists() else ""
+    english_resize = _resize_handler_source(
+        english_source,
+        "const onResize = () => {",
+        "window.addEventListener('resize', onResize)",
+    )
+    if "readLookupPanelSize" not in english_resize or "writeLookupPanelSize" in english_resize:
+        errors.append(
+            f"{english.relative_to(REPO_ROOT).as_posix()}: "
+            "viewport resize must reapply the lookup panel size without saving it."
+        )
+
+    mindmap_text = mindmap.read_text(encoding="utf-8", errors="ignore") if mindmap.exists() else ""
+    if "window_layouts" not in mindmap_text or "视口比例" not in mindmap_text:
+        errors.append(
+            f"{mindmap.relative_to(REPO_ROOT).as_posix()}: "
+            "must document window_layouts viewport-ratio memory."
+        )
+    router_source = router.read_text(encoding="utf-8", errors="ignore") if router.exists() else ""
+    if '"window_layouts"' not in router_source:
+        errors.append(
+            f"{router.relative_to(REPO_ROOT).as_posix()}: "
+            "client preferences must persist window_layouts."
+        )
+    contract_source = contract.read_text(encoding="utf-8", errors="ignore") if contract.exists() else ""
+    if "window_layouts" not in contract_source:
+        errors.append(
+            f"{contract.relative_to(REPO_ROOT).as_posix()}: "
+            "client preference contract must include window_layouts."
+        )
 
 
 def main() -> int:
@@ -4605,6 +5120,9 @@ def main() -> int:
     check_palace_quiz_application_facades(errors)
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
+    check_quiz_font_scale_primitive(errors)
+    check_window_layout_memory(errors)
+    check_quiz_shortcut_primitive(errors)
     check_quiz_question_marks(errors)
     check_quiz_node_count_badges(errors)
     check_quiz_create_requires_node_binding(errors)
@@ -4618,6 +5136,7 @@ def main() -> int:
     check_review_application_boundary(errors)
     check_unit_review_boundary(errors)
     check_english_reading_gap_loop(errors)
+    check_removed_ai_entries_stay_deleted(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)
     check_dashboard_public_facades(errors)
@@ -4630,6 +5149,7 @@ def main() -> int:
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
+    check_enter_reveal_viewport_follow(errors)
     check_freestyle_retry_starts_unrated(errors)
     check_freestyle_unit_progress_kernel(errors)
     check_freestyle_rating_retap_clears(errors)
@@ -4637,19 +5157,16 @@ def main() -> int:
     check_freestyle_rating_last_write_wins(errors)
     check_freestyle_round_sheet_views(errors)
     check_freestyle_viewing_playhead(errors)
+    check_freestyle_queue_removal_rail(errors)
     check_freestyle_complete_slot_reachable(errors)
     check_freestyle_round_learning_time(errors)
+    check_freestyle_config_overlap_choice(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
+    check_exam_context_boundaries(errors)
     check_backend_module_boundaries(errors)
     check_backend_presentation_orm_usage(errors)
     check_tool_personal_paths(errors)
-    for path in BATCH_GENERATION_APPLICATION.rglob("*.py"):
-        source = path.read_text(encoding="utf-8", errors="ignore")
-        if "modules.content.infrastructure" in source or "modules.quiz.infrastructure" in source:
-            errors.append(
-                f"{path.relative_to(REPO_ROOT)}: batch generation must use Palace/Quiz public facades instead of internal infrastructure."
-            )
 
     if errors:
         print("Architecture check failed:")

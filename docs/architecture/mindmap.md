@@ -24,6 +24,7 @@
 - 折叠状态不写回 editor_doc，仅 canvas 本地；节点数 >= 36 时默认折叠 depth>=1 的有子节点分支；practiceModeActive（复习/练习）强制全展开。
 - 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
 - 手机策略：`map` / `auto` 允许单指拖移；只有显式 `guided` 才把单指让给父级滚动。随心复习卡使用 `auto`：窄屏只读仍用更紧的 fit/zoom，但画布保持可拖；翻卡走 pager，不靠在图上单指滑动。
+- Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 
 ## 展示策略
@@ -99,6 +100,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 业务页面只声明动作语义 `opensOverlay: true`，不得使用 `setTimeout`、`queueMicrotask` 或页面级焦点补丁处理 Radix 菜单与浮层竞态。
 - 可最小化的业务入口浮层应使用稳定 `floatingId`；需要每次显式打开完整窗口时使用 `expandOnOpen`，避免持久化胶囊状态让入口看似失效。
 - 需要持续与背景内容交互的非模态工作台应设置 `dismissOnInteractOutside={false}`，只通过显式关闭按钮或 Escape 退出；焦点归还和背景点击不得改变业务 open 状态。
+- 手动调整过的浮层尺寸以视口比例写入 `window_layouts`。视口变化只按比例重算显示，不把暂时夹小的像素写回。查看宫殿同时记住位置比例、置顶和列表收起；通用浮层对话框记住宽高比例、置顶和收起，打开时仍重新居中；悬浮计时器记住尺寸和位置比例以及收起、隐藏；英语查词记住面板宽高比例和词典卡片高度。
 
 ## 知识重点黄底标记
 
@@ -108,6 +110,8 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - 画布展示安全 HTML；编辑态选中文字可 toggle 黄色底色（再点取消）。产品语义是知识重点，不复刻教材下划线样式。
 
 ## 图片与 PDF 导入边界
+
+> In-app image, PDF, and AI mind-map import were removed. Manual JSON import (“文字转脑图”) remains. `pdf_documents` and on-disk PDF files stay; the `pdf_library` module is gone. The notes below are historical.
 
 - 新图片任务统一使用 `image-batch`；一张和多张图片都先进入可排序、可删除的图片队列，再由用户显式开始识别。`image-single` 只用于兼容读取旧历史。
 - PDF 资料库是全局运行时资料，元数据保存于 `pdf_documents`，文件保存于 `%LOCALAPPDATA%\MemoryAnki\pdf_library` 或 `MEMORY_ANKI_HOME/pdf_library`。业务数据库只保存相对文件标识，不保存设备绝对路径。

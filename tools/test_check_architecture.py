@@ -781,6 +781,41 @@ def test_freestyle_round_learning_time_requires_plan_clock_and_settlement_line(
     assert any("useFreestyleRoundLearningClock" in error for error in errors)
 
 
+def test_freestyle_config_overlap_choice_requires_save_prompt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleRoundConfigDialog.tsx",
+        "保存配置并重排\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "setConfigAndPersist\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "replan_remaining\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_config_overlap_choice(errors)
+
+    assert any("overlapping progress" in error for error in errors)
+    assert any("不保留，开启新一轮" in error for error in errors)
+    assert any("保留重复的进度" in error for error in errors)
+    assert any("startNextRound" in error for error in errors)
+    assert any("must document" in error for error in errors)
+
+
 def test_freestyle_canvas_pan_rejects_guided_yield_and_touch_pan_y(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -854,6 +889,63 @@ def test_freestyle_canvas_pan_allows_auto_camera_and_pager(
 
     errors: list[str] = []
     check_architecture.check_freestyle_canvas_pan(errors)
+
+    assert errors == []
+
+
+def test_enter_reveal_follow_requires_minimal_pan(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewFlipPanel.tsx",
+        "handleTargetNodeClick([targetSelection])\n",
+    )
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "useMindMapViewport.ts",
+        "export function useMindMapViewport() { return null }\n",
+    )
+    write_file(
+        web_src / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx",
+        "nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}\n",
+    )
+    write_file(tmp_path / "docs" / "architecture" / "mindmap.md", "canvas notes\n")
+
+    errors: list[str] = []
+    check_architecture.check_enter_reveal_viewport_follow(errors)
+
+    assert any("request a reveal pan" in error for error in errors)
+    assert any("must not bypass" in error for error in errors)
+    assert any("most clipped card" in error for error in errors)
+    assert any("host request" in error for error in errors)
+    assert any("document Enter reveal follow" in error for error in errors)
+
+
+def test_enter_reveal_follow_accepts_wired_hosts(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewFlipPanel.tsx",
+        "useFreestyleEnterRevealFollow()\nrevealFollowNodeIds={revealFollow.nodeIds}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "useFreestyleEnterRevealFollow.ts",
+        "applyTargetRevealFrom(baseMap, [targetSelection])\n",
+    )
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "useMindMapViewport.ts",
+        "if (!viewCommand || viewCommand.type !== 'reveal') return\npickMostOutOfViewNodeId()\n",
+    )
+    write_file(
+        web_src / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx",
+        "revealFollowNodeIds={revealFollowNodeIds}\n"
+        "nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}\n",
+    )
+    write_file(tmp_path / "docs" / "architecture" / "mindmap.md", "Enter reveal follow\n")
+
+    errors: list[str] = []
+    check_architecture.check_enter_reveal_viewport_follow(errors)
 
     assert errors == []
 
@@ -2119,6 +2211,51 @@ def test_palace_memory_lookup_must_keep_full_palace_and_center_bound_node(
     assert any("must not document re-rooting or clipping" in item for item in errors)
 
 
+def test_quiz_shortcut_primitive_must_live_in_quiz_entity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "# Quiz Frontend Boundary\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_shortcut_primitive(errors)
+
+    assert any("quiz shortcut primitive is required" in item for item in errors)
+
+
+def test_window_layout_memory_is_required(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_window_layout_memory(errors)
+
+    assert any("window layout memory is required" in item for item in errors)
+
+
+def test_quiz_font_scale_primitive_must_live_in_quiz_entity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "# Quiz Frontend Boundary\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_font_scale_primitive(errors)
+
+    assert any("quiz font-scale primitive is required" in item for item in errors)
+
+
 def test_quiz_answer_mode_primitive_must_live_in_quiz_entity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -2310,6 +2447,7 @@ def test_quiz_question_marks_reject_the_removed_rating_schedule(
 
     assert any("4-level quiz rating bar must stay deleted" in item for item in errors)
     assert any("rose fill" in item for item in errors)
+    assert any("one measured row" in item for item in errors)
     assert any("removed due schedule" in item for item in errors)
     assert any("mark/unmark toggle is required" in item for item in errors)
     assert any("must not keep the 4-level quiz rating" in item for item in errors)
@@ -2388,50 +2526,44 @@ def test_palaces_must_use_backups_public_facade(tmp_path: Path, monkeypatch) -> 
     ]
 
 
-def test_english_reading_must_use_reviews_public_facade(
+def test_removed_ai_entries_stay_deleted_and_listening_pipeline_stays(
     tmp_path: Path, monkeypatch
 ) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "english_reading" / "application" / "vocabulary.py"
     write_file(
-        path,
-        "from memory_anki.modules.memory.application.schedule_policy "
-        "import load_review_schedule_policy\n",
+        api_src / "modules" / "english_reading" / "application" / "vocabulary.py",
+        "from memory_anki.modules.english.application.fsrs_runtime import build_scheduler\n",
+    )
+    write_file(
+        api_src / "modules" / "english" / "infrastructure" / "dashscope_gateway.py",
+        "def transcribe():\n    return None\n",
+    )
+    write_file(api_src / "infrastructure" / "llm" / "openai_compatible.py", "def call():\n    return None\n")
+    write_file(
+        api_src / "infrastructure" / "llm" / "external_ai_call_logs.py",
+        "def log_call():\n    return None\n",
     )
 
     errors: list[str] = []
-    check_architecture.check_consumer_context_public_facades(errors)
+    check_architecture.check_removed_ai_entries_stay_deleted(errors)
 
-    assert errors == [
-        "apps/api/src/memory_anki/modules/english_reading/application/vocabulary.py: "
-        "english_reading must consume memory through "
-        "memory_anki.modules.memory.api or .public."
-    ]
+    assert any("english_reading" in error and "must stay deleted" in error for error in errors)
+    assert not any("must stay." in error for error in errors)
 
 
-def test_english_reading_must_use_english_public_facade(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_removed_ai_entries_require_listening_pipeline(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    path = api_src / "modules" / "english_reading" / "application" / "vocabulary.py"
-    write_file(
-        path,
-        "from memory_anki.modules.english.application.fsrs_runtime import "
-        "build_scheduler\n",
-    )
 
     errors: list[str] = []
-    check_architecture.check_consumer_context_public_facades(errors)
+    check_architecture.check_removed_ai_entries_stay_deleted(errors)
 
-    assert errors == [
-        "apps/api/src/memory_anki/modules/english_reading/application/vocabulary.py: "
-        "english_reading must consume english through "
-        "memory_anki.modules.english.api or .public."
-    ]
+    assert any("dashscope_gateway.py" in error for error in errors)
+    assert any("openai_compatible.py" in error for error in errors)
+    assert any("external_ai_call_logs.py" in error for error in errors)
 
 
 def test_reviews_must_use_sessions_public_facade(tmp_path: Path, monkeypatch) -> None:
@@ -2759,31 +2891,28 @@ def test_prompt_catalog_boundary_rejects_settings_imports_in_application(tmp_pat
     assert any("platform PromptCatalog" in error for error in errors)
 
 
-def test_mindmap_architecture_requires_replacement_ai_split_contract(tmp_path, monkeypatch) -> None:
+def test_mindmap_architecture_rejects_recreated_ai_split(tmp_path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     web_src = tmp_path / "apps" / "web" / "src"
     split_service = api_src / "modules" / "produce" / "application" / "mindmap_ai_split_service.py"
-    prompt_composition = api_src / "modules" / "settings" / "application" / "ai_prompt_split_seeds.py"
-    capabilities = web_src / "modules" / "content" / "ui" / "mindmap-editor" / "capabilities.ts"
-    split_service.parent.mkdir(parents=True)
-    prompt_composition.parent.mkdir(parents=True)
-    capabilities.parent.mkdir(parents=True)
-    split_service.write_text("AI_SPLIT_REPLACEMENT_MODES\nfind_target_location\n", encoding="utf-8")
-    prompt_composition.write_text(
-        "content.split_source_fidelity\nboundary.split_in_place\noutput.mindmap_split_json\n",
-        encoding="utf-8",
+    write_file(split_service, "AI_SPLIT_REPLACEMENT_MODES\n")
+    write_file(
+        api_src / "modules" / "english" / "infrastructure" / "dashscope_gateway.py",
+        "def transcribe():\n    return None\n",
     )
-    capabilities.write_text("AI 分卡\nsplit_mode\n", encoding="utf-8")
+    write_file(api_src / "infrastructure" / "llm" / "openai_compatible.py", "def call():\n    return None\n")
+    write_file(
+        api_src / "infrastructure" / "llm" / "external_ai_call_logs.py",
+        "def log_call():\n    return None\n",
+    )
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
-    check_architecture.check_mindmap_architecture(errors)
+    check_architecture.check_removed_ai_entries_stay_deleted(errors)
 
-    assert any("operation_id" in error for error in errors)
-    assert any("task.split_structure_judgment" in error for error in errors)
-    assert any("auto" in error for error in errors)
+    assert any("mindmap_ai_split" in error and "must stay deleted" in error for error in errors)
 
 
 def test_unit_review_boundary_rejects_waves_and_node_rating_routes(
@@ -2960,7 +3089,7 @@ def test_unit_review_boundary_rejects_close_wall_span_400(
     assert any("normalized_seconds = wall_seconds" in error for error in errors)
 
 
-def test_english_reading_gap_loop_rejects_retired_colored_flow(
+def test_english_reading_gap_loop_rejects_recreated_page(
     tmp_path: Path, monkeypatch
 ) -> None:
     web_src = tmp_path / "apps/web/src"
@@ -2968,13 +3097,18 @@ def test_english_reading_gap_loop_rejects_retired_colored_flow(
         web_src / "modules/english-reading/ui/english-reading/EnglishReadingPage.tsx",
         "ReadingVersion\ncompleteEnglishReadingMaterialApi\n",
     )
+    write_file(
+        web_src / "modules/english/ui/english/components/EnglishCoursePageView.tsx",
+        "import { LookupTokenText } from '@/modules/english-lookup'\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
     check_architecture.check_english_reading_gap_loop(errors)
 
-    assert any("retired flow marker" in error for error in errors)
-    assert any("createEnglishReadingTargetApi" in error for error in errors)
+    assert any("must stay deleted" in error for error in errors)
+    assert not any("english-lookup" in error for error in errors)
 
 def test_ai_credential_tombstones_reject_environment_secret_reads(
     tmp_path: Path, monkeypatch
@@ -2984,14 +3118,6 @@ def test_ai_credential_tombstones_reject_environment_secret_reads(
         api_src / "modules/english/infrastructure/dashscope_gateway.py",
         "def resolve():\n    return DASHSCOPE_API_KEY\n",
     )
-    write_file(
-        api_src / "modules/english_reading/application/dictionary_service.py",
-        "def resolve(runtime):\n    return runtime.resolve('translation')\n",
-    )
-    write_file(
-        api_src / "modules/produce/application/mindmap_ai_split/config_loader.py",
-        "has_legacy_api_key_override = False\n",
-    )
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
 
@@ -2999,7 +3125,7 @@ def test_ai_credential_tombstones_reject_environment_secret_reads(
     check_architecture.check_ai_credential_tombstones(errors)
 
     assert any("DASHSCOPE_API_KEY" in error for error in errors)
-    assert any("credential tombstone" in error for error in errors)
+    assert not any("credential tombstone" in error for error in errors)
 
 
 def test_ai_credential_tombstones_allow_compatibility_imports(
@@ -3010,14 +3136,6 @@ def test_ai_credential_tombstones_allow_compatibility_imports(
         api_src / "modules/english/infrastructure/dashscope_gateway.py",
         "from memory_anki.core.config import DASHSCOPE_API_KEY\n"
         "def resolve(runtime):\n    return runtime.api_key\n",
-    )
-    write_file(
-        api_src / "modules/english_reading/application/dictionary_service.py",
-        "def resolve(runtime):\n    return runtime.resolve('translation')\n",
-    )
-    write_file(
-        api_src / "modules/produce/application/mindmap_ai_split/config_loader.py",
-        'has_legacy_api_key_override = "mindmap_ai_split_api_key" in values\n',
     )
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
@@ -3228,7 +3346,7 @@ def test_question_practice_has_no_lifecycle_gate(tmp_path: Path, monkeypatch) ->
     check_architecture.check_question_practice_has_no_lifecycle_gate(errors)
     assert any("lifecycle_status" in error for error in errors)
     assert any("filter_quizzes_by_mastery_buckets" in error for error in errors)
-    assert any("AI 出题、讲解、纠错和自由提问已禁用" in error for error in errors)
+    assert any("removed AI entry must stay deleted" in error for error in errors)
 
 
 def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome(
@@ -3473,3 +3591,46 @@ def test_backup_snapshot_policy_blocks_full_create_on_router(
         "POST /backups/create must write rolling DB snapshots, not full media copies."
     ]
 
+
+
+def test_freestyle_composition_reads_split_page_files(tmp_path: Path, monkeypatch) -> None:
+    freestyle_ui = tmp_path / "freestyle"
+    monkeypatch.setattr(check_architecture, "FREESTYLE_UI", freestyle_ui)
+    write_file(freestyle_ui / "ImmersiveFreestylePage.tsx", "const page = useFreestyleLiveSync()\n")
+    write_file(freestyle_ui / "hooks" / "useFreestyleLiveSync.ts", "useFreestyleLiveMirror()\n")
+
+    source = check_architecture.read_freestyle_composition(
+        check_architecture.FREESTYLE_PAGE_COMPOSITION
+    )
+
+    assert "useFreestyleLiveSync" in source
+    assert "useFreestyleLiveMirror" in source
+
+
+def test_exam_domain_rejects_framework_imports_and_schedule_writes(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    write_file(api_src / "modules" / "exam" / "domain" / "stars.py", "from sqlalchemy import func\n")
+    write_file(
+        api_src / "modules" / "exam" / "application" / "overview_service.py",
+        "def bump(state):\n    state.due_date = None\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_exam_context_boundaries(errors)
+    assert any("framework-free" in error and "sqlalchemy" in error for error in errors)
+    assert any("must not write review scheduling" in error for error in errors)
+
+
+def test_exam_domain_accepts_pure_read_only_code(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    write_file(api_src / "modules" / "exam" / "domain" / "stars.py", "from dataclasses import dataclass\n")
+    write_file(
+        api_src / "modules" / "exam" / "application" / "overview_service.py",
+        "def read(state):\n    return state.due_date <= 1\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_exam_context_boundaries(errors)
+    assert errors == []

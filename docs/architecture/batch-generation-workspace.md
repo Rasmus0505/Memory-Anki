@@ -1,5 +1,7 @@
 # Batch Generation Workspace Boundary
 
+> Removed. The batch-generation module, page, and route are gone. Database tables and on-disk runtime files stay. This note is historical.
+
 The batch generation context owns persistent planning for whole-book and multi-PDF work. It stores uploaded asset metadata, book and section plans, generation-step snapshots, editable drafts, deterministic quality issues, and explicit publish plans.
 
 ## Dependency Direction

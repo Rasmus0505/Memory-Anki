@@ -64,8 +64,14 @@ cannot be healed do not toast English API text; the card offers 重试 / 跳过�
 A later due-list rebuild with the same construction knobs (`append_today_cards`) keeps every
 original card, including unstarted leftover work that dropped off today's due set, and appends
 newly seen identities with `entered_on` equal to the local calendar day so retry copies cannot
-clump into an orphan block of attempt-1 nodes. Saving feed config or
-changing palace/subject scope (`replan_remaining`) keeps completed ticks, drops unstarted work
+clump into an orphan block of attempt-1 nodes. Saving feed config from 「保存配置并重排」 asks first. 保留继续这一轮：
+`replan_remaining` keeps completed ticks, drops unstarted work
+outside the new incoming set unless it still has a live retry, and only reorders what has not
+started. 不保留 persists that config and mints the next round through `startNextRound`
+(`forceStart`), so completed, excluded, retry, and overlay 已做 do not carry over. Closing the
+reminder cancels the save. Palace-picker confirm and other in-feed config writes still replan
+without that reminder. Settlement 「开始下一轮」 already starts fresh and does not ask again.
+Changing palace/subject scope (`replan_remaining`) keeps completed ticks, drops unstarted work
 outside the new incoming set unless it still has a live retry, restamps remaining work as today,
 and parks live retries after at most three cards of the new remaining queue (or immediately after
 the completed prefix if fewer remain). Unstarted cards whose review unit is no longer active
@@ -129,10 +135,21 @@ scene, locally — never `dispatchGlobalFeedback`.
 
 The top HUD opens a bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. Configuration is a
-separate dialog. Saving a config preserves finished/excluded records and only reorders unstarted
-work. The HUD line is `当前位置/队列总长` (`position/total`): the denominator is the live
-presented feed including retry insertions and excluding excluded cards. `scheduledBase`
-remains available for plan math but is not the HUD denominator. The rail stays one bar: palace color
+separate dialog. 「保存配置并重排」 asks whether to keep overlapping finished/excluded/retry
+progress. 保留 continues this round and only reorders unstarted work. 不保留 starts a new round. The HUD line is `当前位置/队列总长` (`position/total`): the denominator is the progress
+rail, including retry insertions and a confirmed 移除队列. That removal stays on the rail as a
+solid 已移出队列 tick (the same filled palace color as a scored card, not a faint tick and not a gap).
+`scheduledBase` still omits those removals and remains plan math, not the HUD denominator.
+Hydration unions server `excluded_ids` with local plan exclusions, and the exclude action retries
+on version conflict so a cursor update cannot erase it. A silent rebuild after 移除队列, including
+one that races 完成's cursor write, keeps this-round scores and the solid removal tick. Hydration
+reads that ledger after the network await and does not publish a draft plan first: a changed round
+id would otherwise look like a cancelled rating and wipe the ledger. The rebuild also keeps the
+ledger captured before the await, so a stale render or an all-pending draft cannot drop the
+removal or the other this-round scores. A just-confirmed removal is stamped again on that
+hydrate (`forceExcludedIds`). A newer revision of a removed
+unit stays one solid tick and is handled for 完成 seek. A queue removal is handled for 完成 seek.
+The rail stays one bar: palace color
 on each tick, leftover vs today split by a divider before the first source with
 `entered_on == today`. A unit keeps one live retry at a time; a later weak rating
 must not mint a second copy. Retry occurrences render as independent
@@ -282,7 +299,7 @@ construction settings must not reshuffle.
 
 ## Permanent Marks
 
-Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering edit expands the tree only as far as the current flip progress: a branch opens when a card inside it has been flipped out (`placeholder` / `revealed` in the `revealMap`), and branches the learner has not reached stay folded, for both edit scopes. So the edit view is the flip progress plus editable structure, never the whole palace dumped open. After that the host's own fold seed governs the canvas, and a manual expand/collapse gesture still holds until the next mode switch. Edit keeps the same `revealMap` / flip progress and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map.
+Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering edit expands the tree only as far as the current flip progress: a branch opens when a card inside it has been flipped out (`placeholder` / `revealed` in the `revealMap`), and branches the learner has not reached stay folded, for both edit scopes. So the edit view is the flip progress plus editable structure, never the whole palace dumped open. After that the host's own fold seed governs the canvas, and a manual expand/collapse gesture still holds until the next mode switch. Edit keeps the same `revealMap` / flip progress and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map. Enter reveal follow: Enter on the active review card advances the unit anchor and, when a card flipped out by that step is clipped, pans the minimum distance to bring the most clipped of those cards fully into view. Zoom stays put. A later Enter interrupts the pan. Mouse clicks, Shift hide, and A/S bulk flips do not move the camera.
 
 Permanent marks are edited in the palace document and each complete toggle saves immediately as a plain document write. The active freestyle card never sends `mark_change`, `return_to_review`, or `reconcile_units`, and it never calls `onUnitsReconciled` / `buildQueue` for an edit or mode switch. Schedule reconcile is sent once as same-document `editor_leave` only after the edited card becomes inactive or unmounts; only that leave reconcile may refresh the queue. Explicit 重建本轮 keeps its existing behavior.
 
@@ -361,14 +378,20 @@ persist preferred zoom. 做题 opens `widgets/freestyle-scope-quiz` over the cur
 Question membership is the palaces already scheduled as review units in this round
 (`original_cards` with kind `mindmap_branch`), not the subject union and not
 `streams.quiz.specific_palace_ids`. A subject-wide config still only contributes the palaces
-that this round actually put into review. The optional question-type filter still applies.
-Every non-deleted question in that round palace set is included, including rows
-whose stored `lifecycle_status` is `candidate`, `rejected`, `temporary`, or `published`.
-Mastery buckets, weak priority, question due dates, and `DEFAULT_QUIZ_CARD_LIMIT` do not
-apply to this overlay. Draw order is `streams.quiz.quiz_scope`. Confirm always sends
-`overlay_question_range: all`. The first open asks for palace order, then sets
-`overlay_quiz_setup_done`; later opens skip setup. Config stays reachable from the
-dialog’s top-left.
+that this round actually put into review. Overlay membership does not use
+`streams.quiz.question_type`. Every non-deleted question in that round palace set is
+counted, including rows whose stored `lifecycle_status` is `candidate`, `rejected`,
+`temporary`, or `published`. 客观 is every type except `short_answer`; 主观 is
+`short_answer`. The config shows a checkbox only for a group that exists in this pool,
+with its count. At least one present group stays selected. Both selected defaults to
+混合插入; 先客观后主观 and 先主观后客观 are the other choices. 宫殿优先 vs 题型优先
+appears only when 一个宫殿刷完再换 and a sequential type order are both selected, and
+this round has more than one review palace. Unselected groups stay in `kind_counts`
+so they can be turned back on. Mastery buckets, weak priority, question due dates, and
+`DEFAULT_QUIZ_CARD_LIMIT` do not apply to this overlay. Palace draw order is
+`streams.quiz.quiz_scope`. Confirm always sends `overlay_question_range: all`. The
+first open asks for palace order, then sets `overlay_quiz_setup_done`; later opens
+skip setup. Config stays reachable from the dialog’s top-left. That panel includes the shared 快捷键 section. Mark defaults to ArrowUp and toggles once per press. While the dialog is open, ArrowUp and ArrowDown must not page the feed underneath.
 
 Mark / unmark replaces answer-then-rate. The toggle writes `marked` on the question and does not
 change `schedule_stage`, `schedule_due_on`, palace review units, or the current index. Marked

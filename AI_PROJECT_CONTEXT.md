@@ -18,10 +18,10 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 |---|---|
 | 记忆宫殿 `palaces` | 宫殿、挂钩、分段、迷你宫殿、附件、版本快照、结构编辑。宫殿焦点练习已退役 |
 | 复习 `reviews` | 艾宾浩斯/自定义间隔、宫殿/分段/迷你宫殿多粒度复习、队列与进度 |
-| 测验 `quiz` | 选择题、简答题、AI 生成、题目归类、答题反馈 |
-| 思维导图导入 `mindmap_import` | 图片/文本等资料经 AI 识别后应用为宫殿结构 |
+| 测验 `quiz` | 选择题、简答题、手动增删改查、答题与做题叠加层 |
+| 思维导图导入 `produce` | 手动 JSON、Markdown、整库导入导出；“文字转脑图”走 JSON 路径 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
-| 英语学习 `english` / `english_reading` | 听力、阅读材料、CEFR 版本、打字练习、词典与翻译 |
+| 英语学习 `english` / `english_lookup` | 听力课程与看视频敲字幕；查词翻译。阅读、CEFR、句型、词汇页已删除 |
 | 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle` |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
@@ -182,23 +182,20 @@ modules/<feature>/
 | 模块 | 主要职责 |
 |---|---|
 | `content` | 宫殿、分段、迷你宫殿、导入导出、标题同步、宫殿编辑器 |
-| `quiz` | 题目、AI 出题、题目来源、生成历史、答题反馈 |
+| `quiz` | 题目手动增删改查、答题、做题叠加层 |
 | `memory` | 复习队列、提交结果、调度策略、进度投影 |
 | `session` | 学习会话进度 |
 | `knowledge` | 学科、章节、知识导入 |
 | `mindmap_document` | 思维导图文档规则与快照 |
 | `mindmap_learning` | 思维导图学习投影 |
 | `practice` | 随心训练 feed、轮次与卡片队列 |
-| `produce` | 思维导图导入与知识生产 |
+| `produce` | JSON、Markdown、整库导入导出 |
 | `settings` | AI 模型注册表、提示词、复习设置 |
 | `dashboard` | 聚合页面数据 |
-| `english` | 英语听力/课程能力 |
-| `english_reading` | 英语阅读、CEFR、词典/句子翻译 |
+| `english` | 英语听力课程、语音识别与翻译 |
 | `english_lookup` | 词典查词与翻译引擎 |
+| `exam` | 考试日期、星级权重、导图抽查 |
 | `backups` | 启停备份、版本快照、恢复 |
-| `pdf_library` | PDF 书库与 OCR 缓存 |
-| `batch_generation` | 整书批量生成工作区 |
-| `ai_learning` | AI 学习工作台运行记录 |
 | `search` | 全局搜索 |
 
 ---
@@ -233,7 +230,7 @@ apps/web/src/
 
 前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-`backup`、`content`、`dashboard`、`english`、`english-lookup`、`english-reading`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
 模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
 

@@ -1,5 +1,7 @@
 # English Reading Gap Loop
 
+> Removed. English keeps listening (`/english/listening`, course pages) and `english_lookup`. Reading, CEFR, patterns, and vocab pages are gone. Database tables stay. This note is historical.
+
 English Reading owns immutable source/generated articles, anchored word or sentence targets, English-only explanations, generation runs, and target-to-article links.
 
 ## Learning Flow

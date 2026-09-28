@@ -12,7 +12,7 @@ apps/web: app -> pages/widgets -> modules (14, domain/application/ui/api + publi
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard english english-lookup english-reading memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
+Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
 
 The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
 
@@ -91,6 +91,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Live study presence (PWA/desktop mirror): `docs/architecture/live-study-presence.md`
 - Read-model purity: `docs/architecture/read-models.md`
 - Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
+- Exam stars, countdown and forgetting estimate: `docs/architecture/exam-context.md`
 - Palace Quiz boundary: `docs/architecture/palace-quiz-boundary.md`
 - Consumer context boundaries: `docs/architecture/consumer-contexts.md`
 - Freestyle immersive feed: `docs/architecture/freestyle-immersive-feed.md`
@@ -128,18 +129,16 @@ Frontend AI scenario/model selection and per-run overrides are owned by `modules
 
 The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only the public `content`, `memory`, `quiz`, `english`, and `english_reading` capabilities. Two immersive routes (`/freestyle`, `/freestyle-2`); sidebar lists only 随心, while 随心 2 stays reachable from the HUD switcher and command palette. Shelf review still enters `/freestyle?palaceId=<id>`, and the retired standalone `/review` pages are not registered.
+- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only the public `content`, `memory`, `quiz`, and `english` capabilities. Two immersive routes (`/freestyle`, `/freestyle-2`); sidebar lists only 随心, while 随心 2 stays reachable from the HUD switcher and command palette. Shelf review still enters `/freestyle?palaceId=<id>`, and the retired standalone `/review` pages are not registered.
 - `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
 - Cross-module imports must use the target module's `public.ts`.
 - Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
 - Runtime modules under `apps/web/src/modules` are the production ownership map; do not move migrated logic back into pages as domain code. Empty future-facing module scaffolds are forbidden.
 
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
-- Whole-book batch generation workspace: `docs/architecture/batch-generation-workspace.md`
 - Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
 
-- AI learning workbench and immutable run records: `docs/architecture/ai-learning-workbench.md`
-- English reading gap-driven input loop: `docs/architecture/english-reading-gap-loop.md`
+Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps listening (`/english/listening`) and word lookup. Manual JSON import (“文字转脑图”) remains.
 
 ## Review Settlement Boundary
 

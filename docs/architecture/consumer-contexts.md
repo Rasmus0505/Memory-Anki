@@ -14,13 +14,12 @@ Search owns query matching and result shaping. Palace owns title resolution.
 
 ```text
 freestyle.application -> english.api
-freestyle.application -> english_reading.api
 freestyle.application -> palace_quiz.api
 freestyle.application -> palaces.api
 freestyle.application -> reviews.api
 ```
 
-Each facade is intentionally narrow: recent English course continuation, recent reading materials, quiz question serialization, Palace context projections, and due-review policy. New Freestyle card types must request an explicit public capability from the owner context instead of importing its service implementation.
+Each facade is intentionally narrow: recent English course continuation, quiz question serialization, Palace context projections, and due-review policy. New Freestyle card types must request an explicit public capability from the owner context instead of importing its service implementation.
 
 ### Immersive feed queue
 

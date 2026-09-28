@@ -1,5 +1,7 @@
 # AI Run Workspace Boundary
 
+> Removed with the in-app AI run workspace. English listening ASR/translation and the settings prompt catalog remain. This note is historical.
+
 All user-triggered AI work follows a preview, execute, and accept/apply lifecycle. The existing AI runtime and prompt catalog remain separate platform ports; the run workspace records user-visible workflow state and never owns provider secrets.
 
 ## Required lifecycle

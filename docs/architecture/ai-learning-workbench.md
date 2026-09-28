@@ -1,5 +1,7 @@
 ﻿# AI Learning Workbench Boundary
 
+> Removed. The in-app AI learning workbench, routes, and module are gone. Database tables stay; do not add a drop migration. This note is historical.
+
 The AI learning context owns persisted study conversations, immutable context snapshots, run identity, feedback, and generic preview serialization. It does not own palace editing, quiz publishing, model administration, or prompt administration.
 
 ## Dependency Direction

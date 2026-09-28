@@ -14,14 +14,12 @@ Business modules must not import `settings.application` or `settings.infrastruct
 
 ## Migration State
 
-- Palace association, AI split, and mind-map import jobs use the platform runtime port.
-- Import jobs persist a non-secret runtime snapshot and restore current provider credentials through `AiRuntimeProvider.restore` inside the worker.
-- Palace presentation routers compose the settings-backed adapter through `memory_anki.modules.settings.api`; request sessions are not captured by background threads.
+- Peg association and English listening (DashScope ASR + LLM translation) use the platform runtime port. In-app AI split, PDF/image mind-map import, quiz generation, English reading, and the PDF library were removed; their tables stay.
 - English course generation persists non-secret ASR and translation runtime snapshots beside each task, restores current credentials inside workers, and carries stable `ownerId`/`operationId` across retries.
 - English presentation composes `SettingsAiRuntimeProvider` through `memory_anki.modules.settings.api`; English application and infrastructure no longer import settings application internals.
-- Prompt catalog dependencies are tracked separately from runtime resolution.
-- The settings UI exposes five top-level workspaces (`access`, `models`, `scenes`, `blocks`, `observability`); prompt composition and quality calls stay in the prompt settings API, while Provider/model/scenario calls stay in the model settings API.
-- English course, English Reading, and mind-map AI split resolve credentials through the injected `AiRuntimeProvider`.
+- Prompt catalog dependencies are tracked separately from runtime resolution. Listening scenes are `asr_course_transcription` and `translation_course_batch`. Peg association keeps `peg_association_suggestions`.
+- The settings UI exposes five top-level workspaces (`access`, `models`, `scenes`, `blocks`, `observability`); prompt composition stays in the prompt settings API, while Provider/model/scenario calls stay in the model settings API.
+- English listening resolves credentials through the injected `AiRuntimeProvider` and `infrastructure/llm/openai_compatible.py`. `infrastructure/llm/gateway.py` was removed after its non-English callers were deleted.
 
 ## Invariants
 
