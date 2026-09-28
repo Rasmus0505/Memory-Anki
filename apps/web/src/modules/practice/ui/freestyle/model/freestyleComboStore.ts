@@ -62,6 +62,10 @@ export function resetFreestyleCombo() {
   emit()
 }
 
+export function readFreestyleCombo(): FreestyleComboSnapshot {
+  return comboSnapshot
+}
+
 export function useFreestyleCombo() {
   return useSyncExternalStore(subscribe, () => comboSnapshot, () => comboSnapshot)
 }

@@ -110,7 +110,8 @@
     0 10px 26px -8px color-mix(in oklab, var(--tone) 80%, transparent);
 }
 
-.freestyle-rate-kbd {
+.freestyle-rate-button[data-key]::before {
+  content: attr(data-key);
   position: absolute;
   left: 0.35rem;
   top: 0.25rem;
@@ -120,7 +121,7 @@
 }
 
 @media (hover: none) {
-  .freestyle-rate-kbd { display: none; }
+  .freestyle-rate-button[data-key]::before { display: none; }
 }
 
 /* "3天后见": floats up out of the pressed key and fades. */

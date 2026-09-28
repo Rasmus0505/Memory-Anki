@@ -1,7 +1,27 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import type { FlowRatingReaction } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
-import { useFreestyleRatingPulse } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
+import {
+  readFreestyleCombo,
+  useFreestyleRatingPulse,
+} from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
+import {
+  emitCollectors,
+  emitComboMilestone,
+  emitKeycapShockwave,
+  emitRatingBurst,
+  rectCenter,
+} from '@/shared/feedback/particles'
+import {
+  chargeSegment,
+  flashVignette,
+  freestyleMotionOn,
+  milestoneEffectsOn,
+  playLandingChime,
+  progressTargetPoint,
+  stampOn,
+  viewingSegment,
+} from './freestyleParticleScenes'
 
 // Web Animations API instead of `motion`: this wraps every card on the startup route.
 // Every gesture returns to rest: rating never advances the card, so it must not leave.
@@ -44,7 +64,6 @@ const REACTION_KEYFRAMES: Record<FlowRatingReaction, { frames: Keyframe[]; durat
 }
 
 const REACTION_EASING = 'cubic-bezier(0.22, 1.2, 0.36, 1)'
-const OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
 const FLASH_TONE: Record<UnitRating, string> = {
   1: 'var(--color-rate-again)',
@@ -52,8 +71,6 @@ const FLASH_TONE: Record<UnitRating, string> = {
   3: 'var(--color-rate-good)',
   4: 'var(--color-rate-easy)',
 }
-
-const SPARK_COUNT = 10
 
 interface ActiveReaction {
   nonce: number
@@ -65,62 +82,36 @@ function canAnimate(element: Element | null): element is HTMLElement {
   return !!element && typeof (element as HTMLElement).animate === 'function'
 }
 
-function Sparks({ tone }: { tone: string }) {
-  const rootRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (!root) return
-    const animations: Animation[] = []
-    root.querySelectorAll<HTMLElement>('[data-spark]').forEach((spark, index) => {
-      if (!canAnimate(spark)) return
-      const angle = (index / SPARK_COUNT) * Math.PI * 2 - Math.PI / 2
-      const distance = 46 + (index % 3) * 18
-      const x = Math.cos(angle) * distance
-      const y = Math.sin(angle) * distance
-      animations.push(spark.animate(
-        [
-          { transform: 'translate3d(0,0,0) scale(0.4)', opacity: 1 },
-          { transform: `translate3d(${x * 0.6}px,${y * 0.6}px,0) scale(1.3)`, opacity: 1, offset: 0.45 },
-          { transform: `translate3d(${x}px,${y}px,0) scale(0)`, opacity: 0 },
-        ],
-        { duration: 600, easing: OUT_EXPO, fill: 'forwards' },
-      ))
-    })
-    const plusOne = root.querySelector<HTMLElement>('[data-plus-one]')
-    if (canAnimate(plusOne)) {
-      animations.push(plusOne.animate(
-        [
-          { transform: 'translate3d(-50%,0,0) scale(0.6)', opacity: 0 },
-          { transform: 'translate3d(-50%,-20px,0) scale(1.15)', opacity: 1, offset: 0.3 },
-          { transform: 'translate3d(-50%,-40px,0) scale(1)', opacity: 1, offset: 0.7 },
-          { transform: 'translate3d(-50%,-54px,0) scale(0.95)', opacity: 0 },
-        ],
-        { duration: 800, easing: OUT_EXPO, fill: 'forwards' },
-      ))
-    }
-    return () => animations.forEach((animation) => animation.cancel())
-  }, [])
-
-  return (
-    <div ref={rootRef} className="pointer-events-none absolute right-[18%] top-[38%] z-20" aria-hidden>
-      {Array.from({ length: SPARK_COUNT }, (_, index) => (
-        <span
-          key={index}
-          data-spark
-          className="absolute block size-1.5 rounded-full opacity-0"
-          style={{ background: index % 2 ? tone : 'var(--color-stage-glow)' }}
-        />
-      ))}
-      <span
-        data-plus-one
-        className="absolute whitespace-nowrap text-lg font-black tracking-tight opacity-0"
-        style={{ color: tone, textShadow: '0 2px 12px hsl(32 94% 60% / 0.55)' }}
-      >
-        +1
-      </span>
-    </div>
-  )
+/**
+ * Burst and shockwave from the pressed keycap; collectors (comet-led for strong
+ * grades) home onto the rail, charge the landing segment and chime on arrival.
+ * Read before the card gesture moves the button.
+ */
+function playRatingParticles(scope: HTMLElement, rating: UnitRating) {
+  if (!freestyleMotionOn()) return
+  const button = scope.querySelector(`[data-testid="freestyle-rating-button-${rating}"]`)
+  const rect = button?.getBoundingClientRect()
+  if (!rect || rect.width === 0) return
+  const origin = { x: rect.left + rect.width / 2, y: rect.top + 4 }
+  const { combo, milestoneIndex } = readFreestyleCombo()
+  emitRatingBurst(origin, rating, combo)
+  emitKeycapShockwave(origin, rating)
+  const segment = viewingSegment()
+  emitCollectors({
+    origin,
+    rating,
+    combo,
+    target: progressTargetPoint,
+    onFirstArrive: () => {
+      chargeSegment(segment, rating >= 3 ? combo : 0)
+      playLandingChime(combo)
+    },
+  })
+  if (milestoneIndex != null && milestoneEffectsOn()) {
+    emitComboMilestone(rectCenter(scope.getBoundingClientRect()), combo)
+    stampOn(scope, `连击 ×${combo}`)
+    flashVignette()
+  }
 }
 
 function Flash({ reaction, tone }: { reaction: FlowRatingReaction; tone: string }) {
@@ -164,6 +155,7 @@ export function FreestyleRatingReaction({ active, children }: { active: boolean;
     seenNonceRef.current = pulse.nonce
     const scope = scopeRef.current
     if (!active || !scope) return
+    playRatingParticles(scope, pulse.rating)
     const { frames, duration } = REACTION_KEYFRAMES[pulse.reaction]
     const animation = canAnimate(scope) ? scope.animate(frames, { duration, easing: REACTION_EASING }) : null
     setShown({ nonce: pulse.nonce, rating: pulse.rating, reaction: pulse.reaction })
@@ -180,7 +172,6 @@ export function FreestyleRatingReaction({ active, children }: { active: boolean;
     <div ref={scopeRef} className="relative flex min-h-0 flex-1 flex-col">
       {children}
       {shown && tone ? <Flash key={shown.nonce} reaction={shown.reaction} tone={tone} /> : null}
-      {shown?.reaction === 'fling' && tone ? <Sparks key={shown.nonce} tone={tone} /> : null}
     </div>
   )
 }

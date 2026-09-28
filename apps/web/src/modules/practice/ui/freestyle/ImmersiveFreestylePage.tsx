@@ -9,6 +9,7 @@ import {
 import { RefreshCw } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
+import { FreestyleRailParticles } from '@/modules/practice/ui/freestyle/components/FreestyleRailParticles'
 import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
 import {
   buildFreestyleProgressSummary,
@@ -48,6 +49,8 @@ import {
   FreestyleWorkspaceSwitcher,
 } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
 import { FreestyleRatingReaction } from '@/modules/practice/ui/freestyle/components/FreestyleRatingReaction'
+import { FreestyleKeyCardMotes } from '@/modules/practice/ui/freestyle/components/FreestyleKeyCardMotes'
+import { pageTurnDust } from '@/modules/practice/ui/freestyle/components/freestyleParticleScenes'
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
@@ -250,6 +253,10 @@ export default function ImmersiveFreestylePage({
 
   queueRef.current = cards
   const { signalPageTurn } = useFreestyleFlowFeedback()
+  const signalPageTurnWithDust = useCallback((direction: 'forward' | 'backward') => {
+    signalPageTurn(direction)
+    pageTurnDust()
+  }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
   const roundComplete = isFreestyleRoundComplete(
     cards,
@@ -289,7 +296,7 @@ export default function ImmersiveFreestylePage({
     becameActiveAt,
     loading,
     queueFrozen,
-    onPageTurn: isActive ? signalPageTurn : undefined,
+    onPageTurn: isActive ? signalPageTurnWithDust : undefined,
   })
   const {
     recordChannelSample,
@@ -341,8 +348,8 @@ export default function ImmersiveFreestylePage({
     void hydrateUnitPreviews()
   }, [])
 
-  // Whole-round read-only preload, nearest first, so a card's map is already drawn
-  // while it slides in. Starts a beat late so the active card's session goes first.
+  // Current and adjacent read-only preload, so a unit switch paints immediately
+  // without competing with the active card's session request.
   useEffect(() => {
     if (!isActive || loading || cards.length === 0) return
     const controller = new AbortController()
@@ -773,6 +780,7 @@ export default function ImmersiveFreestylePage({
           onOpenPlan={openPlan}
           overflow={progressRailOverflow}
         />
+        <FreestyleRailParticles segments={progressSummary.segments} />
 
         <FreestyleTopNotices
           showYesterday={!yesterdayHintDismissed && isQueueStateFromPreviousDay(queueState)}
@@ -846,6 +854,11 @@ export default function ImmersiveFreestylePage({
                       className="relative flex min-h-0 flex-1 flex-col"
                       data-exam-stars={examStarsOf(card) ?? undefined}
                     >
+                      {examStarsOf(card) === 3 ? (
+                        <FreestyleKeyCardMotes
+                          active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                        />
+                      ) : null}
                       {examStarsOf(card) ? (
                         <span className="exam-feed-corner" aria-hidden={examStarsOf(card) === 1}>
                           <ExamStarBadge stars={examStarsOf(card) ?? 1} />

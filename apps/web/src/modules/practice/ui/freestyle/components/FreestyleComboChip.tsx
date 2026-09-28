@@ -30,6 +30,7 @@ export function FreestyleComboChip({ reducedMotion = false }: { reducedMotion?: 
             className={cn(
               'freestyle-combo-chip flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold tabular-nums',
               comboHeat(combo),
+              milestone && !reducedMotion && 'freestyle-combo-aura',
             )}
             initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.8 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}

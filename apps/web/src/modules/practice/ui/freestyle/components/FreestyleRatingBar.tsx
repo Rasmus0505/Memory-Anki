@@ -330,6 +330,7 @@ export function FreestyleRatingBar({
                 }
                 title={actionError || hint}
                 data-tone={item.tone}
+                data-key={item.value}
                 data-selected={selected ? 'true' : undefined}
                 className={cn(
                   'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center disabled:pointer-events-none sm:min-h-12 sm:rounded-2xl sm:px-2',
@@ -349,7 +350,6 @@ export function FreestyleRatingBar({
                     aria-hidden
                   />
                 ) : null}
-                <kbd className="freestyle-rate-kbd" aria-hidden>{item.value}</kbd>
                 <span className="freestyle-rate-label inline-flex items-center gap-1 text-xs font-semibold leading-none sm:text-sm">
                   <span className="freestyle-rate-pip" aria-hidden />
                   {item.label}

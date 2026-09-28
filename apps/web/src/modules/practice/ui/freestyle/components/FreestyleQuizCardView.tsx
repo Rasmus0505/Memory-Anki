@@ -19,6 +19,15 @@ import {
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
+import { emitCorrectBurst, emitFlight, emitInkSink, rectCenter } from '@/shared/feedback/particles'
+import {
+  chargeSegment,
+  freestyleMotionOn,
+  playLandingChime,
+  progressTargetPoint,
+  stampOn,
+  viewingSegment,
+} from './freestyleParticleScenes'
 
 export function FreestyleQuizCardView({
   card,
@@ -42,6 +51,7 @@ export function FreestyleQuizCardView({
   active?: boolean
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const paperRef = useRef<HTMLDivElement | null>(null)
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const { mode: answerMode } = useQuizAnswerMode()
   const palaceTitle = card.palace_context.resolved_title || card.palace_context.title
@@ -55,6 +65,28 @@ export function FreestyleQuizCardView({
   useEffect(() => {
     setKeyboardOptionIndex(0)
   }, [card.question.id])
+
+  // Only a live resolve on this question reacts; a card restored as answered stays still.
+  const resolvedSeenRef = useRef<{ questionId: FreestyleQuizCard['question']['id']; resolved: boolean } | null>(null)
+  useEffect(() => {
+    const previous = resolvedSeenRef.current
+    resolvedSeenRef.current = { questionId: card.question.id, resolved: isResolved }
+    const justResolved = previous?.questionId === card.question.id && !previous.resolved && isResolved
+    const paper = paperRef.current
+    if (!justResolved || !active || !paper || !freestyleMotionOn()) return
+    const center = rectCenter(paper.getBoundingClientRect())
+    if (!isCorrect) {
+      emitInkSink(center)
+      return
+    }
+    emitCorrectBurst(center)
+    stampOn(paper, '✓ 答对', 'paper')
+    const segment = viewingSegment()
+    emitFlight({ origin: center, target: progressTargetPoint, count: 7, comet: true, fountain: 6, onFirstArrive: () => {
+      chargeSegment(segment, 3)
+      playLandingChime(3)
+    } })
+  }, [active, card.question.id, isCorrect, isResolved])
 
   useEffect(() => {
     if (!active || !isQuizChoiceShortcutActive(card.question.question_type, answerMode)) return
@@ -118,6 +150,7 @@ export function FreestyleQuizCardView({
   return (
     <div ref={cardRef} className="mx-auto flex h-full w-full max-w-4xl flex-col justify-center py-2 sm:py-4">
       <div
+        ref={paperRef}
         className={cn(
           'fs-paper-card relative overflow-hidden rounded-[1.5rem] p-4 transition-shadow duration-500 sm:p-6',
           isResolved && isCorrect && 'fs-option-correct ring-2 ring-rate-good/45',
