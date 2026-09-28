@@ -31,6 +31,10 @@ const persistMocks = vi.hoisted(() => ({
   persistPalaceEditor: vi.fn(),
 }))
 
+const previewCacheMocks = vi.hoisted(() => ({
+  useUnitPreview: vi.fn(() => null),
+}))
+
 const quizBindingMocks = vi.hoisted(() => ({
   getOpenQuestionIds: vi.fn((nodeUid: string) => (nodeUid === 'unit-node' ? [101, 102] : [])),
   getInitialQuestionIndex: vi.fn(() => 0),
@@ -60,6 +64,10 @@ vi.mock('@/modules/practice/public', () => ({
 
 vi.mock('@/modules/practice/ui/freestyle/api', () => ({
   rateFreestyleRoundUnitApi: apiMocks.rateFreestyleRoundUnitApi,
+}))
+
+vi.mock('@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache', () => ({
+  useUnitPreview: previewCacheMocks.useUnitPreview,
 }))
 
 vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => ({
@@ -387,6 +395,8 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     window.cancelAnimationFrame = vi.fn()
     Object.values(apiMocks).forEach((mock) => mock.mockReset())
+    previewCacheMocks.useUnitPreview.mockReset()
+    previewCacheMocks.useUnitPreview.mockReturnValue(null)
     quizBindingMocks.getOpenQuestionIds.mockClear()
     quizBindingMocks.getInitialQuestionIndex.mockClear()
     quizBindingMocks.markQuestionCompleted.mockClear()
@@ -513,6 +523,37 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
   })
 
+  it('lets a cached preview flip locally and preserves that progress when the live session lands', async () => {
+    writeFlipCardRevealSettings({ granularity: 'single', stage: 'direct' })
+    const card = buildCard('unit-preview-flip')
+    const preview: UnitReviewSessionDto = {
+      ...buildSession(card.unit_id!),
+      id: `preview:${card.unit_id}`,
+      units: [{
+        ...buildSession(card.unit_id!).units[0],
+        encounter: null,
+      }],
+    }
+    previewCacheMocks.useUnitPreview.mockReturnValue(preview)
+    let resolveSession!: (value: UnitReviewSessionDto) => void
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(
+      new Promise<UnitReviewSessionDto>((resolve) => {
+        resolveSession = resolve
+      }),
+    )
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const shell = screen.getByTestId('freestyle-unit-review-map-shell')
+    expect(shell.hasAttribute('inert')).toBe(false)
+    const onNodeClick = capturedPanelProps?.onNodeClick as (nodes: MindMapSelection[]) => void
+    act(() => onNodeClick([selection('root', '完整宫殿')]))
+    flushRevealFrame()
+
+    resolveSession(buildSession(card.unit_id!))
+    const badge = await screen.findByTestId('flip-progress-badge')
+    expect(badge.textContent).toBe('1/2')
+  })
   it('arms then removes this card from the round without posting a rating', async () => {
     const card = buildCard('unit-remove-queue')
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))

@@ -46,6 +46,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { freestyleUnitLoadFailureCopy } from '@/modules/practice/ui/freestyle/model/freestyleUnitLoadRecovery'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
+import { useFreestyleCardParticles } from './useFreestyleCardParticles'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
 
@@ -213,6 +214,14 @@ export function FreestyleUnitReviewCardView({
   const flipProgressKey = `${card.id}:${unit?.encounter?.id ?? 'none'}`
   const activeFlipProgress =
     flipProgress && flipProgress.key === flipProgressKey ? flipProgress : null
+  const sectionRef = useRef<HTMLElement | null>(null)
+  const cardParticles = useFreestyleCardParticles({
+    sectionRef,
+    active,
+    progressKey: flipProgressKey,
+    revealed: activeFlipProgress?.revealed ?? null,
+    total: activeFlipProgress?.total ?? null,
+  })
   const effectiveRevision = adoptedRevision ?? card.unit_revision
   const cardUnitKey =
     card.unit_id && effectiveRevision != null
@@ -713,6 +722,7 @@ export function FreestyleUnitReviewCardView({
     setActionError(null)
     setBusy(true)
     busyRef.current = true
+    const undoneRating = currentUnit.encounter?.selected_rating ?? null
     try {
       let workingSession = currentSession
       let workingUnit = currentUnit
@@ -736,6 +746,7 @@ export function FreestyleUnitReviewCardView({
         if (!options?.clearAll || result.encounter.selected_rating == null) break
       }
       if (!lastResult) return
+      cardParticles.playUndo(undoneRating as UnitRating | null)
       sessionRef.current = workingSession
       unitRef.current = workingUnit
       setSession(workingSession)
@@ -802,7 +813,7 @@ export function FreestyleUnitReviewCardView({
     : null
 
   return (
-    <section className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
+    <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
       {/* Warm paper: same canvas as PWA review; dark stage chrome stays on the shell. */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-paper shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_24px_60px_-18px_rgb(0_0_0/0.65)] sm:rounded-3xl">
         {/* Rate confirmation, at the edge of the card being read rather than at screen
@@ -833,7 +844,6 @@ export function FreestyleUnitReviewCardView({
           <div
             data-testid="freestyle-unit-review-map-shell"
             data-preview={flipSource.live ? undefined : 'true'}
-            inert={!flipSource.live}
             className={cn(
               'fs-unit-arrive flex min-h-0 flex-1 flex-col',
               !inlineEditing && 'pb-[6.75rem] sm:pb-[7.25rem]',
@@ -908,7 +918,10 @@ export function FreestyleUnitReviewCardView({
             onRemoveFromQueue={
               readOnly || !onRemoveFromQueue
                 ? undefined
-                : () => onRemoveFromQueue(card.id)
+                : () => {
+                    cardParticles.playRemove()
+                    onRemoveFromQueue(card.id)
+                  }
             }
             onDismissError={() => setActionError(null)}
           />

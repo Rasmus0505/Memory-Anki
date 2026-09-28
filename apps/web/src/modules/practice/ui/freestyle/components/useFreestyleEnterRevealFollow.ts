@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { MindMapSelection } from '@/modules/content/public'
 import type { RevealState } from '@/modules/session/public'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
@@ -14,7 +14,8 @@ export interface FreestyleEnterRevealApi {
 /**
  * Enter flips the unit anchor and asks the canvas to pan the newly revealed
  * cards into view. Shift hides descendants and does not move the camera.
- * A burst of Enters plans from the unflushed cursor so each step is tracked.
+ * Unprocessed rapid input coalesces to the latest intent, so latency cannot make
+ * the cursor run ahead of the cards that were actually flipped.
  */
 export function useFreestyleEnterRevealFollow({
   active,
@@ -26,7 +27,6 @@ export function useFreestyleEnterRevealFollow({
   rootText,
   handleNodeContextMenu,
   revealApiRef,
-  revealMap,
 }: {
   active: boolean
   isEditMode: boolean
@@ -37,19 +37,12 @@ export function useFreestyleEnterRevealFollow({
   rootText: string
   handleNodeContextMenu: (nodes: MindMapSelection[]) => void
   revealApiRef: { readonly current: FreestyleEnterRevealApi }
-  revealMap: Record<string, RevealState>
 }) {
-  const enterRevealCursorRef = useRef<Record<string, RevealState> | null>(null)
   const revealFollowNonceRef = useRef(0)
   const [revealFollow, setRevealFollow] = useState<{ nodeIds: string[]; nonce: number }>({
     nodeIds: [],
     nonce: 0,
   })
-
-  useEffect(() => {
-    if (!enterRevealCursorRef.current) return
-    enterRevealCursorRef.current = null
-  }, [revealMap])
 
   useLayoutEffect(() => {
     if (!active || isEditMode) return
@@ -88,17 +81,16 @@ export function useFreestyleEnterRevealFollow({
 
       event.preventDefault()
       if (isShift) {
-        enterRevealCursorRef.current = null
         // Right-clicking the root hides every descendant while retaining the
         // root card, which is the keyboard equivalent of returning to root.
         handleNodeContextMenu([rootSelection])
         return
       }
-      const baseMap = enterRevealCursorRef.current ?? revealApiRef.current.revealMap
-      const plan = revealApiRef.current.applyTargetRevealFrom(baseMap, [targetSelection])
-      if (!plan) return
-      enterRevealCursorRef.current = plan.nextRevealMap
-      if (plan.changedIds.length === 0) return
+      const plan = revealApiRef.current.applyTargetRevealFrom(
+        revealApiRef.current.revealMap,
+        [targetSelection],
+      )
+      if (!plan || plan.changedIds.length === 0) return
       revealFollowNonceRef.current += 1
       setRevealFollow({
         nodeIds: [...plan.changedIds],

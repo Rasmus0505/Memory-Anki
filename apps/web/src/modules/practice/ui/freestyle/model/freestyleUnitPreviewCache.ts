@@ -71,12 +71,18 @@ function previewTargets(cards: readonly FreestyleCard[], centerIndex: number) {
     if (card.type !== 'mindmap_branch' || !unitId || revision == null) return
     targets.push({ unitId, revision, distance: Math.abs(index - centerIndex) })
   })
-  return targets.sort((a, b) => a.distance - b.distance)
+  const uniqueByUnit = new Map<string, { unitId: string; revision: number; distance: number }>()
+  for (const target of targets.sort((a, b) => a.distance - b.distance)) {
+    if (!uniqueByUnit.has(target.unitId)) uniqueByUnit.set(target.unitId, target)
+  }
+  // Current unit plus the nearest distinct units on either side. A quiz card in
+  // between must not turn this into a whole-round fetch.
+  return [...uniqueByUnit.values()].slice(0, 3)
 }
 
 /**
- * Background preload of the whole round, nearest cards first, two at a time so it
- * never competes with the active card's own session request.
+ * Background preload of the current and adjacent unit previews, two at a time so
+ * it never competes with the active card's own session request.
  */
 export async function prefetchRoundPreviews(
   cards: readonly FreestyleCard[],

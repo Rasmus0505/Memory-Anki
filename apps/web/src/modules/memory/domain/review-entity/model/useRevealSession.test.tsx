@@ -109,6 +109,26 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('revealed')
   })
 
+  it('keeps only the latest unprocessed advance in latest-only mode', () => {
+    const { result } = renderHook(() =>
+      useRevealSession({
+        title: '宫殿',
+        editorState,
+        revealConfig: { granularity: 'single', stage: 'two-step' },
+        pendingAdvancePolicy: 'latest-only',
+      }),
+    )
+
+    act(() => {
+      result.current.handleNodeClick([selection('root', '宫殿')])
+      result.current.handleNodeClick([selection('root', '宫殿')])
+    })
+    flushRevealFrame()
+
+    expect(result.current.revealMap.a).toBe('placeholder')
+    expect(result.current.revealMap.b).toBe('hidden')
+  })
+
   it('keeps reveal progress when the reveal configuration changes', () => {
     const { result, rerender } = renderHook(
       ({ config }: { config: { granularity: 'single' | 'level'; stage: 'two-step' | 'direct' } }) =>

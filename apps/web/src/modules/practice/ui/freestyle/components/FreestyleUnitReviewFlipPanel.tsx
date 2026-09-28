@@ -128,6 +128,7 @@ export function FreestyleUnitReviewFlipPanel({
     title: card.palace_title || session.title || `宫殿 ${card.palace_id}`,
     editorState: editEditorState,
     revealConfig: flipCardRevealSettings.settings,
+    pendingAdvancePolicy: 'latest-only',
     allowedNodeIds: allowedRevealNodeIds,
     syncedRevealMap: syncedRevealMap as Record<string, RevealState> | null,
   })
@@ -236,7 +237,6 @@ export function FreestyleUnitReviewFlipPanel({
     rootText: root.text || '',
     handleNodeContextMenu,
     revealApiRef,
-    revealMap: reveal.revealMap,
   })
 
   // While reviewing, external/session replacement wins. During edit, the local
@@ -484,6 +484,7 @@ export function FreestyleUnitReviewFlipPanel({
   }, [onRevealMapChange])
 
   const handleToggleMode = useCallback(() => {
+    if (!active) return
     const currentReveal = revealApiRef.current.revealMap
     const flipProgress = countUnitFlipProgress(currentReveal, flipTargetUids)
     const flipDetail = `翻卡 ${flipProgress.revealed}/${flipProgress.total}`
@@ -514,6 +515,7 @@ export function FreestyleUnitReviewFlipPanel({
     setDisplayMode('review')
     setModeSyncVersion((value) => value + 1)
   }, [
+    active,
     flipTargetUids,
     isEditMode,
     onEditorStateSaved,

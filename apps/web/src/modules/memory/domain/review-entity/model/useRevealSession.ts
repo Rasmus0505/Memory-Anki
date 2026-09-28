@@ -45,6 +45,12 @@ interface UseRevealSessionOptions {
   /** Optional freestyle-only scope for cards that may be revealed. */
   allowedNodeIds?: Iterable<string>
   revealConfig?: FlipCardRevealConfig
+  /**
+   * `latest-only` is for latency-sensitive freestyle input: while a frame or data
+   * transition is still pending, later flip intent replaces earlier unprocessed
+   * intent instead of replaying the whole burst.
+   */
+  pendingAdvancePolicy?: 'queue' | 'latest-only'
   /** Remote live-study reveal map. Replaces local state when the JSON changes. */
   syncedRevealMap?: Record<string, RevealState> | null
 }
@@ -67,6 +73,7 @@ export function useRevealSession({
   focusNodeIds = EMPTY_FOCUS_NODE_IDS,
   allowedNodeIds,
   revealConfig = DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+  pendingAdvancePolicy = 'queue',
   syncedRevealMap = null,
 }: UseRevealSessionOptions) {
   const parsedDoc = React.useMemo(
@@ -286,7 +293,16 @@ export function useRevealSession({
   }, [nodeMap, revealOptions, root])
 
   const enqueueRevealAction = React.useCallback(
-    (action: RevealAction) => {
+    (action: RevealAction, replacePendingAdvance = true) => {
+      if (
+        replacePendingAdvance
+        && pendingAdvancePolicy === 'latest-only'
+        && action.type === 'advance'
+      ) {
+        revealActionQueueRef.current = revealActionQueueRef.current.filter(
+          (queued) => queued.type !== 'advance',
+        )
+      }
       revealActionQueueRef.current.push(action)
       if (revealActionFrameRef.current !== null) return
 
@@ -306,7 +322,7 @@ export function useRevealSession({
         revealActionFrameRef.current = frameId
       }
     },
-    [flushRevealActions],
+    [flushRevealActions, pendingAdvancePolicy],
   )
 
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
@@ -333,9 +349,9 @@ export function useRevealSession({
     const plan = planTargetRevealAdvances(root, targetId, nodeMap, baseMap, revealOptions)
     if (!plan.recognized) return null
     clearLockedBulkTarget()
-    for (const nodeId of plan.advanceNodeIds) {
-      enqueueRevealAction({ type: 'advance', nodeId })
-    }
+    plan.advanceNodeIds.forEach((nodeId, index) => {
+      enqueueRevealAction({ type: 'advance', nodeId }, index === 0)
+    })
     return plan
   }, [clearLockedBulkTarget, enqueueRevealAction, nodeMap, revealOptions, root])
 
