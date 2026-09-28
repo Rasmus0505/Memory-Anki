@@ -6,6 +6,7 @@ import threading
 from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables._base import get_session
+from memory_anki.modules.memory.api import warm_unit_projection_cache
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,10 @@ def run_startup_warmup() -> None:
                 """
             )
         ).fetchall()
-        logger.info("startup warmup completed")
+        # Shelf, dashboard and review queue all re-project palace documents; warming
+        # the content-keyed memo moves that ~1s off the first user request.
+        warmed = warm_unit_projection_cache(session)
+        logger.info("startup warmup completed", extra={"warmed_palaces": warmed})
     finally:
         session.close()
 

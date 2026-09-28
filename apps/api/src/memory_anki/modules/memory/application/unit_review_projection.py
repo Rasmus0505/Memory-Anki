@@ -25,6 +25,7 @@ from memory_anki.modules.mindmap_document.api import (
     split_scheduling_units,
 )
 
+from .unit_projection_cache import cached_document_projection, clear_unit_projection_cache
 from .unit_scheduler import INTERVAL_DAYS, clamp_stage
 
 
@@ -129,18 +130,38 @@ def resolve_unit_definitions(
     return _definitions_for_palace(palace)
 
 
+_DocumentProjection = tuple[str | None, dict[str, dict[str, Any]], tuple[UnitDefinition, ...]]
+
+
+def warm_unit_projection_cache(session: Session) -> int:
+    """Read-only: project every live palace once so the first shelf/queue request is warm."""
+    palaces = (
+        session.query(Palace)
+        .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
+        .all()
+    )
+    for palace in palaces:
+        _definitions_for_palace(palace)
+    return len(palaces)
+
+
 def _definitions_for_palace(
     palace: Palace,
 ) -> tuple[dict[str, Any], list[UnitDefinition]]:
-    root_uid, nodes = build_document_tree(palace.editor_doc)
+    root_uid, nodes, definitions = cached_document_projection(palace.editor_doc, _project_document)
     tree = {
         "palace_id": palace.id,
         "title": palace.title or "",
         "root_uid": root_uid,
         "nodes": nodes,
     }
+    return tree, list(definitions)
+
+
+def _project_document(editor_doc: Any) -> _DocumentProjection:
+    root_uid, nodes = build_document_tree(editor_doc)
     if not root_uid:
-        return tree, []
+        return root_uid, nodes, ()
     marks = permanent_mark_uids_from_nodes(nodes, root_uid=str(root_uid))
     splits = split_scheduling_units(
         nodes=nodes,
@@ -167,7 +188,7 @@ def _definitions_for_palace(
                 content_hash=content_hash,
             )
         )
-    return tree, definitions
+    return root_uid, nodes, tuple(definitions)
 
 
 def _active_states(session: Session, palace_id: int) -> list[ReviewUnitState]:
@@ -758,6 +779,8 @@ def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[st
 
 __all__ = [
     "UnitDefinition",
+    "clear_unit_projection_cache",
+    "warm_unit_projection_cache",
     "adjust_unit_schedule",
     "get_palace_unit_projection",
     "json_load_list",

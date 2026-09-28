@@ -14,6 +14,7 @@ from memory_anki.modules.memory.api import (
     get_palace_ladder_progress,
     get_palace_unit_projection,
     get_unit_review_completion,
+    get_unit_review_preview,
     get_unit_review_session,
     list_due_units,
     open_unit_review_encounter,
@@ -205,6 +206,14 @@ def open_encounter(
     except (TypeError, ValueError) as exc:
         session.rollback()
         raise _bad_request(ValueError(str(exc))) from exc
+
+
+@router.get("/review/units/{unit_id}/preview")
+def unit_preview(unit_id: str, session: Session = Depends(session_dep)):
+    try:
+        return {"item": get_unit_review_preview(session, unit_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/review/session/{study_session_id}")
