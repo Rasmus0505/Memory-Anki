@@ -1,3 +1,5 @@
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Brain,
   Check,
@@ -12,23 +14,12 @@ import {
   Wand2,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  useDropdownMenuActionCoordinator,
-} from '@/shared/components/ui/dropdown-menu'
+import { useDropdownMenuActionCoordinator } from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
+import { resolveOverlayPortalContainer } from '@/shared/lib/overlayPortal'
 import { cn } from '@/shared/lib/utils'
 import type { MindMapTask } from '@/shared/api/contracts'
-import {
-  openSessionRecorderDialog,
-  recordSessionRecorderUiAction,
-  stopSessionRecording,
-  useSessionRecorderState,
-} from '@/shared/debug/session-recorder'
+import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
 
 interface MindMapToolbarSegmentOption { id: number; name: string }
 interface MindMapToolbarSegmentControl {
@@ -47,6 +38,110 @@ type OverflowAction = MindMapToolbarAction & {
   destructive?: boolean
   separatorBefore?: boolean
   active?: boolean
+}
+
+/**
+ * Plain overflow menu. Radix DropdownMenu's Popper anchor setState loops inside
+ * the mind-map host and the canvas error boundary then unmounts 文字转脑图.
+ */
+function MindMapOverflowMenu({ actions }: { actions: OverflowAction[] }) {
+  const menu = useDropdownMenuActionCoordinator()
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
+  const [box, setBox] = useState<{ top: number; right: number } | null>(null)
+
+  const menuOpen = menu.open
+  const setMenuOpen = menu.setOpen
+
+  useEffect(() => {
+    if (!menuOpen || !anchor) return
+    const place = () => {
+      const rect = anchor.getBoundingClientRect()
+      const next = { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) }
+      setBox((current) => (
+        current && current.top === next.top && current.right === next.right ? current : next
+      ))
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [anchor, menuOpen])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (anchor?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-mindmap-overflow-menu]')) return
+      setMenuOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [anchor, menuOpen, setMenuOpen])
+
+  if (!actions.length) return null
+  const host = menu.open ? resolveOverlayPortalContainer() : null
+  return (
+    <>
+      <button
+        ref={setAnchor}
+        type="button"
+        aria-label="更多脑图操作"
+        aria-haspopup="menu"
+        aria-expanded={menu.open}
+        className="ma-pressable inline-flex size-9 max-sm:size-8 items-center justify-center rounded-lg border border-input bg-background text-foreground shadow-sm hover:bg-accent"
+        onClick={() => menu.setOpen((open) => !open)}
+        onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          menu.setOpen(true)
+        }}
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {host && box ? createPortal(
+        <div
+          role="menu"
+          data-mindmap-overflow-menu
+          className="z-[250] min-w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{ position: 'fixed', top: box.top, right: box.right }}
+        >
+          {actions.map((action, index) => (
+            <div key={`${action.label}-${index}`}>
+              {action.separatorBefore ? <div className="my-1 h-px bg-border" role="separator" /> : null}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={action.disabled}
+                aria-checked={action.active ? true : undefined}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent',
+                  action.destructive && 'text-destructive',
+                )}
+                onClick={() => {
+                  menu.runAction(() => {
+                    recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`)
+                    action.onClick()
+                  }, action.opensOverlay)
+                }}
+              >
+                <span className="min-w-0 flex-1">{action.label}</span>
+                {action.active ? <Check className="size-3.5 shrink-0" aria-hidden /> : null}
+              </button>
+            </div>
+          ))}
+        </div>,
+        host,
+      ) : null}
+    </>
+  )
 }
 
 export interface MindMapPageToolbarProps {
@@ -102,17 +197,11 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   // englishAction stays a dedicated icon toggle immediately left of 文字模式.
   // quizAction is the first primary icon; do not also bury it in ⋯ (avoids duplicate "做题").
   const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
-  const overflowBase = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
-  const recording = useSessionRecorderState().recording
-  const recorderAction: OverflowAction = recording
-    ? { label: '停止录制', onClick: () => { stopSessionRecording() }, opensOverlay: true, separatorBefore: overflowBase.length > 0 }
-    : { label: '录制', onClick: () => { openSessionRecorderDialog() }, opensOverlay: true, separatorBefore: overflowBase.length > 0 }
-  const overflowActions = [...overflowBase, recorderAction]
+  const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
   // moreActions alone must open the ⋯ menu (freestyle: 进入编辑 / 永久标记 live only there).
   const modern = Boolean(
     taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length > 0,
   )
-  const overflowMenu = useDropdownMenuActionCoordinator()
 
   return (
     <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
@@ -213,35 +302,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
         {!modern && immersiveAction ? <Button type="button" variant="outline" onClick={immersiveAction.onClick}>{immersiveAction.label}</Button> : null}
         {!modern && nativeFullscreenAction ? <Button type="button" variant="outline" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</Button> : null}
         {!modern && clearUiAction ? <Button type="button" variant="outline" onClick={clearUiAction.onClick}>{clearUiAction.label}</Button> : null}
-        <DropdownMenu open={overflowMenu.open} onOpenChange={overflowMenu.setOpen}>
-            <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" aria-label="更多脑图操作" className="max-sm:size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-48">
-              {overflowActions.map((action, index) => (
-                <div key={`${action.label}-${index}`}>
-                  {action.separatorBefore ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuItem
-                    disabled={action.disabled}
-                    variant={action.destructive ? 'destructive' : 'default'}
-                    aria-checked={action.active ? true : undefined}
-                    onSelect={(event) => {
-                      if (action.opensOverlay) event.preventDefault()
-                      overflowMenu.runAction(() => {
-                        if (action.label !== '录制' && action.label !== '停止录制') {
-                          recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`)
-                        }
-                        action.onClick()
-                      }, action.opensOverlay)
-                    }}
-                  >
-                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                      {action.label}
-                      {action.active ? <Check className="size-3.5 shrink-0" aria-hidden /> : null}
-                    </span>
-                  </DropdownMenuItem>
-                </div>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <MindMapOverflowMenu actions={overflowActions} />
       </div>
     </div>
   )

@@ -21,7 +21,7 @@ export function NodeCountBadge({
           : countBadge.tone === 'rose'
             ? 'bg-rose-600'
             : countBadge.tone === 'info'
-              ? 'bg-sky-600'
+              ? 'bg-info'
               : 'bg-success'
   const label = countBadge.title || countBadge.text
 

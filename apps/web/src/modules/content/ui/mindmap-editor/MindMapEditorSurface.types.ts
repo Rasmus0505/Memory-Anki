@@ -6,7 +6,6 @@ import type {
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
 import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
-import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
 import type { MindMapFeedbackFxPayload, MindMapReviewFxPayload } from './hostBridgeUtils'
 import type {
   MindMapContentChangeViewportPolicy,
@@ -55,7 +54,6 @@ export interface MindMapEditorSurfaceProps {
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   presentationStrategy?: MindMapPresentationStrategy
-  aiSplitBusy?: boolean
   syncOnPropChange?: boolean
   syncIntent?: 'soft' | 'replace'
   syncReason?: string | null
@@ -91,8 +89,6 @@ export interface MindMapEditorSurfaceProps {
   highlightedNodeUids?: string[]
   /** Explicit node outline emphasis supplied by the host (e.g. current review path). */
   outlinedNodeUids?: string[]
-  /** Color nodes / edges by Anki front/back roles while editing. */
-  ankiEditMode?: boolean
   mutedNodeUids?: string[]
   masteryByNodeUid?: Record<string, { status: string; manualLabel?: string | null; masteryScore?: number | null }>
   statusChipsByNodeUid?: Record<
@@ -103,6 +99,12 @@ export interface MindMapEditorSurfaceProps {
   onCountBadgeClick?: (nodeUid: string, kind?: MindMapCountBadge['kind']) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
+  /**
+   * Minimal pan that brings these cards fully into view. Does not select or
+   * recenter. Hosts use it for Enter reveal follow.
+   */
+  revealFollowNodeIds?: readonly string[]
+  revealFollowNonce?: number
   reviewFxSignal?: MindMapReviewFxPayload | null
   feedbackFxSignal?: MindMapFeedbackFxPayload | null
   buildSelectionToolbarActions?: (
@@ -141,7 +143,6 @@ export interface MindMapEditorSurfaceProps {
     targetSegmentId: number | 'new' | null
   }) => void
   onSegmentRangeConfirm?: () => void
-  onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
   onFullscreenChange?: (active: boolean) => void
   onFullscreenToggle?: (active?: boolean) => void
   /** When true, both canvas fullscreen toolbar actions are owned by the host. */

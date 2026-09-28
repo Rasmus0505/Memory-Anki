@@ -11,6 +11,8 @@ export interface MindMapNodeStatusChip {
 
 export interface MindMapNodeVisual {
   concealText?: boolean
+  /** Review/practice only: node is shown because it was recalled (drives the reveal flip). */
+  revealed?: boolean
   placeholder?: boolean
   borderColor?: string | null
   /** Editor-only user mark fill (card background). */

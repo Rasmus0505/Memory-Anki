@@ -11,12 +11,17 @@ import {
   type OnMove,
   type Viewport,
 } from '@xyflow/react'
+import { useRef } from 'react'
 import { nodeTypes } from './nodeTypes'
+import { useMindMapEnterMotion } from './useMindMapEnterMotion'
+import { useMindMapRevealMotion } from './useMindMapRevealMotion'
 import {
   MINDMAP_MANUAL_MAX_ZOOM,
   MINDMAP_MANUAL_MIN_ZOOM,
 } from './mindMapViewportConfig'
 import { usePaneModeGestures } from './usePaneModeGestures'
+import { useAxisLockedPan } from './useAxisLockedPan'
+import './mindMapAxisLock.css'
 
 interface MindMapCanvasViewportProps {
   width: number
@@ -46,6 +51,9 @@ interface MindMapCanvasViewportProps {
   onMoveEnd?: OnMove
   viewport: Viewport
   onViewportChange: (viewport: Viewport) => void
+  /** Axis-locked one-finger pan in yield mode (horizontal/diagonal swipes). */
+  onPanBy?: (dx: number, dy: number) => void
+  onPanEnd?: () => void
   readonly?: boolean
   mobileGuided?: boolean
   /** Explicit `guided` policy only: one-finger drag belongs to a parent scroller (freestyle feed). */
@@ -80,6 +88,8 @@ export function MindMapCanvasViewport({
   onMoveEnd,
   viewport,
   onViewportChange,
+  onPanBy,
+  onPanEnd,
   readonly = false,
   mobileGuided = false,
   yieldOneFingerPan = false,
@@ -87,6 +97,16 @@ export function MindMapCanvasViewport({
   const paneGestures = usePaneModeGestures({
     onDoubleClick: onPaneDoubleClick,
     onLongPress: onPaneLongPress,
+  })
+  const frameRef = useRef<HTMLDivElement>(null)
+  const motionSettled = useMindMapEnterMotion(frameRef, nodes, edges)
+  useMindMapRevealMotion(frameRef, nodes, edges)
+  const axisLockEnabled = yieldOneFingerPan && Boolean(onPanBy)
+  useAxisLockedPan(frameRef, {
+    enabled: axisLockEnabled,
+    nodesDraggable: !readonly,
+    onPan: (dx, dy) => onPanBy?.(dx, dy),
+    onPanEnd: () => onPanEnd?.(),
   })
   // Large-graph mode: skip dots earlier once collapse still leaves a wide map.
   const largeGraph = nodes.length >= 120
@@ -96,7 +116,12 @@ export function MindMapCanvasViewport({
 
   return (
     <div
-      className="relative"
+      ref={frameRef}
+      className="memory-anki-mindmap-viewport relative"
+      data-motion-settled={motionSettled ? 'true' : 'false'}
+      data-dragging={isDraggingNode ? 'true' : 'false'}
+      data-large-graph={largeGraph ? 'true' : 'false'}
+      data-axis-lock={axisLockEnabled ? 'true' : undefined}
       style={{ width, height }}
       onPointerDownCapture={paneGestures.onPointerDownCapture}
       onPointerMoveCapture={paneGestures.onPointerMoveCapture}
@@ -156,7 +181,7 @@ export function MindMapCanvasViewport({
         <Controls
           showZoom={false}
           showInteractive={false}
-          className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-zinc-200 !bg-white/92 !shadow-lg max-sm:!hidden"
+          className="!left-4 !top-4 !bottom-auto !rounded-lg !border !border-paper-line !bg-paper-card/92 !shadow-lift max-sm:!hidden"
         />
         {!simplifiedDecorations ? (
           <Background

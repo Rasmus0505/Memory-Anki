@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type PointerEvent } from 'react'
+import { triggerHaptic } from '@/shared/feedback/haptics'
 import {
   createPaneModeGestureMachine,
   isMindMapPaneTarget,
@@ -26,7 +27,7 @@ export function usePaneModeGestures({
         const handler = onLongPressRef.current
         if (!handler) return undefined
         return () => {
-          navigator.vibrate?.(35)
+          triggerHaptic('long-press')
           handler()
         }
       },

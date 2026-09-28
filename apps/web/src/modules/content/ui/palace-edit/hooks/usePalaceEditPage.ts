@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
-import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/feedback/feedbackEvents'
 import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
@@ -15,9 +14,8 @@ import { usePalacePracticeMode } from '@/modules/content/ui/palace-edit/hooks/us
 import { usePalaceVersionsController } from '@/modules/content/ui/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 import { getEnglishContinueCourseApi } from '@/modules/english/public'
-import type { MindMapDoc, MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
-import { useAiSplitWorkbench } from '@/modules/content/ui/palace-edit/hooks/useAiSplitWorkbench'
 export type { PalaceMeta } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
@@ -41,13 +39,11 @@ export function usePalaceEditPage() {
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
-  const [aiSplitAppliedSyncVersion, setAiSplitAppliedSyncVersion] = useState(0)
   const [feedbackFxSignal, setFeedbackFxSignal] = useState<MindMapFeedbackFxPayload | null>(null)
   const hardUnloadRef = useRef(false)
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
   const documentStateRef = useRef<ReturnType<typeof usePalaceEditorDocument> | null>(null)
-  const selectedNodesRef = useRef<MindMapSelection[]>([])
 
   const timer = useTimedSession({
     sessionKey: palaceSessionKey,
@@ -64,7 +60,6 @@ export function usePalaceEditPage() {
     setReplaceSyncVersion,
   })
   documentStateRef.current = documentState
-  selectedNodesRef.current = selectedNodes
   const palace = documentState.meta
   const palaceTitle = palace?.title || '未命名宫殿'
   const selectedNode = selectedNodes[0] ?? null
@@ -318,64 +313,9 @@ export function usePalaceEditPage() {
     }
   }, [navigate])
 
-  const aiSplitWorkbench = useAiSplitWorkbench({
-    palaceId,
-    navigateTarget: fullPath || (palaceId ? `/palaces/${palaceId}` : undefined),
-    getLatestEditorState: () => documentStateRef.current?.editorState ?? null,
-    getCurrentSelectedUid: () => {
-      const node = selectedNodesRef.current[0]
-      return node?.uid ? String(node.uid) : null
-    },
-    getCurrentSelectedLabel: () => {
-      const node = selectedNodesRef.current[0]
-      return node?.text ? String(node.text) : ''
-    },
-    applyEditorDoc: (nextDoc) => {
-      const latest = documentStateRef.current?.editorState
-      if (!latest) return
-      setAiSplitAppliedSyncVersion((value) => value + 1)
-      documentStateRef.current?.setEditorState({
-        ...latest,
-        editor_doc: nextDoc,
-      })
-    },
-    onApplied: ({ mode, nodeCount }) => {
-      emitFeedbackFx('node_create', {
-        nodeUid: selectedNodeUidRef.current,
-        relatedNodeUids: selectedNodeUidRef.current ? [selectedNodeUidRef.current] : [],
-        source:
-          mode === 'replace'
-            ? 'mindmap_ai_split_replace'
-            : mode === 'write_children'
-              ? 'mindmap_ai_split_write_children'
-              : 'mindmap_ai_split_append',
-      })
-      void nodeCount
-    },
-  })
-
-  const handleAiSplitRequest = useCallback(
-    async (payload: MindMapAiSplitRequestPayload) => {
-      if (practice.editorMode !== 'edit' || !palaceId || !documentState.editorState) return
-      if (!payload.target_node_uid) {
-        toast.error('请先选中要分卡的目标节点。')
-        return
-      }
-      const editorDoc = documentState.editorState.editor_doc as MindMapDoc
-      await aiSplitWorkbench.openWorkbench({
-        targetNodeUid: payload.target_node_uid,
-        targetNodeText: payload.target_node_text || '',
-        targetNodeNote: payload.target_node_note || '',
-        editorDoc,
-      })
-    },
-    [aiSplitWorkbench, documentState.editorState, palaceId, practice.editorMode],
-  )
-
   const statusBadge: StatusBadgeState = versions.statusBadge
 
   return {
-    aiSplitWorkbench,
     palaceId,
     palace,
     reload: documentState.reload,
@@ -425,8 +365,6 @@ export function usePalaceEditPage() {
     isCreatingDraft: documentState.isCreatingDraft,
     handleCreateBlankPalace,
     handleMindMapEditorStateChange,
-    aiSplitBusy: aiSplitWorkbench.phase === 'generating',
-    aiSplitAppliedSyncVersion,
     handleSaveMeta: meta.handleSaveMeta,
     handleEstablishCreatedAt: meta.handleEstablishCreatedAt,
     handleAttachmentUpload: meta.handleAttachmentUpload,
@@ -437,7 +375,6 @@ export function usePalaceEditPage() {
     flipCardRevealSettings: practice.flipCardRevealSettings,
     handleInlinePracticeNodeClick,
     handleInlinePracticeNodeContextMenu,
-    handleAiSplitRequest,
     restartInlinePractice: practice.restartInlinePractice,
     handleOpenVersions: versions.handleOpenVersions,
     handlePreviewVersion: versions.handlePreviewVersion,

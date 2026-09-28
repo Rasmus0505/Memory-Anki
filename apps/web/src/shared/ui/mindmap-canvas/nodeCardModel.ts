@@ -131,9 +131,9 @@ export function buildNodeCardTextClassNames(options: {
     nativeTextSelect ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
     options.concealed ? 'blur-[3px]' : '',
     !nativeTextSelect && (options.concealed || !options.readonly) ? 'select-none' : '',
-    options.isRoot ? `${size} text-zinc-900 text-center` : `text-left ${size}`,
-    !options.isRoot && options.depth === 1 ? 'text-zinc-800' : '',
-    !options.isRoot && options.depth !== 1 ? 'text-zinc-700' : '',
+    options.isRoot ? `${size} text-paper-ink text-center tracking-[0.01em]` : `text-left ${size}`,
+    !options.isRoot && options.depth === 1 ? 'text-paper-ink' : '',
+    !options.isRoot && options.depth !== 1 ? 'text-paper-ink-soft' : '',
   ].filter(Boolean).join(' ')
 }
 
@@ -144,19 +144,20 @@ export function buildNodeCardContainerClassNames(options: {
   dropHighlightCls: string
   previewAdopt: boolean
   placeholder: boolean
+  concealed?: boolean
   outlineTones: Set<string>
 }): string {
   return [
-    'flex items-center rounded-xl border',
-    options.markFill ? '' : 'bg-white',
-    'transition-[box-shadow,opacity,transform,background-color,border-color] duration-100',
-    options.isRoot ? 'border-zinc-300 shadow-sm justify-center' : 'border-zinc-200 shadow-sm',
+    'mindmap-node-card flex items-center rounded-[14px] border',
+    options.markFill ? '' : options.isRoot ? 'mindmap-node-card--root' : 'bg-paper-card',
+    options.concealed && !options.isRoot ? 'mindmap-node-card--concealed' : '',
+    options.isRoot ? 'border-paper-line-strong justify-center' : 'border-paper-line',
     options.selectedCls,
     options.dropHighlightCls,
-    options.previewAdopt ? 'ring-1 ring-blue-400/40' : '',
-    options.placeholder ? 'ring-2 ring-amber-400/35' : '',
-    options.outlineTones.has('danger') ? 'outline outline-2 outline-rose-400/55' : '',
-    options.outlineTones.has('info') ? 'outline outline-2 outline-sky-400/70' : '',
+    options.previewAdopt ? 'ring-1 ring-primary/40' : '',
+    options.placeholder ? 'ring-2 ring-primary/35' : '',
+    options.outlineTones.has('danger') ? 'outline outline-2 outline-destructive/55' : '',
+    options.outlineTones.has('info') ? 'outline outline-2 outline-rate-easy/70' : '',
   ].filter(Boolean).join(' ')
 }
 

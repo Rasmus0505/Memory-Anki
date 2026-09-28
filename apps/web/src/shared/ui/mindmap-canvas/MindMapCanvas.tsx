@@ -36,8 +36,10 @@ export type MindMapNodeClickViewportPolicy = 'preserve' | 'guided-center'
 export type MindMapContentChangeViewportPolicy = 'auto-fit' | 'preserve'
 
 export interface MindMapCanvasViewCommand {
-  type: 'fit' | 'center'
+  type: 'fit' | 'center' | 'reveal'
   nodeId?: string | null
+  /** Cards a reveal command may pan into view. The camera keeps zoom. */
+  nodeIds?: readonly string[]
   nonce: number
 }
 
@@ -172,14 +174,14 @@ function MindMapCanvasRecoveryPanel({
   onRefresh,
 }: MindMapCanvasRecoveryPanelProps) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-zinc-50/92 p-4 backdrop-blur-sm">
-      <div className="max-w-sm rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm shadow-lg">
-        <div className="font-semibold text-zinc-900">{title}</div>
-        <div className="mt-1 text-xs leading-5 text-zinc-600">{description}</div>
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-paper/92 p-4 backdrop-blur-sm">
+      <div className="max-w-sm mindmap-pop-in rounded-2xl border border-primary/25 bg-paper-card px-4 py-3 text-sm shadow-lift">
+        <div className="font-semibold text-paper-ink">{title}</div>
+        <div className="mt-1 text-xs leading-5 text-paper-muted">{description}</div>
         <button
           type="button"
           onClick={onRefresh}
-          className="mt-3 inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100"
+          className="mt-3 inline-flex h-9 items-center justify-center ma-pressable rounded-lg border border-paper-line px-3 text-xs font-medium text-paper-ink-soft transition-colors hover:bg-primary-soft"
         >
           刷新脑图
         </button>
@@ -236,7 +238,7 @@ class MindMapCanvasErrorBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <div className="relative h-full min-h-[520px] rounded-[14px] border border-zinc-200 bg-zinc-50">
+        <div className="relative h-full min-h-[520px] rounded-2xl border border-paper-line bg-paper">
           <MindMapCanvasRecoveryPanel
             title="脑图渲染异常"
             description="当前脑图区域遇到渲染错误，可以刷新脑图宿主恢复当前翻卡进度。"
@@ -360,7 +362,7 @@ function MindMapCanvasInner({
       data-interaction-mode={props.editingNodeId ? 'editing' : props.selectedNodeId ? 'selected' : 'idle'}
       data-testid="mindmap-canvas-frame"
       className={cn(
-        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-zinc-200 bg-zinc-50 shadow-[0_18px_44px_rgba(24,24,27,0.08)]',
+        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-paper-line bg-paper shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_18px_44px_-12px_hsl(24_50%_24%/0.16)]',
         className,
       )}
     >
@@ -419,6 +421,8 @@ function MindMapCanvasInner({
               onMoveEnd={state.handleMoveEnd}
               viewport={state.controlledViewport}
               onViewportChange={state.handleViewportChange}
+              onPanBy={state.panViewportBy}
+              onPanEnd={state.endViewportPan}
               readonly={Boolean(props.readonly)}
               mobileGuided={state.mobileGuidedActive}
               yieldOneFingerPan={state.yieldOneFingerPan}

@@ -117,7 +117,7 @@ describe('PalaceListCard unit review entry', () => {
 
     const subjective = screen.getByRole('button', { name: '主观 1 道' })
     const objective = screen.getByRole('button', { name: '客观 3 道，含标记题' })
-    expect(subjective.className).toContain('bg-sky-600')
+    expect(subjective.className).toContain('bg-info')
     expect(objective.className).toContain('bg-rose-600')
     expect(objective.getAttribute('data-quiz-count-badge')).toBe('objective')
     expect(subjective.closest('div')?.className).toContain('-bottom-2')

@@ -546,13 +546,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const showDropChrome = Boolean(extract.localHoverMode || nodeData.dropHighlight)
   const dropHighlightCls = showDropChrome
     ? effectiveDropMode === 'inside'
-      ? 'ring-2 ring-emerald-400/70 bg-emerald-50/20'
-      : 'ring-2 ring-sky-400/70 bg-sky-50/25'
+      ? 'ring-2 ring-success/70 bg-success/10'
+      : 'ring-2 ring-primary/70 bg-primary-soft/40'
     : ''
 
   const selectedCls =
     nodeData.selected && !isEditing
-      ? 'ring-2 ring-zinc-400/70 ring-offset-1 ring-offset-white border-zinc-300'
+      ? 'mindmap-node-card--selected border-primary/70'
       : ''
 
   const markFill = typeof visual.fillColor === 'string' && visual.fillColor.trim()
@@ -565,6 +565,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     dropHighlightCls,
     previewAdopt,
     placeholder,
+    concealed,
     outlineTones,
   })
   const nodeMode = isEditing ? 'editing' : nodeData.selected ? 'selected' : 'idle'
@@ -593,7 +594,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       data-mindmap-node-id={id}
       data-node-mode={nodeMode}
       className={[
-        'group relative transition-[opacity,transform] duration-100',
+        'mindmap-node-shell group relative',
         canStructureDrag ? 'mindmap-node-drag-surface cursor-grab active:cursor-grabbing' : '',
         previewShifted ? 'translate-y-2' : '',
         previewGhost ? 'opacity-35 scale-[0.97]' : '',
@@ -609,7 +610,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       {longPress.longPressPending ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-[-3px] z-20 rounded-[14px] border-2 border-amber-400/80 animate-pulse"
+          className="mindmap-node-longpress-ring pointer-events-none absolute inset-[-4px] z-20 rounded-[17px]"
         />
       ) : null}
       {nodeData.selected && !isEditing && (nodeData.selectionToolbarActions?.length ?? 0) > 0 ? (
@@ -647,12 +648,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           {extract.textSelection ? (
             // w-max + nowrap: absolute shrink-to-fit on a narrow card would otherwise
             // use CJK min-content (1 char wide), wrapping「黄色底色」into a tall oval.
-            <div className="nodrag nopan absolute -top-10 left-1/2 z-40 flex w-max max-w-none -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-full border border-amber-300 bg-white px-1.5 py-1 shadow-md">
+            <div className="nodrag nopan absolute -top-10 left-1/2 z-40 flex w-max max-w-none -translate-x-1/2 items-center gap-1 whitespace-nowrap mindmap-pop-in rounded-full border border-primary/30 bg-paper-card px-1.5 py-1 shadow-lift">
               <button
                 type="button"
                 aria-label="黄色底色"
                 title="黄色底色（再点取消）"
-                className="inline-flex h-7 min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2.5 text-xs font-medium text-amber-900 hover:bg-amber-200"
+                className="inline-flex h-7 min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-primary-soft px-2.5 text-xs font-medium text-primary-strong transition-colors hover:bg-primary/20"
                 onMouseDown={(event) => {
                   // Keep contentEditable focused.
                   event.preventDefault()
@@ -686,7 +687,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             aria-label="编辑节点文本"
             data-node-mode="editing"
             className={[
-              'nodrag nopan nowheel box-border block w-full overflow-hidden rounded-xl border-[2.5px] border-sky-500 bg-sky-50/90 text-zinc-900 outline-none ring-4 ring-sky-400/30 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]',
+              'nodrag nopan nowheel box-border block w-full overflow-hidden mindmap-node-editor rounded-[14px] border-[2.5px] border-primary bg-primary-soft/70 text-paper-ink outline-none ring-4 ring-primary/25',
               '[&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]',
               paddingCls,
               editorTextCls,
@@ -711,7 +712,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
               data-extract-handle="true"
               aria-label="拖出选中文字为新卡片"
               title="拖到目标卡片：成为其子节点或同级"
-              className="nodrag nopan absolute -right-2 -top-2 z-40 flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-sky-400 bg-white text-sky-600 shadow-md active:cursor-grabbing"
+              className="nodrag nopan absolute -right-2 -top-2 z-40 flex h-7 w-7 cursor-grab items-center justify-center mindmap-pop-in rounded-full border border-primary/60 bg-paper-card text-primary-strong shadow-lift active:cursor-grabbing"
               onMouseDown={extract.handleExtractMouseDown}
               onPointerDown={extract.handleExtractPointerDown}
             >
@@ -742,7 +743,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
                   ? `展开分支（${Number(metadata.collapsedDescendantCount ?? 0)} 个节点）；双击展开整棵子树`
                   : '折叠分支；双击展开整棵子树'
               }
-              className="nodrag nopan absolute -right-2 top-1/2 z-30 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-0.5 rounded-full border border-zinc-300 bg-white px-1 text-[10px] font-semibold text-zinc-600 shadow-sm hover:border-sky-400 hover:text-sky-700"
+              className="nodrag nopan absolute -right-2 top-1/2 z-30 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-0.5 mindmap-collapse-toggle rounded-full border border-paper-line-strong bg-paper-card px-1 text-[10px] font-semibold text-paper-muted shadow-sm hover:border-primary hover:text-primary-strong"
               onClick={(event) => {
                 event.stopPropagation()
                 event.preventDefault()

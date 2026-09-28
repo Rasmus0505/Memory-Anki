@@ -8,7 +8,7 @@ import { buildEditorDocFromSourceTree } from '@/modules/produce/ui/mindmap-impor
 
 export const MANUAL_MINDMAP_JSON_PROMPT = `你是一个严格输出 JSON 的助手。
 
-任务：把用户提供的内容整理成 Memory Anki 可导入的思维导图 JSON（可带 Anki 正反面角色）。
+任务：把用户提供的内容整理成 Memory Anki 可导入的思维导图 JSON。
 
 强制要求：
 1. 只输出一个合法 JSON 对象，不要 markdown 代码块，不要解释，不要前后缀。
@@ -20,48 +20,31 @@ export const MANUAL_MINDMAP_JSON_PROMPT = `你是一个严格输出 JSON 的助�
   "children": [
     {
       "text": "节点文字",
-      "ankiRole": "front",
       "children": [
-        {
-          "text": "反面内容",
-          "ankiRole": "back",
-          "children": []
-        }
+        { "text": "子要点", "children": [] }
       ]
     }
   ]
 }
 5. 每个节点必须有 text 与 children；无子节点也要 children: []。
 6. 节点 text 用完整要点句或原文短句，不要只写“1”“一”“如图”这类无信息占位。
-7. 可选字段 ankiRole，取值只能是 "front" | "back" | "none"：
-   - "front"：这张卡的正面（提问 / 提示 / 单词）
-   - "back"：这张卡的反面（答案 / 释义）；应作为某个 front 的直接子节点
-   - "none" 或不写：普通结构节点（分类、章节），不当卡面
-8. 一张 Anki 卡 = 一个 front 父节点 + 其直接子节点中的 back（可多个）。
-9. 根 title 不要写 ankiRole；分类节点不要伪装成问答。
-10. 若输入本身已是 JSON 但格式有误，请修正为上述结构后输出；不要用其它字段替代 text/children/ankiRole。
+7. 若输入本身已是 JSON 但格式有误，请修正为上述结构后输出；不要用其它字段替代 text/children。
 
-示例（带正反面）：
+示例：
 {
   "title": "骑士学院",
   "children": [
     {
-      "text": "骑士学院设立的目的是什么？",
-      "ankiRole": "front",
+      "text": "设立目的",
       "children": [
-        {
-          "text": "德意志各邦国为了培养文武官员、巩固政治，面向上层贵族子弟设立“骑士学院”。",
-          "ankiRole": "back",
-          "children": []
-        }
+        { "text": "德意志各邦国为了培养文武官员、巩固政治，面向上层贵族子弟设立“骑士学院”。", "children": [] }
       ]
     },
     {
-      "text": "骑士学院课程有哪些特点？",
-      "ankiRole": "front",
+      "text": "课程特点",
       "children": [
-        { "text": "现代外语和自然科学占首要地位。", "ankiRole": "back", "children": [] },
-        { "text": "法律、军事、工艺、建筑、机械等课程占很大比重。", "ankiRole": "back", "children": [] }
+        { "text": "现代外语和自然科学占首要地位。", "children": [] },
+        { "text": "法律、军事、工艺、建筑、机械等课程占很大比重。", "children": [] }
       ]
     }
   ]
@@ -161,11 +144,6 @@ function childrenFromUnknown(value: unknown): unknown[] {
   return []
 }
 
-function normalizeAnkiRole(value: unknown): 'front' | 'back' | 'none' | undefined {
-  if (value === 'front' || value === 'back' || value === 'none') return value
-  return undefined
-}
-
 function normalizeSourceNode(value: unknown, counter: { count: number }): MindMapImportSourceNode {
   if (!isRecord(value)) {
     throw new Error('节点结构非法：期望对象。')
@@ -179,8 +157,7 @@ function normalizeSourceNode(value: unknown, counter: { count: number }): MindMa
     throw new Error(`节点过多（超过 ${MAX_NODE_COUNT}），请拆分后再导入。`)
   }
   const children = childrenFromUnknown(value).map((child) => normalizeSourceNode(child, counter))
-  const ankiRole = normalizeAnkiRole(value.ankiRole)
-  return ankiRole ? { text, ankiRole, children } : { text, children }
+  return { text, children }
 }
 
 function normalizeSourceTree(value: unknown): MindMapImportSourceTree {
@@ -216,9 +193,7 @@ function docNodeToSourceNode(node: MindMapDocNode, counter: { count: number }): 
   const children = (Array.isArray(node.children) ? node.children : []).map((child) =>
     docNodeToSourceNode(child as MindMapDocNode, counter),
   )
-  const data = isRecord(node.data) ? node.data : null
-  const ankiRole = normalizeAnkiRole(data?.ankiRole)
-  return ankiRole ? { text, ankiRole, children } : { text, children }
+  return { text, children }
 }
 
 export function sourceTreeFromEditorDoc(doc: MindMapDoc): MindMapImportSourceTree {

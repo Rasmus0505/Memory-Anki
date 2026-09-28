@@ -126,6 +126,10 @@ export function usePalaceEditorQuizBindings({
         initialQuestionStates={quizNodeBindings.questionStates}
         onQuestionStateChange={quizNodeBindings.updateQuestionState}
         onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
+        onQuestionDeleted={(questionId) => {
+          setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId))
+          void quizNodeBindings.refresh()
+        }}
       />
     </>
   )

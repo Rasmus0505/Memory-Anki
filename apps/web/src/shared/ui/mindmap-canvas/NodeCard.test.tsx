@@ -199,8 +199,8 @@ describe('NodeCard', () => {
 
     const editor = screen.getByRole('textbox')
     expect(editor.getAttribute('data-node-mode')).toBe('editing')
-    expect(editor.className).toContain('border-sky-500')
-    expect(editor.className).toContain('bg-sky-50')
+    expect(editor.className).toContain('border-primary')
+    expect(editor.className).toContain('bg-primary-soft')
     expect(document.querySelector('[data-node-mode="editing"]')).toBeTruthy()
   })
 
@@ -446,7 +446,7 @@ describe('NodeCard', () => {
     fireEvent.doubleClick(screen.getByRole('button', { name: '编辑视觉' }))
     const textarea = screen.getByRole('textbox')
 
-    expect(textarea.className).toContain('border-sky-500')
+    expect(textarea.className).toContain('border-primary')
     expect(textarea.className).toContain('overflow-hidden')
     expect(textarea.style.scrollbarWidth).toBe('none')
   })
@@ -621,7 +621,7 @@ describe('NodeCard', () => {
     renderNodeCard()
 
     const { container } = getNodeShell()
-    expect(container.className).toContain('shadow-sm')
+    expect(container.className).toContain('mindmap-node-card--root')
     expect(container.className).not.toContain('shadow-md')
   })
 
@@ -633,15 +633,15 @@ describe('NodeCard', () => {
     )
 
     const { container } = getNodeShell()
-    expect(container.className).toContain('ring-emerald-400/70')
-    expect(container.className).toContain('bg-emerald-50/20')
+    expect(container.className).toContain('ring-success/70')
+    expect(container.className).toContain('bg-success/10')
   })
 
   it('shows blue feedback when dropping before or after a node', () => {
     renderNodeCard({ dropHighlight: true, dropMode: 'before' })
 
     const { container } = getNodeShell()
-    expect(container.className).toContain('ring-sky-400/70')
+    expect(container.className).toContain('ring-primary/70')
   })
 
   it('makes dragged nodes ghosted even when the node is also muted', () => {
@@ -682,9 +682,9 @@ describe('NodeCard', () => {
     })
 
     const { container } = getNodeShell()
-    expect(container.className).toContain('ring-amber-400/35')
-    expect(container.className).toContain('outline-rose-400/55')
-    expect(container.className).toContain('outline-sky-400/70')
+    expect(container.className).toContain('ring-primary/35')
+    expect(container.className).toContain('outline-destructive/55')
+    expect(container.className).toContain('outline-rate-easy/70')
     expect(container.style.borderColor).toBe('rgb(239, 68, 68)')
   })
 

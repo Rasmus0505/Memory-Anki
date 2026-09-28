@@ -609,7 +609,7 @@ export function applyMindMapLayout(
   const edges = graphData.edges
     .filter((edge) => positions.has(edge.source) && positions.has(edge.target))
     .map((edge) => {
-      const edgeColor = edgeColors.get(edge.id) ?? '#89a89e'
+      const edgeColor = edgeColors.get(edge.id) ?? '#b39a82'
       const runtimeStyle = edge.renderStyle
       return {
         id: edge.id,
@@ -622,7 +622,7 @@ export function applyMindMapLayout(
         targetHandle: undefined,
         pathOptions: { curvature: 0.32 },
         style: {
-          stroke: edge.style === 'dashed' ? '#a0aab3' : runtimeStyle?.stroke ?? edgeColor,
+          stroke: edge.style === 'dashed' ? '#c4b3a0' : runtimeStyle?.stroke ?? edgeColor,
           strokeWidth: edge.style === 'dashed' ? 1.3 : runtimeStyle?.strokeWidth ?? 1.5,
           strokeDasharray: edge.style === 'dashed' ? '4 4' : undefined,
           strokeLinecap: 'round',

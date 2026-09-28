@@ -131,6 +131,106 @@ export function resolveSceneRecenterAnchorId(options: {
   return SCENE_FIT_SENTINEL
 }
 
+export interface RevealIntoViewShift {
+  nodeId: string
+  dx: number
+  dy: number
+}
+
+function revealInnerRect(
+  canvasSize: { width: number; height: number },
+  paddingPx: number,
+) {
+  const padX = Math.max(0, Math.min(paddingPx, Math.max(0, (canvasSize.width - 1) / 2)))
+  const padY = Math.max(0, Math.min(paddingPx, Math.max(0, (canvasSize.height - 1) / 2)))
+  return {
+    left: padX,
+    top: padY,
+    right: canvasSize.width - padX,
+    bottom: canvasSize.height - padY,
+  }
+}
+
+/**
+ * Smallest screen-space pan that puts a rect fully inside the padded viewport.
+ * A rect larger than the viewport is aligned to the nearer edge, and a rect that
+ * already covers the viewport does not move.
+ */
+export function minimalShiftToRevealRect(
+  rect: { left: number; top: number; right: number; bottom: number },
+  canvasSize: { width: number; height: number },
+  paddingPx = 0,
+): { dx: number; dy: number } {
+  if (canvasSize.width <= 0 || canvasSize.height <= 0) return { dx: 0, dy: 0 }
+  const inner = revealInnerRect(canvasSize, paddingPx)
+  return {
+    dx: axisShift(rect.left, rect.right, inner.left, inner.right),
+    dy: axisShift(rect.top, rect.bottom, inner.top, inner.bottom),
+  }
+}
+
+function axisShift(start: number, end: number, innerStart: number, innerEnd: number): number {
+  const size = end - start
+  const innerSize = innerEnd - innerStart
+  if (size <= innerSize + 0.5) {
+    if (start < innerStart - 0.5) return innerStart - start
+    if (end > innerEnd + 0.5) return innerEnd - end
+    return 0
+  }
+  if (start <= innerStart + 0.5 && end >= innerEnd - 0.5) return 0
+  const alignStart = innerStart - start
+  const alignEnd = innerEnd - end
+  return Math.abs(alignStart) <= Math.abs(alignEnd) ? alignStart : alignEnd
+}
+
+function screenRectForNode(
+  node: Node,
+  viewport: Viewport,
+  measuredSizes?: NodeSizeMap,
+) {
+  const size = getResolvedNodeSize(node, undefined, measuredSizes)
+  const left = node.position.x * viewport.zoom + viewport.x
+  const top = node.position.y * viewport.zoom + viewport.y
+  return {
+    left,
+    top,
+    right: left + size.width * viewport.zoom,
+    bottom: top + size.height * viewport.zoom,
+  }
+}
+
+/**
+ * Among the candidate cards, the one that needs the largest minimal pan to be
+ * fully visible. Fully visible cards are ignored. Returns null when none are clipped.
+ */
+export function pickMostOutOfViewNodeId(
+  nodes: readonly Node[],
+  candidateIds: readonly string[],
+  viewport: Viewport,
+  canvasSize: { width: number; height: number },
+  measuredSizes?: NodeSizeMap,
+  paddingPx = 0,
+): RevealIntoViewShift | null {
+  if (canvasSize.width <= 0 || canvasSize.height <= 0 || viewport.zoom === 0) return null
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  let best: RevealIntoViewShift | null = null
+  let bestMagnitude = 0
+  for (const id of candidateIds) {
+    const node = byId.get(id)
+    if (!node) continue
+    const shift = minimalShiftToRevealRect(
+      screenRectForNode(node, viewport, measuredSizes),
+      canvasSize,
+      paddingPx,
+    )
+    const magnitude = Math.hypot(shift.dx, shift.dy)
+    if (magnitude <= 0.5 || magnitude <= bestMagnitude + 0.5) continue
+    best = { nodeId: id, dx: shift.dx, dy: shift.dy }
+    bestMagnitude = magnitude
+  }
+  return best
+}
+
 /** True when at least one laid-out card intersects the current camera. */
 export function anyNodeIntersectsViewport(
   nodes: readonly Node[],

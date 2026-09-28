@@ -13,6 +13,10 @@ export const MINDMAP_FOCUS_FIT_PADDING = 0.03
 export const MINDMAP_BRANCH_FIT_PADDING = 0.06
 export const MINDMAP_MOBILE_GUIDED_FIT_PADDING = 0.18
 export const MINDMAP_MOBILE_GUIDED_BRANCH_FIT_PADDING = 0.16
+/** Screen padding kept around a card brought into view by a reveal pan. */
+export const MINDMAP_REVEAL_INTO_VIEW_PADDING_PX = 32
+/** Short pan used when a reveal command brings a clipped card into view. */
+export const MINDMAP_REVEAL_INTO_VIEW_DURATION_MS = 200
 
 /**
  * Normalizes host-owned manual zoom preferences before they reach React Flow.

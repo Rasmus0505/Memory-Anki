@@ -1,7 +1,6 @@
-﻿import { Brain, FolderTree, Sparkles } from 'lucide-react'
+﻿import { Brain, FolderTree } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
 import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
-import type { MindMapAiSplitRequestPayload } from '@/shared/ui/mindmap-canvas/capabilities'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { EditorDocGraphOptions } from './documentGraphProjection'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
@@ -38,8 +37,6 @@ interface CapabilityFactoryOptions {
   countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
-  aiSplitBusy: boolean
-  onAiSplitRequest?: (payload: MindMapAiSplitRequestPayload) => void
   onCreateSegmentFromSelection?: () => void
   onSegmentRangeDraftChange?: (payload: {
     selectedNodeUids: string[]
@@ -88,7 +85,6 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
   if (options.segments.length || options.segmentRangeDraft.active || options.onCreateSegmentFromSelection) {
     capabilities.push(createSegmentCapability(options))
   }
-  if (options.onAiSplitRequest) capabilities.push(createAiSplitCapability(options))
   if (options.practiceModeActive) capabilities.push(createPracticeCapability(options))
 
   return capabilities
@@ -128,32 +124,6 @@ function createSegmentCapability(options: CapabilityFactoryOptions): MindMapCapa
         })
       }
       return actions
-    },
-  }
-}
-
-function createAiSplitCapability(options: CapabilityFactoryOptions): MindMapCapability {
-  return {
-    key: 'ai-split',
-    getNodeActions: ({ nodeId, selection, isRoot, readonly, practiceModeActive }) => {
-      if (readonly || practiceModeActive || isRoot || !options.onAiSplitRequest) return []
-      const selected = selection[0]
-      return [
-        {
-          label: options.aiSplitBusy ? '正在分卡...' : 'AI 分卡',
-          icon: Sparkles,
-          disabled: options.aiSplitBusy,
-          onClick: () =>
-            options.onAiSplitRequest?.({
-              target_node_uid: selected?.uid ?? nodeId,
-              target_node_text: selected?.text ?? '',
-              target_node_note: selected?.note ?? '',
-              target_node_type: selected?.memoryAnkiNodeType ?? null,
-              is_root: isRoot,
-              split_mode: 'auto',
-            }),
-        },
-      ]
     },
   }
 }

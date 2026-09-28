@@ -1,5 +1,4 @@
 ﻿export * from './model/document'
-export * from './model/ankiRoles'
 export * from './model/snapshotAdapter'
 export * from './model/subtree'
 export * from './model/transferFile'

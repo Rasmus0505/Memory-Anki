@@ -18,7 +18,7 @@ interface UseImportApplyControllerOptions {
   setEditorState: (nextState: MindMapEditorState) => void
   applyEditorState?: (nextState: MindMapEditorState, context?: ImportApplyContext) => Promise<void> | void
   selectedNodeUid: string | null
-  importEditorDoc: MindMapEditorState['editor_doc']
+  importEditorDoc: MindMapEditorState['editor_doc'] | null
   sourceTitle: string
   currentJobId: string | null
   sourceKind: ImportSourceKind

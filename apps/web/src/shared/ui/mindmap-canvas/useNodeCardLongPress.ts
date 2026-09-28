@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
+import { triggerHaptic } from '@/shared/feedback/haptics'
 import {
   LONG_PRESS_DELAY_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
@@ -55,7 +56,7 @@ export function useNodeCardLongPress({
       longPressTriggeredRef.current = true
       suppressSyntheticContextMenuUntilRef.current = Date.now() + SYNTHETIC_CONTEXT_MENU_WINDOW_MS
       setLongPressPending(false)
-      navigator.vibrate?.(35)
+      triggerHaptic('long-press')
       onTouchLongPress?.(nodeId, point)
     },
     [nodeId, onTouchLongPress],

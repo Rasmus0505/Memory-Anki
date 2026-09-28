@@ -4,7 +4,9 @@ import {
   anyNodeIntersectsViewport,
   findNearestNodeIdToViewportCenter,
   getViewportCenterFlowPoint,
+  minimalShiftToRevealRect,
   nodeIntersectsViewport,
+  pickMostOutOfViewNodeId,
   resolveSceneRecenterAnchorId,
   SCENE_FIT_SENTINEL,
 } from './mindMapCanvasGeometry'
@@ -54,6 +56,64 @@ describe('mindMapCanvasGeometry viewport center', () => {
         { width: 0, height: 0 },
       ),
     ).toBeNull()
+  })
+})
+
+describe('mindMapCanvasGeometry reveal into view', () => {
+  const canvas = { width: 400, height: 300 }
+  const viewport = { x: 0, y: 0, zoom: 1 }
+  const sizes = new Map([
+    ['visible', { width: 100, height: 40 }],
+    ['near', { width: 100, height: 40 }],
+    ['far', { width: 100, height: 40 }],
+  ])
+
+  it('leaves a fully visible card unmoved', () => {
+    expect(minimalShiftToRevealRect(
+      { left: 40, top: 40, right: 140, bottom: 80 },
+      canvas,
+      32,
+    )).toEqual({ dx: 0, dy: 0 })
+    expect(pickMostOutOfViewNodeId(
+      [node('visible', 40, 40)],
+      ['visible'],
+      viewport,
+      canvas,
+      sizes,
+      32,
+    )).toBeNull()
+  })
+
+  it('pans the minimum distance to clear a clipped edge plus padding', () => {
+    const shift = minimalShiftToRevealRect(
+      { left: 360, top: 40, right: 460, bottom: 80 },
+      canvas,
+      32,
+    )
+    expect(shift.dx).toBeCloseTo(400 - 32 - 460)
+    expect(shift.dy).toBe(0)
+  })
+
+  it('picks the card that needs the larger pan when several are clipped', () => {
+    const picked = pickMostOutOfViewNodeId(
+      [node('near', 350, 40), node('far', 900, 40)],
+      ['near', 'far'],
+      viewport,
+      canvas,
+      sizes,
+      32,
+    )
+    expect(picked?.nodeId).toBe('far')
+    expect(picked?.dx).toBeCloseTo(400 - 32 - 1000)
+    expect(picked?.dy).toBe(0)
+  })
+
+  it('does not pan an oversized card that already covers the viewport', () => {
+    expect(minimalShiftToRevealRect(
+      { left: -20, top: -20, right: 500, bottom: 400 },
+      canvas,
+      32,
+    )).toEqual({ dx: 0, dy: 0 })
   })
 })
 

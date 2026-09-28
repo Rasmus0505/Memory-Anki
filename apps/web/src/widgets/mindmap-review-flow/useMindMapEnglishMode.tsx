@@ -5,8 +5,6 @@ import {
   LookupAnchor,
   useEnglishLookup,
 } from '@/modules/english-lookup/public'
-import { createEnglishReadingVocabularyNoteApi } from '@/modules/english-reading/public'
-import { toast } from '@/shared/feedback/toast'
 
 /**
  * Host-side English interaction mode for flip-card mind maps:
@@ -39,23 +37,10 @@ export function useMindMapEnglishMode() {
     })
   }, [])
 
-  const handleFavorite = useCallback(async (query: string, summary: string) => {
-    try {
-      await createEnglishReadingVocabularyNoteApi({
-        word: query,
-        definitionZh: summary || undefined,
-        note: '',
-      })
-      toast.success('已收藏生词')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '收藏失败')
-    }
-  }, [])
-
   const englishChrome: ReactNode = englishModeActive ? (
     <>
       <LookupAnchor anchor={lookup.anchor} onClick={lookup.handleAnchorClick} />
-      <EnglishLookupPanel lookup={lookup} onFavorite={handleFavorite} />
+      <EnglishLookupPanel lookup={lookup} />
     </>
   ) : null
 

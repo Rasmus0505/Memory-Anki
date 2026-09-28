@@ -11,10 +11,7 @@ import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
-import * as importApi from '@/modules/produce/public'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
-import * as preferencesApi from '@/modules/settings/domain/preferences-entity/api'
-import * as settingsPublic from '@/modules/settings/public'
 
 vi.mock('sonner', () => ({
   toast: {
@@ -27,8 +24,6 @@ vi.mock('sonner', () => ({
 const mindMapFrameMockState = vi.hoisted(() => ({
   nextMountId: 1,
 }))
-
-export const promptForAiOptionsMock = vi.fn()
 
 export const timedSessionMock = {
   sessionId: 'timed-session-1',
@@ -58,76 +53,6 @@ vi.mock('@/shared/hooks/useTimedSession', () => ({
   shouldAutoStartOnPageEnter: (config: unknown) => shouldAutoStartOnPageEnterMock(config),
 }))
 
-vi.mock('@/modules/settings/domain/ai-runtime-entity', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/settings/domain/ai-runtime-entity')>()
-  return {
-    ...actual,
-    useAiRunConfigDialog: () => ({
-      promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
-      aiRunConfigDialog: null,
-    }),
-  }
-})
-
-vi.mock('@/modules/settings/domain/preferences-entity/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/settings/domain/preferences-entity/api')>()
-  return {
-    ...actual,
-    getAiModelScenariosApi: vi.fn(async () => ({
-      scenes: [
-        {
-          key: 'ai_split',
-          label: 'AI 分卡',
-          description: '分卡',
-          default_model: 'qwen3.6-flash',
-          default_thinking_enabled: false,
-          available_models: [
-            {
-              key: 'qwen3.6-flash',
-              label: 'Qwen Flash',
-              provider: 'dashscope',
-              supports_thinking: false,
-            },
-          ],
-        },
-      ],
-      scenarios: [],
-    })),
-    getAiPromptBlocksApi: vi.fn(async () => ({
-      items: [
-        {
-          key: 'role.strict_json',
-          label: '严格 JSON',
-          description: 'test',
-          layer: 'role',
-          sort_order: 10,
-          template: 'json only',
-          is_active: true,
-          applicable_scene_keys: ['ai_split'],
-        },
-      ],
-    })),
-    getAiPromptScenesApi: vi.fn(async () => ({
-      items: [
-        {
-          scene_key: 'ai_split',
-          prompt_key: 'ai_prompt_mindmap_ai_split_system',
-          label: 'AI 分卡',
-          description: '分卡',
-          category: '脑图分卡',
-          block_keys: ['role.strict_json'],
-          recommended_block_keys: ['role.strict_json'],
-          scene_instruction: 'split',
-        },
-      ],
-    })),
-    previewAiPromptCompositionApi: vi.fn(async () => ({
-      text: 'compiled split prompt',
-      warnings: [],
-    })),
-  }
-})
-
 vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({
     openQuizLauncher: vi.fn(),
@@ -149,13 +74,11 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
     initialViewPolicy = 'preserve',
     mobileViewPolicy = 'map',
     nodeClickViewportPolicy = 'guided-center',
-    aiSplitBusy = false,
     syncOnPropChange = false,
     externalSyncKey = null,
     viewMemoryScope = null,
     focusRequestNodeUid = null,
     focusRequestNonce = 0,
-    onAiSplitRequest,
     onNodeActive,
     onNodeClick,
     onNodeContextMenu,
@@ -171,7 +94,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
     initialViewPolicy?: 'preserve' | 'reset'
     mobileViewPolicy?: 'map' | 'guided' | 'auto'
     nodeClickViewportPolicy?: 'preserve' | 'guided-center'
-    aiSplitBusy?: boolean
     syncOnPropChange?: boolean
     externalSyncKey?: string | number | null
     viewMemoryScope?: string | null
@@ -193,14 +115,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
         }
       }
     }
-    onAiSplitRequest?: (payload: {
-      target_node_uid: string | null
-      target_node_text: string
-      target_node_note: string
-      target_node_type: string | null
-      is_root: boolean
-      split_mode: 'auto' | 'parallel' | 'hierarchy'
-    }) => void
     onNodeActive?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeClick?: (nodes: Array<{ uid: string | null; text: string }>) => void
     onNodeContextMenu?: (nodes: Array<{ uid: string | null; text: string }>) => void
@@ -233,7 +147,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
         <div>{`flip-policies-${mobileViewPolicy}-${nodeClickViewportPolicy}`}</div>
         <div>{`scope-${String(viewMemoryScope ?? '')}`}</div>
         <div>{`focus-${String(focusRequestNodeUid ?? '')}:${String(focusRequestNonce)}`}</div>
-        <div>{`aisplit-${aiSplitBusy ? 'busy' : 'idle'}`}</div>
         <div>{`root-${String(root?.data?.text ?? '')}`}</div>
         <div>{`child-${String(child?.data?.text ?? '')}`}</div>
         <div>{`grandchild-${String(grandchild?.data?.text ?? '')}`}</div>
@@ -302,23 +215,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
             }
           >
             右键首子节点
-          </button>
-        ) : null}
-        {onAiSplitRequest ? (
-          <button
-            type="button"
-            onClick={() =>
-              onAiSplitRequest({
-                target_node_uid: 'node-1',
-                target_node_text: '原节点',
-                target_node_note: '原备注',
-                target_node_type: 'peg',
-                is_root: false,
-                split_mode: 'auto',
-              })
-            }
-          >
-            AI分卡
           </button>
         ) : null}
       </div>
@@ -540,57 +436,6 @@ export function renderPalaceEditPageStrict() {
   )
 }
 
-const AI_SPLIT_SCENARIO_FIXTURE = {
-  scenes: [
-    {
-      key: 'ai_split',
-      label: 'AI 分卡',
-      description: '分卡',
-      default_model: 'qwen3.6-flash',
-      default_thinking_enabled: false,
-      available_models: [
-        {
-          key: 'qwen3.6-flash',
-          label: 'Qwen Flash',
-          provider: 'dashscope',
-          supports_thinking: false,
-        },
-      ],
-    },
-  ],
-  scenarios: [],
-}
-
-const AI_SPLIT_PROMPT_BLOCKS_FIXTURE = {
-  items: [
-    {
-      key: 'role.strict_json',
-      label: '严格 JSON',
-      description: 'test',
-      layer: 'role',
-      sort_order: 10,
-      template: 'json only',
-      is_active: true,
-      applicable_scene_keys: ['ai_split'],
-    },
-  ],
-}
-
-const AI_SPLIT_PROMPT_SCENES_FIXTURE = {
-  items: [
-    {
-      scene_key: 'ai_split',
-      prompt_key: 'ai_prompt_mindmap_ai_split_system',
-      label: 'AI 分卡',
-      description: '分卡',
-      category: '脑图分卡',
-      block_keys: ['role.strict_json'],
-      recommended_block_keys: ['role.strict_json'],
-      scene_instruction: 'split',
-    },
-  ],
-}
-
 export function setupPalaceEditPageTestDefaults() {
   vi.restoreAllMocks()
   window.localStorage.clear()
@@ -607,39 +452,13 @@ export function setupPalaceEditPageTestDefaults() {
   timedSessionMock.logEvent.mockReset()
   timedSessionMock.complete.mockReset()
   timedSessionMock.reset.mockReset()
-  promptForAiOptionsMock.mockReset()
-  promptForAiOptionsMock.mockResolvedValue({})
   shouldAutoStartOnPageEnterMock.mockReset()
   shouldAutoStartOnPageEnterMock.mockReturnValue(false)
-  // restoreAllMocks clears module-level vi.fn implementations; re-bind AI catalog fixtures.
-  // Spy both the domain module and public facade so workbench imports resolve either way.
-  for (const api of [preferencesApi, settingsPublic]) {
-    vi.spyOn(api, 'getAiModelScenariosApi').mockResolvedValue(AI_SPLIT_SCENARIO_FIXTURE as never)
-    vi.spyOn(api, 'getAiPromptBlocksApi').mockResolvedValue(AI_SPLIT_PROMPT_BLOCKS_FIXTURE as never)
-    vi.spyOn(api, 'getAiPromptScenesApi').mockResolvedValue(AI_SPLIT_PROMPT_SCENES_FIXTURE as never)
-    vi.spyOn(api, 'previewAiPromptCompositionApi').mockResolvedValue({
-      text: 'compiled split prompt',
-      warnings: [],
-    } as never)
-  }
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
   vi.spyOn(palaceApi, 'clearPracticeSessionProgressApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(importApi, 'previewMindMapImportApi').mockResolvedValue({
-    ok: true,
-    source_tree: {
-      title: '导入脑图',
-      children: [{ text: '新增知识点', children: [] }],
-    },
-    editor_doc: {
-      root: {
-        data: { text: '导入脑图', uid: 'import-root' },
-        children: [{ data: { text: '新增知识点', uid: 'import-child-1' }, children: [] }],
-      },
-    },
-  } as never)
   vi.spyOn(palaceApi, 'updatePalaceApi').mockResolvedValue({ ok: true } as never)
   vi.spyOn(palaceApi, 'savePalaceEditorApi').mockImplementation(async (_id, data) => ({
     palace: {
@@ -668,25 +487,6 @@ export function setupPalaceEditPageTestDefaults() {
     removed_duplicates: 0,
   } as never)
   vi.spyOn(palaceApi, 'restorePalaceVersionApi').mockResolvedValue({ ok: true } as never)
-  vi.spyOn(palaceApi, 'splitMindMapNodeApi').mockImplementation(async (_palaceId, request) => ({
-    ok: true,
-    editor_doc: {
-      root: {
-        data: { text: '测试宫殿', uid: 'root-1' },
-        children: [{ data: { text: 'AI分类', uid: 'split-1' }, children: [] }],
-      },
-    },
-    generated_children_count: 1,
-    replacement_node_count: 1,
-    replacement_nodes: [
-      { data: { text: 'AI分类', uid: 'split-1' }, children: [] },
-    ],
-    reassigned_existing_children_count: 0,
-    split_mode: request.split_mode,
-    owner_id: request.owner_id,
-    operation_id: request.operation_id,
-    model: 'qwen3.6-flash',
-  } as never))
   vi.spyOn(appLogs, 'logAiCall').mockImplementation(() => ({
     id: 'log-1',
     kind: 'ai_call',

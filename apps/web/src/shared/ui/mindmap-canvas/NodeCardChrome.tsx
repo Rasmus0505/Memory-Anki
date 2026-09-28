@@ -80,7 +80,7 @@ function renderEnglishInteractiveLabel(
           role="button"
           tabIndex={0}
           data-reading-word="true"
-          className="cursor-pointer rounded-sm px-0.5 text-inherit underline decoration-dotted decoration-zinc-400/70 underline-offset-2 transition hover:bg-sky-500/10 hover:decoration-sky-400"
+          className="cursor-pointer rounded-sm px-0.5 text-inherit underline decoration-dotted decoration-paper-line-strong underline-offset-2 transition hover:bg-primary/10 hover:decoration-primary"
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -175,7 +175,7 @@ export function NodeCardTextFace({
         .join(' ')}
     >
       {concealed ? (
-        '待回忆'
+        <span className="mindmap-node-concealed">待回忆</span>
       ) : showEnglishInteraction ? (
         // Plain interactive words: long-press drag can select across spans for AI translate.
         <span className="block w-full">{renderEnglishInteractiveLabel(plainLabel, onEnglishWordClick)}</span>

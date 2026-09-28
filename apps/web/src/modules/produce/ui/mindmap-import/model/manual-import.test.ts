@@ -25,62 +25,17 @@ describe('manual mindmap import parser', () => {
     expect(result.editorDoc.root?.children).toHaveLength(2)
   })
 
-  it('parses source-tree JSON with ankiRole and writes it into editor doc', () => {
-    const result = parseManualMindMapImport(
-      JSON.stringify({
-        title: '骑士学院',
-        children: [
-          {
-            text: '骑士学院设立的目的是什么？',
-            ankiRole: 'front',
-            children: [
-              {
-                text: '培养文武官员、巩固政治。',
-                ankiRole: 'back',
-                children: [],
-              },
-            ],
-          },
-          {
-            text: '分类节点（不标角色）',
-            children: [],
-          },
-        ],
-      }),
-    )
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.sourceTree.children[0]).toMatchObject({
-      text: '骑士学院设立的目的是什么？',
-      ankiRole: 'front',
-    })
-    expect(result.sourceTree.children[0]?.children[0]).toMatchObject({
-      text: '培养文武官员、巩固政治。',
-      ankiRole: 'back',
-    })
-    expect(result.sourceTree.children[1]?.ankiRole).toBeUndefined()
-    expect(result.editorDoc.root?.children?.[0]?.data).toMatchObject({
-      text: '骑士学院设立的目的是什么？',
-      ankiRole: 'front',
-    })
-    expect(result.editorDoc.root?.children?.[0]?.children?.[0]?.data).toMatchObject({
-      text: '培养文武官员、巩固政治。',
-      ankiRole: 'back',
-    })
-    expect(result.editorDoc.root?.children?.[1]?.data?.ankiRole).toBeUndefined()
-  })
-
-  it('ignores invalid ankiRole values', () => {
+  it('drops legacy ankiRole fields from pasted JSON', () => {
     const result = parseManualMindMapImport(
       JSON.stringify({
         title: '根',
-        children: [{ text: '节点', ankiRole: 'side', children: [] }],
+        children: [{ text: '节点', ankiRole: 'front', children: [] }],
       }),
     )
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.sourceTree.children[0]?.ankiRole).toBeUndefined()
-    expect(result.editorDoc.root?.children?.[0]?.data?.ankiRole).toBeUndefined()
+    expect(result.sourceTree.children[0]).toEqual({ text: '节点', children: [] })
+    expect(result.editorDoc.root?.children?.[0]?.data).not.toHaveProperty('ankiRole')
   })
 
   it('parses fenced JSON and transfer file format', () => {
@@ -167,27 +122,13 @@ describe('manual mindmap import parser', () => {
     })
   })
 
-  it('preserves ankiRole when converting editor doc to source tree', () => {
+  it('drops legacy ankiRole when converting editor doc to source tree', () => {
     const tree = sourceTreeFromEditorDoc({
       root: {
         data: { text: 'Root' },
-        children: [
-          {
-            data: { text: '正面', ankiRole: 'front' },
-            children: [{ data: { text: '反面', ankiRole: 'back' }, children: [] }],
-          },
-        ],
+        children: [{ data: { text: '旧正面', ankiRole: 'front' }, children: [] }],
       },
     })
-    expect(tree).toEqual({
-      title: 'Root',
-      children: [
-        {
-          text: '正面',
-          ankiRole: 'front',
-          children: [{ text: '反面', ankiRole: 'back', children: [] }],
-        },
-      ],
-    })
+    expect(tree).toEqual({ title: 'Root', children: [{ text: '旧正面', children: [] }] })
   })
 })

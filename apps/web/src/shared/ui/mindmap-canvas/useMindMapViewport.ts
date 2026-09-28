@@ -18,6 +18,7 @@ import {
   findNearestNodeIdToViewportCenter,
   getEventFeedbackPoint,
   hasMeaningfulSizeChange,
+  pickMostOutOfViewNodeId,
   resolveSceneRecenterAnchorId,
   SCENE_FIT_SENTINEL,
 } from './mindMapCanvasGeometry'
@@ -50,6 +51,8 @@ import {
   normalizeMindMapManualZoom,
   MINDMAP_MOBILE_FIT_MAX_ZOOM,
   MINDMAP_MOBILE_FIT_MIN_ZOOM,
+  MINDMAP_REVEAL_INTO_VIEW_DURATION_MS,
+  MINDMAP_REVEAL_INTO_VIEW_PADDING_PX,
 } from './mindMapViewportConfig'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
@@ -292,6 +295,28 @@ export function useMindMapViewport({
     restorePreservedViewport(viewport)
   }, [commitControlledViewport, preserveViewport, restorePreservedViewport])
 
+  /** Host-driven one-finger pan (axis-locked touch): counts as a user gesture. */
+  const panViewportBy = useCallback(
+    (dx: number, dy: number) => {
+      if (explicitViewportTimeoutRef.current !== null) {
+        window.clearTimeout(explicitViewportTimeoutRef.current)
+        explicitViewportTimeoutRef.current = null
+      }
+      explicitViewportChangeRef.current = false
+      manualViewportGestureRef.current = true
+      const current = controlledViewportRef.current
+      const next = { ...current, x: current.x + dx, y: current.y + dy }
+      preservedViewportRef.current = next
+      commitControlledViewport(next)
+    },
+    [commitControlledViewport],
+  )
+
+  const endViewportPan = useCallback(() => {
+    manualViewportGestureRef.current = false
+    preservedViewportRef.current = controlledViewportRef.current
+  }, [])
+
   const notifyUserZoomChange = useCallback(
     (zoom: number) => {
       const normalizedZoom = normalizeMindMapManualZoom(zoom)
@@ -456,6 +481,38 @@ export function useMindMapViewport({
     },
     [isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, setCenter],
   )
+
+  const revealNodesIntoView = useCallback((nodeIds: readonly string[]) => {
+    if (!isCanvasReady || nodeIds.length === 0) return
+    const viewport = getViewport()
+    const picked = pickMostOutOfViewNodeId(
+      nodes,
+      nodeIds,
+      viewport,
+      canvasSize,
+      measuredNodeSizesRef.current,
+      MINDMAP_REVEAL_INTO_VIEW_PADDING_PX,
+    )
+    if (!picked) return
+    const duration = MINDMAP_REVEAL_INTO_VIEW_DURATION_MS
+    const next = {
+      x: viewport.x + picked.dx,
+      y: viewport.y + picked.dy,
+      zoom: viewport.zoom,
+    }
+    cameraCommandEpochRef.current += 1
+    runExplicitViewportChange(() => {
+      void setViewport(next, { duration })
+    }, duration)
+  }, [
+    canvasSize,
+    getViewport,
+    isCanvasReady,
+    measuredNodeSizesRef,
+    nodes,
+    runExplicitViewportChange,
+    setViewport,
+  ])
 
   const resolveViewportCenterNodeId = useCallback(() => {
     if (!isCanvasReady) return null
@@ -896,7 +953,42 @@ export function useMindMapViewport({
   }, [getViewport, notifyUserZoomChange, runExplicitViewportChange, zoomOut])
 
   useEffect(() => {
+    if (!viewCommand || viewCommand.type !== 'reveal' || !isCanvasReady) return
+    if (handledViewCommandNonceRef.current === viewCommand.nonce) return
+    const ids = viewCommand.nodeIds ?? []
+    const nonce = viewCommand.nonce
+    if (ids.length === 0) {
+      handledViewCommandNonceRef.current = nonce
+      return
+    }
+    const allPresent = ids.every((id) => nodes.some((node) => node.id === id))
+    if (!allPresent) {
+      const timer = window.setTimeout(() => {
+        if (handledViewCommandNonceRef.current === nonce) return
+        handledViewCommandNonceRef.current = nonce
+        revealNodesIntoView(ids)
+      }, 400)
+      return () => window.clearTimeout(timer)
+    }
+    let innerFrame = 0
+    let cancelled = false
+    const outerFrame = window.requestAnimationFrame(() => {
+      innerFrame = window.requestAnimationFrame(() => {
+        if (cancelled || handledViewCommandNonceRef.current === nonce) return
+        handledViewCommandNonceRef.current = nonce
+        revealNodesIntoView(ids)
+      })
+    })
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(outerFrame)
+      if (innerFrame) window.cancelAnimationFrame(innerFrame)
+    }
+  }, [isCanvasReady, layoutFingerprint, nodes, revealNodesIntoView, viewCommand])
+
+  useEffect(() => {
     if (!viewCommand || !isCanvasReady) return
+    if (viewCommand.type === 'reveal') return
     if (handledViewCommandNonceRef.current === viewCommand.nonce) return
     if (viewCommand.type === 'center' && !nodes.some((node) => node.id === viewCommand.nodeId)) {
       return
@@ -953,6 +1045,8 @@ export function useMindMapViewport({
     handleMove,
     handleMoveEnd,
     handleViewportChange,
+    panViewportBy,
+    endViewportPan,
     runFitView,
     fitNodesInView,
     centerNodeInCanvas,

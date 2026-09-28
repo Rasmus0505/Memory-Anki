@@ -1,0 +1,10 @@
+/*
+ * Axis-locked one-finger pan (map embedded in a vertical scroller).
+ * Unlayered and more specific than @xyflow's `.react-flow__pane { touch-action: none }`,
+ * which is also unlayered, so a Tailwind utility could not override it.
+ * Effective touch-action intersects ancestors, so the pane itself must allow pan-y.
+ */
+.memory-anki-mindmap-viewport[data-axis-lock='true'],
+.memory-anki-mindmap-viewport[data-axis-lock='true'] .react-flow__pane {
+  touch-action: pan-y;
+}

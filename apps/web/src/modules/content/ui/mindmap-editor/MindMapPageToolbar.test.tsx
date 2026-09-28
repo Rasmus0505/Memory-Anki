@@ -1,22 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  getSessionRecorderState,
-  resetSessionRecorderForTest,
-  startSessionRecording,
-} from '@/shared/debug/session-recorder'
+import { describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogTitle } from '@/shared/components/ui/dialog'
 import { MindMapPageToolbar } from './MindMapPageToolbar'
 
 describe('MindMapPageToolbar', () => {
-  beforeEach(() => {
-    resetSessionRecorderForTest()
-  })
-  afterEach(() => {
-    resetSessionRecorderForTest()
-  })
-
   it('renders only the actions provided for the current scene', () => {
     render(
       <MindMapPageToolbar
@@ -174,7 +162,7 @@ describe('MindMapPageToolbar', () => {
           />
           <Dialog open={open} onOpenChange={setOpen} modal={false}>
             <DialogContent floating={false}>
-              <DialogTitle>图片转脑图</DialogTitle>
+              <DialogTitle>文字转脑图</DialogTitle>
             </DialogContent>
           </Dialog>
         </>
@@ -186,7 +174,7 @@ describe('MindMapPageToolbar', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitem', { name: '转脑图' }))
 
-    expect(await screen.findByRole('dialog', { name: '图片转脑图' })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: '文字转脑图' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: '转脑图' })).toBeNull()
   })
 
@@ -212,7 +200,6 @@ describe('MindMapPageToolbar', () => {
       '导出脑图',
       '导入脑图',
       '转脑图',
-      '录制',
     ])
 
     fireEvent.click(screen.getByRole('menuitem', { name: '导出脑图' }))
@@ -278,18 +265,16 @@ describe('MindMapPageToolbar', () => {
     expect(onToggleUiCleared).toHaveBeenCalledTimes(1)
   })
 
-  it('puts 录制 in the overflow menu and opens the recorder dialog', async () => {
-    render(<MindMapPageToolbar modeToggle={{ label: '编辑', onClick: vi.fn() }} />)
+  it('does not put 录制 in the overflow menu', async () => {
+    render(
+      <MindMapPageToolbar
+        modeToggle={{ label: '编辑', onClick: vi.fn() }}
+        moreActions={[{ label: '结构检查（0）', onClick: vi.fn() }]}
+      />,
+    )
     fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
-    fireEvent.click(await screen.findByRole('menuitem', { name: '录制' }))
-    await waitFor(() => expect(getSessionRecorderState().dialogOpen).toBe(true))
-    expect(getSessionRecorderState().recording).toBe(false)
-  })
-
-  it('shows 停止录制 in the overflow menu while recording', async () => {
-    startSessionRecording()
-    render(<MindMapPageToolbar modeToggle={{ label: '编辑', onClick: vi.fn() }} />)
-    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
-    expect(await screen.findByRole('menuitem', { name: '停止录制' })).toBeTruthy()
+    expect(await screen.findByRole('menuitem', { name: '结构检查（0）' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: '录制' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '停止录制' })).toBeNull()
   })
 })

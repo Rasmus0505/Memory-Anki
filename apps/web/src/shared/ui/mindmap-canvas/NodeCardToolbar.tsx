@@ -77,7 +77,7 @@ export function statusChipClassName(tone: MindMapNodeStatusChip['tone'], style: 
       danger: 'border-destructive bg-destructive text-white',
       warning: 'border-warning bg-warning text-white',
       success: 'border-success bg-success text-white',
-      info: 'border-sky-500 bg-sky-500 text-white',
+      info: 'border-info bg-info text-info-foreground',
       neutral: 'border-muted-foreground/40 bg-muted text-foreground',
     }[tone] ?? 'border-muted-foreground/40 bg-muted text-foreground'
   }
@@ -85,7 +85,7 @@ export function statusChipClassName(tone: MindMapNodeStatusChip['tone'], style: 
     danger: 'border-destructive/70 bg-background/95 text-destructive',
     warning: 'border-warning/70 bg-background/95 text-warning',
     success: 'border-success/70 bg-background/95 text-success',
-    info: 'border-sky-500/70 bg-background/95 text-sky-700',
+    info: 'border-info/70 bg-background/95 text-info',
     neutral: 'border-border bg-background/95 text-muted-foreground',
   }[tone] ?? 'border-border bg-background/95 text-muted-foreground'
 }

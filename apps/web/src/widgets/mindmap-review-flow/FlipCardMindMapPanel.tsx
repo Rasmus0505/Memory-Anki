@@ -50,7 +50,6 @@ type FlipCardSurfaceExtensions = Pick<
   | 'highlightedNodeUids'
   | 'outlinedNodeUids'
   | 'statusChipsByNodeUid'
-  | 'ankiEditMode'
   | 'mutedNodeUids'
   | 'masteryByNodeUid'
   | 'countBadgeByNodeUid'
@@ -58,13 +57,13 @@ type FlipCardSurfaceExtensions = Pick<
   | 'confirmDeleteNodes'
   | 'focusRequestNodeUid'
   | 'focusRequestNonce'
+  | 'revealFollowNodeIds'
+  | 'revealFollowNonce'
   | 'feedbackFxSignal'
   | 'presentationStrategy'
   | 'mobileViewPolicy'
   | 'preferredZoom'
   | 'onUserZoomChange'
-  | 'aiSplitBusy'
-  | 'onAiSplitRequest'
   | 'onSegmentSelect'
   | 'onCreateSegmentFromSelection'
   | 'onSegmentRangeDraftChange'
@@ -203,13 +202,13 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   confirmDeleteNodes,
   focusRequestNodeUid,
   focusRequestNonce,
+  revealFollowNodeIds,
+  revealFollowNonce,
   feedbackFxSignal,
   presentationStrategy,
   mobileViewPolicy,
   preferredZoom,
   onUserZoomChange,
-  aiSplitBusy = false,
-  onAiSplitRequest,
   onSegmentSelect,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
@@ -223,7 +222,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   highlightedNodeUids,
   outlinedNodeUids: outlinedNodeUidsProp,
   statusChipsByNodeUid: hostStatusChipsByNodeUid,
-  ankiEditMode = false,
   mutedNodeUids: mutedNodeUidsProp,
   scopeBranchUid = null,
   forceExpanded = false,
@@ -588,14 +586,12 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onUserZoomChange={onUserZoomChange}
         reviewFxSignal={reviewFxSignal}
         feedbackFxSignal={feedbackFxSignal}
-        aiSplitBusy={aiSplitBusy}
         segments={segments}
         activeSegmentId={activeSegmentId}
         segmentColorMode={segmentColorMode}
         segmentRangeDraft={segmentRangeDraft}
         highlightedNodeUids={highlightedNodeUids}
         outlinedNodeUids={resolvedOutlinedNodeUids}
-        ankiEditMode={ankiEditMode}
         mutedNodeUids={resolvedMutedNodeUids}
         masteryByNodeUid={masteryByNodeUid}
         statusChipsByNodeUid={hostStatusChipsByNodeUid}
@@ -604,6 +600,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         selectionToolbarPreferPosition="bottom"
         focusRequestNodeUid={focusRequestNodeUid}
         focusRequestNonce={focusRequestNonce}
+        revealFollowNodeIds={revealFollowNodeIds}
+        revealFollowNonce={revealFollowNonce}
         onEditorStateChange={isEditMode && onEditorStateChange ? onEditorStateChange : () => {}}
         confirmDeleteNodes={isEditMode ? confirmDeleteNodes : undefined}
         onNodeActive={handleNodeActive}
@@ -621,7 +619,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onSegmentRangeDraftChange={onSegmentRangeDraftChange}
         onSegmentRangeModeToggle={onSegmentRangeModeToggle}
         onSegmentRangeConfirm={onSegmentRangeConfirm}
-        onAiSplitRequest={onAiSplitRequest}
         onFullscreenToggle={onToggleFullscreen}
         delegateFullscreenToHost={Boolean(hostFullscreenControl && !isEditMode)}
         onFullscreenChange={handleSurfaceFullscreenChange}

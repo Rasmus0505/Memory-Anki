@@ -227,7 +227,7 @@ export function MarkColorFlyout({
                 title={color}
                 aria-label={`使用颜色 ${color}`}
                 className={`h-6 w-6 rounded-md border border-black/10 ${
-                  active ? 'ring-2 ring-sky-500 ring-offset-1' : ''
+                  active ? 'ring-2 ring-primary ring-offset-1 ring-offset-paper-card scale-110' : ''
                 }`}
                 style={{ backgroundColor: color }}
                 onClick={() => pick(color)}

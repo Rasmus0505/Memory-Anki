@@ -98,7 +98,7 @@
   letter-spacing: 0.02em;
   line-height: 1.2;
   backdrop-filter: blur(8px);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 2px hsl(24 40% 20% / 0.08);
 }
 
 .memory-anki-mindmap-scene-label::before {
@@ -110,60 +110,56 @@
   opacity: 0.9;
 }
 
-/* —— 编辑：冷静蓝，施工感 —— */
+/* —— 编辑：琥珀工坊，温暖的施工感 —— */
 .memory-anki-mindmap-scene-edit {
-  border-color: color-mix(in oklab, var(--color-info) 48%, var(--color-border)) !important;
+  border-color: color-mix(in oklab, var(--color-primary) 42%, var(--color-paper-line)) !important;
   box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--color-info) 22%, transparent),
-    0 0 28px color-mix(in oklab, var(--color-info) 14%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--color-primary) 20%, transparent),
+    0 0 28px color-mix(in oklab, var(--color-primary) 14%, transparent),
     var(--shadow-soft);
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--color-info) 6%, transparent),
+    color-mix(in oklab, var(--color-primary) 6%, transparent),
     transparent 42%
   );
 }
 
 .memory-anki-mindmap-scene-edit::before {
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--color-info) 80%, white),
-    color-mix(in oklab, var(--color-primary) 70%, var(--color-info))
-  );
+  background: linear-gradient(90deg, hsl(36 94% 62%), var(--color-primary) 55%, hsl(16 76% 56%));
 }
 
 .memory-anki-mindmap-scene-edit .memory-anki-mindmap-scene-label {
-  color: var(--color-info);
-  border-color: color-mix(in oklab, var(--color-info) 35%, transparent);
-  background: color-mix(in oklab, var(--color-background) 88%, var(--color-info));
+  color: var(--color-primary-strong);
+  border-color: color-mix(in oklab, var(--color-primary) 35%, transparent);
+  background: color-mix(in oklab, var(--color-paper-card) 86%, var(--color-primary));
 }
 
-/* —— 正式复习：靛紫，略庄重 —— */
+/* —— 正式复习：暖梅子，沉静庄重 —— */
 .memory-anki-mindmap-scene-review {
-  border-color: color-mix(in oklab, hsl(252 52% 58%) 42%, var(--color-border)) !important;
+  border-color: color-mix(in oklab, hsl(318 24% 46%) 40%, var(--color-paper-line)) !important;
   box-shadow:
-    0 0 0 1px color-mix(in oklab, hsl(252 52% 58%) 18%, transparent),
-    0 0 30px color-mix(in oklab, hsl(252 52% 58%) 12%, transparent),
+    0 0 0 1px color-mix(in oklab, hsl(318 24% 46%) 18%, transparent),
+    0 0 30px color-mix(in oklab, hsl(318 24% 46%) 12%, transparent),
     var(--shadow-soft);
   background-image: linear-gradient(
     180deg,
-    color-mix(in oklab, hsl(252 52% 58%) 7%, transparent),
+    color-mix(in oklab, hsl(318 24% 46%) 6%, transparent),
     transparent 44%
   );
 }
 
 .memory-anki-mindmap-scene-review::before {
-  background: linear-gradient(90deg, hsl(252 58% 62%), hsl(222 62% 56%));
+  background: linear-gradient(90deg, hsl(318 28% 52%), hsl(350 40% 58%) 55%, hsl(28 80% 56%));
 }
 
 .memory-anki-mindmap-scene-review .memory-anki-mindmap-scene-label {
-  color: hsl(252 42% 42%);
-  border-color: color-mix(in oklab, hsl(252 52% 58%) 32%, transparent);
-  background: color-mix(in oklab, var(--color-background) 90%, hsl(252 52% 58%));
+  color: hsl(318 28% 36%);
+  border-color: color-mix(in oklab, hsl(318 24% 46%) 32%, transparent);
+  background: color-mix(in oklab, var(--color-paper-card) 88%, hsl(318 24% 46%));
 }
 
 .dark .memory-anki-mindmap-scene-review .memory-anki-mindmap-scene-label {
-  color: hsl(252 70% 78%);
+  color: hsl(318 28% 36%);
 }
 
 /* —— 练习：青绿，轻量训练感 —— */
@@ -250,9 +246,219 @@
   }
 }
 
+/* —— 节点卡片：奶油纸片 + 暖阴影 —— */
+.mindmap-node-card {
+  box-shadow:
+    0 1px 0 hsl(43 100% 100% / 0.9) inset,
+    0 1px 2px hsl(24 40% 22% / 0.07),
+    0 6px 16px -8px hsl(24 50% 26% / 0.16);
+  transition:
+    box-shadow var(--duration-base) var(--ease-out-expo),
+    transform var(--duration-base) var(--ease-spring-soft),
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease;
+}
+
+.mindmap-node-card--root {
+  background:
+    radial-gradient(120% 140% at 0% 0%, hsl(38 100% 90% / 0.9), transparent 60%),
+    linear-gradient(160deg, hsl(40 100% 97%), hsl(34 78% 92%));
+  box-shadow:
+    0 1px 0 hsl(43 100% 100% / 0.95) inset,
+    0 2px 4px hsl(24 50% 22% / 0.08),
+    0 14px 30px -12px hsl(28 70% 36% / 0.32);
+  font-weight: 650;
+}
+
+/* Selection: amber ring + soft halo, box-shadow only (no layout change). */
+.mindmap-node-card--selected {
+  box-shadow:
+    0 0 0 2px var(--color-primary),
+    0 0 0 6px color-mix(in oklab, var(--color-primary) 18%, transparent),
+    0 12px 30px -10px color-mix(in oklab, var(--color-primary) 48%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected) {
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 0 hsl(43 100% 100% / 0.9) inset,
+      var(--shadow-lift);
+  }
+}
+
+.mindmap-node-shell:active > .mindmap-node-card {
+  transform: scale(0.985);
+  transition-duration: var(--duration-instant);
+}
+
+.mindmap-node-editor {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 30%, transparent), var(--shadow-lift);
+  animation: mindmap-editor-in var(--duration-base) var(--ease-spring-soft) both;
+}
+
+@keyframes mindmap-editor-in {
+  from { transform: scale(0.97); }
+}
+
+/* Concealed (待回忆): frosted paper shimmer instead of plain blur. */
+.mindmap-node-concealed {
+  display: inline-block;
+  background: linear-gradient(100deg, var(--color-paper-muted) 30%, var(--color-primary) 50%, var(--color-paper-muted) 70%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: mindmap-concealed-sheen 2.8s var(--ease-in-out-soft) infinite;
+}
+
+@keyframes mindmap-concealed-sheen {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+/* —— 待回忆：暖琥珀纸背（斜纹 + 内虚线框），翻牌时同一张纸翻走 —— */
+.mindmap-node-card--concealed,
+.mindmap-flip-cover {
+  background:
+    repeating-linear-gradient(135deg, hsl(32 90% 60% / 0.10) 0 6px, transparent 6px 12px),
+    radial-gradient(120% 140% at 0% 0%, hsl(40 100% 94%), transparent 60%),
+    linear-gradient(160deg, hsl(38 92% 90%), hsl(30 80% 82%));
+  border-color: hsl(30 70% 62% / 0.7);
+}
+
+.mindmap-node-card--concealed::after,
+.mindmap-flip-cover::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed hsl(28 70% 48% / 0.38);
+  border-radius: 11px;
+  pointer-events: none;
+}
+
+.mindmap-node-card--concealed .mindmap-node-concealed,
+.mindmap-flip-cover .mindmap-node-concealed {
+  background-image: linear-gradient(100deg, hsl(26 60% 38% / 0.55) 30%, hsl(38 100% 56%) 50%, hsl(26 60% 38% / 0.55) 70%);
+}
+
+/* Flip FX layers are injected by useMindMapRevealMotion and removed when done. */
+.mindmap-flip-cover {
+  position: absolute;
+  inset: -1px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(30 70% 62% / 0.7);
+  border-radius: inherit;
+  font-size: 12px;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+
+.mindmap-flip-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 30%, hsl(45 100% 92% / 0.85) 48%, hsl(38 100% 70% / 0.35) 54%, transparent 68%);
+  background-size: 260% 100%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.mindmap-flip-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 7;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: radial-gradient(circle, hsl(48 100% 88%), hsl(32 96% 58%) 60%, transparent 72%);
+  box-shadow: 0 0 8px hsl(36 100% 60% / 0.8);
+  pointer-events: none;
+}
+
+/* Long-press pending: warm amber ring that breathes outward. */
+.mindmap-node-longpress-ring {
+  border: 2px solid color-mix(in oklab, var(--color-primary) 85%, transparent);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 40%, transparent);
+  animation: mindmap-longpress-ring 900ms var(--ease-out-expo) infinite;
+}
+
+@keyframes mindmap-longpress-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 45%, transparent); opacity: 1; }
+  100% { box-shadow: 0 0 0 10px transparent; opacity: 0.55; }
+}
+
+/* Toolbars, flyouts, chips: spring pop-in. */
+.mindmap-pop-in,
+.react-flow__node-toolbar > * {
+  animation: mindmap-pop-in 260ms var(--ease-spring) both;
+  transform-origin: center bottom;
+}
+
+@keyframes mindmap-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.92); }
+}
+
+/* Tailwind positions this with the `translate` property, so animate `scale` independently. */
+.mindmap-collapse-toggle {
+  transition:
+    scale var(--duration-fast) var(--ease-spring),
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.mindmap-collapse-toggle:hover {
+  scale: 1.12;
+}
+
+/* Layout reflow spring: enabled only after the first layout settles, off while dragging. */
+.memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
+  .react-flow__node:not(.dragging) {
+  transition: transform 360ms var(--ease-spring-soft);
+}
+
+.memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
+  .react-flow__edge-path {
+  transition: d 360ms var(--ease-spring-soft), stroke 200ms ease;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--color-primary) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .memory-anki-mindmap-scene-rating {
-    animation: none;
+  .memory-anki-mindmap-scene-rating,
+  .mindmap-node-editor,
+  .mindmap-node-concealed,
+  .mindmap-node-longpress-ring,
+  .mindmap-pop-in,
+  .react-flow__node-toolbar > * {
+    animation: none !important;
+  }
+  .mindmap-flip-cover,
+  .mindmap-flip-sheen,
+  .mindmap-flip-spark {
+    display: none;
+  }
+  .memory-anki-mindmap-viewport .react-flow__node,
+  .memory-anki-mindmap-viewport .react-flow__edge-path,
+  .mindmap-node-card,
+  .mindmap-collapse-toggle {
+    transition: none !important;
+  }
+  .mindmap-node-shell:hover > .mindmap-node-card,
+  .mindmap-node-shell:active > .mindmap-node-card {
+    transform: none !important;
+  }
+  .mindmap-collapse-toggle:hover {
+    scale: none;
   }
 }
 

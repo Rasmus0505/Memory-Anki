@@ -12,7 +12,6 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
-import { AiSplitWorkbench } from '@/modules/content/public'
 import { PalaceAttachmentPanel } from '@/modules/content/public'
 import { PalaceMetaPanel } from '@/modules/content/public'
 import { PalaceTemplateDialog } from '@/modules/content/public'
@@ -37,11 +36,7 @@ import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
 import { PalaceReviewUnitsPanel } from '@/modules/practice/public'
 import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
-import {
-  cycleMindMapAnkiRole,
-  parseMindMapDocument,
-  type MindMapSelection,
-} from '@/modules/content/public'
+import type { MindMapSelection } from '@/modules/content/public'
 import {
   buildEditorParentMap,
   collectPermanentMarkUids,
@@ -105,11 +100,7 @@ export default function PalaceEdit() {
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
   const [templateSaving, setTemplateSaving] = useState(false)
-  /** Session-only: default palace mode each entry; Anki is temporary. */
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
-  const [ankiEditMode, setAnkiEditMode] = useState(false)
-  /** When true in Anki mode, click cycles front/back/none instead of normal select. */
-  const [ankiRolePen, setAnkiRolePen] = useState(false)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
 
@@ -163,9 +154,6 @@ export default function PalaceEdit() {
     lastBuildActivationRef.current = becameActiveAt
     setMindMapTask('build')
     if (editorMode !== 'edit') exitInlinePractice()
-    // Always re-enter in palace mode (Anki switch is session-only).
-    setAnkiEditMode(false)
-    setAnkiRolePen(false)
   }, [becameActiveAt, editorMode, exitInlinePractice, isActive, setMindMapTask])
 
   const permanentMarkChips = useMemo(() => {
@@ -236,24 +224,6 @@ export default function PalaceEdit() {
     })
   }, [page, permanentMarkHighlights.length])
 
-  const handleAnkiRoleCycleClick = useCallback(
-
-    (nodes: MindMapSelection[]) => {
-      const uid = nodes[0]?.uid
-      if (!uid || !page.editorState) return
-      const doc = parseMindMapDocument(page.editorState.editor_doc)
-      const result = cycleMindMapAnkiRole(doc, uid)
-      if (!result.changed) return
-      page.handleMindMapEditorStateChange({
-        ...page.editorState,
-        editor_doc: result.document,
-      })
-      const label =
-        result.role === 'front' ? '正面' : result.role === 'back' ? '反面' : '取消角色'
-      toast.success(`已标为${label}`)
-    },
-    [page],
-  )
   const recallModeActive = page.editorMode === 'recall'
   const showTemplateCreateAction = useMemo(() => {
     if (!page.palaceId || !page.editorState?.editor_doc) return false
@@ -368,31 +338,6 @@ export default function PalaceEdit() {
         },
       },
       {
-        label: ankiEditMode ? '切换到记忆宫殿模式' : '切换到 Anki 正反面模式',
-        onClick: () => {
-          setAnkiEditMode((current) => {
-            const next = !current
-            if (!next) setAnkiRolePen(false)
-            toast.success(next ? 'Anki 模式：可用「角色笔」点节点标正/反面' : '已回到记忆宫殿模式')
-            return next
-          })
-        },
-      },
-      ...(ankiEditMode
-        ? [
-            {
-              label: ankiRolePen ? '关闭角色笔' : '打开角色笔（点节点循环正/反面）',
-              onClick: () => {
-                setAnkiRolePen((current) => {
-                  const next = !current
-                  toast.success(next ? '角色笔已开：单击节点 中性→正面→反面→中性' : '角色笔已关')
-                  return next
-                })
-              },
-            },
-          ]
-        : []),
-      {
         label: `结构检查（${mindMapExperience.structureIssues.length}）`,
         onClick: () => {
           const issue = mindMapExperience.structureIssues[0]
@@ -404,11 +349,7 @@ export default function PalaceEdit() {
       ...fileTransferActions,
       quizBindingsHost.moreAction,
     ],
-    importMindMapAction: {
-      label: '转脑图',
-      onClick: () => mindMapImport.setImportOpen(true),
-      opensOverlay: true,
-    },
+    importMindMapAction: null,
   }
 
   useEffect(() => {
@@ -580,7 +521,7 @@ export default function PalaceEdit() {
                           visibleEditorState={activeFrameEditorState}
                           editableEditorState={page.editorState}
                           visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
-                          hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}:${page.aiSplitAppliedSyncVersion}`}
+                          hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
                           hostExternalSyncKey={mindMapImport.importExternalSyncKey}
                           // Keep camera continuity across build/learn/recall; canvas re-anchors the center card.
                           preserveViewOnSync
@@ -598,11 +539,9 @@ export default function PalaceEdit() {
                               ? permanentMarkHighlights
                               : mindMapExperience.highlightedNodeUids
                           }
-                          ankiEditMode={ankiEditMode && !recallModeActive}
                           countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
                           onCountBadgeClick={quizBindingsHost.openNodeQuiz}
                           confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
-                          aiSplitBusy={page.aiSplitBusy}
                           focusRequestNodeUid={page.modeFocusRequestNodeUid}
                           focusRequestNonce={page.modeFocusRequestNonce}
                           onEditorStateChange={page.handleMindMapEditorStateChange}
@@ -612,11 +551,8 @@ export default function PalaceEdit() {
                           onEditNodeClick={
                             permanentMarkMode && !recallModeActive
                               ? handlePermanentMarkClick
-                              : ankiEditMode && ankiRolePen && !recallModeActive
-                                ? handleAnkiRoleCycleClick
-                                : undefined
+                              : undefined
                           }
-                          onAiSplitRequest={page.handleAiSplitRequest}
                           onNativeFullscreenChange={setMindMapNativeFullscreen}
                           onToggleFullscreen={page.toggleMindMapFullscreen}
                           onUiClearedChange={setMindMapUiCleared}
@@ -640,17 +576,6 @@ export default function PalaceEdit() {
       <MindMapImportDrawer
         open={mindMapImport.importOpen}
         onOpenChange={mindMapImport.setImportOpen}
-        mode={mindMapImport.importMode}
-        onModeChange={mindMapImport.setImportMode}
-        sourceKind={mindMapImport.importSourceKind}
-        onSourceKindChange={mindMapImport.setImportSourceKind}
-        onWorkflowChange={mindMapImport.setMindMapImportWorkflow}
-        loading={mindMapImport.importLoading}
-        streamPhase={mindMapImport.importStreamPhase}
-        streamStatusMessage={mindMapImport.importStreamStatusMessage}
-        streamStep={mindMapImport.importStreamStep}
-        streamTotalSteps={mindMapImport.importStreamTotalSteps}
-        streamPreviewText={mindMapImport.importStreamPreviewText}
         applying={mindMapImport.importApplying}
         undoing={mindMapImport.importUndoing}
         error={mindMapImport.importError}
@@ -668,46 +593,9 @@ export default function PalaceEdit() {
             className="h-full w-full rounded-[inherit] bg-zinc-50"
           />
         )}
-        extractedText={mindMapImport.importExtractedText}
-        imagePreviewUrl={mindMapImport.importImagePreviewUrl}
-        batchImages={mindMapImport.importBatchImages}
-        batchStatus={mindMapImport.importBatchStatus}
-        batchMeta={mindMapImport.importBatchMeta}
-        importWarnings={mindMapImport.importWarnings}
-        reviewPreview={mindMapImport.importReviewPreview}
-        currentJobId={mindMapImport.currentJobId}
-        currentJobStatus={mindMapImport.currentJobStatus}
-        currentJobStage={mindMapImport.currentJobStage}
-        currentJobUsage={mindMapImport.currentJobUsage}
-        currentJobError={mindMapImport.currentJobError}
-        currentJobResolvedAi={mindMapImport.currentJobResolvedAi}
-        currentJobResult={mindMapImport.currentJobResult}
-        onRetryVision={() => void mindMapImport.handleRetryVision()}
-        onReformatFromOcr={() => void mindMapImport.handleReformatFromOcr()}
-        currentJobPauseRequested={mindMapImport.currentJobPauseRequested}
-        canResumeJob={mindMapImport.canResumeJob}
-        canPauseJob={mindMapImport.canPauseJob}
-        reusedExistingResult={mindMapImport.importReusedExistingResult}
-        onResumeJob={mindMapImport.handleResumeJob}
-        onPauseJob={mindMapImport.handlePauseJob}
         targetNodeLabel={selectedNodeLabel}
         canAppend={mindMapImport.importCanAppend}
         canUndoLastImport={mindMapImport.importCanUndoLastImport}
-        onPaste={mindMapImport.handleImportPaste}
-        onFileChange={mindMapImport.handleImportFileChange}
-        onBatchStart={mindMapImport.handleBatchImportStart}
-        onBatchDeleteImage={mindMapImport.handleDeleteBatchImage}
-        onBatchMoveImage={mindMapImport.handleMoveBatchImage}
-        pdfDocuments={mindMapImport.pdfDocuments}
-        selectedPdfDocumentId={mindMapImport.selectedPdfDocumentId}
-        onSelectedPdfDocumentIdChange={mindMapImport.setSelectedPdfDocumentId}
-        pdfPageSelection={mindMapImport.pdfPageSelection}
-        onPdfPageSelectionChange={mindMapImport.setPdfPageSelection}
-        pdfLibraryLoading={mindMapImport.pdfLibraryLoading}
-        pdfOcrCoverage={mindMapImport.pdfOcrCoverage}
-        onPdfUpload={mindMapImport.handlePdfUpload}
-        onPdfDelete={(documentId) => void mindMapImport.handlePdfDelete(documentId)}
-        onPdfStart={mindMapImport.handlePdfImportStart}
         manualImportText={mindMapImport.manualImportText}
         onManualImportTextChange={mindMapImport.setManualImportText}
         manualImportFileName={mindMapImport.manualImportFileName}
@@ -717,18 +605,8 @@ export default function PalaceEdit() {
         onApplyReplace={mindMapImport.handleImportApplyReplace}
         onApplyAppend={mindMapImport.handleImportApplyAppend}
         onUndoLastImport={mindMapImport.handleUndoLastImport}
-        history={mindMapImport.importHistory}
-        onSelectHistory={mindMapImport.handleImportSelectHistory}
-        onDeleteHistory={mindMapImport.handleImportDeleteHistory}
-        onRerunHistory={mindMapImport.handleImportRerunHistory}
         className={page.mindMapFullscreen ? 'z-[130]' : 'z-[120]'}
         overlayClassName={page.mindMapFullscreen ? 'z-[120]' : 'z-[110]'}
-      />
-      {mindMapImport.aiRunConfigDialog}
-      <AiSplitWorkbench
-        workbench={page.aiSplitWorkbench}
-        currentSelectedLabel={selectedNodeLabel}
-        hasCurrentSelection={Boolean(page.selectedNode?.uid)}
       />
 
       <PalaceVersionDialog

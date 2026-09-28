@@ -169,6 +169,8 @@ export interface UseMindMapCanvasStateResult {
   handleMove: ReturnType<typeof useMindMapViewport>['handleMove']
   handleMoveEnd: ReturnType<typeof useMindMapViewport>['handleMoveEnd']
   handleViewportChange: ReturnType<typeof useMindMapViewport>['handleViewportChange']
+  panViewportBy: ReturnType<typeof useMindMapViewport>['panViewportBy']
+  endViewportPan: ReturnType<typeof useMindMapViewport>['endViewportPan']
   preserveViewport: boolean
   controlledViewport: Viewport
 }
@@ -882,6 +884,8 @@ export function useMindMapCanvasState(
     handleMove: viewport.handleMove,
     handleMoveEnd: viewport.handleMoveEnd,
     handleViewportChange: viewport.handleViewportChange,
+    panViewportBy: viewport.panViewportBy,
+    endViewportPan: viewport.endViewportPan,
     preserveViewport: viewport.preserveViewport,
     controlledViewport: viewport.controlledViewport,
   }

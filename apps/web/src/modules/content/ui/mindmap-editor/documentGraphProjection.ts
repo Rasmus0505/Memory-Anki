@@ -40,12 +40,6 @@ import {
   type MindMapExtractPlacement,
   type MindMapRelocateMode,
 } from '@/modules/content/domain/mindmap-document-entity'
-import {
-  ANKI_ROLE_VISUAL,
-  readExplicitAnkiRole,
-  resolveEffectiveAnkiRole,
-  type AnkiTreeNode,
-} from '@/modules/content/domain/mindmap-document-entity/model/ankiRoles'
 import { hasHighlightMarkup } from '@/shared/lib/mindmapRichText'
 import type { GraphData, MindMapCountBadge, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
 import { BRANCH_COLORS } from '@/shared/ui/mindmap-canvas/branchColors'
@@ -58,8 +52,6 @@ export interface EditorDocGraphOptions {
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'
   segmentRangeDraft?: MindMapHostSegmentRangeDraft
   revealMap?: Record<string, RevealState>
-  /** When true, color nodes by Anki front/back roles. */
-  ankiEditMode?: boolean
   readonly?: boolean
   highlightedNodeUids?: string[]
   /** Explicit host-owned outline emphasis (e.g. the active review path). */
@@ -92,30 +84,6 @@ export function normalizeEditorDocTree(value: MindMapEditorState['editor_doc']):
   return normalizeMindMapDocument(value) as MindMapDoc
 }
 
-function buildAnkiRoleTree(root: MindMapDocNode): Record<string, AnkiTreeNode> {
-  const out: Record<string, AnkiTreeNode> = {}
-  const walk = (node: MindMapDocNode, parentUid: string | null, fallback: string) => {
-    const uid = getMindMapNodeUid(node, fallback)
-    const data = (node.data ?? {}) as Record<string, unknown>
-    const childrenRaw = Array.isArray(node.children) ? node.children : []
-    const childUids: string[] = []
-    childrenRaw.forEach((child, index) => {
-      if (!child || typeof child !== 'object') return
-      childUids.push(walk(child as MindMapDocNode, uid, `${fallback}-${index}`))
-    })
-    out[uid] = {
-      uid,
-      parentUid,
-      children: childUids,
-      explicitRole: readExplicitAnkiRole(data),
-      ankiFrontUid: typeof data.ankiFrontUid === 'string' ? data.ankiFrontUid : null,
-    }
-    return uid
-  }
-  walk(root, null, 'root')
-  return out
-}
-
 export function editorDocToGraph(
   editorDoc: MindMapEditorState['editor_doc'],
   options: EditorDocGraphOptions = {},
@@ -128,8 +96,6 @@ export function editorDocToGraph(
   const highlightedSet = new Set(options.highlightedNodeUids ?? [])
   const outlinedSet = new Set(options.outlinedNodeUids ?? [])
   const mutedSet = new Set(options.mutedNodeUids ?? [])
-  const ankiTree = options.ankiEditMode ? buildAnkiRoleTree(doc.root as MindMapDocNode) : null
-  const ankiMemo = new Map<string, 'front' | 'back' | 'none'>()
   const keepUids = options.scopeBranchUid
     ? collectMindMapBranchScope(doc, options.scopeBranchUid)?.keepUids ?? null
     : null
@@ -156,23 +122,9 @@ export function editorDocToGraph(
     const questionCardChip = isMindMapQuestionCard(node)
       ? [{ text: '题', tone: 'info' as const, style: 'outline' as const }]
       : []
-    const ankiRole =
-      ankiTree != null ? resolveEffectiveAnkiRole(uid, ankiTree, ankiMemo) : 'none'
-    const ankiChip =
-      options.ankiEditMode && ankiRole !== 'none'
-        ? [
-            {
-              text: ANKI_ROLE_VISUAL[ankiRole].label,
-              tone: ANKI_ROLE_VISUAL[ankiRole].chipTone,
-              style: 'filled' as const,
-            },
-          ]
-        : []
-    const statusChips = [...ankiChip, ...questionCardChip, ...hostStatusChips]
+    const statusChips = [...questionCardChip, ...hostStatusChips]
     const segmentMuted =
       options.segmentColorMode === 'active-only' && segment != null && !activeSegment
-    const ankiBorder =
-      options.ankiEditMode && ankiRole !== 'none' ? ANKI_ROLE_VISUAL[ankiRole].borderColor : null
     // Editor-only card fill from markColor; review/practice use revealMap and skip it.
     const markFill = options.revealMap ? null : getMindMapMarkColor(node)
     nodes.push({
@@ -193,9 +145,9 @@ export function editorDocToGraph(
           revealState,
           borderColor: rangeSelected.has(uid)
             ? '#0ea5e9'
-            : ankiBorder || (outlinedSet.has(uid)
+            : outlinedSet.has(uid)
               ? '#16a34a'
-              : (segmentVisible ? segment?.color : null)),
+              : (segmentVisible ? segment?.color : null),
           fillColor: markFill,
           muted: segmentMuted || mutedSet.has(uid),
           secondaryMarked: false,
@@ -207,14 +159,7 @@ export function editorDocToGraph(
       },
     })
     if (parentId) {
-      let renderStyle = options.revealMap ? getRuntimeEdgeRenderStyle(node.data) : undefined
-      // Anki: emphasize front → back edges with amber stroke.
-      if (options.ankiEditMode && ankiTree) {
-        const parentRole = resolveEffectiveAnkiRole(parentId, ankiTree, ankiMemo)
-        if (parentRole === 'front' && ankiRole === 'back') {
-          renderStyle = { stroke: '#d97706', strokeWidth: 2.5 }
-        }
-      }
+      const renderStyle = options.revealMap ? getRuntimeEdgeRenderStyle(node.data) : undefined
       edges.push({ id: `${parentId}->${uid}`, source: parentId, target: uid, type: 'parent-child', renderStyle })
     }
     ;(Array.isArray(node.children) ? node.children : []).forEach((child, childIndex) => {
@@ -333,6 +278,7 @@ function buildNodeVisual(options: {
           : null)
   return {
     concealText: options.revealState === 'hidden',
+    revealed: options.revealState === 'revealed',
     placeholder: options.revealState === 'placeholder',
     borderColor: options.borderColor ?? null,
     fillColor: options.fillColor ?? null,

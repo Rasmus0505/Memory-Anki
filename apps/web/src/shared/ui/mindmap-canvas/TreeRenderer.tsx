@@ -126,7 +126,7 @@ export function TreeRenderer<T>({
         return (
           <div
             key={`v-${key}-${idx}`}
-            className="absolute top-0 bottom-0 border-l border-slate-300/90"
+            className="absolute top-0 bottom-0 border-l border-paper-line-strong/80"
             style={{ left }}
           />
         )
@@ -141,12 +141,12 @@ export function TreeRenderer<T>({
             <>
               {!isLastChild ? (
                 <div
-                  className="absolute border-l border-slate-300/90"
+                  className="absolute border-l border-paper-line-strong/80"
                   style={{ left: branchLeft, top: '50%', bottom: 0 }}
                 />
               ) : null}
               <div
-                className="absolute border-t border-slate-400/90"
+                className="absolute border-t border-paper-line-strong"
                 style={{ left: branchLeft, top: '50%', width: indentPerLevel / 2 + 8 }}
               />
             </>

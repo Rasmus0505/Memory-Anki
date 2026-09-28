@@ -1,29 +1,12 @@
-import { useState, type ChangeEvent, type ClipboardEvent } from 'react'
-import type { MindMapEditorState } from '@/shared/api/contracts'
-import { useCallback, useEffect } from 'react'
+import { useState, type ChangeEvent } from 'react'
+import type { MindMapEditorState, MindMapImportSourceTree } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import { useImportApplyController } from '@/modules/produce/ui/mindmap-import/hooks/useImportApplyController'
-import { useImportBatchState } from '@/modules/produce/ui/mindmap-import/hooks/useImportBatchState'
-import { useImportJobController } from '@/modules/produce/ui/mindmap-import/hooks/useImportJobController'
-import { useAiRunConfigDialog } from '@/modules/settings/public'
-import {
-  deletePdfDocumentApi,
-  getPdfOcrCoverageApi,
-  listPdfDocumentsApi,
-  uploadPdfDocumentApi,
-} from '@/modules/produce/domain/knowledge-import-entity/api'
-import type { PdfDocument, PdfOcrCoverage } from '@/modules/produce/domain/knowledge-import-entity/model'
 import {
   MANUAL_MINDMAP_JSON_PROMPT,
   parseManualMindMapImport,
   parseManualMindMapImportFile,
 } from '@/modules/produce/ui/mindmap-import/model/manual-import'
-import type {
-  BatchImportMeta,
-  ImportMode,
-  ImportSourceKind,
-  MindMapImportWorkflow,
-} from '@/modules/produce/ui/mindmap-import/model/mindmap-import-types'
 
 interface UseMindMapImportOptions {
   entityKey: string | null
@@ -32,13 +15,6 @@ interface UseMindMapImportOptions {
   applyEditorState?: (nextState: MindMapEditorState, context?: ImportApplyContext) => Promise<void> | void
   selectedNodeUid?: string | null
 }
-
-export type {
-  BatchImportImageItem,
-  ImportMode,
-  ImportSourceKind,
-  MindMapImportWorkflow,
-} from '@/modules/produce/ui/mindmap-import/model/mindmap-import-types'
 
 /** Clipboard read for 文字转脑图. Empty string means the user can still paste in the drawer. */
 export async function readClipboardTextForMindMapImport(): Promise<string> {
@@ -58,41 +34,13 @@ export function useMindMapImport({
   applyEditorState,
   selectedNodeUid = null,
 }: UseMindMapImportOptions) {
-  const [controllerError, setControllerError] = useState('')
-  const [mode, setModeState] = useState<ImportMode>('mindmap')
-  const [sourceKind, setSourceKindState] = useState<ImportSourceKind>('image-batch')
-  const [mindMapWorkflow, setMindMapWorkflowState] = useState<MindMapImportWorkflow>('batch')
-  const [pdfDocuments, setPdfDocuments] = useState<PdfDocument[]>([])
-  const [selectedPdfDocumentId, setSelectedPdfDocumentId] = useState('')
-  const [pdfPageSelection, setPdfPageSelection] = useState('1')
-  const [pdfLibraryLoading, setPdfLibraryLoading] = useState(false)
-  const [pdfOcrCoverage, setPdfOcrCoverage] = useState<PdfOcrCoverage | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [error, setError] = useState('')
+  const [sourceTree, setSourceTree] = useState<MindMapImportSourceTree | null>(null)
+  const [previewEditorDoc, setPreviewEditorDoc] = useState<MindMapEditorState['editor_doc'] | null>(null)
+  const [warnings, setWarnings] = useState<string[]>([])
   const [manualImportText, setManualImportText] = useState('')
   const [manualImportFileName, setManualImportFileName] = useState('')
-
-  const batch = useImportBatchState(setControllerError)
-  const { promptForAiOptions, promptForScenarioAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
-  const jobs = useImportJobController({
-    entityKey,
-    mode,
-    sourceKind,
-    setModeState,
-    setSourceKindState,
-    setMindMapWorkflowState,
-    batchImagesRef: batch.batchImagesRef,
-    setBatchStatus: batch.setBatchStatus,
-    setLastBatchMeta: batch.setLastBatchMeta,
-    promptForAiOptions,
-    promptForScenarioAiOptions,
-    contextOptions: editorState
-      ? [{
-          id: 'mindmap',
-          label: '包含当前思维导图',
-          description: '将当前脑图结构作为只读提示词快照，默认不勾选。',
-          content: JSON.stringify(editorState.editor_doc),
-        }]
-      : [],
-  })
 
   const apply = useImportApplyController({
     entityKey,
@@ -100,99 +48,26 @@ export function useMindMapImport({
     setEditorState,
     applyEditorState,
     selectedNodeUid,
-    importEditorDoc: jobs.importPreviewEditorDoc,
-    sourceTitle: jobs.importSourceTree?.title || '',
-    currentJobId: jobs.currentJobId,
-    sourceKind,
-    setImportOpen: (open) => void jobs.setImportOpen(open),
-    setError: jobs.setImportError,
+    importEditorDoc: previewEditorDoc,
+    sourceTitle: sourceTree?.title || '',
+    currentJobId: null,
+    sourceKind: 'manual-json',
+    setImportOpen,
+    setError,
   })
-
-  const refreshPdfDocuments = useCallback(async () => {
-    setPdfLibraryLoading(true)
-    try {
-      const result = await listPdfDocumentsApi()
-      setPdfDocuments(result.items)
-      setSelectedPdfDocumentId((current) =>
-        current && result.items.some((item) => item.id === current)
-          ? current
-          : result.items[0]?.id ?? '',
-      )
-    } catch {
-      setPdfDocuments([])
-      setSelectedPdfDocumentId('')
-    } finally {
-      setPdfLibraryLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (jobs.importOpen) void refreshPdfDocuments()
-  }, [jobs.importOpen, refreshPdfDocuments])
-
-  useEffect(() => {
-    if (!jobs.importOpen || !selectedPdfDocumentId) {
-      setPdfOcrCoverage(null)
-      return
-    }
-    let cancelled = false
-    void getPdfOcrCoverageApi(selectedPdfDocumentId)
-      .then((coverage) => {
-        if (!cancelled) setPdfOcrCoverage(coverage)
-      })
-      .catch(() => {
-        if (!cancelled) setPdfOcrCoverage(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [jobs.importOpen, selectedPdfDocumentId, jobs.currentJobStatus])
-
-  const setImportMode = (nextMode: ImportMode) => {
-    setModeState(nextMode)
-    if (nextMode === 'text' && sourceKind === 'manual-json') {
-      setSourceKindState('image-batch')
-      setMindMapWorkflowState('batch')
-    }
-    setControllerError('')
-    jobs.setImportError('')
-  }
-
-  const setImportSourceKind = (nextSourceKind: ImportSourceKind) => {
-    setSourceKindState(nextSourceKind)
-    if (nextSourceKind === 'image-batch') {
-      setMindMapWorkflowState('batch')
-    }
-    if (nextSourceKind === 'manual-json') {
-      setModeState('mindmap')
-    }
-    setControllerError('')
-    jobs.setImportError('')
-  }
-
-  const setMindMapImportWorkflow = (workflow: MindMapImportWorkflow) => {
-    setMindMapWorkflowState(workflow)
-    setSourceKindState('image-batch')
-    setControllerError('')
-    jobs.setImportError('')
-    if (workflow === 'batch') {
-      batch.setBatchStatus(batch.batchImages.length > 0 ? 'ready' : 'idle')
-    }
-  }
 
   const applyParsedManualImport = (parsed: ReturnType<typeof parseManualMindMapImport>) => {
     if (parsed.ok === false) {
-      setControllerError(parsed.error)
-      jobs.setImportError(parsed.error)
+      setSourceTree(null)
+      setPreviewEditorDoc(null)
+      setWarnings([])
+      setError(parsed.error)
       return false
     }
-    setControllerError('')
-    jobs.setImportError('')
-    jobs.applyManualImportResult({
-      sourceTree: parsed.sourceTree,
-      editorDoc: parsed.editorDoc,
-      warnings: parsed.warnings,
-    })
+    setError('')
+    setSourceTree(parsed.sourceTree)
+    setPreviewEditorDoc(parsed.editorDoc)
+    setWarnings(parsed.warnings)
     return true
   }
 
@@ -204,17 +79,8 @@ export function useMindMapImport({
     const content = String(text ?? '')
     setManualImportText(content)
     setManualImportFileName('')
-    setSourceKindState('manual-json')
-    setModeState('mindmap')
-    jobs.openPreservingPreview()
-    const parsed = parseManualMindMapImport(content)
-    if (parsed.ok === false) {
-      jobs.clearPreviewState()
-      setControllerError(parsed.error)
-      jobs.setImportError(parsed.error)
-      return
-    }
-    applyParsedManualImport(parsed)
+    setImportOpen(true)
+    applyParsedManualImport(parseManualMindMapImport(content))
   }
 
   const handleManualImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -226,33 +92,13 @@ export function useMindMapImport({
       setManualImportFileName(file.name)
       setManualImportText(content)
       applyParsedManualImport(parseManualMindMapImportFile(file.name, content))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '读取文件失败。'
-      setControllerError(message)
-      jobs.setImportError(message)
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : '读取文件失败。'
+      setSourceTree(null)
+      setPreviewEditorDoc(null)
+      setWarnings([])
+      setError(message)
     }
-  }
-
-  const handleImportPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    const items = event.clipboardData?.items
-    if (!items) return
-    if (sourceKind === 'manual-json' || sourceKind === 'pdf-document') return
-    const imageFiles: File[] = []
-    for (const item of Array.from(items)) {
-      if (!item.type.startsWith('image/')) continue
-      const file = item.getAsFile()
-      if (file) imageFiles.push(file)
-    }
-    if (imageFiles.length === 0) return
-    batch.appendBatchFiles(imageFiles)
-  }
-
-  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    if (files.length > 0) {
-      batch.appendBatchFiles(files)
-    }
-    event.target.value = ''
   }
 
   return {
@@ -263,86 +109,23 @@ export function useMindMapImport({
     handleManualImportParse,
     openManualJsonPreview,
     handleManualImportFileChange,
-    importOpen: jobs.importOpen,
-    setImportOpen: jobs.setImportOpen,
-    importMode: mode,
-    setImportMode,
-    importSourceKind: sourceKind,
-    setImportSourceKind,
-    mindMapImportWorkflow: mindMapWorkflow,
-    setMindMapImportWorkflow,
-    importLoading: jobs.importLoading,
-    importStreamPhase: jobs.importStreamPhase,
-    importStreamStatusMessage: jobs.importStreamStatusMessage,
-    importStreamStep: jobs.importStreamStep,
-    importStreamTotalSteps: jobs.importStreamTotalSteps,
-    importStreamPreviewText: jobs.importStreamPreviewText,
+    importOpen,
+    setImportOpen,
+    importMode: 'mindmap' as const,
+    importSourceKind: 'manual-json' as const,
+    importLoading: false,
     importApplying: apply.applying,
     importUndoing: apply.undoing,
-    importError: jobs.importError || controllerError,
-    importSourceTree: jobs.importSourceTree,
-    importPreviewEditorDoc: jobs.importPreviewEditorDoc,
-    importExtractedText: jobs.importExtractedText,
-    importImagePreviewUrl: jobs.importImagePreviewUrl,
-    importHistory: jobs.importHistory,
-    importHistoryJobs: jobs.importHistory,
-    importBatchImages: batch.batchImages,
-    importBatchStatus: batch.batchStatus,
-    importBatchMeta: batch.lastBatchMeta as BatchImportMeta | null,
-    pdfDocuments,
-    selectedPdfDocumentId,
-    setSelectedPdfDocumentId,
-    pdfPageSelection,
-    setPdfPageSelection,
-    pdfLibraryLoading,
-    pdfOcrCoverage,
+    importError: error,
+    importSourceTree: sourceTree,
+    importPreviewEditorDoc: previewEditorDoc,
     importCanAppend: Boolean(selectedNodeUid),
     importCanUndoLastImport: apply.canUndoLastImport,
     importExternalSyncKey: apply.externalSyncKey,
     importAppliedSyncVersion: apply.appliedSyncVersion,
-    importWarnings: jobs.importWarnings,
-    importReviewPreview: jobs.importReviewPreview,
-    currentJobId: jobs.currentJobId,
-    currentJobStatus: jobs.currentJobStatus,
-    currentJobStage: jobs.currentJobStage,
-    currentJobUsage: jobs.currentJobUsage,
-    currentJobError: jobs.currentJobError,
-    currentJobResolvedAi: jobs.currentJobResolvedAi,
-    currentJobResult: jobs.currentJobResult,
-    currentJobPauseRequested: jobs.currentJobPauseRequested,
-    canResumeJob: jobs.canResumeJob,
-    canPauseJob: jobs.canPauseJob,
-    importReusedExistingResult: jobs.importReusedExistingResult,
-    handleResumeJob: jobs.handleResumeJob,
-    handlePauseJob: jobs.handlePauseJob,
-    handleRetryVision: jobs.handleRetryVision,
-    handleReformatFromOcr: jobs.handleReformatFromOcr,
-    handleImportPaste,
-    handleImportFileChange,
-    handleBatchImportStart: () => void jobs.handleBatchImportStart(),
-    handlePdfImportStart: () => void jobs.handlePdfImportStart(selectedPdfDocumentId, pdfPageSelection),
-    handlePdfUpload: async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ''
-      if (!file) return
-      const document = await uploadPdfDocumentApi(file)
-      await refreshPdfDocuments()
-      setSelectedPdfDocumentId(document.id)
-      setPdfPageSelection(document.page_count > 1 ? `1-${document.page_count}` : '1')
-    },
-    handlePdfDelete: async (documentId: string) => {
-      await deletePdfDocumentApi(documentId)
-      await refreshPdfDocuments()
-    },
-    handleDeleteBatchImage: batch.handleDeleteBatchImage,
-    handleMoveBatchImage: batch.handleMoveBatchImage,
-    clearBatchQueue: batch.clearBatchQueue,
+    importWarnings: warnings,
     handleImportApplyReplace: apply.handleApplyReplace,
     handleImportApplyAppend: apply.handleApplyAppend,
-    handleImportSelectHistory: jobs.handleImportSelectHistory,
-    handleImportDeleteHistory: jobs.handleImportDeleteHistory,
-    handleImportRerunHistory: jobs.handleImportRerunHistory,
     handleUndoLastImport: apply.handleUndoLastImport,
-    aiRunConfigDialog,
   }
 }

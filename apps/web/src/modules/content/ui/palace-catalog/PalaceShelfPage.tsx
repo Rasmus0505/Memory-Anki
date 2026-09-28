@@ -1,3 +1,4 @@
+import { ExamStarPicker, useExamOverview } from '@/modules/exam/public'
 import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -215,18 +216,39 @@ export default function PalaceShelfPage() {
     fetchData,
     navigate,
   })
+  const { data: examOverview, reload: reloadExam } = useExamOverview()
+  const examStarsById = useMemo(
+    () => new Map((examOverview?.palaces ?? []).map((row) => [row.id, row])),
+    [examOverview],
+  )
   const renderExpandedPalaceCard = useCallback(
-    (palace: PalaceGroupedItem) => (
-      <PalaceListCard
-        key={palace.id}
-        palace={palace}
-        viewSettings={expandedViewSettings}
-        defaultExpanded
-        onPalaceReview={cardActions.onPalaceReview}
-        onDelete={cardActions.onDelete}
-      />
-    ),
-    [cardActions, expandedViewSettings],
+    (palace: PalaceGroupedItem) => {
+      const exam = examStarsById.get(palace.id)
+      return (
+        <div key={palace.id} className={`relative rounded-xl ${exam?.stars === 3 ? 'exam-key-card' : ''}`}>
+          <PalaceListCard
+            palace={palace}
+            viewSettings={expandedViewSettings}
+            defaultExpanded
+            onPalaceReview={cardActions.onPalaceReview}
+            onDelete={cardActions.onDelete}
+          />
+          {exam ? (
+            <div className="absolute bottom-2 right-3 z-10 rounded-full bg-card/90 px-1.5 shadow-sm backdrop-blur" title={examOverview?.star_rule.description}>
+              <ExamStarPicker
+                kind="palace"
+                entityId={palace.id}
+                stars={exam.stars}
+                source={exam.stars_source}
+                ownStars={exam.own_stars}
+                onSaved={() => void reloadExam()}
+              />
+            </div>
+          ) : null}
+        </div>
+      )
+    },
+    [cardActions, examOverview?.star_rule.description, examStarsById, expandedViewSettings, reloadExam],
   )
 
   return (

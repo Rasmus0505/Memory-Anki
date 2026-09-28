@@ -588,3 +588,125 @@ describe('useMindMapViewport first canvas size', () => {
     }
   })
 })
+
+describe('useMindMapViewport reveal into view', () => {
+  beforeEach(() => {
+    reactFlowMock.setViewport.mockClear()
+    reactFlowMock.fitView.mockClear()
+    reactFlowMock.setCenter.mockClear()
+    reactFlowMock.getViewport.mockReturnValue({ x: 0, y: 0, zoom: 1 })
+  })
+
+  function installCanvas() {
+    const originalRaf = window.requestAnimationFrame
+    const originalCancel = window.cancelAnimationFrame
+    const originalResizeObserver = globalThis.ResizeObserver
+    const queued = new Map<number, FrameRequestCallback>()
+    let nextId = 1
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      const id = nextId
+      nextId += 1
+      queued.set(id, callback)
+      return id
+    }) as typeof window.requestAnimationFrame
+    window.cancelAnimationFrame = ((id: number) => {
+      queued.delete(id)
+    }) as typeof window.cancelAnimationFrame
+    let resizeCallback: ResizeObserverCallback | null = null
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: MockResizeObserver,
+    })
+    const host = document.createElement('div')
+    Object.defineProperties(host, {
+      clientWidth: { configurable: true, value: 800 },
+      clientHeight: { configurable: true, value: 600 },
+    })
+    return {
+      host,
+      ready: () => {
+        act(() => {
+          resizeCallback?.([], {} as ResizeObserver)
+        })
+      },
+      flushFrames: () => {
+        const batch = [...queued.values()]
+        queued.clear()
+        act(() => {
+          batch.forEach((callback) => callback(0))
+        })
+      },
+      restore: () => {
+        window.requestAnimationFrame = originalRaf
+        window.cancelAnimationFrame = originalCancel
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+          configurable: true,
+          writable: true,
+          value: originalResizeObserver,
+        })
+      },
+    }
+  }
+
+  it('pans the minimum distance to reveal the most clipped card and keeps zoom', () => {
+    const canvas = installCanvas()
+    const props = buildProps({
+      canvasRef: { current: canvas.host },
+      controlledViewport: { x: 0, y: 0, zoom: 1 },
+      nodes: [flowNode('near', 740, 40), flowNode('far', 900, 40)],
+      measuredNodeSizesRef: {
+        current: new Map([
+          ['near', { width: 100, height: 40 }],
+          ['far', { width: 100, height: 40 }],
+        ]),
+      },
+      viewCommand: { type: 'reveal', nodeIds: ['near', 'far'], nonce: 1 },
+    })
+    try {
+      renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
+      canvas.ready()
+      reactFlowMock.setViewport.mockClear()
+      canvas.flushFrames()
+      canvas.flushFrames()
+      expect(reactFlowMock.setCenter).not.toHaveBeenCalled()
+      expect(reactFlowMock.setViewport).toHaveBeenCalledWith(
+        { x: 800 - 32 - 1000, y: 0, zoom: 1 },
+        { duration: 200 },
+      )
+    } finally {
+      canvas.restore()
+    }
+  })
+
+  it('does not pan when the revealed card is already fully inside the padded viewport', () => {
+    const canvas = installCanvas()
+    const props = buildProps({
+      canvasRef: { current: canvas.host },
+      controlledViewport: { x: 0, y: 0, zoom: 1 },
+      nodes: [flowNode('visible', 80, 80)],
+      measuredNodeSizesRef: {
+        current: new Map([['visible', { width: 100, height: 40 }]]),
+      },
+      viewCommand: { type: 'reveal', nodeIds: ['visible'], nonce: 2 },
+    })
+    try {
+      renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
+      canvas.ready()
+      reactFlowMock.setViewport.mockClear()
+      canvas.flushFrames()
+      canvas.flushFrames()
+      expect(reactFlowMock.setViewport).not.toHaveBeenCalled()
+    } finally {
+      canvas.restore()
+    }
+  })
+})

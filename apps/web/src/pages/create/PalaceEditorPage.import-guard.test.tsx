@@ -262,13 +262,6 @@ describe('PalaceEditPage import apply guard', () => {
       versions: [],
       removed_duplicates: 0,
     } as never)
-    vi.spyOn(palaceApi, 'splitMindMapNodeApi').mockResolvedValue({
-      ok: true,
-      editor_doc: importedEditorState.editor_doc,
-      generated_children_count: 1,
-      reassigned_existing_children_count: 0,
-      model: 'qwen3.6-flash',
-    } as never)
   })
 
   afterEach(async () => {

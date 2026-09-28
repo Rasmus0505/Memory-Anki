@@ -14,7 +14,6 @@ import {
   mindMapSceneChromeClassName,
   mindMapSceneChromeLabel,
 } from '@/shared/ui/mindmap-canvas'
-import type { MindMapCanvasViewCommand } from '@/shared/ui/mindmap-canvas'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import { collectMindMapBranchScope } from '@/modules/content/domain/mindmap-document-entity'
@@ -34,6 +33,7 @@ import {
 import { useMindMapEditHistory } from './useMindMapEditHistory'
 import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
+import { useMindMapSurfaceViewCommands } from './useMindMapSurfaceViewCommands'
 import { createMindMapCapabilities, mergeMindMapGraphOptions } from './capabilities'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
@@ -67,7 +67,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onEnglishWordClick,
   textSelectionModeActive = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
-  aiSplitBusy = false,
   externalSyncKey = null,
   forceSyncKey = null,
   preserveViewOnSync = false,
@@ -88,7 +87,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   segmentRangeDraft = EMPTY_SEGMENT_RANGE_DRAFT,
   highlightedNodeUids = EMPTY_UIDS,
   outlinedNodeUids = EMPTY_UIDS,
-  ankiEditMode = false,
   mutedNodeUids = EMPTY_UIDS,
   masteryByNodeUid = EMPTY_MASTERY_BY_UID,
   statusChipsByNodeUid,
@@ -96,6 +94,8 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onCountBadgeClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
+  revealFollowNodeIds = EMPTY_UIDS,
+  revealFollowNonce = 0,
   reviewFxSignal = null,
   feedbackFxSignal = null,
   buildSelectionToolbarActions,
@@ -111,7 +111,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onNodeHover,
   onCreateSegmentFromSelection,
   onSegmentRangeDraftChange,
-  onAiSplitRequest,
   onFullscreenChange,
   onFullscreenToggle,
   delegateFullscreenToHost = false,
@@ -130,16 +129,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   // Review hosts recreate these handlers every second when effectiveSeconds updates.
   const onNodeClickRef = useRef(onNodeClick)
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
-  const onAiSplitRequestRef = useRef(onAiSplitRequest)
   const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
   const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
-  const handledFocusRequestNonceRef = useRef(0)
   onNodeActiveRef.current = onNodeActive
   onReadyRef.current = onReady
   onUiClearedChangeRef.current = onUiClearedChange
   onNodeClickRef.current = onNodeClick
   onNodeContextMenuRef.current = onNodeContextMenu
-  onAiSplitRequestRef.current = onAiSplitRequest
   onCreateSegmentFromSelectionRef.current = onCreateSegmentFromSelection
   onSegmentRangeDraftChangeRef.current = onSegmentRangeDraftChange
   const selectedNodeId =
@@ -160,8 +156,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const editingNodeId = interaction.mode === 'editing' ? interaction.nodeId : null
   const editingDraft = interaction.mode === 'editing' ? interaction.draftText : null
   const [uiCleared, setUiCleared] = useState(false)
-  const [viewCommand, setViewCommand] = useState<MindMapCanvasViewCommand | null>(null)
-  const viewCommandNonceRef = useRef(0)
   const pendingKeyboardFocusNodeIdRef = useRef<string | null>(null)
   const editorDoc = editorState.editor_doc
   const editorConfig = editorState.editor_config
@@ -197,15 +191,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       countBadgeByNodeUid,
       practiceModeActive,
       revealMap: practiceModeActive ? revealMap : undefined,
-      aiSplitBusy,
-      onAiSplitRequest: (payload) => onAiSplitRequestRef.current?.(payload),
       onCreateSegmentFromSelection: () => onCreateSegmentFromSelectionRef.current?.(),
       onSegmentRangeDraftChange: (payload) => onSegmentRangeDraftChangeRef.current?.(payload),
       onNodeClick: (nodes) => onNodeClickRef.current?.(nodes),
       onNodeContextMenu: (nodes) => onNodeContextMenuRef.current?.(nodes),
         }),
     [
-      activeSegmentId, aiSplitBusy, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
+      activeSegmentId, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
       outlinedNodeUids,
       mutedNodeUids, practiceModeActive, providedCapabilities, revealMap, segmentColorMode,
       segmentRangeDraft, segments, statusChipsByNodeUid,
@@ -225,13 +217,12 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     () =>
       editorDocToGraph(normalizedEditorState.editor_doc, {
         ...graphOptions,
-        ankiEditMode,
         readonly,
         scopeBranchUid,
       }),
     // graphOptions is read from the latest closure when signature changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- signature tracks decoration content
-    [ankiEditMode, graphOptionsSignature, normalizedEditorState.editor_doc, readonly, scopeBranchUid],
+    [graphOptionsSignature, normalizedEditorState.editor_doc, readonly, scopeBranchUid],
   )
   // Host remounts only on intentional document-identity changes.
   // Mode switches (build/learn, flip syncReason, preserveView flag) must not rebuild ReactFlow.
@@ -452,30 +443,17 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
-  const requestFocusNode = useCallback(
-    (nodeUid: string | null) => {
-      const current = interactionRef.current
-      if (current.mode === 'editing') commitEditingDraft()
-      replaceInteraction(nodeUid ? selectedInteraction(nodeUid) : { mode: 'idle' })
-      onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
-      if (!nodeUid) return
-      viewCommandNonceRef.current += 1
-      setViewCommand({
-        type: 'center',
-        nodeId: nodeUid,
-        nonce: viewCommandNonceRef.current,
-      })
-    },
-    [commitEditingDraft, getCurrentEditorDoc, replaceInteraction],
-  )
-
-  const requestFitView = useCallback(() => {
-    viewCommandNonceRef.current += 1
-    setViewCommand({
-      type: 'fit',
-      nonce: viewCommandNonceRef.current,
-    })
-  }, [])
+  const { viewCommand, requestFocusNode, requestFitView } = useMindMapSurfaceViewCommands({
+    focusRequestNodeUid,
+    focusRequestNonce,
+    revealFollowNodeIds,
+    revealFollowNonce,
+    interactionRef,
+    onNodeActiveRef,
+    commitEditingDraft,
+    replaceInteraction,
+    getCurrentEditorDoc,
+  })
 
   const fullscreen = useMindMapFullscreen({
     getFullscreenTarget: () => frameRef.current,
@@ -489,16 +467,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const toggleViewportFullscreen = fullscreen.toggleViewport
   const toggleCanvasFullscreen = fullscreen.toggle
   const showSystemFullscreenControl = !delegateFullscreenToHost && presentationStrategy !== 'viewport-only'
-
-  // Each focusRequestNonce must run at most once. Including requestFocusNode in deps is
-  // unsafe: hosts pass unstable onNodeActive, which used to recreate requestFocusNode and
-  // re-enter this effect, nesting setViewCommand until React #185 (max update depth).
-  useEffect(() => {
-    if (!focusRequestNodeUid || focusRequestNonce <= 0) return
-    if (handledFocusRequestNonceRef.current === focusRequestNonce) return
-    handledFocusRequestNonceRef.current = focusRequestNonce
-    requestFocusNode(focusRequestNodeUid)
-  }, [focusRequestNodeUid, focusRequestNonce, requestFocusNode])
 
   const activateNode = useCallback(
     (nodeId: string) => {
