@@ -187,6 +187,71 @@ export function playWebAudioFireworkAccent(args: {
   playToneSequence(getFireworkAccentTones(kind, milestoneStep ?? 0), feedbackVolume)
 }
 
+const noiseBuffers = new WeakMap<AudioContext, AudioBuffer>()
+
+function getNoiseBuffer(context: AudioContext) {
+  const cached = noiseBuffers.get(context)
+  if (cached) return cached
+  const length = Math.floor(context.sampleRate * 0.25)
+  const buffer = context.createBuffer(1, length, context.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let index = 0; index < length; index += 1) data[index] = Math.random() * 2 - 1
+  noiseBuffers.set(context, buffer)
+  return buffer
+}
+
+function scheduleNoiseSwipe(
+  context: AudioContext,
+  args: { startAt: number; durationS: number; fromHz: number; toHz: number; q: number; gain: number },
+) {
+  const source = context.createBufferSource()
+  source.buffer = getNoiseBuffer(context)
+  source.playbackRate.value = 0.9 + Math.random() * 0.2
+  const band = context.createBiquadFilter()
+  band.type = 'bandpass'
+  band.Q.value = args.q
+  band.frequency.setValueAtTime(args.fromHz, args.startAt)
+  band.frequency.exponentialRampToValueAtTime(args.toHz, args.startAt + args.durationS)
+  const envelope = context.createGain()
+  envelope.gain.setValueAtTime(0.0001, args.startAt)
+  envelope.gain.linearRampToValueAtTime(args.gain, args.startAt + Math.min(0.012, args.durationS * 0.2))
+  envelope.gain.exponentialRampToValueAtTime(0.0001, args.startAt + args.durationS)
+  source.connect(band)
+  band.connect(envelope)
+  envelope.connect(context.destination)
+  source.start(args.startAt, Math.random() * 0.1)
+  source.stop(args.startAt + args.durationS + 0.02)
+}
+
+/** Soft paper swipe for feed page turns; synthesized, no assets. */
+export function playWebAudioPageTurn(args: { volume?: number; direction?: 'forward' | 'backward' }) {
+  const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
+  if (feedbackVolume <= 0) return
+  const context = getSharedAudioContext()
+  if (!context || typeof context.createBufferSource !== 'function') return
+  if (context.state === 'suspended') void context.resume().catch(() => undefined)
+  const now = context.currentTime + 0.004
+  const jitter = 0.92 + Math.random() * 0.16
+  const [fromHz, toHz] = args.direction === 'backward' ? [1400, 3600] : [3800, 1300]
+  scheduleNoiseSwipe(context, {
+    startAt: now,
+    durationS: 0.11 * jitter,
+    fromHz: fromHz * jitter,
+    toHz: toHz * jitter,
+    q: 0.9,
+    gain: 0.05 * feedbackVolume,
+  })
+  // Edge flick: a very short high tick at the end of the swipe.
+  scheduleNoiseSwipe(context, {
+    startAt: now + 0.075 * jitter,
+    durationS: 0.03,
+    fromHz: 6200,
+    toHz: 4800,
+    q: 2.4,
+    gain: 0.022 * feedbackVolume,
+  })
+}
+
 export function __resetWebAudioContextForTests() {
   sharedAudioContext = null
 }

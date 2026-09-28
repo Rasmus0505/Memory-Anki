@@ -8,7 +8,13 @@ import {
   type FlowBreath,
   type FlowFeedbackSignal,
 } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
+import {
+  publishFreestyleRatingPulse,
+  recordFreestyleComboRating,
+} from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
+import { triggerHaptic } from '@/shared/feedback/haptics'
+import { playWebAudioPageTurn } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import {
   useMindMapFeedbackAudio,
   useMindMapFeedbackSettings,
@@ -26,11 +32,21 @@ import {
  * limit is deliberately short — it must never swallow a deliberate single flip.
  */
 const REVEAL_AUDIO_MIN_GAP_MS = 90
+const PAGE_TURN_AUDIO_MIN_GAP_MS = 110
+const PAGE_TURN_HAPTIC_MIN_GAP_MS = 140
+const PAGE_TURN_FULL_VOLUME_GAP_MS = 420
+
+/** 0.45 at the fastest audible flick, rising to full volume for a deliberate turn. */
+export function pageTurnAttenuation(gapMs: number) {
+  const span = PAGE_TURN_FULL_VOLUME_GAP_MS - PAGE_TURN_AUDIO_MIN_GAP_MS
+  const progress = Math.max(0, Math.min(1, (gapMs - PAGE_TURN_AUDIO_MIN_GAP_MS) / span))
+  return 0.45 + 0.55 * progress
+}
 
 export function useFreestyleFlowFeedback() {
   const settings = useMindMapFeedbackSettings()
   const reducedMotion = usePrefersReducedMotion()
-  const { playEvent } = useMindMapFeedbackAudio(
+  const { playEvent, playComboMilestone } = useMindMapFeedbackAudio(
     settings.soundEnabled,
     getSceneEffectiveVolume(settings, 'review'),
   )
@@ -40,6 +56,7 @@ export function useFreestyleFlowFeedback() {
   const breathNonceRef = useRef(0)
   const breathTimerRef = useRef<number | null>(null)
   const lastRevealAudioAtRef = useRef(0)
+  const lastPageTurnAtRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -59,6 +76,7 @@ export function useFreestyleFlowFeedback() {
     const now = Date.now()
     if (now - lastRevealAudioAtRef.current < REVEAL_AUDIO_MIN_GAP_MS) return
     lastRevealAudioAtRef.current = now
+    triggerHaptic('tap')
     playEvent(FLOW_REVEAL_SIGNAL.audioEvent, {
       origin: 'review',
       audioScope: 'local',
@@ -100,14 +118,47 @@ export function useFreestyleFlowFeedback() {
 
   const signalRating = useCallback(
     (rating: UnitRating, passed: boolean) => {
-      playSignal(flowRatingSignal(rating, passed))
+      const signal = flowRatingSignal(rating, passed)
+      playSignal(signal)
+      triggerHaptic(signal.haptic)
+      const milestoneScene = settings.scenes.milestone
+      const combo = recordFreestyleComboRating(signal.keepsCombo, milestoneScene.steps)
+      if (combo.milestoneIndex != null && milestoneScene.enabled) {
+        triggerHaptic('milestone')
+        if (settings.soundEnabled && milestoneScene.soundEnabled) {
+          playComboMilestone(combo.milestoneIndex, {
+            volume: getSceneEffectiveVolume(settings, 'milestone'),
+          })
+        }
+      }
+      if (settings.animationEnabled && !reducedMotion) {
+        publishFreestyleRatingPulse(rating, signal.reaction)
+      }
     },
-    [playSignal],
+    [playComboMilestone, playSignal, reducedMotion, settings],
   )
 
   const signalPalaceCleared = useCallback(() => {
     playSignal(FLOW_PALACE_CLEARED_SIGNAL)
   }, [playSignal])
+
+  /** Every page turn sounds, but a fast flick-through thins out instead of clattering. */
+  const signalPageTurn = useCallback(
+    (direction: 'forward' | 'backward') => {
+      const now = Date.now()
+      const gap = now - lastPageTurnAtRef.current
+      lastPageTurnAtRef.current = now
+      if (gap > PAGE_TURN_HAPTIC_MIN_GAP_MS) triggerHaptic('tap')
+      if (gap < PAGE_TURN_AUDIO_MIN_GAP_MS) return
+      if (!settings.soundEnabled || !resolveFeedbackChannels(settings).learningSounds) return
+      if (!settings.scenes.review.enabled || !settings.scenes.review.soundEnabled) return
+      playWebAudioPageTurn({
+        direction,
+        volume: getSceneEffectiveVolume(settings, 'review') * pageTurnAttenuation(gap),
+      })
+    },
+    [settings],
+  )
 
   const clearBreath = useCallback(() => {
     if (breathTimerRef.current != null) {
@@ -117,5 +168,5 @@ export function useFreestyleFlowFeedback() {
     setBreath(null)
   }, [])
 
-  return { breath, signalReveal, signalRating, signalPalaceCleared, clearBreath }
+  return { breath, signalReveal, signalRating, signalPalaceCleared, signalPageTurn, clearBreath }
 }

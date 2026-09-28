@@ -230,7 +230,7 @@ function positivePalaceId(value: unknown): number | null {
  */
 export function cardPalaceId(card: FreestyleCard | null | undefined): number | null {
   if (!card) return null
-  if (card.type === 'mindmap_branch' || card.type === 'anki_card') {
+  if (card.type === 'mindmap_branch') {
     return (
       positivePalaceId(card.palace_id) ??
       positivePalaceId(card.palace_context?.id)

@@ -82,9 +82,27 @@ describe('FreestyleScopeQuizDialog', () => {
     vi.clearAllMocks()
     progressFreestyleOverlayQuizApiMock.mockResolvedValue({} as never)
     deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 2,
+      plan: {
+        overlay_quiz: {
+          question_ids: [],
+          current_index: 0,
+          completed_ids: [],
+          states: {},
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 0,
+          kind_counts: { objective: 0, subjective: 0 },
+        },
+      },
+    } as never)
   })
 
-  it('asks for palace order before the first session', () => {
+  it('asks for palace order before the first session', async () => {
     const onConfirmSetup = vi.fn()
     render(
       <FreestyleScopeQuizDialog
@@ -103,10 +121,76 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(screen.getByTestId('freestyle-scope-quiz-dialog')).toBeTruthy()
     expect(screen.getByRole('radio', { name: /跨宫殿乱序/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /一个宫殿刷完再换/ }))
+    const start = await screen.findByRole('button', { name: '开始做题' })
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(start)
+    expect(onConfirmSetup).toHaveBeenCalledWith({
+      quizScope: 'single_palace_random',
+      overlayQuestionRange: 'all',
+      overlayQuestionKinds: ['objective', 'subjective'],
+      overlayTypeOrder: 'interleave',
+      overlayTypePalaceNesting: 'palace_then_type',
+    })
+  })
+
+  it('shows kind checkboxes and nesting only for the selected combination', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 2,
+      plan: {
+        overlay_quiz: {
+          question_ids: [],
+          kind_counts: { objective: 4, subjective: 2 },
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          current_index: 0,
+          completed_ids: [],
+          states: {},
+          limit_reached: false,
+          candidate_count: 6,
+        },
+      },
+    } as never)
+    const onConfirmSetup = vi.fn()
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone={false}
+        palaceCount={2}
+        rangeLabel="本轮纳入复习的 2 个宫殿"
+        onConfirmSetup={onConfirmSetup}
+        onRoundSync={vi.fn()}
+      />,
+    )
+
+    const objective = await screen.findByRole('checkbox', { name: '客观（4）' })
+    const subjective = screen.getByRole('checkbox', { name: '主观（2）' })
+    expect((objective as HTMLInputElement).checked).toBe(true)
+    expect((subjective as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('radio', { name: /混合插入/ })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: /这座宫殿两类都刷完再换/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('radio', { name: /一个宫殿刷完再换/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /先客观后主观/ }))
+    expect(screen.getByRole('radio', { name: /这座宫殿两类都刷完再换/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /先刷完所有宫殿的一类/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '主观（2）' }))
+    expect(screen.queryByRole('radio', { name: /先客观后主观/ })).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: '客观（4）' }))
+    expect((screen.getByRole('checkbox', { name: '客观（4）' }) as HTMLInputElement).checked).toBe(true)
+
     fireEvent.click(screen.getByRole('button', { name: '开始做题' }))
     expect(onConfirmSetup).toHaveBeenCalledWith({
       quizScope: 'single_palace_random',
       overlayQuestionRange: 'all',
+      overlayQuestionKinds: ['objective'],
+      overlayTypeOrder: 'objective_then_subjective',
+      overlayTypePalaceNesting: 'type_then_palace',
     })
   })
 
@@ -296,7 +380,8 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(await screen.findByRole('button', { name: '1' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '20' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '21' })).toBeNull()
-    expect(screen.getByText('第 1/2 页（1–20）')).toBeTruthy()
+    expect(screen.getByText('第 1/2 页 · 第 1 / 21 题')).toBeTruthy()
+    expect(screen.getByText('宫殿 7')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(screen.getByRole('button', { name: '21' })).toBeTruthy()
@@ -431,5 +516,90 @@ describe('FreestyleScopeQuizDialog', () => {
       // re-ensured to drop the deleted id.
       expect(ensureFreestyleOverlayQuizApiMock).toHaveBeenCalled()
     })
+  })
+
+  it('drops a question the server already deleted and ignores a later reload of that id', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 1,
+      version: 1,
+      plan: {
+        overlay_quiz: {
+          question_ids: [42, 43],
+          current_index: 0,
+          completed_ids: [],
+          states: {},
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 2,
+        },
+      },
+    } as never)
+    getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
+      items: [42, 43].map((id) => ({
+        id,
+        palace_id: 7,
+        sort_order: id,
+        correct_count: 0,
+        incorrect_count: 0,
+        attempt_count: 0,
+        question_type: 'multiple_choice',
+        stem: `第 ${id} 题干`,
+        options: [{ id: 'A', text: 'A' }],
+        answer_payload: { correct_option_id: 'A' },
+        analysis: '',
+        source_meta: {},
+        created_at: null,
+        updated_at: null,
+      })),
+      item_count: 2,
+    } as never)
+    deletePalaceQuizQuestionApiMock.mockRejectedValue(new Error('题目不存在。'))
+    const toastModule = await import('@/shared/feedback/toast')
+    const errorSpy = vi.spyOn(toastModule.toast, 'error').mockImplementation(() => undefined)
+
+    const view = render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="当前配置下的全部宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('第 42 题干')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
+    fireEvent.click(screen.getByRole('button', { name: '移入回收站' }))
+    await waitFor(() => {
+      expect(screen.queryByText('第 42 题干')).toBeNull()
+      expect(screen.getByText('第 43 题干')).toBeTruthy()
+    })
+    expect(errorSpy).not.toHaveBeenCalled()
+
+    view.rerender(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-2"
+        planVersion={2}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="当前配置下的全部宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+    await waitFor(() => {
+      expect(screen.getByText('第 43 题干')).toBeTruthy()
+    })
+    expect(screen.queryByText('第 42 题干')).toBeNull()
+    errorSpy.mockRestore()
   })
 })

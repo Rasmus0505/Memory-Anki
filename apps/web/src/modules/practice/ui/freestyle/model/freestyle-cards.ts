@@ -2,7 +2,6 @@ import { MODE_LABELS } from '@/modules/practice/ui/freestyle/model/freestyle-lab
 import type { FreestyleMode } from '@/modules/practice/ui/freestyle/model/today-training'
 import type {
   FreestyleActionCard,
-  FreestyleAnkiCard,
   FreestyleCard,
   FreestyleMindMapBranchCard,
   FreestylePalaceContext,
@@ -22,13 +21,7 @@ export function isActionCard(card: FreestyleCard | null | undefined): card is Fr
 export function isMindMapBranchCard(
   card: FreestyleCard | null | undefined,
 ): card is FreestyleMindMapBranchCard {
-  return card?.type === 'mindmap_branch' || card?.type === 'anki_card'
-}
-
-export function isAnkiPresentationCard(
-  card: FreestyleCard | null | undefined,
-): card is FreestyleAnkiCard {
-  return card?.type === 'anki_card'
+  return card?.type === 'mindmap_branch'
 }
 
 export function stringListsEqual(left: string[], right: string[]) {

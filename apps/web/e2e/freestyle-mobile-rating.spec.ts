@@ -53,6 +53,9 @@ for (const viewport of viewports) {
       await expect(button).toBeVisible()
       await expect(button).toBeDisabled()
     }
+    const remove = page.getByTestId('freestyle-rating-button-remove')
+    await expect(remove).toBeVisible()
+    await expect(remove).toBeEnabled()
 
     const barBox = await ratingBar.boundingBox()
     const nextButtonBox = await page.getByRole('button', { name: '下一张' }).boundingBox()

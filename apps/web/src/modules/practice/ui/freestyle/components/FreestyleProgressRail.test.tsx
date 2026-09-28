@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createFreestyleScrollChannel } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
 import {
   palaceAccent,
   palaceAccentToneClass,
@@ -307,5 +308,136 @@ describe('FreestyleProgressRail', () => {
   it('does not show a session timer on the HUD', () => {
     renderRail()
     expect(screen.queryByTestId('freestyle-timer-dot')).toBeNull()
+  })
+
+  describe('finger follow', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    })
+
+    function stubLayout() {
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+        cb(performance.now())
+        return 1
+      })
+      vi.stubGlobal('cancelAnimationFrame', () => {})
+      const order = ['one', 'two', 'three', 'four']
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const index = order.indexOf(this.dataset.railSlot ?? '')
+        const left = index >= 0 ? index * 40 : 0
+        const width = index >= 0 ? 30 : 400
+        return { left, right: left + width, width, top: 0, bottom: 10, height: 10, x: left, y: 0, toJSON() {} } as DOMRect
+      })
+    }
+
+    it('slides the glider between the leaving and entering tick as frames arrive', () => {
+      stubLayout()
+      const channel = createFreestyleScrollChannel()
+      renderRail({ scrollChannel: channel })
+      const glider = screen.getByTestId('freestyle-progress-glider')
+
+      act(() => channel.publish({ fromCardId: 'three', toCardId: 'four', t: 0.25, settled: false }))
+      expect(glider.className).toContain('progress-glider-follow')
+      expect(glider.style.transform).toBe('translateX(90px) scaleX(0.3)')
+
+      act(() => channel.publish({ fromCardId: 'three', toCardId: 'four', t: 0.75, settled: false }))
+      expect(glider.style.transform).toBe('translateX(110px) scaleX(0.3)')
+      expect(glider.dataset.direction).toBe('forward')
+      const entering = document.querySelector<HTMLElement>('[data-rail-slot="four"]')
+      expect(entering?.dataset.follow).toBe('to')
+      expect(entering?.style.getPropertyValue('--fs-follow')).toBe('0.75')
+    })
+
+    it('releases control back to the playhead once the scroll settles', () => {
+      stubLayout()
+      const channel = createFreestyleScrollChannel()
+      renderRail({ scrollChannel: channel })
+      const glider = screen.getByTestId('freestyle-progress-glider')
+
+      act(() => channel.publish({ fromCardId: 'three', toCardId: 'four', t: 0.5, settled: false }))
+      act(() => channel.publish({ fromCardId: 'four', toCardId: null, t: 0, settled: true }))
+
+      expect(glider.className).not.toContain('progress-glider-follow')
+      expect(glider.className).toContain('progress-glider-release')
+      expect(document.querySelector('[data-follow]')).toBeNull()
+    })
+  })
+
+  describe('motion', () => {
+    type Seg = FreestyleProgressSummary['segments'][number]
+    const seg = (cardId: string, tone: Seg['tone'], extra: Partial<Seg> = {}): Seg => ({
+      cardId, tone, palaceId: 1, palaceDone: false, kind: 'source', sourceLabel: cardId, ...extra,
+    })
+    function mountRail(segments: Seg[]) {
+      const view = render(
+        <TooltipProvider>
+          <FreestyleProgressRail summary={summary({ segments, total: segments.length })} onOpenPlan={() => {}} />
+        </TooltipProvider>,
+      )
+      return (next: Seg[]) => view.rerender(
+        <TooltipProvider>
+          <FreestyleProgressRail summary={summary({ segments: next, total: next.length })} onOpenPlan={() => {}} />
+        </TooltipProvider>,
+      )
+    }
+
+    it('sweeps the palace fill in from the left when a tick becomes done', () => {
+      const update = mountRail([seg('one', 'pending', { viewing: true }), seg('two', 'pending')])
+      update([seg('one', 'done'), seg('two', 'pending', { viewing: true })])
+
+      const first = screen.getAllByTestId('freestyle-progress-segment')[0]
+      expect(first.querySelector('.progress-fill-sweep')).not.toBeNull()
+      // Base stays faint underneath so the sweep is visible.
+      expect(first.className).toContain(palaceAccentToneClass(1, 'pending'))
+    })
+
+    it('opens a slot for a retry occurrence inserted into a drawn rail', () => {
+      const update = mountRail([seg('one', 'done'), seg('two', 'pending', { viewing: true })])
+      update([
+        seg('one', 'done'),
+        seg('retry:round-1:one:1', 'retry', { kind: 'retry', retryAttempt: 1, sourceCardId: 'one' }),
+        seg('two', 'pending', { viewing: true }),
+      ])
+
+      const node = screen.getByTestId('freestyle-progress-retry-node')
+      expect(node.className).toContain('progress-retry-insert')
+      expect(node.parentElement?.className).toMatch(/progress-slot-open-/)
+    })
+
+    it('does not treat the first render as an insertion', () => {
+      mountRail([
+        seg('one', 'done'),
+        seg('retry:round-1:one:1', 'retry', { kind: 'retry', retryAttempt: 1, sourceCardId: 'one' }),
+      ])
+      expect(screen.getByTestId('freestyle-progress-retry-node').className).not.toContain('progress-retry-insert')
+    })
+
+    it('sweeps a sheen over a palace that just cleared', () => {
+      const update = mountRail([
+        seg('one', 'done'),
+        seg('two', 'pending', { viewing: true }),
+        seg('three', 'pending', { palaceId: 2 }),
+      ])
+      expect(screen.queryAllByTestId('freestyle-progress-sheen')).toHaveLength(0)
+      update([
+        seg('one', 'done', { palaceDone: true }),
+        seg('two', 'done', { palaceDone: true }),
+        seg('three', 'pending', { palaceId: 2, viewing: true }),
+      ])
+
+      const sheens = screen.getAllByTestId('freestyle-progress-sheen')
+      expect(sheens).toHaveLength(1)
+      expect(sheens[0].getAttribute('data-kind')).toBe('palace')
+    })
+
+    it('plays the round finale when the last card is done', () => {
+      const update = mountRail([seg('one', 'done'), seg('two', 'pending', { viewing: true })])
+      update([seg('one', 'done', { palaceDone: true }), seg('two', 'done', { palaceDone: true, viewing: true })])
+
+      const sheens = screen.getAllByTestId('freestyle-progress-sheen')
+      expect(sheens.map((node) => node.getAttribute('data-kind'))).toEqual(['round'])
+      expect(screen.getByTestId('freestyle-progress-rail').className).toContain('progress-round-glow')
+    })
   })
 })

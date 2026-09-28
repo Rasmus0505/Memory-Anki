@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import type {
   FreestyleRatingScope,
@@ -14,39 +14,24 @@ import {
   ratingEffectLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
-import { getFreestyleRatingShortcut } from '@/modules/practice/ui/freestyle/model/freestyleRatingShortcut'
+import {
+  getFreestyleRatingShortcut,
+  isFreestyleRemoveFromQueueShortcut,
+} from '@/modules/practice/ui/freestyle/model/freestyleRatingShortcut'
 import { cn } from '@/shared/lib/utils'
+import { FreestyleComboChip } from './LazyFreestyleMotion'
+
+export type FreestyleRatingTone = 'again' | 'hard' | 'good' | 'easy'
 
 export const FREESTYLE_RATINGS: Array<{
   value: UnitRating
   label: string
-  className: string
-  selectedClassName: string
+  tone: FreestyleRatingTone
 }> = [
-  {
-    value: 1,
-    label: '忘记',
-    className: 'border-rose-400/30 bg-rose-400/10 text-rose-100 hover:bg-rose-400/18',
-    selectedClassName: 'border-rose-300 bg-rose-400/25 ring-2 ring-rose-300/45',
-  },
-  {
-    value: 2,
-    label: '困难',
-    className: 'border-amber-300/30 bg-amber-300/10 text-amber-50 hover:bg-amber-300/18',
-    selectedClassName: 'border-amber-200 bg-amber-300/25 ring-2 ring-amber-200/45',
-  },
-  {
-    value: 3,
-    label: '记得',
-    className: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-50 hover:bg-emerald-300/18',
-    selectedClassName: 'border-emerald-200 bg-emerald-300/25 ring-2 ring-emerald-200/45',
-  },
-  {
-    value: 4,
-    label: '轻松',
-    className: 'border-sky-300/30 bg-sky-300/10 text-sky-50 hover:bg-sky-300/18',
-    selectedClassName: 'border-sky-200 bg-sky-300/25 ring-2 ring-sky-200/45',
-  },
+  { value: 1, label: '忘记', tone: 'again' },
+  { value: 2, label: '困难', tone: 'hard' },
+  { value: 3, label: '记得', tone: 'good' },
+  { value: 4, label: '轻松', tone: 'easy' },
 ]
 
 export function FreestyleRatingBar({
@@ -67,6 +52,7 @@ export function FreestyleRatingBar({
   hintMode = false,
   onRatingScopeChange,
   onRate,
+  onRemoveFromQueue,
   onDismissError,
 }: {
   ratingEffects: UnitRatingEffectDto[]
@@ -91,29 +77,61 @@ export function FreestyleRatingBar({
   hintMode?: boolean
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   onRate: (rating: UnitRating) => void
+  /**
+   * Drop this card from the current round only. First press arms it; the second
+   * press calls this. No schedule write.
+   */
+  onRemoveFromQueue?: () => void
   onDismissError?: () => void
 }) {
   // Confirmed fill only. In-flight uses 正在记录 so a failed POST cannot look like
   // a kept score, and a late response cannot light the wrong button.
-  const shownRating = selectedRating ?? recordedRating
-  const showingRecorded = pendingRating == null && selectedRating == null && recordedRating != null
+  const [removeArmed, setRemoveArmed] = useState(false)
+  const removeArmedRef = useRef(false)
+  const disarmRemove = useCallback(() => {
+    removeArmedRef.current = false
+    setRemoveArmed(false)
+  }, [])
+  const requestRemove = useCallback(() => {
+    if (!onRemoveFromQueue || busy) return
+    if (!removeArmedRef.current) {
+      removeArmedRef.current = true
+      setRemoveArmed(true)
+      return
+    }
+    disarmRemove()
+    onRemoveFromQueue()
+  }, [busy, disarmRemove, onRemoveFromQueue])
+  const shownRating = removeArmed ? null : (selectedRating ?? recordedRating)
+  const showingRecorded = !removeArmed && pendingRating == null && selectedRating == null && recordedRating != null
   const selectedEffect = ratingEffects.find(
     (effect) => effect.rating === (pendingRating ?? shownRating),
   )
   const palaceMode = ratingScope === 'palace'
 
   useEffect(() => {
-    if (!shortcutsActive || locked || busy) return
+    if (pendingRating != null) disarmRemove()
+  }, [disarmRemove, pendingRating])
+
+  useEffect(() => {
+    if (!shortcutsActive || busy) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
+      if (onRemoveFromQueue && isFreestyleRemoveFromQueueShortcut(event.key)) {
+        event.preventDefault()
+        requestRemove()
+        return
+      }
+      if (locked) return
       const rating = getFreestyleRatingShortcut(event.key)
       if (rating == null) return
       event.preventDefault()
+      disarmRemove()
       onRate(rating)
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [busy, locked, onRate, shortcutsActive])
+  }, [busy, disarmRemove, locked, onRate, onRemoveFromQueue, requestRemove, shortcutsActive])
 
   return (
     <footer
@@ -124,10 +142,11 @@ export function FreestyleRatingBar({
         'pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:p-2.5 sm:pb-2.5',
       )}
     >
-      <div className="pointer-events-auto rounded-[1.2rem] border border-white/12 bg-zinc-950/88 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-md sm:rounded-2xl sm:p-2">
+      <div className="freestyle-rating-dock pointer-events-auto relative rounded-[1.35rem] border border-stage-line-strong p-1.5 sm:rounded-[1.4rem] sm:p-2">
+        <FreestyleComboChip />
         {actionError ? (
           <div
-            className="mb-1.5 whitespace-pre-wrap rounded-lg border border-rose-300/25 bg-rose-400/10 px-2.5 py-1.5 text-[11px] text-rose-100"
+            className="mb-1.5 whitespace-pre-wrap rounded-lg border border-rate-again/30 bg-rate-again/12 px-2.5 py-1.5 text-[11px] text-stage-ink"
             role="alert"
           >
             <div>{actionError}</div>
@@ -147,13 +166,20 @@ export function FreestyleRatingBar({
             </div>
           </div>
         ) : null}
-        {selectedEffect ? (
+        {removeArmed ? (
           <div
             data-testid="freestyle-rating-effect-line"
-            className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-zinc-100 sm:text-xs"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
+          >
+            <span className="min-w-0 truncate">再点确认移除 · 不改复习进度</span>
+          </div>
+        ) : selectedEffect ? (
+          <div
+            data-testid="freestyle-rating-effect-line"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
           >
             {pendingRating != null ? (
-              <LoaderCircle className="size-3 shrink-0 animate-spin text-zinc-300" aria-hidden />
+              <LoaderCircle className="size-3 shrink-0 animate-spin text-stage-glow" aria-hidden />
             ) : null}
             <span className="min-w-0 truncate">
               {pendingRating != null
@@ -163,11 +189,11 @@ export function FreestyleRatingBar({
                   : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
             </span>
             {locked && pendingRating == null ? (
-              <span className="shrink-0 text-zinc-500">已锁定</span>
+              <span className="shrink-0 text-stage-faint">已锁定</span>
             ) : showingRecorded ? (
-              <span className="shrink-0 text-zinc-500">上次评分</span>
+              <span className="shrink-0 text-stage-faint">上次评分</span>
             ) : pendingRating == null && shownRating != null ? (
-              <span className="shrink-0 text-zinc-500">再点取消</span>
+              <span className="shrink-0 text-stage-faint">再点取消</span>
             ) : null}
           </div>
         ) : null}
@@ -176,7 +202,7 @@ export function FreestyleRatingBar({
             data-testid="freestyle-sequential-hint"
             /* The gate explanation is two clauses ("还有 N 个单元未评分" + what 忘记/困难 do);
                truncating it at phone width cut the half that says why. */
-            className="mb-1.5 line-clamp-2 rounded-lg border border-amber-300/25 bg-amber-300/8 px-2.5 py-1 text-[11px] leading-snug text-amber-100"
+            className="mb-1.5 line-clamp-2 rounded-lg border border-rate-hard/30 bg-rate-hard/10 px-2.5 py-1 text-[11px] leading-snug text-stage-ink"
           >
             {blockedHint}
           </div>
@@ -184,7 +210,7 @@ export function FreestyleRatingBar({
         {onRatingScopeChange ? (
           <div
             data-testid="freestyle-rating-scope"
-            className="mb-1.5 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.06] p-0.5"
+            className="mb-1.5 grid grid-cols-2 gap-1 rounded-xl bg-stage-line p-0.5"
             role="tablist"
             aria-label="评分范围"
           >
@@ -204,8 +230,8 @@ export function FreestyleRatingBar({
                   className={cn(
                     'rounded-[0.7rem] px-2 py-1 text-[11px] font-semibold transition-colors sm:text-xs',
                     selected
-                      ? 'bg-white/16 text-zinc-50 shadow-sm'
-                      : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200',
+                      ? 'bg-stage-raised text-stage-glow shadow-sm'
+                      : 'text-stage-muted hover:bg-stage-line hover:text-stage-ink',
                   )}
                   onClick={() => onRatingScopeChange(item.value)}
                 >
@@ -215,7 +241,33 @@ export function FreestyleRatingBar({
             })}
           </div>
         ) : null}
-        <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
+        <div className={cn('grid gap-1 sm:gap-1.5', onRemoveFromQueue ? 'grid-cols-5' : 'grid-cols-4')}>
+          {onRemoveFromQueue ? (
+            <button
+              data-testid="freestyle-rating-button-remove"
+              type="button"
+              disabled={busy}
+              aria-pressed={removeArmed}
+              aria-label={
+                removeArmed
+                  ? '移除本队列：不改复习进度。再点确认移除'
+                  : '移除本队列：不改复习进度'
+              }
+              title={removeArmed ? '再点确认移除，不改复习进度' : '从本轮队列移除，不改复习进度'}
+              data-tone="neutral"
+              data-selected={removeArmed ? 'true' : undefined}
+              className={cn(
+                'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-1',
+                removeArmed && 'disabled:opacity-100',
+              )}
+              onClick={requestRemove}
+            >
+              <span className="max-w-full text-[10px] font-semibold leading-tight sm:text-xs">移除本队列</span>
+              <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
+                {removeArmed ? '再点确认' : '不改进度'}
+              </span>
+            </button>
+          ) : null}
           {FREESTYLE_RATINGS.map((item) => {
             const effect = ratingEffects.find((value) => value.rating === item.value)
             const palaceKind = effect
@@ -258,17 +310,18 @@ export function FreestyleRatingBar({
                       : `${item.label}：${hint}`
                 }
                 title={actionError || hint}
+                data-tone={item.tone}
+                data-selected={selected ? 'true' : undefined}
                 className={cn(
-                  // transition-[colors,transform] + scale-95: the old transition-colors
-                  // never animated the active scale, so a tap had no felt response.
-                  'relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center transition-[color,background-color,border-color,transform,box-shadow] duration-150 active:scale-95 disabled:pointer-events-none sm:min-h-12 sm:rounded-2xl sm:px-2',
-                  item.className,
-                  selected && item.selectedClassName,
+                  'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center disabled:pointer-events-none sm:min-h-12 sm:rounded-2xl sm:px-2',
                   // Keep the chosen button legible: the shared 55% dim made the
                   // learner's own selection the faintest thing on the bar.
                   selected ? 'disabled:opacity-100' : 'disabled:opacity-55',
                 )}
-                onClick={() => onRate(item.value)}
+                onClick={() => {
+                  disarmRemove()
+                  onRate(item.value)
+                }}
               >
                 {pending ? (
                   <LoaderCircle
@@ -277,7 +330,10 @@ export function FreestyleRatingBar({
                     aria-hidden
                   />
                 ) : null}
-                <span className="text-xs font-semibold leading-none sm:text-sm">{item.label}</span>
+                <span className="freestyle-rate-label inline-flex items-center gap-1 text-xs font-semibold leading-none sm:text-sm">
+                  <span className="freestyle-rate-pip" aria-hidden />
+                  {item.label}
+                </span>
                 {/* Touch has no hover: the schedule consequence must be readable pre-tap. */}
                 {preview ? (
                   <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">

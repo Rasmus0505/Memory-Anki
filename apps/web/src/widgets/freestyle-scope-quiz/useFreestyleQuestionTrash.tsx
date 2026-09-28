@@ -15,6 +15,11 @@ import type {
 import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
 import { toast } from '@/shared/feedback/toast'
 
+function isAlreadyDeletedQuizQuestionError(error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  return message.includes('题目不存在')
+}
+
 export interface FreestyleQuestionTrashOptions {
   current: PalaceQuizQuestion | null
   questions: PalaceQuizQuestion[]
@@ -34,6 +39,7 @@ export interface FreestyleQuestionTrashOptions {
   storedConfigRef: RefObject<FreestyleFeedConfig>
   onRoundSync: (round: FreestyleRoundStatePayload) => void
   setOverlay: Dispatch<SetStateAction<FreestyleOverlayQuizState | null>>
+  removedQuestionIdsRef: RefObject<Set<number>>
 }
 
 export function useFreestyleQuestionTrash({
@@ -52,6 +58,7 @@ export function useFreestyleQuestionTrash({
   storedConfigRef,
   onRoundSync,
   setOverlay,
+  removedQuestionIdsRef,
 }: FreestyleQuestionTrashOptions) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
@@ -84,6 +91,8 @@ export function useFreestyleQuestionTrash({
       if (next) setOverlay(next)
     } catch (error) {
       // Local list is already correct; next open re-ensures and self-heals.
+      // A missing-question error is the delete itself, not a failed sync.
+      if (isAlreadyDeletedQuizQuestionError(error)) return
       toast.error(error instanceof Error ? error.message : '同步做题会话失败。')
     }
   }, [onRoundSync, planVersionRef, roundIdRef, setOverlay, storedConfigRef])
@@ -91,23 +100,36 @@ export function useFreestyleQuestionTrash({
   const handleDeleteCurrent = useCallback(async () => {
     if (!current) return
     const removedId = current.id
-    try {
-      await deletePalaceQuizQuestionApi(removedId)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败。')
-      return
-    }
-    const nextQuestions = questions.filter((item) => item.id !== removedId)
-    const nextStates = { ...questionStates }
+    if (removedQuestionIdsRef.current?.has(removedId)) return
+    const snapshotQuestions = questions
+    const snapshotStates = questionStates
+    const snapshotIndex = index
+    removedQuestionIdsRef.current?.add(removedId)
+    const nextQuestions = snapshotQuestions.filter((item) => item.id !== removedId)
+    const nextStates = { ...snapshotStates }
     delete nextStates[removedId]
     const nextIndex = nextQuestions.length > 0
-      ? Math.min(index, nextQuestions.length - 1)
+      ? Math.min(snapshotIndex, nextQuestions.length - 1)
       : 0
     setQuestions(nextQuestions)
     setQuestionStates(nextStates)
     questionStatesRef.current = nextStates
     setIndex(nextIndex)
     indexRef.current = nextIndex
+    try {
+      await deletePalaceQuizQuestionApi(removedId)
+    } catch (error) {
+      if (!isAlreadyDeletedQuizQuestionError(error)) {
+        removedQuestionIdsRef.current?.delete(removedId)
+        setQuestions(snapshotQuestions)
+        setQuestionStates(snapshotStates)
+        questionStatesRef.current = snapshotStates
+        setIndex(snapshotIndex)
+        indexRef.current = snapshotIndex
+        toast.error(error instanceof Error ? error.message : '删除失败。')
+        return
+      }
+    }
     writeQuizSessionState(removedId, {})
     persistProgress(nextIndex, nextStates)
     toast.success('题目已移入回收站。')
@@ -120,6 +142,7 @@ export function useFreestyleQuestionTrash({
     questionStates,
     questionStatesRef,
     questions,
+    removedQuestionIdsRef,
     setIndex,
     setQuestionStates,
     setQuestions,

@@ -1,12 +1,5 @@
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 
-export interface FreestyleAnkiFlipLiveState {
-  cardId: string
-  flipped: boolean
-  revealedBacks: string[]
-  focusUid: string | null
-}
-
 export interface FreestyleLiveRatingSettle {
   cardId: string
   rating: number
@@ -28,7 +21,6 @@ export interface FreestyleLiveView {
   currentCardId: string | null
   currentIndex: number
   queueCardIds: string[]
-  flip: FreestyleAnkiFlipLiveState | null
   questionState: { questionId: number; state: QuizRuntimeState } | null
   revealMap: Record<string, string> | null
   roundComplete: boolean
@@ -49,7 +41,6 @@ export function decodeFreestyleLiveView(raw: unknown): FreestyleLiveView | null 
   const queueCardIds = Array.isArray(record.queueCardIds)
     ? record.queueCardIds.filter((id): id is string => typeof id === 'string')
     : []
-  const flipRaw = record.flip && typeof record.flip === 'object' ? record.flip as Record<string, unknown> : null
   const questionRaw = record.questionState && typeof record.questionState === 'object'
     ? record.questionState as Record<string, unknown>
     : null
@@ -61,16 +52,6 @@ export function decodeFreestyleLiveView(raw: unknown): FreestyleLiveView | null 
     currentCardId,
     currentIndex,
     queueCardIds,
-    flip: flipRaw && typeof flipRaw.cardId === 'string'
-      ? {
-          cardId: flipRaw.cardId,
-          flipped: flipRaw.flipped === true,
-          revealedBacks: Array.isArray(flipRaw.revealedBacks)
-            ? flipRaw.revealedBacks.filter((id): id is string => typeof id === 'string')
-            : [],
-          focusUid: typeof flipRaw.focusUid === 'string' ? flipRaw.focusUid : null,
-        }
-      : null,
     questionState: questionRaw && typeof questionRaw.questionId === 'number'
       ? {
           questionId: questionRaw.questionId,

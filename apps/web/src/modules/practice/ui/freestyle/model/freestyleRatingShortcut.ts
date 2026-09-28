@@ -23,3 +23,8 @@ export function getFreestyleRatingShortcut(key: string): FreestyleRatingShortcut
       return null
   }
 }
+
+/** Queue removal is not a memory rating. 5 arms it, then confirms. */
+export function isFreestyleRemoveFromQueueShortcut(key: string) {
+  return key === '5'
+}

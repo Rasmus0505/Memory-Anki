@@ -20,9 +20,8 @@ function review(id: string): FreestyleCard {
 function path(id: string): FreestyleCard {
   return {
     id,
-    type: 'anki_card',
-    content_type: 'anki_card',
-    presentation: 'anki',
+    type: 'mindmap_branch',
+    content_type: 'mindmap_branch',
     palace_id: 1,
   } as FreestyleCard
 }

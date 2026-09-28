@@ -38,8 +38,8 @@ export function FreestyleChannelHint({
         className={cn(
           'pointer-events-auto flex max-w-[min(26rem,100%)] items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] shadow-lg backdrop-blur-md sm:text-xs',
           state === 'anxious'
-            ? 'border-sky-300/25 bg-sky-950/85 text-sky-100'
-            : 'border-amber-300/25 bg-amber-950/85 text-amber-100',
+            ? 'border-rate-easy/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_hsl(190_60%_40%/0.5)]'
+            : 'border-stage-glow/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_hsl(32_94%_50%/0.55)]',
         )}
       >
         <span className="min-w-0 truncate">{hint}</span>
@@ -51,8 +51,8 @@ export function FreestyleChannelHint({
           className={cn(
             'shrink-0 rounded-full px-2.5 py-1 font-medium transition-colors disabled:opacity-50',
             state === 'anxious'
-              ? 'bg-sky-300/20 hover:bg-sky-300/30 active:bg-sky-300/40'
-              : 'bg-amber-300/20 hover:bg-amber-300/30 active:bg-amber-300/40',
+              ? 'bg-rate-easy/20 hover:bg-rate-easy/30 active:bg-rate-easy/40'
+              : 'bg-stage-glow/20 hover:bg-stage-glow/30 active:bg-stage-glow/40',
           )}
           onClick={onApply}
         >

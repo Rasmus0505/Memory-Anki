@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { getFreestyleRatingShortcut } from './freestyleRatingShortcut'
+import {
+  getFreestyleRatingShortcut,
+  isFreestyleRemoveFromQueueShortcut,
+} from './freestyleRatingShortcut'
 
 describe('getFreestyleRatingShortcut', () => {
   it('maps 1-4 to the four unit ratings', () => {
@@ -13,5 +16,10 @@ describe('getFreestyleRatingShortcut', () => {
     for (const key of ['0', '5', 'a', 'Enter', ' ', 'ArrowDown', '']) {
       expect(getFreestyleRatingShortcut(key)).toBeNull()
     }
+  })
+
+  it('reserves 5 for removing the current card from this round', () => {
+    expect(isFreestyleRemoveFromQueueShortcut('5')).toBe(true)
+    expect(isFreestyleRemoveFromQueueShortcut('1')).toBe(false)
   })
 })

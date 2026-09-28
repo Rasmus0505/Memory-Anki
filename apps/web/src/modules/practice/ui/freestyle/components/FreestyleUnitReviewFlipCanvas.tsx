@@ -34,7 +34,7 @@ export function FreestyleUnitReviewStatusBanner({
           isError ? 'pointer-events-auto' : 'pointer-events-none'
         }`}
       >
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300/80 bg-white/95 px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur-sm dark:border-white/20 dark:bg-zinc-900/92 dark:text-zinc-100">
+        <span className="inline-flex items-center gap-1.5 fs-rise rounded-full border border-paper-line bg-paper-card px-3 py-1.5 text-xs font-medium text-paper-ink-soft shadow-lift">
           {isSaving ? (
             <>
               <LoaderCircle className="size-3.5 animate-spin" />
@@ -42,12 +42,12 @@ export function FreestyleUnitReviewStatusBanner({
             </>
           ) : isError ? (
             <>
-              <CircleAlert className="size-3.5 text-rose-600 dark:text-rose-300" />
+              <CircleAlert className="size-3.5 text-[hsl(8_70%_52%)]" />
               保存失败
               <button
                 type="button"
                 onClick={onRetry}
-                className="ml-1 inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-400/40 dark:bg-rose-950/70 dark:text-rose-200"
+                className="ml-1 inline-flex items-center gap-1 ma-pressable rounded-full border border-[hsl(8_70%_52%/0.3)] bg-[hsl(8_80%_96%)] px-2 py-0.5 text-[11px] font-semibold text-[hsl(8_70%_42%)] hover:bg-[hsl(8_80%_92%)]"
               >
                 <RotateCcw className="size-3" />
                 重试
@@ -55,7 +55,7 @@ export function FreestyleUnitReviewStatusBanner({
             </>
           ) : (
             <>
-              <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-300" />
+              <CheckCircle2 className="size-3.5 text-[hsl(104_46%_38%)]" />
               已保存
             </>
           )}
@@ -70,7 +70,7 @@ export function FreestyleUnitReviewStatusBanner({
       role="status"
       className="pointer-events-none absolute inset-x-0 bottom-20 z-30 flex justify-center sm:bottom-16"
     >
-      <span className="max-w-[min(20rem,90%)] truncate rounded-full border border-black/8 bg-white/92 px-3 py-1 text-[11px] font-medium text-zinc-700 shadow-sm backdrop-blur-sm">
+      <span className="max-w-[min(20rem,90%)] truncate rounded-full border border-paper-line bg-paper-card/95 px-3 py-1 text-[11px] font-medium text-paper-ink-soft shadow-soft">
         {quietStatus}
       </span>
     </div>
@@ -87,6 +87,7 @@ export function FreestyleUnitReviewFlipDialogs({
   questionStates,
   updateQuestionState,
   markQuestionCompleted,
+  onQuestionDeleted,
   reviewUnitsPanelOpen,
   setReviewUnitsPanelOpen,
   lastUndoToken,
@@ -102,6 +103,7 @@ export function FreestyleUnitReviewFlipDialogs({
   questionStates: Record<number, QuizRuntimeState>
   updateQuestionState: (questionId: number, next: QuizRuntimeState) => void
   markQuestionCompleted: (questionId: number) => void
+  onQuestionDeleted?: (questionId: number) => void
   reviewUnitsPanelOpen: boolean
   setReviewUnitsPanelOpen: (open: boolean) => void
   lastUndoToken: string | null
@@ -120,6 +122,7 @@ export function FreestyleUnitReviewFlipDialogs({
         initialQuestionStates={questionStates}
         onQuestionStateChange={updateQuestionState}
         onQuestionCompleted={markQuestionCompleted}
+        onQuestionDeleted={onQuestionDeleted}
       />
       <PalaceReviewUnitsPanel
         open={reviewUnitsPanelOpen}

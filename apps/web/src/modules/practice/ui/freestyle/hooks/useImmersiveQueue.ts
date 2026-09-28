@@ -8,11 +8,9 @@ import {
   getOrCreateFreestyleRoundApi,
   startFreestyleRoundApi,
 } from '@/modules/practice/ui/freestyle/api'
+import { coalesceHydrationLedger, commitHydratedRoundLedger } from '@/modules/practice/domain/hydrateRoundLedger'
 import {
-  applyServerCohorts,
-  applyServerRatingsToRoundPlan,
   cardsForServerPlan,
-  mergeServerPlanIntoLocalEncounters,
   nextUnfinishedCardId,
   planCardCohort,
   resolveResumePreferCardId,
@@ -25,6 +23,8 @@ import {
   clearMutedPalaces,
   createRoundPlan,
   createOperationId,
+  excludeRoundPlanCards,
+  mergeRetainedHiddenIds,
   filterMutedPalaces,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   markCompleted,
@@ -148,7 +148,7 @@ function queueBuildDiagnostic(input: {
     `触发原因: ${input.reason}`,
     `耗时: ${input.elapsedMs}ms`,
     `宫殿筛选: ${selectedPalaces}`,
-    `内容: 宫殿=${input.config.content.mindmap_branch}，正反面=${input.config.content.anki_card}，题目=${input.config.content.quiz_question}`,
+    `内容: 宫殿=${input.config.content.mindmap_branch}，题目=${input.config.content.quiz_question}`,
     `目标队列长度: ${input.config.queue_length}`,
     requestError?.requestId ? `请求 ID: ${requestError.requestId}` : null,
     requestError?.status != null ? `HTTP 状态: ${requestError.status}` : null,
@@ -174,6 +174,12 @@ function waitForQueueBuildRetry(signal: AbortSignal) {
     }, QUEUE_BUILD_RETRY_DELAY_MS)
     signal.addEventListener('abort', handleAbort, { once: true })
   })
+}
+
+function cardsWithoutHidden(cards: FreestyleCard[], hiddenIds: readonly string[]) {
+  if (!hiddenIds.length) return cards
+  const hidden = new Set(hiddenIds.map((id) => String(id)))
+  return cards.filter((card) => !hidden.has(String(card.id)))
 }
 
 async function buildQueueWithTimeout(
@@ -328,10 +334,27 @@ export function useImmersiveQueue(
   const [staleCircuitOpen, setStaleCircuitOpen] = useState(false)
   const [staleRecoveryCardId, setStaleRecoveryCardId] = useState<string | null>(null)
   const serverPlanVersionRef = useRef(0)
+  /** Restores in flight. A stale server exclude list must not hide these again. */
+  const pendingReleaseIdsRef = useRef(new Set<string>())
   const [planVersion, setPlanVersion] = useState(0)
   const [queueFrozen, setQueueFrozen] = useState(false)
-  cardsRef.current = cards
-  queueStateRef.current = queueState
+  // Adopt React state only when the ref still points at the previous render.
+  // persistQueueState / setCards update the ref first; a render that still
+  // holds the older snapshot must not roll a confirmed 移除队列 back.
+  const renderedQueueStateRef = useRef(queueState)
+  const renderedCardsRef = useRef(cards)
+  if (renderedQueueStateRef.current !== queueState) {
+    if (queueStateRef.current === renderedQueueStateRef.current) {
+      queueStateRef.current = queueState
+    }
+    renderedQueueStateRef.current = queueState
+  }
+  if (renderedCardsRef.current !== cards) {
+    if (cardsRef.current === renderedCardsRef.current) {
+      cardsRef.current = cards
+    }
+    renderedCardsRef.current = cards
+  }
   configRef.current = config
   currentIndexRef.current = currentIndex
 
@@ -505,6 +528,11 @@ export function useImmersiveQueue(
          * id is only a retry glance that still needs leave-time reposition.
          */
         restudyCardId?: string | null
+        /**
+         * Ids just confirmed as 移除队列. Hydration stamps them excluded even
+         * when a stale snapshot has already dropped the plan mark.
+         */
+        forceExcludedIds?: readonly string[]
         /** Force replan_remaining on the current round (重建本轮). */
         replan?: boolean
         /**
@@ -557,6 +585,14 @@ export function useImmersiveQueue(
           (options?.preserveCompleted === false
             ? []
             : queueStateRef.current.hiddenIds)
+        // Taken before the await. A later render must not replace this with a
+        // pre-removal snapshot, and a wiped draft plan must not replace it either.
+        const capturedLedger = {
+          plan: queueStateRef.current.roundPlan,
+          completedIds: [...queueStateRef.current.completedIds],
+          hiddenIds: [...queueStateRef.current.hiddenIds],
+          encounters: queueStateRef.current.unitEncountersByCardId,
+        }
         const response = await buildQueueWithTimeout(
           {
             operation_id: operationId,
@@ -684,20 +720,9 @@ export function useImmersiveQueue(
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
         }
         const builtCards = nextCards
-        const nextPlan = createRoundPlan(
-          queueStateRef.current.roundId,
-          builtCards,
-          nextConfig,
-          incomingMeta,
-          queueStateRef.current.roundPlan,
-        )
-        nextCards = applyRoundPlanOrder(builtCards, nextPlan)
-        const plannedState = {
-          ...queueStateRef.current,
-          palaceScopeSignature: scopeSignature,
-          roundPlan: nextPlan,
-        }
-        persistQueueState(plannedState)
+        // Do not persist this ordering plan. A mismatched round id would publish
+        // an all-pending ledger, and the post-await retain would treat those scores as cancelled.
+        nextCards = applyRoundPlanOrder(builtCards, queueStateRef.current.roundPlan)
         if (silent) setQueueFrozen(true)
         let serverCurrentId: string | null = null
         let draftResumeCardId: string | null = queueStateRef.current.currentCardId
@@ -729,36 +754,11 @@ export function useImmersiveQueue(
           serverPlanVersionRef.current = version
           setPlanVersion(version)
           const adoptedRoundId = round.round_id || queueStateRef.current.roundId
-          if (adoptedRoundId && adoptedRoundId !== queueStateRef.current.roundId) {
-            persistQueueState({ ...queueStateRef.current, roundId: adoptedRoundId })
-          }
           nextCards = cardsForServerPlan(builtCards, round.plan, adoptedRoundId)
           incomingMeta.scheduled_count = nextCards.length
-          const serverCompleted = Array.isArray(round.plan?.completed_ids)
-            ? round.plan.completed_ids.map(String)
-            : queueStateRef.current.completedIds
-          const serverHidden = Array.isArray(round.plan?.excluded_ids)
-            ? round.plan.excluded_ids.map(String)
-            : queueStateRef.current.hiddenIds
           serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
           // Capture the pre-hydrate draft cursor before server fields overwrite it.
           draftResumeCardId = queueStateRef.current.currentCardId
-          const hydratedPlan = applyServerRatingsToRoundPlan(
-            applyServerCohorts(
-              syncCompletedIdsToRoundPlan(
-                createRoundPlan(
-                  adoptedRoundId,
-                  nextCards,
-                  nextConfig,
-                  incomingMeta,
-                  queueStateRef.current.roundPlan,
-                ),
-                serverCompleted,
-              ),
-              round.plan,
-            ),
-            round.plan,
-          )
           const resumeCardId = resolveResumePreferCardId({
             preferCardId: options?.preferCardId,
             silent,
@@ -767,26 +767,53 @@ export function useImmersiveQueue(
             userCardId,
             nextCards,
           })
+          // After the await: a cancel that already cleared lastRating must not be restored.
+          // A stale render or a wiped draft must not drop the removal or the other scores.
+          const releasedIds = [...pendingReleaseIdsRef.current]
+          const localLedger = coalesceHydrationLedger(
+            capturedLedger,
+            {
+              plan: queueStateRef.current.roundPlan,
+              completedIds: queueStateRef.current.completedIds,
+              hiddenIds: queueStateRef.current.hiddenIds,
+              encounters: queueStateRef.current.unitEncountersByCardId,
+            },
+            releasedIds,
+          )
+          const retained = commitHydratedRoundLedger({
+            localPlan: localLedger.plan,
+            localCompletedIds: localLedger.completedIds,
+            localHiddenIds: localLedger.hiddenIds,
+            localEncounters: localLedger.encounters,
+            releasedIds,
+            adoptedRoundId,
+            cards: nextCards,
+            config: nextConfig,
+            meta: incomingMeta,
+            serverPlan: round.plan,
+            forceExcludedIds: options?.forceExcludedIds,
+          })
           persistQueueState({
             ...queueStateRef.current,
             roundId: adoptedRoundId,
-            completedIds: serverCompleted,
-            hiddenIds: serverHidden,
+            completedIds: retained.completedIds,
+            hiddenIds: retained.hiddenIds,
             currentCardId: resumeCardId ?? serverCurrentId ?? draftResumeCardId,
-            unitEncountersByCardId: mergeServerPlanIntoLocalEncounters(
-              queueStateRef.current.unitEncountersByCardId,
-              round.plan,
-              adoptedRoundId,
-            ),
-            roundPlan: hydratedPlan,
+            unitEncountersByCardId: retained.encounters,
+            roundPlan: retained.plan,
           })
           notifyPeerRound()
-        } catch {
+        } catch (err) {
+          if (operationIdRef.current !== operationId) return
+          if (err instanceof Error && err.name === 'AbortError') return
           // Offline draft keeps the local plan until the server is reachable.
         }
         // Plan hydration is done — only now the presented feed may carry the
         // yellow boundary hint (kept out of every server round-plan write).
-        nextCards = insertReviewHintCards(nextCards)
+        nextCards = cardsWithoutHidden(
+          insertReviewHintCards(nextCards),
+          queueStateRef.current.hiddenIds,
+        )
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
         // Cold start prefers the local draft cursor when it still exists in-feed.
@@ -1522,12 +1549,15 @@ export function useImmersiveQueue(
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       notifyPeerRound()
-      const confirmed = insertReviewHintCards(
-        cardsForServerPlan(
-          cardsRef.current,
-          round.plan,
-          round.round_id || roundId,
+      const confirmed = cardsWithoutHidden(
+        insertReviewHintCards(
+          cardsForServerPlan(
+            cardsRef.current,
+            round.plan,
+            round.round_id || roundId,
+          ),
         ),
+        queueStateRef.current.hiddenIds,
       )
       const liveId = resolveLeaveConfirmViewportId({
         leavingCardId: leftId,
@@ -1684,7 +1714,7 @@ export function useImmersiveQueue(
     const card = cardsRef.current[currentIndexRef.current]
     if (!card) return
     const palaceId =
-      card.type === 'mindmap_branch' || card.type === 'anki_card'
+      card.type === 'mindmap_branch'
         ? card.palace_id
         : card.type === 'quiz_question'
           ? card.palace_context?.id
@@ -1723,29 +1753,73 @@ export function useImmersiveQueue(
   const excludePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
-    let nextPlan: FreestyleRoundPlanState | null = queueStateRef.current.roundPlan
-    ids.forEach((id) => {
-      if (nextPlan) nextPlan = updateRoundPlanCard(nextPlan, id, { status: 'excluded' })
-    })
-    const nextState = hideCards({ ...queueStateRef.current, roundPlan: nextPlan }, ids)
+    ids.forEach((id) => pendingReleaseIdsRef.current.delete(id))
+    const previousPlan = queueStateRef.current.roundPlan
+    const nextPlan = excludeRoundPlanCards(previousPlan, ids, cardsRef.current)
+    const excludedIds = new Set(ids)
+    if (nextPlan) {
+      for (const [id, card] of Object.entries(nextPlan.cardsById)) {
+        if (card.status === 'excluded' && previousPlan?.cardsById[id]?.status !== 'excluded') {
+          excludedIds.add(id)
+        }
+      }
+    }
+    const nextState = hideCards(
+      { ...queueStateRef.current, roundPlan: nextPlan },
+      [...excludedIds],
+    )
     persistQueueState(nextState)
-    const filtered = cardsRef.current.filter((card) => !ids.includes(card.id))
+    const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
+    const filtered = cardsRef.current.filter((card) => !nextState.hiddenIds.includes(card.id))
     cardsRef.current = filtered
     setCards(filtered)
-    applyCurrentIndex(Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)), filtered)
+    const landedId = viewingId && !nextState.hiddenIds.includes(viewingId)
+      ? viewingId
+      : filtered[Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1))]?.id
+    const landedIndex = landedId ? filtered.findIndex((card) => card.id === landedId) : -1
+    applyCurrentIndex(landedIndex >= 0 ? landedIndex : 0, filtered)
     const roundId = nextState.roundId
     void (async () => {
+      let echoedExcluded: string[] | null = null
       for (const cardId of ids) {
-        const round = await applyFreestyleRoundActionApi(roundId, {
-          operation_id: createOperationId(),
-          expected_version: serverPlanVersionRef.current,
-          action: 'exclude',
-          card_id: cardId,
-        })
-        if (queueStateRef.current.roundId !== roundId) return
-        serverPlanVersionRef.current = serverPlanVersion(round)
-        setPlanVersion(serverPlanVersion(round))
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const round = await applyFreestyleRoundActionApi(roundId, {
+            operation_id: createOperationId(),
+            expected_version: serverPlanVersionRef.current,
+            action: 'exclude',
+            card_id: cardId,
+          })
+          if (queueStateRef.current.roundId !== roundId) return
+          const version = serverPlanVersion(round)
+          if (version > 0) {
+            serverPlanVersionRef.current = version
+            setPlanVersion(version)
+          }
+          if (Array.isArray(round.plan?.excluded_ids)) {
+            echoedExcluded = round.plan.excluded_ids.map(String)
+          }
+          if (!round.conflict) break
+        }
       }
+      if (queueStateRef.current.roundId !== roundId) return
+      const current = queueStateRef.current
+      const stamped = excludeRoundPlanCards(current.roundPlan, ids, cardsRef.current)
+      const hiddenIds = mergeRetainedHiddenIds(
+        current.hiddenIds,
+        stamped,
+        echoedExcluded,
+        [...pendingReleaseIdsRef.current],
+      )
+      persistQueueState({ ...queueStateRef.current, roundPlan: stamped, hiddenIds })
+      const stillViewing = cardsRef.current[currentIndexRef.current]?.id ?? null
+      const kept = cardsWithoutHidden(cardsRef.current, hiddenIds)
+      cardsRef.current = kept
+      setCards(kept)
+      const nextView = stillViewing && !hiddenIds.includes(stillViewing)
+        ? stillViewing
+        : kept[Math.min(currentIndexRef.current, Math.max(0, kept.length - 1))]?.id
+      const nextIndex = nextView ? kept.findIndex((card) => card.id === nextView) : -1
+      if (nextIndex >= 0) applyCurrentIndex(nextIndex, kept)
       notifyPeerRound()
     })().catch(() => {
       // Local exclude remains the offline draft.
@@ -1755,14 +1829,16 @@ export function useImmersiveQueue(
       hiddenIds: nextState.hiddenIds,
       completedIds: nextState.completedIds,
       silent: true,
-      preferCardId: filtered[currentIndexRef.current]?.id ?? null,
+      preferCardId: filtered[landedIndex >= 0 ? landedIndex : 0]?.id ?? null,
       reason: 'plan_exclude',
+      forceExcludedIds: [...excludedIds],
     })
   }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState])
 
   const restorePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
+    ids.forEach((id) => pendingReleaseIdsRef.current.add(id))
     let nextPlan: FreestyleRoundPlanState | null = queueStateRef.current.roundPlan
     ids.forEach((id) => {
       if (nextPlan) nextPlan = updateRoundPlanCard(nextPlan, id, { status: 'pending' })
@@ -1772,15 +1848,24 @@ export function useImmersiveQueue(
     const roundId = nextState.roundId
     void (async () => {
       for (const cardId of ids) {
-        const round = await applyFreestyleRoundActionApi(roundId, {
-          operation_id: createOperationId(),
-          expected_version: serverPlanVersionRef.current,
-          action: 'restore',
-          card_id: cardId,
-        })
-        if (queueStateRef.current.roundId !== roundId) return
-        serverPlanVersionRef.current = serverPlanVersion(round)
-        setPlanVersion(serverPlanVersion(round))
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const round = await applyFreestyleRoundActionApi(roundId, {
+            operation_id: createOperationId(),
+            expected_version: serverPlanVersionRef.current,
+            action: 'restore',
+            card_id: cardId,
+          })
+          if (queueStateRef.current.roundId !== roundId) return
+          const version = serverPlanVersion(round)
+          if (version > 0) {
+            serverPlanVersionRef.current = version
+            setPlanVersion(version)
+          }
+          if (!round.conflict) {
+            pendingReleaseIdsRef.current.delete(cardId)
+            break
+          }
+        }
       }
       notifyPeerRound()
     })().catch(() => {
@@ -1875,7 +1960,7 @@ export function useImmersiveQueue(
       throw new Error('这次随心配置里没有可清除做题进度的宫殿。')
     }
     const palaceSet = new Set(palaceIds)
-    let questionIds: number[] = []
+    let questionIds: number[]
     try {
       const current = await getFreestyleRoundApi(roundId)
       const map = current.plan?.overlay_quiz?.question_palace_ids || {}
@@ -1930,6 +2015,12 @@ export function useImmersiveQueue(
 
   const hydrateFromServerRound = useCallback(async (advanceIfCompleted: boolean) => {
     const roundId = queueStateRef.current.roundId
+    const capturedLedger = {
+      plan: queueStateRef.current.roundPlan,
+      completedIds: [...queueStateRef.current.completedIds],
+      hiddenIds: [...queueStateRef.current.hiddenIds],
+      encounters: queueStateRef.current.unitEncountersByCardId,
+    }
     try {
       let round = roundId ? await getFreestyleRoundApi(roundId).catch(() => null) : null
       if (!round?.plan && hasLoadedClientPreferences()) {
@@ -1953,51 +2044,49 @@ export function useImmersiveQueue(
         round.plan,
         adoptedRoundId,
       )
-      const nextCards = insertReviewHintCards(plannedCards)
-      const serverCompleted = Array.isArray(round.plan.completed_ids)
-        ? round.plan.completed_ids.map(String)
-        : queueStateRef.current.completedIds
-      const serverHidden = Array.isArray(round.plan.excluded_ids)
-        ? round.plan.excluded_ids.map(String)
-        : queueStateRef.current.hiddenIds
+      const releasedIds = [...pendingReleaseIdsRef.current]
+      const localLedger = coalesceHydrationLedger(
+        capturedLedger,
+        {
+          plan: queueStateRef.current.roundPlan,
+          completedIds: queueStateRef.current.completedIds,
+          hiddenIds: queueStateRef.current.hiddenIds,
+          encounters: queueStateRef.current.unitEncountersByCardId,
+        },
+        releasedIds,
+      )
+      const retained = commitHydratedRoundLedger({
+        localPlan: localLedger.plan,
+        localCompletedIds: localLedger.completedIds,
+        localHiddenIds: localLedger.hiddenIds,
+        localEncounters: localLedger.encounters,
+        releasedIds,
+        adoptedRoundId,
+        cards: plannedCards,
+        config: configRef.current,
+        meta: {
+          candidate_count: plannedCards.length,
+          scheduled_count: plannedCards.length,
+          queue_limit: configRef.current.queue_length,
+          limit_reached: false,
+          palace_leftover_due: {},
+        },
+        serverPlan: round.plan,
+      })
+      const nextCards = cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds)
       persistQueueState({
         ...queueStateRef.current,
         roundId: adoptedRoundId,
-        completedIds: serverCompleted,
-        hiddenIds: serverHidden,
-        unitEncountersByCardId: mergeServerPlanIntoLocalEncounters(
-          queueStateRef.current.unitEncountersByCardId,
-          round.plan,
-          adoptedRoundId,
-        ),
-        roundPlan: applyServerRatingsToRoundPlan(
-          applyServerCohorts(
-            syncCompletedIdsToRoundPlan(
-              createRoundPlan(
-                adoptedRoundId,
-                plannedCards,
-                configRef.current,
-                {
-                  candidate_count: plannedCards.length,
-                  scheduled_count: plannedCards.length,
-                  queue_limit: configRef.current.queue_length,
-                  limit_reached: false,
-                  palace_leftover_due: {},
-                },
-                queueStateRef.current.roundPlan,
-              ),
-              serverCompleted,
-            ),
-            round.plan,
-          ),
-          round.plan,
-        ),
+        completedIds: retained.completedIds,
+        hiddenIds: retained.hiddenIds,
+        unitEncountersByCardId: retained.encounters,
+        roundPlan: retained.plan,
       })
       const feedWasEmpty = cardsRef.current.length === 0
       cardsRef.current = nextCards
       setCards(nextCards)
       const currentId = nextCards[currentIndexRef.current]?.id
-      const handled = new Set([...serverCompleted, ...serverHidden])
+      const handled = new Set([...retained.completedIds, ...retained.hiddenIds])
       if (feedWasEmpty && nextCards.length > 0) {
         setLoading(false)
         const prefer = String(

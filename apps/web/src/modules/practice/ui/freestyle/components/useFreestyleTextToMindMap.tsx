@@ -103,13 +103,10 @@ export function useFreestyleTextToMindMap({
   })
 
   const drawer = (
-    <>
-      <FreestyleMindMapImportDrawer
-        mindMapImport={mindMapImport}
-        targetNodeLabel={selectedAppendNode?.text ?? ''}
-      />
-      {mindMapImport.aiRunConfigDialog}
-    </>
+    <FreestyleMindMapImportDrawer
+      mindMapImport={mindMapImport}
+      targetNodeLabel={selectedAppendNode?.text ?? ''}
+    />
   )
 
   return { onNodeActive, moreActions, drawer }

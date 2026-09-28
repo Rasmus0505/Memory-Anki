@@ -322,6 +322,7 @@ function renderCard(
     }
     onRatingSettled?: (cardId: string, passed: boolean, rating: number) => void
     onOpenScopeQuiz?: () => void
+    onRemoveFromQueue?: (cardId: string) => void
   } = {},
 ) {
   const callbacks = {
@@ -330,6 +331,7 @@ function renderCard(
     onBranchComplete: vi.fn(),
     onBatchCardsSettled: vi.fn(),
     onStaleDrop: vi.fn(),
+    onRemoveFromQueue: options.onRemoveFromQueue ?? vi.fn(),
     onRebuildRound: vi.fn(),
     onRevisionAdopted: vi.fn(),
     onSaveFailed: vi.fn(),
@@ -511,6 +513,22 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
   })
 
+  it('arms then removes this card from the round without posting a rating', async () => {
+    const card = buildCard('unit-remove-queue')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
+    const onRemoveFromQueue = vi.fn()
+    renderCard(card, { onRemoveFromQueue })
+
+    const button = await screen.findByTestId('freestyle-rating-button-remove')
+    fireEvent.click(button)
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    fireEvent.click(button)
+    expect(onRemoveFromQueue).toHaveBeenCalledWith(card.id)
+    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
+    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
+    expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
+  })
+
   it('keeps four disabled rating buttons visible while the session is loading', async () => {
     const card = buildCard('unit-loading-ratings')
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
@@ -624,7 +642,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(action?.opensOverlay).toBe(true)
     act(() => action?.onClick())
 
-    const dialog = await screen.findByRole('dialog', { name: '手动转脑图' })
+    const dialog = await screen.findByRole('dialog', { name: '文字转脑图' })
     expect(dialog.textContent).toContain('外部片段')
     expect((screen.getByLabelText('粘贴 JSON 或大纲文本') as HTMLTextAreaElement).value).toBe(clipboardJson)
     expect((screen.getByRole('button', { name: '追加到选中知识点' }) as HTMLButtonElement).disabled).toBe(true)
@@ -661,7 +679,7 @@ describe('FreestyleUnitReviewCardView', () => {
     }).moreActions?.find((item) => item.label === '文字转脑图')
     act(() => action?.onClick())
 
-    const dialog = await screen.findByRole('dialog', { name: '手动转脑图' })
+    const dialog = await screen.findByRole('dialog', { name: '文字转脑图' })
     expect(dialog.textContent).toContain('请先粘贴 JSON 或大纲文本')
     expect((screen.getByLabelText('粘贴 JSON 或大纲文本') as HTMLTextAreaElement).value).toBe('')
     expect((screen.getByRole('button', { name: '追加到选中知识点' }) as HTMLButtonElement).disabled).toBe(true)
@@ -1253,6 +1271,7 @@ describe('FreestyleUnitReviewCardView', () => {
     act(() => onNodeClick([selection('root', '完整宫殿')]))
     flushRevealFrame()
     expect(capturedPanelProps?.visibleEditorState).toBeTruthy()
+    expect(capturedPanelProps?.revealFollowNonce ?? 0).toBe(0)
   })
 
   it('uses Enter to reveal the active unit anchor through the same progressive flip flow', async () => {
@@ -1268,6 +1287,9 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     act(() => window.dispatchEvent(revealTarget))
     expect(revealTarget.defaultPrevented).toBe(true)
+    expect(capturedPanelProps?.revealFollowNodeIds).toContain('unit-node')
+    expect(capturedPanelProps?.revealFollowNodeIds).not.toContain('unit-child')
+    expect(capturedPanelProps?.revealFollowNonce).toBe(1)
     flushRevealFrame()
     expect(
       (capturedPanelProps?.visibleEditorState as {
@@ -1281,6 +1303,8 @@ describe('FreestyleUnitReviewCardView', () => {
       cancelable: true,
     })
     act(() => window.dispatchEvent(revealChild))
+    expect(capturedPanelProps?.revealFollowNodeIds).toEqual(['unit-child'])
+    expect(capturedPanelProps?.revealFollowNonce).toBe(2)
     flushRevealFrame()
     expect(
       (capturedPanelProps?.visibleEditorState as {
@@ -1318,8 +1342,10 @@ describe('FreestyleUnitReviewCardView', () => {
       bubbles: true,
       cancelable: true,
     })
+    const followNonce = capturedPanelProps?.revealFollowNonce
     act(() => window.dispatchEvent(hideTarget))
     expect(hideTarget.defaultPrevented).toBe(true)
+    expect(capturedPanelProps?.revealFollowNonce).toBe(followNonce)
     flushRevealFrame()
     expect(
       (capturedPanelProps?.visibleEditorState as {

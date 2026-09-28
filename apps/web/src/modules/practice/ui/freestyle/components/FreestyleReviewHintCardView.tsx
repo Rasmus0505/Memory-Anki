@@ -19,16 +19,16 @@ export function FreestyleReviewHintCardView({
   return (
     <div
       data-testid="freestyle-review-hint-card"
-      className="relative flex h-full min-h-0 flex-col items-center justify-center bg-amber-300 px-6 pb-24"
+      className="fs-hint-card relative flex h-full min-h-0 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-stage-glow via-primary to-primary-strong px-6 pb-24"
     >
       <div className="flex flex-col items-center gap-3 text-center">
         <span
-          className="text-3xl font-semibold leading-snug text-zinc-900 sm:text-4xl"
+          className="fs-rise text-3xl font-semibold leading-snug text-stage sm:text-4xl"
           data-testid="freestyle-review-hint-text"
         >
           {card.text}
         </span>
-        <span className="text-sm text-zinc-800/70">路径到此为止，接下来是正式复习单元</span>
+        <span className="text-sm text-stage/70">路径到此为止，接下来是正式复习单元</span>
       </div>
       <FreestyleRatingBar
         hintMode

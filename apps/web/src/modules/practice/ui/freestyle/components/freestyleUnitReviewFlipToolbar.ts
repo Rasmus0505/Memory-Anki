@@ -21,6 +21,12 @@ export function useFreestyleUnitReviewNodeQuiz({
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = useState<number[]>([])
   const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
 
+  const refreshBindings = quizNodeBindings.refresh
+  const handleQuestionDeleted = useCallback((questionId: number) => {
+    setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId))
+    void refreshBindings()
+  }, [refreshBindings])
+
   const handleOpenNodeQuiz = useCallback(
     (nodeUid: string, kind?: 'objective' | 'subjective') => {
       const ids = quizNodeBindings.getOpenQuestionIds(nodeUid, kind)
@@ -50,6 +56,7 @@ export function useFreestyleUnitReviewNodeQuiz({
     nodeQuizQuestionIds,
     nodeQuizInitialIndex,
     handleOpenNodeQuiz,
+    handleQuestionDeleted,
   }
 }
 

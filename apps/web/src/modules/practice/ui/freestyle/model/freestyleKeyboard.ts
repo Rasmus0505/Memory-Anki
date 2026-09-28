@@ -20,6 +20,33 @@ export function getFreestyleQuestionDirection(key: string): FreestyleQuestionDir
   return null
 }
 
+/** Vertical feed paging. Callers must skip this while a quiz dialog owns the keyboard. */
+export function getFreestyleFeedPageDirection(key: string): FreestyleQuestionDirection | null {
+  if (key === 'ArrowDown' || key === 'PageDown' || key === ' ') return 'next'
+  if (key === 'ArrowUp' || key === 'PageUp') return 'previous'
+  return null
+}
+
+/**
+ * True when a vertical page key is aimed at the feed while some overlay already
+ * owns the keyboard. Cancel the browser default so the snap scroller cannot
+ * turn the card. Keys inside the dialog or a text field stay untouched.
+ */
+export function shouldSwallowFreestyleFeedPageKey(
+  target: EventTarget | null,
+  feedRoot: EventTarget | null,
+) {
+  if (!(target instanceof Node) || !(feedRoot instanceof Node) || !feedRoot.contains(target)) {
+    return false
+  }
+  if (!(target instanceof HTMLElement)) return true
+  if (target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName)) return false
+  if (target.closest('[role="dialog"], [role="menu"], [data-keyboard-shortcuts-suspended="true"]')) {
+    return false
+  }
+  return true
+}
+
 export function getFreestyleChoiceIndex(key: string): number | null {
   const normalized = key.toLowerCase()
   if (/^[1-4]$/.test(normalized)) return Number(normalized) - 1

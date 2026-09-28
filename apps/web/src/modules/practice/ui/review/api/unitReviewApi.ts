@@ -386,6 +386,15 @@ export async function getUnitReviewSessionApi(id: string) {
   return response.item
 }
 
+/** Read-only: same shape as a session, `encounter: null`, never opens anything server-side. */
+export async function getUnitReviewPreviewApi(unitId: string, options?: { signal?: AbortSignal }) {
+  const response = await request<{ item: UnitReviewSessionDto }>(
+    `/review/units/${encodeURIComponent(unitId)}/preview`,
+    { signal: options?.signal },
+  )
+  return response.item
+}
+
 export interface PalaceDueRatingCurrentPayload {
   study_session_id: string
   unit_id: string

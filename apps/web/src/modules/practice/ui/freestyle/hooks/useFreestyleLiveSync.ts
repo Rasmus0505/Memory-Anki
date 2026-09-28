@@ -1,0 +1,156 @@
+import { useCallback, useMemo, useRef, useState } from 'react'
+import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
+import type { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
+import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
+import type { FreestyleLiveRating } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
+import {
+  readFreestyleRevealMap,
+  writeFreestyleRevealMap,
+} from '@/modules/practice/ui/freestyle/model/freestyleRevealCache'
+import { isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import type { QuizRuntimeState } from '@/modules/quiz/public'
+
+type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
+type QuizFlow = ReturnType<typeof useFreestyleQuizFlow>
+
+/** Mirrors the feed between PWA and desktop: seek, quiz state, reveal map, ratings. */
+export function useFreestyleLiveSync({
+  fullPath,
+  entryPalaceId,
+  isActive,
+  cards,
+  currentIndex,
+  currentCard,
+  roundComplete,
+  planVersion,
+  queueState,
+  navigateToIndex,
+  progress,
+  updateQuestionState,
+  adoptRoundVersion,
+  updateUnitEncounter,
+  completeCardBatch,
+}: {
+  fullPath: string
+  entryPalaceId: number | null
+  isActive: boolean
+  cards: ImmersiveQueue['cards']
+  currentIndex: number
+  currentCard: ImmersiveQueue['cards'][number] | null
+  roundComplete: boolean
+  planVersion: number
+  queueState: ImmersiveQueue['queueState']
+  navigateToIndex: (index: number, options?: { reorderRestudy?: boolean }) => void
+  progress: QuizFlow['progress']
+  updateQuestionState: QuizFlow['updateQuestionState']
+  adoptRoundVersion: ImmersiveQueue['adoptRoundVersion']
+  updateUnitEncounter: ImmersiveQueue['updateUnitEncounter']
+  completeCardBatch: ImmersiveQueue['completeCardBatch']
+}) {
+  const [liveRevealMap, setLiveRevealMap] = useState<Record<string, string> | null>(null)
+  const seededRevealCardIdRef = useRef<string | null>(null)
+  const queueStateRef = useRef(queueState)
+  queueStateRef.current = queueState
+
+  const currentCardId = currentCard?.id ?? null
+  const revealCacheKey = currentCardId
+  if (seededRevealCardIdRef.current !== revealCacheKey) {
+    seededRevealCardIdRef.current = revealCacheKey
+    setLiveRevealMap(revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null)
+  }
+
+  const seekLiveCardId = useCallback((cardId: string) => {
+    const index = cards.findIndex((card) => card.id === cardId)
+    if (index >= 0) navigateToIndex(index, { reorderRestudy: false })
+  }, [cards, navigateToIndex])
+  const applyLiveQuestionState = useCallback((questionId: number, state: QuizRuntimeState) => {
+    updateQuestionState(questionId, (current) => (
+      JSON.stringify(current) === JSON.stringify(state) ? current : state
+    ))
+  }, [updateQuestionState])
+  const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
+    setLiveRevealMap((current) => {
+      if (JSON.stringify(current) === JSON.stringify(map)) return current
+      if (map && revealCacheKey) writeFreestyleRevealMap(revealCacheKey, map)
+      return map
+    })
+  }, [revealCacheKey])
+  const liveRating = useMemo<FreestyleLiveRating | null>(() => {
+    const settled = Object.entries(queueState.unitEncountersByCardId).flatMap(([cardId, encounter]) => {
+      if (encounter.selectedRating == null) return []
+      return [{
+        cardId,
+        rating: encounter.selectedRating,
+        passed: encounter.passed === true,
+        restudy: encounter.passed === false,
+        retryAfterCards: encounter.retryAfterCards ?? 0,
+      }]
+    })
+    const currentId = currentCard?.id ?? null
+    const current = currentId ? queueState.unitEncountersByCardId[currentId] : undefined
+    if (current?.selectedRating == null && settled.length === 0) return null
+    return {
+      planVersion,
+      currentCardId: currentId,
+      selectedRating: current?.selectedRating ?? settled[0]?.rating ?? 0,
+      passed: current?.passed === true,
+      settled,
+    }
+  }, [currentCard?.id, planVersion, queueState.unitEncountersByCardId])
+  const applyLiveRating = useCallback((rating: FreestyleLiveRating) => {
+    if (rating.planVersion > 0) {
+      adoptRoundVersion({ plan_version: rating.planVersion })
+    }
+    const entries = rating.settled.flatMap((settle) => {
+      const current = queueStateRef.current.unitEncountersByCardId[settle.cardId]
+      if (
+        current?.selectedRating === settle.rating
+        && current.passed === settle.passed
+        && current.retryAfterCards === settle.retryAfterCards
+      ) {
+        return []
+      }
+      updateUnitEncounter(settle.cardId, {
+        encounterId: current?.encounterId ?? settle.cardId,
+        roundId: current?.roundId,
+        unitRevision: current?.unitRevision ?? 0,
+        status: current?.status ?? 'open',
+        sessionId: current?.sessionId ?? null,
+        selectedRating: settle.rating,
+        passed: settle.passed,
+        retryAfterCards: settle.retryAfterCards,
+      })
+      return [{
+        cardId: settle.cardId,
+        restudy: settle.restudy,
+        rating: settle.rating,
+        retryAfterCards: settle.retryAfterCards,
+      }]
+    })
+    if (entries.length > 0) {
+      completeCardBatch(entries, rating.currentCardId ?? undefined)
+    }
+  }, [adoptRoundVersion, completeCardBatch, updateUnitEncounter])
+  const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])
+  useFreestyleLiveMirror({
+    route: fullPath,
+    palaceId: entryPalaceId,
+    currentCardId: currentCard?.id ?? null,
+    currentIndex,
+    queueCardIds,
+    roundComplete,
+    questionId: currentCard && isQuizCard(currentCard) ? currentCard.question.id : null,
+    questionState: currentCard && isQuizCard(currentCard)
+      ? progress.questionStates[currentCard.question.id]
+      : undefined,
+    revealMap: liveRevealMap,
+    rating: liveRating,
+    seekCardId: seekLiveCardId,
+    applyQuestionState: applyLiveQuestionState,
+    applyRevealMap: applyLiveRevealMap,
+    applyRating: applyLiveRating,
+    isActive,
+  })
+
+  return { liveRevealMap, applyLiveRevealMap }
+}

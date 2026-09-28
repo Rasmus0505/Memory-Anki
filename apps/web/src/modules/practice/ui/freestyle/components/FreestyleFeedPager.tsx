@@ -1,7 +1,7 @@
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 
 const pagerButtonClass =
-  'inline-flex size-11 items-center justify-center rounded-xl text-zinc-100 transition-colors hover:bg-white/10 active:bg-white/15 disabled:pointer-events-none disabled:opacity-35 sm:size-10'
+  'ma-pressable inline-flex size-11 items-center justify-center rounded-xl text-stage-ink hover:bg-stage-line hover:text-stage-glow active:bg-stage-line-strong disabled:pointer-events-none disabled:opacity-35 sm:size-10'
 
 export function FreestyleFeedPager({
   canGoPrevious,
@@ -26,7 +26,7 @@ export function FreestyleFeedPager({
     <div className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2">
       <div
         data-testid="freestyle-feed-pager"
-        className="pointer-events-auto flex flex-col gap-1 rounded-2xl border border-white/12 bg-zinc-950/90 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-md"
+        className="freestyle-stage-glass pointer-events-auto flex flex-col gap-1 rounded-2xl border border-stage-line-strong p-1.5"
       >
         <button
           type="button"

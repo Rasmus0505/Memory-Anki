@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoaderCircle, RotateCcw } from 'lucide-react'
 import {
   flipProgressLabel,
   flipProgressTitle,
   flipProgressTone,
-  flipProgressToneClass,
   type FlipProgress,
 } from '../model/flipProgressBadge'
 import {
   cancelUnratedUnitReviewEncounterApi,
   closeUnitReviewEncounterApi,
-  getUnitReviewSessionApi,
   rateReviewUnitApi,
-  startFreestyleUnitReviewSessionApi,
   undoReviewUnitRatingApi,
   type FreestyleFlipMode,
   type FreestyleRatingScope,
@@ -28,7 +24,18 @@ import type {
   MindMapEditorState,
 } from '@/shared/api/contracts'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
-import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
+import {
+  adoptRatedEncounter,
+  asUnitRating,
+  buildEditorState,
+  encounterState,
+  formatUnitDiagnostic,
+  loadSessionWithTimeout,
+  operationId,
+  UNDO_VISIBLE_MS,
+  updateSessionUnit,
+} from '@/modules/practice/ui/freestyle/model/freestyleUnitReviewSession'
+import { useUnitPreview } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import { cn } from '@/shared/lib/utils'
 import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
@@ -40,174 +47,18 @@ import {
 import { freestyleUnitLoadFailureCopy } from '@/modules/practice/ui/freestyle/model/freestyleUnitLoadRecovery'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
-
-const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
-const SESSION_LOAD_TIMEOUT_MS = 30_000
-/** Undo stays reachable just after a rate, then collapses so the map keeps the room. */
-const UNDO_VISIBLE_MS = 5_000
-
-function operationId() {
-  return crypto.randomUUID?.() ?? `freestyle-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-function sessionCacheKey(cardId: string, encounter: FreestyleUnitEncounterState) {
-  return `${cardId}:${encounter.encounterId}:${encounter.status}:${encounter.sessionId ?? ''}`
-}
-
-function loadSession(
-  card: FreestyleReviewUnitCard,
-  encounter: FreestyleUnitEncounterState,
-  roundId: string,
-) {
-  const key = sessionCacheKey(card.id, encounter)
-  const cached = inFlightSessionLoads.get(key)
-  if (cached) return cached
-  const promise = encounter.status === 'closed' && encounter.sessionId
-    ? getUnitReviewSessionApi(encounter.sessionId)
-    : startFreestyleUnitReviewSessionApi(
-        { id: card.unit_id!, revision: card.unit_revision! },
-        roundId,
-        encounter.encounterId,
-        ...(
-          card.phase === 'fill'
-          || encounter.selectedRating != null
-          || encounter.passed === true
-            ? [{ allowNotDue: true }]
-            : []
-        ),
-      )
-  inFlightSessionLoads.set(key, promise)
-  const clear = () => {
-    if (inFlightSessionLoads.get(key) === promise) inFlightSessionLoads.delete(key)
-  }
-  void promise.then(clear, clear)
-  return promise
-}
-
-function loadSessionWithTimeout(
-  card: FreestyleReviewUnitCard,
-  encounter: FreestyleUnitEncounterState,
-  roundId: string,
-) {
-  return new Promise<UnitReviewSessionDto>((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      // Do not let a hung request poison retry with the same in-flight cache key.
-      inFlightSessionLoads.delete(sessionCacheKey(card.id, encounter))
-      reject(new Error('加载单元超时，请重试或重建队列。'))
-    }, SESSION_LOAD_TIMEOUT_MS)
-    void loadSession(card, encounter, roundId).then(
-      (value) => {
-        window.clearTimeout(timeout)
-        resolve(value)
-      },
-      (error) => {
-        window.clearTimeout(timeout)
-        reject(error)
-      },
-    )
-  })
-}
-
-function buildEditorState(session: UnitReviewSessionDto): MindMapEditorState | null {
-  // Session payloads may still ship editor_doc as a JSON string; permanent-mark
-  // chip/toggle logic needs a real document object with `.root`.
-  const editorDoc = coerceEditorDoc(
-    session.palace?.editor_doc as Parameters<typeof coerceEditorDoc>[0],
-  )
-  if (!editorDoc) return null
-  return {
-    editor_doc: editorDoc as MindMapEditorState['editor_doc'],
-    editor_config: {},
-    editor_local_config: {},
-    lang: 'zh',
-  }
-}
-
-function formatUnitDiagnostic(input: {
-  error: unknown
-  card: FreestyleReviewUnitCard
-  roundId: string
-  operationId?: string | null
-  stage: string
-}) {
-  const value = input.error as {
-    message?: string
-    requestId?: string
-    status?: number
-    url?: string
-  }
-  const lines = [
-    value?.message || String(input.error || '未知错误'),
-    `页面：/freestyle · 宫殿：${input.card.palace_id} · 卡片：${input.card.id}`,
-    `单元：${input.card.unit_id || '无'} · 回合：${input.roundId}`,
-    `阶段：${input.stage} · 操作 ID：${input.operationId || '未生成'}`,
-    value?.requestId ? `请求 ID：${value.requestId}` : null,
-    value?.status != null ? `HTTP 状态：${value.status}` : null,
-    value?.url ? `接口：${value.url}` : null,
-  ].filter(Boolean)
-  return lines.join('\n')
-}
+import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
 
 export {
   ratingEffectLabel,
   retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 
-function asUnitRating(value: unknown): UnitRating | null {
-  return value === 1 || value === 2 || value === 3 || value === 4 ? value : null
-}
-
-function encounterState(
-  sessionId: string,
-  unitRevision: number,
-  encounter: NonNullable<ReviewUnitDto['encounter']>,
-): FreestyleUnitEncounterState {
-  return {
-    encounterId: encounter.id,
-    roundId: encounter.round_id,
-    unitRevision,
-    status: encounter.status,
-    sessionId,
-    selectedRating: encounter.selected_rating,
-    passed: encounter.passed,
-    retryAfterCards: encounter.retry_after_cards,
-    effectiveSeconds: encounter.effective_seconds ?? null,
-  }
-}
-
-function adoptRatedEncounter(
-  live: NonNullable<ReviewUnitDto['encounter']>,
-  rated: NonNullable<ReviewUnitDto['encounter']>,
-): NonNullable<ReviewUnitDto['encounter']> {
-  if (rated.id === live.id) return rated
-  if (live.status !== 'open') return rated
-  // A retry glance must keep its own encounter. Reusing the source glance's
-  // payload remounts the map at the root and looks like the view snapped back.
-  return {
-    ...rated,
-    id: live.id,
-    status: 'open',
-    round_id: live.round_id,
-    sequence: live.sequence,
-  }
-}
-
-function updateSessionUnit(
-  session: UnitReviewSessionDto,
-  unit: ReviewUnitDto,
-): UnitReviewSessionDto {
-  const units = session.units.map((item) => item.id === unit.id ? unit : item)
-  return {
-    ...session,
-    units,
-    pending_unit_count: units.filter((item) => item.session_status !== 'passed').length,
-    completed_unit_count: units.filter((item) => item.session_status === 'passed').length,
-  }
-}
 
 export function FreestyleUnitReviewCardView({
   card,
   active,
+  nearViewport = false,
   readOnly,
   roundId,
   encounter,
@@ -216,6 +67,7 @@ export function FreestyleUnitReviewCardView({
   onEncounterChange,
   onBranchComplete,
   onStaleDrop,
+  onRemoveFromQueue,
   onRebuildRound,
   onRevisionAdopted,
   onSaveFailed,
@@ -244,6 +96,8 @@ export function FreestyleUnitReviewCardView({
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
+  /** Adjacent to the viewport: may draw its read-only preview before activation. */
+  nearViewport?: boolean
   readOnly: boolean
   roundId: string
   planVersion?: number
@@ -280,6 +134,8 @@ export function FreestyleUnitReviewCardView({
     options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
   ) => void
   onStaleDrop: (cardId: string) => void
+  /** Drop this card from the current round. Does not write a review rating. */
+  onRemoveFromQueue?: (cardId: string) => void
   /** Rebuild this round's queue without treating the card as stale. */
   onRebuildRound?: () => void
   onRevisionAdopted?: (cardId: string, unitId: string, revision: number) => void
@@ -362,6 +218,29 @@ export function FreestyleUnitReviewCardView({
     card.unit_id && effectiveRevision != null
       ? `${card.id}:${card.unit_id}:${effectiveRevision}:${roundId}`
       : null
+  // Read-only preview: the real map is drawn while the card slides in; the encounter
+  // still opens only on activation. Limited to the active card and its neighbours.
+  const preview = useUnitPreview(active || nearViewport ? card.unit_id : null, effectiveRevision)
+  const previewUnit = preview?.units.find((item) => item.id === card.unit_id) ?? null
+  const previewEditorState = useMemo(() => (preview ? buildEditorState(preview) : null), [preview])
+  const flipSource = editorState && session && unit && unit.encounter
+    ? { live: true, session, unit, editorState: savedEditorState ?? editorState }
+    : !recapOnly && !loadError && !staleRecovery && preview && previewUnit && previewEditorState
+      ? { live: false, session: preview, unit: previewUnit, editorState: previewEditorState }
+      : null
+  // One FlipPanel across preview → live; only a genuine encounter renewal (restudy after
+  // a fail) remounts it, so the landed card never blanks while its session arrives.
+  const liveEncounterId = flipSource?.live ? flipSource.unit.encounter?.id ?? null : null
+  const [flipIdentity, setFlipIdentity] = useState<{ encounterId: string | null; generation: number }>({
+    encounterId: null,
+    generation: 0,
+  })
+  if (liveEncounterId && liveEncounterId !== flipIdentity.encounterId) {
+    setFlipIdentity({
+      encounterId: liveEncounterId,
+      generation: flipIdentity.encounterId ? flipIdentity.generation + 1 : flipIdentity.generation,
+    })
+  }
   // A freshly mounted unit card must not inherit a previous card's saved-doc override.
   useEffect(() => {
     setSavedEditorState(null)
@@ -924,8 +803,8 @@ export function FreestyleUnitReviewCardView({
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
-      {/* Paper white: same canvas as PWA review; dark chrome stays on the shell. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#fafafa] shadow-[0_18px_50px_rgba(0,0,0,0.28)] sm:rounded-3xl">
+      {/* Warm paper: same canvas as PWA review; dark stage chrome stays on the shell. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-paper shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_24px_60px_-18px_rgb(0_0_0/0.65)] sm:rounded-3xl">
         {/* Rate confirmation, at the edge of the card being read rather than at screen
             center. Keyed by nonce so two rates inside one breath window restart it. */}
         {breath ? (
@@ -940,166 +819,75 @@ export function FreestyleUnitReviewCardView({
             )}
           />
         ) : null}
-        {/* Identity row sits in flow above the map chrome. It used to be absolutely
-            positioned over the canvas toolbar, which on phone hid 英语/文字模式 entirely.
-            Right padding reserves the page-level HUD pill's band (timer + plan + ⋯). */}
-        <div className="relative z-10 flex min-w-0 shrink-0 items-center gap-1.5 p-2 pr-[7rem] sm:p-2.5 sm:pr-2.5">
-          <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-black/8 bg-white/88 px-2.5 py-1 shadow-sm backdrop-blur-sm">
-            <span
-              className="size-2 shrink-0 rounded-full bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.2)]"
-              title="永久标记"
-              aria-label="永久标记"
-            />
-            <h1 className="min-w-0 truncate text-[13px] font-semibold leading-tight tracking-tight text-zinc-800 sm:text-sm">
-              {titleText}
-            </h1>
-            {card.phase === 'fill' ? (
-              <span
-                data-testid="freestyle-fill-badge"
-                title="补充练习：记得/轻松只记下，不改下次到期日"
-                className="inline-flex h-5 shrink-0 items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 text-[10px] font-semibold text-sky-800 sm:h-6 sm:px-2 sm:text-[11px]"
-              >
-                补充
-              </span>
-            ) : null}
-            {flipTone && flipLabel && flipTitle ? (
-              <span
-                role="status"
-                aria-label={flipTitle}
-                title={flipTitle}
-                data-testid="flip-progress-badge"
-                data-tone={flipTone}
-                className={cn(
-                  'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 font-mono text-[10px] font-semibold tabular-nums tracking-tight sm:h-6 sm:px-2 sm:text-[11px]',
-                  flipProgressToneClass(flipTone),
-                )}
-              >
-                {flipLabel}
-              </span>
-            ) : null}
-          </div>
-          {undoVisible && lastOperationId && !locked ? (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="freestyle-transient-undo"
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-black/8 bg-white/92 px-2.5 text-xs font-medium text-zinc-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:opacity-40"
-              onClick={() => void undoRating()}
-            >
-              <RotateCcw className="size-3.5" />
-              撤销
-            </button>
-          ) : null}
-        </div>
-        {editorState && session && unit && unit.encounter ? (
+        <FreestyleUnitReviewIdentityRow
+          titleText={titleText}
+          phase={card.phase}
+          flipTone={flipTone}
+          flipLabel={flipLabel}
+          flipTitle={flipTitle}
+          showUndo={Boolean(undoVisible && lastOperationId && !locked)}
+          undoDisabled={busy}
+          onUndo={() => void undoRating()}
+        />
+        {flipSource ? (
           <div
             data-testid="freestyle-unit-review-map-shell"
+            data-preview={flipSource.live ? undefined : 'true'}
+            inert={!flipSource.live}
             className={cn(
-              'flex min-h-0 flex-1 flex-col',
+              'fs-unit-arrive flex min-h-0 flex-1 flex-col',
               !inlineEditing && 'pb-[6.75rem] sm:pb-[7.25rem]',
             )}
           >
           <FreestyleUnitReviewFlipPanel
-            key={`${card.id}:${unit.encounter.id}`}
+            key={`${card.id}:${flipIdentity.generation}`}
             card={card}
-            session={session}
-            unit={unit}
-            editorState={savedEditorState ?? editorState}
-            active={active}
+            session={flipSource.session}
+            unit={flipSource.unit}
+            editorState={flipSource.editorState}
+            active={active && flipSource.live}
             fullscreen={fullscreen}
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
-            onFreestyleFlipModeChange={onFreestyleFlipModeChange}
+            onFreestyleFlipModeChange={flipSource.live ? onFreestyleFlipModeChange : undefined}
             autoAdvance={autoAdvance}
-            onAutoAdvanceChange={onAutoAdvanceChange}
+            onAutoAdvanceChange={flipSource.live ? onAutoAdvanceChange : undefined}
             preferredZoom={preferredZoom}
-            onUserZoomChange={onUserZoomChange}
-            onEditingChange={(editing) => {
-              setInlineEditing(editing)
-              onEditingChange?.(editing)
-            }}
-            onSaveFailed={onSaveFailed}
-            onEditorStateSaved={setSavedEditorState}
-            onUnitsReconciled={onUnitsReconciled}
-            onRevealProgressChange={handleRevealProgressChange}
-            syncedRevealMap={liveRevealMap}
-            onRevealMapChange={onLiveRevealMapChange}
-            onOpenScopeQuiz={onOpenScopeQuiz}
+            onUserZoomChange={flipSource.live ? onUserZoomChange : undefined}
+            // A preview must never report editing/reveal/save state: it would clobber the
+            // active card's inline edit and push a fake reveal map to live sync.
+            onEditingChange={flipSource.live
+              ? (editing) => {
+                  setInlineEditing(editing)
+                  onEditingChange?.(editing)
+                }
+              : undefined}
+            onSaveFailed={flipSource.live ? onSaveFailed : undefined}
+            onEditorStateSaved={flipSource.live ? setSavedEditorState : undefined}
+            onUnitsReconciled={flipSource.live ? onUnitsReconciled : undefined}
+            onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
+            syncedRevealMap={flipSource.live ? liveRevealMap : null}
+            onRevealMapChange={flipSource.live ? onLiveRevealMapChange : undefined}
+            onOpenScopeQuiz={flipSource.live ? onOpenScopeQuiz : undefined}
           />
           </div>
         ) : (
-          <div className={cn(
-            'flex h-full items-center justify-center px-5 text-center text-sm',
-            recapOnly
-              ? 'bg-white/[0.03] text-zinc-200'
-              : loadError
-              ? 'bg-rose-950/20 text-rose-100'
-              : staleRecovery
-                ? 'bg-amber-200/[0.04] text-amber-100'
-                : 'bg-white/[0.03] text-zinc-400',
-          )}>
-            {recapOnly ? (
-              <div className="flex max-w-[min(22rem,100%)] flex-col items-center gap-3 text-zinc-100">
-                <p>这张已经评过，当前只看不评</p>
-                <p className="text-xs text-zinc-400">
-                  {card.palace_title || '记忆宫殿'}
-                  {card.context_path?.length
-                    ? ` · ${card.context_path.map((item) => item.text).filter(Boolean).join(' / ')}`
-                    : ''}
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button type="button" className="rounded-xl border border-white/25 px-3 py-2" onClick={retryLoad}>
-                    改评分
-                  </button>
-                  <button type="button" className="rounded-xl border border-white/25 px-3 py-2" onClick={() => onStaleDrop(card.id)}>
-                    跳过这张
-                  </button>
-                </div>
-              </div>
-            ) : loadError ? (
-              <div className="flex max-w-[min(22rem,100%)] flex-col items-center gap-3">
-                <p>{loadErrorTitle || '这张卡暂时打不开'}</p>
-                <p className="text-xs text-rose-100/80">{loadErrorHint || '可以重试、跳过、重建本轮，或只看不评。'}</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={retryLoad}>
-                    重试
-                  </button>
-                  <button type="button" className="rounded-xl border border-rose-200/40 px-3 py-2" onClick={() => onStaleDrop(card.id)}>
-                    跳过这张
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-xl border border-rose-200/40 px-3 py-2"
-                    onClick={() => onRebuildRound?.()}
-                  >
-                    重建本轮
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-xl border border-rose-200/40 px-3 py-2"
-                    onClick={() => {
-                      setRecapOnly(true)
-                      setLoadError(null)
-                      setActionError(null)
-                    }}
-                  >
-                    只看不评
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs underline underline-offset-2 text-rose-100/70"
-                  onClick={() => void navigator.clipboard?.writeText(loadError)}
-                >
-                  复制诊断
-                </button>
-              </div>
-            ) : staleRecovery ? (
-              <span className="inline-flex items-center"><LoaderCircle className="mr-2 size-4 animate-spin" />正在更新复习安排...</span>
-            ) : (
-              <span className="inline-flex items-center">{active ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}{active ? '正在加载单元...' : '等待进入当前单元'}</span>
-            )}
-          </div>
+          <FreestyleUnitReviewPlaceholder
+            card={card}
+            recapOnly={recapOnly}
+            loadError={loadError}
+            loadErrorTitle={loadErrorTitle}
+            loadErrorHint={loadErrorHint}
+            staleRecovery={staleRecovery}
+            onRetry={retryLoad}
+            onSkip={() => onStaleDrop(card.id)}
+            onRebuildRound={onRebuildRound}
+            onRecapOnly={() => {
+              setRecapOnly(true)
+              setLoadError(null)
+              setActionError(null)
+            }}
+          />
         )}
 
         {active && !inlineEditing && !loadError && !recapOnly ? (
@@ -1117,6 +905,11 @@ export function FreestyleUnitReviewCardView({
             blockedHint={blockedHint}
             shortcutsActive={active && !inlineEditing}
             onRate={(rating) => void rate(rating)}
+            onRemoveFromQueue={
+              readOnly || !onRemoveFromQueue
+                ? undefined
+                : () => onRemoveFromQueue(card.id)
+            }
             onDismissError={() => setActionError(null)}
           />
         ) : null}

@@ -295,7 +295,6 @@ export function todayFeedContentTypes(config: TodayTrainingConfig): {
     fill: [
       'quiz_question',
       ...(config.includeEnglish ? (['english'] as const) : []),
-      ...(config.includeEnglishReading ? (['english_reading'] as const) : []),
     ],
   }
 }

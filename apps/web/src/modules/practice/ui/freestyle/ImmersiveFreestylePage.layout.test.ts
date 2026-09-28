@@ -2,10 +2,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const source = readFileSync(
-  resolve(process.cwd(), 'src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx'),
-  'utf8',
-)
+const read = (path: string) =>
+  readFileSync(resolve(process.cwd(), 'src/modules/practice/ui/freestyle', path), 'utf8')
+
+// The page composes feed navigation and HUD chrome from split files; assert on the whole surface.
+const source = [
+  'ImmersiveFreestylePage.tsx',
+  'hooks/useFreestyleFeedNavigation.ts',
+  'components/FreestyleHudChrome.tsx',
+].map(read).join('\n')
 
 describe('ImmersiveFreestylePage layout', () => {
   it('locks the snap scroller to one viewport without min-h-full cards', () => {
@@ -43,6 +48,13 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain("mode={configIntent}")
     expect(source).toContain('onClearQuizProgress={clearConfiguredOverlayQuiz}')
     expect(source).not.toContain('promptOverlayPalaceClear')
+  })
+
+  it('does not page the feed from vertical arrows while a quiz dialog owns the keyboard', () => {
+    const handler = source.slice(source.indexOf('const handleKeyDown'), source.indexOf('const viewingCardId'))
+    expect(handler).toContain('isFreestyleShortcutBlocked(event.target)')
+    expect(handler).toContain('getFreestyleFeedPageDirection')
+    expect(handler).toContain('shouldSwallowFreestyleFeedPageKey')
   })
 
   it('pages cards with the dock arrows regardless of palace rating scope', () => {

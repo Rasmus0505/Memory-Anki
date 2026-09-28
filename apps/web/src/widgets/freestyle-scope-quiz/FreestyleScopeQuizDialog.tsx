@@ -6,6 +6,7 @@ import {
   progressFreestyleOverlayQuizApi,
 } from '@/modules/practice/ui/freestyle/api'
 import { overlayQuizScopeLabel } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
+import { OverlayQuizSetupPanel, type OverlayQuizSetupChoice } from './OverlayQuizSetupPanel'
 import {
   getPalaceQuizQuestionsByIdsApi,
   listQuestionNodeBindingsApi,
@@ -13,14 +14,19 @@ import {
 import {
   beginQuizQuestionMarkRequest,
   isCurrentQuizQuestionMarkRequest,
+  isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
+  QuizFontScaleBody,
+  QuizFontScaleHint,
   QuizQuestionInteraction,
   QuizQuestionStem,
   submitQuizQuestionMark,
   useQuizAnswerMode,
+  useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
+  useQuizDialogFontScale,
   writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
@@ -34,9 +40,7 @@ import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
   FreestyleFeedConfig,
-  FreestyleOverlayQuestionRange,
   FreestyleOverlayQuizState,
-  FreestyleQuizScope,
   FreestyleRoundStatePayload,
   PalaceQuizQuestion,
 } from '@/shared/api/contracts'
@@ -52,7 +56,6 @@ import {
 import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
-import { cn } from '@/shared/lib/utils'
 import {
   PalaceMemoryLookupDialog,
   collectMemoryLookupFocusNodeUids,
@@ -70,6 +73,7 @@ export function FreestyleScopeQuizDialog({
   storedConfig,
   setupDone,
   rangeLabel,
+  palaceCount = 0,
   onConfirmSetup,
   onRoundSync,
 }: {
@@ -80,16 +84,14 @@ export function FreestyleScopeQuizDialog({
   storedConfig: FreestyleFeedConfig
   setupDone: boolean
   rangeLabel: string
-  onConfirmSetup: (next: {
-    quizScope: FreestyleQuizScope
-    overlayQuestionRange: FreestyleOverlayQuestionRange
-  }) => void
+  palaceCount?: number
+  onConfirmSetup: (next: OverlayQuizSetupChoice) => void
   onRoundSync: (round: FreestyleRoundStatePayload) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
+  const fontScale = useQuizDialogFontScale(open)
   const [configOpen, setConfigOpen] = useState(!setupDone)
-  const [draftScope, setDraftScope] = useState<FreestyleQuizScope>(storedConfig.streams.quiz.quiz_scope)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [overlay, setOverlay] = useState<FreestyleOverlayQuizState | null>(null)
@@ -101,6 +103,7 @@ export function FreestyleScopeQuizDialog({
   const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
   const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  const removedQuestionIdsRef = useRef(new Set<number>())
   const planVersionRef = useRef(planVersion)
   const persistTimerRef = useRef<number | null>(null)
   const storedConfigRef = useRef(storedConfig)
@@ -141,12 +144,7 @@ export function FreestyleScopeQuizDialog({
   useEffect(() => {
     if (!open) return
     setConfigOpen(!setupDone)
-    setDraftScope(storedConfig.streams.quiz.quiz_scope)
-  }, [
-    open,
-    setupDone,
-    storedConfig.streams.quiz.quiz_scope,
-  ])
+  }, [open, setupDone])
 
   const adoptRound = useCallback((round: FreestyleRoundStatePayload) => {
     onRoundSync(round)
@@ -169,16 +167,18 @@ export function FreestyleScopeQuizDialog({
   }, [onRoundSync])
 
   const loadQuestions = useCallback(async (session: FreestyleOverlayQuizState) => {
-    if (session.question_ids.length === 0) {
+    const ids = session.question_ids.filter((id) => !removedQuestionIdsRef.current.has(id))
+    if (ids.length === 0) {
       setQuestions([])
       return
     }
-    const response = await getPalaceQuizQuestionsByIdsApi(session.question_ids)
+    const response = await getPalaceQuizQuestionsByIdsApi(ids)
     const byId = new Map((response.items || []).map((item) => [item.id, item]))
     setQuestions(
-      session.question_ids
+      ids
         .map((id) => byId.get(id))
-        .filter((item): item is PalaceQuizQuestion => Boolean(item)),
+        .filter((item): item is PalaceQuizQuestion => Boolean(item))
+        .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
     )
   }, [])
 
@@ -202,6 +202,11 @@ export function FreestyleScopeQuizDialog({
       setLoading(false)
     }
   }, [adoptRound, loadQuestions, roundId])
+
+  useEffect(() => {
+    if (open) return
+    removedQuestionIdsRef.current = new Set()
+  }, [open])
 
   useEffect(() => {
     if (!open || !setupDone || configOpen) return
@@ -248,7 +253,9 @@ export function FreestyleScopeQuizDialog({
     try {
       await postProgress(retryOnConflict)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '保存做题进度失败。')
+      const message = error instanceof Error ? error.message : '保存做题进度失败。'
+      if (message.includes('题目不存在')) return
+      toast.error(message)
     }
   }, [onRoundSync])
 
@@ -354,6 +361,7 @@ export function FreestyleScopeQuizDialog({
         updateLocalState(questionId, updater)
       },
       applyUpdatedQuestion: (question: PalaceQuizQuestion) => {
+        if (removedQuestionIdsRef.current.has(question.id)) return
         setQuestions((currentQuestions) =>
           currentQuestions.map((item) => (item.id === question.id ? question : item)),
         )
@@ -362,12 +370,18 @@ export function FreestyleScopeQuizDialog({
     [questionStates, updateLocalState],
   )
 
+  const shouldToastAttemptError = useCallback(
+    (questionId: number) => !removedQuestionIdsRef.current.has(questionId),
+    [],
+  )
+
   const orchestration = useQuizAttemptOrchestration({
     adapter,
     promptForAiOptions,
     shortAnswerEntrypointKey: 'freestyle.scope-quiz.short-answer',
     resultFeedbackMode: 'immediate',
     emitFeedback: dispatchGlobalFeedback,
+    shouldToastAttemptError,
   })
 
   const handleChoiceResolve = useCallback(
@@ -388,6 +402,7 @@ export function FreestyleScopeQuizDialog({
       setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
     } catch (error) {
       if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
+      if (removedQuestionIdsRef.current.has(questionId)) return
       toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
   }, [current])
@@ -408,69 +423,28 @@ export function FreestyleScopeQuizDialog({
     storedConfigRef,
     onRoundSync,
     setOverlay,
+    removedQuestionIdsRef,
   })
 
   useEffect(() => {
     setKeyboardOptionIndex(0)
   }, [current?.id])
 
-  useEffect(() => {
-    if (!open || configOpen || !current) return
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target
-      if (
-        target instanceof HTMLElement
-        && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      ) {
-        return
-      }
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (questions.length <= 1) return
-        event.preventDefault()
-        goToIndex(
-          event.key === 'ArrowLeft'
-            ? Math.max(0, index - 1)
-            : Math.min(questions.length - 1, index + 1),
-        )
-        return
-      }
-      if (!isQuizChoiceShortcutActive(current.question_type, answerMode) || currentState.resolved) return
-      const optionCount = current.options.length
-      if (optionCount === 0) return
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        event.preventDefault()
-        const delta = event.key === 'ArrowDown' ? 1 : -1
-        const nextIndex = (keyboardOptionIndex + delta + optionCount) % optionCount
-        setKeyboardOptionIndex(nextIndex)
-        questionInteractionRef.current
-          ?.querySelector<HTMLButtonElement>(`[data-quiz-option-index="${nextIndex}"]`)
-          ?.focus()
-        return
-      }
-      const normalizedKey = event.key.toLowerCase()
-      const directIndex = /^[1-4]$/.test(normalizedKey)
-        ? Number(normalizedKey) - 1
-        : 'abcd'.indexOf(normalizedKey)
-      const focusedOption =
-        target instanceof HTMLElement
-          ? target.closest<HTMLElement>('[data-quiz-option-index]')
-          : null
-      if (
-        event.key === 'Enter'
-        && target instanceof HTMLElement
-        && !focusedOption
-        && target.closest('button, [role="button"], a')
-      ) {
-        return
-      }
-      const focusedIndex = focusedOption?.dataset.quizOptionIndex
-      const optionIndex = event.key === 'Enter'
-        ? (focusedIndex == null ? keyboardOptionIndex : Number(focusedIndex))
-        : directIndex
-      if (optionIndex < 0 || optionIndex >= optionCount) return
+  useQuizAnsweringShortcuts({
+    enabled: open && !configOpen && current != null,
+    questionCount: questions.length,
+    optionCount: current?.options.length ?? 0,
+    choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
+    attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId }),
+    keyboardOptionIndex,
+    setKeyboardOptionIndex,
+    interactionRootRef: questionInteractionRef,
+    onPreviousQuestion: () => goToIndex(Math.max(0, index - 1)),
+    onNextQuestion: () => goToIndex(Math.min(Math.max(questions.length - 1, 0), index + 1)),
+    onSelectOption: (optionIndex) => {
+      if (!current) return
       const option = current.options[optionIndex]
       if (!option) return
-      event.preventDefault()
       const correct = option.id === (current.answer_payload.correct_option_id || '')
       updateLocalState(current.id, (state) => ({
         ...state,
@@ -479,22 +453,12 @@ export function FreestyleScopeQuizDialog({
         correct,
       }))
       handleChoiceResolve(option.id, correct)
-    }
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [
-    answerMode,
-    configOpen,
-    current,
-    currentState.resolved,
-    goToIndex,
-    handleChoiceResolve,
-    index,
-    keyboardOptionIndex,
-    open,
-    questions.length,
-    updateLocalState,
-  ])
+    },
+    onToggleMark: () => {
+      if (!current) return
+      void handleToggleMark(!current.marked)
+    },
+  })
 
   const showConfig = !setupDone || configOpen
   const headerDetail = showConfig
@@ -502,15 +466,21 @@ export function FreestyleScopeQuizDialog({
     : loading
       ? '加载中…'
       : questions.length > 0
-        ? `第 ${index + 1} / ${questions.length} 题` +
-          (answeredCount > 0 ? ` · 已答 ${answeredCount}` : '') +
-          (current?.palace_id != null ? ` · 宫殿 ${current.palace_id}` : '')
+        ? [
+            // The pager row owns 「第 n / m 题」 once there is more than one question.
+            questions.length > 1 ? null : `第 ${index + 1} / ${questions.length} 题`,
+            answeredCount > 0 ? `已答 ${answeredCount}` : null,
+            current?.palace_id != null ? `宫殿 ${current.palace_id}` : null,
+          ]
+            .filter((part) => part != null && part !== '')
+            .join(' · ')
         : rangeLabel
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          ref={fontScale.contentRef}
           floatingId="freestyle-scope-quiz"
           showCloseButton
           expandOnOpen
@@ -519,6 +489,7 @@ export function FreestyleScopeQuizDialog({
           data-keyboard-shortcuts-suspended="true"
           data-testid="freestyle-scope-quiz-dialog"
         >
+          <QuizFontScaleHint percent={fontScale.percent} visible={fontScale.hintVisible} />
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
@@ -551,50 +522,28 @@ export function FreestyleScopeQuizDialog({
                 </Button>
               ) : null}
             </div>
-            <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
-              {headerDetail}
-            </DialogDescription>
+            {headerDetail ? (
+              <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
+                {headerDetail}
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
             {showConfig ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">{rangeLabel}。只出这些宫殿的题，不会改训练方向。</p>
-                <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2">
-                  {([
-                    ['cross_palace_random', '跨宫殿乱序', '每道题可能来自不同宫殿'],
-                    ['single_palace_random', '一个宫殿刷完再换', '先刷完一座宫殿的题再换下一座'],
-                  ] as const).map(([value, label, hint]) => {
-                    const selected = draftScope === value
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        className={cn(
-                          'rounded-xl border px-3.5 py-3 text-left transition-colors',
-                          selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60',
-                        )}
-                        onClick={() => setDraftScope(value)}
-                      >
-                        <span className="block text-sm font-semibold">{label}</span>
-                        <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => {
-                    onConfirmSetup({ quizScope: draftScope, overlayQuestionRange: 'all' })
-                    setConfigOpen(false)
-                  }}
-                >
-                  {setupDone ? '保存并继续' : '开始做题'}
-                </Button>
-              </div>
+              <OverlayQuizSetupPanel
+                roundId={roundId}
+                planVersion={planVersion}
+                storedConfig={storedConfig}
+                setupDone={setupDone}
+                rangeLabel={rangeLabel}
+                palaceCount={palaceCount}
+                onRoundSync={onRoundSync}
+                onConfirm={(choice) => {
+                  onConfirmSetup(choice)
+                  setConfigOpen(false)
+                }}
+              />
             ) : loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                 <LoaderCircle className="size-4 animate-spin" />
@@ -654,23 +603,25 @@ export function FreestyleScopeQuizDialog({
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+                </div>
+                <QuizFontScaleBody percent={fontScale.percent}>
                   <div className="text-base font-semibold leading-7 text-foreground">
                     <QuizQuestionStem question={current} />
                   </div>
-                </div>
-                <div ref={questionInteractionRef}>
-                  <QuizQuestionInteraction
-                    question={current}
-                    state={currentState}
-                    onStateChange={(updater) => updateLocalState(current.id, updater)}
-                    onChoiceResolve={handleChoiceResolve}
-                    onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
-                    mark={{
-                      marked: Boolean(current.marked),
-                      onToggle: (marked) => void handleToggleMark(marked),
-                    }}
-                  />
-                </div>
+                  <div ref={questionInteractionRef}>
+                    <QuizQuestionInteraction
+                      question={current}
+                      state={currentState}
+                      onStateChange={(updater) => updateLocalState(current.id, updater)}
+                      onChoiceResolve={handleChoiceResolve}
+                      onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
+                      mark={{
+                        marked: Boolean(current.marked),
+                        onToggle: (marked) => void handleToggleMark(marked),
+                      }}
+                    />
+                  </div>
+                </QuizFontScaleBody>
               </>
             )}
           </div>

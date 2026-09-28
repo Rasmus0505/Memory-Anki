@@ -124,6 +124,7 @@ export interface ReviewFeedbackSettings {
   volume: number
   animationEnabled: boolean
   reducedCelebrationMotion: boolean
+  hapticsEnabled: boolean
   surpriseEnabled: boolean
   learningSoundsEnabled: FeedbackChannelOverride
   milestoneEffectsEnabled: FeedbackChannelOverride
@@ -209,6 +210,7 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   volume: 1.15,
   animationEnabled: true,
   reducedCelebrationMotion: false,
+  hapticsEnabled: true,
   surpriseEnabled: true,
   learningSoundsEnabled: null,
   milestoneEffectsEnabled: null,
@@ -442,6 +444,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
     animationEnabled,
     reducedCelebrationMotion: sanitizeBoolean(raw.reducedCelebrationMotion, false),
+    hapticsEnabled: sanitizeBoolean(raw.hapticsEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.hapticsEnabled),
     surpriseEnabled: sanitizeBoolean(raw.surpriseEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.surpriseEnabled),
     learningSoundsEnabled: sanitizeChannelOverride(raw.learningSoundsEnabled),
     milestoneEffectsEnabled: sanitizeChannelOverride(raw.milestoneEffectsEnabled),

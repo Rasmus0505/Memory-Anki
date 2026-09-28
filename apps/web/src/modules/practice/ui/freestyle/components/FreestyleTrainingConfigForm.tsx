@@ -256,6 +256,7 @@ export function FreestyleTrainingConfigForm({
               <select className={FIELD_CLASS} value={value.palace_order} onChange={(event) => onChange(updateStream(config, 'memory_palace', { palace_order: event.target.value }))}>
                 <option value="finish_palace_then_next">一个刷完再换下一个</option>
                 <option value="interleave_palaces">多个宫殿轮流穿插</option>
+                <option value="exam_priority">考试优先（高星、易忘的先刷）</option>
               </select>
             </Field>
           </div>

@@ -1,6 +1,6 @@
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { queueConstructionSignature } from './feedConfig'
-import { bookedRetryAfterCards, cardPalaceId } from './queueState'
+import { bookedRetryAfterCards, cardPalaceId, cardUnitId, reviewUnitIdFromCardId } from './queueState'
 
 export type FreestyleRoundPlanCardStatus =
   | 'pending'
@@ -63,6 +63,13 @@ function asStatus(value: unknown): FreestyleRoundPlanCardStatus {
     : 'pending'
 }
 
+/** Persisted null must stay null. Number(null) is 0, which is not a rating. */
+function asStoredRating(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const rating = Number(value)
+  return Number.isInteger(rating) && rating >= 1 && rating <= 4 ? rating : null
+}
+
 function asStringList(value: unknown) {
   if (!Array.isArray(value)) return []
   const seen = new Set<string>()
@@ -90,7 +97,7 @@ function asCards(value: unknown) {
       label: asString(item.label) || key,
       kind: asString(item.kind) || 'card',
       status: asStatus(item.status),
-      lastRating: Number.isInteger(Number(item.lastRating)) ? Number(item.lastRating) : null,
+      lastRating: asStoredRating(item.lastRating),
       retryAfterCards: Math.max(0, Math.min(3, Math.round(Number(item.retryAfterCards) || 0))),
       attemptCount: Math.max(0, Math.round(Number(item.attemptCount) || 0)),
       updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : 0,
@@ -361,7 +368,7 @@ function cardLabel(card: FreestyleCard) {
   if (card.type === 'action') return card.title || card.subtitle || card.id
   return card.type === 'mindmap_branch'
     ? (card.context_path.at(-1)?.text || card.anchor_uid || card.id)
-    : (card.anki_front_uid || card.anchor_uid || card.id)
+    : (card.anchor_uid || card.id)
 }
 
 export function applyRoundPlanOrder(cards: FreestyleCard[], plan: FreestyleRoundPlanState | null) {
@@ -470,6 +477,82 @@ export function stampRestudyPlan(
   return next
 }
 
+function planCardFromLive(
+  card: FreestyleCard,
+  status: FreestyleRoundPlanCardStatus,
+  now: number,
+): FreestyleRoundPlanCard {
+  const id = String(card.id || '').trim()
+  return {
+    cardId: id,
+    sourceCardId: String(card.source_card_id || id),
+    occurrenceKind: card.occurrence_kind === 'retry' ? 'retry' : 'source',
+    retryAttempt: Math.max(0, Math.round(Number(card.retry_attempt) || 0)),
+    palaceId: cardPalaceId(card),
+    palaceTitle: cardPalaceTitle(card),
+    label: cardLabel(card),
+    kind: card.type,
+    status,
+    lastRating: null,
+    retryAfterCards: bookedRetryAfterCards(card),
+    attemptCount: 0,
+    updatedAt: now,
+  }
+}
+
+/**
+ * Confirm 移除队列 on these ids. A live id missing from the plan is inserted
+ * excluded (updateRoundPlanCard would no-op). A pending source sibling of the
+ * same unit is excluded too, so a newer revision cannot sit on the rail as
+ * unscored. Completed and retry rows keep their own score.
+ */
+export function excludeRoundPlanCards(
+  plan: FreestyleRoundPlanState | null,
+  cardIds: readonly string[],
+  liveCards: readonly FreestyleCard[] = [],
+  now = Date.now(),
+): FreestyleRoundPlanState | null {
+  if (!plan) return plan
+  const ids = [...new Set(cardIds.map((id) => String(id || '').trim()).filter(Boolean))]
+  if (!ids.length) return plan
+  const liveById = new Map(liveCards.map((card) => [String(card.id || '').trim(), card]))
+  const unitIds = new Set<string>()
+  const rememberUnit = (id: string) => {
+    const unit = reviewUnitIdFromCardId(id) || cardUnitId(liveById.get(id))
+    if (unit) unitIds.add(unit)
+  }
+  ids.forEach(rememberUnit)
+
+  let next = plan
+  const stamp = (id: string) => {
+    if (next.cardsById[id]) {
+      if (next.cardsById[id].status !== 'excluded') {
+        next = updateRoundPlanCard(next, id, { status: 'excluded' }, now)
+      }
+      return
+    }
+    const live = liveById.get(id)
+    if (!live) return
+    const entry = planCardFromLive(live, 'excluded', now)
+    const orderIds = next.orderIds.includes(id) ? next.orderIds : [...next.orderIds, id]
+    next = {
+      ...next,
+      orderIds,
+      cardsById: { ...next.cardsById, [id]: entry },
+    }
+  }
+  ids.forEach(stamp)
+
+  for (const entry of Object.values(next.cardsById)) {
+    if (entry.occurrenceKind === 'retry') continue
+    if (entry.status === 'completed' || entry.status === 'retry' || entry.status === 'excluded') continue
+    const unit = reviewUnitIdFromCardId(entry.cardId) || reviewUnitIdFromCardId(entry.sourceCardId)
+    if (!unit || !unitIds.has(unit)) continue
+    next = updateRoundPlanCard(next, entry.cardId, { status: 'excluded' }, now)
+  }
+  return next
+}
+
 export function updateRoundPlanCard(
   plan: FreestyleRoundPlanState,
   cardId: string,
@@ -534,10 +617,49 @@ export function planCardStatus(
   currentCardId?: string | null,
 ): FreestyleRoundPlanCardStatus {
   if (hiddenIds && Array.from(hiddenIds, String).includes(card.id)) return 'excluded'
+  // A confirmed 移除队列 stays excluded even when this card is on screen and
+  // a later hydrate has not echoed the id into hiddenIds yet.
+  if (plan?.cardsById[card.id]?.status === 'excluded') return 'excluded'
   if (completedIds && Array.from(completedIds, String).includes(card.id)) return 'completed'
   if (plan?.cardsById[card.id]?.status === 'completed') return 'completed'
   if (currentCardId === card.id) return 'active'
   return plan?.cardsById[card.id]?.status === 'stale' ? 'stale' : plan?.cardsById[card.id]?.status === 'retry' ? 'retry' : 'pending'
+}
+
+/**
+ * Hidden ids that must survive a server snapshot.
+ * Keep a local plan exclusion the server has not echoed, keep a local hidden id
+ * whose plan entry is still excluded or missing, and union server excluded ids.
+ * `releasedIds` are in-flight restores: a stale server exclude list must not hide them again.
+ */
+export function mergeRetainedHiddenIds(
+  localHidden: readonly string[],
+  localPlan: FreestyleRoundPlanState | null | undefined,
+  serverExcluded: readonly string[] | null | undefined,
+  releasedIds: readonly string[] = [],
+): string[] {
+  const released = new Set(releasedIds.map((id) => String(id || '').trim()).filter(Boolean))
+  const merged: string[] = []
+  const seen = new Set<string>()
+  const push = (raw: string) => {
+    const id = String(raw || '').trim()
+    if (!id || seen.has(id) || released.has(id)) return
+    seen.add(id)
+    merged.push(id)
+  }
+  if (localPlan) {
+    for (const [id, card] of Object.entries(localPlan.cardsById)) {
+      if (card.status === 'excluded') push(id)
+    }
+  }
+  for (const id of localHidden) {
+    const text = String(id || '').trim()
+    const status = localPlan?.cardsById[text]?.status
+    if (status && status !== 'excluded') continue
+    push(text)
+  }
+  for (const id of serverExcluded ?? []) push(String(id))
+  return merged
 }
 
 export function applyCompletedIdsToRoundPlan(
@@ -548,6 +670,8 @@ export function applyCompletedIdsToRoundPlan(
   if (!completed.size) return plan
   let next = plan
   for (const id of Object.keys(plan.cardsById)) {
+    // 移除本队列 is not a pass. A stale completed_ids entry must not flip it back.
+    if (next.cardsById[id]?.status === 'excluded') continue
     if (!completed.has(id) || next.cardsById[id]?.status === 'completed') continue
     next = updateRoundPlanCard(next, id, { status: 'completed' })
   }

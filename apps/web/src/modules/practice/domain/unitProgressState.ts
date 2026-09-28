@@ -72,6 +72,60 @@ export function scoredOccurrenceIds(input: UnitProgressInput): string[] {
   return ids
 }
 
+/**
+ * `review_unit:UNIT:rN` → UNIT. Inlined so this module does not value-import
+ * queueState (that module already imports occurrence scoring).
+ */
+function sourceUnitKeyFromId(cardId: string): string {
+  const text = idOf(cardId)
+  if (!text.startsWith('review_unit:')) return ''
+  const rest = text.slice('review_unit:'.length)
+  const marker = rest.lastIndexOf(':r')
+  if (marker <= 0) return ''
+  const revision = rest.slice(marker + 2)
+  return /^\d+$/.test(revision) ? rest.slice(0, marker) : ''
+}
+
+function cardUnitKey(card: FreestyleCard): string {
+  if ('unit_id' in card) return idOf(card.unit_id)
+  return ''
+}
+
+function isRetryCard(card: FreestyleCard): boolean {
+  if (card.occurrence_kind === 'retry') return true
+  const source = 'source_card_id' in card ? idOf(card.source_card_id) : ''
+  return Boolean(source && source !== idOf(card.id))
+}
+
+/**
+ * A later revision of a unit already 移除队列. The removal tick stays on the
+ * old id; this id must not look unscored. Retries and already-scored cards
+ * are not shadows — callers still score those on their own id.
+ */
+export function isShadowOfQueueRemoval(
+  cardId: string,
+  plan: FreestyleRoundPlanState | null,
+  unitId = '',
+): boolean {
+  const id = idOf(cardId)
+  if (!id || !plan || id.startsWith('retry:')) return false
+  const entry = plan.cardsById[id]
+  if (entry?.status === 'excluded' || entry?.occurrenceKind === 'retry') return false
+  if (entry?.status === 'completed' || entry?.status === 'retry' || entry?.lastRating != null) return false
+  const unit = sourceUnitKeyFromId(id) || idOf(unitId)
+  if (!unit) return false
+  return Object.values(plan.cardsById).some((item) => {
+    if (item.status !== 'excluded' || item.occurrenceKind === 'retry' || item.cardId === id) return false
+    const excludedUnit = sourceUnitKeyFromId(item.cardId) || sourceUnitKeyFromId(item.sourceCardId)
+    return Boolean(excludedUnit && excludedUnit === unit)
+  })
+}
+
+function isUnscoredRemovalShadow(card: FreestyleCard, input: UnitProgressInput): boolean {
+  if (isRetryCard(card) || isOccurrenceScored(card.id, input)) return false
+  return isShadowOfQueueRemoval(card.id, input.roundPlan, cardUnitKey(card))
+}
+
 /** Ids of cards that still need a score this round (excluded stay out). */
 export function unscoredOccurrenceIds(input: UnitProgressInput): string[] {
   const ids: string[] = []
@@ -81,6 +135,7 @@ export function unscoredOccurrenceIds(input: UnitProgressInput): string[] {
     // The yellow boundary hint is never scored; it is not outstanding work.
     if (isReviewHintId(id)) continue
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') continue
+    if (isUnscoredRemovalShadow(card, input)) continue
     if (!isOccurrenceScored(id, input)) ids.push(id)
   }
   return ids
@@ -96,6 +151,7 @@ export function findEarliestUnscoredIndex(input: UnitProgressInput): number | nu
     if (!id) return false
     if (isReviewHintId(id)) return false
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') return false
+    if (isUnscoredRemovalShadow(card, input)) return false
     return !isOccurrenceScored(id, input)
   })
   return index >= 0 ? index : null
@@ -131,6 +187,7 @@ export function areAllOccurrencesPassed(input: UnitProgressInput): boolean {
     if (!id) continue
     if (isReviewHintId(id)) continue
     if (input.roundPlan?.cardsById[id]?.status === 'excluded') continue
+    if (!isOccurrencePassed(id, input) && isUnscoredRemovalShadow(card, input)) continue
     const sourceId = idOf((card as { source_card_id?: string }).source_card_id) || id
     families.add(sourceId)
   }

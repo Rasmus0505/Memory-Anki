@@ -56,7 +56,33 @@ describe('FreestyleRoundConfigDialog', () => {
     expect(screen.getByRole('radio', { name: /^混合模式/ })).toBeTruthy()
     expect(screen.queryByRole('radio', { name: /英语宫殿/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    expect(onSaveConfig).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
+    expect(onSaveConfig.mock.calls[0][1]).toBe('keep-overlap')
+  })
+
+  it('starts a fresh round when overlapping progress is discarded', async () => {
+    const { onSaveConfig } = renderDialog()
+
+    await screen.findByText('快捷预设')
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    fireEvent.click(await screen.findByRole('button', { name: '不保留，开启新一轮' }))
+
+    expect(onSaveConfig).toHaveBeenCalledTimes(1)
+    expect(onSaveConfig.mock.calls[0][1]).toBe('start-fresh')
+  })
+
+  it('cancels the save when the overlap reminder is dismissed', async () => {
+    const { onSaveConfig } = renderDialog()
+
+    await screen.findByText('快捷预设')
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    const prompt = await screen.findByTestId('freestyle-overlap-progress-dialog')
+    fireEvent.click(within(prompt).getByRole('button', { name: '关闭弹窗' }))
+
+    expect(onSaveConfig).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('freestyle-overlap-progress-dialog')).toBeNull()
   })
 
   it('uses next-round copy and CTA after settlement', async () => {
@@ -65,6 +91,7 @@ describe('FreestyleRoundConfigDialog', () => {
     await screen.findByText('快捷预设')
     expect(screen.getByText(/确认后开始全新一轮/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '开始下一轮' }))
+    expect(screen.queryByTestId('freestyle-overlap-progress-dialog')).toBeNull()
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
   })
 
@@ -79,6 +106,7 @@ describe('FreestyleRoundConfigDialog', () => {
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     })
+    fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
     expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
       mix_mode: 'quiz_only',
       content: { mindmap_branch: false, anki_card: false, quiz_question: true },
@@ -143,6 +171,7 @@ describe('FreestyleRoundConfigDialog', () => {
     const subjectGroup = await screen.findByRole('group', { name: '学科' })
     fireEvent.click(await within(subjectGroup).findByRole('button', { name: '英语' }))
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
 
     expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
       streams: {

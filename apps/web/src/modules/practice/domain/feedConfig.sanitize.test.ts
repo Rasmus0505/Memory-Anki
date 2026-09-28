@@ -60,6 +60,14 @@ describe('freestyle feed config', () => {
     expect(sanitizeFreestyleFeedConfig(null).overlay_question_range).toBe('all')
     expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).overlay_question_range).toBe('due')
     expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).streams.quiz.overlay_question_range).toBe('due')
+    expect(sanitizeFreestyleFeedConfig(null).overlay_question_kinds).toEqual(['objective', 'subjective'])
+    expect(sanitizeFreestyleFeedConfig(null).overlay_type_order).toBe('interleave')
+    expect(sanitizeFreestyleFeedConfig(null).overlay_type_palace_nesting).toBe('palace_then_type')
+    expect(sanitizeFreestyleFeedConfig({
+      overlay_question_kinds: ['subjective', 'nope', 'subjective'],
+      overlay_type_order: 'subjective_then_objective',
+      overlay_type_palace_nesting: 'type_then_palace',
+    }).overlay_question_kinds).toEqual(['subjective'])
   })
 
   it('defaults mix_mode to ratio and derives mix_ratio from weights', () => {

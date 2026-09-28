@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
@@ -25,8 +25,8 @@ import type {
   UnitReviewSessionDto,
 } from '@/modules/practice/public'
 import { countUnitFlipProgress, unitFlipTargetUids } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
-import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
+import { useFreestyleEnterRevealFollow } from './useFreestyleEnterRevealFollow'
 import {
   recordSessionRecorderUiAction,
   summarizeRevealMapChange,
@@ -93,6 +93,10 @@ export function FreestyleUnitReviewFlipPanel({
   onOpenScopeQuiz?: () => void
 }) {
   const flipCardRevealSettings = useFlipCardRevealSettings()
+  // Sticky: once this card has been the active one, keep its ladder so swiping back
+  // doesn't blank and refetch it.
+  const [ladderEnabled, setLadderEnabled] = useState(active)
+  if (active && !ladderEnabled) setLadderEnabled(true)
   const [displayMode, setDisplayMode] = useState<'review' | 'edit'>('review')
   const [editEditorState, setEditEditorState] = useState<MindMapEditorState>(editorState)
   const editEditorStateRef = useRef(editorState)
@@ -137,7 +141,7 @@ export function FreestyleUnitReviewFlipPanel({
     })
   }, [editEditorState, isEditMode, reveal.revealMap])
 
-  const { handleNodeContextMenu, handleTargetNodeClick, root } = reveal
+  const { handleNodeContextMenu, root } = reveal
   const { signalReveal } = useFreestyleFlowFeedback()
 
   const lastNotifiedRevealKeyRef = useRef('')
@@ -222,6 +226,18 @@ export function FreestyleUnitReviewFlipPanel({
   const lastRevealRecordKeyRef = useRef('')
   const revealApiRef = useRef(reveal)
   revealApiRef.current = reveal
+  const revealFollow = useFreestyleEnterRevealFollow({
+    active,
+    isEditMode,
+    palaceTitle: card.palace_title || '',
+    unitTitle: unit.title || '',
+    anchorUid: unit.anchor_uid || '',
+    rootId: root.id,
+    rootText: root.text || '',
+    handleNodeContextMenu,
+    revealApiRef,
+    revealMap: reveal.revealMap,
+  })
 
   // While reviewing, external/session replacement wins. During edit, the local
   // document stays authoritative until the card leaves the editing session.
@@ -233,66 +249,6 @@ export function FreestyleUnitReviewFlipPanel({
     editEditorStateRef.current = editorState
     lastSavedFingerprintRef.current = editorState.editor_fingerprint || ''
   }, [editorState])
-
-  useLayoutEffect(() => {
-    if (!active || isEditMode) return
-
-    const anchorUid = String(unit.anchor_uid || '').trim()
-    if (!anchorUid) return
-
-    const targetSelection: MindMapSelection = {
-      uid: anchorUid,
-      text: unit.title || card.palace_title || '复习目标',
-      note: '',
-      memoryAnkiId: null,
-      memoryAnkiNodeType: null,
-      rawData: {},
-    }
-    const rootSelection: MindMapSelection = {
-      ...targetSelection,
-      uid: root.id,
-      text: root.text || card.palace_title || '宫殿',
-    }
-    const handleTargetShortcut = (event: globalThis.KeyboardEvent) => {
-      const isEnter = event.key === 'Enter'
-      const isShift = event.key === 'Shift'
-      if (
-        event.defaultPrevented
-        || (!isEnter && !isShift)
-        || event.ctrlKey
-        || event.altKey
-        || event.metaKey
-        || (isEnter && event.shiftKey)
-        || (isShift && event.repeat)
-        || isFreestyleShortcutBlocked(event.target)
-      ) {
-        return
-      }
-      if (event.target instanceof HTMLElement && event.target.closest('button, a')) return
-
-      event.preventDefault()
-      if (isShift) {
-        // Right-clicking the root hides every descendant while retaining the
-        // root card, which is the keyboard equivalent of returning to root.
-        handleNodeContextMenu([rootSelection])
-        return
-      }
-      handleTargetNodeClick([targetSelection])
-    }
-
-    window.addEventListener('keydown', handleTargetShortcut, true)
-    return () => window.removeEventListener('keydown', handleTargetShortcut, true)
-  }, [
-    active,
-    card.palace_title,
-    handleNodeContextMenu,
-    handleTargetNodeClick,
-    isEditMode,
-    root.id,
-    root.text,
-    unit.anchor_uid,
-    unit.title,
-  ])
 
   // Session reload (stale rebuild) refreshes the edit baseline only while learning.
   useEffect(() => {
@@ -625,6 +581,7 @@ export function FreestyleUnitReviewFlipPanel({
     nodeQuizQuestionIds,
     nodeQuizInitialIndex,
     handleOpenNodeQuiz,
+    handleQuestionDeleted,
   } = useFreestyleUnitReviewNodeQuiz({
     palaceId: session.palace_id,
     editorDoc: (isEditMode ? editEditorState : editorState).editor_doc,
@@ -711,14 +668,19 @@ export function FreestyleUnitReviewFlipPanel({
         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         toolbarCenterContent={
-          <PalaceLadderProgress
-            palaceId={session.palace_id}
-            unitId={unit.id}
-            refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
-          />
+          // Neighbour previews skip it: each fetch is ~1s under load and they raced the active card.
+          ladderEnabled ? (
+            <PalaceLadderProgress
+              palaceId={session.palace_id}
+              unitId={unit.id}
+              refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
+            />
+          ) : null
         }
         onNodeActive={textToMindMap.onNodeActive}
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
+        revealFollowNodeIds={revealFollow.nodeIds}
+        revealFollowNonce={revealFollow.nonce}
         onPaneDoubleClick={handleToggleMode}
         preserveViewOnSync
         initialViewPolicy="preserve"
@@ -736,6 +698,7 @@ export function FreestyleUnitReviewFlipPanel({
         questionStates={quizNodeBindings.questionStates}
         updateQuestionState={quizNodeBindings.updateQuestionState}
         markQuestionCompleted={quizNodeBindings.markQuestionCompleted}
+        onQuestionDeleted={handleQuestionDeleted}
         reviewUnitsPanelOpen={reviewUnitsPanelOpen}
         setReviewUnitsPanelOpen={setReviewUnitsPanelOpen}
         lastUndoToken={lastUndoToken}

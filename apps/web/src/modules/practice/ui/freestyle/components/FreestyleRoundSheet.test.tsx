@@ -74,7 +74,7 @@ describe('FreestyleRoundSheet', () => {
   it('marks the current card and shows a drop placeholder while reordering', () => {
     const { onReorder } = renderSheet()
 
-    expect(screen.getByTestId('round-plan-card-one').className).toContain('bg-emerald-500/12')
+    expect(screen.getByTestId('round-plan-card-one').className).toContain('bg-primary/12')
     const dataTransfer = {
       effectAllowed: '',
       dropEffect: '',
@@ -197,8 +197,8 @@ describe('FreestyleRoundSheet', () => {
     expect(pendingRow.getAttribute('data-retry')).toBe('pending')
     expect(doneRow.textContent).toContain('重练已过')
     expect(pendingRow.textContent).toContain('待重练')
-    expect(pendingRow.className).toContain('bg-amber-500/10')
-    expect(doneRow.className).toContain('bg-emerald-500/8')
+    expect(pendingRow.className).toContain('bg-rate-hard/10')
+    expect(doneRow.className).toContain('bg-rate-good/8')
   })
 
   it('lists cards in progress-rail order when the header toggle asks for it', () => {

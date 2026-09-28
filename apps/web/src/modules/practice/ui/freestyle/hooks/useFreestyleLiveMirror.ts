@@ -13,7 +13,6 @@ import {
   decodeFreestyleLiveView,
   isWeakerLiveRating,
   serializeFreestyleLiveView,
-  type FreestyleAnkiFlipLiveState,
   type FreestyleLiveRating,
   type FreestyleLiveView,
 } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
@@ -27,12 +26,10 @@ export function useFreestyleLiveMirror({
   roundComplete,
   questionId,
   questionState,
-  ankiFlip,
   revealMap,
   rating,
   seekCardId,
   applyQuestionState,
-  applyAnkiFlip,
   applyRevealMap,
   applyRating,
   isActive = true,
@@ -45,12 +42,10 @@ export function useFreestyleLiveMirror({
   roundComplete: boolean
   questionId: number | null
   questionState: QuizRuntimeState | undefined
-  ankiFlip: FreestyleAnkiFlipLiveState | null
   revealMap: Record<string, string> | null
   rating: FreestyleLiveRating | null
   seekCardId: (cardId: string) => void
   applyQuestionState: (questionId: number, state: QuizRuntimeState) => void
-  applyAnkiFlip: (flip: FreestyleAnkiFlipLiveState | null) => void
   applyRevealMap: (revealMap: Record<string, string> | null) => void
   applyRating: (rating: FreestyleLiveRating) => void
   isActive?: boolean
@@ -101,7 +96,6 @@ export function useFreestyleLiveMirror({
     if (decoded.questionState) {
       applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
     }
-    applyAnkiFlip(decoded.flip)
     if (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap)) {
       applyRevealMap(decoded.revealMap)
     }
@@ -109,7 +103,6 @@ export function useFreestyleLiveMirror({
       applyRating(decoded.rating)
     }
   }, [
-    applyAnkiFlip,
     applyQuestionState,
     applyRating,
     applyRevealMap,
@@ -130,7 +123,6 @@ export function useFreestyleLiveMirror({
       currentCardId,
       currentIndex,
       queueCardIds,
-      flip: ankiFlip,
       questionState: questionId != null && questionState
         ? { questionId, state: questionState }
         : null,
@@ -152,7 +144,6 @@ export function useFreestyleLiveMirror({
       previous
       && previous.currentCardId === view.currentCardId
       && previous.roundComplete === view.roundComplete
-      && JSON.stringify(previous.flip) === JSON.stringify(view.flip)
       && JSON.stringify(previous.questionState) === JSON.stringify(view.questionState)
       && JSON.stringify(previous.revealMap) === JSON.stringify(view.revealMap)
       && JSON.stringify(previous.rating) === JSON.stringify(view.rating),
@@ -187,7 +178,6 @@ export function useFreestyleLiveMirror({
       view,
     })
   }, [
-    ankiFlip,
     currentCardId,
     currentIndex,
     isActive,

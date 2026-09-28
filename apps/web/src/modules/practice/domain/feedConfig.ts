@@ -19,6 +19,12 @@ import type {
   FreestyleUnitOrder,
 } from '@/shared/api/contracts'
 import type { FreestylePalaceContext } from '@/shared/api/contracts'
+import {
+  asOverlayQuestionKinds,
+  asOverlayTypeOrder,
+  asOverlayTypePalaceNesting,
+  DEFAULT_OVERLAY_QUESTION_KINDS,
+} from './overlayQuizConfig'
 
 export const FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v2'
 export const LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.v1'
@@ -166,6 +172,9 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   weak_quiz_priority: true,
   overlay_quiz_setup_done: false,
   overlay_question_range: 'all',
+  overlay_question_kinds: [...DEFAULT_OVERLAY_QUESTION_KINDS],
+  overlay_type_order: 'interleave',
+  overlay_type_palace_nesting: 'palace_then_type',
 }
 
 function asBoolean(value: unknown, fallback: boolean) {
@@ -192,7 +201,8 @@ function asIdList(value: unknown) {
 }
 
 function asPalaceOrder(value: unknown): FreestylePalaceOrder {
-  return value === 'interleave_palaces' ? 'interleave_palaces' : 'finish_palace_then_next'
+  if (value === 'interleave_palaces' || value === 'exam_priority') return value
+  return 'finish_palace_then_next'
 }
 
 function asDuePolicy(_value: unknown, _fallback: FreestyleDuePolicy = 'due_only'): FreestyleDuePolicy {
@@ -650,6 +660,9 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     question_type: legacyQuestionType,
     weak_quiz_priority: quizStream.weak_priority,
     overlay_quiz_setup_done: asBoolean(raw.overlay_quiz_setup_done, false),
+    overlay_question_kinds: asOverlayQuestionKinds(raw.overlay_question_kinds),
+    overlay_type_order: asOverlayTypeOrder(raw.overlay_type_order),
+    overlay_type_palace_nesting: asOverlayTypePalaceNesting(raw.overlay_type_palace_nesting),
   }
 }
 

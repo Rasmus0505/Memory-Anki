@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   getFreestyleChoiceIndex,
+  getFreestyleFeedPageDirection,
   getFreestyleQuestionDirection,
   isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
+  shouldSwallowFreestyleFeedPageKey,
 } from './freestyleKeyboard'
 
 describe('freestyle keyboard shortcuts', () => {
@@ -20,6 +22,46 @@ describe('freestyle keyboard shortcuts', () => {
     expect(getFreestyleQuestionDirection('ArrowLeft')).toBe('previous')
     expect(getFreestyleQuestionDirection('ArrowRight')).toBe('next')
     expect(getFreestyleQuestionDirection('ArrowUp')).toBeNull()
+  })
+
+  it('maps vertical arrows to feed paging only when no quiz dialog owns the keyboard', () => {
+    expect(getFreestyleFeedPageDirection('ArrowUp')).toBe('previous')
+    expect(getFreestyleFeedPageDirection('ArrowDown')).toBe('next')
+    expect(getFreestyleFeedPageDirection('ArrowLeft')).toBeNull()
+    const scope = document.createElement('div')
+    scope.dataset.keyboardShortcutsSuspended = 'true'
+    document.body.appendChild(scope)
+    try {
+      const direction = isFreestyleShortcutBlocked(document.body)
+        ? null
+        : getFreestyleFeedPageDirection('ArrowUp')
+      expect(direction).toBeNull()
+    } finally {
+      scope.remove()
+    }
+  })
+
+  it('cancels arrow scrolling aimed at the feed while a quiz dialog is open', () => {
+    const feed = document.createElement('div')
+    const cardButton = document.createElement('button')
+    feed.append(cardButton)
+    const dialog = document.createElement('div')
+    dialog.dataset.keyboardShortcutsSuspended = 'true'
+    dialog.setAttribute('role', 'dialog')
+    const dialogButton = document.createElement('button')
+    dialog.append(dialogButton)
+    const field = document.createElement('input')
+    feed.append(field)
+    document.body.append(feed, dialog)
+    try {
+      expect(isFreestyleShortcutBlocked(cardButton)).toBe(true)
+      expect(shouldSwallowFreestyleFeedPageKey(cardButton, feed)).toBe(true)
+      expect(shouldSwallowFreestyleFeedPageKey(dialogButton, feed)).toBe(false)
+      expect(shouldSwallowFreestyleFeedPageKey(field, feed)).toBe(false)
+    } finally {
+      feed.remove()
+      dialog.remove()
+    }
   })
 
   it('blocks page navigation while a modal owns keyboard input', () => {

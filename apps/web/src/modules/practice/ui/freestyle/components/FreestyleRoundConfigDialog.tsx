@@ -15,6 +15,11 @@ import {
   normalizeFreestylePalaceSelection,
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
+import {
+  OVERLAP_PROGRESS_PROMPT_TITLE,
+  overlapProgressPromptCopy,
+  type FreestyleConfigSaveChoice,
+} from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
 import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
 import { FreestyleTrainingConfigForm } from './FreestyleTrainingConfigForm'
 import type {
@@ -48,17 +53,21 @@ export function FreestyleRoundConfigDialog({
   open: boolean
   config: FreestyleFeedConfig
   onOpenChange: (open: boolean) => void
-  onSaveConfig: (config: FreestyleFeedConfig) => void
+  onSaveConfig: (config: FreestyleFeedConfig, choice?: FreestyleConfigSaveChoice) => void
   /** Settlement 「再来一轮」 uses nextRound; in-round HUD uses replan. */
   mode?: 'replan' | 'nextRound'
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
+  const [pendingSave, setPendingSave] = useState<FreestyleFeedConfig | null>(null)
   const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
   const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
   const [pickerStream, setPickerStream] = useState<FreestyleTrainingStream | null>(null)
 
   useEffect(() => {
-    if (!open) setPickerStream(null)
+    if (!open) {
+      setPickerStream(null)
+      setPendingSave(null)
+    }
   }, [open])
 
   useEffect(() => {
@@ -104,6 +113,26 @@ export function FreestyleRoundConfigDialog({
     setDraft((current) => applyFreestyleQuickPreset(current, presetId, palaces))
   }
 
+  const commitSave = (choice?: FreestyleConfigSaveChoice) => {
+    const next = pendingSave ?? sanitizeFreestyleFeedConfig(draft)
+    onSaveConfig(next, choice)
+    setPendingSave(null)
+    onOpenChange(false)
+  }
+
+  const requestSave = () => {
+    const next = sanitizeFreestyleFeedConfig(draft)
+    if (mode === 'nextRound') {
+      commitSave()
+      return
+    }
+    setPendingSave(next)
+  }
+
+  const cancelOverlapPrompt = () => {
+    setPendingSave(null)
+  }
+
   const pickerSubjects = pickerStream
     ? filterSubjectsForStream(scopeSubjects, draft.streams[pickerStream])
     : scopeSubjects
@@ -133,7 +162,7 @@ export function FreestyleRoundConfigDialog({
               <DialogDescription>
                 {mode === 'nextRound'
                   ? '确认后开始全新一轮：按当前配置重新生成队列，并清空本轮做题进度。'
-                  : '保存后重排尚未开始的卡片，保留本轮已完成和已排除状态。'}
+                  : '保存后会询问是否保留和新配置重复的进度。保留则继续这一轮，只重排还没开始的卡片。'}
               </DialogDescription>
             </div>
             <DialogClose onClick={() => onOpenChange(false)} />
@@ -186,10 +215,7 @@ export function FreestyleRoundConfigDialog({
             <Button
               type="button"
               className="w-full sm:w-auto"
-              onClick={() => {
-                onSaveConfig(sanitizeFreestyleFeedConfig(draft))
-                onOpenChange(false)
-              }}
+              onClick={requestSave}
             >
               <Save className="size-4" />
               {mode === 'nextRound' ? '开始下一轮' : '保存配置并重排'}
@@ -197,6 +223,40 @@ export function FreestyleRoundConfigDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {pendingSave != null && mode !== 'nextRound' ? (
+        <Dialog open onOpenChange={(next) => { if (!next) cancelOverlapPrompt() }}>
+          <DialogContent
+            floatingId="freestyle-overlap-progress"
+            data-testid="freestyle-overlap-progress-dialog"
+            className="flex w-[min(28rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
+          >
+            <DialogHeader>
+              <div className="min-w-0">
+                <DialogTitle>{OVERLAP_PROGRESS_PROMPT_TITLE}</DialogTitle>
+                <DialogDescription>{overlapProgressPromptCopy()}</DialogDescription>
+              </div>
+              <DialogClose onClick={cancelOverlapPrompt} />
+            </DialogHeader>
+            <DialogFooter className="shrink-0 flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => commitSave('keep-overlap')}
+              >
+                保留，继续这一轮
+              </Button>
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => commitSave('start-fresh')}
+              >
+                不保留，开启新一轮
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       <FreestylePalacePickerDialog
         open={pickerStream != null}
         subjects={pickerSubjects}

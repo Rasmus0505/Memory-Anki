@@ -113,7 +113,7 @@ describe('FreestyleQuizCardView', () => {
     fireEvent.keyDown(window, { key: '1' })
     expect(inactive.onChoiceResolve).not.toHaveBeenCalled()
 
-    const resolved = renderCard({ resolved: true })
+    const resolved = renderCard({ resolved: true, selectedOptionId: 'A' })
     fireEvent.keyDown(window, { key: '1' })
     expect(resolved.onChoiceResolve).not.toHaveBeenCalled()
 

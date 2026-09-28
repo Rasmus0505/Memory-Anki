@@ -11,8 +11,9 @@ import {
   planHasNewDueWork,
   planIsFullyHandled,
   resolveResumePreferCardId,
+  retainLocalRoundLedger,
 } from './serverRoundPlan'
-import { createRoundPlan } from './roundPlan'
+import { createRoundPlan, updateRoundPlanCard } from './roundPlan'
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from './feedConfig'
 
 function branch(id: string, palaceId = 1): FreestyleReviewUnitCard {
@@ -57,6 +58,30 @@ describe('server round plan hydrate', () => {
     }
     expect(cardsForServerPlan(cards, plan, 'round-1').map((card) => card.id))
       .toEqual(['a', 'b', 'c', retry.id])
+  })
+
+  it('does not put an excluded unit or its newer revision back into the live feed', () => {
+    const rebound = { ...branch('review_unit:u1:r2'), unit_id: 'u1' }
+    const other = branch('b')
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [{
+        card_id: 'review_unit:u1:r1',
+        unit_id: 'u1',
+        unit_revision: 1,
+        kind: 'mindmap_branch',
+        palace_id: 1,
+        palace_title: 'P',
+        label: 'A',
+      }],
+      presented_ids: ['review_unit:u1:r1', 'b'],
+      current_card_id: 'b',
+      current_index: 1,
+      completed_ids: [],
+      excluded_ids: ['review_unit:u1:r1'],
+      occurrences: [],
+      encounters: {},
+    }
+    expect(cardsForServerPlan([rebound, other], plan, 'round-1').map((card) => card.id)).toEqual(['b'])
   })
 
   it('keeps a completed retry occurrence in presented order', () => {
@@ -479,5 +504,117 @@ describe('server round plan hydrate', () => {
     }
     const hydrated = cardsForServerPlan([source, localRetry], plan, 'round-1')
     expect(hydrated.map((card) => card.id)).toEqual(['review_unit:u1:r1', 'retry:local-open'])
+  })
+})
+
+function encounter(cardId: string, selectedRating: 1 | 2 | 3 | 4 | null) {
+  return {
+    encounterId: `enc-${cardId}`,
+    roundId: 'round-1',
+    unitRevision: 1,
+    status: selectedRating == null ? 'pending' as const : 'closed' as const,
+    sessionId: null,
+    selectedRating,
+    passed: selectedRating == null ? null : selectedRating >= 3,
+    retryAfterCards: 0,
+  }
+}
+
+describe('retainLocalRoundLedger', () => {
+  it('keeps this-round scores when a stale hydrate clears completed ids', () => {
+    const localPlan = createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG)
+    const scored = updateRoundPlanCard(
+      updateRoundPlanCard(localPlan, 'a', { status: 'completed', lastRating: 4 }),
+      'b',
+      { status: 'retry', lastRating: 1 },
+    )
+    const hydrated = createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG)
+    const retained = retainLocalRoundLedger({
+      localPlan: scored,
+      localCompletedIds: ['a'],
+      localEncounters: { a: encounter('a', 4), b: encounter('b', 1) },
+      hydratedPlan: hydrated,
+      hydratedCompletedIds: [],
+      hydratedEncounters: { a: encounter('a', null), b: encounter('b', null) },
+    })
+    expect(retained.plan.cardsById.a).toMatchObject({ status: 'completed', lastRating: 4 })
+    expect(retained.plan.cardsById.b).toMatchObject({ status: 'retry', lastRating: 1 })
+    expect(retained.completedIds).toEqual(['a'])
+    expect(retained.encounters.a?.selectedRating).toBe(4)
+    expect(retained.encounters.b?.selectedRating).toBe(1)
+  })
+
+  it('puts a dropped queue removal back on the plan', () => {
+    const localPlan = updateRoundPlanCard(
+      createRoundPlan('round-1', [branch('a'), branch('gone'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG),
+      'gone',
+      { status: 'excluded' },
+    )
+    const hydrated = createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG)
+    const retained = retainLocalRoundLedger({
+      localPlan,
+      localCompletedIds: [],
+      localEncounters: {},
+      hydratedPlan: hydrated,
+      hydratedCompletedIds: [],
+      hydratedEncounters: {},
+    })
+    expect(retained.plan.orderIds).toEqual(['a', 'gone', 'b'])
+    expect(retained.plan.cardsById.gone?.status).toBe('excluded')
+  })
+
+  it('does not resurrect a cancelled rating', () => {
+    const localPlan = updateRoundPlanCard(
+      createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG),
+      'a',
+      { status: 'pending', lastRating: null },
+    )
+    const hydrated = updateRoundPlanCard(
+      createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG),
+      'a',
+      { status: 'pending', lastRating: null },
+    )
+    const retained = retainLocalRoundLedger({
+      localPlan,
+      localCompletedIds: ['a'],
+      localEncounters: { a: encounter('a', null) },
+      hydratedPlan: hydrated,
+      hydratedCompletedIds: [],
+      hydratedEncounters: { a: encounter('a', null) },
+    })
+    expect(retained.plan.cardsById.a).toMatchObject({ status: 'pending', lastRating: null })
+    expect(retained.completedIds).toEqual([])
+    expect(retained.encounters.a?.selectedRating).toBeNull()
+  })
+
+  it('rebinds a source score onto the new revision and leaves the retry blank', () => {
+    const previous = createRoundPlan(
+      'round-1',
+      [branch('review_unit:u1:r1')],
+      DEFAULT_FREESTYLE_FEED_CONFIG,
+    )
+    const localPlan = updateRoundPlanCard(previous, 'review_unit:u1:r1', {
+      status: 'completed',
+      lastRating: 3,
+    })
+    const retry = createRetryOccurrence(branch('review_unit:u1:r2'), 'round-1', 1, 3)
+    const hydrated = createRoundPlan(
+      'round-1',
+      [branch('review_unit:u1:r2'), retry],
+      DEFAULT_FREESTYLE_FEED_CONFIG,
+    )
+    const retained = retainLocalRoundLedger({
+      localPlan,
+      localCompletedIds: ['review_unit:u1:r1'],
+      localEncounters: { 'review_unit:u1:r1': encounter('review_unit:u1:r1', 3) },
+      hydratedPlan: hydrated,
+      hydratedCompletedIds: [],
+      hydratedEncounters: {},
+    })
+    expect(retained.plan.cardsById['review_unit:u1:r2']).toMatchObject({ status: 'completed', lastRating: 3 })
+    expect(retained.plan.cardsById[retry.id]?.lastRating ?? null).toBeNull()
+    expect(retained.completedIds).toEqual(['review_unit:u1:r2'])
+    expect(retained.encounters['review_unit:u1:r2']?.selectedRating).toBe(3)
+    expect(retained.encounters[retry.id]).toBeUndefined()
   })
 })

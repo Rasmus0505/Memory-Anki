@@ -236,6 +236,81 @@ describe('FreestyleRatingBar', () => {
   })
 })
 
+describe('移除本队列', () => {
+  it('sits to the left of the four ratings and does not rate on the first press', () => {
+    const onRemoveFromQueue = vi.fn()
+    const { onRate } = renderBar({ onRemoveFromQueue })
+
+    const remove = screen.getByTestId('freestyle-rating-button-remove')
+    const forgot = screen.getByTestId('freestyle-rating-button-1')
+    expect(remove.compareDocumentPosition(forgot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(remove.textContent).toContain('移除本队列')
+    expect(remove.textContent).toContain('不改进度')
+
+    fireEvent.click(remove)
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    expect(onRate).not.toHaveBeenCalled()
+    expect(remove.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('再点确认移除')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('不改复习进度')
+  })
+
+  it('removes only on the second press and leaves the schedule ratings untouched', () => {
+    const onRemoveFromQueue = vi.fn()
+    const { onRate } = renderBar({ onRemoveFromQueue, selectedRating: 3 })
+
+    const remove = screen.getByTestId('freestyle-rating-button-remove')
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+    expect(onRemoveFromQueue).toHaveBeenCalledTimes(1)
+    expect(onRate).not.toHaveBeenCalled()
+  })
+
+  it('arms and confirms from the 5 key without treating 5 as a rating', () => {
+    const onRemoveFromQueue = vi.fn()
+    const { onRate } = renderBar({ onRemoveFromQueue })
+
+    fireEvent.keyDown(window, { key: '5' })
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: '5' })
+    expect(onRemoveFromQueue).toHaveBeenCalledTimes(1)
+    expect(onRate).not.toHaveBeenCalled()
+  })
+
+  it('drops the armed remove when a memory rating is chosen instead', () => {
+    const onRemoveFromQueue = vi.fn()
+    const { onRate } = renderBar({ onRemoveFromQueue })
+
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-remove'))
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    expect(onRate).toHaveBeenCalledWith(3)
+    expect(screen.queryByText('再点确认移除 · 不改复习进度')).toBeNull()
+  })
+
+  it('stays available before the review session loads', () => {
+    const onRemoveFromQueue = vi.fn()
+    renderBar({
+      ratingEffects: [],
+      reviewReady: false,
+      hasEncounter: false,
+      locked: true,
+      onRemoveFromQueue,
+    })
+
+    const remove = screen.getByTestId('freestyle-rating-button-remove') as HTMLButtonElement
+    expect(remove.disabled).toBe(false)
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+    expect(onRemoveFromQueue).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays off hint cards, which are not queue units', () => {
+    renderBar({ ratingEffects: [], hintMode: true, reviewReady: true })
+    expect(screen.queryByTestId('freestyle-rating-button-remove')).toBeNull()
+  })
+})
+
 describe('hintMode', () => {
   it('labels the buttons 继续 instead of schedule copy', () => {
     renderBar({ ratingEffects: [], hintMode: true, reviewReady: true })

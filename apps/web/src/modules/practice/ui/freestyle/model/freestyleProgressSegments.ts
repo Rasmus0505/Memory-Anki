@@ -2,7 +2,9 @@ import {
   cardPalaceId,
   isOccurrenceScored,
   isRetryOccurrence,
+  isShadowOfQueueRemoval,
   planCardStatus,
+  reviewUnitIdFromCardId,
   sourceCardId,
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
@@ -22,6 +24,8 @@ export interface FreestyleProgressSegment {
   palaceDone: boolean
   /** True when this tick is the card currently on screen, even if already rated. */
   viewing?: boolean
+  /** Confirmed 移除队列. Solid fill, but not a memory pass and not palace clearance. */
+  removed?: boolean
   kind?: 'source' | 'retry'
   retryAttempt?: number
   sourceCardId?: string
@@ -38,15 +42,15 @@ export interface FreestyleProgressSegment {
  * Viewing size is separate (`progressSegmentShapeClass` / node size).
  */
 export function retryNodeToneClass(tone: FreestyleSegmentTone): string {
-  if (tone === 'done') return 'bg-amber-400 text-zinc-950'
-  return 'bg-amber-400/25 text-amber-50'
+  if (tone === 'done') return 'bg-rate-hard text-stage'
+  return 'bg-rate-hard/25 text-stage-ink'
 }
 
 /** Card badge / 本轮安排 row chrome for a retry occurrence. */
 export function retryChromeClass(done: boolean): string {
   return done
-    ? 'border-emerald-500/40 bg-emerald-500/12 text-emerald-800 dark:border-emerald-400/35 dark:bg-emerald-500/15 dark:text-emerald-200'
-    : 'border-amber-500/50 bg-amber-400/90 text-zinc-950 dark:border-amber-300/50 dark:bg-amber-400 dark:text-zinc-950'
+    ? 'border-rate-good/40 bg-rate-good/12 text-rate-good'
+    : 'border-rate-hard/50 bg-rate-hard/90 text-stage'
 }
 
 /**
@@ -106,15 +110,15 @@ export interface FreestyleProgressSummary {
 /**
  * Palace identity is the primary rail hue. Tone is fill strength, not a second hue:
  * pending is a faint unfilled tick, done is a solid fill of the same palace color,
- * current is the playhead. Plan statuses still collapse: `excluded` leaves the rail
- * (not part of the round), and `stale` is too transient for its own treatment.
+ * current is the playhead. A confirmed 移除队列 stays on the rail as that solid fill.
+ * `stale` is too transient for its own treatment.
  */
 export function segmentTone(
   status: FreestyleRoundPlanCardStatus,
 ): FreestyleSegmentTone | null {
   switch (status) {
     case 'excluded':
-      return null
+      return 'done'
     case 'active':
       // Playhead size is `viewing`, not fill. An unrated card on screen stays faint.
       return 'pending'
@@ -127,16 +131,16 @@ export function segmentTone(
   }
 }
 
-/** Fixed accents readable on the dark immersive chrome (~8 slots). */
+/** Warm accents readable on the warm-dark stage (~8 slots, one muted cool for contrast). */
 const PALACE_ACCENT_KEYS = [
-  'sky',
-  'violet',
-  'rose',
+  'honey',
+  'terracotta',
+  'sage',
   'teal',
-  'indigo',
-  'green',
-  'fuchsia',
-  'pink',
+  'plum',
+  'clay',
+  'moss',
+  'dusk',
 ] as const
 
 export type PalaceAccentKey = (typeof PALACE_ACCENT_KEYS)[number] | 'neutral'
@@ -145,64 +149,65 @@ type AccentToneClass = Record<FreestyleSegmentTone, string>
 
 /**
  * pending: faint unfilled (~25%) · current: bright playhead · done: solid filled
- * retry: palace + amber mix. /70 vs /90 is not readable on a 6px tick.
+ * retry: palace + rate-hard amber mix. /70 vs /90 is not readable on a 6px tick.
+ * Literal strings so Tailwind can see every class.
  */
 const PALACE_ACCENT_TONE_CLASS: Record<(typeof PALACE_ACCENT_KEYS)[number], AccentToneClass> = {
-  sky: {
-    pending: 'bg-sky-400/25',
-    current: 'bg-sky-300',
-    done: 'bg-sky-400',
-    retry: 'bg-[color-mix(in_srgb,#38bdf8_55%,#fcd34d_45%)]',
+  honey: {
+    pending: 'bg-[hsl(38_90%_58%)]/25',
+    current: 'bg-[hsl(40_96%_72%)]',
+    done: 'bg-[hsl(38_90%_58%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(38_90%_58%)_55%,var(--color-rate-hard)_45%)]',
   },
-  violet: {
-    pending: 'bg-violet-400/25',
-    current: 'bg-violet-300',
-    done: 'bg-violet-400',
-    retry: 'bg-[color-mix(in_srgb,#a78bfa_55%,#fcd34d_45%)]',
+  terracotta: {
+    pending: 'bg-[hsl(12_70%_60%)]/25',
+    current: 'bg-[hsl(14_80%_74%)]',
+    done: 'bg-[hsl(12_70%_60%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(12_70%_60%)_55%,var(--color-rate-hard)_45%)]',
   },
-  rose: {
-    pending: 'bg-rose-400/25',
-    current: 'bg-rose-300',
-    done: 'bg-rose-400',
-    retry: 'bg-[color-mix(in_srgb,#fb7185_55%,#fcd34d_45%)]',
+  sage: {
+    pending: 'bg-[hsl(96_30%_56%)]/25',
+    current: 'bg-[hsl(96_40%_72%)]',
+    done: 'bg-[hsl(96_30%_56%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(96_30%_56%)_55%,var(--color-rate-hard)_45%)]',
   },
   teal: {
-    pending: 'bg-teal-400/25',
-    current: 'bg-teal-300',
-    done: 'bg-teal-400',
-    retry: 'bg-[color-mix(in_srgb,#2dd4bf_55%,#fcd34d_45%)]',
+    pending: 'bg-[hsl(176_42%_48%)]/25',
+    current: 'bg-[hsl(176_50%_66%)]',
+    done: 'bg-[hsl(176_42%_48%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(176_42%_48%)_55%,var(--color-rate-hard)_45%)]',
   },
-  indigo: {
-    pending: 'bg-indigo-400/25',
-    current: 'bg-indigo-300',
-    done: 'bg-indigo-400',
-    retry: 'bg-[color-mix(in_srgb,#818cf8_55%,#fcd34d_45%)]',
+  plum: {
+    pending: 'bg-[hsl(322_36%_62%)]/25',
+    current: 'bg-[hsl(322_46%_76%)]',
+    done: 'bg-[hsl(322_36%_62%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(322_36%_62%)_55%,var(--color-rate-hard)_45%)]',
   },
-  green: {
-    pending: 'bg-green-400/25',
-    current: 'bg-green-300',
-    done: 'bg-green-400',
-    retry: 'bg-[color-mix(in_srgb,#4ade80_55%,#fcd34d_45%)]',
+  clay: {
+    pending: 'bg-[hsl(352_62%_68%)]/25',
+    current: 'bg-[hsl(352_72%_80%)]',
+    done: 'bg-[hsl(352_62%_68%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(352_62%_68%)_55%,var(--color-rate-hard)_45%)]',
   },
-  fuchsia: {
-    pending: 'bg-fuchsia-400/25',
-    current: 'bg-fuchsia-300',
-    done: 'bg-fuchsia-400',
-    retry: 'bg-[color-mix(in_srgb,#e879f9_55%,#fcd34d_45%)]',
+  moss: {
+    pending: 'bg-[hsl(70_44%_48%)]/25',
+    current: 'bg-[hsl(70_52%_66%)]',
+    done: 'bg-[hsl(70_44%_48%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(70_44%_48%)_55%,var(--color-rate-hard)_45%)]',
   },
-  pink: {
-    pending: 'bg-pink-400/25',
-    current: 'bg-pink-300',
-    done: 'bg-pink-400',
-    retry: 'bg-[color-mix(in_srgb,#f472b6_55%,#fcd34d_45%)]',
+  dusk: {
+    pending: 'bg-[hsl(208_40%_60%)]/25',
+    current: 'bg-[hsl(208_52%_76%)]',
+    done: 'bg-[hsl(208_40%_60%)]',
+    retry: 'bg-[color-mix(in_srgb,hsl(208_40%_60%)_55%,var(--color-rate-hard)_45%)]',
   },
 }
 
 const NEUTRAL_ACCENT_TONE_CLASS: AccentToneClass = {
-  pending: 'bg-white/20',
-  current: 'bg-zinc-100',
-  done: 'bg-zinc-200',
-  retry: 'bg-amber-300/90',
+  pending: 'bg-stage-ink/20',
+  current: 'bg-stage-ink',
+  done: 'bg-stage-muted',
+  retry: 'bg-rate-hard/90',
 }
 
 /**
@@ -213,6 +218,29 @@ export function palaceAccent(palaceId: number | null): PalaceAccentKey {
   if (palaceId == null) return 'neutral'
   const slot = ((palaceId % PALACE_ACCENT_KEYS.length) + PALACE_ACCENT_KEYS.length) % PALACE_ACCENT_KEYS.length
   return PALACE_ACCENT_KEYS[slot]
+}
+
+const PALACE_AMBIENT_HSL: Record<(typeof PALACE_ACCENT_KEYS)[number], string> = {
+  honey: '38 90% 58%',
+  terracotta: '12 70% 60%',
+  sage: '96 30% 56%',
+  teal: '176 42% 48%',
+  plum: '322 36% 62%',
+  clay: '352 62% 68%',
+  moss: '70 44% 48%',
+  dusk: '208 40% 60%',
+}
+
+/** Raw `H S% L%` of the palace accent, for the feed's per-card ambient glow. Neutral = lamp amber. */
+export function palaceAmbientHsl(palaceId: number | null): string {
+  const accent = palaceAccent(palaceId)
+  return accent === 'neutral' ? '32 94% 60%' : PALACE_AMBIENT_HSL[accent]
+}
+
+/** Ambient glow for any feed card; cards without a palace fall back to the lamp amber. */
+export function cardAmbientHsl(card: object): string {
+  const value = (card as { palace_id?: unknown }).palace_id
+  return palaceAmbientHsl(typeof value === 'number' ? value : null)
 }
 
 /** Tailwind fill for a segment: palace accent modulated by tone. */
@@ -238,7 +266,7 @@ export function progressSegmentShapeClass(
   viewing = false,
 ): string {
   if (viewing || tone === 'current') {
-    return 'h-3.5 min-w-[6px] ring-2 ring-white'
+    return 'h-3.5 min-w-[6px] ring-2 ring-stage-ink'
   }
   return 'h-1.5'
 }
@@ -403,6 +431,9 @@ export function retryNodeLabel(segment: FreestyleProgressSegment): string {
 }
 
 function segmentStatusLabel(segment: FreestyleProgressSegment): string {
+  if (segment.removed) {
+    return segment.viewing || segment.tone === 'current' ? '当前 · 已移出队列' : '已移出队列'
+  }
   if (segment.viewing || segment.tone === 'current') {
     if (segment.tone === 'done') return '当前 · 已过'
     return '当前'
@@ -443,26 +474,65 @@ export function buildFreestyleProgressSummary(
   const baseItems: Array<{ id: string; sourceId: string }> = []
   let retryInserted = 0
   const passedSources = new Set<string>()
+  const drawnRemovalUnits = new Set<string>()
 
-  // Visual only: keep completed/retry ticks after the live feed drops them.
+  // Visual only: keep completed/retry/removed ticks after the live feed drops them.
   for (const id of progressIds(cards, roundPlan)) {
-    if (hidden.has(id)) continue
     const planEntry = roundPlan?.cardsById[id]
-    if (planEntry?.status === 'excluded') continue
+    if (planEntry?.status === 'excluded') {
+      const card = liveById.get(id)
+      const retryKind = card ? isRetryOccurrence(card) : planEntry.occurrenceKind === 'retry'
+      const sourceId = card ? sourceCardId(card) : (planEntry.sourceCardId || id)
+      if (!retryKind) {
+        const unit = reviewUnitIdFromCardId(id)
+        if (unit && drawnRemovalUnits.has(unit)) continue
+        if (unit) drawnRemovalUnits.add(unit)
+      }
+      segments.push({
+        cardId: id,
+        tone: 'done',
+        palaceId: card ? cardPalaceId(card) : (planEntry.palaceId ?? null),
+        palaceDone: false,
+        viewing: currentCardId === id,
+        removed: true,
+        kind: retryKind ? 'retry' : 'source',
+        enteredOn: planEntry.enteredOn,
+        sourceLabel: card
+          ? progressCardLabel(card, cards, roundPlan)
+          : snapshotSourceLabel(id, sourceId, planEntry, roundPlan),
+        ...(retryKind
+          ? {
+              retryAttempt: Math.max(
+                1,
+                Math.round(Number(card && 'retry_attempt' in card ? card.retry_attempt : planEntry.retryAttempt) || 1),
+              ),
+              sourceCardId: sourceId,
+            }
+          : {}),
+      })
+      continue
+    }
+    if (hidden.has(id)) continue
 
     const card = liveById.get(id)
     if (card) {
       const sourceId = sourceCardId(card)
       const encounter = encounters[card.id]
+      const scored = isOccurrenceScored(card.id, { completedIds, encounters, roundPlan })
+      const retryKind = isRetryOccurrence(card)
+      if (
+        !retryKind
+        && !scored
+        && isShadowOfQueueRemoval(card.id, roundPlan, 'unit_id' in card ? String(card.unit_id || '') : '')
+      ) continue
       const status = visualPlanStatus(
         planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
         encounter,
         planEntry?.status,
-        isOccurrenceScored(card.id, { completedIds, encounters, roundPlan }),
+        scored,
       )
       const tone = segmentTone(status)
       if (!tone) continue
-      const retryKind = isRetryOccurrence(card)
       const waitingRetry = !retryKind && planEntry?.status === 'retry'
       segments.push({
         cardId: card.id,
@@ -501,7 +571,11 @@ export function buildFreestyleProgressSummary(
       continue
     }
 
-    const status = snapshotPlanStatus(id, planEntry, completed)
+    // A scored card that left the live feed still fills solid. Excluded is handled above.
+    const scoredOffFeed = isOccurrenceScored(id, { completedIds, encounters, roundPlan })
+    const offFeedRetry = planEntry?.occurrenceKind === 'retry'
+    if (!offFeedRetry && !scoredOffFeed && isShadowOfQueueRemoval(id, roundPlan)) continue
+    const status = scoredOffFeed ? 'completed' : snapshotPlanStatus(id, planEntry, completed)
     const tone = status ? segmentTone(status) : null
     if (!tone) continue
     const retryKind = planEntry?.occurrenceKind === 'retry'
@@ -560,7 +634,7 @@ export function buildFreestyleProgressSummary(
 
   const unfinishedPalaces = new Set(
     segments
-      .filter((segment) => segment.palaceId != null && segment.tone !== 'done')
+      .filter((segment) => segment.palaceId != null && (segment.tone !== 'done' || segment.removed))
       .map((segment) => segment.palaceId as number),
   )
   for (const segment of segments) {
@@ -580,7 +654,7 @@ export function buildFreestyleProgressSummary(
     segments,
     position: currentIndex >= 0 ? currentIndex + 1 : 0,
     total: segments.length,
-    doneCount: segments.filter((segment) => segment.tone === 'done').length,
+    doneCount: segments.filter((segment) => segment.tone === 'done' && !segment.removed).length,
     retryCount: segments.filter((segment) => segment.tone === 'retry').length,
     scheduledBase: baseItems.length,
     positionBase: baseIndex >= 0 ? baseIndex + 1 : 0,

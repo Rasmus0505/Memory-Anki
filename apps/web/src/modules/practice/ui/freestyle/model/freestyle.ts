@@ -250,7 +250,9 @@ function actionInterval(frequency: FreestyleActionFrequency) {
 }
 
 export function enabledContentTypes(config: FreestyleConfig): FreestyleContentType[] {
-  return FREESTYLE_CONTENT_TYPES.filter((type) => config.contentTypes[type])
+  return FREESTYLE_CONTENT_TYPES.filter(
+    (type) => type !== 'english_reading' && config.contentTypes[type],
+  )
 }
 
 function downgradeResolvedQuizCards<T extends FreestyleCard>(

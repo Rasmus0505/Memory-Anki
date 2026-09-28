@@ -2,26 +2,20 @@ import type { UnitRating } from '@/modules/practice/public'
 import type { FeedbackEvent } from '@/shared/feedback/feedbackEvents'
 
 /**
- * Freestyle feedback vocabulary, built on the feedback论 in Csikszentmihalyi's
- * 《心流》 rather than on reward mechanics.
+ * Freestyle feedback vocabulary, built on Csikszentmihalyi's 《心流》 feedback rules
+ * plus a light game layer.
  *
- * The book's claims that actually constrain this file:
- *
- * - Feedback must be immediate. A tennis player knows where the ball went at once;
- *   the delay is what breaks the merging of action and awareness. Freestyle used to
- *   answer a rate with silence, so every action needed an act of interpretation.
- * - The *form* of feedback is irrelevant as long as it is logically related to the
- *   goal you invested attention in. A surgeon reads "no bleeding". So we do not need
- *   score symbols — a tone that means "recorded" is complete feedback.
- * - Feedback must remove the question "how am I doing" *without being read*. Text is
- *   the wrong channel: reading is reflection, and reflection is an exit from flow.
- * - Flow includes the absence of worry about failure. So a weak rating must land as
- *   information, never as a loss signal. There is deliberately no streak to break.
- * - Attention is finite psychic energy. Feedback that takes focus costs more than it
- *   returns, so nothing here goes to screen center or interrupts.
+ * - Feedback must be immediate and must not need reading: tone, haptic and a short
+ *   card gesture answer "recorded" before the learner thinks about it.
+ * - Each grade has its own voice so the ear learns the scale, but a weak rating is
+ *   information, never a loss signal: no miss sound, no shake of shame.
+ * - Streaks are allowed and celebrated at milestones, but never punished: 忘记 just
+ *   lets the combo fade quietly back to zero.
+ * - Per-card feedback stays on the card and the rating bar. Screen-center
+ *   celebration is reserved for round completion.
  */
 
-/** Where the confirmation is drawn. Never screen-center: that is focus, not periphery. */
+/** Where the confirmation is drawn: on the card edge, never screen-center. */
 export type FlowBreath = 'affirm' | 'note' | null
 
 export interface FlowFeedbackSignal {
@@ -42,23 +36,39 @@ export const FLOW_REVEAL_SIGNAL: FlowFeedbackSignal = {
   breath: null,
 }
 
+/** Card gesture played on the rated card; the card springs back to rest afterwards. */
+export type FlowRatingReaction = 'sink' | 'wobble' | 'lift' | 'fling'
+
+export type FlowHaptic = 'soft-fail' | 'select' | 'success'
+
+export interface FlowRatingSignal extends FlowFeedbackSignal {
+  reaction: FlowRatingReaction
+  haptic: FlowHaptic
+  /** Whether this grade keeps the combo alive. */
+  keepsCombo: boolean
+}
+
 /**
- * Rating tones are chosen to mean "recorded", not "scored".
- *
- * `记得`/`轻松` use `field_commit` — the app's existing "committed" tone. `困难`/`忘记`
- * deliberately do NOT use `quiz_result_incorrect`: that is a miss sound, and a miss
- * sound here would manufacture exactly the failure-anxiety the book names as an exit.
- * They use `node_select`, a quiet neutral acknowledgement, because in spaced
- * repetition an honest `忘记` is a correct and useful move, not an error.
+ * One voice per grade, rising with confidence. 忘记/困难 deliberately avoid
+ * `quiz_result_incorrect`: in spaced repetition an honest 忘记 is a correct move.
  */
-export function flowRatingSignal(rating: UnitRating, passed: boolean): FlowFeedbackSignal {
-  if (passed) {
-    return { audioEvent: 'field_commit', breath: 'affirm' }
-  }
-  // rating is retained in the signature so a future per-rating tone split has a
-  // seam, and so callers cannot pass a rating that silently does not matter.
-  void rating
-  return { audioEvent: 'node_select', breath: 'note' }
+const FLOW_RATING_SIGNALS: Record<UnitRating, FlowRatingSignal> = {
+  1: { audioEvent: 'node_select', breath: 'note', reaction: 'sink', haptic: 'soft-fail', keepsCombo: false },
+  2: { audioEvent: 'text_commit', breath: 'note', reaction: 'wobble', haptic: 'select', keepsCombo: true },
+  3: { audioEvent: 'field_commit', breath: 'affirm', reaction: 'lift', haptic: 'success', keepsCombo: true },
+  4: { audioEvent: 'segment_action', breath: 'affirm', reaction: 'fling', haptic: 'success', keepsCombo: true },
+}
+
+export function flowRatingSignal(rating: UnitRating, passed: boolean): FlowRatingSignal {
+  const signal = FLOW_RATING_SIGNALS[rating]
+  // The server's pass verdict wins over the grade's default breath.
+  return { ...signal, breath: passed ? 'affirm' : 'note' }
+}
+
+/** Combo milestones fire on the exact step, so 4/8/12/20 each land once per streak. */
+export function comboMilestoneIndex(combo: number, steps: readonly number[]): number | null {
+  const index = steps.indexOf(combo)
+  return index >= 0 ? index : null
 }
 
 /**

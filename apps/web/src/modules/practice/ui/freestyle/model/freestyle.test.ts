@@ -346,7 +346,7 @@ describe('today training queue model', () => {
         includeEnglish: true,
         includeEnglishReading: true,
       }).fill,
-    ).toEqual(['quiz_question', 'english', 'english_reading'])
+    ).toEqual(['quiz_question', 'english'])
   })
 
   it('persists today training config without touching freestyle config', () => {

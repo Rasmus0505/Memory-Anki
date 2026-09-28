@@ -14,7 +14,7 @@ describe('FreestyleReviewHintCardView', () => {
     render(<FreestyleReviewHintCardView card={hintCard} onAdvance={() => {}} />)
 
     expect(screen.getByTestId('freestyle-review-hint-text').textContent).toBe('下一张：正式复习')
-    expect(screen.getByTestId('freestyle-review-hint-card').className).toContain('bg-amber-300')
+    expect(screen.getByTestId('freestyle-review-hint-card').className).toContain('fs-hint-card')
   })
 
   it('advances on a rating tap without selecting any score', () => {

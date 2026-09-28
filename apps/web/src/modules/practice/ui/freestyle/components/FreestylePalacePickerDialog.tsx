@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { ChevronDown, ChevronRight, ListChecks, RotateCcw } from 'lucide-react'
 import type {
   FreestylePalaceScopeChapter,
@@ -10,7 +10,6 @@ import {
   toggleFreestylePalaceGroup,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import { Button } from '@/shared/components/ui/button'
-import { Checkbox } from '@/shared/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -23,10 +22,12 @@ import {
 function TriStateCheckbox({
   state,
   onChange,
+  onClick,
   label,
 }: {
   state: 'checked' | 'indeterminate' | 'unchecked'
   onChange: () => void
+  onClick?: (event: MouseEvent<HTMLInputElement>) => void
   label: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -39,9 +40,44 @@ function TriStateCheckbox({
       type="checkbox"
       checked={state === 'checked'}
       aria-label={label}
+      onClick={onClick}
       onChange={onChange}
       className="size-4 shrink-0 accent-primary"
     />
+  )
+}
+
+function PalaceRow({
+  palace,
+  checked,
+  onToggle,
+  indentPx,
+}: {
+  palace: { id: number; title: string; resolved_title?: string | null }
+  checked: boolean
+  onToggle: (ids: number[], checked: boolean) => void
+  indentPx?: number
+}) {
+  const title = palace.resolved_title || palace.title
+  return (
+    <div
+      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50"
+      style={indentPx != null ? { paddingLeft: `${indentPx}px` } : undefined}
+      onClick={() => onToggle([palace.id], !checked)}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => onToggle([palace.id], event.target.checked)}
+        aria-label={`选择宫殿${title}`}
+        className="size-4 shrink-0 accent-primary"
+      />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="mr-1.5 text-[11px] text-muted-foreground">宫殿</span>
+        <span>{title}</span>
+      </span>
+    </div>
   )
 }
 
@@ -66,25 +102,34 @@ function ChapterRow({
             {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           </button>
         ) : <span className="size-6" />}
-        <TriStateCheckbox state={state} onChange={() => onToggle(chapter.palaceIds, state !== 'checked')} label={`选择章节${chapter.title}`} />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          <span className="mr-1.5 text-[11px] font-normal text-muted-foreground">章节</span>
-          <span>{chapter.title}</span>
-        </span>
-        <span className="text-xs text-muted-foreground">{chapter.palaceIds.length} 个宫殿</span>
+        <div
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+          onClick={() => onToggle(chapter.palaceIds, state !== 'checked')}
+        >
+          <TriStateCheckbox
+            state={state}
+            onChange={() => onToggle(chapter.palaceIds, state !== 'checked')}
+            label={`选择章节${chapter.title}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            <span className="mr-1.5 text-[11px] font-normal text-muted-foreground">章节</span>
+            <span>{chapter.title}</span>
+          </span>
+          <span className="text-xs text-muted-foreground">{chapter.palaceIds.length} 个宫殿</span>
+        </div>
       </div>
       {expanded ? (
         <div className="space-y-1">
-          {chapter.palaces.map((palace) => {
-            const checked = selectedIds.includes(palace.id)
-            return <label key={palace.id} className="flex min-h-9 items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50" style={{ paddingLeft: `${32 + level * 18}px` }}>
-              <Checkbox checked={checked} onCheckedChange={(value) => onToggle([palace.id], value === true)} aria-label={`选择宫殿${palace.resolved_title || palace.title}`} />
-              <span className="min-w-0 flex-1 truncate">
-                <span className="mr-1.5 text-[11px] text-muted-foreground">宫殿</span>
-                <span>{palace.resolved_title || palace.title}</span>
-              </span>
-            </label>
-          })}
+          {chapter.palaces.map((palace) => (
+            <PalaceRow
+              key={palace.id}
+              palace={palace}
+              checked={selectedIds.includes(palace.id)}
+              onToggle={onToggle}
+              indentPx={32 + level * 18}
+            />
+          ))}
           {chapter.children.map((child) => <ChapterRow key={child.key} chapter={child} selectedIds={selectedIds} onToggle={onToggle} level={level + 1} />)}
         </div>
       ) : null}
@@ -122,13 +167,19 @@ function SubjectRow({
             {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           </button>
         ) : <span className="size-6" />}
-        <TriStateCheckbox
-          state={state}
-          onChange={() => onToggle(palaceIds, state !== 'checked')}
-          label={`选择学科${subject.title}`}
-        />
-        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{subject.title}</h3>
-        <span className="text-xs text-muted-foreground">{palaceIds.length} 个宫殿</span>
+        <div
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+          onClick={() => onToggle(palaceIds, state !== 'checked')}
+        >
+          <TriStateCheckbox
+            state={state}
+            onChange={() => onToggle(palaceIds, state !== 'checked')}
+            label={`选择学科${subject.title}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{subject.title}</span>
+          <span className="text-xs text-muted-foreground">{palaceIds.length} 个宫殿</span>
+        </div>
       </div>
       {expanded ? (
         <div className="mt-2 space-y-2">
@@ -145,20 +196,12 @@ function SubjectRow({
             <div className="mt-2 rounded-lg border-t border-border/50 pt-2">
               <div className="mb-1 px-2 text-sm font-medium">{subject.ungrouped.title}</div>
               {subject.ungrouped.palaces.map((palace) => (
-                <label
+                <PalaceRow
                   key={palace.id}
-                  className="flex min-h-9 items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50"
-                >
-                  <Checkbox
-                    checked={selectedIds.includes(palace.id)}
-                    onCheckedChange={(checked) => onToggle([palace.id], checked === true)}
-                    aria-label={`选择宫殿${palace.resolved_title || palace.title}`}
-                  />
-                  <span className="truncate">
-                    <span className="mr-1.5 text-[11px] text-muted-foreground">宫殿</span>
-                    <span>{palace.resolved_title || palace.title}</span>
-                  </span>
-                </label>
+                  palace={palace}
+                  checked={selectedIds.includes(palace.id)}
+                  onToggle={onToggle}
+                />
               ))}
             </div>
           ) : null}
@@ -182,7 +225,12 @@ export function FreestylePalacePickerDialog({
   onConfirm: (ids: number[]) => void
 }) {
   const [draft, setDraft] = useState(value)
-  useEffect(() => { if (open) setDraft(value) }, [open, value])
+  useEffect(() => {
+    if (!open) return
+    setDraft(value)
+    // Open only: parent recreates `value` on each render and when trees load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
   const allIds = allFreestylePalaceIdsFromSubjects(subjects)
   const toggle = (ids: number[], checked: boolean) => setDraft((current) => toggleFreestylePalaceGroup(current, ids, checked))
   return <Dialog open={open} onOpenChange={onOpenChange}>

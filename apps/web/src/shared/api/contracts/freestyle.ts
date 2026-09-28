@@ -18,7 +18,7 @@ export type FreestyleDuePolicy =
   | 'all_content_due_weighted'
 
 /** Mutually exclusive freestyle progress buckets (multi-select). */
-export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces'
+export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces' | 'exam_priority'
 
 /** How palace-side cards and quiz cards are ordered relative to each other. */
 export type FreestyleMixMode =
@@ -47,6 +47,21 @@ export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 
 /** Toolbar 做题 overlay membership: due questions vs all questions in the saved palace range. */
 export type FreestyleOverlayQuestionRange = 'due' | 'all'
+
+/** Overlay 做题 groups: 客观 is every type except short_answer; 主观 is short_answer. */
+export type FreestyleOverlayQuestionKind = 'objective' | 'subjective'
+
+/** Overlay 做题 type order when both 客观 and 主观 are selected. */
+export type FreestyleOverlayTypeOrder =
+  | 'interleave'
+  | 'objective_then_subjective'
+  | 'subjective_then_objective'
+
+/**
+ * Overlay nesting when palace-by-palace draw and sequential types are both on.
+ * Hidden unless 一个宫殿刷完再换 and a sequential type order are selected.
+ */
+export type FreestyleOverlayTypePalaceNesting = 'palace_then_type' | 'type_then_palace'
 
 export type FreestyleSubjectScope = 'all' | 'english' | 'non_english'
 
@@ -171,6 +186,18 @@ export interface FreestyleFeedConfig {
    */
   overlay_quiz_setup_done: boolean
   overlay_question_range: FreestyleOverlayQuestionRange
+  /**
+   * Toolbar 做题 overlay: which of 客观 / 主观 to include.
+   * Empty after sanitize becomes both. Independent of streams.quiz.question_type.
+   */
+  overlay_question_kinds: FreestyleOverlayQuestionKind[]
+  /** Toolbar 做题 overlay: mix 客观/主观 or finish one group first. Default interleave. */
+  overlay_type_order: FreestyleOverlayTypeOrder
+  /**
+   * Toolbar 做题 overlay: palace-first vs type-first when
+   * quiz_scope is single_palace_random and type order is sequential.
+   */
+  overlay_type_palace_nesting: FreestyleOverlayTypePalaceNesting
 }
 
 export interface FreestyleContextPathItem {
@@ -178,11 +205,11 @@ export interface FreestyleContextPathItem {
   text: string
 }
 
-export type FreestyleMindMapPresentation = 'palace' | 'anki'
-
 interface FreestylePalaceCardBase {
   id: string
   palace_id: number
+  /** Resolved exam importance 1-3, attached by the queue builder. */
+  exam_stars?: number
   palace_title?: string
   anchor_uid: string
   context_path: FreestyleContextPathItem[]
@@ -204,19 +231,7 @@ export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
   unit_revision: number
 }
 
-export interface FreestyleAnkiCard extends FreestylePalaceCardBase {
-  type: 'anki_card'
-  content_type: 'anki_card'
-  presentation: 'anki'
-  unit_id?: never
-  unit_revision?: never
-  /** Anki: front node uid when presentation is anki. */
-  anki_front_uid?: string
-  /** Anki: back node uids for multi-placeholder reveal. */
-  anki_back_uids?: string[]
-}
-
-export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard | FreestyleAnkiCard
+export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard
 
 export type FreestyleActionKind =
   | 'review'
@@ -258,6 +273,7 @@ export interface FreestyleSegmentContext {
 export interface FreestyleQuizCard {
   id: string
   type: 'quiz_question'
+  exam_stars?: number
   content_type: 'quiz_question'
   question: PalaceQuizQuestion
   palace_context: FreestylePalaceContext
@@ -313,8 +329,6 @@ export interface FreestyleReviewHintCard {
   retry_attempt?: number
   retry_after_cards?: number
   anchor_uid?: string
-  anki_front_uid?: string
-  anki_back_uids?: string[]
 }
 
 export type FreestyleCard =
@@ -423,11 +437,15 @@ export interface FreestyleOverlayQuizState {
   limit_reached: boolean
   candidate_count: number
   question_palace_ids?: Record<string, number>
+  /** Unfiltered 客观/主观 counts for the current round palace set. */
+  kind_counts?: Record<FreestyleOverlayQuestionKind, number>
   parked?: {
     question_ids: number[]
     completed_ids: number[]
     states: Record<string, Record<string, unknown>>
   }
+  /** Subjective (or any) questions taken out of this round's 做题 queue. */
+  excluded_ids?: number[]
 }
 
 export interface FreestyleRoundStatePayload {

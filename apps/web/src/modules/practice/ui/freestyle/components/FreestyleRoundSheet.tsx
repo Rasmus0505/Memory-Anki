@@ -47,10 +47,10 @@ const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
 const STATUS_CLASSES: Record<FreestyleRoundPlanCardStatus, string> = {
   pending: 'border-border/60 text-muted-foreground',
   active: 'border-primary/60 bg-primary/10 text-primary',
-  completed: 'border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300',
-  retry: 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200',
+  completed: 'border-rate-good/30 bg-rate-good/8 text-rate-good',
+  retry: 'border-rate-hard/35 bg-rate-hard/10 text-rate-hard',
   excluded: 'border-border/50 bg-muted/50 text-muted-foreground line-through',
-  stale: 'border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-200',
+  stale: 'border-rate-again/35 bg-rate-again/10 text-rate-again',
 }
 
 function palaceIdFromEntry(entry: FreestyleRoundPlanCard) {
@@ -125,7 +125,7 @@ function RoundPlanRow({
       {dragOverId === entry.cardId && draggingId !== entry.cardId ? (
         <div
           data-testid="round-plan-drop-placeholder"
-          className="mx-1 my-1 flex h-14 items-center justify-center rounded-lg border-2 border-dashed border-emerald-500/60 bg-emerald-500/8 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+          className="mx-1 my-1 flex h-14 items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-primary/8 text-xs font-medium text-primary fs-expand"
         >
           放到这里
         </div>
@@ -161,13 +161,13 @@ function RoundPlanRow({
           onDragOverId(null)
         }}
         className={cn(
-          'mx-1 my-1 flex min-h-14 items-center gap-2 rounded-lg border px-2 py-2 text-sm transition-colors',
+          'mx-1 my-1 flex min-h-14 items-center gap-2 rounded-xl border px-2 py-2 text-sm transition-[background-color,border-color,box-shadow,opacity] duration-200',
           isCurrent
-            ? 'border-emerald-500/60 bg-emerald-500/12 shadow-sm ring-1 ring-emerald-500/20'
+            ? 'border-primary/60 bg-primary/12 shadow-sm ring-1 ring-primary/25'
             : retryPending
-              ? 'border-amber-500/35 bg-amber-500/10 hover:border-amber-500/50'
+              ? 'border-rate-hard/35 bg-rate-hard/10 hover:border-rate-hard/50'
               : retryDone
-                ? 'border-emerald-500/25 bg-emerald-500/8 hover:border-emerald-500/40'
+                ? 'border-rate-good/25 bg-rate-good/8 hover:border-rate-good/40'
                 : 'border-transparent hover:border-border/70 hover:bg-background/70',
           isSelected && !isCurrent && 'bg-primary/5',
           draggingId === entry.cardId && 'opacity-45',
@@ -249,11 +249,11 @@ function RoundPlanRow({
               : STATUS_LABELS[status]}
         </span>
         {entry.occurrenceKind === 'retry' && !retryDone ? (
-          <span className="shrink-0 text-[11px] text-amber-700 dark:text-amber-300">
+          <span className="shrink-0 text-[11px] text-rate-hard">
             来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
           </span>
         ) : null}
-        {status === 'completed' ? <Check className="size-4 shrink-0 text-emerald-500" /> : null}
+        {status === 'completed' ? <Check className="size-4 shrink-0 text-rate-good" /> : null}
       </div>
     </div>
   )

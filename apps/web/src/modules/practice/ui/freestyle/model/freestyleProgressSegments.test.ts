@@ -49,8 +49,8 @@ describe('segmentTone', () => {
     expect(segmentTone('pending')).toBe('pending')
     // Too transient for its own treatment.
     expect(segmentTone('stale')).toBe('pending')
-    // Not part of the round: drawing it would make progress look artificially slow.
-    expect(segmentTone('excluded')).toBeNull()
+    // 移除队列 stays on the rail as the same solid fill as a scored card.
+    expect(segmentTone('excluded')).toBe('done')
   })
 })
 
@@ -65,7 +65,7 @@ describe('palaceAccent', () => {
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(1, 'current'))
     expect(palaceAccentToneClass(1, 'done')).not.toContain('bg-emerald-400')
     expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
-    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-white/20')
+    expect(palaceAccentToneClass(null, 'pending')).toContain('bg-stage-ink/20')
   })
 
   it('keeps pending faint and done solid so unfinished vs finished is readable', () => {
@@ -179,7 +179,7 @@ describe('buildFreestyleProgressSummary', () => {
       retryAttempt: 1,
       sourceCardId: 'a',
     })
-    expect(retryNodeToneClass('retry')).toContain('bg-amber-400/25')
+    expect(retryNodeToneClass('retry')).toContain('bg-rate-hard/25')
     expect(summary.retryInserted).toBe(1)
     expect(progressHudText(summary)).toBe('1/6')
   })
@@ -194,14 +194,38 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments.map((segment) => segment.palaceDone)).toEqual([true, true, true])
   })
 
-  it('drops excluded cards and counts position among rendered segments only', () => {
+  it('lights a queue removal as a solid tick without counting it as a pass', () => {
     const cards = [card('one'), card('gone'), card('two'), card('three')]
-    // 'gone' is hidden, so 'two' is the 2nd rendered segment even though it is 3rd in cards.
-    const summary = buildFreestyleProgressSummary(cards, plan(cards), [], ['gone'], 'two')
+    const roundPlan = updateRoundPlanCard(plan(cards), 'gone', { status: 'excluded' })
+    const summary = buildFreestyleProgressSummary(
+      [card('one'), card('two'), card('three')],
+      roundPlan,
+      [],
+      ['gone'],
+      'two',
+    )
+    const removed = summary.segments.find((segment) => segment.cardId === 'gone')
+    const removedIndex = summary.segments.findIndex((segment) => segment.cardId === 'gone')
 
-    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
-    expect(summary.total).toBe(3)
-    expect(summary.position).toBe(2)
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'gone', 'two', 'three'])
+    expect(removed).toMatchObject({ tone: 'done', removed: true, viewing: false })
+    expect(palaceAccentToneClass(removed?.palaceId ?? null, 'done')).not.toMatch(/\/\d+/)
+    expect(progressSegmentHoverLabel(removed!, removedIndex, summary.total)).toContain('已移出队列')
+    expect(summary.passedCount).toBe(0)
+    expect(summary.scheduledBase).toBe(3)
+    expect(summary.total).toBe(4)
+    expect(summary.position).toBe(3)
+  })
+
+  it('keeps a removed card solid while it is the viewing playhead', () => {
+    const cards = [card('one'), card('two')]
+    const roundPlan = updateRoundPlanCard(plan(cards), 'one', { status: 'excluded' })
+    const summary = buildFreestyleProgressSummary(cards, roundPlan, [], ['one'], 'one')
+
+    expect(summary.segments[0]).toMatchObject({ tone: 'done', viewing: true, removed: true })
+    expect(progressSegmentShapeClass(summary.segments[0].tone, summary.segments[0].viewing)).toContain('h-3.5')
+    expect(progressSegmentHoverLabel(summary.segments[0], 0, summary.total)).toContain('当前 · 已移出队列')
+    expect(summary.segments.every((segment) => segment.palaceDone === false)).toBe(true)
   })
 
   it('reports no position rather than a false completion when no card is current', () => {
@@ -275,6 +299,57 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments[1]).toMatchObject({ cardId: 'two', tone: 'pending', viewing: false })
     expect(progressSegmentShapeClass(summary.segments[0].tone, summary.segments[0].viewing)).toContain('h-3.5')
     expect(progressSegmentHoverLabel(summary.segments[0], 0, 2)).toContain('当前 · 已过')
+  })
+
+  it('does not draw a second faint tick for a new revision of a removed unit', () => {
+    const removed = 'review_unit:u1:r1'
+    const rebound = 'review_unit:u1:r2'
+    const roundPlan = updateRoundPlanCard(plan([card(removed), card('two')]), removed, { status: 'excluded' })
+    const withRebound = {
+      ...roundPlan,
+      orderIds: [...roundPlan.orderIds, rebound],
+      cardsById: {
+        ...roundPlan.cardsById,
+        [rebound]: {
+          ...roundPlan.cardsById[removed]!,
+          cardId: rebound,
+          status: 'pending' as const,
+          lastRating: null,
+        },
+      },
+    }
+    const summary = buildFreestyleProgressSummary(
+      [card(rebound), card('two')],
+      withRebound,
+      [],
+      [removed],
+      'two',
+    )
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual([removed, 'two'])
+    expect(summary.segments[0]).toMatchObject({ tone: 'done', removed: true })
+    expect(palaceAccentToneClass(summary.segments[0]?.palaceId ?? null, 'done')).not.toMatch(/\/\d+/)
+  })
+
+  it('keeps a scored card solid after it leaves the live feed', () => {
+    const scheduled = [card('one'), card('two')]
+    const remaining = [card('two')]
+    const roundPlan = updateRoundPlanCard(plan(scheduled), 'one', { status: 'retry', lastRating: 1 })
+    const summary = buildFreestyleProgressSummary(remaining, roundPlan, [], [], 'two', {
+      one: {
+        encounterId: 'enc-one',
+        unitRevision: 1,
+        status: 'closed',
+        sessionId: null,
+        selectedRating: 1,
+        passed: false,
+        retryAfterCards: 3,
+      },
+    })
+
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two'])
+    expect(summary.segments[0]).toMatchObject({ cardId: 'one', tone: 'done' })
+    expect(summary.segments[0].removed).toBeUndefined()
+    expect(summary.segments[1]).toMatchObject({ cardId: 'two', tone: 'pending' })
   })
 
   it('keeps completed ticks from the plan when live cards only have remaining work', () => {
@@ -488,10 +563,10 @@ describe('retryNodeLabel', () => {
   it('keeps unfinished retry faint and completed retry solid', () => {
     expect(retryNodeToneClass('pending')).toContain('/25')
     expect(retryNodeToneClass('retry')).toContain('/25')
-    expect(retryNodeToneClass('done')).toBe('bg-amber-400 text-zinc-950')
+    expect(retryNodeToneClass('done')).toBe('bg-rate-hard text-stage')
     expect(retryNodeToneClass('done')).not.toMatch(/\/\d+/)
-    expect(retryChromeClass(false)).toContain('bg-amber-400')
-    expect(retryChromeClass(true)).toContain('bg-emerald-500/12')
+    expect(retryChromeClass(false)).toContain('bg-rate-hard/90')
+    expect(retryChromeClass(true)).toContain('bg-rate-good/12')
     const emptyGlance = {
       encounterId: 'enc',
       unitRevision: 1,
@@ -581,16 +656,15 @@ describe('yellow boundary hint segment', () => {
   }
   const pathCard: FreestyleCard = {
     id: 'path',
-    type: 'anki_card',
-    content_type: 'anki_card',
-    presentation: 'anki',
+    type: 'mindmap_branch',
+    content_type: 'mindmap_branch',
     palace_id: 1,
     palace_title: '宫殿 A',
     anchor_uid: 'path-anchor',
     context_path: [{ uid: 'path-anchor', text: 'path' }],
     node_uids: ['path-node'],
     node_count: 1,
-  }
+  } as FreestyleCard
 
   it('seats the plan-external hint before the first formal review unit', () => {
     const cards = [pathCard, hint, card('one'), card('two')]

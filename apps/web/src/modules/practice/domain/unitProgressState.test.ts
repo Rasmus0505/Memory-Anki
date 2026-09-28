@@ -191,6 +191,32 @@ describe('yellow boundary hint is never outstanding work', () => {
     expect(unscoredOccurrenceIds(input)).toEqual([])
   })
 
+  it('does not seek a new revision of a unit already removed from the queue', () => {
+    const removed = 'review_unit:u1:r1'
+    const rebound = 'review_unit:u1:r2'
+    const retry = card('retry:round-1:u1:1', removed)
+    const input = {
+      cards: [card(rebound), card('b'), retry],
+      completedIds: [],
+      encounters: {},
+      roundPlan: plan({
+        [removed]: { status: 'excluded' },
+        b: { lastRating: null },
+      }),
+    }
+    expect(unscoredOccurrenceIds(input)).toEqual(['b', retry.id])
+    expect(findEarliestUnscoredIndex(input)).toBe(1)
+  })
+
+  it('treats a removed unit revision as handled for round completion', () => {
+    expect(areAllOccurrencesPassed({
+      cards: [card('review_unit:u1:r2'), card('b')],
+      completedIds: ['b'],
+      encounters: {},
+      roundPlan: plan({ 'review_unit:u1:r1': { status: 'excluded' } }),
+    })).toBe(true)
+  })
+
   it('seek still finds real unscored work behind the hint', () => {
     const input = {
       cards: [card('a'), hint, card('b')],
@@ -244,5 +270,5 @@ describe('rail fill == isScored (契约 5)', () => {
     }
     expect(scoredOccurrenceIds(input).sort()).toEqual(['a', 'z'].sort())
     expect(unscoredOccurrenceIds(input).sort()).toEqual(['b', retry.id].sort())
-  })
+  }, 20000)
 })

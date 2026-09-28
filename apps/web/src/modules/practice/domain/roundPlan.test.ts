@@ -7,10 +7,12 @@ import {
   countIncompletePalaceUnits,
   createRoundPlan,
   isSequentialPalaceBlocked,
+  mergeRetainedHiddenIds,
   planCardStatus,
   reorderRoundPlan,
   sanitizeRoundPlan,
   stampRestudyPlan,
+  excludeRoundPlanCards,
   updateRoundPlanCard,
 } from './roundPlan'
 import {
@@ -371,12 +373,36 @@ describe('round plan reducer', () => {
     expect(plan?.cardsById.a).toBeUndefined()
   })
 
+  it('keeps a missing lastRating null instead of storing 0', () => {
+    const plan = sanitizeRoundPlan({
+      roundId: 'round-1',
+      orderIds: ['a'],
+      cardsById: {
+        a: { cardId: 'a', status: 'excluded', lastRating: null, kind: 'mindmap_branch' },
+      },
+    })
+    expect(plan?.cardsById.a?.lastRating).toBeNull()
+    expect(plan?.cardsById.a?.status).toBe('excluded')
+  })
+
   it('reports active, retry and excluded status from the round state', () => {
     const first = createRoundPlan('round-1', [card('a', 1)], config)
     const retry = updateRoundPlanCard(first, 'a', { status: 'retry' })
     expect(planCardStatus(card('a', 1), retry, [], [], 'a')).toBe('active')
     expect(planCardStatus(card('a', 1), retry, [], [], null)).toBe('retry')
     expect(planCardStatus(card('a', 1), retry, [], ['a'], null)).toBe('excluded')
+    const removed = updateRoundPlanCard(first, 'a', { status: 'excluded' })
+    expect(planCardStatus(card('a', 1), removed, [], [], 'a')).toBe('excluded')
+  })
+
+  it('keeps a local queue removal when the server exclude list is stale', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const removed = updateRoundPlanCard(first, 'a', { status: 'excluded' })
+    expect(mergeRetainedHiddenIds([], removed, [])).toEqual(['a'])
+    expect(mergeRetainedHiddenIds([], null, ['a'])).toEqual(['a'])
+    expect(mergeRetainedHiddenIds(['a'], first, ['a'], ['a'])).toEqual([])
+    const pending = updateRoundPlanCard(first, 'a', { status: 'pending' })
+    expect(mergeRetainedHiddenIds(['a'], pending, ['a'])).toEqual(['a'])
   })
 
   it('keeps completed ticks from the plan when completedIds were not yet restored', () => {
@@ -392,5 +418,26 @@ describe('round plan reducer', () => {
     const synced = syncCompletedIdsToRoundPlan(done, ['b'])
     expect(planCardStatus(card('a', 1), synced, [], [], 'a')).toBe('active')
     expect(planCardStatus(card('b', 1), synced, ['b'], [], 'a')).toBe('completed')
+  })
+
+  it('keeps a queue removal excluded when that id is also in the completed set', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const removed = updateRoundPlanCard(first, 'a', { status: 'excluded' })
+    const stamped = applyCompletedIdsToRoundPlan(removed, ['a', 'b'])
+    const synced = syncCompletedIdsToRoundPlan(removed, ['a'])
+    expect(stamped.cardsById.a?.status).toBe('excluded')
+    expect(synced.cardsById.a?.status).toBe('excluded')
+    expect(stamped.cardsById.b?.status).toBe('completed')
+  })
+
+  it('inserts a missing removal and covers the pending sibling revision', () => {
+    const oldId = 'review_unit:u1:r1'
+    const liveId = 'review_unit:u1:r2'
+    const first = createRoundPlan('round-1', [card(oldId, 1), card('b', 1)], config)
+    const scored = updateRoundPlanCard(first, 'b', { status: 'completed', lastRating: 3 })
+    const next = excludeRoundPlanCards(scored, [liveId], [card(liveId, 1)])
+    expect(next?.cardsById[liveId]?.status).toBe('excluded')
+    expect(next?.cardsById[oldId]?.status).toBe('excluded')
+    expect(next?.cardsById.b).toMatchObject({ status: 'completed', lastRating: 3 })
   })
 })
