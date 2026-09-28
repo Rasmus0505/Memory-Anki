@@ -24,6 +24,19 @@ export function isQuizChoiceShortcutActive(questionType: string, mode: QuizAnswe
   return questionType === 'multiple_choice' && mode !== 'subjective'
 }
 
+/** A subjective submit sets `resolved` without selecting an option. Choice stays open until then. */
+export function isQuizChoiceAttemptClosed(
+  state:
+    | {
+        selectedOptionId?: string | null
+        resolved?: boolean
+        shortAnswerSubmitted?: boolean
+      }
+    | undefined,
+) {
+  return Boolean(state?.selectedOptionId)
+}
+
 export function mcqReferenceAnswer(question: {
   options?: Array<{ id: string; text: string }>
   answer_payload?: { correct_option_id?: string }

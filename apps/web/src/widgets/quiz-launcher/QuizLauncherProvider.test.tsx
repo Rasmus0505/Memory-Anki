@@ -9,8 +9,6 @@ import {
 const getPalaceApiMock = vi.fn()
 const getSubjectsApiMock = vi.fn()
 const promptForAiOptionsMock = vi.fn()
-const generatePalaceQuizPreviewMock = vi.fn()
-const savePalaceQuizGenerationPreviewMock = vi.fn()
 const dispatchGlobalFeedbackMock = vi.fn()
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
@@ -26,11 +24,6 @@ vi.mock('@/modules/settings/domain/ai-runtime-entity', () => ({
     promptForAiOptions: (...args: unknown[]) => promptForAiOptionsMock(...args),
     aiRunConfigDialog: null,
   }),
-}))
-
-vi.mock('@/modules/quiz/ui/palace-quiz/quizGenerationController', () => ({
-  generatePalaceQuizPreview: (...args: unknown[]) => generatePalaceQuizPreviewMock(...args),
-  savePalaceQuizGenerationPreview: (...args: unknown[]) => savePalaceQuizGenerationPreviewMock(...args),
 }))
 
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
@@ -72,13 +65,6 @@ describe('QuizLauncherProvider', () => {
     })
     getSubjectsApiMock.mockResolvedValue([{ id: 2, name: '生物' }])
     promptForAiOptionsMock.mockResolvedValue({})
-    generatePalaceQuizPreviewMock.mockResolvedValue({
-      palace_id: 1,
-      questions: [{ question_type: 'short_answer', stem: '示例题', options: [], answer_payload: { answer: '答案' }, analysis: '解析', source_meta: {} }],
-      source_meta: { source_kind: 'review-mindmap', page_numbers: null, image_names: null, extra_prompt: '', ai_call_log_id: 'log-1', generated_at: '2026-06-15T00:00:00', generation_mode: 'review_mindmap' },
-      ai_call_log_id: 'log-1',
-    })
-    savePalaceQuizGenerationPreviewMock.mockResolvedValue({ preview: {}, savedCount: 1 })
   })
 
   afterEach(() => {
@@ -123,6 +109,5 @@ describe('QuizLauncherProvider', () => {
     expect(screen.queryByRole('button', { name: '基于当前复习脑图' })).toBeNull()
     expect(screen.queryByRole('button', { name: '生成并预览' })).toBeNull()
     expect(screen.queryByRole('button', { name: '确认保存到题库' })).toBeNull()
-    expect(generatePalaceQuizPreviewMock).not.toHaveBeenCalled()
   })
 })

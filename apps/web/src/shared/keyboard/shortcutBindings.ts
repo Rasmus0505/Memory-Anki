@@ -36,6 +36,10 @@ function isBareLetterShortcutKey(key: string) {
   return /^[a-z]$/.test(key)
 }
 
+function isBareDigitShortcutKey(key: string) {
+  return /^[0-9]$/.test(key)
+}
+
 const SHORTCUT_KEY_LABELS: Record<string, string> = {
   ' ': 'Space',
   space: 'Space',
@@ -136,6 +140,8 @@ export interface ShortcutAllowOptions {
    * but typing scenes (e.g. English answer input) must reject them. Default true.
    */
   allowBareLetters?: boolean
+  /** Bare digits (1–9) are quiz option keys. Default false so typing scenes stay protected. */
+  allowBareDigits?: boolean
 }
 
 export function isShortcutBindingAllowed(
@@ -149,6 +155,7 @@ export function isShortcutBindingAllowed(
   if (!key || MODIFIER_ONLY_KEYS.has(key) || RESERVED_SHORTCUT_KEYS.has(key)) return false
   // Bare single letters (A–Z) are allowed for flip-card and similar non-typing scenes.
   if (!hasModifier && isBareLetterShortcutKey(key)) return options.allowBareLetters !== false
+  if (!hasModifier && isBareDigitShortcutKey(key)) return options.allowBareDigits === true
   if (!hasModifier && isPrintableShortcutKey(key)) return false
   if (!hasModifier && !isAllowedBareShortcut(binding)) return false
   return true
@@ -234,10 +241,12 @@ export function captureShortcutFromKeyboardEvent(
     }
   }
   const bareLetterAllowed = options.allowBareLetters !== false
+  const bareDigitAllowed = options.allowBareDigits === true
   if (
     !hasModifier &&
     isPrintableShortcutKey(key) &&
-    (!isBareLetterShortcutKey(key) || !bareLetterAllowed)
+    !(isBareLetterShortcutKey(key) && bareLetterAllowed) &&
+    !(isBareDigitShortcutKey(key) && bareDigitAllowed)
   ) {
     return { value: null, error: resolvedMessages.barePrintable(key) }
   }

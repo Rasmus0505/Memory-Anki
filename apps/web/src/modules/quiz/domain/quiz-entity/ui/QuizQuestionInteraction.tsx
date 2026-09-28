@@ -7,6 +7,7 @@ import { cn } from '@/shared/lib/utils'
 
 import {
   canSwitchQuizAnswerMode,
+  isQuizChoiceAttemptClosed,
   isQuizSubjectivePresentation,
   mcqReferenceAnswer,
   mcqSubjectiveReferenceAnswer,
@@ -91,9 +92,8 @@ export function QuizQuestionInteraction({
   const { mode, updateMode } = useQuizAnswerMode()
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const restoreKey = quizInteractionRestoreKey(question, mode)
-  const resolved = Boolean(currentState.resolved || currentState.shortAnswerSubmitted)
   const modeToggle = canSwitchQuizAnswerMode(question.question_type) ? (
-    <QuizAnswerModeToggle mode={mode} disabled={resolved} onChange={updateMode} />
+    <QuizAnswerModeToggle mode={mode} onChange={updateMode} />
   ) : null
   const subjective = isQuizSubjectivePresentation(question.question_type, mode)
   const markControl = mark ? (
@@ -129,21 +129,21 @@ export function QuizQuestionInteraction({
 
   if (question.question_type === 'multiple_choice') {
     const correctOptionId = question.answer_payload.correct_option_id || ''
+    const choiceAnswered = isQuizChoiceAttemptClosed(currentState)
     return (
       <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="choice">
         {modeToggle}
         {(question.options || []).map((option, index) => {
           const selected = currentState.selectedOptionId === option.id
-          const resolved = Boolean(currentState.resolved)
           const correct = option.id === correctOptionId
           return (
             <button
               key={option.id}
               type="button"
               data-quiz-option-index={index}
-              disabled={resolved}
+              disabled={choiceAnswered}
               onClick={() => {
-                if (resolved) return
+                if (choiceAnswered) return
                 onStateChange((current) => ({
                   ...current,
                   selectedOptionId: option.id,
@@ -155,17 +155,17 @@ export function QuizQuestionInteraction({
               className={cn(
                 'border text-left text-sm transition-colors',
                 compact ? 'rounded-xl px-3 py-2' : 'rounded-lg px-4 py-3',
-                resolved && correct && 'border-success/30 bg-success/5 text-success',
-                resolved && selected && !correct && 'border-destructive/30 bg-destructive/5 text-destructive',
-                resolved && !selected && !correct && 'border-border/70 bg-background/60 text-muted-foreground',
-                !resolved && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
+                choiceAnswered && correct && 'border-success/30 bg-success/5 text-success',
+                choiceAnswered && selected && !correct && 'border-destructive/30 bg-destructive/5 text-destructive',
+                choiceAnswered && !selected && !correct && 'border-border/70 bg-background/60 text-muted-foreground',
+                !choiceAnswered && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
               )}
             >
               <span className="font-medium">{option.id}.</span> {option.text}
             </button>
           )
         })}
-        {currentState.resolved ? (
+        {choiceAnswered ? (
           <div
             className={cn(
               'border border-border/70 bg-background/70',

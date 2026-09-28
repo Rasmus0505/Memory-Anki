@@ -2,7 +2,6 @@
  * Public surface for module `settings`.
  * Other modules may import only from this file.
  */
-export * from './domain/ai-learning-entity'
 export * from './domain/ai-log-entity/api'
 export * from './domain/ai-runtime-entity'
 export * from './domain/preferences-entity/api'

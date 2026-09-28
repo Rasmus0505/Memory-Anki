@@ -1,19 +1,12 @@
-import { request, uploadWithFormData } from '@/shared/api/http'
+import { request } from '@/shared/api/http'
 import type {
-  AiRuntimeOptions,
-  MindMapEditorState,
-  PalaceQuizSegmentClassificationResult,
   PalaceQuizOcrSource,
   PalaceQuizOcrSourceDraft,
-  PalaceQuizGenerationPreview,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
-  PalaceQuizQuestionType,
   PalaceQuestionExplainResult,
   PalaceShortAnswerFeedback,
   QuizNodeBindingEdge,
-  QuizNodeBindingMergeMode,
-  QuizNodeBindingPreview,
 } from '@/shared/api/contracts'
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
@@ -243,163 +236,6 @@ export function requestPalaceQuestionExplainApi(
   )
 }
 
-function buildPalaceQuizGenerationUploadForm(input: {
-  files: File[]
-  extraPrompt: string
-  classifyByMiniPalace: boolean
-  selectedChapterId?: number | null
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions
-}) {
-  const form = new FormData()
-  input.files.forEach((file) => form.append('files', file))
-  form.append('extra_prompt', input.extraPrompt)
-  form.append('classify_by_mini_palace', input.classifyByMiniPalace ? 'true' : 'false')
-  if (input.selectedChapterId) {
-    form.append('selected_chapter_id', String(input.selectedChapterId))
-  }
-  if (input.aiOptions) {
-    form.append('ai_options', JSON.stringify(input.aiOptions))
-  }
-  return form
-}
-
-function previewPalaceQuizGenerationFromUploadedFiles(
-  palaceId: number,
-  kind: 'images' | 'text-files',
-  files: File[],
-  extraPrompt: string,
-  classifyByMiniPalace: boolean,
-  selectedChapterId?: number | null,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return uploadWithFormData<PalaceQuizGenerationPreview>(
-    `/palaces/${palaceId}/quiz-generation/${kind}`,
-    buildPalaceQuizGenerationUploadForm({
-      files,
-      extraPrompt,
-      classifyByMiniPalace,
-      selectedChapterId,
-      aiOptions,
-    }),
-    {
-      resourceKey: `palace:${palaceId}:quiz-generation:${kind}:${files.map((file) => file.name).join(',')}`,
-      description:
-        kind === 'images'
-          ? 'AI 生成宫殿题目（图片）'
-          : 'AI 生成宫殿题目（文本文件）',
-    },
-  )
-}
-
-export function recoverPalaceQuizPreviewFromLogApi(palaceId: number, logId: string) {
-  return request<PalaceQuizGenerationPreview>(
-    `/palaces/${palaceId}/quiz-generation/recover-from-log`,
-    { method: 'POST', body: JSON.stringify({ log_id: logId }) },
-  )
-}
-
-export async function previewPalaceQuizGenerationFromImagesApi(
-  palaceId: number,
-  files: File[],
-  extraPrompt: string,
-  classifyByMiniPalace = false,
-  selectedChapterId?: number | null,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return previewPalaceQuizGenerationFromUploadedFiles(
-    palaceId,
-    'images',
-    files,
-    extraPrompt,
-    classifyByMiniPalace,
-    selectedChapterId,
-    aiOptions,
-  )
-}
-
-export async function previewPalaceQuizGenerationFromTextFilesApi(
-  palaceId: number,
-  files: File[],
-  extraPrompt: string,
-  classifyByMiniPalace = false,
-  selectedChapterId?: number | null,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return previewPalaceQuizGenerationFromUploadedFiles(
-    palaceId,
-    'text-files',
-    files,
-    extraPrompt,
-    classifyByMiniPalace,
-    selectedChapterId,
-    aiOptions,
-  )
-}
-
-export function previewChapterQuizGenerationFromOutlineApi(
-  chapterId: number,
-  data: {
-    question_types?: PalaceQuizQuestionType[]
-    question_count?: number
-    extra_prompt: string
-    classify_by_child_chapter?: boolean
-    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
-  },
-) {
-  return request<PalaceQuizGenerationPreview>(`/chapters/${chapterId}/quiz-generation/outline`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `chapter:${chapterId}:quiz-generation:outline:${data.question_types?.join(',') || 'default'}:${data.question_count || 5}`,
-      description: 'AI 生成章节题目',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function classifyPalaceQuizQuestionsToSegmentsApi(
-  palaceId: number,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return request<PalaceQuizSegmentClassificationResult>(
-    `/palaces/${palaceId}/quiz-classification/segments`,
-    {
-      method: 'POST',
-      body: JSON.stringify(aiOptions ? { ai_options: aiOptions } : {}),
-      persistence: {
-        resourceKey: `palace:${palaceId}:quiz-classification:segments`,
-        description: '把记忆宫殿题库归类到学习组',
-        replayMode: 'manual',
-      },
-    },
-  )
-}
-
-export function previewPalaceQuizGenerationFromReviewMindmapApi(
-  palaceId: number,
-  data: {
-    mode: 'chapter' | 'cross_palace'
-    question_types: PalaceQuizQuestionType[]
-    question_count: number
-    review_editor_doc: MindMapEditorState['editor_doc']
-    related_palace_ids?: number[]
-    ai_options?: import('@/shared/api/contracts').AiRuntimeOptions
-  },
-) {
-  return request<PalaceQuizGenerationPreview>(
-    `/palaces/${palaceId}/quiz-generation/review-mindmap`,
-    {
-      method: 'POST',
-      body: JSON.stringify(data),
-      persistence: {
-        resourceKey: `palace:${palaceId}:quiz-generation:review-mindmap:${data.mode}:${data.question_types.join(',')}:${data.question_count}`,
-        description: 'AI 生成做题题目',
-        replayMode: 'manual',
-      },
-    },
-  )
-}
-
 export function getQuizReviewQueueApi(palaceId?: number | null) {
   const query = palaceId ? `?palace_id=${palaceId}` : ''
   return request<{ items: PalaceQuizQuestion[] }>(`/palace-quiz-questions/review-queue${query}`)
@@ -493,48 +329,6 @@ export function autoBindPalaceQuizNodeBindingsApi(
     persistence: {
       resourceKey: `palace:${palaceId}:quiz-node-bindings:auto-bind-text`,
       description: '文本重合自动绑定知识点',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function previewPalaceQuizNodeBindingsApi(
-  palaceId: number,
-  data: {
-    merge_mode?: QuizNodeBindingMergeMode
-    batch_size?: number
-    operation_id?: string
-    ai_options?: AiRuntimeOptions | null
-  },
-) {
-  return request<QuizNodeBindingPreview>(`/palaces/${palaceId}/quiz-node-bindings/preview`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
-export function applyPalaceQuizNodeBindingsApi(
-  palaceId: number,
-  data: {
-    merge_mode: QuizNodeBindingMergeMode
-    operation_id?: string
-    bindings: QuizNodeBindingEdge[]
-    accepted_edges?: QuizNodeBindingEdge[] | null
-  },
-) {
-  return request<{
-    palace_id: number
-    operation_id: string
-    merge_mode: QuizNodeBindingMergeMode
-    created_count: number
-    items: QuizNodeBindingEdge[]
-    item_count: number
-  }>(`/palaces/${palaceId}/quiz-node-bindings/apply`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `palace:${palaceId}:quiz-node-bindings:apply`,
-      description: '保存题库知识点绑定',
       replayMode: 'manual',
     },
   })

@@ -25,7 +25,7 @@ describe('emitQuizResultFeedback', () => {
     expect(mocks.dispatchGlobalFeedback).toHaveBeenCalledWith('quiz_result_correct', {
       audioScope: 'local',
     })
-    expect(navigator.vibrate).toHaveBeenCalledWith(18)
+    expect(navigator.vibrate).toHaveBeenCalledWith([14, 40, 18])
   })
 
   it('emits incorrect feedback without punitive vibration or celebration', () => {

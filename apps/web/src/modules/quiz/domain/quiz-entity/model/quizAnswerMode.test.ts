@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canSwitchQuizAnswerMode,
   DEFAULT_QUIZ_ANSWER_MODE_SETTINGS,
+  isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
   isQuizSubjectivePresentation,
   mcqReferenceAnswer,
@@ -30,6 +31,12 @@ describe('quizAnswerMode', () => {
     expect(isQuizChoiceShortcutActive('multiple_choice', 'choice')).toBe(true)
     expect(isQuizChoiceShortcutActive('multiple_choice', 'subjective')).toBe(false)
     expect(isQuizChoiceShortcutActive('short_answer', 'choice')).toBe(false)
+  })
+
+  it('keeps the choice attempt open after a subjective submit', () => {
+    expect(isQuizChoiceAttemptClosed({ resolved: true, shortAnswerSubmitted: true })).toBe(false)
+    expect(isQuizChoiceAttemptClosed({ resolved: true, selectedOptionId: 'B' })).toBe(true)
+    expect(isQuizChoiceAttemptClosed(undefined)).toBe(false)
   })
 
   it('builds the multiple-choice reference answer from the correct option', () => {

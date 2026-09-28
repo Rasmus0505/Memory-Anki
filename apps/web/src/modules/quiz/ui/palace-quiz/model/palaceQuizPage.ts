@@ -1,6 +1,5 @@
 import type {
   PalaceSegmentSummary,
-  PalaceQuizSegmentClassificationResult,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
@@ -27,19 +26,6 @@ export interface PalaceQuizPageMeta {
   }>
 }
 
-export interface ChapterTreeNode {
-  id: number
-  name: string
-  subject_id?: number | null
-  parent_id?: number | null
-  children?: ChapterTreeNode[]
-}
-
-export interface SubjectTreePayload {
-  subject: { id: number; name: string } | null
-  chapters: ChapterTreeNode[]
-}
-
 export interface QuestionFormState {
   question_type: PalaceQuizQuestionType
   stem: string
@@ -49,15 +35,6 @@ export interface QuestionFormState {
   analysis: string
   source_meta: PalaceQuizSourceMeta
 }
-
-export interface PalaceQuizGenerationStateSnapshot {
-  sourceKind: QuizGenerationSourceKind
-  previewQuestionCount: number
-  selectedChapterSummary: string
-  classificationResult: PalaceQuizSegmentClassificationResult | null
-}
-
-export type QuizGenerationSourceKind = 'image-single' | 'image-batch' | 'text-files'
 
 export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
 
@@ -193,101 +170,11 @@ export function getQuestionSourceLabel(sourceMeta?: PalaceQuizSourceMeta | null)
   return QUESTION_SOURCE_LABELS[sourceMeta.source_kind] ?? '手工录入'
 }
 
-export function formatResolvedAiSteps(
-  steps:
-    | Array<{
-        scenario_key: string
-        model_label?: string | null
-      }>
-    | {
-        generation?: { model_label?: string | null } | null
-        pairing?: { model_label?: string | null } | null
-        review?: { model_label?: string | null } | null
-      }
-    | null
-    | undefined,
-) {
-  if (!steps) return ''
-  const normalizedSteps = Array.isArray(steps)
-    ? steps
-    : Object.entries(steps)
-        .filter(([, meta]) => Boolean(meta))
-        .map(([scenario_key, meta]) => ({
-          scenario_key,
-          model_label: meta?.model_label ?? null,
-        }))
-  if (!normalizedSteps.length) return ''
-  return normalizedSteps
-    .map((step) => {
-      const label = step.model_label?.trim()
-      return label ? `${step.scenario_key}: ${label}` : step.scenario_key
-    })
-    .join(' / ')
-}
-
 export function getQuestionTypeLabel(questionType: PalaceQuizQuestionType) {
   return QUESTION_TYPE_LABELS[questionType]
 }
 
 export function canManuallyEditQuestion(questionType: PalaceQuizQuestionType) {
   return questionType === 'multiple_choice' || questionType === 'short_answer'
-}
-
-export function collectAllowedChapterIds(
-  nodes: ChapterTreeNode[],
-  explicitIds: Set<number>,
-  ancestorSelected: boolean,
-  collector: Set<number>,
-) {
-  const walk = (items: ChapterTreeNode[], parentAllowed: boolean) => {
-    let branchHasAllowedNode = false
-    for (const node of items) {
-      const selfAllowed = parentAllowed || explicitIds.has(node.id)
-      const childHasAllowedNode = walk(node.children || [], selfAllowed)
-      const shouldAllow = selfAllowed || childHasAllowedNode
-      if (shouldAllow) {
-        collector.add(node.id)
-        branchHasAllowedNode = true
-      }
-    }
-    return branchHasAllowedNode
-  }
-  walk(nodes, ancestorSelected)
-}
-
-export function findChapterPath(
-  nodes: ChapterTreeNode[],
-  chapterId: number,
-  trail: ChapterTreeNode[] = [],
-): ChapterTreeNode[] | null {
-  for (const node of nodes) {
-    const nextTrail = [...trail, node]
-    if (node.id === chapterId) return nextTrail
-    const nested = findChapterPath(node.children || [], chapterId, nextTrail)
-    if (nested) return nested
-  }
-  return null
-}
-
-export function resolveChapterInfoFromTrees(
-  trees: SubjectTreePayload[],
-  chapterId: number | null,
-) {
-  if (!chapterId) return null
-  for (const tree of trees) {
-    const path = findChapterPath(tree.chapters || [], chapterId)
-    if (path) {
-      return {
-        subjectName: tree.subject?.name || '未命名学科',
-        path,
-      }
-    }
-  }
-  return null
-}
-
-export function buildChapterSummary(info: { subjectName: string; path: ChapterTreeNode[] } | null) {
-  if (!info) return '尚未选择题目所属章节'
-  return `${info.subjectName} / ${info.path.map((item) => item.name).join(' / ')}`
 }
 

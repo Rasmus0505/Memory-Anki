@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, Trash2 } from 'lucide-react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, Keyboard, LoaderCircle, Trash2 } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   deletePalaceQuizQuestionApi,
@@ -10,14 +10,20 @@ import {
 import {
   beginQuizQuestionMarkRequest,
   isCurrentQuizQuestionMarkRequest,
+  isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
   QuizQuestionIndexPager,
+  QuizFontScaleBody,
+  QuizFontScaleHint,
   QuizQuestionInteraction,
   QuizQuestionStem,
+  QuizShortcutSettingsSection,
   submitQuizQuestionMark,
   useQuizAnswerMode,
+  useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
+  useQuizDialogFontScale,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
@@ -43,6 +49,11 @@ import {
   collectMemoryLookupFocusNodeUids,
 } from '@/widgets/palace-memory-lookup'
 
+function isAlreadyDeletedQuizQuestionError(error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  return message.includes('题目不存在')
+}
+
 export function NodeBoundQuizDialog({
   open,
   onOpenChange,
@@ -53,6 +64,7 @@ export function NodeBoundQuizDialog({
   initialQuestionStates,
   onQuestionStateChange,
   onQuestionCompleted,
+  onQuestionDeleted,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -65,12 +77,18 @@ export function NodeBoundQuizDialog({
   initialQuestionStates?: Record<number, QuizRuntimeState>
   onQuestionStateChange?: (questionId: number, next: QuizRuntimeState) => void
   onQuestionCompleted: (questionId: number) => void
+  /** Drop the id from the opener's queue so a later reload cannot paint it again. */
+  onQuestionDeleted?: (questionId: number) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
+  const fontScale = useQuizDialogFontScale(open)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
+  const questionsRef = useRef<PalaceQuizQuestion[]>([])
+  const removedQuestionIdsRef = useRef(new Set<number>())
+  questionsRef.current = questions
   const [bindingByQuestion, setBindingByQuestion] = useState<Map<number, QuizNodeBindingEdge>>(
     () => new Map(),
   )
@@ -80,6 +98,7 @@ export function NodeBoundQuizDialog({
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
@@ -95,8 +114,10 @@ export function NodeBoundQuizDialog({
   const questionIdsKey = questionIds.join(',')
 
   useEffect(() => {
+    if (!open) removedQuestionIdsRef.current = new Set()
     if (!open || !palaceId || questionIds.length === 0) {
       setQuestions([])
+      questionsRef.current = []
       setBindingByQuestion(new Map())
       setBindingsByQuestion(new Map())
       setIndex(0)
@@ -104,24 +125,57 @@ export function NodeBoundQuizDialog({
       setLoadError('')
       return
     }
+    const activeIds = questionIds.filter((id) => !removedQuestionIdsRef.current.has(id))
+    if (activeIds.length === 0) {
+      setQuestions([])
+      questionsRef.current = []
+      setLoading(false)
+      return
+    }
+    const activeSet = new Set(activeIds)
+    const shown = questionsRef.current
+    if (
+      shown.length > 0
+      && activeIds.every((id) => shown.some((item) => item.id === id))
+      && shown.every((item) => activeSet.has(item.id))
+    ) {
+      return
+    }
+    if (shown.length > 0 && activeIds.every((id) => shown.some((item) => item.id === id))) {
+      const next = shown.filter((item) => activeSet.has(item.id))
+      questionsRef.current = next
+      setQuestions(next)
+      setIndex((value) => Math.min(value, Math.max(next.length - 1, 0)))
+      return
+    }
     let cancelled = false
-    setLoading(true)
+    if (shown.length === 0) setLoading(true)
     setLoadError('')
     void Promise.all([
-      getPalaceQuizQuestionsByIdsApi(questionIds).catch(() => ({ items: [] as PalaceQuizQuestion[] })),
+      getPalaceQuizQuestionsByIdsApi(activeIds).then(
+        (response) => ({ failed: false as const, items: response.items || [] }),
+        () => ({ failed: true as const, items: [] as PalaceQuizQuestion[] }),
+      ),
       listPalaceQuizNodeBindingsApi(palaceId),
       getPalaceQuizQuestionsApi(palaceId).catch(() => ({ items: [] as PalaceQuizQuestion[] })),
     ])
-      .then(([questionResponse, bindingResponse, palaceQuestions]) => {
+      .then(([questionOutcome, bindingResponse, palaceQuestions]) => {
         if (cancelled) return
         const byId = new Map<number, PalaceQuizQuestion>()
-        for (const item of palaceQuestions.items || []) byId.set(item.id, item)
-        for (const item of questionResponse.items || []) byId.set(item.id, item)
+        // Palace list is only a fallback when by-ids fails. A successful by-ids
+        // response omits deleted rows; filling those ids from a stale palace
+        // payload would put the question back on screen.
+        if (questionOutcome.failed) {
+          for (const item of palaceQuestions.items || []) byId.set(item.id, item)
+        }
+        for (const item of questionOutcome.items) byId.set(item.id, item)
         const ordered = sortPalaceQuizQuestions(
-          questionIds
+          activeIds
             .map((id) => byId.get(id))
-            .filter((item): item is PalaceQuizQuestion => Boolean(item)),
+            .filter((item): item is PalaceQuizQuestion => Boolean(item))
+            .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
         )
+        questionsRef.current = ordered
         setQuestions(ordered)
         if (ordered.length === 0) {
           setLoadError('绑定题目未能加载，可能已删除。')
@@ -212,12 +266,18 @@ export function NodeBoundQuizDialog({
         updateLocalState(questionId, updater)
       },
       applyUpdatedQuestion: (question: PalaceQuizQuestion) => {
+        if (removedQuestionIdsRef.current.has(question.id)) return
         setQuestions((current) =>
           current.map((item) => (item.id === question.id ? question : item)),
         )
       },
     }),
     [questionStates, updateLocalState],
+  )
+
+  const shouldToastAttemptError = useCallback(
+    (questionId: number) => !removedQuestionIdsRef.current.has(questionId),
+    [],
   )
 
   const orchestration = useQuizAttemptOrchestration({
@@ -229,6 +289,7 @@ export function NodeBoundQuizDialog({
     onChoiceStart: ({ question }) => {
       markCompleted(question.id)
     },
+    shouldToastAttemptError,
   })
 
   const currentBinding = current ? bindingByQuestion.get(current.id) : undefined
@@ -266,6 +327,7 @@ export function NodeBoundQuizDialog({
       setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
     } catch (error) {
       if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
+      if (removedQuestionIdsRef.current.has(questionId)) return
       toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
   }, [current])
@@ -273,88 +335,54 @@ export function NodeBoundQuizDialog({
   const handleDeleteCurrent = useCallback(async () => {
     if (!current) return
     const removedId = current.id
-    try {
-      await deletePalaceQuizQuestionApi(removedId)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败。')
-      return
-    }
-    const nextQuestions = questions.filter((item) => item.id !== removedId)
+    if (removedQuestionIdsRef.current.has(removedId)) return
+    const snapshotQuestions = questions
+    const snapshotIndex = index
+    const snapshotStates = questionStates
+    removedQuestionIdsRef.current.add(removedId)
+    const nextQuestions = snapshotQuestions.filter((item) => item.id !== removedId)
+    const nextIndex = nextQuestions.length > 0 ? Math.min(snapshotIndex, nextQuestions.length - 1) : 0
+    questionsRef.current = nextQuestions
     setQuestions(nextQuestions)
     setQuestionStates((prev) => {
       const next = { ...prev }
       delete next[removedId]
       return next
     })
-    toast.success('题目已移入回收站。')
-    if (nextQuestions.length === 0) {
-      onOpenChange(false)
-      return
+    setIndex(nextIndex)
+    try {
+      await deletePalaceQuizQuestionApi(removedId)
+    } catch (error) {
+      if (!isAlreadyDeletedQuizQuestionError(error)) {
+        removedQuestionIdsRef.current.delete(removedId)
+        questionsRef.current = snapshotQuestions
+        setQuestions(snapshotQuestions)
+        setQuestionStates(snapshotStates)
+        setIndex(snapshotIndex)
+        toast.error(error instanceof Error ? error.message : '删除失败。')
+        return
+      }
     }
-    setIndex((value) => Math.min(value, nextQuestions.length - 1))
-  }, [current, onOpenChange, questions])
+    toast.success('题目已移入回收站。')
+    onQuestionDeleted?.(removedId)
+    if (nextQuestions.length === 0) onOpenChange(false)
+  }, [current, index, onOpenChange, onQuestionDeleted, questionStates, questions])
 
-  useEffect(() => {
-    if (!open || !current) return
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target
-      if (
-        target instanceof HTMLElement
-        && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      ) {
-        return
-      }
-
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (questions.length <= 1) return
-        event.preventDefault()
-        setIndex((value) =>
-          event.key === 'ArrowLeft'
-            ? Math.max(0, value - 1)
-            : Math.min(questions.length - 1, value + 1),
-        )
-        return
-      }
-
-      if (!isQuizChoiceShortcutActive(current.question_type, answerMode) || currentState.resolved) return
-      const optionCount = current.options.length
-      if (optionCount === 0) return
-
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        event.preventDefault()
-        const delta = event.key === 'ArrowDown' ? 1 : -1
-        const nextIndex = (keyboardOptionIndex + delta + optionCount) % optionCount
-        setKeyboardOptionIndex(nextIndex)
-        questionInteractionRef.current
-          ?.querySelector<HTMLButtonElement>(`[data-quiz-option-index="${nextIndex}"]`)
-          ?.focus()
-        return
-      }
-
-      const normalizedKey = event.key.toLowerCase()
-      const directIndex = /^[1-4]$/.test(normalizedKey)
-        ? Number(normalizedKey) - 1
-        : 'abcd'.indexOf(normalizedKey)
-      const focusedOption =
-        target instanceof HTMLElement
-          ? target.closest<HTMLElement>('[data-quiz-option-index]')
-          : null
-      if (
-        event.key === 'Enter' &&
-        target instanceof HTMLElement &&
-        !focusedOption &&
-        target.closest('button, [role="button"], a')
-      ) {
-        return
-      }
-      const focusedIndex = focusedOption?.dataset.quizOptionIndex
-      const optionIndex = event.key === 'Enter'
-        ? (focusedIndex == null ? keyboardOptionIndex : Number(focusedIndex))
-        : directIndex
-      if (optionIndex < 0 || optionIndex >= optionCount) return
+  useQuizAnsweringShortcuts({
+    enabled: open && !shortcutsOpen && current != null,
+    questionCount: questions.length,
+    optionCount: current?.options.length ?? 0,
+    choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
+    attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId }),
+    keyboardOptionIndex,
+    setKeyboardOptionIndex,
+    interactionRootRef: questionInteractionRef,
+    onPreviousQuestion: () => setIndex((value) => Math.max(0, value - 1)),
+    onNextQuestion: () => setIndex((value) => Math.min(questions.length - 1, value + 1)),
+    onSelectOption: (optionIndex) => {
+      if (!current) return
       const option = current.options[optionIndex]
       if (!option) return
-      event.preventDefault()
       const correct = option.id === (current.answer_payload.correct_option_id || '')
       updateLocalState(current.id, (state) => ({
         ...state,
@@ -363,32 +391,31 @@ export function NodeBoundQuizDialog({
         correct,
       }))
       handleChoiceResolve(option.id, correct)
-    }
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [
-    answerMode,
-    current,
-    currentState.resolved,
-    handleChoiceResolve,
-    keyboardOptionIndex,
-    open,
-    questions.length,
-    updateLocalState,
-  ])
+    },
+    onToggleMark: () => {
+      if (!current) return
+      void handleToggleMark(!current.marked)
+    },
+  })
 
   const headerDetail = loading
     ? '加载中…'
-    : questions.length > 0
-      ? `第 ${index + 1} / ${questions.length} 题` +
-        (answeredCount > 0 ? ` · 已答 ${answeredCount}` : '') +
-        (ownerLabel ? ` · ${ownerLabel}` : '')
-      : '关闭后继续翻卡'
+    : questions.length === 0
+      ? '关闭后继续翻卡'
+      : [
+          // The pager row owns 「第 n / m 题」 once there is more than one question.
+          questions.length > 1 ? null : `第 ${index + 1} / ${questions.length} 题`,
+          answeredCount > 0 ? `已答 ${answeredCount}` : null,
+          ownerLabel,
+        ]
+          .filter((part) => part != null && part !== '')
+          .join(' · ')
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          ref={fontScale.contentRef}
           // Own floating id: the fallback key is derived from className, so a style
           // tweak used to throw away the learner's remembered window size.
           floatingId="node-bound-quiz"
@@ -405,9 +432,23 @@ export function NodeBoundQuizDialog({
           data-keyboard-shortcuts-suspended="true"
           data-testid="node-bound-quiz-dialog"
         >
+          <QuizFontScaleHint percent={fontScale.percent} visible={fontScale.hintVisible} />
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle className="text-base">关联题目</DialogTitle>
+              <div className="flex min-w-0 items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={shortcutsOpen ? 'default' : 'outline'}
+                  aria-label="做题快捷键"
+                  title="做题快捷键"
+                  onClick={() => setShortcutsOpen((value) => !value)}
+                >
+                  <Keyboard className="size-4" />
+                  快捷键
+                </Button>
+                <DialogTitle className="text-base">关联题目</DialogTitle>
+              </div>
               {palaceId != null ? (
                 <Button
                   type="button"
@@ -422,15 +463,19 @@ export function NodeBoundQuizDialog({
                 </Button>
               ) : null}
             </div>
-            <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
-              {headerDetail}
-            </DialogDescription>
+            {headerDetail ? (
+              <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
+                {headerDetail}
+              </DialogDescription>
+            ) : null}
           </DialogHeader>
 
           {/* min-h-0 + flex-1: the old fixed 70vh left dead space inside a resized
               floating window and double-clipped against the panel's own max-height. */}
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
-            {loading ? (
+            {shortcutsOpen ? (
+              <QuizShortcutSettingsSection />
+            ) : loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                 <LoaderCircle className="size-4 animate-spin" />
                 加载题目…
@@ -484,26 +529,28 @@ export function NodeBoundQuizDialog({
                       <Trash2 className="size-4" />
                     </Button>
                   </div>
+                </div>
+                <QuizFontScaleBody percent={fontScale.percent}>
                   <div className="text-base font-semibold leading-7 text-foreground">
                     <QuizQuestionStem question={current} />
                   </div>
-                </div>
-                <div ref={questionInteractionRef}>
-                  <QuizQuestionInteraction
-                    question={current}
-                    state={currentState}
-                    onStateChange={(updater) => updateLocalState(current.id, updater)}
-                    onChoiceResolve={handleChoiceResolve}
-                    onShortAnswerSubmit={() => {
-                      orchestration.handleShortAnswerSubmit(current.id)
-                      markCompleted(current.id)
-                    }}
-                    mark={{
-                      marked: Boolean(current.marked),
-                      onToggle: (marked) => void handleToggleMark(marked),
-                    }}
-                  />
-                </div>
+                  <div ref={questionInteractionRef}>
+                    <QuizQuestionInteraction
+                      question={current}
+                      state={currentState}
+                      onStateChange={(updater) => updateLocalState(current.id, updater)}
+                      onChoiceResolve={handleChoiceResolve}
+                      onShortAnswerSubmit={() => {
+                        orchestration.handleShortAnswerSubmit(current.id)
+                        markCompleted(current.id)
+                      }}
+                      mark={{
+                        marked: Boolean(current.marked),
+                        onToggle: (marked) => void handleToggleMark(marked),
+                      }}
+                    />
+                  </div>
+                </QuizFontScaleBody>
               </>
             )}
           </div>

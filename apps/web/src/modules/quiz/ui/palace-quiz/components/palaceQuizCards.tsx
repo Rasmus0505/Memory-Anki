@@ -4,9 +4,6 @@ import {
   QuizQuestionStem,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
-import type {
-  ChapterTreeNode,
-} from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import {
   getQuestionOwnershipLabel,
   getQuestionSourceLabel,
@@ -138,53 +135,6 @@ export function PreviewQuestionCard({
       <div className="mt-2.5 text-sm text-muted-foreground">
         解析：{question.analysis || '暂无解析'}
       </div>
-    </div>
-  )
-}
-
-export function ChapterRangeTree({
-  node,
-  allowedChapterIds,
-  selectedChapterId,
-  onSelect,
-  depth,
-}: {
-  node: ChapterTreeNode
-  allowedChapterIds: Set<number>
-  selectedChapterId: number | null
-  onSelect: (chapterId: number) => void
-  depth: number
-}) {
-  const isAllowed = allowedChapterIds.has(node.id)
-  return (
-    <div className="space-y-1">
-      <button
-        type="button"
-        disabled={!isAllowed}
-        onClick={() => isAllowed && onSelect(node.id)}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm',
-          isAllowed
-            ? selectedChapterId === node.id
-              ? 'border-primary/40 bg-primary/10 text-foreground'
-              : 'border-border/70 bg-background hover:border-primary/30'
-            : 'cursor-not-allowed border-border/50 bg-background/50 text-muted-foreground opacity-60',
-        )}
-        style={{ marginLeft: `${depth * 16}px` }}
-      >
-        <span>{selectedChapterId === node.id ? '●' : '○'}</span>
-        <span>{node.name}</span>
-      </button>
-      {(node.children || []).map((child) => (
-        <ChapterRangeTree
-          key={child.id}
-          node={child}
-          allowedChapterIds={allowedChapterIds}
-          selectedChapterId={selectedChapterId}
-          onSelect={onSelect}
-          depth={depth + 1}
-        />
-      ))}
     </div>
   )
 }

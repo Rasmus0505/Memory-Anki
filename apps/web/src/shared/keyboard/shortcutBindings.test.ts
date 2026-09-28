@@ -69,6 +69,14 @@ describe('shortcutBindings', () => {
     expect(digit.value).toBeNull()
     expect(digit.error).toContain('输入冲突')
 
+    const quizDigit = captureShortcutFromKeyboardEvent(
+      new KeyboardEvent('keydown', { key: '1', code: 'Digit1' }),
+      {},
+      { allowBareDigits: true },
+    )
+    expect(quizDigit.error).toBe('')
+    expect(quizDigit.value?.code).toBe('Digit1')
+
     const escaped = captureShortcutFromKeyboardEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }))
     expect(escaped.value).toBeNull()
     expect(escaped.error).toContain('Esc')

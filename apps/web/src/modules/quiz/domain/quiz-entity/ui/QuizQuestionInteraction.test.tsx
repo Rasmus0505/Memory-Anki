@@ -319,6 +319,63 @@ describe('QuizQuestionInteraction', () => {
     expect(screen.getByRole('button', { name: '取消标记' })).toBeTruthy()
   })
 
+  it('keeps the choice and subjective toggle available after either presentation is answered', () => {
+    const question = {
+      question_type: 'multiple_choice' as const,
+      stem: '细胞的供能结构是？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '线粒体' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '线粒体是主要供能结构。',
+      source_meta: MANUAL_SOURCE,
+    }
+    const { rerenderWithLatestState } = renderInteraction(question)
+
+    fireEvent.click(screen.getByRole('button', { name: '主观' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
+    rerenderWithLatestState()
+
+    const choiceMode = screen.getByRole('button', { name: '选择' })
+    expect((choiceMode as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(choiceMode)
+    rerenderWithLatestState()
+
+    const option = screen.getByRole('button', { name: 'B. 线粒体' })
+    expect((option as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByText('回答错误')).toBeNull()
+    fireEvent.click(option)
+    rerenderWithLatestState()
+    expect(screen.getByText('回答正确')).toBeTruthy()
+
+    expect((screen.getByRole('button', { name: '主观' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('opens a subjective draft after a choice has already been answered', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'multiple_choice',
+      stem: '细胞的供能结构是？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '线粒体' },
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '线粒体是主要供能结构。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'B. 线粒体' }))
+    rerenderWithLatestState()
+    const subjectiveMode = screen.getByRole('button', { name: '主观' })
+    expect((subjectiveMode as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(subjectiveMode)
+    rerenderWithLatestState()
+
+    expect((screen.getByPlaceholderText('先写下你的答案，再点击提交') as HTMLTextAreaElement).disabled).toBe(false)
+    expect(screen.queryByText('选项')).toBeNull()
+  })
+
   it('does not show the choice/subjective toggle on non-choice questions', () => {
     renderInteraction({
       question_type: 'true_false',

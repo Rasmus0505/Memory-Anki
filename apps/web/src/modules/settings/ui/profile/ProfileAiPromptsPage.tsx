@@ -23,6 +23,7 @@ import {
   filterBlocksForScene,
   groupBlocksByLayer,
 } from '@/modules/settings/domain/ai-runtime-entity'
+import { isRetiredAiSettingsScene } from '@/modules/settings/ui/profile/model/retiredAiScenes'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -64,8 +65,9 @@ export function ProfileAiPromptsPage({
       ])
       setBlocks(blockResponse.items)
       setBlockDrafts(Object.fromEntries(blockResponse.items.map((item) => [item.key, item])))
-      setScenes(sceneResponse.items)
-      setSceneDrafts(Object.fromEntries(sceneResponse.items.map((item) => [item.scene_key, item])))
+      const visibleScenes = sceneResponse.items.filter((item) => !isRetiredAiSettingsScene(item.scene_key))
+      setScenes(visibleScenes)
+      setSceneDrafts(Object.fromEntries(visibleScenes.map((item) => [item.scene_key, item])))
       setLoaded(true)
     }
     void load()

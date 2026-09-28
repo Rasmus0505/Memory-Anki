@@ -81,10 +81,11 @@ const baseResponse = {
           default_base_url: 'https://zhipu.example/v1',
         },
       ],
-      scene_keys: ['ai_split', 'reading_sentence_rewrite'],
+      scene_keys: ['ai_split', 'reading_sentence_rewrite', 'peg_association_suggestions'],
       scene_details: [
         { key: 'ai_split', label: 'AI 知识点拆分', description: '拆分知识点' },
         { key: 'reading_sentence_rewrite', label: '英语阅读句子改写', description: '改写句子' },
+        { key: 'peg_association_suggestions', label: '挂钩联想', description: '为挂钩生成联想' },
       ],
     },
   ],
@@ -129,6 +130,60 @@ const baseResponse = {
     },
   ],
   scenes: [
+    {
+      key: 'peg_association_suggestions',
+      label: '挂钩联想',
+      description: '为挂钩生成联想',
+      category_key: 'llm',
+      category_label: '大语言',
+      config_key: 'scene_model_peg_association',
+      thinking_config_key: 'scene_model_peg_association_thinking_enabled',
+      default_model: 'glm-4.7-flash',
+      current_model: 'glm-4.7-flash',
+      default_thinking_enabled: true,
+      current_thinking_enabled: true,
+      effective_model: 'glm-4.7-flash',
+      effective_thinking_enabled: true,
+      inherits_category_default: false,
+      available_models: [
+        {
+          key: 'qwen3.5-flash',
+          label: 'qwen3.5-flash（无视觉）',
+          display_name: 'qwen3.5-flash',
+          provider: 'qwen',
+          provider_label: 'Qwen',
+          model_type: 'llm',
+          model_type_label: '大语言',
+          has_vision: false,
+          supports_thinking: false,
+          supports_temperature: true,
+          is_builtin: true,
+          is_active: true,
+          default_base_url: 'https://dashscope.example/v1',
+        },
+        {
+          key: 'glm-4.7-flash',
+          label: 'GLM 4.7 Flash（无视觉）',
+          display_name: 'GLM 4.7 Flash',
+          provider: 'zhipu',
+          provider_label: 'Zhipu',
+          model_type: 'llm',
+          model_type_label: '大语言',
+          has_vision: false,
+          supports_thinking: true,
+          supports_temperature: true,
+          is_builtin: true,
+          is_active: true,
+          default_base_url: 'https://zhipu.example/v1',
+        },
+      ],
+      source_location: 'test.py',
+      latest_resolved_model: null,
+      last_called_at: '2026-06-15T08:00:00',
+      last_status: 'success',
+      resolved_provider: 'zhipu',
+      resolved_model_label: 'GLM 4.7 Flash（无视觉）',
+    },
     {
       key: 'ai_split',
       label: 'AI 知识点拆分',
@@ -268,6 +323,10 @@ describe('ProfileAiConfigPage', () => {
     })
 
     expect(screen.getByText('已单独配置')).toBeTruthy()
+    expect(screen.getAllByText('挂钩联想').length).toBeGreaterThan(0)
+    expect(screen.queryByText('简答题点评')).toBeNull()
+    expect(screen.queryByText('AI 知识点拆分')).toBeNull()
+    expect(screen.queryByText('英语阅读句子改写')).toBeNull()
 
     fireEvent.change(screen.getByLabelText('通用模型'), {
       target: { value: 'glm-4.7-flash' },
@@ -303,7 +362,7 @@ describe('ProfileAiConfigPage', () => {
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledWith({
         scene_updates: {
-          ai_split: {
+          peg_association_suggestions: {
             default_model: 'qwen3.5-flash',
             current_model: 'qwen3.5-flash',
             default_thinking_enabled: false,

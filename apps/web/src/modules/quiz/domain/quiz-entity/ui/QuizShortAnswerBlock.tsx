@@ -88,11 +88,9 @@ function renderShortAnswerFeedback(feedback: PalaceShortAnswerFeedback, compact:
 
 export function QuizAnswerModeToggle({
   mode,
-  disabled,
   onChange,
 }: {
   mode: QuizAnswerMode
-  disabled: boolean
   onChange: (mode: QuizAnswerMode) => void
 }) {
   return (
@@ -106,7 +104,6 @@ export function QuizAnswerModeToggle({
           <button
             key={value}
             type="button"
-            disabled={disabled}
             aria-pressed={mode === value}
             onClick={() => onChange(value)}
             className={cn(
@@ -114,7 +111,6 @@ export function QuizAnswerModeToggle({
               mode === value
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground',
-              disabled && 'cursor-not-allowed opacity-50',
             )}
           >
             {value === 'choice' ? '选择' : '主观'}
@@ -168,7 +164,10 @@ export function ShortAnswerBlock({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const currentState = state || {}
-  const submitted = Boolean(currentState.shortAnswerSubmitted || currentState.resolved)
+  const submitted =
+    question.question_type === 'multiple_choice'
+      ? Boolean(currentState.shortAnswerSubmitted)
+      : Boolean(currentState.shortAnswerSubmitted || currentState.resolved)
   const submittedRef = useRef(submitted)
   submittedRef.current = submitted
   const answerText = currentState.shortAnswerText || ''

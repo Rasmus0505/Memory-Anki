@@ -10,9 +10,6 @@ export const getPalaceQuizQuestionsApiMock = vi.fn()
 export const batchCreateChapterQuizQuestionsApiMock = vi.fn()
 export const batchCreatePalaceQuizQuestionsApiMock = vi.fn()
 export const batchDeletePalaceQuizQuestionsApiMock = vi.fn()
-export const previewPalaceQuizGenerationFromImagesApiMock = vi.fn()
-export const previewPalaceQuizGenerationFromTextFilesApiMock = vi.fn()
-export const classifyPalaceQuizQuestionsToMiniPalacesApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 export const setPalaceQuizQuestionMarkedApiMock = vi.fn()
 export const resetPalaceQuizQuestionAttemptsApiMock = vi.fn()
@@ -27,23 +24,6 @@ export const useTimedSessionMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
 export const promptForScenarioAiOptionsMock = vi.fn()
 export const mindMapFramePropsMock = vi.fn()
-export const listQuizGenerationJobsApiMock = vi.fn()
-export const listQuizPdfAssetsApiMock = vi.fn()
-export const createQuizGenerationJobApiMock = vi.fn()
-export const addQuizFileSourceApiMock = vi.fn()
-export const addQuizTextSourceApiMock = vi.fn()
-export const addQuizPdfSourceApiMock = vi.fn()
-export const deleteQuizSourceApiMock = vi.fn()
-export const reorderQuizSourcesApiMock = vi.fn()
-export const extractMatchQuizJobApiMock = vi.fn()
-export const updateQuizMatchingApiMock = vi.fn()
-export const generateQuizWorkspacePreviewApiMock = vi.fn()
-export const markQuizGenerationJobSavedApiMock = vi.fn()
-export const updateQuizGenerationJobApiMock = vi.fn()
-export const uploadQuizPdfAssetApiMock = vi.fn()
-export const updateQuizPdfAssetApiMock = vi.fn()
-export const deleteQuizPdfAssetApiMock = vi.fn()
-export const deleteQuizGenerationJobApiMock = vi.fn()
 
 function collectMindMapNodes(root: any): Array<{ uid: string; text: string }> {
   if (!root) return []
@@ -128,12 +108,6 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
     batchDeletePalaceQuizQuestionsApiMock(...args),
   updatePalaceQuizQuestionApi: vi.fn(),
   deletePalaceQuizQuestionApi: (...args: unknown[]) => deletePalaceQuizQuestionApiMock(...args),
-  previewPalaceQuizGenerationFromImagesApi: (...args: unknown[]) =>
-    previewPalaceQuizGenerationFromImagesApiMock(...args),
-  previewPalaceQuizGenerationFromTextFilesApi: (...args: unknown[]) =>
-    previewPalaceQuizGenerationFromTextFilesApiMock(...args),
-  classifyPalaceQuizQuestionsToMiniPalacesApi: (...args: unknown[]) =>
-    classifyPalaceQuizQuestionsToMiniPalacesApiMock(...args),
   recordPalaceQuizChoiceAttemptApi: (...args: unknown[]) =>
     recordPalaceQuizChoiceAttemptApiMock(...args),
   setPalaceQuizQuestionMarkedApi: (...args: unknown[]) =>
@@ -149,27 +123,6 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
 vi.mock('@/modules/content/domain/knowledge-entity/api', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
   getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
-}))
-
-vi.mock('@/modules/quiz/ui/palace-quiz/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/modules/quiz/ui/palace-quiz/api')>()),
-  listQuizGenerationJobsApi: (...args: unknown[]) => listQuizGenerationJobsApiMock(...args),
-  listQuizPdfAssetsApi: (...args: unknown[]) => listQuizPdfAssetsApiMock(...args),
-  createQuizGenerationJobApi: (...args: unknown[]) => createQuizGenerationJobApiMock(...args),
-  addQuizFileSourceApi: (...args: unknown[]) => addQuizFileSourceApiMock(...args),
-  addQuizTextSourceApi: (...args: unknown[]) => addQuizTextSourceApiMock(...args),
-  addQuizPdfSourceApi: (...args: unknown[]) => addQuizPdfSourceApiMock(...args),
-  deleteQuizSourceApi: (...args: unknown[]) => deleteQuizSourceApiMock(...args),
-  reorderQuizSourcesApi: (...args: unknown[]) => reorderQuizSourcesApiMock(...args),
-  extractMatchQuizJobApi: (...args: unknown[]) => extractMatchQuizJobApiMock(...args),
-  updateQuizMatchingApi: (...args: unknown[]) => updateQuizMatchingApiMock(...args),
-  generateQuizWorkspacePreviewApi: (...args: unknown[]) => generateQuizWorkspacePreviewApiMock(...args),
-  markQuizGenerationJobSavedApi: (...args: unknown[]) => markQuizGenerationJobSavedApiMock(...args),
-  updateQuizGenerationJobApi: (...args: unknown[]) => updateQuizGenerationJobApiMock(...args),
-  uploadQuizPdfAssetApi: (...args: unknown[]) => uploadQuizPdfAssetApiMock(...args),
-  updateQuizPdfAssetApi: (...args: unknown[]) => updateQuizPdfAssetApiMock(...args),
-  deleteQuizPdfAssetApi: (...args: unknown[]) => deleteQuizPdfAssetApiMock(...args),
-  deleteQuizGenerationJobApi: (...args: unknown[]) => deleteQuizGenerationJobApiMock(...args),
 }))
 
 vi.mock('@/shared/hooks/useTimedSession', () => ({
@@ -431,47 +384,10 @@ export function renderPage(
   )
 }
 
-export const workspaceQuestion = {
-  question_type: 'multiple_choice' as const,
-  stem: '细胞的控制中心是？',
-  options: [{ id: 'A', text: '细胞膜' }, { id: 'B', text: '细胞核' }],
-  answer_payload: { correct_option_id: 'B' },
-  analysis: '细胞核控制细胞活动。',
-  source_meta: { ...baseQuestions[0].source_meta, source_kind: 'workspace', generation_mode: 'workspace' },
-}
-
-export function buildWorkspaceJob(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'job-1', palace_id: 1, selected_chapter_id: 1, status: 'draft',
-    title: '细胞生物学宫殿题库生成', extra_prompt: '', options: {},
-    matching_items: [], preview: null, error_message: '', sources: [],
-    created_at: '2026-07-10T00:00:00', updated_at: '2026-07-10T00:00:00',
-    ...overrides,
-  }
-}
-
 export function setupPalaceQuizPageTest() {
   vi.clearAllMocks()
   vi.stubGlobal('confirm', vi.fn(() => true))
   window.localStorage.clear()
-  const emptyJob = buildWorkspaceJob()
-  listQuizGenerationJobsApiMock.mockResolvedValue({ items: [] })
-  listQuizPdfAssetsApiMock.mockResolvedValue({ items: [{ id: 7, name: '生物题库', original_name: 'biology.pdf', file_size: 1048576, page_count: 80, archived: false, created_at: null, updated_at: null }] })
-  createQuizGenerationJobApiMock.mockResolvedValue({ item: emptyJob })
-  addQuizFileSourceApiMock.mockResolvedValue({ item: {} })
-  addQuizTextSourceApiMock.mockResolvedValue({ item: {} })
-  addQuizPdfSourceApiMock.mockResolvedValue({ item: {} })
-  deleteQuizSourceApiMock.mockResolvedValue({ ok: true })
-  reorderQuizSourcesApiMock.mockResolvedValue({ item: emptyJob })
-  updateQuizGenerationJobApiMock.mockImplementation(async (_jobId: string, data: Record<string, unknown>) => ({ item: { ...emptyJob, ...data } }))
-  extractMatchQuizJobApiMock.mockResolvedValue({ item: buildWorkspaceJob({ status: 'matching_review', matching_items: [{ id: 'match-1', status: 'ai_generated_answer', confidence: 'medium', ignored: false, question: workspaceQuestion, question_text: workspaceQuestion.stem, answer_text: JSON.stringify(workspaceQuestion.answer_payload), answer_generated_by_ai: true }] }) })
-  updateQuizMatchingApiMock.mockImplementation(async (_jobId: string, items: unknown[]) => ({ item: buildWorkspaceJob({ status: 'matching_review', matching_items: items }) }))
-  generateQuizWorkspacePreviewApiMock.mockResolvedValue({ item: buildWorkspaceJob({ status: 'preview', matching_items: [{ id: 'match-1', status: 'matched', confidence: 'high', ignored: false, question: workspaceQuestion, question_text: workspaceQuestion.stem, answer_text: JSON.stringify(workspaceQuestion.answer_payload), answer_generated_by_ai: false }], preview: { palace_id: 1, questions: [workspaceQuestion], source_meta: { source_kind: 'workspace', generation_mode: 'workspace' }, ai_call_log_id: null, warnings: [], generation_stats: { returned_count: 1, savable_count: 1, skipped_count: 0 }, grouped_questions: null } }) })
-  markQuizGenerationJobSavedApiMock.mockResolvedValue({ item: buildWorkspaceJob({ status: 'saved' }) })
-  uploadQuizPdfAssetApiMock.mockResolvedValue({ item: { id: 8, name: '新 PDF', original_name: 'new.pdf', file_size: 1, page_count: 3, archived: false, created_at: null, updated_at: null } })
-  updateQuizPdfAssetApiMock.mockResolvedValue({ item: {} })
-  deleteQuizPdfAssetApiMock.mockResolvedValue({ ok: true })
-  deleteQuizGenerationJobApiMock.mockResolvedValue({ ok: true })
   useTimedSessionMock.mockReturnValue({
     sessionId: 'quiz-timer-1',
     effectiveSeconds: 0,
@@ -503,111 +419,6 @@ export function setupPalaceQuizPageTest() {
   batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchDeletePalaceQuizQuestionsApiMock.mockResolvedValue({ ok: true, deleted_count: 0 })
   deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
-  previewPalaceQuizGenerationFromImagesApiMock.mockResolvedValue({
-        palace_id: 1,
-        questions: [
-          {
-            question_type: 'multiple_choice',
-            stem: '细胞的控制中心是？',
-            options: [
-              { id: 'A', text: '细胞膜' },
-              { id: 'B', text: '细胞核' },
-            ],
-            answer_payload: { correct_option_id: 'B' },
-            analysis: '细胞核控制细胞活动。',
-            source_meta: {
-              ...baseQuestions[0].source_meta,
-              source_kind: 'image_single',
-              generation_mode: 'image_single',
-              image_names: ['bio-question.png'],
-            },
-          },
-        ],
-        source_meta: {
-          ...baseQuestions[0].source_meta,
-          source_kind: 'image_single',
-          generation_mode: 'image_single',
-          image_names: ['bio-question.png'],
-        },
-        ai_call_log_id: 'log-preview',
-        warnings: ['第 2 题正确答案不在选项列表中，已跳过；请重试或补充提示词要求选项完整。'],
-        generation_stats: {
-          returned_count: 2,
-          savable_count: 1,
-          skipped_count: 1,
-        },
-        grouped_questions: {
-          child_chapter_groups: [
-            {
-              classified_chapter_id: 101,
-              classified_chapter_name: '第二节',
-              questions: [
-                {
-                  question_type: 'multiple_choice',
-                  stem: '细胞的控制中心是？',
-                  options: [
-                    { id: 'A', text: '细胞膜' },
-                    { id: 'B', text: '细胞核' },
-                  ],
-                  answer_payload: { correct_option_id: 'B' },
-                  analysis: '细胞核控制细胞活动。',
-                  source_chapter_id: 1,
-                  classified_chapter_id: 101,
-                  source_meta: {
-                    ...baseQuestions[0].source_meta,
-                    source_kind: 'image_single',
-                    generation_mode: 'image_single',
-                    image_names: ['bio-question.png'],
-                  },
-                },
-              ],
-            },
-          ],
-          unassigned_questions: [],
-        },
-      })
-  previewPalaceQuizGenerationFromTextFilesApiMock.mockResolvedValue({
-    palace_id: 1,
-    questions: [
-      {
-        question_type: 'short_answer',
-        stem: '简述细胞核的作用。',
-        options: [],
-        answer_payload: { reference_answer: '储存遗传信息并控制细胞活动。' },
-        analysis: '细胞核是细胞活动控制中心。',
-        source_chapter_id: 1,
-        source_meta: {
-          ...baseQuestions[1].source_meta,
-          source_kind: 'text_files',
-          generation_mode: 'manual_text_pair',
-          image_names: ['bio_questions.txt', 'bio_answers.txt'],
-        },
-      },
-    ],
-    source_meta: {
-      ...baseQuestions[1].source_meta,
-      source_kind: 'text_files',
-      generation_mode: 'manual_text_pair',
-      image_names: ['bio_questions.txt', 'bio_answers.txt'],
-    },
-    ai_call_log_id: null,
-    warnings: [],
-    generation_stats: {
-      returned_count: 1,
-      savable_count: 1,
-      skipped_count: 0,
-    },
-    grouped_questions: null,
-  })
-  classifyPalaceQuizQuestionsToMiniPalacesApiMock.mockResolvedValue({
-    palace_id: 1,
-    mini_palace_groups: [
-      { mini_palace_id: 21, mini_palace_name: '细胞核迷你宫殿训练', question_count: 1 },
-    ],
-    unassigned_count: 1,
-    copied_question_count: 1,
-    ai_call_log_id: 'log-classify',
-  })
   getSubjectsApiMock.mockResolvedValue([{ id: 2, name: '生物' }])
   getSubjectTreeApiMock.mockResolvedValue({
     subject: { id: 2, name: '生物' },

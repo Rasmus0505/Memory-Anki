@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/modules/quiz/domain/quiz-entity/api'
+import { isQuizChoiceAttemptClosed } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerMode'
 import { withOptimisticQuizAttempt } from '@/modules/quiz/domain/quiz-entity/model/quizAttemptStats'
 import { emitQuizResultFeedback } from '@/modules/quiz/domain/quiz-entity/model/quizResultFeedback'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
@@ -27,6 +28,7 @@ export function useQuizAttemptOrchestration({
   emitFeedback,
   onChoiceStart,
   emitChoiceStatErrorFeedback = false,
+  shouldToastAttemptError,
 }: {
   adapter: QuizAttemptStateAdapter
   promptForAiOptions: (options: {
@@ -43,13 +45,15 @@ export function useQuizAttemptOrchestration({
     correct: boolean
   }) => void
   emitChoiceStatErrorFeedback?: boolean
+  /** Return false to swallow a stat-refresh failure, e.g. the question was just deleted. */
+  shouldToastAttemptError?: (questionId: number) => boolean
 }) {
   const handleChoiceSelect = useCallback(
     (question: PalaceQuizQuestion, optionId: string, correctOverride?: boolean) => {
       const currentState = adapter.readQuestionState(question.id)
-      // Skip duplicate handling when already resolved, unless the caller explicitly
-      // supplies correctOverride (freestyle resolves UI state first in the same click).
-      if (currentState.resolved && correctOverride === undefined) return
+      // Skip a second choice record. Subjective recall sets resolved without a
+      // selected option, and freestyle may resolve the choice in the same click.
+      if (isQuizChoiceAttemptClosed(currentState) && correctOverride === undefined) return
       const correct = correctOverride ?? question.answer_payload.correct_option_id === optionId
       onChoiceStart?.({ question, optionId, correct })
       adapter.applyUpdatedQuestion(withOptimisticQuizAttempt(question, correct))
@@ -65,6 +69,7 @@ export function useQuizAttemptOrchestration({
           })
         })
         .catch((error) => {
+          if (shouldToastAttemptError && !shouldToastAttemptError(question.id)) return
           if (emitChoiceStatErrorFeedback) {
             emitFeedback('quiz_error_stat_failed', { label: '统计失败', audioScope: 'local' })
           }
@@ -77,6 +82,7 @@ export function useQuizAttemptOrchestration({
       emitFeedback,
       onChoiceStart,
       resultFeedbackMode,
+      shouldToastAttemptError,
     ],
   )
 

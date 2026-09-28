@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAiPromptScenesApi } from '@/modules/settings/domain/preferences-entity/api'
 import { mergeAiScenes } from '@/modules/settings/ui/profile/model/ai-scene-merge'
+import { isRetiredAiSettingsScene } from '@/modules/settings/ui/profile/model/retiredAiScenes'
 import type { AiPromptSceneDefault, AiSceneBinding } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -16,11 +17,20 @@ export function AiSceneMergeOverview({ modelScenes }: { modelScenes: AiSceneBind
 
   useEffect(() => {
     void getAiPromptScenesApi()
-      .then((response) => setPromptScenes(response.items))
+      .then((response) =>
+        setPromptScenes(response.items.filter((scene) => !isRetiredAiSettingsScene(scene.scene_key))),
+      )
       .catch(() => setPromptScenes([]))
   }, [])
 
-  const merged = useMemo(() => mergeAiScenes(modelScenes, promptScenes), [modelScenes, promptScenes])
+  const visibleModelScenes = useMemo(
+    () => modelScenes.filter((scene) => !isRetiredAiSettingsScene(scene.key)),
+    [modelScenes],
+  )
+  const merged = useMemo(
+    () => mergeAiScenes(visibleModelScenes, promptScenes),
+    [visibleModelScenes, promptScenes],
+  )
   const counts = useMemo(
     () => ({
       both: merged.filter((scene) => scene.kind === 'both').length,

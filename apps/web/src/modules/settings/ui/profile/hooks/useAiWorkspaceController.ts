@@ -43,6 +43,7 @@ import {
   resolveAiTab,
   workspaceTabToAiTab,
 } from "@/modules/settings/ui/profile/model/ai-tabs";
+import { isRetiredAiSettingsScene } from "@/modules/settings/ui/profile/model/retiredAiScenes";
 
 export function useAiWorkspaceController() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -102,13 +103,33 @@ export function useAiWorkspaceController() {
   const [logDetail, setLogDetail] = useState<AiCallLogDetail | null>(null);
 
   const hydrateState = useCallback((response: AiModelSettingsResponse) => {
-    const nextCategories = response.categories ?? [];
-    const nextScenes = response.scenes ?? response.scenarios ?? [];
+    const nextScenes = (response.scenes ?? response.scenarios ?? []).filter(
+      (scene) => !isRetiredAiSettingsScene(scene.key),
+    );
+    const nextCategories = (response.categories ?? []).map((category) => {
+      const scene_keys = category.scene_keys.filter((key) => !isRetiredAiSettingsScene(key));
+      const scene_details = category.scene_details.filter(
+        (detail) => !isRetiredAiSettingsScene(detail.key),
+      );
+      const categoryScenes = nextScenes.filter((scene) => scene.category_key === category.key);
+      const visibleKeys = new Set([...scene_keys, ...categoryScenes.map((scene) => scene.key)]);
+      return {
+        ...category,
+        scene_keys: [...visibleKeys],
+        scene_details,
+        scene_count: visibleKeys.size,
+        custom_scene_count: categoryScenes.filter((scene) => !scene.inherits_category_default).length,
+      };
+    });
     setCategories(nextCategories);
     setModels(response.models ?? []);
     setScenes(nextScenes);
     setProviders(response.providers ?? []);
-    setSummary(response.summary ?? null);
+    setSummary(
+      response.summary
+        ? { ...response.summary, scene_count: nextScenes.length }
+        : null,
+    );
     setModelSelections(
       Object.fromEntries(
         nextScenes.map((item) => [

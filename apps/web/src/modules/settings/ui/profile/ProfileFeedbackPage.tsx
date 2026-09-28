@@ -324,6 +324,14 @@ export default function ProfileFeedbackPage() {
                 }
               />
               <SettingRow
+                title="震动反馈"
+                description="评分、连击和完成时在手机上轻震。iOS 不支持网页震动。"
+                checked={draftSettings.hapticsEnabled}
+                onCheckedChange={(hapticsEnabled) =>
+                  updateDraft((current) => ({ ...current, hapticsEnabled }))
+                }
+              />
+              <SettingRow
                 title="惊喜彩蛋"
                 description="偶尔在连击时出现的额外鼓励文案。"
                 checked={draftSettings.surpriseEnabled}
