@@ -1,0 +1,21 @@
+{
+  "name": "exam",
+  "owns": [
+    "exam countdown, star weights, mastery prediction and war-room read models"
+  ],
+  "forbids": [
+    "private cross-module imports",
+    "changing review scheduling"
+  ],
+  "publicEntry": "src/modules/exam/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "star edits are keyed by entity id; stale responses must not overwrite a newer edit"
+  ],
+  "requiredTests": [
+    "examFormat.test.ts"
+  ]
+}
